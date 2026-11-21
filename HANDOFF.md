@@ -18,7 +18,7 @@ Tuần 1 (21–27/11/2026), ngày đầu. Mục tiêu tuần 1 theo proposal §1
 - **Bảy spike đã chạy thật** (bảng ở [docs/research/README.md](docs/research/README.md), code ở `spikes/`): model Bedrock, Strands + AG-UI local, Runtime + CORS, Gateway + Cedar + danh tính, Aurora Data API, ML, stack frontend. Kết quả chính: trình duyệt gọi thẳng Runtime qua SSE được; deploy bằng zip không cần Docker; danh tính xuống tool bằng interceptor + Cedar; token xác nhận do server cấp chạy đúng; Data API đủ nhanh; Sonnet 4.6 / Haiku 4.5 / Nova / Kimi K3 gọi được ngay (Claude 5.x bị chặn); Chronos-2 đề xuất để ngoài MVP (chưa chốt). Tài nguyên AWS của spike đã xóa và đã kiểm lại trên tài khoản.
 - Stack frontend đã chốt ([ADR-0001](docs/decisions/0001-frontend-stack.md)).
 - Chủ dự án muốn UI là app kiểu ngân hàng trên điện thoại: chuyển tiền, biểu đồ, hũ, chatbot có đầu ra JSON để render (ghi ở [frontend/README.md](frontend/README.md)).
-- Chưa là git repo (chưa chạy `git init`).
+- Đã là git repo, nhánh `main`, đã push lên `github.com/thphuc06/HCPUS_MoMoMentum` (repo public). Commit không kèm dòng Co-Authored-By.
 
 ## Việc kế tiếp (tuần 1, theo proposal §15)
 
