@@ -1,0 +1,52 @@
+# Workspace uv ở gốc repo. Python 3.13 để dev; mã phải chạy được trên 3.12 và 3.13
+# (runtime Lambda / AgentCore Runtime), nên requires-python giữ cả hai.
+# Gói sản phẩm nằm ở libs/* (và các thư mục khác thêm vào `members` khi tới lượt).
+[project]
+name = "yofina-foresight"
+version = "0.0.0"
+description = "Yofina Foresight: workspace Python (không phải gói để phát hành)."
+requires-python = ">=3.12,<3.14"
+dependencies = []
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+
+[tool.uv.workspace]
+members = ["libs/*"]
+
+[tool.uv.sources]
+yofina-core = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "yofina-core",
+    "pytest>=8.3",
+    "ruff>=0.8",
+    # test hợp đồng (contracts/): JSON Schema, OpenAPI
+    "jsonschema>=4.23",
+    "pyyaml>=6.0",
+    "openapi-spec-validator>=0.7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["libs/yofina_core/tests", "tests/unit"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["docs", "spikes", "frontend", "infra-cdk", "node_modules", ".venv", "*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # chuỗi/comment tiếng Việt có ký tự Unicode
+    "E501",  # độ dài dòng do `ruff format` lo; chuỗi và chú thích tiếng Việt dài được phép
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["B011"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["yofina_core"]

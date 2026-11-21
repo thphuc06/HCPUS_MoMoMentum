@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "hologram_3d:x",
+  "type": "hologram_3d",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Mình chưa hiển thị được phần này.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "x": 1
+  }
+}

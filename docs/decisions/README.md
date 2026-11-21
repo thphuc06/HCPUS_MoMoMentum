@@ -11,3 +11,5 @@ Mỗi quyết định kỹ thuật đáng nhớ là một file `NNNN-tiêu-đề
 | ADR | Tiêu đề | Trạng thái |
 |---|---|---|
 | [0001](0001-frontend-stack.md) | Stack frontend và hướng giao diện | Đã chốt |
+| [0002](0002-xac-nhan-truoc-khi-ghi.md) | Xác nhận trước khi ghi bằng token dùng một lần do server cấp | Đã chốt |
+| [0003](0003-dong-ho-mo-phong.md) | Đồng hồ mô phỏng theo tài khoản | Đã chốt |

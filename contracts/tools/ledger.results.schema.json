@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/tools/ledger.results.schema.json",
+  "title": "LedgerToolResults",
+  "description": "Kết quả JSON mà Lambda `ledger` trả cho Gateway (và cho đường REST nội bộ) của từng tool. Dữ liệu `data` của get_jar_balances/move_between_jars dùng lại đúng `data` của khối UI tương ứng, nên agent chỉ việc bọc bằng build_* của yofina_core.blocks. Mọi kết quả OK mang `as_of` và `app_date` để dựng `source` của khối. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "$defs": {
+    "ToolError": {
+      "description": "Lỗi nghiệp vụ hoặc kiểm token; `code` thuộc yofina_core.errors.ErrorCode. Gateway coi đây là kết quả thành công của Lambda; agent đọc `status`.",
+      "type": "object",
+      "required": ["status", "code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "ERROR" },
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 280 }
+      }
+    },
+    "GetJarBalancesOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "../blocks/jar_summary.schema.json#/$defs/JarSummaryData" }
+      }
+    },
+    "GetJarBalancesResult": {
+      "oneOf": [{ "$ref": "#/$defs/GetJarBalancesOk" }, { "$ref": "#/$defs/ToolError" }]
+    },
+    "Transaction": {
+      "description": "Một dòng sổ cái. Số tiền có dấu: âm là tiền ra khỏi hũ, dương là tiền vào hũ.",
+      "type": "object",
+      "required": ["id", "occurred_at", "app_date", "kind", "amount_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "occurred_at": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "kind": { "type": "string", "enum": ["expense", "income", "transfer"] },
+        "jar": {
+          "description": "Mã hũ bị tác động; vắng nếu giao dịch chưa gán hũ.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+        },
+        "amount_vnd": { "type": "integer", "minimum": -99999999999999, "maximum": 99999999999999 },
+        "merchant": { "type": "string", "maxLength": 120 },
+        "note": { "type": "string", "maxLength": 200 },
+        "transfer_id": {
+          "description": "Có ở hai dòng của cùng một lần chuyển hũ.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        }
+      }
+    },
+    "QueryTransactionsOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": {
+          "type": "object",
+          "required": ["transactions", "has_more"],
+          "additionalProperties": false,
+          "properties": {
+            "transactions": {
+              "type": "array",
+              "maxItems": 50,
+              "items": { "$ref": "#/$defs/Transaction" }
+            },
+            "has_more": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "QueryTransactionsResult": {
+      "oneOf": [{ "$ref": "#/$defs/QueryTransactionsOk" }, { "$ref": "#/$defs/ToolError" }]
+    },
+    "MoveNeedsConfirmation": {
+      "description": "Không có confirm_token: không ghi gì. `data` là đúng `data` của khối confirm; agent dựng khối bằng build_confirm và phát cho người dùng.",
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "NEEDS_CONFIRMATION" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "../blocks/confirm.schema.json#/$defs/ConfirmData" }
+      }
+    },
+    "MoveOk": {
+      "description": "Token hợp lệ, đã ghi. `data` là đúng `data` của khối receipt.",
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "../blocks/receipt.schema.json#/$defs/ReceiptData" }
+      }
+    },
+    "MoveBetweenJarsResult": {
+      "oneOf": [
+        { "$ref": "#/$defs/MoveNeedsConfirmation" },
+        { "$ref": "#/$defs/MoveOk" },
+        { "$ref": "#/$defs/ToolError" }
+      ]
+    }
+  }
+}

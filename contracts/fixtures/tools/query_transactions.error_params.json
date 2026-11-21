@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "PARAMS_INVALID",
+  "message": "from_date không phải ngày hợp lệ."
+}

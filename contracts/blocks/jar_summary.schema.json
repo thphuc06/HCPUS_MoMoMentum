@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/jar_summary.schema.json",
+  "title": "JarSummaryBlock",
+  "description": "Số dư các hũ của người dùng. Số do code đọc từ sổ cái (tool ledger___get_jar_balances hoặc GET /jars), không do LLM viết.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "jar_summary" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/JarSummaryData" }
+  },
+  "$defs": {
+    "JarBalance": {
+      "description": "Một hũ và số dư hiện tại.",
+      "type": "object",
+      "required": ["code", "name", "color_key", "icon_key", "balance_vnd", "split_percent"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "color_key": {
+          "description": "Khóa màu hũ; frontend ánh xạ sang biến màu thiết kế.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "icon_key": {
+          "description": "Khóa biểu tượng hũ; frontend ánh xạ sang JarIcon.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "balance_vnd": { "$ref": "envelope.schema.json#/$defs/Vnd" },
+        "split_percent": {
+          "description": "Tỷ lệ chia lương vào hũ này, 0..100.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "JarSummaryData": {
+      "type": "object",
+      "required": ["jars", "jars_total_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "jars": {
+          "description": "Theo thứ tự hiển thị của người dùng (cột jars.position).",
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/JarBalance" }
+        },
+        "jars_total_vnd": {
+          "description": "Tổng số dư của các hũ trong `jars`.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        }
+      }
+    }
+  }
+}

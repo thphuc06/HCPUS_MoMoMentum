@@ -1,0 +1,29 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "has_more": false,
+    "transactions": [
+      {
+        "id": "0a1b2c3d-1111-4222-8333-444455556666",
+        "occurred_at": "2026-12-09T11:20:00Z",
+        "app_date": "2026-11-20",
+        "kind": "expense",
+        "jar": "an_uong",
+        "amount_vnd": -45000,
+        "merchant": "Quán cơm",
+        "note": "Bữa trưa"
+      },
+      {
+        "id": "0a1b2c3d-1111-4222-8333-444455556667",
+        "occurred_at": "2026-12-08T02:00:00Z",
+        "app_date": "2026-11-19",
+        "kind": "transfer",
+        "jar": "giai_tri",
+        "amount_vnd": -100000,
+        "transfer_id": "3b9f6c1e-7a52-4d8e-9c4b-0e1f2a3b4c5d"
+      }
+    ]
+  }
+}

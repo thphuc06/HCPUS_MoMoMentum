@@ -48,7 +48,9 @@ Một subagent tạo:
 
 Sở hữu: `infra-cdk/`, `scripts/bootstrap/`, `docs/aws-resources.md`.
 
-Danh tính deploy (làm đầu tiên, cần chủ dự án):
+> **Đổi ngày 2026-11-21 (chủ dự án)**: dùng luôn phiên root của CLI để deploy, không chuyển sang IAM user. Các bước 3–5 dưới đây không thực hiện; user `yofina-deployer` đã tạo ở bước 2 được giữ lại (không mật khẩu, không access key) để chuyển sang sau nếu muốn. Hệ quả: policy Deny lên `jars-dev*` không có tác dụng với root, nên việc không đụng `jars-dev*`, các stack `Jars*` và `CDKToolkit` chỉ còn dựa vào kỷ luật của agent; mọi lệnh vẫn đặt `--region ap-southeast-1` tường minh. Tiêu chí hoàn thành 8 bỏ vế "`sts get-caller-identity` là `yofina-deployer`".
+
+Danh tính deploy (kế hoạch ban đầu):
 
 1. Chủ dự án đăng nhập lại (`aws login`, connector AWS MCP). Phiên này còn là root.
 2. Agent, bằng phiên root, chỉ tạo: IAM user `yofina-deployer` (không access key), gắn `AdministratorAccess` (CDK bootstrap cần quyền gần quản trị) và một policy `yofina-deny-jars-dev` Deny mọi hành động `rds:*` lên cluster và instance tên `jars-dev*`, và `cognito-idp:*` lên user pool có sẵn (tra id lúc chạy, không ghi vào repo). Tag `project=yofina`.

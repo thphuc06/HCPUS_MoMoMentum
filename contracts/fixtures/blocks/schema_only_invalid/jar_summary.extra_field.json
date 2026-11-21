@@ -1,0 +1,74 @@
+{
+  "v": 1,
+  "id": "jar_summary:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "type": "jar_summary",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Số dư 7 hũ. tổng 7.730.000 ₫.",
+  "source": {
+    "tool": "ledger___get_jar_balances",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "jars": [
+      {
+        "code": "an_uong",
+        "name": "Ăn uống",
+        "color_key": "violet",
+        "icon_key": "utensils",
+        "balance_vnd": 380000,
+        "split_percent": 30
+      },
+      {
+        "code": "di_lai",
+        "name": "Đi lại",
+        "color_key": "sky",
+        "icon_key": "bus",
+        "balance_vnd": 640000,
+        "split_percent": 7
+      },
+      {
+        "code": "hoa_don",
+        "name": "Hóa đơn",
+        "color_key": "brown",
+        "icon_key": "receipt",
+        "balance_vnd": 450000,
+        "split_percent": 31
+      },
+      {
+        "code": "giai_tri",
+        "name": "Giải trí",
+        "color_key": "orchid",
+        "icon_key": "gamepad",
+        "balance_vnd": 760000,
+        "split_percent": 7
+      },
+      {
+        "code": "du_lich",
+        "name": "Du lịch",
+        "color_key": "teal",
+        "icon_key": "plane",
+        "balance_vnd": 1800000,
+        "split_percent": 10
+      },
+      {
+        "code": "du_phong",
+        "name": "Dự phòng",
+        "color_key": "blue",
+        "icon_key": "shield",
+        "balance_vnd": 2700000,
+        "split_percent": 10
+      },
+      {
+        "code": "nghia_vu",
+        "name": "Nghĩa vụ",
+        "color_key": "slate",
+        "icon_key": "wallet",
+        "balance_vnd": 1000000,
+        "split_percent": 5
+      }
+    ],
+    "jars_total_vnd": 7730000,
+    "surprise": true
+  }
+}

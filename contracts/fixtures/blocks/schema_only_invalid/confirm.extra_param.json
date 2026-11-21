@@ -1,0 +1,38 @@
+{
+  "v": 1,
+  "id": "confirm:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:52a35d69448e",
+  "type": "confirm",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Chuyển 100.000 ₫ từ Giải trí sang Ăn uống. Cần bạn xác nhận trên ứng dụng.",
+  "source": {
+    "tool": "ledger___move_between_jars",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "tool": "move_between_jars",
+    "params": {
+      "from_jar": "giai_tri",
+      "to_jar": "an_uong",
+      "amount_vnd": 100000,
+      "user_id": "someone"
+    },
+    "params_hash": "52a35d69448e3621190f43bbc8fa12356d2cfdd9895fac320e0557dfa779a962",
+    "summary": "Chuyển 100.000 ₫ từ Giải trí sang Ăn uống",
+    "preview": {
+      "from": {
+        "code": "giai_tri",
+        "name": "Giải trí",
+        "before_vnd": 760000,
+        "after_vnd": 660000
+      },
+      "to": {
+        "code": "an_uong",
+        "name": "Ăn uống",
+        "before_vnd": 380000,
+        "after_vnd": 480000
+      }
+    },
+    "expires_at": "2026-12-10T03:10:00Z"
+  }
+}

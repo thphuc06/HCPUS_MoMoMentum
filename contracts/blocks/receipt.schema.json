@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/receipt.schema.json",
+  "title": "ReceiptBlock",
+  "description": "Biên nhận sau khi một thao tác ghi đã được thực hiện. Trả bởi POST /actions (và dựng lại từ kết quả tool). Số dư sau là số đã commit trong cùng transaction.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "receipt" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ReceiptData" }
+  },
+  "$defs": {
+    "JarAfter": {
+      "description": "Một hũ và số dư sau thao tác.",
+      "type": "object",
+      "required": ["code", "name", "balance_after_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "balance_after_vnd": { "$ref": "envelope.schema.json#/$defs/Vnd" }
+      }
+    },
+    "ReceiptData": {
+      "type": "object",
+      "required": [
+        "tool",
+        "transaction_id",
+        "occurred_at",
+        "app_date",
+        "amount_vnd",
+        "summary",
+        "from_jar",
+        "to_jar"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "type": "string", "enum": ["move_between_jars"] },
+        "transaction_id": {
+          "description": "Id giao dịch (UUID): với chuyển hũ là transfer_id chung của hai dòng sổ cái.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "occurred_at": {
+          "description": "Thời điểm thật (UTC) giao dịch được ghi.",
+          "$ref": "envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "description": "Ngày mô phỏng của người dùng lúc ghi (ADR-0003).",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "amount_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "from_jar": { "$ref": "#/$defs/JarAfter" },
+        "to_jar": { "$ref": "#/$defs/JarAfter" }
+      }
+    }
+  }
+}

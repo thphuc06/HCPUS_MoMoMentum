@@ -1,6 +1,6 @@
 # Cấu trúc thư mục dự án
 
-Scaffold ngày 2026-11-21. Chỉ có thư mục và README mô tả; chưa có code. Khung FAST của AWS **chỉ dùng để tham khảo**, không kéo về (xem mục cuối).
+Scaffold ngày 2026-11-21 (cập nhật cùng ngày khi bước 0 của phase 1 thêm `contracts/`, `libs/` và workspace uv). Khung FAST của AWS **chỉ dùng để tham khảo**, không kéo về (xem mục cuối).
 
 ## Cây thư mục
 
@@ -20,7 +20,10 @@ c:\moMo
 │   ├── research/              ghi chú tra cứu internet
 │   ├── plan/                  kế hoạch 3 tuần, chia vai, kịch bản demo
 │   └── ai-log/                nhật ký thay đổi của AI (YYYY-MM.md)
-├── frontend/                  web app (F1–F7 giao diện, khối UI theo type)
+├── contracts/                 hợp đồng: blocks/*.schema.json (khối UI), tools/ (schema tool Gateway), rest/openapi.yaml, fixtures/
+├── libs/
+│   └── yofina_core/           gói Python dùng chung (blocks, money, clock, config, confirm, db, llm, pii)
+├── frontend/                  web app (F1–F7 giao diện, khối UI theo type); src/contracts/ là Zod sinh từ contracts/
 ├── infra-cdk/                 AWS CDK (hạ tầng)
 ├── agent/                     agent Strands: harness L0–L5
 ├── gateway/
@@ -38,14 +41,16 @@ c:\moMo
 │   ├── nightly/               batch 02:00 (F1, F4, F7)
 │   └── weekly/                backtest, hiệu chỉnh, đánh giá, đồng bộ KB
 ├── db/
-│   ├── schema/                schema Aurora PostgreSQL
-│   └── migrations/
+│   ├── schema/                schema Aurora PostgreSQL (tổng hợp, sẽ có sau)
+│   └── migrations/            0001_core.sql ...; chạy bằng Lambda migrator
 ├── data/
 │   └── personas/              bộ sinh dữ liệu tổng hợp 3 persona
 ├── knowledge-base/            biểu phí, kiến thức tài chính, luật suitability (RAG)
 ├── evals/                     bộ câu chuẩn, evaluator tự viết
 ├── spikes/                    bản thử đã chạy 2026-11-21 (không phải code sản phẩm); kết quả ở docs/research/spike-*.md
-├── scripts/                   script triển khai/tiện ích
+├── scripts/                   script triển khai/tiện ích (gen_contracts.mjs sinh Zod từ contracts/)
+├── pyproject.toml, uv.lock    workspace uv (members: libs/*)
+├── package.json               chỉ công cụ hợp đồng (zod); không phải project frontend
 └── tests/
     ├── unit/
     └── integration/

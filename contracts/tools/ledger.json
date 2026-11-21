@@ -1,0 +1,74 @@
+[
+  {
+    "name": "get_jar_balances",
+    "description": "Lấy số dư hiện tại của từng hũ chi tiêu của người dùng (mã hũ, tên, số dư, tỷ lệ chia lương), theo thứ tự hiển thị. Không cần tham số.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        }
+      }
+    }
+  },
+  {
+    "name": "query_transactions",
+    "description": "Tra cứu giao dịch gần đây của người dùng, mới nhất trước. Có thể lọc theo hũ và khoảng ngày; trả tối đa limit dòng và cho biết còn nữa không.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "jar": {
+          "type": "string",
+          "description": "Mã hũ cần lọc (lấy từ kết quả get_jar_balances). Bỏ trống để lấy mọi hũ."
+        },
+        "from_date": {
+          "type": "string",
+          "description": "Từ ngày (gồm), định dạng YYYY-MM-DD theo ngày mô phỏng của người dùng. Bỏ trống: không giới hạn."
+        },
+        "to_date": {
+          "type": "string",
+          "description": "Đến ngày (gồm), định dạng YYYY-MM-DD theo ngày mô phỏng của người dùng. Bỏ trống: không giới hạn."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Số dòng tối đa, từ 1 đến 50. Bỏ trống: mặc định theo cấu hình."
+        }
+      }
+    }
+  },
+  {
+    "name": "move_between_jars",
+    "description": "Chuyển tiền giữa hai hũ. Khi chưa có confirm_token, công cụ KHÔNG ghi gì mà trả NEEDS_CONFIRMATION kèm bản xem trước để người dùng tự bấm xác nhận trên màn hình. Không bao giờ tự bịa confirm_token.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "from_jar": {
+          "type": "string",
+          "description": "Mã hũ nguồn (lấy từ kết quả get_jar_balances)."
+        },
+        "to_jar": {
+          "type": "string",
+          "description": "Mã hũ đích (lấy từ kết quả get_jar_balances), khác hũ nguồn."
+        },
+        "amount_vnd": {
+          "type": "integer",
+          "description": "Số tiền chuyển, VND, số nguyên dương."
+        },
+        "confirm_token": {
+          "type": "string",
+          "description": "Token xác nhận một lần do hệ thống cấp sau khi người dùng bấm xác nhận. Chỉ truyền khi được cung cấp; không tự tạo."
+        }
+      },
+      "required": ["from_jar", "to_jar", "amount_vnd"]
+    }
+  }
+]

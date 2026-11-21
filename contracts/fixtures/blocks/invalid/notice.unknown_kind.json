@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "notice:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:MODEL_BUDGET_EXCEEDED",
+  "type": "notice",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Hôm nay mình đã dùng hết lượt trả lời bằng AI nên chỉ hiện số liệu. Bạn vẫn xem và thao tác được bình thường.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "kind": "celebration",
+    "title": "Đang ở chế độ rút gọn",
+    "message": "Hôm nay mình đã dùng hết lượt trả lời bằng AI nên chỉ hiện số liệu. Bạn vẫn xem và thao tác được bình thường.",
+    "code": "MODEL_BUDGET_EXCEEDED"
+  }
+}

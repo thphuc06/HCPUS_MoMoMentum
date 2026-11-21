@@ -1,0 +1,22 @@
+{
+  "name": "yofina-infra-cdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ha tang AWS CDK cua Yofina Foresight",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "synth": "cdk synth --strict",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.278.0",
+    "constructs": "10.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "aws-cdk": "2.1149.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/confirm.schema.json",
+  "title": "ConfirmBlock",
+  "description": "Đề nghị xác nhận một thao tác ghi. `tool`, `params` và `params_hash` là đúng thứ sẽ được ký vào token một lần (ADR-0002); phần còn lại chỉ để hiển thị. Do code dựng từ kết quả NEEDS_CONFIRMATION của tool, không do LLM viết.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "confirm" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ConfirmData" }
+  },
+  "$defs": {
+    "MoveParams": {
+      "description": "Tham số đã chuẩn hóa của move_between_jars: mã hũ chữ thường, số tiền nguyên VND dương. Không có user_id (người dùng nằm ở sub của token).",
+      "type": "object",
+      "required": ["from_jar", "to_jar", "amount_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "from_jar": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "to_jar": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "amount_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" }
+      }
+    },
+    "JarChange": {
+      "description": "Số dư một hũ trước và sau khi thao tác được thực hiện (xem trước).",
+      "type": "object",
+      "required": ["code", "name", "before_vnd", "after_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "before_vnd": { "$ref": "envelope.schema.json#/$defs/Vnd" },
+        "after_vnd": { "$ref": "envelope.schema.json#/$defs/Vnd" }
+      }
+    },
+    "ConfirmData": {
+      "type": "object",
+      "required": ["tool", "params", "params_hash", "summary", "preview", "expires_at"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "description": "Tên tool ngắn (không có tiền tố target `ledger___`). Giai đoạn này chỉ có move_between_jars.",
+          "type": "string",
+          "enum": ["move_between_jars"]
+        },
+        "params": { "$ref": "#/$defs/MoveParams" },
+        "params_hash": {
+          "description": "sha256 hex thường của {\"tool\", \"params\"} chuẩn hóa; cách tính ở libs/yofina_core/src/yofina_core/confirm.py.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "summary": {
+          "description": "Một câu tóm tắt do code dựng, ví dụ 'Chuyển 100.000 ₫ từ A sang B'.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "preview": {
+          "description": "Số dư hai hũ trước và sau, tính từ số dư thật lúc đề nghị.",
+          "type": "object",
+          "required": ["from", "to"],
+          "additionalProperties": false,
+          "properties": {
+            "from": { "$ref": "#/$defs/JarChange" },
+            "to": { "$ref": "#/$defs/JarChange" }
+          }
+        },
+        "expires_at": {
+          "description": "Hạn của đề nghị: quá hạn thì frontend vô hiệu nút xác nhận và hỏi lại (số dư xem trước có thể đã cũ). Khác với hạn của token, token chỉ được cấp khi người dùng bấm.",
+          "$ref": "envelope.schema.json#/$defs/IsoDateTime"
+        }
+      }
+    }
+  }
+}

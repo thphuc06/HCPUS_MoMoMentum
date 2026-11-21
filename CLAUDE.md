@@ -34,7 +34,9 @@ Tài liệu viết tiếng Việt, thuật ngữ kỹ thuật giữ tiếng Anh.
 
 | Thư mục | Chứa |
 |---|---|
-| `frontend/` | Web app, khối UI theo `type` |
+| `contracts/` | Hợp đồng: JSON Schema khối UI, schema tool Gateway, OpenAPI, fixtures; [README](contracts/README.md) nói quy ước (tiền là số nguyên VND, id khối, versioning) |
+| `libs/yofina_core/` | Gói Python dùng chung (khối UI, tiền, `app_today`, config, xác nhận, client DB, `llm`); workspace uv ở gốc repo (`uv sync`, `uv run pytest`) |
+| `frontend/` | Web app, khối UI theo `type`; `src/contracts/` là Zod sinh từ `contracts/` (không sửa tay) |
 | `infra-cdk/` | AWS CDK |
 | `agent/` | Agent Strands, harness L0–L5 |
 | `gateway/tools/{ledger,forecast,planner,knowledge,ingest,audit}/` | Lambda tool sau AgentCore Gateway |

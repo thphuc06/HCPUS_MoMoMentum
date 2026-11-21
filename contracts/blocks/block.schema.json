@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/block.schema.json",
+  "title": "Block",
+  "description": "Hợp của các khối đã biết, phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema.",
+  "oneOf": [
+    { "$ref": "jar_summary.schema.json" },
+    { "$ref": "confirm.schema.json" },
+    { "$ref": "receipt.schema.json" },
+    { "$ref": "notice.schema.json" }
+  ]
+}

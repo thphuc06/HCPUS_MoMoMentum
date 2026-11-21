@@ -22,8 +22,9 @@ Không phải câu hỏi của proposal; ghi nhận ngày 2026-11-21 từ trạn
 
 - [x] **Region triển khai**: AWS CLI đang để mặc định `us-east-1`, proposal nhắc Singapore (`ap-southeast-1`; §13 ghi AgentCore có ở Singapore theo tra cứu 20/11/2026, từng tính năng con cần kiểm riêng trong tuần 1). Cần chốt Region trước khi deploy; sau đó đặt Region tường minh trong cấu hình CDK/CLI. Kiểm tính năng theo Region bằng `get_regional_availability` hoặc tài liệu AWS ([aws-tooling.md](../references/aws-tooling.md)).
   - Chốt 2026-11-21 (chủ dự án): `ap-southeast-1`, đặt tường minh ở mọi nơi.
-- [ ] **Danh tính deploy**: CLI đang đăng nhập bằng root user của tài khoản. Nên tạo IAM user/role riêng (quyền tối thiểu đủ để chạy CDK) cho việc deploy và không dùng root.
-  - Kế hoạch 2026-11-21: việc đầu tiên của [phase 1](../plan/phases/phase-1-nen-va-lat-doc.md#luồng-a--danh-tính-deploy-và-nền-cdk); tick khi xong.
+- [x] **Danh tính deploy**: CLI đang đăng nhập bằng root user của tài khoản. Nên tạo IAM user/role riêng (quyền tối thiểu đủ để chạy CDK) cho việc deploy và không dùng root.
+  - Chốt 2026-11-21 (chủ dự án): **tiếp tục dùng root** cho bản hackathon; IAM user `yofina-deployer` đã tạo sẵn nhưng chưa dùng. Rủi ro đã nêu cho chủ dự án (root không bị policy nào giới hạn).
+  - Kế hoạch ban đầu 2026-11-21: việc đầu tiên của [phase 1](../plan/phases/phase-1-nen-va-lat-doc.md#luồng-a--danh-tính-deploy-và-nền-cdk); tick khi xong.
 - [x] **Khung FAST**: kéo FAST về bằng cách nào?
   - Chốt 2026-11-21 (chủ dự án): **không kéo FAST về**. FAST chỉ là nguồn tham khảo; code tự viết theo tài liệu chính thức của từng dịch vụ/thư viện. Khác với proposal §8 và §14 ("khởi đầu từ khung FAST"). Xem [project-structure.md](../architecture/project-structure.md#fast-chỉ-để-tham-khảo).
 - [x] **Frontend**: dùng framework và thư viện giao diện nào?

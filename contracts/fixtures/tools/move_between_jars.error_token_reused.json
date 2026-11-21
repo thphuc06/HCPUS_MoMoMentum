@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "TOKEN_REUSED",
+  "message": "Token xác nhận đã được dùng."
+}

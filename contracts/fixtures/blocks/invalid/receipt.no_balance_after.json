@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "id": "receipt:3b9f6c1e-7a52-4d8e-9c4b-0e1f2a3b4c5d",
+  "type": "receipt",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Đã chuyển 100.000 ₫ từ Giải trí sang Ăn uống.",
+  "source": {
+    "tool": "rest:POST /actions",
+    "as_of": "2026-12-10T03:02:11Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "tool": "move_between_jars",
+    "transaction_id": "3b9f6c1e-7a52-4d8e-9c4b-0e1f2a3b4c5d",
+    "occurred_at": "2026-12-10T03:02:11Z",
+    "app_date": "2026-11-21",
+    "amount_vnd": 100000,
+    "summary": "Đã chuyển 100.000 ₫ từ Giải trí sang Ăn uống",
+    "from_jar": {
+      "code": "giai_tri",
+      "name": "Giải trí",
+      "balance_after_vnd": 660000
+    },
+    "to_jar": {
+      "code": "an_uong",
+      "name": "Ăn uống"
+    }
+  }
+}

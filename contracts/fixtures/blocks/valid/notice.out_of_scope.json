@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "notice:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:out_of_scope",
+  "type": "notice",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Mình chỉ hỗ trợ về chi tiêu và các hũ của bạn.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "kind": "out_of_scope",
+    "title": "Ngoài phạm vi",
+    "message": "Mình chỉ hỗ trợ về chi tiêu và các hũ của bạn."
+  }
+}

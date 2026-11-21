@@ -1,0 +1,407 @@
+openapi: 3.1.0
+info:
+  title: Yofina Foresight REST API
+  version: 1.0.0
+  summary: Màn hình không cần LLM, cấp token xác nhận, thực hiện thao tác ghi, đặt lại dữ liệu demo.
+  description: |
+    API Gateway HTTP API với JWT authorizer của Cognito, cùng một Lambda `ledger` với đường Gateway
+    của agent (một mã, hai đường vào). Chi tiết thiết kế: ADR-0002 (xác nhận trước khi ghi) và
+    ADR-0003 (đồng hồ mô phỏng); quy ước chung: contracts/README.md.
+
+    **Danh tính**: `sub` của access token Cognito là người dùng; không endpoint nào nhận `user_id`
+    từ client.
+
+    **Tiền** là số nguyên VND. **Ngày** là ngày mô phỏng của người dùng (ADR-0003), trừ trường nói
+    rõ là thời điểm thật (`as_of`, `occurred_at`, `expires_at`: RFC 3339, UTC).
+
+    **Luồng ghi**: (1) agent hoặc UI lấy khối `confirm` (tool trả NEEDS_CONFIRMATION); (2) người dùng
+    bấm xác nhận → `POST /confirmations` cấp token dùng một lần; (3) `POST /actions` kèm token →
+    ghi và trả khối `receipt`. LLM không nằm trên đường ghi.
+
+    Mã lỗi (`ErrorCode`) dùng chung với kết quả tool và `notice.data.code`; ánh xạ HTTP status ở
+    `x-http-status`. Schema khối UI và tham số được tham chiếu tới `../blocks/*.schema.json`.
+servers:
+  - url: https://{host}
+    description: Domain API do CDK xuất ra (output của stack YofinaTools); không gắn cứng trong repo.
+    variables:
+      host:
+        default: api.yofina.invalid
+security:
+  - bearerAuth: []
+tags:
+  - name: ledger
+    description: Số dư hũ và thao tác ghi sổ cái.
+  - name: demo
+    description: Chỉ cho tài khoản demo.
+paths:
+  /jars:
+    get:
+      tags: [ledger]
+      operationId: getJars
+      summary: Số dư các hũ của người dùng đang đăng nhập
+      description: Cùng nguồn số liệu với tool `ledger___get_jar_balances` và khối `jar_summary`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Danh sách hũ theo thứ tự hiển thị.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JarsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /confirmations:
+    post:
+      tags: [ledger]
+      operationId: createConfirmation
+      summary: Cấp token xác nhận dùng một lần
+      description: |
+        Gọi khi người dùng bấm nút trong khối `confirm`. Server xác thực người dùng bằng JWT, chuẩn
+        hóa lại tham số, kiểm tra nghiệp vụ (hũ tồn tại, đủ số dư, hạn mức) rồi ký token
+        HMAC trên (sub, tool, params_hash, hạn, jti). Token **mờ** với client: không phân tích nó.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmationRequest'
+      responses:
+        '200':
+          description: Token đã cấp.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /actions:
+    post:
+      tags: [ledger]
+      operationId: applyAction
+      summary: Thực hiện thao tác ghi với token xác nhận
+      description: |
+        Kiểm token (chữ ký, hạn, tool, sub, hash tham số, `jti` chưa dùng) rồi ghi trong một
+        transaction và ghi `audit_events`. Thiếu `confirm_token` thì không ghi, trả 428
+        `NEEDS_CONFIRMATION`. Thành công trả khối `receipt`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionRequest'
+      responses:
+        '200':
+          description: Đã ghi; số dư sau nằm trong biên nhận.
+          content:
+            application/json:
+              schema:
+                $ref: '../blocks/receipt.schema.json'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '428':
+          $ref: '#/components/responses/NeedsConfirmation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /demo/reset:
+    post:
+      tags: [demo]
+      operationId: resetDemo
+      summary: Đặt lại dữ liệu của chính người dùng về trạng thái ban đầu
+      description: |
+        Xóa dữ liệu của người gọi (hũ, giao dịch, khối đã lưu), sinh lại persona tất định theo seed,
+        đặt `clock_offset_days` để ngày mô phỏng quay về ngày neo (ADR-0003). `audit_events` chỉ
+        thêm, không xóa. Không có thân yêu cầu.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Đã đặt lại.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'Access token Cognito (không phải ID token), gửi trong header Authorization: Bearer <token>.'
+  parameters:
+    Traceparent:
+      name: traceparent
+      in: header
+      required: false
+      description: W3C trace context. Nếu có, trace-id của nó là `trace_id` của khối; nếu không server sinh.
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+  schemas:
+    ErrorCode:
+      type: string
+      description: Mã lỗi máy đọc được; khớp yofina_core.errors.ErrorCode.
+      enum:
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - PARAMS_INVALID
+        - JAR_NOT_FOUND
+        - INSUFFICIENT_FUNDS
+        - AMOUNT_LIMIT_EXCEEDED
+        - NEEDS_CONFIRMATION
+        - TOKEN_INVALID
+        - TOKEN_EXPIRED
+        - TOKEN_REUSED
+        - PARAMS_MISMATCH
+        - RATE_LIMITED
+        - MODEL_BUDGET_EXCEEDED
+        - DATABASE_UNAVAILABLE
+        - INTERNAL_ERROR
+      x-http-status:
+        UNAUTHENTICATED: 401
+        FORBIDDEN: 403
+        PARAMS_INVALID: 400
+        JAR_NOT_FOUND: 404
+        INSUFFICIENT_FUNDS: 422
+        AMOUNT_LIMIT_EXCEEDED: 422
+        NEEDS_CONFIRMATION: 428
+        TOKEN_INVALID: 403
+        TOKEN_EXPIRED: 403
+        TOKEN_REUSED: 409
+        PARAMS_MISMATCH: 409
+        RATE_LIMITED: 429
+        MODEL_BUDGET_EXCEEDED: 503
+        DATABASE_UNAVAILABLE: 503
+        INTERNAL_ERROR: 500
+      x-meaning:
+        UNAUTHENTICATED: Thiếu hoặc sai access token.
+        FORBIDDEN: Không được phép (token xác nhận không thuộc người dùng này, v.v.).
+        PARAMS_INVALID: Tham số sai định dạng hoặc vô lý (cùng hũ, số tiền không dương...).
+        JAR_NOT_FOUND: Mã hũ không tồn tại với người dùng này.
+        INSUFFICIENT_FUNDS: Hũ nguồn không đủ số dư.
+        AMOUNT_LIMIT_EXCEEDED: Vượt hạn mức số tiền một lần (cấu hình, cùng giá trị với luật Cedar).
+        NEEDS_CONFIRMATION: Thao tác ghi cần xác nhận; chưa ghi gì.
+        TOKEN_INVALID: Token sai định dạng, chữ ký sai, cho tool khác hoặc cho người dùng khác.
+        TOKEN_EXPIRED: Token đã hết hạn.
+        TOKEN_REUSED: Token đã được dùng (replay).
+        PARAMS_MISMATCH: Tham số khác với tham số đã được xác nhận (hash không khớp).
+        RATE_LIMITED: Quá giới hạn tần suất.
+        MODEL_BUDGET_EXCEEDED: Chạm trần lượt gọi model trong ngày (agent, không phải REST).
+        DATABASE_UNAVAILABLE: Aurora đang thức dậy hoặc không sẵn sàng; thử lại sau vài giây.
+        INTERNAL_ERROR: Lỗi không lường trước; xem log theo trace_id.
+    ErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code:
+              $ref: '#/components/schemas/ErrorCode'
+            message:
+              type: string
+              description: Câu tiếng Việt hiển thị được cho người dùng, không chứa dữ liệu nhạy cảm.
+              minLength: 1
+              maxLength: 280
+            trace_id:
+              $ref: '../blocks/envelope.schema.json#/$defs/TraceId'
+    JarsResponse:
+      type: object
+      required: [app_date, as_of, jars, jars_total_vnd]
+      additionalProperties: false
+      properties:
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        as_of:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        jars:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '../blocks/jar_summary.schema.json#/$defs/JarBalance'
+        jars_total_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+    ToolName:
+      type: string
+      description: Tên tool ngắn (không có tiền tố target). Hiện chỉ có chuyển hũ.
+      enum: [move_between_jars]
+    ConfirmationRequest:
+      type: object
+      required: [tool, params]
+      additionalProperties: false
+      properties:
+        tool:
+          $ref: '#/components/schemas/ToolName'
+        params:
+          description: Sao nguyên từ khối `confirm` (đã chuẩn hóa).
+          $ref: '../blocks/confirm.schema.json#/$defs/MoveParams'
+        params_hash:
+          description: |
+            `params_hash` của khối `confirm` người dùng đang nhìn. Nếu gửi, server so với hash tự
+            tính từ `tool` và `params`; lệch thì trả PARAMS_MISMATCH.
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+    ConfirmationResponse:
+      type: object
+      required: [confirm_token, expires_at, ttl_seconds, tool, params, params_hash]
+      additionalProperties: false
+      properties:
+        confirm_token:
+          type: string
+          description: Token mờ, dùng một lần, gắn với người dùng, tool và tham số.
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+          minLength: 3
+          maxLength: 1024
+        expires_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        ttl_seconds:
+          type: integer
+          minimum: 1
+          description: Thời gian sống của token, từ cấu hình; frontend đếm ngược theo đây.
+        tool:
+          $ref: '#/components/schemas/ToolName'
+        params:
+          $ref: '../blocks/confirm.schema.json#/$defs/MoveParams'
+        params_hash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+    ActionRequest:
+      type: object
+      required: [tool, params]
+      additionalProperties: false
+      properties:
+        tool:
+          $ref: '#/components/schemas/ToolName'
+        params:
+          $ref: '../blocks/confirm.schema.json#/$defs/MoveParams'
+        confirm_token:
+          description: Token từ `POST /confirmations`. Vắng thì không ghi, trả 428 NEEDS_CONFIRMATION.
+          type: string
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+          maxLength: 1024
+    ResetResponse:
+      type: object
+      required: [reset_at, app_date, clock_offset_days, jars_count, transactions_count]
+      additionalProperties: false
+      properties:
+        reset_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        app_date:
+          description: Ngày mô phỏng sau khi đặt lại (ngày neo).
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        clock_offset_days:
+          type: integer
+        jars_count:
+          type: integer
+          minimum: 0
+        transactions_count:
+          type: integer
+          minimum: 0
+  responses:
+    BadRequest:
+      description: PARAMS_INVALID (tham số sai định dạng hoặc vô lý).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthenticated:
+      description: UNAUTHENTICATED. JWT authorizer có thể trả thân rỗng 401 trước khi tới Lambda.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: FORBIDDEN, TOKEN_INVALID hoặc TOKEN_EXPIRED.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: JAR_NOT_FOUND.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: TOKEN_REUSED hoặc PARAMS_MISMATCH.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unprocessable:
+      description: INSUFFICIENT_FUNDS hoặc AMOUNT_LIMIT_EXCEEDED.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NeedsConfirmation:
+      description: NEEDS_CONFIRMATION. Chưa ghi gì; hãy lấy token ở `POST /confirmations`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: RATE_LIMITED.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unavailable:
+      description: DATABASE_UNAVAILABLE. Thử lại sau vài giây (Aurora có thể đang thức dậy).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: INTERNAL_ERROR.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

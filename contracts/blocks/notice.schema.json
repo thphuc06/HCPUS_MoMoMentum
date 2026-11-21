@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/notice.schema.json",
+  "title": "NoticeBlock",
+  "description": "Thông báo trạng thái: ngoài phạm vi, chế độ rút gọn khi hệ thống chạm giới hạn, dữ liệu ít, lỗi. Không chứa số liệu tài chính.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "notice" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/NoticeData" }
+  },
+  "$defs": {
+    "NoticeData": {
+      "type": "object",
+      "required": ["kind", "title", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "out_of_scope: ngoài phạm vi; degraded: chế độ rút gọn (hạn mức model, model lỗi); low_data: dữ liệu ít; error: lỗi.",
+          "type": "string",
+          "enum": ["out_of_scope", "degraded", "low_data", "error"]
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 280 },
+        "code": {
+          "description": "Mã lỗi máy đọc được (yofina_core.errors.ErrorCode), nếu có.",
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      }
+    }
+  }
+}

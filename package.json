@@ -1,0 +1,17 @@
+{
+  "name": "yofina-contract-tools",
+  "private": true,
+  "type": "module",
+  "description": "Công cụ cho contracts/: sinh Zod và kiểm fixture ở phía TypeScript. Không phải project frontend (frontend/ có package.json riêng khi luồng E dựng).",
+  "scripts": {
+    "contracts:gen": "node scripts/gen_contracts.mjs",
+    "contracts:check": "node scripts/gen_contracts.mjs --check",
+    "contracts:test": "node --test tests/unit/ts/*.test.mjs"
+  },
+  "devDependencies": {
+    "zod": "4.6.7"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}
