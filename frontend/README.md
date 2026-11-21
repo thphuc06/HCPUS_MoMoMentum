@@ -1,0 +1,12 @@
+# frontend/
+
+Web app ưu tiên điện thoại (không làm app native) cho người dùng cuối: màn hình khai báo (lương, ngày nhận, chi phí cố định, khoản vay, mục tiêu), màn hình hũ, chat what-if, thẻ kiểm tra trước khi quẹt, điểm chống chịu, lộ trình, nạp ảnh/CSV, bảng "Vì sao".
+
+- Proposal: §12 (streaming, giao diện sinh từ JSON), §9 (hợp đồng đầu ra: mỗi `type` trong `blocks[]` ánh xạ sang một component), §14 (proposal ghi Next.js + React, Tailwind, Recharts/visx, client AG-UI, CopilotKit; stack thực tế đã đổi, xem dưới).
+- Tính năng: F1–F7 (phần giao diện); kịch bản demo: [../docs/plan/demo-script.md](../docs/plan/demo-script.md).
+- Hình dung của chủ dự án (2026-11-21): giả lập **một app kiểu ngân hàng/ví** trên điện thoại — chuyển tiền được (ví mô phỏng), xem biểu đồ trực quan hóa tài chính, các hũ chi tiêu, và AI chatbot. Câu trả lời của AI phải trực quan: agent xuất JSON, frontend render thành component (biểu đồ, thẻ, nút xác nhận), không chỉ chữ.
+- Ghi chú nghiên cứu: [agentic UI và generative UI](../docs/research/agentic-ui-generative-ui.md), [thiết kế fintech và stack frontend](../docs/research/frontend-fintech-ui.md).
+- **Stack đã chốt (2026-11-21)**: React + Vite SPA, shadcn/ui + Tailwind 4, Recharts + SVG tự vẽ, Motion, `@ag-ui/client` — xem [ADR-0001](../docs/decisions/0001-frontend-stack.md). Bản thử đã chạy được và các lệnh đúng: [spike-frontend-stack.md](../docs/research/spike-frontend-stack.md), code tham khảo ở `spikes/frontend-stack/`. Phần §14 của proposal (Next.js) không còn áp dụng.
+- **Kết nối backend (đã chạy thử)**: chat gọi thẳng Runtime V2 bằng `fetch` + SSE với access token Cognito, session id UUID, gửi lại toàn bộ `messages` mỗi lượt, xử lý 401/403/409 và luồng rỗng; khối UI nhận qua `ACTIVITY_SNAPSHOT`, lưu lại để phát lại; màn hình không cần LLM gọi REST API (HTTP API + JWT, đề xuất, chưa chạy thử). Xem [spike-agentcore-runtime-cors.md](../docs/research/spike-agentcore-runtime-cors.md), [spike-strands-agui-local.md](../docs/research/spike-strands-agui-local.md), [overview.md](../docs/architecture/overview.md).
+- Tiêu chí chọn stack (chủ dự án, 2026-11-21): **ưu tiên cái nào cho giao diện đẹp nhất**. Stack ở proposal §14 là điểm xuất phát, không bắt buộc; không copy frontend của FAST. Trước khi dựng, tra các lựa chọn hiện hành (framework, thư viện component, biểu đồ, animation) rồi chốt và ghi ADR.
+- Hosting: Amplify Hosting + CloudFront + WAF; đăng nhập Cognito (JWT).

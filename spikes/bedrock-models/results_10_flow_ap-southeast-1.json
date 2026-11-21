@@ -1,0 +1,35 @@
+{
+ "turns": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "router_s": 0.87,
+   "plan1_s": 1.21,
+   "plan2_s": 3.25,
+   "explain_ttft_s": 0.45,
+   "explain_total_s": 1.05,
+   "turn_total_s": 6.38,
+   "calls": 4
+  },
+  {
+   "utt": "nếu mua giày 900 nghìn bằng tiền mặt thì sao",
+   "router_s": 0.67,
+   "plan1_s": 1.26,
+   "plan2_s": 3.27,
+   "explain_ttft_s": 0.71,
+   "explain_total_s": 1.08,
+   "turn_total_s": 6.29,
+   "calls": 4
+  },
+  {
+   "utt": "mua loa 2 triệu trả sau thì hũ nào cạn trước",
+   "router_s": 0.75,
+   "plan1_s": 1.31,
+   "plan2_s": 3.06,
+   "explain_ttft_s": 0.42,
+   "explain_total_s": 1.25,
+   "turn_total_s": 6.37,
+   "calls": 4
+  }
+ ],
+ "retry_log": []
+}

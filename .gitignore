@@ -1,0 +1,84 @@
+# --- Secrets / environment ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.aws/
+credentials
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+.turbo/
+.vercel/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv-*/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+.tox/
+.uv-cache/
+# Lambda packaging output
+.aws-sam/
+lambda-build/
+*.zip
+
+# --- AWS CDK ---
+cdk.out/
+cdk.context.json
+.cdk.staging/
+*.d.ts.map
+
+# --- Terraform (nếu có dùng) ---
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# --- Data / model artifacts ---
+data/**/*.parquet
+data/**/*.sqlite
+*.onnx
+*.pt
+*.safetensors
+*.ckpt
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDE / editor ---
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*~
+
+# --- Claude Code local state ---
+.claude/settings.local.json
+
+# Spike outputs that can be regenerated
+*.pkl

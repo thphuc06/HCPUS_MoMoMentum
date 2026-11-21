@@ -1,0 +1,21 @@
+[us-east-1] sonnet46 mục tiêu 700 (count_tokens=None):
+    1 {'inputTokens': 23, 'outputTokens': 7, 'totalTokens': 1085, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 1055, 'cacheDetails': [{'ttl': '5m', 'inputTokens': 1055}]} total_in=1078
+    2 {'inputTokens': 23, 'outputTokens': 7, 'totalTokens': 1085, 'cacheReadInputTokens': 1055, 'cacheWriteInputTokens': 0} total_in=1078
+[us-east-1] qwen.qwen3-next-80b-a3b mục tiêu 1500 (count_tokens=None):
+    1 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+    2 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+[us-east-1] deepseek.v3.2 mục tiêu 1500 (count_tokens=None):
+    1 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+    2 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+[us-east-1] openai.gpt-oss-120b-1:0 mục tiêu 1500 (count_tokens=None):
+    1 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+    2 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+[us-east-1] mistral.mistral-large-3-675b-instruct mục tiêu 1500 (count_tokens=None):
+    1 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+    2 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+[us-east-1] moonshotai.kimi-k2.5 mục tiêu 1500 (count_tokens=None):
+    1 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+    2 AccessDeniedException: You invoked an unsupported model or your request did not allow prompt caching. See the documentation for more information. (HTTP 403) 
+[us-east-1] us.amazon.nova-lite-v1:0 mục tiêu 1500 (count_tokens=None):
+    1 {'inputTokens': 17, 'outputTokens': 6, 'totalTokens': 2419, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 2396} total_in=2413
+    2 {'inputTokens': 17, 'outputTokens': 6, 'totalTokens': 2419, 'cacheReadInputTokens': 2396, 'cacheWriteInputTokens': 0} total_in=2413

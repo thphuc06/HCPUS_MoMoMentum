@@ -1,0 +1,173 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/plus-jakarta-sans";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Plus Jakarta Sans Variable", system-ui, sans-serif;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-ink: var(--ok-ink);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-ink: var(--warn-ink);
+  --color-short: var(--short);
+  --color-short-soft: var(--short-soft);
+  --color-short-ink: var(--short-ink);
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.65);
+  --radius-lg: calc(var(--radius) * 0.8);
+  --radius-xl: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.25);
+  --radius-3xl: calc(var(--radius) * 1.5);
+  --radius-4xl: calc(var(--radius) * 2);
+}
+
+/* Yofina: nền kem, chàm, ba trạng thái teal / hổ phách / san hô (hex theo ghi chú frontend-fintech-ui §4.2) */
+:root {
+  --background: #f6f5f1;
+  --foreground: #14142b;
+  --card: #ffffff;
+  --card-foreground: #14142b;
+  --popover: #ffffff;
+  --popover-foreground: #14142b;
+  --primary: #4338ca;
+  --primary-foreground: #ffffff;
+  --secondary: #ebe9f7;
+  --secondary-foreground: #2c2680;
+  --muted: #efeee8;
+  --muted-foreground: #5b5b73;
+  --accent: #ebe9f7;
+  --accent-foreground: #2c2680;
+  --destructive: #b4233c;
+  --border: #e6e4dc;
+  --input: #dcdad0;
+  --ring: #4338ca;
+  --chart-1: #4338ca;
+  --chart-2: #0e9f78;
+  --chart-3: #c98500;
+  --chart-4: #e5484d;
+  --chart-5: #8b93ff;
+  --radius: 1.5rem;
+
+  --ok: #0e9f78;
+  --ok-soft: #e3f6ee;
+  --ok-ink: #0b6b52;
+  --warn: #c98500;
+  --warn-soft: #fff2d9;
+  --warn-ink: #8a5300;
+  --short: #e5484d;
+  --short-soft: #ffe9ec;
+  --short-ink: #b4233c;
+
+  --band: #4338ca;
+  --band-before: #8d8aa8;
+  --grid: #e6e4dc;
+}
+
+.dark {
+  --background: #0e0f1a;
+  --foreground: #f2f2f8;
+  --card: #181a2b;
+  --card-foreground: #f2f2f8;
+  --popover: #181a2b;
+  --popover-foreground: #f2f2f8;
+  --primary: #8b93ff;
+  --primary-foreground: #0e0f1a;
+  --secondary: #26294a;
+  --secondary-foreground: #dfe1ff;
+  --muted: #1f2136;
+  --muted-foreground: #a3a5bf;
+  --accent: #26294a;
+  --accent-foreground: #dfe1ff;
+  --destructive: #ff7a8a;
+  --border: #2a2d46;
+  --input: #34375a;
+  --ring: #8b93ff;
+  --chart-1: #8b93ff;
+  --chart-2: #34d3a0;
+  --chart-3: #f5b94a;
+  --chart-4: #ff7a8a;
+  --chart-5: #b9bdff;
+
+  --ok: #34d3a0;
+  --ok-soft: #12332b;
+  --ok-ink: #34d3a0;
+  --warn: #f5b94a;
+  --warn-soft: #382c12;
+  --warn-ink: #f5b94a;
+  --short: #ff7a8a;
+  --short-soft: #3b1a22;
+  --short-ink: #ff7a8a;
+
+  --band: #8b93ff;
+  --band-before: #7b7e9a;
+  --grid: #2a2d46;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.5;
+    overscroll-behavior-y: none;
+  }
+  button {
+    touch-action: manipulation;
+  }
+  .recharts-wrapper:focus,
+  .recharts-surface:focus {
+    outline: none;
+  }
+  /* số tiền: chữ số đều bề ngang */
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,12 @@
+[project]
+name = "yofina-spike-rt-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "ag-ui-protocol==1.0.0",
+  "ag-ui-strands==1.0.4",
+  "strands-agents==1.65.0",
+  "fastapi==0.165.0",
+  "uvicorn==0.54.0",
+  "boto3==1.44.9",
+]

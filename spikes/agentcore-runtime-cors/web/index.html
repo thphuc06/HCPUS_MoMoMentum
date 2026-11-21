@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>spike rt cors</title></head>
+<body><pre id="o">spike page (origin: <script>document.write(location.origin)</script>)</pre>
+<script>
+// Gọi fetch POST + đọc SSE bằng ReadableStream; ghi mốc thời gian từng event.
+window.agui = async function (cfg) {
+  const t0 = performance.now();
+  const out = { events: [], t_headers: null, status: null, headers: {}, error: null, raw_len: 0 };
+  try {
+    const res = await fetch(cfg.url, {
+      method: "POST", mode: "cors", credentials: cfg.credentials || "omit",
+      headers: cfg.headers, body: JSON.stringify(cfg.body),
+    });
+    out.t_headers = performance.now() - t0; out.status = res.status;
+    res.headers.forEach((v, k) => { out.headers[k] = v; });
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const t = performance.now() - t0; out.raw_len += value.length;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+        const line = frame.split("\n").find(l => l.startsWith("data:"));
+        if (!line) continue;
+        let ev; try { ev = JSON.parse(line.slice(5)); } catch { ev = { type: "UNPARSEABLE" }; }
+        out.events.push({ t: Math.round(t), type: ev.type, name: ev.name, delta: ev.delta, code: ev.code, message: ev.message,
+                          info: ev.name === "spike.info" ? { pid: ev.value.pid, n: ev.value.invocation_n, uptime_s: ev.value.uptime_s,
+                            seen: Object.keys(ev.value.headers_seen_by_app), origin: ev.value.headers_seen_by_app.origin } : undefined });
+      }
+    }
+    out.t_total = Math.round(performance.now() - t0);
+  } catch (e) { out.error = String(e); out.t_fail = Math.round(performance.now() - t0); }
+  return out;
+};
+</script></body></html>

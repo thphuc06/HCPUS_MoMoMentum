@@ -1,0 +1,5 @@
+user-a {'longValue': 7} [{'longValue': 210}, {'longValue': 1}] {'longValue': 50}
+ kiểm user_id thực: [[{'isNull': True}]]
+user-b {'longValue': 7} [{'longValue': 210}, {'longValue': 1}] {'longValue': 50}
+ kiểm user_id thực: [[{'isNull': True}]]
+không gọi hàm: [[{'longValue': 0}]]

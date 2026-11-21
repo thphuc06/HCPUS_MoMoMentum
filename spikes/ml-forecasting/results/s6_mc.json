@@ -1,0 +1,716 @@
+{
+ "HP": 15,
+ "bal0": {
+  "an_uong": 956.0,
+  "di_chuyen": 772.8,
+  "giai_tri": -93.2,
+  "mua_sam": -7.6,
+  "du_lich": 259.9,
+  "du_phong": 1200.0
+ },
+ "p_true": {
+  "an_uong": 0.4821,
+  "di_chuyen": 0.0,
+  "giai_tri": 1.0,
+  "mua_sam": 1.0,
+  "du_lich": 0.2267,
+  "du_phong": 0.0297
+ },
+ "p_table": [
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle (bi\u00ean th\u1eadt t\u1eeb b\u1ed9 sinh)",
+   "rho": 0.0,
+   "an_uong": 0.508,
+   "di_chuyen": 0.0,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.295,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle (bi\u00ean th\u1eadt t\u1eeb b\u1ed9 sinh)",
+   "rho": 0.2,
+   "an_uong": 0.499,
+   "di_chuyen": 0.0,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.286,
+   "du_phong": 0.001
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle (bi\u00ean th\u1eadt t\u1eeb b\u1ed9 sinh)",
+   "rho": 0.4,
+   "an_uong": 0.487,
+   "di_chuyen": 0.0,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.267,
+   "du_phong": 0.003
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle (bi\u00ean th\u1eadt t\u1eeb b\u1ed9 sinh)",
+   "rho": 0.6,
+   "an_uong": 0.47,
+   "di_chuyen": 0.004,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.237,
+   "du_phong": 0.011
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle (bi\u00ean th\u1eadt t\u1eeb b\u1ed9 sinh)",
+   "rho": 0.8,
+   "an_uong": 0.445,
+   "di_chuyen": 0.025,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.186,
+   "du_phong": 0.027
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.0,
+   "an_uong": 0.633,
+   "di_chuyen": 0.0,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.373,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.2,
+   "an_uong": 0.604,
+   "di_chuyen": 0.0,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.359,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.4,
+   "an_uong": 0.567,
+   "di_chuyen": 0.003,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.333,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.6,
+   "an_uong": 0.525,
+   "di_chuyen": 0.013,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.29,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.8,
+   "an_uong": 0.469,
+   "di_chuyen": 0.052,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.219,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.0,
+   "an_uong": 0.598,
+   "di_chuyen": 0.0,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.6,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.2,
+   "an_uong": 0.575,
+   "di_chuyen": 0.0,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.577,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.4,
+   "an_uong": 0.54,
+   "di_chuyen": 0.0,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.529,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.6,
+   "an_uong": 0.494,
+   "di_chuyen": 0.004,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.459,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.8,
+   "an_uong": 0.436,
+   "di_chuyen": 0.022,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.347,
+   "du_phong": 0.0
+  },
+  {
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "S\u1ef0 TH\u1eacT (m\u00f4 ph\u1ecfng b\u1ed9 sinh, 100k \u0111\u01b0\u1eddng)",
+   "rho": "-",
+   "an_uong": 0.482,
+   "di_chuyen": 0.0,
+   "giai_tri": 1.0,
+   "mua_sam": 1.0,
+   "du_lich": 0.227,
+   "du_phong": 0.03
+  }
+ ],
+ "calibrated": [
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.0,
+   "an_uong": 0.058,
+   "di_chuyen": 0.091,
+   "giai_tri": 0.089,
+   "mua_sam": 0.091,
+   "du_lich": 0.086
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.2,
+   "an_uong": 0.092,
+   "di_chuyen": 0.131,
+   "giai_tri": 0.115,
+   "mua_sam": 0.105,
+   "du_lich": 0.095
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.4,
+   "an_uong": 0.129,
+   "di_chuyen": 0.177,
+   "giai_tri": 0.146,
+   "mua_sam": 0.121,
+   "du_lich": 0.109
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.6,
+   "an_uong": 0.174,
+   "di_chuyen": 0.23,
+   "giai_tri": 0.178,
+   "mua_sam": 0.14,
+   "du_lich": 0.119
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.8,
+   "an_uong": 0.22,
+   "di_chuyen": 0.285,
+   "giai_tri": 0.202,
+   "mua_sam": 0.147,
+   "du_lich": 0.119
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.0,
+   "an_uong": 0.218,
+   "di_chuyen": 0.201,
+   "giai_tri": 0.087,
+   "mua_sam": 0.402,
+   "du_lich": 0.159
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.2,
+   "an_uong": 0.238,
+   "di_chuyen": 0.242,
+   "giai_tri": 0.114,
+   "mua_sam": 0.386,
+   "du_lich": 0.164
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.4,
+   "an_uong": 0.258,
+   "di_chuyen": 0.28,
+   "giai_tri": 0.148,
+   "mua_sam": 0.366,
+   "du_lich": 0.166
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.6,
+   "an_uong": 0.273,
+   "di_chuyen": 0.314,
+   "giai_tri": 0.181,
+   "mua_sam": 0.328,
+   "du_lich": 0.164
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.8,
+   "an_uong": 0.276,
+   "di_chuyen": 0.346,
+   "giai_tri": 0.209,
+   "mua_sam": 0.267,
+   "du_lich": 0.146
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.0,
+   "an_uong": 0.297,
+   "di_chuyen": 0.026,
+   "giai_tri": 0.051,
+   "mua_sam": 0.324,
+   "du_lich": 0.472
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.2,
+   "an_uong": 0.304,
+   "di_chuyen": 0.049,
+   "giai_tri": 0.075,
+   "mua_sam": 0.32,
+   "du_lich": 0.453
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.4,
+   "an_uong": 0.308,
+   "di_chuyen": 0.082,
+   "giai_tri": 0.106,
+   "mua_sam": 0.305,
+   "du_lich": 0.419
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.6,
+   "an_uong": 0.303,
+   "di_chuyen": 0.129,
+   "giai_tri": 0.14,
+   "mua_sam": 0.284,
+   "du_lich": 0.364
+  },
+  {
+   "P th\u1eadt": 0.1,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.8,
+   "an_uong": 0.283,
+   "di_chuyen": 0.18,
+   "giai_tri": 0.172,
+   "mua_sam": 0.238,
+   "du_lich": 0.277
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.0,
+   "an_uong": 0.277,
+   "di_chuyen": 0.316,
+   "giai_tri": 0.326,
+   "mua_sam": 0.371,
+   "du_lich": 0.384
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.2,
+   "an_uong": 0.301,
+   "di_chuyen": 0.343,
+   "giai_tri": 0.335,
+   "mua_sam": 0.358,
+   "du_lich": 0.371
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.4,
+   "an_uong": 0.323,
+   "di_chuyen": 0.365,
+   "giai_tri": 0.337,
+   "mua_sam": 0.339,
+   "du_lich": 0.343
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.6,
+   "an_uong": 0.34,
+   "di_chuyen": 0.388,
+   "giai_tri": 0.332,
+   "mua_sam": 0.308,
+   "du_lich": 0.298
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.8,
+   "an_uong": 0.353,
+   "di_chuyen": 0.41,
+   "giai_tri": 0.312,
+   "mua_sam": 0.251,
+   "du_lich": 0.223
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.0,
+   "an_uong": 0.456,
+   "di_chuyen": 0.483,
+   "giai_tri": 0.342,
+   "mua_sam": 0.6,
+   "du_lich": 0.438
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.2,
+   "an_uong": 0.449,
+   "di_chuyen": 0.479,
+   "giai_tri": 0.349,
+   "mua_sam": 0.575,
+   "du_lich": 0.421
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.4,
+   "an_uong": 0.436,
+   "di_chuyen": 0.476,
+   "giai_tri": 0.351,
+   "mua_sam": 0.533,
+   "du_lich": 0.389
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.6,
+   "an_uong": 0.418,
+   "di_chuyen": 0.472,
+   "giai_tri": 0.345,
+   "mua_sam": 0.468,
+   "du_lich": 0.337
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.8,
+   "an_uong": 0.39,
+   "di_chuyen": 0.464,
+   "giai_tri": 0.327,
+   "mua_sam": 0.367,
+   "du_lich": 0.249
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.0,
+   "an_uong": 0.471,
+   "di_chuyen": 0.112,
+   "giai_tri": 0.241,
+   "mua_sam": 0.554,
+   "du_lich": 0.662
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.2,
+   "an_uong": 0.46,
+   "di_chuyen": 0.148,
+   "giai_tri": 0.258,
+   "mua_sam": 0.532,
+   "du_lich": 0.636
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.4,
+   "an_uong": 0.44,
+   "di_chuyen": 0.188,
+   "giai_tri": 0.272,
+   "mua_sam": 0.494,
+   "du_lich": 0.589
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.6,
+   "an_uong": 0.413,
+   "di_chuyen": 0.232,
+   "giai_tri": 0.279,
+   "mua_sam": 0.437,
+   "du_lich": 0.514
+  },
+  {
+   "P th\u1eadt": 0.3,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.8,
+   "an_uong": 0.372,
+   "di_chuyen": 0.269,
+   "giai_tri": 0.273,
+   "mua_sam": 0.344,
+   "du_lich": 0.383
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.0,
+   "an_uong": 0.529,
+   "di_chuyen": 0.53,
+   "giai_tri": 0.552,
+   "mua_sam": 0.556,
+   "du_lich": 0.624
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.2,
+   "an_uong": 0.517,
+   "di_chuyen": 0.522,
+   "giai_tri": 0.529,
+   "mua_sam": 0.534,
+   "du_lich": 0.599
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.4,
+   "an_uong": 0.502,
+   "di_chuyen": 0.513,
+   "giai_tri": 0.499,
+   "mua_sam": 0.496,
+   "du_lich": 0.554
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.6,
+   "an_uong": 0.482,
+   "di_chuyen": 0.505,
+   "giai_tri": 0.46,
+   "mua_sam": 0.435,
+   "du_lich": 0.482
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "oracle",
+   "rho": 0.8,
+   "an_uong": 0.454,
+   "di_chuyen": 0.496,
+   "giai_tri": 0.401,
+   "mua_sam": 0.339,
+   "du_lich": 0.361
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.0,
+   "an_uong": 0.648,
+   "di_chuyen": 0.68,
+   "giai_tri": 0.584,
+   "mua_sam": 0.744,
+   "du_lich": 1.0
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.2,
+   "an_uong": 0.617,
+   "di_chuyen": 0.648,
+   "giai_tri": 0.559,
+   "mua_sam": 0.713,
+   "du_lich": 1.0
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.4,
+   "an_uong": 0.579,
+   "di_chuyen": 0.616,
+   "giai_tri": 0.524,
+   "mua_sam": 0.662,
+   "du_lich": 1.0
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.6,
+   "an_uong": 0.536,
+   "di_chuyen": 0.582,
+   "giai_tri": 0.483,
+   "mua_sam": 0.582,
+   "du_lich": 1.0
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Chronos-2",
+   "rho": 0.8,
+   "an_uong": 0.476,
+   "di_chuyen": 0.543,
+   "giai_tri": 0.421,
+   "mua_sam": 0.453,
+   "du_lich": 1.0
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.0,
+   "an_uong": 0.61,
+   "di_chuyen": 0.239,
+   "giai_tri": 0.458,
+   "mua_sam": 0.715,
+   "du_lich": 0.819
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.2,
+   "an_uong": 0.585,
+   "di_chuyen": 0.27,
+   "giai_tri": 0.443,
+   "mua_sam": 0.685,
+   "du_lich": 0.788
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.4,
+   "an_uong": 0.548,
+   "di_chuyen": 0.297,
+   "giai_tri": 0.428,
+   "mua_sam": 0.633,
+   "du_lich": 0.738
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.6,
+   "an_uong": 0.501,
+   "di_chuyen": 0.323,
+   "giai_tri": 0.403,
+   "mua_sam": 0.553,
+   "du_lich": 0.651
+  },
+  {
+   "P th\u1eadt": 0.5,
+   "b\u1ea3ng ph\u00e2n v\u1ecb": "Hurdle",
+   "rho": 0.8,
+   "an_uong": 0.442,
+   "di_chuyen": 0.346,
+   "giai_tri": 0.355,
+   "mua_sam": 0.435,
+   "du_lich": 0.506
+  }
+ ],
+ "timing": [
+  {
+   "N": 1000,
+   "c\u00e1ch": "\u0111\u1ed9c l\u1eadp",
+   "median_ms": 13.6,
+   "max_ms": 19.2
+  },
+  {
+   "N": 1000,
+   "c\u00e1ch": "copula, v\u00f2ng for",
+   "median_ms": 13.5,
+   "max_ms": 17.3
+  },
+  {
+   "N": 1000,
+   "c\u00e1ch": "copula, lfilter",
+   "median_ms": 14.6,
+   "max_ms": 18.2
+  },
+  {
+   "N": 5000,
+   "c\u00e1ch": "\u0111\u1ed9c l\u1eadp",
+   "median_ms": 76.1,
+   "max_ms": 84.9
+  },
+  {
+   "N": 5000,
+   "c\u00e1ch": "copula, v\u00f2ng for",
+   "median_ms": 76.7,
+   "max_ms": 85.4
+  },
+  {
+   "N": 5000,
+   "c\u00e1ch": "copula, lfilter",
+   "median_ms": 76.8,
+   "max_ms": 98.4
+  },
+  {
+   "N": 10000,
+   "c\u00e1ch": "\u0111\u1ed9c l\u1eadp",
+   "median_ms": 153.4,
+   "max_ms": 182.5
+  },
+  {
+   "N": 10000,
+   "c\u00e1ch": "copula, v\u00f2ng for",
+   "median_ms": 163.3,
+   "max_ms": 185.1
+  },
+  {
+   "N": 10000,
+   "c\u00e1ch": "copula, lfilter",
+   "median_ms": 161.3,
+   "max_ms": 238.3
+  }
+ ],
+ "one_jar_5000_ms": 11.738100001821294,
+ "se_pp": {
+  "1000": {
+   "an_uong": 1.73,
+   "di_chuyen": 0.04,
+   "giai_tri": 0.0,
+   "mua_sam": 0.0,
+   "du_lich": 1.37,
+   "du_phong": 0.12
+  },
+  "5000": {
+   "an_uong": 0.61,
+   "di_chuyen": 0.02,
+   "giai_tri": 0.0,
+   "mua_sam": 0.0,
+   "du_lich": 0.62,
+   "du_phong": 0.07
+  },
+  "10000": {
+   "an_uong": 0.4,
+   "di_chuyen": 0.02,
+   "giai_tri": 0.0,
+   "mua_sam": 0.0,
+   "du_lich": 0.42,
+   "du_phong": 0.06
+  }
+ }
+}

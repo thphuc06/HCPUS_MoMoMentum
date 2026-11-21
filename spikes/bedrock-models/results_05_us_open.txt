@@ -1,0 +1,24 @@
+[us-east-1] qwen.qwen3-vl-235b-a22b: gọi được 3/3; đúng trên 3 ảnh: {'amount': 3, 'time': 3, 'counterparty': 3, 'counterparty_noaccent': 3, 'note': 3}; median 1.78s
+    img1_momo_style.png {"amount_vnd": 1250000, "time": "2026-11-21 14:35", "counterparty": "NGUYỄN THỊ HOÀI THƯƠNG", "note": "tien tro thang 11"} {'note_sim': 1.0}
+    img2_bank_style.png {"amount_vnd": 85000, "time": "2026-11-20 12:07", "counterparty": "TRẦN ĐỨC MINH", "note": "CK tien com trua + ca phe"} {'note_sim': 1.0}
+    img3_shopee_style.png {"amount_vnd": 2399000, "time": "2026-11-19 19:48", "counterparty": "Công ty TNHH Điện Máy Hoa Sen", "note": "Thanh toán đơn hàng #DH5521 - tai nghe"} {'note_sim': 1.0}
+[us-east-1] mistral.mistral-large-3-675b-instruct: gọi được 3/3; đúng trên 3 ảnh: {'amount': 3, 'time': 3, 'counterparty': 3, 'counterparty_noaccent': 3, 'note': 3}; median 1.05s
+    img1_momo_style.png {"amount_vnd": 1250000, "time": "2026-11-21 14:35", "counterparty": "NGUYỄN THỊ HOÀI THƯƠNG", "note": "tien tro thang 11"} {'note_sim': 1.0}
+    img2_bank_style.png {"amount_vnd": 85000, "time": "2026-11-20 12:07", "counterparty": "TRẦN Đức MINH", "note": "CK tien com trua + ca phe"} {'note_sim': 1.0}
+    img3_shopee_style.png {"amount_vnd": 2399000, "time": "2026-11-19 19:48", "counterparty": "Công ty TNHH Điện Máy Hoa Sen", "note": "Thanh toán đơn hàng #DH5521 - tai nghe"} {'note_sim': 1.0}
+[us-east-1] moonshotai.kimi-k2.5: gọi được 3/3; đúng trên 3 ảnh: {'amount': 3, 'time': 3, 'counterparty': 3, 'counterparty_noaccent': 3, 'note': 3}; median 1.55s
+    img1_momo_style.png {"amount_vnd": 1250000, "time": "2026-11-21 14:35", "counterparty": "NGUYỄN THỊ HOÀI THƯƠNG", "note": "tien tro thang 11"} {'note_sim': 1.0}
+    img2_bank_style.png {"amount_vnd": 85000, "time": "2026-11-20 12:07", "counterparty": "TRẦN ĐỨC MINH", "note": "CK tien com trua + ca phe"} {'note_sim': 1.0}
+    img3_shopee_style.png {"amount_vnd": 2399000, "time": "2026-11-19 19:48", "counterparty": "Công ty TNHH Điện Máy Hoa Sen", "note": "Thanh toán đơn hàng #DH5521 - tai nghe"} {'note_sim': 1.0}
+[us-east-1] google.gemma-3-27b-it: gọi được 3/3; đúng trên 3 ảnh: {'amount': 3, 'time': 3, 'counterparty': 3, 'counterparty_noaccent': 3, 'note': 3}; median 2.03s
+    img1_momo_style.png {"amount_vnd": 1250000, "time": "2026-11-21 14:35", "counterparty": "NGUYỄN THỊ HOÀI THƯƠNG", "note": "tien tro thang 11"} {'note_sim': 1.0}
+    img2_bank_style.png {"amount_vnd": 85000, "time": "2026-11-20 12:07", "counterparty": "TRẦN ĐỨC MINH", "note": "CK tien com trua + ca phe"} {'note_sim': 1.0}
+    img3_shopee_style.png {"amount_vnd": 2399000, "time": "2026-11-19 19:48", "counterparty": "Công ty TNHH Điện Máy Hoa Sen", "note": "Thanh toán đơn hàng #DH5521 - tai nghe"} {'note_sim': 1.0}
+[us-east-1] us.meta.llama4-maverick-17b-instruct-v1:0: gọi được 2/3; đúng trên 3 ảnh: {'amount': 2, 'time': 2, 'counterparty': 1, 'counterparty_noaccent': 2, 'note': 1}; median 0.98s
+    LỖI ResourceNotFoundException: Access denied. This Model is marked by provider as Legacy and you have not been actively using the model in the last 30 days. Please upgrade to an active model on Amazon Bed
+    img2_bank_style.png {"amount_vnd": 85000, "time": "2026-11-20 12:07", "counterparty": "TRẦN ĐỨC MINH", "note": "CK tien com trua + ca phe"} {'note_sim': 1.0}
+    img3_shopee_style.png {"amount_vnd": 2399000, "time": "2026-11-19 19:48", "counterparty": "Cong ty TNHH Dien May Hoa Sen", "note": "Thanh toan don hang #DH5521 - tai nghe"} {'note_sim': 0.89}
+[us-east-1] mistral.ministral-3-14b-instruct: gọi được 3/3; đúng trên 3 ảnh: {'amount': 3, 'time': 3, 'counterparty': 2, 'counterparty_noaccent': 3, 'note': 1}; median 1.26s
+    img1_momo_style.png {"amount_vnd": 1250000, "time": "2026-11-21 14:35", "counterparty": "NGUYỄN THỊ HOÀI THƯỞNG", "note": "tien tro thang 11"} {'note_sim': 1.0}
+    img2_bank_style.png {"amount_vnd": 85000, "time": "2026-11-20 12:07", "counterparty": "TRẦN ĐỨC MINH", "note": "CK tien com trưa + ca phe"} {'note_sim': 0.96}
+    img3_shopee_style.png {"amount_vnd": 2399000, "time": "2026-11-19 19:48", "counterparty": "Công ty TNHH Điện Máy Hoa Sen", "note": "Thanh toán đơn hàng #DH5521 - tại nghị"} {'note_sim': 0.95}

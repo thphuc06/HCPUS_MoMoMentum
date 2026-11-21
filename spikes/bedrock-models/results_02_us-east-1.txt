@@ -1,0 +1,8 @@
+haiku45 {"model": "global.anthropic.claude-haiku-4-5-20251001-v1:0", "region": "us-east-1", "ttft": [1.492, 0.836, 0.876], "ttft_med": 0.8759602999925846, "total_stream": [2.14, 1.492, 1.462], "total_stream_med": 1.4919090000039432, "total_converse": [1.531, 2.447, 1.468], "total_converse_med": 1.5308895000052871, "out_tokens": [100, 100, 100], "notes": []}
+   mẫu: # Hũ ăn uống trong quản lý chi tiêu
+
+**Hũ ăn uống** là một phần của phương pháp quản lý tài chính "hũ tiền" (bucket method), dùng để tách riêng và quản lý khoản tiền dành cho chi phí ăn uống hàng ngày. Phương p
+sonnet46 {"model": "global.anthropic.claude-sonnet-4-6", "region": "us-east-1", "ttft": [0.915, 0.995, 0.869], "ttft_med": 0.9151920000003884, "total_stream": [2.221, 2.124, 2.033], "total_stream_med": 2.1235219000081997, "total_converse": [2.105, 2.156, 2.196], "total_converse_med": 2.1563597999920603, "out_tokens": [100, 100, 100], "notes": []}
+   mẫu: **Hũ ăn uống** là một trong các "hũ" (phong bì/tài khoản) trong phương pháp quản lý tài chính theo tỷ lệ phần trăm, dùng để phân bổ một khoản tiền cố định hàng tháng cho chi phí ăn uống hàng ngày.
+nova2lite {"model": "global.amazon.nova-2-lite-v1:0", "region": "us-east-1", "ttft": [0.75, 0.931, 0.753], "ttft_med": 0.7527952000091318, "total_stream": [1.138, 1.537, 1.432], "total_stream_med": 1.4317861000017729, "total_converse": [1.136, 1.667, 1.204], "total_converse_med": 1.2044705000007525, "out_tokens": [71, 89, 99], "notes": []}
+   mẫu: **Hũ ăn uống** trong quản lý chi tiêu cá nhân là một phương pháp chia nhỏ ngân sách dành riêng cho các món ăn và uống hàng ngày, giúp bạn kiểm soát chi phí sinh hoạt. Nó thường được sử dụng để tránh vượt ngân sách và hình thành thói quen chi tiêu có chủ đích.

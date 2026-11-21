@@ -1,0 +1,4 @@
+[ap-southeast-1] haiku55: LỖI AccessDeniedException: anthropic.claude-haiku-5-5 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403) (0.24s)
+[ap-southeast-1] sonnet55: LỖI AccessDeniedException: anthropic.claude-sonnet-5-5 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403) (0.11s)
+[ap-southeast-1] haiku45: GỌI ĐƯỢC 0.52s usage={'inputTokens': 23, 'outputTokens': 4, 'totalTokens': 27, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 0} text='OK' stop=end_turn
+[ap-southeast-1] sonnet46: GỌI ĐƯỢC 0.65s usage={'inputTokens': 23, 'outputTokens': 4, 'totalTokens': 27, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 0} text='ok' stop=end_turn

@@ -1,0 +1,9 @@
+[ap-southeast-1] sonnet5(global): LỖI AccessDeniedException: anthropic.claude-sonnet-5 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)
+[ap-southeast-1] sonnet5(in-region): LỖI AccessDeniedException: anthropic.claude-sonnet-5 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)
+[ap-southeast-1] opus55: LỖI AccessDeniedException: anthropic.claude-opus-5-5 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)
+[ap-southeast-1] fable52: LỖI AccessDeniedException: anthropic.claude-fable-5-2 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)
+[ap-southeast-1] opus46: GỌI ĐƯỢC 1.34s usage_in/out=23/4
+[ap-southeast-1] nova2lite: GỌI ĐƯỢC 0.67s usage_in/out=56/20
+[ap-southeast-1] novalite: GỌI ĐƯỢC 0.35s usage_in/out=17/7
+[ap-southeast-1] novamicro: GỌI ĐƯỢC 0.39s usage_in/out=17/20
+[ap-southeast-1] novapro: GỌI ĐƯỢC 0.41s usage_in/out=17/5

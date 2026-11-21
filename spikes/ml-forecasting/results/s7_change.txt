@@ -1,0 +1,109 @@
+điểm gãy thật: index 251 2026-07-10 | trung bình chi/ngày trước: 99.2 sau: 148.3 (+49%)
+tuần chứa điểm gãy: 35 (ngày 245-251); mức mới bắt đầu tuần 36
+
+PELT l2, min_size=2 tuần, penalty = c * sigma^2 * ln(n) (sigma bền từ sai phân); điểm gãy thật = tuần 36 
+ | chuỗi                              |   c |   pen | điểm gãy (tuần)                      | bắt đúng (±2 tuần)   |   báo động giả |
+|:-----------------------------------|----:|------:|:-------------------------------------|:---------------------|---------------:|
+| A. tuần thô (có khoản lớn)         | 0.5 |  1.73 | [12, 24, 26, 36, 40, 44, 46, 48]     | True                 |              7 |
+| A. tuần thô (có khoản lớn)         | 1   |  3.45 | [22, 26, 36, 40]                     | True                 |              3 |
+| A. tuần thô (có khoản lớn)         | 2   |  6.9  | [36]                                 | True                 |              0 |
+| A. tuần thô (có khoản lớn)         | 3   | 10.35 | []                                   | False                |              0 |
+| A. tuần thô (có khoản lớn)         | 5   | 17.26 | []                                   | False                |              0 |
+| A. tuần thô (có khoản lớn)         | 8   | 27.61 | []                                   | False                |              0 |
+| B. tuần, cắt khoản lớn             | 0.5 |  1.39 | [12, 33, 36, 38, 40, 44, 46, 48, 50] | True                 |              7 |
+| B. tuần, cắt khoản lớn             | 1   |  2.79 | [12, 38, 40, 48]                     | True                 |              3 |
+| B. tuần, cắt khoản lớn             | 2   |  5.58 | [36]                                 | True                 |              0 |
+| B. tuần, cắt khoản lớn             | 3   |  8.37 | [36]                                 | True                 |              0 |
+| B. tuần, cắt khoản lớn             | 5   | 13.95 | []                                   | False                |              0 |
+| B. tuần, cắt khoản lớn             | 8   | 22.32 | []                                   | False                |              0 |
+| C. tuần, cắt + khử nhịp ngày lương | 0.5 |  1.32 | [12, 33, 36, 38, 40, 43, 46, 48, 50] | True                 |              7 |
+| C. tuần, cắt + khử nhịp ngày lương | 1   |  2.64 | [12, 38, 40, 48]                     | True                 |              3 |
+| C. tuần, cắt + khử nhịp ngày lương | 2   |  5.27 | [36]                                 | True                 |              0 |
+| C. tuần, cắt + khử nhịp ngày lương | 3   |  7.91 | [36]                                 | True                 |              0 |
+| C. tuần, cắt + khử nhịp ngày lương | 5   | 13.18 | []                                   | False                |              0 |
+| C. tuần, cắt + khử nhịp ngày lương | 8   | 21.08 | []                                   | False                |              0 |
+
+PELT trên chuỗi ngày (cuộn 7 ngày, cắt + khử nhịp), min_size=14, jump=1; điểm gãy thật = ngày 251
+  c=  1: điểm gãy (ngày) [32, 49, 70, 89, 113, 127, 156, 181, 201, 218, 232, 254, 271, 285, 308, 323, 337, 351]  | thời gian 10 ms | gần điểm gãy thật (±14 ngày): [254]
+  c=  3: điểm gãy (ngày) [32, 50, 89, 113, 127, 156, 181, 201, 218, 232, 254, 271, 285, 308, 323, 337, 351]  | thời gian 17 ms | gần điểm gãy thật (±14 ngày): [254]
+  c= 10: điểm gãy (ngày) [89, 113, 127, 156, 181, 201, 232, 254, 271, 285, 308, 323, 337, 351]  | thời gian 31 ms | gần điểm gãy thật (±14 ngày): [254]
+  c= 30: điểm gãy (ngày) [89, 113, 156, 181, 255, 271, 285, 308, 323, 337, 351]  | thời gian 62 ms | gần điểm gãy thật (±14 ngày): [255]
+  c=100: điểm gãy (ngày) [256, 285, 339]  | thời gian 268 ms | gần điểm gãy thật (±14 ngày): [256]
+  model=l1, pen=3 ln n, min_size=2: []
+  model=normal, pen=3 ln n, min_size=3: [12, 39]
+
+river 0.27.0 | lớp trong river.drift: ['ADWIN', 'DriftRetrainingClassifier', 'DummyDriftDetector', 'KSWIN', 'NoDrift', 'PageHinkley']
+tìm 'cusum' trong tên module river: [] | trong river.drift: []
+
+Chuỗi NGÀY, z theo 120 ngày đầu (tổng 3 hũ chi đều, có khoản lớn và nhịp ngày lương); điểm gãy = ngày 251
+  PageHinkley threshold=  5: {'sự kiện': [32, 72, 102, 132, 162, 192, 222, 252, 282, 312, 342], 'báo giả trước gãy': 7, 'độ trễ phát hiện đầu tiên sau gãy': 1}
+  PageHinkley threshold= 10: {'sự kiện': [49, 92, 162, 192, 225, 255, 285, 315, 345], 'báo giả trước gãy': 5, 'độ trễ phát hiện đầu tiên sau gãy': 4}
+  PageHinkley threshold= 20: {'sự kiện': [108, 162, 196, 273, 303], 'báo giả trước gãy': 3, 'độ trễ phát hiện đầu tiên sau gãy': 22}
+  PageHinkley threshold= 50: {'sự kiện': [180, 316], 'báo giả trước gãy': 1, 'độ trễ phát hiện đầu tiên sau gãy': 65}
+  ADWIN delta=0.002 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  ADWIN delta=0.0002 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  ADWIN delta=0.002 clock= 7: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  ADWIN delta=0.0002 clock= 7: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  ADWIN delta=0.002 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  ADWIN delta=0.0002 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+
+ADWIN trên chuỗi đã chuẩn hóa về [0,1] (ngày: chia phân vị 99 của 120 ngày đầu; tuần: chia 1,5 x max 15 tuần đầu)
+  NGÀY  ADWIN delta=0.002 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  NGÀY  ADWIN delta=0.01 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  NGÀY  ADWIN delta=0.05 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  NGÀY  ADWIN delta=0.002 clock= 7: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  NGÀY  ADWIN delta=0.01 clock= 7: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  NGÀY  ADWIN delta=0.05 clock= 7: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  NGÀY  ADWIN delta=0.002 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  NGÀY  ADWIN delta=0.01 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  NGÀY  ADWIN delta=0.05 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  TUẦN  ADWIN delta=0.002 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  TUẦN  ADWIN delta=0.05 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  TUẦN  ADWIN delta=0.3 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  TUẦN  ADWIN delta=0.002 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  TUẦN  ADWIN delta=0.05 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  TUẦN  ADWIN delta=0.3 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  KIỂM TRA ADWIN bậc 0,2->0,5 sd 0,1 clock=32: {'sự kiện': [255], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': 55}
+  KIỂM TRA ADWIN bậc 0,2->0,5 sd 0,1 clock= 1: {'sự kiện': [243], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': 43}
+  KIỂM TRA ADWIN bậc 0,2->0,3 sd 0,15 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  KIỂM TRA ADWIN bậc 0,2->0,3 sd 0,15 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  độ dịch mức (chuẩn hóa [0,1]) = 0.136, độ lệch chuẩn ngày = 0.207
+
+Chuỗi TUẦN (C: cắt + khử nhịp; z theo 15 tuần đầu); điểm gãy = tuần 36
+  PageHinkley min_instances=10 threshold=  3: {'sự kiện': [9, 22, 32, 42], 'báo giả trước gãy': 3, 'độ trễ phát hiện đầu tiên sau gãy': 6}
+  PageHinkley min_instances=10 threshold=  5: {'sự kiện': [15, 25, 39, 49], 'báo giả trước gãy': 2, 'độ trễ phát hiện đầu tiên sau gãy': 3}
+  PageHinkley min_instances=10 threshold= 10: {'sự kiện': [24, 39], 'báo giả trước gãy': 1, 'độ trễ phát hiện đầu tiên sau gãy': 3}
+  PageHinkley min_instances=10 threshold= 20: {'sự kiện': [39], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': 3}
+  ADWIN delta=0.002 clock=32: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  ADWIN delta=0.002 clock= 1: {'sự kiện': [], 'báo giả trước gãy': 0, 'độ trễ phát hiện đầu tiên sau gãy': None}
+  CUSUM tự viết k=0.5 h=4 (tuần): {'sự kiện': [15, 22, 25, 37, 39, 44, 48, 50], 'báo giả trước gãy': 3, 'độ trễ phát hiện đầu tiên sau gãy': 1}
+  CUSUM tự viết k=0.5 h=5 (tuần): {'sự kiện': [15, 23, 32, 38, 39, 44, 48, 50], 'báo giả trước gãy': 3, 'độ trễ phát hiện đầu tiên sau gãy': 2}
+  CUSUM tự viết k=1.0 h=4 (tuần): {'sự kiện': [24, 39, 45, 48, 50], 'báo giả trước gãy': 1, 'độ trễ phát hiện đầu tiên sau gãy': 3}
+
+pyod 3.6.8 | số dòng (hũ-ngày có chi): 857 | nhãn bất thường: 3 (3 khoản lớn một lần chèn vào; hũ dự phòng bị loại vì mọi khoản của nó đều là cú sốc)
+  (chỉ đuôi phải: gắn cờ 45, TP=3, FP=42)
+  ECOD contamination=0.1: gắn cờ 86, TP=3, FP=83, FN=0, precision=0.03, recall=1.00, fit 202 ms
+  (chỉ đuôi phải: gắn cờ 23, TP=3, FP=20)
+  ECOD contamination=0.05: gắn cờ 43, TP=3, FP=40, FN=0, precision=0.07, recall=1.00, fit 1 ms
+  (chỉ đuôi phải: gắn cờ 11, TP=3, FP=8)
+  ECOD contamination=0.02: gắn cờ 18, TP=3, FP=15, FN=0, precision=0.17, recall=1.00, fit 1 ms
+  (chỉ đuôi phải: gắn cờ 5, TP=3, FP=2)
+  ECOD contamination=0.01: gắn cờ 9, TP=3, FP=6, FN=0, precision=0.33, recall=1.00, fit 1 ms
+  top-12 điểm ECOD:
+ | jar       | date       |   amt |   score | y     |
+|:----------|:-----------|------:|--------:|:------|
+| mua_sam   | 2026-09-02 |  2200 |    12.8 | True  |
+| an_uong   | 2026-04-30 |  1035 |    12.1 | True  |
+| mua_sam   | 2026-01-17 |  1800 |    11.7 | True  |
+| mua_sam   | 2026-04-19 |  1504 |    10.8 | False |
+| mua_sam   | 2026-06-10 |     9 |    10.6 | False |
+| di_chuyen | 2026-03-17 |     5 |    10.3 | False |
+| di_chuyen | 2026-06-27 |     5 |    10.3 | False |
+| an_uong   | 2026-09-25 |     7 |    10.2 | False |
+| an_uong   | 2026-07-14 |   563 |     9.4 | False |
+| mua_sam   | 2025-11-28 |   787 |     9.4 | False |
+| mua_sam   | 2026-04-17 |   773 |     9.1 | False |
+| giai_tri  | 2026-09-25 |    10 |     9.1 | False |
+  hạng của các khoản có nhãn: [1, 2, 3]
+  z bền MAD > 6: gắn cờ 16, TP=3, FP=13
+  z bền MAD > 10: gắn cờ 8, TP=3, FP=5

@@ -1,0 +1,1080 @@
+{
+ "haiku45/tool_choice": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "ok": {
+    "intent": true,
+    "amount": true,
+    "pay": true,
+    "clar": false
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "confidence": 0.95,
+    "needs_clarification": true,
+    "clarification_question": "Bạn muốn mua tai nghe này cho hũ nào? (vd: giải trí, mua sắm, hoặc hũ khác?)",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    }
+   },
+   "secs": 1.42,
+   "usage": {
+    "inputTokens": 1221,
+    "outputTokens": 200,
+    "totalTokens": 1421,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "jar_balance",
+    "params": {
+     "jar": "ăn uống",
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 1.01,
+   "usage": {
+    "inputTokens": 1208,
+    "outputTokens": 149,
+    "totalTokens": 1357,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "investment_advice",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 1.05,
+   "usage": {
+    "inputTokens": 1206,
+    "outputTokens": 144,
+    "totalTokens": 1350,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "ok": {
+    "intent": false,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "jar_balance",
+    "params": {
+     "jar": "giải trí",
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 1.06,
+   "usage": {
+    "inputTokens": 1210,
+    "outputTokens": 148,
+    "totalTokens": 1358,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": null,
+     "item": "<UNKNOWN>",
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.3,
+    "needs_clarification": true,
+    "clarification_question": "Bạn muốn mua cái gì? Giá bao nhiêu tiền? Sẽ thanh toán bằng cách nào (tiền mặt, thẻ, ví trả sau...)? Và tiền sẽ lấy từ hũ nào (ăn uống, giải trí, tiền trợ...)?"
+   },
+   "secs": 1.84,
+   "usage": {
+    "inputTokens": 1203,
+    "outputTokens": 245,
+    "totalTokens": 1448,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  }
+ ],
+ "haiku45/output_schema": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "ok": {
+    "intent": true,
+    "amount": true,
+    "pay": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.75,
+   "usage": {
+    "inputTokens": 807,
+    "outputTokens": 65,
+    "totalTokens": 872,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "jar_balance",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "ăn uống"
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 3.26,
+   "usage": {
+    "inputTokens": 794,
+    "outputTokens": 59,
+    "totalTokens": 853,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "investment_advice",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.7,
+   "usage": {
+    "inputTokens": 792,
+    "outputTokens": 55,
+    "totalTokens": 847,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "ok": {
+    "intent": false,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "jar_balance",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "giải trí"
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.75,
+   "usage": {
+    "inputTokens": 796,
+    "outputTokens": 58,
+    "totalTokens": 854,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "ok": {
+    "intent": false,
+    "clar": true
+   },
+   "result": {
+    "intent": "other",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.3,
+    "needs_clarification": true,
+    "clarification_question": "Bạn muốn mua cái gì và giá bao nhiêu tiền? Cũng cần biết bạn sẽ thanh toán bằng cách nào (ví trả sau, tiền mặt, thẻ...) và từ hũ nào (ăn uống, giải trí, tiền trợ...)"
+   },
+   "secs": 1.41,
+   "usage": {
+    "inputTokens": 789,
+    "outputTokens": 147,
+    "totalTokens": 936,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  }
+ ],
+ "sonnet46/tool_choice": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "ok": {
+    "intent": true,
+    "amount": true,
+    "pay": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.97,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 1.21,
+   "usage": {
+    "inputTokens": 1111,
+    "outputTokens": 147,
+    "totalTokens": 1258,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "jar_balance",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "ăn uống"
+    },
+    "confidence": 0.97,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 1.24,
+   "usage": {
+    "inputTokens": 1098,
+    "outputTokens": 140,
+    "totalTokens": 1238,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "investment_advice",
+    "params": {
+     "amount_vnd": null,
+     "item": "cổ phiếu",
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.97,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 1.24,
+   "usage": {
+    "inputTokens": 1096,
+    "outputTokens": 141,
+    "totalTokens": 1237,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "forecast_depletion",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "giải trí"
+    },
+    "confidence": 0.92,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 1.19,
+   "usage": {
+    "inputTokens": 1100,
+    "outputTokens": 141,
+    "totalTokens": 1241,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": null,
+     "item": "<UNKNOWN>",
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.6,
+    "needs_clarification": true,
+    "clarification_question": "Bạn muốn mua món gì và với giá bao nhiêu vậy? Bạn có thể cho mình biết thêm tên món hàng và số tiền không?"
+   },
+   "secs": 1.78,
+   "usage": {
+    "inputTokens": 1093,
+    "outputTokens": 190,
+    "totalTokens": 1283,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  }
+ ],
+ "sonnet46/output_schema": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "ok": {
+    "intent": true,
+    "amount": true,
+    "pay": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.95,
+   "usage": {
+    "inputTokens": 808,
+    "outputTokens": 65,
+    "totalTokens": 873,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "jar_balance",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "ăn uống"
+    },
+    "confidence": 0.97,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.97,
+   "usage": {
+    "inputTokens": 795,
+    "outputTokens": 59,
+    "totalTokens": 854,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "investment_advice",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.97,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.97,
+   "usage": {
+    "inputTokens": 793,
+    "outputTokens": 55,
+    "totalTokens": 848,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "forecast_depletion",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "giải trí"
+    },
+    "confidence": 0.92,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.98,
+   "usage": {
+    "inputTokens": 797,
+    "outputTokens": 60,
+    "totalTokens": 857,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.4,
+    "needs_clarification": true,
+    "clarification_question": "Bạn muốn mua món gì và với số tiền bao nhiêu vậy? Ví dụ: 'Mua tai nghe 500k thì sao?'"
+   },
+   "secs": 1.52,
+   "usage": {
+    "inputTokens": 790,
+    "outputTokens": 106,
+    "totalTokens": 896,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  }
+ ],
+ "novalite/tool_choice": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "ok": {
+    "intent": true,
+    "amount": true,
+    "pay": false,
+    "clar": true
+   },
+   "result": {
+    "needs_clarification": false,
+    "clarification_question": null,
+    "confidence": 0.9,
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "vi tra sau",
+     "jar": "other"
+    },
+    "intent": "what_if_purchase"
+   },
+   "secs": 0.76,
+   "usage": {
+    "inputTokens": 842,
+    "outputTokens": 80,
+    "totalTokens": 922
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "needs_clarification": false,
+    "clarification_question": null,
+    "confidence": 0.9,
+    "params": {
+     "jar": "ăn uống"
+    },
+    "intent": "jar_balance"
+   },
+   "secs": 0.52,
+   "usage": {
+    "inputTokens": 830,
+    "outputTokens": 47,
+    "totalTokens": 877
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "ok": {
+    "intent": true,
+    "clar": false
+   },
+   "result": {
+    "needs_clarification": true,
+    "clarification_question": "Bạn có thể cung cấp thêm thông tin về số tiền bạn muốn đầu tư và bất kỳ yêu cầu cụ thể nào khác về cổ phiếu nào?",
+    "confidence": 0.9,
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "intent": "investment_advice"
+   },
+   "secs": 0.9,
+   "usage": {
+    "inputTokens": 828,
+    "outputTokens": 129,
+    "totalTokens": 957
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "needs_clarification": false,
+    "clarification_question": null,
+    "confidence": 0.9,
+    "params": {
+     "jar": "giải trí"
+    },
+    "intent": "forecast_depletion"
+   },
+   "secs": 0.54,
+   "usage": {
+    "inputTokens": 829,
+    "outputTokens": 50,
+    "totalTokens": 879
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "needs_clarification": true,
+    "clarification_question": "Bạn có thể cung cấp thêm thông tin về số tiền bạn muốn chi tiêu cho món hàng này không?",
+    "confidence": 0.7,
+    "params": {
+     "amount_vnd": 0,
+     "item": "cái đó",
+     "payment_method": "null",
+     "jar": "null"
+    },
+    "intent": "what_if_purchase"
+   },
+   "secs": 0.81,
+   "usage": {
+    "inputTokens": 826,
+    "outputTokens": 112,
+    "totalTokens": 938
+   },
+   "stop": "tool_use",
+   "logs": []
+  }
+ ],
+ "novalite/output_schema": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "error": "ValidationException: This model doesn't support the outputConfig field. Remove outputConfig and try again. (HTTP 400)",
+   "secs": 0.08,
+   "logs": []
+  }
+ ],
+ "novapro/tool_choice": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "ok": {
+    "intent": true,
+    "amount": true,
+    "pay": true,
+    "clar": true
+   },
+   "result": {
+    "needs_clarification": false,
+    "clarification_question": null,
+    "confidence": 0.9,
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "intent": "what_if_purchase"
+   },
+   "secs": 0.88,
+   "usage": {
+    "inputTokens": 842,
+    "outputTokens": 80,
+    "totalTokens": 922
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "needs_clarification": false,
+    "clarification_question": null,
+    "confidence": 0.9,
+    "params": {
+     "jar": "ăn uống"
+    },
+    "intent": "jar_balance"
+   },
+   "secs": 0.62,
+   "usage": {
+    "inputTokens": 830,
+    "outputTokens": 47,
+    "totalTokens": 877
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "needs_clarification": false,
+    "clarification_question": null,
+    "confidence": 0.9,
+    "params": {},
+    "intent": "investment_advice"
+   },
+   "secs": 0.66,
+   "usage": {
+    "inputTokens": 828,
+    "outputTokens": 40,
+    "totalTokens": 868
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "needs_clarification": false,
+    "clarification_question": null,
+    "confidence": 0.9,
+    "params": {
+     "jar": "giải trí"
+    },
+    "intent": "forecast_depletion"
+   },
+   "secs": 0.65,
+   "usage": {
+    "inputTokens": 829,
+    "outputTokens": 50,
+    "totalTokens": 879
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "needs_clarification": true,
+    "clarification_question": "Bạn muốn mua món hàng nào?",
+    "confidence": 0.5,
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "intent": "what_if_purchase"
+   },
+   "secs": 0.81,
+   "usage": {
+    "inputTokens": 826,
+    "outputTokens": 79,
+    "totalTokens": 905
+   },
+   "stop": "tool_use",
+   "logs": []
+  }
+ ],
+ "novapro/output_schema": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "error": "ValidationException: This model doesn't support the outputConfig field. Remove outputConfig and try again. (HTTP 400)",
+   "secs": 0.09,
+   "logs": []
+  }
+ ],
+ "nova2lite/tool_choice": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "ok": {
+    "intent": true,
+    "amount": true,
+    "pay": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 1.0,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 1.0,
+   "usage": {
+    "inputTokens": 1227,
+    "outputTokens": 104,
+    "totalTokens": 1331
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "jar_balance",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "ăn uống"
+    },
+    "confidence": 1.0,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.98,
+   "usage": {
+    "inputTokens": 1218,
+    "outputTokens": 97,
+    "totalTokens": 1315
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "investment_advice",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 1.0,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.81,
+   "usage": {
+    "inputTokens": 1217,
+    "outputTokens": 96,
+    "totalTokens": 1313
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "forecast_depletion",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "giải trí"
+    },
+    "confidence": 1.0,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 0.92,
+   "usage": {
+    "inputTokens": 1222,
+    "outputTokens": 99,
+    "totalTokens": 1321
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.6,
+    "needs_clarification": true,
+    "clarification_question": "Bạn muốn mua món gì và số tiền dự kiến là bao nhiêu?"
+   },
+   "secs": 0.92,
+   "usage": {
+    "inputTokens": 1217,
+    "outputTokens": 109,
+    "totalTokens": 1326
+   },
+   "stop": "tool_use",
+   "logs": []
+  }
+ ],
+ "nova2lite/output_schema": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "error": "ValidationException: This model doesn't support the outputConfig field. Remove outputConfig and try again. (HTTP 400)",
+   "secs": 0.09,
+   "logs": []
+  }
+ ],
+ "global.moonshotai.kimi-k3/tool_choice": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "error": "ValidationException: This model doesn't support the temperature field. Remove temperature and try again. (HTTP 400)",
+   "secs": 15.94,
+   "logs": [
+    "retry 1 sau ThrottlingException, nghỉ 15s"
+   ]
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "error": "ValidationException: This model doesn't support the temperature field. Remove temperature and try again. (HTTP 400)",
+   "secs": 16.88,
+   "logs": [
+    "retry 1 sau ThrottlingException, nghỉ 15s"
+   ]
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "error": "ValidationException: This model doesn't support the temperature field. Remove temperature and try again. (HTTP 400)",
+   "secs": 0.08,
+   "logs": []
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "error": "ValidationException: This model doesn't support the temperature field. Remove temperature and try again. (HTTP 400)",
+   "secs": 0.09,
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "error": "ValidationException: This model doesn't support the temperature field. Remove temperature and try again. (HTTP 400)",
+   "secs": 0.59,
+   "logs": []
+  }
+ ],
+ "global.moonshotai.kimi-k3/output_schema": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "error": "ValidationException: This model doesn't support the temperature field. Remove temperature and try again. (HTTP 400)",
+   "secs": 1.1,
+   "logs": []
+  }
+ ]
+}

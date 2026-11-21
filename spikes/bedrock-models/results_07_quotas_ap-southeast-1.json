@@ -1,0 +1,3677 @@
+[
+ {
+  "code": "L-2767B9A9",
+  "name": "Records per batch inference job for Claude Opus 4.5",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-CB5B847D",
+  "name": "(Model customization) Custom models per account",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-FEE1DCB6",
+  "name": "On-demand model inference tokens per minute for Cohere Command R Plus",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F86AE9DD",
+  "name": "(Guardrails) On-demand ApplyGuardrail contextual grounding policy text units burst rate",
+  "default": 106.0,
+  "applied": 106.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A8E19E21",
+  "name": "Batch inference job size (in GB) for Claude Sonnet 4.5",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F6E116D7",
+  "name": "Global cross-region model inference requests per minute for Anthropic Claude Sonnet 4.6",
+  "default": 10000.0,
+  "applied": 10.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-987117C6",
+  "name": "ListAgentVersions requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-AA411D03",
+  "name": "Records per batch inference job for Llama 3.1 405B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-44992E63",
+  "name": "On-demand model inference tokens per minute for Amazon Titan Text Express",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-89F8391A",
+  "name": "Cross-region model inference requests per minute for Amazon Nova Lite",
+  "default": 400.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-E9AF2411",
+  "name": "DisassociateAgentKnowledgeBase requests per second",
+  "default": 4.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FF73AE42",
+  "name": "Records per batch inference job for Llama 3.2 1B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-2D84F8A3",
+  "name": "(Flows) Conditions per condition node",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FE44174A",
+  "name": "Model units no-commitment Provisioned Throughputs across base models",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4A832410",
+  "name": "Records per input file per batch inference job for Nova 2 Lite",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A0EBB440",
+  "name": "Global cross-region model inference tokens per day for Amazon Nova 2 Pro Preview",
+  "default": 1440000000.0,
+  "applied": 54000000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FC6C0CDB",
+  "name": "(Flows) DeleteFlowVersion requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A0AAB785",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 3.1 405B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-5CBDB5BC",
+  "name": "Batch inference input file size (in GB) for Claude 3.5 Sonnet v2",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B4B995D8",
+  "name": "Records per input file per batch inference job for Llama 4 Maverick",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-BD343E2A",
+  "name": "(Data Automation) Maximum number of Blueprints per Start Inference request (Audios)",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F3A3096C",
+  "name": "Batch inference input file size (in GB) for Llama 3.1 8B Instruct",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D5F39C2F",
+  "name": "Global cross-region model inference requests per minute for Amazon Nova 2 Lite",
+  "default": 2000.0,
+  "applied": 20.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-EB75F053",
+  "name": "Batch inference job size (in GB) for Llama 4 Maverick",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-4090E58E",
+  "name": "Batch inference job size (in GB) for Llama 3.2 3B Instruct",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B46CFAB8",
+  "name": "On-demand model inference tokens per minute for Anthropic Claude Sonnet 5",
+  "default": 3000000.0,
+  "applied": 0.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-AFA1CDAB",
+  "name": "(Knowledge Bases) RetrieveAndGenerate requests per second",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-51B0DEE7",
+  "name": "Records per input file per batch inference job for Llama 3.2 90B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-8F302008",
+  "name": "Batch inference job size (in GB) for Llama 3.1 8B Instruct",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-50CC5674",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Fable 5.1",
+  "default": 10000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-6E3CDA2D",
+  "name": "Characters in Agent instructions",
+  "default": 20000.0,
+  "applied": 20000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-05E453B4",
+  "name": "GetAgentActionGroup requests per second",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6DE38E15",
+  "name": "Minimum number of records per batch inference job for Claude Sonnet 4.6",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D690997B",
+  "name": "Model invocation max tokens per day for Amazon Nova Pro (doubled for cross-region calls)",
+  "default": 1440000000.0,
+  "applied": 230400000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A2BE277A",
+  "name": "On-demand model inference tokens per minute for Cohere Embed English",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-1074C53D",
+  "name": "Model units per provisioned model for Amazon Titan Text Embeddings V2",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A7EDC29B",
+  "name": "On-demand model inference tokens per minute for Meta Llama 3.2 3B Instruct",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6AB143E6",
+  "name": "Batch inference input file size (in GB) for Claude Opus 4.5",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3CAACDCF",
+  "name": "Batch inference input file size (in GB) for Titan Text Embeddings V2",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3E961CAB",
+  "name": "(Data Automation) InvokeDataAutomationAsync - Audio - Max number of concurrent jobs",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-26B15D4D",
+  "name": "Batch inference job size (in GB) for Nova Pro V1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-9F13DDE7",
+  "name": "Batch inference input file size (in GB) for Mistral Large 2 (24.07)",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A21CC341",
+  "name": "(Knowledge Bases) ListKnowledgeBases requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-916C9264",
+  "name": "Records per batch inference job for Nova Lite V1",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-254CACF4",
+  "name": "On-demand model inference requests per minute for Anthropic Claude 3.5 Sonnet",
+  "default": 20.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-7150BC56",
+  "name": "(Knowledge Bases) DeleteKnowledgeBase requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C0BA182F",
+  "name": "(Guardrails) Content policy maximum input size in text units (Standard tier - Recommended)",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-DC7FF66C",
+  "name": "Cross-region model inference tokens per minute for Amazon Nova Micro",
+  "default": 400000.0,
+  "applied": 400000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-87E3FFAC",
+  "name": "(Flows) GetFlow requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8D4EA85C",
+  "name": "Batch inference job size (in GB) for Llama 3.2 11B Instruct",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-059C1AAB",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 3.2 3B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-BB313AA3",
+  "name": "(Model customization) Sum of training and validation records for a Titan Multimodal Embeddings G1 v1 Fine-tuning job",
+  "default": 50000.0,
+  "applied": 50000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-14A16430",
+  "name": "Enabled action groups per agent",
+  "default": 15.0,
+  "applied": 15.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-392F9C48",
+  "name": "(Guardrails) Contextual grounding policy maximum input size in text units",
+  "default": 106.0,
+  "applied": 106.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-B1E11F5B",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 4 Scout",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D06938E7",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Fable 5",
+  "default": 4000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-C15B8AA6",
+  "name": "(Flows) DeleteFlow requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5E29F315",
+  "name": "Model units per provisioned model for Cohere Command",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-36AE5758",
+  "name": "(Knowledge Bases) Maximum number of files for Foundation Models as a parser",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8D4ED20B",
+  "name": "(Knowledge Bases) Concurrent IngestKnowledgeBaseDocuments and DeleteKnowledgeBaseDocuments requests per account",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A103A344",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Opus 5.5",
+  "default": 30000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4E7DDF49",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 4 Maverick",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-652C224A",
+  "name": "Sum of in-progress and submitted batch inference jobs using a custom model for Titan Multimodal Embeddings G1",
+  "default": 3.0,
+  "applied": 3.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-CCC92354",
+  "name": "Global cross-region model inference tokens per minute for GPT-6 Luna",
+  "default": 4000000.0,
+  "applied": 4000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E3F10727",
+  "name": "Cross-Model Max Tokens Per Day",
+  "default": 700000000.0,
+  "applied": 150000000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C4522D0D",
+  "name": "Model units per provisioned model for Anthropic Claude V2 100K",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-B38B530A",
+  "name": "Global cross-region model inference tokens per minute for GPT-6 Astra",
+  "default": 4000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-BD9FDA6F",
+  "name": "Cross-region model inference tokens per minute for Meta Llama 3.2 1B Instruct",
+  "default": 600000.0,
+  "applied": 600000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-879F6850",
+  "name": "On-demand model inference requests per minute for Amazon Titan Text Embeddings",
+  "default": 2000.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-83D7FD1C",
+  "name": "(Flows) Agent nodes per flow",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-679D8304",
+  "name": "(Knowledge Bases) Data sources per knowledge base",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-795ADAB0",
+  "name": "Global cross-region model inference tokens per day for Cohere Embed V4",
+  "default": 432000000.0,
+  "applied": 16200000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FF8B4E28",
+  "name": "Cross-Region model inference tokens per minute for Anthropic Claude 3.5 Sonnet V2",
+  "default": 800000.0,
+  "applied": 800000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E2ED42E6",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Nova Lite V1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-75C63C29",
+  "name": "Batch inference job size (in GB) for Claude Opus 5",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-1E2B9998",
+  "name": "Records per batch inference job for Claude 3.5 Sonnet",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-21800074",
+  "name": "Global cross-region model inference tokens per minute for Amazon Nova 2 Omni",
+  "default": 8000000.0,
+  "applied": 8000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-52F48BF6",
+  "name": "Global cross-region model inference requests per minute for TwelveLabs Pegasus 1.5",
+  "default": 60.0,
+  "applied": 1.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-B90A0AF2",
+  "name": "(Guardrails) Content policy maximum input size in text units (Classic tier)",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E06E7FD6",
+  "name": "Minimum number of records per batch inference job for Llama 3.3 70B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-9B651738",
+  "name": "Records per input file per batch inference job for Nova Pro V1",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A986092E",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Mistral Small",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-B46AC24C",
+  "name": "(Knowledge Bases) GetKnowledgeBase requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5E3E0013",
+  "name": "Records per batch inference job for Claude Opus 5",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-9782A23E",
+  "name": "Minimum number of records per batch inference job for Nova 2 Lite",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8651ED26",
+  "name": "Records per input file per batch inference job for Llama 3.1 405B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-1AC1CABC",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Titan Text Embeddings V2",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-01F3CD81",
+  "name": "(Guardrails) On-demand ApplyGuardrail Content filter policy text units per second (Classic tier)",
+  "default": 25.0,
+  "applied": 25.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-385F89F0",
+  "name": "Model invocation max tokens per day for Meta Llama 3.2 1B Instruct (doubled for cross-region calls)",
+  "default": 432000000.0,
+  "applied": 203040000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-BAE2EB93",
+  "name": "Records per input file per batch inference job for Mistral Large 2 (24.07)",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D1374B71",
+  "name": "(Knowledge Bases) GetIngestionJob requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-DE24F5BC",
+  "name": "(Prompt management) ListPrompts requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-4FCE27C7",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Opus 4.8",
+  "default": 30000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0F052E16",
+  "name": "Batch inference job size (in GB) for Mistral Small",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-329D7443",
+  "name": "Sum of in-progress and submitted batch inference jobs using a custom model for Titan Text Embeddings V2",
+  "default": 3.0,
+  "applied": 3.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-91554672",
+  "name": "(Model customization) Sum of training and validation records for a Titan Text G1 - Lite v1 Continued Pre-Training job",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-9E3C255A",
+  "name": "(Data Automation) InvokeDataAutomationAsync - Document - Max number of concurrent jobs",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-EAA9E7C9",
+  "name": "(Data Automation) Maximum number of Blueprints per Start Inference request (Documents)",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-039AF68B",
+  "name": "Global cross-region model inference tokens per minute for GPT-6 Sol",
+  "default": 2000000.0,
+  "applied": 2000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-185CB521",
+  "name": "Minimum number of records per batch inference job for Llama 3.2 3B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-26BB089C",
+  "name": "(Flows) ListFlowAliases requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-DF49A520",
+  "name": "(Guardrails) Word length in characters",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-74B5B793",
+  "name": "On-demand model inference tokens per minute for Amazon Titan Text Embeddings",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-9A11C666",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Haiku 4.5",
+  "default": 5000000.0,
+  "applied": 5000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-F457545D",
+  "name": "Cross-region model inference requests per minute for Anthropic Claude 3.5 Sonnet",
+  "default": 40.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-73ACE256",
+  "name": "(Flows) ListFlowVersions requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A63633C5",
+  "name": "Model units per provisioned model for Anthropic Claude V2.1 200K",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-F63AB5A7",
+  "name": "(Knowledge Bases) GetKnowledgeBaseDocuments requests per second",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-067F7E01",
+  "name": "Batch inference input file size (in GB) for Claude 3 Sonnet",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-897F8151",
+  "name": "Records per input file per batch inference job for Claude 3.5 Sonnet v2",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4B26E44A",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Sonnet 4.5 V1 1M Context Length",
+  "default": 1000000.0,
+  "applied": 1000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-ABA9742A",
+  "name": "(Data Automation) Maximum audio length (Minutes)",
+  "default": 240.0,
+  "applied": 240.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-459E44E5",
+  "name": "(Data Automation) InvokeBlueprintOptimizationAsync - Max number of blueprint optimization jobs per day",
+  "default": 30.0,
+  "applied": 30.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-17F95AA4",
+  "name": "On-demand model inference tokens per minute for Cohere Command R",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-57DC56A1",
+  "name": "Records per batch inference job for Nova Micro V1",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-FA06C205",
+  "name": "Records per batch inference job for Llama 3.1 8B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0ABA0A81",
+  "name": "(Prompt management) CreatePromptVersion requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FBBE47CA",
+  "name": "(Prompt management) Versions per prompt",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3CD2AF6F",
+  "name": "(Guardrails) On-demand ApplyGuardrail Word filter policy text units burst rate",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-7089DC7D",
+  "name": "Global cross-region model inference requests per minute for Cohere Embed V4",
+  "default": 2000.0,
+  "applied": 20.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0406044C",
+  "name": "(Model customization) Scheduled customization jobs",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8453046B",
+  "name": "(Knowledge Bases) UpdateDataSource requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-7315A204",
+  "name": "Batch inference input file size (in GB) for Claude Haiku 4.5",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5BF45557",
+  "name": "Minimum number of records per batch inference job for Llama 3.2 11B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-21EE8B55",
+  "name": "(Data Automation) CreateBlueprintVersion - Max number of Blueprint versions per Blueprint",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-1570CF9E",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude 3 Haiku",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-00F9DD5C",
+  "name": "(Data Automation) Maximum instruction field length for Audio Blueprint - (Characters)",
+  "default": 500.0,
+  "applied": 500.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-1D3E59A3",
+  "name": "Cross-Region model inference requests per minute for Anthropic Claude 3.5 Sonnet V2",
+  "default": 100.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FFFEDD8D",
+  "name": "Records per batch inference job for Claude Sonnet 4.5",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4C301596",
+  "name": "Batch inference input file size (in GB) for Nova 2 Lite",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-60DA3E0D",
+  "name": "(Knowledge Bases) Knowledge bases per account",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C479D0A2",
+  "name": "ListAgentAliases requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2A3EB975",
+  "name": "Minimum number of records per batch inference job for Nova Pro V1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-442924EC",
+  "name": "[bedrock-mantle endpoint] Output tokens per minute for GLM 5.3",
+  "default": 1000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-3A7ED9C0",
+  "name": "Batch inference job size (in GB) for Llama 3.3 70B Instruct",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-478319B0",
+  "name": "Records per input file per batch inference job for Llama 3.2 1B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-5AB0EE48",
+  "name": "Records per input file per batch inference job for Claude 3.5 Sonnet",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-AFFB7581",
+  "name": "Global cross-region model inference tokens per minute for GPT-6.1 Terra",
+  "default": 4000000.0,
+  "applied": 4000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-491F84D3",
+  "name": "Minimum number of records per batch inference job for Llama 4 Maverick",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C39B6D57",
+  "name": "Records per input file per batch inference job for Claude 3.5 Haiku",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-795A8608",
+  "name": "(Knowledge Bases) Concurrent ingestion jobs per account",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-85DABFD4",
+  "name": "(Guardrails) Words per word policy",
+  "default": 10000.0,
+  "applied": 10000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FE130012",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Nova Pro V1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A83ECA24",
+  "name": "Batch inference job size (in GB) for Mistral Large 2 (24.07)",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3F0ECEDC",
+  "name": "Model units per provisioned model for AI21 Labs Jurassic-2 Ultra",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-12056022",
+  "name": "Model invocation max tokens per day for Mistral AI Mistral 7B Instruct (doubled for cross-region calls)",
+  "default": 432000000.0,
+  "applied": 129600000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-1F644C2A",
+  "name": "Records per batch inference job for Claude 3 Haiku",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-C2FA9AEC",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude 3.5 Sonnet v2",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-81E26054",
+  "name": "Records per input file per batch inference job for Titan Multimodal Embeddings G1",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-2D7A58CF",
+  "name": "PrepareAgent requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A50569E5",
+  "name": "On-demand model inference tokens per minute for Anthropic Claude 3.5 Sonnet",
+  "default": 200000.0,
+  "applied": 200000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-55F225F6",
+  "name": "Records per input file per batch inference job for Claude Opus 5",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A596AFC0",
+  "name": "(Data Automation) InvokeDataAutomationAsync - Max number of open jobs",
+  "default": 1800.0,
+  "applied": 1800.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-95CACD43",
+  "name": "Records per batch inference job for Llama 3.2 11B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D50EA4E4",
+  "name": "Batch inference job size (in GB) for Llama 3.1 405B Instruct",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-BC7417B6",
+  "name": "(Flows) UpdateFlowAlias requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5A222661",
+  "name": "(Model customization) Sum of training and validation records for a Meta Llama 2 70B v1 Fine-tuning job",
+  "default": 10000.0,
+  "applied": 10000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-ECCE76C6",
+  "name": "Records per batch inference job for Nova 2 Lite",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-5C5CC02A",
+  "name": "Minimum number of records per batch inference job for Claude Opus 4.6",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-712788A5",
+  "name": "GetAgent requests per second",
+  "default": 15.0,
+  "applied": 15.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B83CA9E3",
+  "name": "ListAgents requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8111AFAC",
+  "name": "Batch inference input file size (in GB) for Llama 3.2 3B Instruct",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-99105855",
+  "name": "(Data Automation) Minimum Audio Sample Rate (Hz)",
+  "default": 8000.0,
+  "applied": 8000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-73573F44",
+  "name": "Model units per provisioned model for Anthropic Claude V2 18K",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-16941C66",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude Opus 5",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-2B5A3FA2",
+  "name": "Global cross-region model inference tokens per minute for Moonshot AI Kimi K3",
+  "default": 10000000.0,
+  "applied": 10000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-68AE6C02",
+  "name": "(Model customization) Sum of training and validation records for a Meta Llama 2 13B v1 Fine-tuning job",
+  "default": 10000.0,
+  "applied": 10000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-934360E8",
+  "name": "Batch inference input file size (in GB) for Claude 3.5 Sonnet",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D32CEBC2",
+  "name": "Batch inference input file size (in GB) for Mistral Small",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-E293C7C7",
+  "name": "Records per batch inference job for Llama 3.3 70B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-68D6B437",
+  "name": "Model invocation max tokens per day for Mistral AI Mixtral 8X7B Instruct (doubled for cross-region calls)",
+  "default": 432000000.0,
+  "applied": 41040000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6284B54D",
+  "name": "Batch inference job size (in GB) for Claude 3.5 Sonnet",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3DCCFAA4",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Opus 4.6 V1",
+  "default": 3000000.0,
+  "applied": 3000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E93C745B",
+  "name": "Records per input file per batch inference job for Claude 3 Sonnet",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-41FFF7F7",
+  "name": "UpdateAgent requests per second",
+  "default": 4.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5755FAB6",
+  "name": "(Guardrails) On-demand ApplyGuardrail Denied topic policy text units per second (Standard tier - Recommended)",
+  "default": 25.0,
+  "applied": 25.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D19DD0CE",
+  "name": "(Flows) ListFlows requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2B30E322",
+  "name": "Model invocation max tokens per day for Meta Llama 3.2 90B Instruct (doubled for cross-region calls)",
+  "default": 432000000.0,
+  "applied": 28080000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-447BB329",
+  "name": "Batch inference input file size (in GB) for Titan Multimodal Embeddings G1",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A88E7250",
+  "name": "(Guardrails) Word policy maximum input size in text units",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-13143995",
+  "name": "Associated knowledge bases per Agent",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D983F7C0",
+  "name": "Global cross-region model inference tokens per minute for GPT-5.6 Luna",
+  "default": 4000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-6F139B4D",
+  "name": "(Guardrails) Contextual grounding response length in text units",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-534E6885",
+  "name": "Minimum number of records per batch inference job for Nova Micro V1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-26C560CE",
+  "name": "On-demand model inference requests per minute for Amazon Titan Text Embeddings V2",
+  "default": 6000.0,
+  "applied": 60.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3EF72321",
+  "name": "(Knowledge Bases) Ingestion job file size with text content",
+  "default": 50.0,
+  "applied": 50.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B99072E7",
+  "name": "(Knowledge Bases) GetDataSource requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-10F69CA1",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Nova 2 Lite",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-FE6BC3E4",
+  "name": "Minimum number of records per batch inference job for Claude 3 Sonnet",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6F08AA6D",
+  "name": "(Guardrails) Regex length in characters",
+  "default": 500.0,
+  "applied": 500.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-CC3FC244",
+  "name": "(Guardrails) On-demand ApplyGuardrail Sensitive information filter policy text units burst rate",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-2AF05E49",
+  "name": "Batch inference input file size (in GB) for Claude Sonnet 4.6",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8175E285",
+  "name": "(Flows) Inline code nodes per flow",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-7847F21F",
+  "name": "(Flows) S3 storage nodes per flow",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-CAF2175F",
+  "name": "Batch inference job size (in GB) for Llama 3.2 90B Instruct",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-CDD9DC4A",
+  "name": "(Model customization) Sum of training and validation records for a Titan Text G1 - Express v1 Continued Pre-Training job",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-EBDED838",
+  "name": "On-demand model inference requests per minute for Meta Llama 3.2 90B Instruct",
+  "default": 400.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-23DB0C0C",
+  "name": "Minimum number of records per batch inference job for Claude Sonnet 4.5.",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B688EFA5",
+  "name": "Batch inference input file size (in GB) for Claude 3.5 Haiku",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-39FA8DCA",
+  "name": "Minimum number of records per batch inference job for Nova Lite V1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-9807BAA2",
+  "name": "(Guardrails) On-demand ApplyGuardrail Content filter policy text units burst rate (Standard tier - Recommended)",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-54CA9AAA",
+  "name": "(Knowledge Bases) DeleteKnowledgeBaseDocuments requests per second",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-E953E4AB",
+  "name": "Model units per provisioned model for Meta Llama 2 Chat 70B",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-9EDE6039",
+  "name": "Records per input file per batch inference job for Claude Haiku 4.5",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-60AFC764",
+  "name": "(Flows) Flow versions per flow",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-4C35BB2A",
+  "name": "On-demand model inference tokens per minute for Anthropic Claude 3 Sonnet",
+  "default": 200000.0,
+  "applied": 200000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F5FD68DB",
+  "name": "(Data Automation) Maximum Blueprints per Project (Videos)",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D3894D44",
+  "name": "(Data Automation) Maximum JSON Blueprint Size (Characters)",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-DD84E5CA",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Sonnet 5",
+  "default": 6000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-240F3183",
+  "name": "Model units per provisioned model for Stability.ai Stable Diffusion XL 0.8",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-34152C1D",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Opus 4.7",
+  "default": 10000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-50C45667",
+  "name": "(Knowledge Bases) ListKnowledgeBaseDocuments requests per second",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-9072D6F0",
+  "name": "(Guardrails) On-demand ApplyGuardrail requests per second",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-28612175",
+  "name": "Records per batch inference job for Claude Haiku 4.5",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-3B82104D",
+  "name": "(Model customization) Sum of training and validation records for a Titan Text G1 - Lite v1 Fine-tuning job",
+  "default": 10000.0,
+  "applied": 10000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A31D2B40",
+  "name": "Cross-region model inference requests per minute for Meta Llama 3.2 1B Instruct",
+  "default": 1600.0,
+  "applied": 16.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-9149A536",
+  "name": "Model units per provisioned model for Stability.ai Stable Diffusion XL 1.0",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-6473F1D2",
+  "name": "Global cross-region model inference tokens per minute for Z.ai GLM 5.3",
+  "default": 10000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-564C017C",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Nova Micro V1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-71C69B70",
+  "name": "Global cross-region model inference tokens per minute for Amazon Nova 2 Lite",
+  "default": 8000000.0,
+  "applied": 8000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-ABC24664",
+  "name": "On-demand model inference tokens per minute for Amazon Titan Multimodal Embeddings G1",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-909ED56A",
+  "name": "Batch inference job size (in GB) for Claude Haiku 4.5",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B8626674",
+  "name": "Records per input file per batch inference job for Nova Lite V1",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-7ABD27EC",
+  "name": "(Guardrails) On-demand ApplyGuardrail Denied topic policy text units burst rate (Standard tier - Recommended)",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D73B1244",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Opus 5",
+  "default": 30000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-B34C64C1",
+  "name": "Model invocation max tokens per day for Meta Llama 3.2 11B Instruct (doubled for cross-region calls)",
+  "default": 432000000.0,
+  "applied": 125280000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B8DED09F",
+  "name": "Batch inference input file size (in GB) for Llama 3.2 1B Instruct",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D471AEAB",
+  "name": "(Guardrails) Versions per guardrail",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6B0A9FAD",
+  "name": "Cross-region model inference requests per minute for Meta Llama 3.2 3B Instruct",
+  "default": 1600.0,
+  "applied": 16.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8E63548F",
+  "name": "UpdateAgentKnowledgeBase requests per second",
+  "default": 4.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-616A3F5B",
+  "name": "Cross-region model inference requests per minute for Anthropic Claude 3 Haiku",
+  "default": 400.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3030E098",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude Sonnet 4.6",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-6EBFEB27",
+  "name": "Records per batch inference job for Claude 3.5 Sonnet v2",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-31BC8F89",
+  "name": "(Knowledge Bases) Concurrent ingestion jobs per knowledge base",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-02DFBB76",
+  "name": "Global cross-region model inference tokens per minute for Cohere Embed V4",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0B66D421",
+  "name": "(Advanced Prompt Optimization) Inactive jobs per account",
+  "default": 5000.0,
+  "applied": 5000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E2D0B19E",
+  "name": "On-demand model inference tokens per minute for Meta Llama 3.2 11B Instruct",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D9A35062",
+  "name": "On-demand model inference requests per minute for Mistral 7B Instruct",
+  "default": 800.0,
+  "applied": 8.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B48488BD",
+  "name": "Minimum number of records per batch inference job for Claude 3.5 Haiku",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F406804E",
+  "name": "On-demand model inference requests per minute for Anthropic Claude 3 Sonnet",
+  "default": 100.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-1E9F6637",
+  "name": "(Flows) DeleteFlowAlias requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-130570F3",
+  "name": "(Flows) Flow aliases per flow",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-224F3DE4",
+  "name": "(Knowledge Bases) Files to add or update per ingestion job",
+  "default": 5000000.0,
+  "applied": 5000000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-409754A1",
+  "name": "(Knowledge Bases) IngestKnowledgeBaseDocuments requests per second",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-E83AC604",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude Opus 4.5",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-9EF212F4",
+  "name": "ListAgentKnowledgeBases requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-AAC5F6D6",
+  "name": "Records per batch inference job for Titan Text Embeddings V2",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E553E123",
+  "name": "(Flows) ValidateFlowDefinition requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-40EC9882",
+  "name": "Inference profiles per account",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-707418DE",
+  "name": "CreateAgent requests per second",
+  "default": 6.0,
+  "applied": 6.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F762E842",
+  "name": "(Knowledge Bases) Files to ingest per IngestKnowledgeBaseDocuments job.",
+  "default": 25.0,
+  "applied": 25.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-87482B04",
+  "name": "Minimum number of records per batch inference job for Llama 3.1 8B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6F2B2616",
+  "name": "Minimum number of records per batch inference job for Titan Text Embeddings V2",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8D07E980",
+  "name": "Records per batch inference job for Llama 3.1 70B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-7F2C6F33",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Titan Multimodal Embeddings G1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-19E52681",
+  "name": "Batch inference job size (in GB) for Nova Lite V1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F879F645",
+  "name": "Model units per provisioned model for Amazon Titan Embeddings G1 - Text",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-97A8CC77",
+  "name": "Model units per provisioned model for Cohere Embed English",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-C07B5EA2",
+  "name": "(Guardrails) On-demand ApplyGuardrail requests burst rate",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0495104E",
+  "name": "(Knowledge Bases) User query size",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-77C372BE",
+  "name": "(Flows) GetFlowVersion requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-274AA31F",
+  "name": "Records per batch inference job for Claude 3.5 Haiku",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-54FAADA6",
+  "name": "(Data Automation) InvokeBlueprintOptimizationAsync - Max number of blueprint optimization concurrent jobs",
+  "default": 3.0,
+  "applied": 3.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-00DFDB26",
+  "name": "(Knowledge Bases) RetrieveAndGenerateStream requests per second",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-01A2DC4B",
+  "name": "Records per batch inference job for Claude Sonnet 4.6",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-B5C023CA",
+  "name": "Global cross-region model inference tokens per minute for GPT-6.1 Sol",
+  "default": 2000000.0,
+  "applied": 2000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-77854CA1",
+  "name": "(Knowledge Bases) Files to delete per ingestion job",
+  "default": 5000000.0,
+  "applied": 5000000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-69B1E2CD",
+  "name": "(Data Automation) Maximum number of Blueprints per Start Inference request (Images)",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C79C2150",
+  "name": "Batch inference job size (in GB) for Nova Micro V1",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2BC3F4E3",
+  "name": "(Flows) GetFlowAlias requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-7DBB06FD",
+  "name": "On-demand model inference requests per minute for Amazon Titan Image Generator G1",
+  "default": 60.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-79301C5B",
+  "name": "Batch inference job size (in GB) for Claude 3 Haiku",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5D367E5C",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Mistral Large 2 (24.07)",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0B2687F4",
+  "name": "Cross-region model inference tokens per minute for Meta Llama 3.2 3B Instruct",
+  "default": 600000.0,
+  "applied": 600000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-BFF3304E",
+  "name": "Batch inference job size (in GB) for Claude Opus 4.6",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-987C98F5",
+  "name": "Batch inference job size (in GB) for Claude 3.5 Haiku",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F1613626",
+  "name": "(Flows) Flow executions per account",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-62B5D9D5",
+  "name": "Batch inference input file size (in GB) for Claude Opus 5",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-ED4DC88B",
+  "name": "(Prompt management) UpdatePrompt requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-CFF972CC",
+  "name": "AssociateAgentKnowledgeBase requests per second",
+  "default": 6.0,
+  "applied": 6.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-DCD79770",
+  "name": "Global cross-region model inference requests per minute for Amazon Nova 2 Omni",
+  "default": 2000.0,
+  "applied": 20.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0F2A24D7",
+  "name": "(Flows) Prompt nodes per flow",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-6B796A8E",
+  "name": "Global cross-region model inference tokens per minute for Amazon Nova 2 Pro Preview",
+  "default": 1000000.0,
+  "applied": 1000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-9C450F60",
+  "name": "(Data Automation) Maximum video file size (MB)",
+  "default": 10240.0,
+  "applied": 10240.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-CD43D76B",
+  "name": "(Data Automation) Minimum audio length (Miliseconds)",
+  "default": 500.0,
+  "applied": 500.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8D6762F0",
+  "name": "Global cross-region model inference tokens per minute for Moonshot AI Kimi K3.1",
+  "default": 1000000.0,
+  "applied": 1000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-32F1CE34",
+  "name": "(Flows) Collector nodes per flow",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B2ADD004",
+  "name": "Batch inference job size (in GB) for Llama 3.1 70B Instruct",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-45E0AD92",
+  "name": "Model invocation max tokens per day for Amazon Nova Lite (doubled for cross-region calls)",
+  "default": 5760000000.0,
+  "applied": 564480001.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-7D24C2A2",
+  "name": "(Prompt management) GetPrompt requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-0C92D61A",
+  "name": "(Data Automation) Maximum Levels of Field Hierarchy",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-42ABE687",
+  "name": "Batch inference input file size (in GB) for Claude 3 Haiku",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F12318F0",
+  "name": "Minimum number of records per batch inference job for Mistral Large 2 (24.07)",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2EBEF050",
+  "name": "Model units per provisioned model for Meta Llama 2 70B",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-AE7F26D4",
+  "name": "Minimum number of records per batch inference job for Claude 3 Haiku",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-1E0DA3DF",
+  "name": "Minimum number of records per batch inference job for Claude 3.5 Sonnet",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A3425ABD",
+  "name": "Global cross-region model inference requests per minute for Amazon Nova 2 Pro Preview",
+  "default": 100.0,
+  "applied": 1.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-F2469446",
+  "name": "Model units per provisioned model for Cohere Command R",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-268D592E",
+  "name": "Model units per provisioned model for Meta Llama 2 13B",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-BCF9AED9",
+  "name": "Batch inference input file size (in GB) for Llama 3.1 405B Instruct",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-871FF812",
+  "name": "UpdateAgentAlias requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-4F4FC597",
+  "name": "(Guardrails) Regex entities in Sensitive Information Filter",
+  "default": 30.0,
+  "applied": 30.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-ED46B8C5",
+  "name": "Cross-region model inference requests per minute for Amazon Nova Pro",
+  "default": 500.0,
+  "applied": 25.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-E7D41161",
+  "name": "Model invocation max tokens per day for Anthropic Claude 3.5 Sonnet V1 (doubled for cross-region calls)",
+  "default": 2880000000.0,
+  "applied": 28800000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-92E7FE32",
+  "name": "Records per input file per batch inference job for Llama 4 Scout",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-50E31465",
+  "name": "(Data Automation) Maximum document file size (MB)",
+  "default": 500.0,
+  "applied": 500.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C0326783",
+  "name": "Cross-region model inference tokens per minute for Amazon Nova Pro",
+  "default": 2000000.0,
+  "applied": 2000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-39128CD1",
+  "name": "(Flows) Condition nodes per flow",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-091522BC",
+  "name": "(Flows) PrepareFlow requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-4CB86209",
+  "name": "Throttle rate limit for Bedrock Data Automation Runtime: ListTagsForResource",
+  "default": 25.0,
+  "applied": 25.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-124DCF3D",
+  "name": "(Guardrails) On-demand ApplyGuardrail Denied topic policy text units per second (Classic tier)",
+  "default": 25.0,
+  "applied": 25.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-829AE0B9",
+  "name": "(Data Automation) Maximum image file size (MB)",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-DE0A7679",
+  "name": "Minimum number of records per batch inference job for Mistral Small",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F777E93B",
+  "name": "Batch inference job size (in GB) for Llama 3.2 1B Instruct",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D56DF585",
+  "name": "Records per input file per batch inference job for Nova Micro V1",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4A0EAD70",
+  "name": "(Guardrails) On-demand ApplyGuardrail Content filter policy text units burst rate (Classic tier)",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-DCADBC78",
+  "name": "Cross-region model inference tokens per minute for Anthropic Claude 3 Haiku",
+  "default": 400000.0,
+  "applied": 400000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-DD0273B7",
+  "name": "(Guardrails) Topic policy maximum input size in text units (Classic tier)",
+  "default": 25.0,
+  "applied": 25.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-F36E54E0",
+  "name": "Batch inference input file size (in GB) for Nova Micro V1",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-16E25672",
+  "name": "Records per batch inference job for Claude 3 Sonnet",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-8129BF10",
+  "name": "Model units per provisioned model for Amazon Titan Text G1 - Express 8K",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4C584163",
+  "name": "Batch inference job size (in GB) for Titan Multimodal Embeddings G1",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-83FDDF24",
+  "name": "DeleteAgentActionGroup requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F65B864B",
+  "name": "(Knowledge Bases) Maximum number of files for BDA parser",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5E04C7E2",
+  "name": "(Knowledge Bases) ListDataSources requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2FE3C16F",
+  "name": "(Knowledge Bases) CreateKnowledgeBase requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A3D5E9F8",
+  "name": "Batch inference job size (in GB) for Claude 3.5 Sonnet v2",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-E4F91723",
+  "name": "Batch inference input file size (in GB) for Llama 4 Scout",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-CCE51B55",
+  "name": "Model invocation max tokens per day for Meta Llama 3.2 3B Instruct (doubled for cross-region calls)",
+  "default": 432000000.0,
+  "applied": 133920000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B2BA8611",
+  "name": "Batch inference job size (in GB) for Llama 4 Scout",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-92F3BE6F",
+  "name": "Throttle rate limit for Bedrock Data Automation Runtime: TagResource",
+  "default": 25.0,
+  "applied": 25.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-AC6F8476",
+  "name": "Model units per provisioned model for Meta Llama 2 Chat 13B",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-F424A1E3",
+  "name": "Model units per provisioned model for Amazon Titan Image Generator G1",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-27C57EE8",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Sonnet 4.5 V1",
+  "default": 5000000.0,
+  "applied": 5000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-CFCAAB0E",
+  "name": "(Guardrails) On-demand ApplyGuardrail Sensitive information filter policy text units per second",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0E8CAF89",
+  "name": "(Data Automation) Maximum audio file size (MB)",
+  "default": 2048.0,
+  "applied": 2048.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-529EC606",
+  "name": "(Knowledge Bases) UpdateKnowledgeBase requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-4B4330A0",
+  "name": "Parameters per function",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-C482C4CA",
+  "name": "GetAgentVersion requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6BF35027",
+  "name": "(Data Automation) Maximum Blueprints per Project (Audios)",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-437802FD",
+  "name": "(Guardrails) Sensitive information policy maximum input size in text units",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0F83A720",
+  "name": "Batch inference input file size (in GB) for Claude Opus 4.6",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8AF2815B",
+  "name": "(Data Automation) Maximum Number of pages per document",
+  "default": 3000.0,
+  "applied": 3000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D38407FA",
+  "name": "(Knowledge Bases) Concurrent ingestion jobs per data source",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-AB971C9B",
+  "name": "Batch inference job size (in GB) for Claude 3 Sonnet",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-0DD4EC92",
+  "name": "(Knowledge Bases) Rerank requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B46DD052",
+  "name": "(Advanced Prompt Optimization) Active jobs per account",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-229A5DEC",
+  "name": "Global cross-region model inference tokens per day for Anthropic Claude Sonnet 4.5 V1 1M Context Length",
+  "default": 1440000000.0,
+  "applied": 54000000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-185629E7",
+  "name": "Minimum number of records per batch inference job for Claude Opus 4.5",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6F14193C",
+  "name": "On-demand model inference tokens per minute for Meta Llama 3.2 1B Instruct",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F77743B5",
+  "name": "Records per input file per batch inference job for Llama 3.3 70B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E14A4A4C",
+  "name": "CreateAgentAlias requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-166C69FA",
+  "name": "DeleteAgentAlias requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-640034B8",
+  "name": "Batch inference input file size (in GB) for Claude Sonnet 4.5",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-9F4DB459",
+  "name": "(Guardrails) On-demand ApplyGuardrail Word filter policy text units per second",
+  "default": 500.0,
+  "applied": 500.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-1EC9C5DF",
+  "name": "Minimum number of records per batch inference job for Llama 3.1 70B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5DF13F64",
+  "name": "Cross-region model inference tokens per minute for Anthropic Claude 3 Sonnet",
+  "default": 400000.0,
+  "applied": 400000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-67BD0D49",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude 3 Sonnet",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-086556D1",
+  "name": "(Guardrails) On-demand ApplyGuardrail contextual grounding policy text units per second",
+  "default": 106.0,
+  "applied": 106.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-BDD176EF",
+  "name": "(Data Automation) InvokeDataAutomationAsync - Image - Max number of concurrent jobs",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-C549AE85",
+  "name": "Model units per provisioned model for Cohere Command R Plus",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-53CCF898",
+  "name": "On-demand model inference requests per minute for Meta Llama 3.2 11B Instruct",
+  "default": 400.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6FAB43BE",
+  "name": "Records per batch inference job for Llama 4 Maverick",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-8DBDC30B",
+  "name": "(Flows) Lex nodes per flow",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-70AD2F8F",
+  "name": "Throttle rate limit for Bedrock Data Automation Runtime: UntagResource",
+  "default": 25.0,
+  "applied": 25.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-19329652",
+  "name": "(Data Automation) Maximum number of Blueprints per Start Inference request (Videos)",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-46591118",
+  "name": "Cross-region model inference requests per minute for Anthropic Claude 3 Sonnet",
+  "default": 200.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6B2DA87E",
+  "name": "APIs per Agent",
+  "default": 11.0,
+  "applied": 11.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-04F1DD0C",
+  "name": "(Prompt management) DeletePrompt requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-E428575E",
+  "name": "(Knowledge Bases) StartIngestionJob requests per second",
+  "default": 0.1,
+  "applied": 0.1,
+  "adjustable": false
+ },
+ {
+  "code": "L-A4A6DDE4",
+  "name": "(Data Automation) Maximum Resolution",
+  "default": 8000.0,
+  "applied": 8000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-8E752C84",
+  "name": "Global cross-region model inference tokens per minute for GPT-5.6 Terra",
+  "default": 20000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-5618D36B",
+  "name": "(Guardrails) Contextual grounding query length in text units",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3FBB95EA",
+  "name": "Batch inference job size (in GB) for Claude Opus 4.5",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-7C42E72A",
+  "name": "Cross-region model inference tokens per minute for Amazon Nova Lite",
+  "default": 400000.0,
+  "applied": 400000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-9EAB0D12",
+  "name": "On-demand model inference requests per minute for Amazon Titan Text Express",
+  "default": 400.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F60B56CC",
+  "name": "Batch inference input file size (in GB) for Nova Lite V1",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A4EBFDE7",
+  "name": "Model units per provisioned model for Amazon Titan Lite V1 4K",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-9602E0D9",
+  "name": "(Flows) CreateFlow requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-01F37E14",
+  "name": "Model units per provisioned model for Cohere Command Light",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-3F110E0F",
+  "name": "Cross-region model inference requests per minute for Amazon Nova Micro",
+  "default": 400.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F7440010",
+  "name": "Records per input file per batch inference job for Claude Opus 4.5",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-C0CACF50",
+  "name": "(Model customization) Sum of training and validation records for a Titan Text G1 - Premier v1 Fine-tuning job",
+  "default": 20000.0,
+  "applied": 20000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0DF688AB",
+  "name": "Throttle rate limit for InvokeDataAutomationAsync",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B536331C",
+  "name": "(Flows) Iterator nodes per flow",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-97D79C54",
+  "name": "Agents per account",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D1151D45",
+  "name": "Records per input file per batch inference job for Titan Text Embeddings V2",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E2985A8E",
+  "name": "Global cross-region model inference tokens per day for Anthropic Claude Opus 4.5",
+  "default": 2880000000.0,
+  "applied": 13500000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C0D53EFB",
+  "name": "Global cross-region model inference requests per minute for Anthropic Claude Sonnet 4.5 V1 1M Context Length",
+  "default": 1000.0,
+  "applied": 1.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-7E60D96D",
+  "name": "Minimum number of records per batch inference job for Llama 4 Scout",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-68FC8D47",
+  "name": "Batch inference input file size (in GB) for Nova Pro V1",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-4DFF050E",
+  "name": "Records per input file per batch inference job for Claude Sonnet 4.5",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A938DC68",
+  "name": "(Data Automation) Maximum Blueprints per Project (Documents)",
+  "default": 40.0,
+  "applied": 40.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-1A69C08F",
+  "name": "Minimum number of records per batch inference job for Titan Multimodal Embeddings G1",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-391478D2",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 3.1 8B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E5084BBA",
+  "name": "Global cross-region model inference requests per minute for Anthropic Claude Haiku 4.5",
+  "default": 10000.0,
+  "applied": 10.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-99EDA841",
+  "name": "(Guardrails) Example phrases per Topic",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C68D8E7F",
+  "name": "DeleteAgent requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-CF987B82",
+  "name": "(Knowledge Bases) GenerateQuery requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-539B5996",
+  "name": "Minimum number of records per batch inference job for Llama 3.2 1B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FE24F76E",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 3.3 70B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-7BEE40FB",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Sonnet 4.6",
+  "default": 6000000.0,
+  "applied": 6000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-8E129B28",
+  "name": "Batch inference input file size (in GB) for Llama 3.2 11B Instruct",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2806605C",
+  "name": "Batch inference job size (in GB) for Claude Sonnet 4.6",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6CA39F00",
+  "name": "(Guardrails) Topics per guardrail",
+  "default": 30.0,
+  "applied": 30.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-ADB4B3D7",
+  "name": "On-demand model inference requests per minute for Cohere Command R Plus",
+  "default": 400.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-4777C575",
+  "name": "(Data Automation) Maximum video length (Minutes)",
+  "default": 240.0,
+  "applied": 240.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-0E5A840C",
+  "name": "(Guardrails) Guardrails per account",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B0F56DCF",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude Opus 4.6",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D8E451A7",
+  "name": "Records per input file per batch inference job for Claude Opus 4.6",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-58424D95",
+  "name": "Global cross-region model inference requests per minute for Anthropic Claude Opus 4.5",
+  "default": 10000.0,
+  "applied": 5.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-36522305",
+  "name": "On-demand InvokeModel concurrent requests for TwelveLabs Pegasus 1.5",
+  "default": 30.0,
+  "applied": 1.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-8CC57EDA",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 3.2 1B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-3BD2251E",
+  "name": "Records per batch inference job for Titan Multimodal Embeddings G1",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-99AE898F",
+  "name": "(Knowledge Bases) DeleteDataSource requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6C3B9A50",
+  "name": "(Knowledge Bases) ListIngestionJobs requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D30E6B4B",
+  "name": "Records per input file per batch inference job for Llama 3.2 11B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-10DE37DB",
+  "name": "GetAgentAlias requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3B60C1ED",
+  "name": "(Guardrails) Topic policy maximum input size in text units (Standard tier - Recommended)",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-CA80888F",
+  "name": "Records per batch inference job for Mistral Large 2 (24.07)",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4D7537CF",
+  "name": "Global cross-region model inference tokens per minute for GPT-5.6 Sol",
+  "default": 2000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-08D49FA4",
+  "name": "(Flows) Input nodes per flow",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A49CA90F",
+  "name": "On-demand model inference requests per minute for Cohere Command R",
+  "default": 400.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-0B3FA11F",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Fable 5.2",
+  "default": 10000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-EBB72C32",
+  "name": "Records per input file per batch inference job for Claude 3 Haiku",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A4F73742",
+  "name": "Global cross-region model inference tokens per minute for Grok 4.7",
+  "default": 10000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-ACA7B6C2",
+  "name": "Batch inference input file size (in GB) for Llama 3.2 90B Instruct",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FD938632",
+  "name": "On-demand model inference requests per minute for Mistral Mixtral 8x7b Instruct",
+  "default": 400.0,
+  "applied": 4.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-517574A2",
+  "name": "(Flows) Knowledge base nodes per flow",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-995BEC0E",
+  "name": "(Knowledge Bases) IngestKnowledgeBaseDocuments total payload size",
+  "default": 6.0,
+  "applied": 6.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-02D831F1",
+  "name": "On-demand model inference tokens per minute for Mistral AI Mistral 7B Instruct",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-E6489B37",
+  "name": "Records per input file per batch inference job for Mistral Small",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-6E57E827",
+  "name": "Associated aliases per Agent",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A9C9E017",
+  "name": "(Flows) Lambda function nodes per flow",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-46BC975A",
+  "name": "(Prompt management) CreatePrompt requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-391CEF89",
+  "name": "Records per input file per batch inference job for Claude Sonnet 4.6",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-F0D0E0B9",
+  "name": "(Knowledge Bases) Retrieve requests per second",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-1870BD3C",
+  "name": "Model units per provisioned model for Cohere Embed Multilingual",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-9AA02BEF",
+  "name": "Records per batch inference job for Claude Opus 4.6",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-9E5BD0C6",
+  "name": "On-demand model inference requests per minute for Cohere Embed Multilingual",
+  "default": 2000.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-DE641971",
+  "name": "On-demand model inference tokens per minute for Amazon Titan Text Embeddings V2",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2BB465D6",
+  "name": "(Flows) UpdateFlow requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-209848DD",
+  "name": "(Data Automation) Maximum number of list fields per Blueprint",
+  "default": 15.0,
+  "applied": 15.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-BE77399C",
+  "name": "Model units no-commitment Provisioned Throughputs across custom models",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-89197AE6",
+  "name": "Records per batch inference job for Nova Pro V1",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-1FA30AE7",
+  "name": "Minimum number of records per batch inference job for Claude 3.5 Sonnet v2",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-3DD46812",
+  "name": "Global cross-region model inference requests per minute for Anthropic Claude Opus 4.6 V1",
+  "default": 10000.0,
+  "applied": 5.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-1CF3E033",
+  "name": "Batch inference input file size (in GB) for Llama 3.1 70B Instruct",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-DF0E34D4",
+  "name": "On-demand model inference requests per minute for Amazon Titan Multimodal Embeddings G1",
+  "default": 2000.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-31AB82D0",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Sonnet 5.5",
+  "default": 6000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-77D5E75F",
+  "name": "Endpoints per inference profile",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5DAAE567",
+  "name": "Action groups per Agent",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-AFD14A53",
+  "name": "(Guardrails) On-demand ApplyGuardrail Denied topic policy text units burst rate (Classic tier)",
+  "default": 25.0,
+  "applied": 25.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-7478F443",
+  "name": "Model units per provisioned model for Anthropic Claude V2.1 18K",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-F26CA8D1",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Haiku 5.5",
+  "default": 10000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-EA764586",
+  "name": "(Data Automation) Max number of vocabulary phrases per library",
+  "default": 500.0,
+  "applied": 500.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-62E2A345",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 3.1 70B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-640FAA80",
+  "name": "(Data Automation) Description length for fields (Characters)",
+  "default": 300.0,
+  "applied": 300.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-FC4A46BE",
+  "name": "Throttle rate limit for GetDataAutomationStatus",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-895C7A6C",
+  "name": "(Data Automation) InvokeDataAutomationAsync - Video - Max number of concurrent jobs",
+  "default": 3.0,
+  "applied": 3.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-982DE2DB",
+  "name": "Records per batch inference job for Llama 3.2 3B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4A6D2F15",
+  "name": "Model units per provisioned model for Anthropic Claude Instant V1 100K",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-FF8E7864",
+  "name": "On-demand model inference requests per minute for Cohere Embed English",
+  "default": 2000.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-072E11FC",
+  "name": "Records per batch inference job for Mistral Small",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-29998DC2",
+  "name": "(Knowledge Bases) Ingestion job size",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-20CFCD61",
+  "name": "On-demand model inference requests per minute for Meta Llama 3.2 1B Instruct",
+  "default": 800.0,
+  "applied": 8.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-F2E6F90D",
+  "name": "Records per input file per batch inference job for Llama 3.2 3B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-AD940EDE",
+  "name": "Global cross-region model inference tokens per day for Amazon Nova 2 Lite",
+  "default": 11520000000.0,
+  "applied": 432000000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-5EBE3E09",
+  "name": "(Knowledge Bases) CreateDataSource requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-41C63FF8",
+  "name": "On-demand model inference tokens per minute for Meta Llama 3.2 90B Instruct",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2F9B4FC2",
+  "name": "On-demand model inference requests per minute for Meta Llama 3.2 3B Instruct",
+  "default": 800.0,
+  "applied": 8.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-23CF4444",
+  "name": "(Data Automation) CreateBlueprint - Max number of blueprints per account",
+  "default": 350.0,
+  "applied": 350.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-220B8A25",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude 3.5 Haiku",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-F687AD4D",
+  "name": "Batch inference job size (in GB) for Titan Text Embeddings V2",
+  "default": 5.0,
+  "applied": 5.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-63020993",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude Haiku 4.5",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-479B647F",
+  "name": "Cross-region model inference tokens per minute for Anthropic Claude 3.5 Sonnet",
+  "default": 400000.0,
+  "applied": 400000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-3ABF6ACC",
+  "name": "Global cross-region model inference tokens per minute for Anthropic Claude Opus 4.5",
+  "default": 2000000.0,
+  "applied": 2000000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-CCB99FFA",
+  "name": "(Flows) Output nodes per flow",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-CBAEEDF6",
+  "name": "Batch inference input file size (in GB) for Llama 3.3 70B Instruct",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-73BBA086",
+  "name": "(Model customization) Sum of training and validation records for a Titan Image Generator G1 V1 Fine-tuning job",
+  "default": 10000.0,
+  "applied": 10000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-6B20E60F",
+  "name": "DeleteAgentVersion requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D4C72CE2",
+  "name": "Minimum number of records per batch inference job for Llama 3.2 90B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B783C50B",
+  "name": "(Prompt management) Prompts per account",
+  "default": 500.0,
+  "applied": 500.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4CD00D47",
+  "name": "(Data Automation) Maximum Audio Sample Rate (Hz)",
+  "default": 48000.0,
+  "applied": 48000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C2F86908",
+  "name": "On-demand model inference tokens per minute for Cohere Embed Multilingual",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-79BA683B",
+  "name": "(Model customization) Sum of training and validation records for a Titan Text G1 - Express v1 Fine-tuning job",
+  "default": 10000.0,
+  "applied": 10000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A5CEDB91",
+  "name": "Minimum number of records per batch inference job for Llama 3.1 405B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-D41E62E4",
+  "name": "Records per batch inference job for Llama 4 Scout",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-893F8BF9",
+  "name": "(Guardrails) Contextual grounding source length in text units",
+  "default": 50.0,
+  "applied": 50.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2AD735F5",
+  "name": "Global cross-region model inference tokens per minute for Grok 4.6",
+  "default": 10000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-102A1657",
+  "name": "[bedrock-mantle endpoint] Input tokens per minute for GLM 5.3",
+  "default": 10000000.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-EDFC771A",
+  "name": "Minimum number of records per batch inference job for Claude Haiku 4.5",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-DB84CE56",
+  "name": "Global cross-region model inference requests per minute for Anthropic Claude Sonnet 4.5 V1",
+  "default": 10000.0,
+  "applied": 10.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-1EFED863",
+  "name": "(Data Automation) (Console) Maximum document file size (MB)",
+  "default": 200.0,
+  "applied": 200.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-2DC80978",
+  "name": "On-demand model inference requests per minute for Anthropic Claude 3 Haiku",
+  "default": 200.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-21D1371E",
+  "name": "GetAgentKnowledgeBase requests per second",
+  "default": 15.0,
+  "applied": 15.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-BFA815EF",
+  "name": "(Data Automation) (Console) Maximum number of pages per document file",
+  "default": 20.0,
+  "applied": 20.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-4821684D",
+  "name": "Records per batch inference job for Llama 3.2 90B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D2912E70",
+  "name": "Model invocation max tokens per day for Amazon Nova Micro (doubled for cross-region calls)",
+  "default": 5760000000.0,
+  "applied": 207360000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-A0300844",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude Sonnet 4.5.",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-737CE37C",
+  "name": "(Flows) CreateFlowAlias requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-9342B636",
+  "name": "Model units per provisioned model for AI21 Labs Jurassic-2 Mid",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-3CCB3548",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 3.2 11B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-8CE99163",
+  "name": "On-demand model inference tokens per minute for Anthropic Claude 3 Haiku",
+  "default": 200000.0,
+  "applied": 200000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-15868B7E",
+  "name": "(Data Automation) Maximum Blueprints per Project (Images)",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-00BD9E79",
+  "name": "Global cross-region model inference tokens per day for Amazon Nova 2 Omni",
+  "default": 11520000000.0,
+  "applied": 432000000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-EAFCD549",
+  "name": "Agent Collaborators per Agent",
+  "default": 1000.0,
+  "applied": 1000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-1FC48CF3",
+  "name": "UpdateAgentActionGroup requests per second",
+  "default": 6.0,
+  "applied": 6.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-32F732DE",
+  "name": "Model units per provisioned model for Amazon Titan Multimodal Embeddings G1",
+  "default": 0.0,
+  "applied": 0.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-E211B5EA",
+  "name": "(Flows) Total nodes per flow",
+  "default": 40.0,
+  "applied": 40.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-6B3D3DE4",
+  "name": "(Guardrails) On-demand ApplyGuardrail Content filter policy text units per second (Standard tier - Recommended)",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-17987C44",
+  "name": "(Flows) S3 retrieval nodes per flow",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-89923E2C",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Llama 3.2 90B Instruct",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-A60EE1AF",
+  "name": "Model invocation max tokens per day for Anthropic Claude 3 Haiku (doubled for cross-region calls)",
+  "default": 288000000.0,
+  "applied": 63360000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-490F4D1F",
+  "name": "On-demand model inference tokens per minute for Mistral AI Mixtral 8X7BB Instruct",
+  "default": 300000.0,
+  "applied": 300000.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-C7DC86D2",
+  "name": "ListAgentActionGroups requests per second",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-B370112A",
+  "name": "(Data Automation) CreateDataAutomationLibrary - Max number of data automation libraries per account",
+  "default": 10.0,
+  "applied": 10.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-4E7EE0B5",
+  "name": "Sum of in-progress and submitted batch inference jobs using a base model for Claude 3.5 Sonnet",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-0451886A",
+  "name": "CreateAgentActionGroup requests per second",
+  "default": 12.0,
+  "applied": 12.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-0EA49C8E",
+  "name": "(Flows) CreateFlowVersion requests per second",
+  "default": 2.0,
+  "applied": 2.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-E038D932",
+  "name": "Records per input file per batch inference job for Llama 3.1 70B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-D321719B",
+  "name": "(Flows) Flows per account",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-8D8E0C5E",
+  "name": "Minimum number of records per batch inference job for Claude Opus 5",
+  "default": 100.0,
+  "applied": 100.0,
+  "adjustable": false
+ },
+ {
+  "code": "L-AFE8E0CD",
+  "name": "Records per input file per batch inference job for Llama 3.1 8B Instruct",
+  "default": 100000.0,
+  "applied": 100000.0,
+  "adjustable": true
+ },
+ {
+  "code": "L-5D5080D0",
+  "name": "Batch inference input file size (in GB) for Llama 4 Maverick",
+  "default": 1.0,
+  "applied": 1.0,
+  "adjustable": false
+ }
+]

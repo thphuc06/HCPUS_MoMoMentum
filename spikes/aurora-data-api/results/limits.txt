@@ -1,0 +1,35 @@
+== 1 MiB
+500 dòng x 1000 ký tự (~0.48 MiB): 500
+900 dòng x 1000 ký tự (~0.86 MiB): 900
+1100 dòng x 1000 ký tự (~1.05 MiB): LỖI UnsupportedResultException: An error occurred (UnsupportedResultException) when calling the ExecuteStatement operation: The result exceeds the size limit 1 MB.
+3000 dòng x 1000 ký tự (~2.86 MiB): LỖI UnsupportedResultException: An error occurred (UnsupportedResultException) when calling the ExecuteStatement operation: The result exceeds the size limit 1 MB.
+1 dòng 1.2 MB: LỖI UnsupportedResultException: An error occurred (UnsupportedResultException) when calling the ExecuteStatement operation: The result exceeds the size limit 1 MB.
+formatRecordsAs=JSON 3000x1000: LỖI UnsupportedResultException: An error occurred (UnsupportedResultException) when calling the ExecuteStatement operation: The result exceeds the size limit 1 MB.
+210 dòng forecast: 210
+kích thước JSON phản hồi 2 dòng jars: 144
+== BatchExecuteStatement
+1001 parameter sets: 1001
+1000 parameter sets (1 lệnh): 1000
+  ms: 350
+200 sets trong transaction + rollback ms: 182 | còn lại zz: {'longValue': 1000}
+== Kiểu dữ liệu (trả về thô)
+  num   typeName=numeric      -> {'stringValue': '12345678901234.5678'}
+  n0    typeName=numeric      -> {'stringValue': '100000'}
+  tstz  typeName=timestamptz  -> {'stringValue': '2026-11-21 02:13:37.658608'}
+  d     typeName=date         -> {'stringValue': '2026-11-21'}
+  j     typeName=jsonb        -> {'stringValue': '{"a":1,"b":[1,2]}'}
+  b     typeName=bool         -> {'booleanValue': True}
+  big   typeName=int8         -> {'longValue': 9223372036854775807}
+  f     typeName=float8       -> {'doubleValue': 1.5}
+  u     typeName=uuid         -> {'stringValue': 'bb517dbd-37a9-4207-95d0-b7a2fb65b12f'}
+  arr   typeName=_int4        -> {'arrayValue': {'longValues': [1, 2, 3]}}
+  by    typeName=bytea        -> {'blobValue': b'\xde\xad\xbe\xef'}
+  nul   typeName=text         -> {'isNull': True}
+  t     typeName=text         -> {'stringValue': 'abc'}
+  decimalReturnType=DOUBLE_OR_LONG, longReturnType=STRING: [{'doubleValue': 12345678901234.568}, {'longValue': 100000}, {'stringValue': '9223372036854775807'}]
+  formatRecordsAs=JSON: [{"code":"NEC","balance":"1509000","updated_at":"2026-11-21 01:59:49.887308","m":"{\"k\":1}"},{"code":"FFA","balance":"2000000","updated_at":"2026-11-21 01:59:49.887308","m":"{\"k\":1}"}]
+== tham số
+jsonb tham số + CAST: [{'stringValue': 'x'}]
+numeric stringValue + typeHint DECIMAL: [{'stringValue': '13.50'}]
+timestamptz typeHint TIMESTAMP: [{'stringValue': '2026-11-21 10:00:00'}]
+timestamptz tham số KHÔNG cast/hint (so với now()): LỖI DatabaseErrorException: An error occurred (DatabaseErrorException) when calling the ExecuteStatement operation: ERROR: operator does not exist: timestamp with time zone > text; Hint: No operator matches the given name and argument types. You might need to add explicit type casts.; Position: 22; SQLState: 42883

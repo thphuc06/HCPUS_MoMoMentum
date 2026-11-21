@@ -1,0 +1,63 @@
+{
+ "import_s": 1.102777199994307,
+ "models": {
+  "SeasonalNaive": {
+   "point_first_s": 0.004,
+   "point_second_s": 0.002,
+   "native_s": 0.005,
+   "native_interval": true,
+   "native_width_mean": 785.3,
+   "native_lo_negative_share": 0.94,
+   "native_flat_forecast": false,
+   "conformal_s": 0.003,
+   "conformal_interval": true,
+   "conformal_width_mean": 273.5
+  },
+  "AutoETS": {
+   "point_first_s": 0.252,
+   "point_second_s": 0.24,
+   "native_s": 0.247,
+   "native_interval": true,
+   "native_width_mean": 362.1,
+   "native_lo_negative_share": 0.86,
+   "native_flat_forecast": false,
+   "conformal_s": 0.694,
+   "conformal_interval": true,
+   "conformal_width_mean": 134.1
+  },
+  "CrostonClassic": {
+   "point_first_s": 0.002,
+   "point_second_s": 0.002,
+   "native_interval": "ERROR Exception: You have to instantiate the class with `prediction_intervals` to calculate them",
+   "conformal_s": 0.003,
+   "conformal_interval": true,
+   "conformal_width_mean": 138.6
+  },
+  "TSB": {
+   "point_first_s": 0.002,
+   "point_second_s": 0.002,
+   "native_interval": "ERROR Exception: You must pass `prediction_intervals` to compute them.",
+   "conformal_s": 0.003,
+   "conformal_interval": true,
+   "conformal_width_mean": 146.0
+  },
+  "ADIDA": {
+   "point_first_s": 0.002,
+   "point_second_s": 0.002,
+   "native_interval": "ERROR Exception: You have to instantiate the class with `prediction_intervals`to calculate them",
+   "conformal_s": 0.003,
+   "conformal_interval": true,
+   "conformal_width_mean": 147.1
+  },
+  "IMAPA": {
+   "point_first_s": 0.003,
+   "point_second_s": 0.003,
+   "native_interval": "ERROR Exception: You have to instantiate the class with `prediction_intervals`to calculate them",
+   "conformal_s": 0.005,
+   "conformal_interval": true,
+   "conformal_width_mean": 166.9
+  }
+ },
+ "all6_point_s": 0.2581815000012284,
+ "all6_level80_s": 0.710521000000881
+}

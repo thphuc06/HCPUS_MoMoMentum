@@ -1,0 +1,5 @@
+# gateway/policies/
+
+Luật Cedar cho AgentCore Policy tại Gateway (proposal §9, §16: Cedar chuyển về Policy trong AgentCore). Mặc định từ chối; điều kiện theo claim JWT và tham số tool call. Action Cedar có dạng `AgentCore::Action::"ledger___get_jar_balances"` (không wildcard); mỗi tool một policy `user_id == principal.id`. Tool ghi (`ledger___update_profile`, `ledger___record_transaction`, `ledger___move_between_jars`, `ledger___assign_jar`, `planner___save_roadmap`, `planner___schedule_nudge`, `ingest___*`) cần người dùng xác nhận: proposal dùng cờ trong tham số (LLM điền được), đề xuất thay bằng token xác nhận do server cấp, Cedar chỉ là lớp phụ (hạn mức, khớp `user_id`, có `confirm_token`); chưa chốt.
+
+Cú pháp đã chạy thật, thứ tự tạo (target rồi policy rồi gắn engine) và bẫy `LOG_ONLY`: [spike-agentcore-gateway-identity.md](../../docs/research/spike-agentcore-gateway-identity.md) mục 3b và 4.

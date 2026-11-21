@@ -1,0 +1,178 @@
+{
+ "haiku45": {
+  "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "region": "ap-southeast-1",
+  "ttft": [
+   4.024,
+   0.911,
+   0.638
+  ],
+  "ttft_med": 0.9113313000125345,
+  "total_stream": [
+   5.087,
+   1.605,
+   1.201
+  ],
+  "total_stream_med": 1.605438900005538,
+  "total_converse": [
+   2.033,
+   1.124,
+   2.017
+  ],
+  "total_converse_med": 2.0170985000004293,
+  "out_tokens": [
+   100,
+   100,
+   100
+  ],
+  "notes": [
+   "retry 1 sau ThrottlingException, nghỉ 15s"
+  ],
+  "sample": "# Hũ ăn uống trong quản lý chi tiêu\n\n**Hũ ăn uống** là một phần của phương pháp quản lý tài chính \"hũ tiền\" (jar system), dùng để tách riêng và quản lý khoản tiền dành cho chi phí ăn uống hàng ngày như thực ph"
+ },
+ "sonnet46": {
+  "model": "global.anthropic.claude-sonnet-4-6",
+  "region": "ap-southeast-1",
+  "ttft": [
+   0.687,
+   0.614,
+   0.576
+  ],
+  "ttft_med": 0.6139856999943731,
+  "total_stream": [
+   1.843,
+   1.765,
+   1.815
+  ],
+  "total_stream_med": 1.8152533999964362,
+  "total_converse": [
+   1.865,
+   1.842,
+   1.698
+  ],
+  "total_converse_med": 1.841595599995344,
+  "out_tokens": [
+   100,
+   100,
+   100
+  ],
+  "notes": [],
+  "sample": "**Hũ ăn uống** là một khoản ngân sách được tách riêng, dành chuyên biệt cho các chi phí ăn uống hàng ngày như ăn sáng, cơm trưa, cà phê, ăn ngoài... Phương pháp này giúp bạn kiểm soát chi tiêu "
+ },
+ "nova2lite": {
+  "model": "global.amazon.nova-2-lite-v1:0",
+  "region": "ap-southeast-1",
+  "ttft": [
+   0.526,
+   0.587,
+   0.498
+  ],
+  "ttft_med": 0.5257494999968912,
+  "total_stream": [
+   0.899,
+   1.068,
+   0.951
+  ],
+  "total_stream_med": 0.9514567000005627,
+  "total_converse": [
+   1.039,
+   1.005,
+   0.951
+  ],
+  "total_converse_med": 1.0054932000057306,
+  "out_tokens": [
+   74,
+   82,
+   82
+  ],
+  "notes": [],
+  "sample": "**Hũ ăn uống** trong quản lý chi tiêu cá nhân là một phương pháp chia nhỏ ngân sách để dành riêng một phần tiền cho các nhu cầu ăn uống hàng ngày hoặc hàng tuần, giúp kiểm soát chi tiêu và tránh vượt ngân sách. Nó thường được sử dụng để quản lý chi phí thực phẩm, ăn uống ra ngoài nhà một cách có kế hoạch và tiết kiệm hiệu quả."
+ },
+ "novalite": {
+  "model": "apac.amazon.nova-lite-v1:0",
+  "region": "ap-southeast-1",
+  "ttft": [
+   0.355,
+   0.362,
+   0.312
+  ],
+  "ttft_med": 0.35528739998699166,
+  "total_stream": [
+   0.753,
+   0.771,
+   0.743
+  ],
+  "total_stream_med": 0.7526231999945594,
+  "total_converse": [
+   0.729,
+   0.789,
+   0.723
+  ],
+  "total_converse_med": 0.7293119999958435,
+  "out_tokens": [
+   96,
+   100,
+   100
+  ],
+  "notes": [],
+  "sample": "\"Hũ ăn uống\" trong quản lý chi tiêu cá nhân là khoản chi tiêu đề cập đến các khoản tiền chi tiêu cho thực phẩm và đồ uống hàng ngày. Nó bao gồm chi phí cho việc mua ăn và uống tại nhà hoặc bên ngoài."
+ },
+ "novamicro": {
+  "model": "apac.amazon.nova-micro-v1:0",
+  "region": "ap-southeast-1",
+  "ttft": [
+   0.323,
+   0.308,
+   0.354
+  ],
+  "ttft_med": 0.3228049000026658,
+  "total_stream": [
+   0.795,
+   0.746,
+   0.798
+  ],
+  "total_stream_med": 0.7953722999955062,
+  "total_converse": [
+   0.773,
+   0.687,
+   0.713
+  ],
+  "total_converse_med": 0.713396000006469,
+  "out_tokens": [
+   100,
+   100,
+   90
+  ],
+  "notes": [],
+  "sample": "\"Hũ ăn uống\" trong quản lý chi tiêu cá nhân là khoản chi cho các mục tiêu liên quan đến thực phẩm và đồ uống, giúp bạn theo dõi và kiểm soát chi phí cho các hoạt động ăn uống của mình. Điều này giúp giảm chi tiêu không cần"
+ },
+ "novapro": {
+  "model": "apac.amazon.nova-pro-v1:0",
+  "region": "ap-southeast-1",
+  "ttft": [
+   0.372,
+   0.409,
+   0.514
+  ],
+  "ttft_med": 0.408987699993304,
+  "total_stream": [
+   1.174,
+   1.222,
+   1.536
+  ],
+  "total_stream_med": 1.221730999997817,
+  "total_converse": [
+   1.15,
+   1.094,
+   1.144
+  ],
+  "total_converse_med": 1.1436898000101792,
+  "out_tokens": [
+   91,
+   91,
+   97
+  ],
+  "notes": [],
+  "sample": "'Hũ ăn uống' là một phương pháp quản lý chi tiêu cá nhân, trong đó một số tiền cố định được dành riêng cho chi phí ăn uống hàng ngày hoặc hàng tuần, giúp kiểm soát và hạn chế chi tiêu thừa."
+ }
+}

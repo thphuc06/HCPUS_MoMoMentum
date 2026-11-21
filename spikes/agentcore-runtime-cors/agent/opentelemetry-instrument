@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+import sys
+from opentelemetry.instrumentation.auto_instrumentation import run
+if __name__ == "__main__":
+    sys.exit(run())

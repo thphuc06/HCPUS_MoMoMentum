@@ -1,0 +1,6 @@
+[
+ {"name":"S1_post_bearer_session_sse","headers":{"Content-Type":"application/json","Authorization":"Bearer $TOKEN","X-Amzn-Bedrock-AgentCore-Runtime-Session-Id":"$SID"},"repeat":1},
+ {"name":"S2_no_authorization_401","headers":{"Content-Type":"application/json","X-Amzn-Bedrock-AgentCore-Runtime-Session-Id":"$SID"}},
+ {"name":"S3_custom_headers","headers":{"Content-Type":"application/json","Authorization":"Bearer $TOKEN","X-Amzn-Bedrock-AgentCore-Runtime-Session-Id":"$SID","X-Yofina-Test":"abc","traceparent":"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01","X-Amzn-Trace-Id":"Root=1-67891233-abcdef012345678912345678","X-Amzn-Bedrock-AgentCore-Runtime-Custom-Foo":"bar","Accept":"text/event-stream"}},
+ {"name":"S4_credentials_include","credentials":"include","headers":{"Content-Type":"application/json","Authorization":"Bearer $TOKEN","X-Amzn-Bedrock-AgentCore-Runtime-Session-Id":"$SID"}}
+]

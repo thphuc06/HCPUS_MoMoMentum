@@ -1,0 +1,15 @@
+[ap-southeast-1] haiku45 mục tiêu 2530 (count_tokens=None):
+    1 {'inputTokens': 3898, 'outputTokens': 9, 'totalTokens': 3907, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 0} total_in=3898
+    2 {'inputTokens': 3898, 'outputTokens': 9, 'totalTokens': 3907, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 0} total_in=3898
+[ap-southeast-1] haiku45 mục tiêu 2695 (count_tokens=None):
+    1 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 4163, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 4131, 'cacheDetails': [{'ttl': '5m', 'inputTokens': 4131}]} total_in=4154
+    2 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 4163, 'cacheReadInputTokens': 4131, 'cacheWriteInputTokens': 0} total_in=4154
+[ap-southeast-1] haiku45 mục tiêu 2805 (count_tokens=None):
+    1 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 4330, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 4298, 'cacheDetails': [{'ttl': '5m', 'inputTokens': 4298}]} total_in=4321
+    2 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 4330, 'cacheReadInputTokens': 4298, 'cacheWriteInputTokens': 0} total_in=4321
+[ap-southeast-1] haiku45 mục tiêu 2915 (count_tokens=None):
+    1 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 4497, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 4465, 'cacheDetails': [{'ttl': '5m', 'inputTokens': 4465}]} total_in=4488
+    2 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 4497, 'cacheReadInputTokens': 4465, 'cacheWriteInputTokens': 0} total_in=4488
+[ap-southeast-1] sonnet46 mục tiêu 605 (count_tokens=None):
+    1 {'inputTokens': 1000, 'outputTokens': 7, 'totalTokens': 1007, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 0} total_in=1000
+    2 {'inputTokens': 1000, 'outputTokens': 7, 'totalTokens': 1007, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 0} total_in=1000

@@ -1,0 +1,56 @@
+
+=== ETS_native: độ phủ daily P10-P90 (origin từ chỉ số 8, tức sau ~8 tuần nạp điểm) ===
+| jar       |   raw_cov |   g0.0_cov |   g0.005_cov |   g0.01_cov |   g0.02_cov |   g0.05_cov |
+|:----------|----------:|-----------:|-------------:|------------:|------------:|------------:|
+| an_uong   |     0.89  |      0.862 |        0.865 |       0.871 |       0.855 |       0.823 |
+| di_chuyen |     0.71  |      0.719 |        0.73  |       0.751 |       0.768 |       0.784 |
+| giai_tri  |     0.852 |      0.852 |        0.852 |       0.852 |       0.852 |       0.806 |
+| mua_sam   |     0.965 |      0.965 |        0.965 |       0.949 |       0.878 |       0.8   |
+| du_lich   |     0.92  |      0.92  |        0.92  |       0.92  |       0.835 |       0.803 |
+mean over 5 jars:
+ {'raw_cov': 0.868, 'g0.0_cov': 0.864, 'g0.005_cov': 0.867, 'g0.01_cov': 0.869, 'g0.02_cov': 0.838, 'g0.05_cov': 0.803}
+post-break origins: {'raw_cov_post': 0.863, 'g0.0_cov_post': 0.861, 'g0.005_cov_post': 0.87, 'g0.01_cov_post': 0.873, 'g0.02_cov_post': 0.839, 'g0.05_cov_post': 0.809}
+mean width: {'raw_width': 161.7, 'g0.0_width': 161.0, 'g0.005_width': 162.7, 'g0.01_width': 175.9, 'g0.02_width': 210.0, 'g0.05_width': 436.7}
+alpha_t cuối (g=0.02): [['an_uong', (np.float64(0.34), np.float64(0.372), np.float64(0.488))], ['di_chuyen', (np.float64(0.12), np.float64(0.072), np.float64(0.248))], ['giai_tri', (np.float64(0.42), np.float64(0.452), np.float64(0.808))], ['mua_sam', (np.float64(0.84), np.float64(0.832), np.float64(0.428))], ['du_lich', (np.float64(0.72), np.float64(0.712), np.float64(0.868))]]
+
+=== ETS_conf: độ phủ daily P10-P90 (origin từ chỉ số 8, tức sau ~8 tuần nạp điểm) ===
+| jar       |   raw_cov |   g0.0_cov |   g0.005_cov |   g0.01_cov |   g0.02_cov |   g0.05_cov |
+|:----------|----------:|-----------:|-------------:|------------:|------------:|------------:|
+| an_uong   |     0.575 |      0.806 |        0.861 |       0.858 |       0.849 |       0.822 |
+| di_chuyen |     0.577 |      0.745 |        0.781 |       0.799 |       0.79  |       0.81  |
+| giai_tri  |     0.584 |      0.838 |        0.845 |       0.843 |       0.832 |       0.838 |
+| mua_sam   |     0.619 |      0.871 |        0.796 |       0.774 |       0.772 |       0.775 |
+| du_lich   |     0.691 |      0.728 |        0.79  |       0.79  |       0.79  |       0.791 |
+mean over 5 jars:
+ {'raw_cov': 0.609, 'g0.0_cov': 0.797, 'g0.005_cov': 0.814, 'g0.01_cov': 0.813, 'g0.02_cov': 0.807, 'g0.05_cov': 0.807}
+post-break origins: {'raw_cov_post': 0.587, 'g0.0_cov_post': 0.791, 'g0.005_cov_post': 0.807, 'g0.01_cov_post': 0.792, 'g0.02_cov_post': 0.779, 'g0.05_cov_post': 0.805}
+mean width: {'raw_width': 80.5, 'g0.0_width': 102.4, 'g0.005_width': 111.3, 'g0.01_width': 167.6, 'g0.02_width': 223.9, 'g0.05_width': 395.8}
+alpha_t cuối (g=0.02): [['an_uong', (np.float64(0.24), np.float64(0.232), np.float64(0.288))], ['di_chuyen', (np.float64(0.16), np.float64(0.112), np.float64(0.288))], ['giai_tri', (np.float64(0.32), np.float64(0.232), np.float64(0.208))], ['mua_sam', (np.float64(0.14), np.float64(0.192), np.float64(0.388))], ['du_lich', (np.float64(0.26), np.float64(0.172), np.float64(0.428))]]
+
+=== Chronos2: độ phủ daily P10-P90 (origin từ chỉ số 8, tức sau ~8 tuần nạp điểm) ===
+| jar       |   raw_cov |   g0.0_cov |   g0.005_cov |   g0.01_cov |   g0.02_cov |   g0.05_cov |
+|:----------|----------:|-----------:|-------------:|------------:|------------:|------------:|
+| an_uong   |     0.784 |      0.806 |        0.806 |       0.801 |       0.799 |       0.801 |
+| di_chuyen |     0.738 |      0.751 |        0.757 |       0.772 |       0.787 |       0.803 |
+| giai_tri  |     0.804 |      0.872 |        0.865 |       0.858 |       0.848 |       0.809 |
+| mua_sam   |     0.799 |      0.816 |        0.822 |       0.822 |       0.816 |       0.81  |
+| du_lich   |     0.83  |      0.83  |        0.83  |       0.83  |       0.83  |       0.83  |
+mean over 5 jars:
+ {'raw_cov': 0.791, 'g0.0_cov': 0.815, 'g0.005_cov': 0.816, 'g0.01_cov': 0.817, 'g0.02_cov': 0.816, 'g0.05_cov': 0.811}
+post-break origins: {'raw_cov_post': 0.78, 'g0.0_cov_post': 0.794, 'g0.005_cov_post': 0.797, 'g0.01_cov_post': 0.804, 'g0.02_cov_post': 0.818, 'g0.05_cov_post': 0.851}
+mean width: {'raw_width': 62.4, 'g0.0_width': 63.9, 'g0.005_width': 64.3, 'g0.01_width': 65.0, 'g0.02_width': 69.9, 'g0.05_width': 317.0}
+alpha_t cuối (g=0.02): [['an_uong', (np.float64(0.18), np.float64(0.192), np.float64(0.228))], ['di_chuyen', (np.float64(0.16), np.float64(0.152), np.float64(0.168))], ['giai_tri', (np.float64(0.42), np.float64(0.372), np.float64(0.508))], ['mua_sam', (np.float64(0.2), np.float64(0.212), np.float64(0.408))], ['du_lich', (np.float64(0.34), np.float64(0.472), np.float64(0.628))]]
+
+=== Hurdle: độ phủ daily P10-P90 (origin từ chỉ số 8, tức sau ~8 tuần nạp điểm) ===
+| jar       |   raw_cov |   g0.0_cov |   g0.005_cov |   g0.01_cov |   g0.02_cov |   g0.05_cov |
+|:----------|----------:|-----------:|-------------:|------------:|------------:|------------:|
+| an_uong   |     0.832 |      0.822 |        0.814 |       0.812 |       0.801 |       0.791 |
+| di_chuyen |     0.736 |      0.754 |        0.748 |       0.764 |       0.78  |       0.8   |
+| giai_tri  |     0.861 |      0.868 |        0.867 |       0.867 |       0.864 |       0.814 |
+| mua_sam   |     0.9   |      0.9   |        0.9   |       0.9   |       0.9   |       0.83  |
+| du_lich   |     0.952 |      0.952 |        0.952 |       0.952 |       0.952 |       0.952 |
+mean over 5 jars:
+ {'raw_cov': 0.856, 'g0.0_cov': 0.859, 'g0.005_cov': 0.856, 'g0.01_cov': 0.859, 'g0.02_cov': 0.859, 'g0.05_cov': 0.838}
+post-break origins: {'raw_cov_post': 0.829, 'g0.0_cov_post': 0.835, 'g0.005_cov_post': 0.841, 'g0.01_cov_post': 0.854, 'g0.02_cov_post': 0.869, 'g0.05_cov_post': 0.866}
+mean width: {'raw_width': 68.7, 'g0.0_width': 69.2, 'g0.005_width': 68.9, 'g0.01_width': 71.1, 'g0.02_width': 73.4, 'g0.05_width': 255.0}
+alpha_t cuối (g=0.02): [['an_uong', (np.float64(0.26), np.float64(0.252), np.float64(0.308))], ['di_chuyen', (np.float64(0.14), np.float64(0.132), np.float64(0.128))], ['giai_tri', (np.float64(0.42), np.float64(0.492), np.float64(0.788))], ['mua_sam', (np.float64(0.58), np.float64(0.552), np.float64(0.968))], ['du_lich', (np.float64(0.82), np.float64(0.792), np.float64(1.488))]]

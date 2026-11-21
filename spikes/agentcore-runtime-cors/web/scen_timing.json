@@ -1,0 +1,4 @@
+[
+ {"name":"cold_new_session_each_x3","headers":{"Content-Type":"application/json","Authorization":"Bearer $TOKEN","X-Amzn-Bedrock-AgentCore-Runtime-Session-Id":"$SID"},"repeat":3,"pause_ms":500,"fp":{"chunks":3,"delay":0.3}},
+ {"name":"same_session_1cold_then_warm_x4","sid":"d6c818ae-1dd6-4030-b960-42194af8c01d","headers":{"Content-Type":"application/json","Authorization":"Bearer $TOKEN","X-Amzn-Bedrock-AgentCore-Runtime-Session-Id":"$SID"},"repeat":5,"fp":{"chunks":3,"delay":0.3}}
+]

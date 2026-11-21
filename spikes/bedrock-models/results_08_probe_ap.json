@@ -1,0 +1,756 @@
+{
+ "novapro": {
+  "model": "apac.amazon.nova-pro-v1:0",
+  "region": "ap-southeast-1",
+  "text": {
+   "ttft_text_med": 0.41119470000558067,
+   "ttft_any_med": 0.41119470000558067,
+   "total_med": 1.4814686000026995,
+   "out_tokens": [
+    97,
+    100,
+    91
+   ],
+   "runs": [
+    {
+     "first_any": 0.64,
+     "first_text": 0.64,
+     "total": 1.514,
+     "text": "'Hũ ăn uống' là một phương pháp quản lý chi tiêu cá nhân, trong đó một số tiền cố định được dành riêng cho chi phí ăn uống hàng ngày hoặc hàng tuần, giúp kiểm soát và hạn chế chi tiêu quá mức trong mục này.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 47,
+      "outputTokens": 97,
+      "totalTokens": 144
+     }
+    },
+    {
+     "first_any": 0.411,
+     "first_text": 0.411,
+     "total": 1.331,
+     "text": "'Hũ ăn uống' là một phương pháp quản lý chi tiêu cá nhân, trong đó một số tiền cố định được dành riêng cho chi phí ăn uống hàng ngày hoặc hàng tuần, giúp kiểm soát và hạn chế chi tiêu quá mức trong lĩnh vực này.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 47,
+      "outputTokens": 100,
+      "totalTokens": 147
+     }
+    },
+    {
+     "first_any": 0.393,
+     "first_text": 0.393,
+     "total": 1.481,
+     "text": "'Hũ ăn uống' là một phương pháp quản lý chi tiêu cá nhân, trong đó một số tiền cố định được dành riêng cho chi phí ăn uống hàng ngày hoặc hàng tuần, giúp kiểm soát và hạn chế chi tiêu thừa.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 47,
+      "outputTokens": 91,
+      "totalTokens": 138
+     }
+    }
+   ]
+  },
+  "tool_forced": {
+   "secs": 0.97,
+   "parsed": {
+    "needs_clarification": false,
+    "clarification_question": null,
+    "confidence": 0.9,
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "intent": "what_if_purchase"
+   },
+   "used_tool": true,
+   "stop": "tool_use",
+   "usage": {
+    "inputTokens": 716,
+    "outputTokens": 80,
+    "totalTokens": 796
+   }
+  },
+  "schema": {
+   "error": "ValidationException: This model doesn't support the outputConfig field. Remove outputConfig and try again. (HTTP 400)"
+  },
+  "retries": []
+ },
+ "novalite": {
+  "model": "apac.amazon.nova-lite-v1:0",
+  "region": "ap-southeast-1",
+  "text": {
+   "ttft_text_med": 0.33051780000096187,
+   "ttft_any_med": 0.33051780000096187,
+   "total_med": 0.8509027999971295,
+   "out_tokens": [
+    93,
+    126,
+    76
+   ],
+   "runs": [
+    {
+     "first_any": 0.351,
+     "first_text": 0.351,
+     "total": 0.851,
+     "text": "\"Hũ ăn uống\" trong quản lý chi tiêu cá nhân đề cập đến ngân sách dành cho chi tiêu hàng ngày như mua thực phẩm và đồ uống. Nó giúp người dùng theo dõi và kiểm soát chi tiêu hàng tháng cho mục này.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 47,
+      "outputTokens": 93,
+      "totalTokens": 140
+     }
+    },
+    {
+     "first_any": 0.331,
+     "first_text": 0.331,
+     "total": 0.888,
+     "text": "\"Hũ ăn uống\" trong quản lý chi tiêu cá nhân đề cập đến ngân sách dành cho chi tiêu hàng ngày liên quan đến thực phẩm và đồ uống. Đây là một phần quan trọng trong kế hoạch tài chính cá nhân để đảm bảo chi tiêu hợp lý và có thể kiểm soát ngân sách hiệu quả.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 47,
+      "outputTokens": 126,
+      "totalTokens": 173
+     }
+    },
+    {
+     "first_any": 0.314,
+     "first_text": 0.314,
+     "total": 0.659,
+     "text": "\"Hũ ăn uống\" trong quản lý chi tiêu cá nhân là khoản chi tiêu để mua thực phẩm và đồ uống hàng ngày. Nó bao gồm cả thức ăn tại nhà và bên ngoài.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 47,
+      "outputTokens": 76,
+      "totalTokens": 123
+     }
+    }
+   ]
+  },
+  "tool_forced": {
+   "secs": 0.7,
+   "parsed": {
+    "needs_clarification": false,
+    "clarification_question": null,
+    "confidence": 0.9,
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "vi tra sau",
+     "jar": "vi"
+    },
+    "intent": "what_if_purchase"
+   },
+   "used_tool": true,
+   "stop": "tool_use",
+   "usage": {
+    "inputTokens": 716,
+    "outputTokens": 80,
+    "totalTokens": 796
+   }
+  },
+  "schema": {
+   "error": "ValidationException: This model doesn't support the outputConfig field. Remove outputConfig and try again. (HTTP 400)"
+  },
+  "retries": []
+ },
+ "nova2lite": {
+  "model": "global.amazon.nova-2-lite-v1:0",
+  "region": "ap-southeast-1",
+  "text": {
+   "ttft_text_med": 0.6646081000071717,
+   "ttft_any_med": 0.6646081000071717,
+   "total_med": 1.2079598999989685,
+   "out_tokens": [
+    79,
+    70,
+    123
+   ],
+   "runs": [
+    {
+     "first_any": 0.681,
+     "first_text": 0.681,
+     "total": 1.208,
+     "text": "**Hũ ăn uống** trong quản lý chi tiêu cá nhân là một phương pháp chia nhỏ ngân sách hàng ngày hoặc hàng tuần cho các món ăn, giúp bạn kiểm soát và hạn chế chi tiêu cho thực phẩm, đồ uống một cách hợp lý. Nó giúp tránh thói quen ăn uống không cần thiết và dễ dàng theo dõi số tiền đã dùng cho mục đích này.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 74,
+      "outputTokens": 79,
+      "totalTokens": 153
+     }
+    },
+    {
+     "first_any": 0.665,
+     "first_text": 0.665,
+     "total": 1.101,
+     "text": "**Hũ ăn uống** trong quản lý chi tiêu cá nhân là một phương pháp chia nhỏ ngân sách dành riêng cho các món ăn uống hàng ngày như ăn sáng, trưa, chiều và tối. Nó giúp bạn kiểm soát được số tiền tiêu cho thực phẩm, tránh vượt chi phí và quản lý tài chính hợp lý hơn.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 74,
+      "outputTokens": 70,
+      "totalTokens": 144
+     }
+    },
+    {
+     "first_any": 0.636,
+     "first_text": 0.636,
+     "total": 1.378,
+     "text": "### Giải thích ngắn gọn về 'hũ ăn uống' trong quản lý chi tiêu cá nhân (trong đúng 2 câu):\n\n**'Hũ ăn uống' là một phương pháp quản lý chi tiêu cá nhân thông qua việc dành một phần thu nhập vào một khoản dành riêng cho các nhu cầu ăn uống hàng ngày hoặc định kỳ, giúp cá nhân kiểm soát được chi phí thực phẩm và tránh vượt ngân sách.** Bằng cách này, người dùng có kế hoạch trước và tiết kiệm chủ động, đảm bảo đủ tiền cho ăn uống mà không ảnh hưởng đến các mục tiêu tài chính khác.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 74,
+      "outputTokens": 123,
+      "totalTokens": 197
+     }
+    }
+   ]
+  },
+  "tool_forced": {
+   "secs": 1.03,
+   "parsed": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "used_tool": true,
+   "stop": "tool_use",
+   "usage": {
+    "inputTokens": 1144,
+    "outputTokens": 104,
+    "totalTokens": 1248
+   }
+  },
+  "schema": {
+   "error": "ValidationException: This model doesn't support the outputConfig field. Remove outputConfig and try again. (HTTP 400)"
+  },
+  "retries": []
+ },
+ "gpt6luna": {
+  "model": "global.openai.gpt-6-luna",
+  "region": "ap-southeast-1",
+  "text": {
+   "error": "AccessDeniedException: openai.gpt-6-luna is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)",
+   "partial": 0
+  },
+  "tool_forced": {
+   "skipped": "model không gọi được"
+  },
+  "schema": {
+   "skipped": "model không gọi được"
+  },
+  "retries": []
+ },
+ "gpt6sol": {
+  "model": "global.openai.gpt-6-sol",
+  "region": "ap-southeast-1",
+  "text": {
+   "error": "AccessDeniedException: openai.gpt-6-sol is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)",
+   "partial": 0
+  },
+  "tool_forced": {
+   "skipped": "model không gọi được"
+  },
+  "schema": {
+   "skipped": "model không gọi được"
+  },
+  "retries": []
+ },
+ "gpt61terra": {
+  "model": "global.openai.gpt-6.1-terra",
+  "region": "ap-southeast-1",
+  "text": {
+   "error": "AccessDeniedException: openai.gpt-6.1-terra is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)",
+   "partial": 0
+  },
+  "tool_forced": {
+   "skipped": "model không gọi được"
+  },
+  "schema": {
+   "skipped": "model không gọi được"
+  },
+  "retries": []
+ },
+ "gpt61sol": {
+  "model": "global.openai.gpt-6.1-sol",
+  "region": "ap-southeast-1",
+  "text": {
+   "error": "AccessDeniedException: openai.gpt-6.1-sol is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)",
+   "partial": 0
+  },
+  "tool_forced": {
+   "skipped": "model không gọi được"
+  },
+  "schema": {
+   "skipped": "model không gọi được"
+  },
+  "retries": []
+ },
+ "gpt62astra": {
+  "model": "global.openai.gpt-6.2-astra",
+  "region": "ap-southeast-1",
+  "text": {
+   "error": "AccessDeniedException: openai.gpt-6.2-astra is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)",
+   "partial": 0
+  },
+  "tool_forced": {
+   "skipped": "model không gọi được"
+  },
+  "schema": {
+   "skipped": "model không gọi được"
+  },
+  "retries": []
+ },
+ "gpt62sol": {
+  "model": "global.openai.gpt-6.2-sol",
+  "region": "ap-southeast-1",
+  "text": {
+   "error": "AccessDeniedException: openai.gpt-6.2-sol is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)",
+   "partial": 0
+  },
+  "tool_forced": {
+   "skipped": "model không gọi được"
+  },
+  "schema": {
+   "skipped": "model không gọi được"
+  },
+  "retries": []
+ },
+ "gpt55": {
+  "model": "global.openai.gpt-5.5",
+  "region": "ap-southeast-1",
+  "text": {
+   "error": "AccessDeniedException: openai.gpt-5.5 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)",
+   "partial": 0
+  },
+  "tool_forced": {
+   "skipped": "model không gọi được"
+  },
+  "schema": {
+   "skipped": "model không gọi được"
+  },
+  "retries": []
+ },
+ "gpt54": {
+  "model": "global.openai.gpt-5.4",
+  "region": "ap-southeast-1",
+  "text": {
+   "error": "AccessDeniedException: openai.gpt-5.4 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)",
+   "partial": 0
+  },
+  "tool_forced": {
+   "skipped": "model không gọi được"
+  },
+  "schema": {
+   "skipped": "model không gọi được"
+  },
+  "retries": []
+ },
+ "kimik3": {
+  "model": "global.moonshotai.kimi-k3",
+  "region": "ap-southeast-1",
+  "text": {
+   "ttft_text_med": 1.7083560000028228,
+   "ttft_any_med": 0.6829488999937894,
+   "total_med": 1.7827949000056833,
+   "out_tokens": [
+    300,
+    300,
+    300
+   ],
+   "runs": [
+    {
+     "first_any": 0.712,
+     "first_text": 1.736,
+     "total": 1.783,
+     "text": "\"Hũ ăn uống\" là một phần tiền được tách riêng từ thu nhập (thường theo phương pháp quản lý tài chính bằng các hũ của T. Har",
+     "reasoning_chars": 711,
+     "usage": {
+      "inputTokens": 133,
+      "outputTokens": 300,
+      "totalTokens": 433
+     }
+    },
+    {
+     "first_any": 0.679,
+     "first_text": 1.706,
+     "total": 1.785,
+     "text": "\"Hũ ăn uống\" là một trong các \"hũ chi tiêu\" trong phương pháp quản lý tài chính 6 chiếc hũ, dùng để chứa phần tiền dành",
+     "reasoning_chars": 687,
+     "usage": {
+      "inputTokens": 133,
+      "outputTokens": 300,
+      "totalTokens": 433
+     }
+    },
+    {
+     "first_any": 0.683,
+     "first_text": 1.708,
+     "total": 1.722,
+     "text": "\"Hũ ăn uống\" (hay hũ chi tiêu thiết yếu – NEC) là một trong 6 hũ trong phương pháp quản lý tài chính JARS, dùng để chi trả cho các",
+     "reasoning_chars": 673,
+     "usage": {
+      "inputTokens": 133,
+      "outputTokens": 300,
+      "totalTokens": 433
+     }
+    }
+   ]
+  },
+  "tool_forced": {
+   "secs": 2.04,
+   "parsed": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau"
+    },
+    "confidence": 0.95,
+    "needs_clarification": false
+   },
+   "used_tool": true,
+   "stop": "tool_use",
+   "usage": {
+    "inputTokens": 473,
+    "outputTokens": 281,
+    "totalTokens": 754,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   }
+  },
+  "schema": {
+   "secs": 1.66,
+   "parsed": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.92,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "used_tool": false,
+   "stop": "end_turn",
+   "usage": {
+    "inputTokens": 424,
+    "outputTokens": 266,
+    "totalTokens": 690,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   }
+  },
+  "retries": []
+ },
+ "kimik31": {
+  "model": "global.moonshotai.kimi-k3.1",
+  "region": "ap-southeast-1",
+  "text": {
+   "ttft_text_med": 1.8923531000036746,
+   "ttft_any_med": 1.0710210999968695,
+   "total_med": 1.9240791000047466,
+   "out_tokens": [
+    300,
+    300,
+    300
+   ],
+   "runs": [
+    {
+     "first_any": 1.071,
+     "first_text": 1.892,
+     "total": 1.952,
+     "text": "“Hũ ăn uống” là một khoản ngân sách được tách riêng để chi cho bữa ăn, đồ uống và các chi phí ăn uống khác trong một khoảng thời g",
+     "reasoning_chars": 657,
+     "usage": {
+      "inputTokens": 133,
+      "outputTokens": 300,
+      "totalTokens": 433
+     }
+    },
+    {
+     "first_any": 1.023,
+     "first_text": 1.833,
+     "total": 1.837,
+     "text": "“Hũ ăn uống” là một phần tiền được tách riêng từ thu nhập, chỉ dùng cho các khoản ăn uống như đi chợ, nấu ăn hay ăn",
+     "reasoning_chars": 393,
+     "usage": {
+      "inputTokens": 133,
+      "outputTokens": 300,
+      "totalTokens": 433
+     }
+    },
+    {
+     "first_any": 1.081,
+     "first_text": 1.902,
+     "total": 1.924,
+     "text": "“Hũ ăn uống” là khoản tiền được tách riêng trong ngân sách để chi cho các bữa ăn, đồ uống và đôi khi cả ăn uống bên ngoài",
+     "reasoning_chars": 436,
+     "usage": {
+      "inputTokens": 133,
+      "outputTokens": 300,
+      "totalTokens": 433
+     }
+    }
+   ]
+  },
+  "tool_forced": {
+   "secs": 1.65,
+   "parsed": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau"
+    },
+    "confidence": 0.99,
+    "needs_clarification": false
+   },
+   "used_tool": true,
+   "stop": "tool_use",
+   "usage": {
+    "inputTokens": 473,
+    "outputTokens": 283,
+    "totalTokens": 756,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   }
+  },
+  "schema": {
+   "secs": 2.03,
+   "parsed": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.99,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "used_tool": false,
+   "stop": "end_turn",
+   "usage": {
+    "inputTokens": 424,
+    "outputTokens": 179,
+    "totalTokens": 603,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   }
+  },
+  "retries": []
+ },
+ "haiku45": {
+  "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "region": "ap-southeast-1",
+  "text": {
+   "ttft_text_med": 0.38442800000484567,
+   "ttft_any_med": 0.38442800000484567,
+   "total_med": 1.542038900006446,
+   "out_tokens": [
+    173,
+    179,
+    170
+   ],
+   "runs": [
+    {
+     "first_any": 0.377,
+     "first_text": 0.377,
+     "total": 1.542,
+     "text": "# 'Hũ ăn uống' trong quản lý chi tiêu\n\n**'Hũ ăn uống'** là một phần ngân sách được dành riêng cho các chi phí liên quan đến thực phẩm, đồ uống và các bữa ăn hàng ngày của gia đình hoặc cá nhân. Đây là một trong những hạng mục chi tiêu thiết yếu trong kế hoạch tài chính cá nhân, giúp kiểm soát và theo dõi chi phí sinh hoạt hàng tháng một cách có hệ thống.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 56,
+      "outputTokens": 173,
+      "totalTokens": 229
+     }
+    },
+    {
+     "first_any": 0.384,
+     "first_text": 0.384,
+     "total": 1.74,
+     "text": "# Hũ Ăn Uống Trong Quản Lý Chi Tiêu\n\n**Hũ ăn uống** là một trong các hũ tiền được dùng để phân loại và quản lý chi tiêu hàng ngày, dành riêng cho các khoản tiền dùng vào ăn uống, thực phẩm và các chi phí liên quan đến dinh dưỡng. Phương pháp này giúp bạn kiểm soát tổng chi tiêu, đảm bảo không chi vượt quá ngân sách đã lên kế hoạch cho mục đích này.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 56,
+      "outputTokens": 179,
+      "totalTokens": 235
+     }
+    },
+    {
+     "first_any": 0.412,
+     "first_text": 0.412,
+     "total": 1.479,
+     "text": "# Hũ ăn uống trong quản lý chi tiêu\n\n**'Hũ ăn uống'** là một phương pháp chia ngân sách cá nhân thành các \"hũ\" (danh mục) khác nhau, trong đó hũ ăn uống dành riêng cho chi phí thực phẩm, đồ ăn, đồ uống hàng ngày. Cách này giúp bạn kiểm soát rõ ràng từng khoản chi tiêu và tránh vượt quá ngân sách cho từng lĩnh vực.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 56,
+      "outputTokens": 170,
+      "totalTokens": 226
+     }
+    }
+   ]
+  },
+  "tool_forced": {
+   "secs": 1.08,
+   "parsed": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "used_tool": true,
+   "stop": "tool_use",
+   "usage": {
+    "inputTokens": 1020,
+    "outputTokens": 157,
+    "totalTokens": 1177,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   }
+  },
+  "schema": {
+   "secs": 3.14,
+   "parsed": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "used_tool": false,
+   "stop": "end_turn",
+   "usage": {
+    "inputTokens": 599,
+    "outputTokens": 65,
+    "totalTokens": 664,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   }
+  },
+  "retries": []
+ },
+ "sonnet46": {
+  "model": "global.anthropic.claude-sonnet-4-6",
+  "region": "ap-southeast-1",
+  "text": {
+   "ttft_text_med": 0.5726290000020526,
+   "ttft_any_med": 0.5726290000020526,
+   "total_med": 2.649713500009966,
+   "out_tokens": [
+    176,
+    145,
+    186
+   ],
+   "runs": [
+    {
+     "first_any": 0.58,
+     "first_text": 0.58,
+     "total": 2.65,
+     "text": "**Hũ ăn uống** là một khoản ngân sách được phân bổ riêng biệt dành cho chi phí ăn uống hàng ngày (ăn sáng, trưa, tối, cà phê...), thường chiếm khoảng 10-15% thu nhập trong phương pháp quản lý tài chính theo hũ (JARS). Mục đích là giúp kiểm soát chi tiêu ăn uống không vượt quá giới hạn đã đặt ra, tránh lãng phí và cân đối ngân sách tổng thể.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 56,
+      "outputTokens": 176,
+      "totalTokens": 232
+     }
+    },
+    {
+     "first_any": 0.571,
+     "first_text": 0.571,
+     "total": 2.437,
+     "text": "**Hũ ăn uống** là một khoản ngân sách được tách riêng, chỉ dành cho các chi phí ăn uống hàng ngày như cơm, đồ ăn, đồ uống. Đây là một phần trong phương pháp quản lý tài chính theo **6 chiếc hũ** (của T. Harv Eker), giúp kiểm soát chi tiêu ăn uống không vượt quá mức đã định sẵn.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 56,
+      "outputTokens": 145,
+      "totalTokens": 201
+     }
+    },
+    {
+     "first_any": 0.573,
+     "first_text": 0.573,
+     "total": 2.966,
+     "text": "**Hũ ăn uống** là một khoản ngân sách được tách riêng, thường chiếm khoảng **55% thu nhập**, dùng để chi trả các nhu cầu thiết yếu hàng ngày như ăn uống, đi lại, hóa đơn sinh hoạt. Đây là một phần trong **phương pháp quản lý tài chính 6 chiếc hũ** (JARS), giúp người dùng kiểm soát chi tiêu có kỷ luật hơn bằng cách phân bổ tiền vào các \"hũ\" với mục đích cụ thể.",
+     "reasoning_chars": 0,
+     "usage": {
+      "inputTokens": 56,
+      "outputTokens": 186,
+      "totalTokens": 242
+     }
+    }
+   ]
+  },
+  "tool_forced": {
+   "secs": 1.35,
+   "parsed": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.97,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "used_tool": true,
+   "stop": "tool_use",
+   "usage": {
+    "inputTokens": 983,
+    "outputTokens": 147,
+    "totalTokens": 1130,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   }
+  },
+  "schema": {
+   "secs": 3.37,
+   "parsed": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "used_tool": false,
+   "stop": "end_turn",
+   "usage": {
+    "inputTokens": 600,
+    "outputTokens": 65,
+    "totalTokens": 665,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   }
+  },
+  "retries": []
+ }
+}

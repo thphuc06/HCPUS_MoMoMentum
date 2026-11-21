@@ -1,0 +1,24 @@
+[ap-southeast-1] haiku45 mục tiêu 3000 (count_tokens=None):
+    1 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 4572, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 4540, 'cacheDetails': [{'ttl': '5m', 'inputTokens': 4540}]} total_in=4563
+    2 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 4572, 'cacheReadInputTokens': 4540, 'cacheWriteInputTokens': 0} total_in=4563
+[ap-southeast-1] haiku45 mục tiêu 4500 (count_tokens=None):
+    1 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 6819, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 6787, 'cacheDetails': [{'ttl': '5m', 'inputTokens': 6787}]} total_in=6810
+    2 {'inputTokens': 23, 'outputTokens': 9, 'totalTokens': 6819, 'cacheReadInputTokens': 6787, 'cacheWriteInputTokens': 0} total_in=6810
+[ap-southeast-1] sonnet46 mục tiêu 700 (count_tokens=None):
+    1 {'inputTokens': 23, 'outputTokens': 7, 'totalTokens': 1084, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 1054, 'cacheDetails': [{'ttl': '5m', 'inputTokens': 1054}]} total_in=1077
+    2 {'inputTokens': 23, 'outputTokens': 7, 'totalTokens': 1084, 'cacheReadInputTokens': 1054, 'cacheWriteInputTokens': 0} total_in=1077
+[ap-southeast-1] sonnet46 mục tiêu 1300 (count_tokens=None):
+    1 {'inputTokens': 23, 'outputTokens': 7, 'totalTokens': 2004, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 1974, 'cacheDetails': [{'ttl': '5m', 'inputTokens': 1974}]} total_in=1997
+    2 {'inputTokens': 23, 'outputTokens': 7, 'totalTokens': 2004, 'cacheReadInputTokens': 1974, 'cacheWriteInputTokens': 0} total_in=1997
+[ap-southeast-1] apac.amazon.nova-lite-v1:0 mục tiêu 1500 (count_tokens=None):
+    1 {'inputTokens': 17, 'outputTokens': 6, 'totalTokens': 2418, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 2395} total_in=2412
+    2 {'inputTokens': 17, 'outputTokens': 6, 'totalTokens': 2418, 'cacheReadInputTokens': 2395, 'cacheWriteInputTokens': 0} total_in=2412
+[ap-southeast-1] global.amazon.nova-2-lite-v1:0 mục tiêu 1500 (count_tokens=None):
+    1 {'inputTokens': 10, 'outputTokens': 4, 'totalTokens': 1469, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 1455} total_in=1465
+    2 {'inputTokens': 10, 'outputTokens': 4, 'totalTokens': 1469, 'cacheReadInputTokens': 1455, 'cacheWriteInputTokens': 0} total_in=1465
+[ap-southeast-1] apac.amazon.nova-pro-v1:0 mục tiêu 1500 (count_tokens=None):
+    1 {'inputTokens': 17, 'outputTokens': 5, 'totalTokens': 2418, 'cacheReadInputTokens': 0, 'cacheWriteInputTokens': 2396} total_in=2413
+    2 {'inputTokens': 17, 'outputTokens': 5, 'totalTokens': 2418, 'cacheReadInputTokens': 2396, 'cacheWriteInputTokens': 0} total_in=2413
+[ap-southeast-1] global.moonshotai.kimi-k3 mục tiêu 1500 (count_tokens=None):
+    1 ValidationException: This model doesn't support the cachePoint field. Remove cachePoint and try again. (HTTP 400) 
+    2 ValidationException: This model doesn't support the cachePoint field. Remove cachePoint and try again. (HTTP 400) 

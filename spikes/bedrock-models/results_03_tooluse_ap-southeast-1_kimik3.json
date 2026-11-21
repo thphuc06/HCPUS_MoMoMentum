@@ -1,0 +1,295 @@
+{
+ "global.moonshotai.kimi-k3/tool_choice": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "ok": {
+    "intent": true,
+    "amount": true,
+    "pay": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau"
+    },
+    "confidence": 0.95,
+    "needs_clarification": false
+   },
+   "secs": 2.29,
+   "usage": {
+    "inputTokens": 597,
+    "outputTokens": 288,
+    "totalTokens": 885,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "jar_balance",
+    "params": {
+     "jar": "ăn uống"
+    },
+    "confidence": 0.97,
+    "needs_clarification": false
+   },
+   "secs": 17.12,
+   "usage": {
+    "inputTokens": 72,
+    "outputTokens": 223,
+    "totalTokens": 811,
+    "cacheReadInputTokens": 516,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": [
+    "retry 1 sau ThrottlingException, nghỉ 15s"
+   ]
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "investment_advice",
+    "params": {},
+    "confidence": 0.98,
+    "needs_clarification": false
+   },
+   "secs": 2.02,
+   "usage": {
+    "inputTokens": 66,
+    "outputTokens": 223,
+    "totalTokens": 805,
+    "cacheReadInputTokens": 516,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "forecast_depletion",
+    "params": {
+     "jar": "giải trí"
+    },
+    "confidence": 0.95,
+    "needs_clarification": false
+   },
+   "secs": 1.84,
+   "usage": {
+    "inputTokens": 72,
+    "outputTokens": 218,
+    "totalTokens": 806,
+    "cacheReadInputTokens": 516,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {},
+    "confidence": 0.6,
+    "needs_clarification": true,
+    "clarification_question": "Bạn định mua món gì và giá bao nhiêu tiền? Bạn dự định trả bằng phương thức nào (tiền mặt, thẻ, ví trả sau)?"
+   },
+   "secs": 74.81,
+   "usage": {
+    "inputTokens": 65,
+    "outputTokens": 273,
+    "totalTokens": 854,
+    "cacheReadInputTokens": 516,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "tool_use",
+   "logs": [
+    "retry 1 sau ThrottlingException, nghỉ 15s",
+    "retry 2 sau ThrottlingException, nghỉ 22s",
+    "retry 3 sau ThrottlingException, nghỉ 34s"
+   ]
+  }
+ ],
+ "global.moonshotai.kimi-k3/output_schema": [
+  {
+   "utt": "nếu mua tai nghe 1,2 triệu bằng ví trả sau thì sao",
+   "ok": {
+    "intent": true,
+    "amount": true,
+    "pay": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": 1200000,
+     "item": "tai nghe",
+     "payment_method": "ví trả sau",
+     "jar": null
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 2.39,
+   "usage": {
+    "inputTokens": 548,
+    "outputTokens": 215,
+    "totalTokens": 763,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "hũ ăn uống còn bao nhiêu",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "jar_balance",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "ăn uống"
+    },
+    "confidence": 0.97,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 2.11,
+   "usage": {
+    "inputTokens": 539,
+    "outputTokens": 126,
+    "totalTokens": 665,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "nên mua cổ phiếu nào",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "investment_advice",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.98,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 41.22,
+   "usage": {
+    "inputTokens": 533,
+    "outputTokens": 242,
+    "totalTokens": 775,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": [
+    "retry 1 sau ThrottlingException, nghỉ 15s",
+    "retry 2 sau ThrottlingException, nghỉ 22s"
+   ]
+  },
+  {
+   "utt": "cuối tháng hũ giải trí có cạn không",
+   "ok": {
+    "intent": true,
+    "jar": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "forecast_depletion",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": "giải trí"
+    },
+    "confidence": 0.95,
+    "needs_clarification": false,
+    "clarification_question": null
+   },
+   "secs": 1.71,
+   "usage": {
+    "inputTokens": 539,
+    "outputTokens": 131,
+    "totalTokens": 670,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": []
+  },
+  {
+   "utt": "mua cái đó thì sao",
+   "ok": {
+    "intent": true,
+    "clar": true
+   },
+   "result": {
+    "intent": "what_if_purchase",
+    "params": {
+     "amount_vnd": null,
+     "item": null,
+     "payment_method": null,
+     "jar": null
+    },
+    "confidence": 0.6,
+    "needs_clarification": true,
+    "clarification_question": "Bạn muốn mua món gì và giá bao nhiêu tiền? Bạn định trả bằng phương thức nào (tiền mặt, thẻ, ví trả sau)?"
+   },
+   "secs": 41.2,
+   "usage": {
+    "inputTokens": 532,
+    "outputTokens": 237,
+    "totalTokens": 769,
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0
+   },
+   "stop": "end_turn",
+   "logs": [
+    "retry 1 sau ThrottlingException, nghỉ 15s",
+    "retry 2 sau ThrottlingException, nghỉ 22s"
+   ]
+  }
+ ]
+}

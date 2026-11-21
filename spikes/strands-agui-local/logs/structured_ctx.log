@@ -1,0 +1,1 @@
+{"tool": "IntentResult", "input": {"intent": "move_money", "amount_vnd": 300000, "confidence": 0.95}, "result": "'Successfully validated IntentResult structured output'"}

@@ -1,0 +1,155 @@
+{
+ "haiku45@~2530": {
+  "counted_tokens": null,
+  "rows": [
+   {
+    "call": 1,
+    "usage": {
+     "inputTokens": 3898,
+     "outputTokens": 9,
+     "totalTokens": 3907,
+     "cacheReadInputTokens": 0,
+     "cacheWriteInputTokens": 0
+    },
+    "retry": []
+   },
+   {
+    "call": 2,
+    "usage": {
+     "inputTokens": 3898,
+     "outputTokens": 9,
+     "totalTokens": 3907,
+     "cacheReadInputTokens": 0,
+     "cacheWriteInputTokens": 0
+    },
+    "retry": []
+   }
+  ]
+ },
+ "haiku45@~2695": {
+  "counted_tokens": null,
+  "rows": [
+   {
+    "call": 1,
+    "usage": {
+     "inputTokens": 23,
+     "outputTokens": 9,
+     "totalTokens": 4163,
+     "cacheReadInputTokens": 0,
+     "cacheWriteInputTokens": 4131,
+     "cacheDetails": [
+      {
+       "ttl": "5m",
+       "inputTokens": 4131
+      }
+     ]
+    },
+    "retry": []
+   },
+   {
+    "call": 2,
+    "usage": {
+     "inputTokens": 23,
+     "outputTokens": 9,
+     "totalTokens": 4163,
+     "cacheReadInputTokens": 4131,
+     "cacheWriteInputTokens": 0
+    },
+    "retry": []
+   }
+  ]
+ },
+ "haiku45@~2805": {
+  "counted_tokens": null,
+  "rows": [
+   {
+    "call": 1,
+    "usage": {
+     "inputTokens": 23,
+     "outputTokens": 9,
+     "totalTokens": 4330,
+     "cacheReadInputTokens": 0,
+     "cacheWriteInputTokens": 4298,
+     "cacheDetails": [
+      {
+       "ttl": "5m",
+       "inputTokens": 4298
+      }
+     ]
+    },
+    "retry": []
+   },
+   {
+    "call": 2,
+    "usage": {
+     "inputTokens": 23,
+     "outputTokens": 9,
+     "totalTokens": 4330,
+     "cacheReadInputTokens": 4298,
+     "cacheWriteInputTokens": 0
+    },
+    "retry": []
+   }
+  ]
+ },
+ "haiku45@~2915": {
+  "counted_tokens": null,
+  "rows": [
+   {
+    "call": 1,
+    "usage": {
+     "inputTokens": 23,
+     "outputTokens": 9,
+     "totalTokens": 4497,
+     "cacheReadInputTokens": 0,
+     "cacheWriteInputTokens": 4465,
+     "cacheDetails": [
+      {
+       "ttl": "5m",
+       "inputTokens": 4465
+      }
+     ]
+    },
+    "retry": []
+   },
+   {
+    "call": 2,
+    "usage": {
+     "inputTokens": 23,
+     "outputTokens": 9,
+     "totalTokens": 4497,
+     "cacheReadInputTokens": 4465,
+     "cacheWriteInputTokens": 0
+    },
+    "retry": []
+   }
+  ]
+ },
+ "sonnet46@~605": {
+  "counted_tokens": null,
+  "rows": [
+   {
+    "call": 1,
+    "usage": {
+     "inputTokens": 1000,
+     "outputTokens": 7,
+     "totalTokens": 1007,
+     "cacheReadInputTokens": 0,
+     "cacheWriteInputTokens": 0
+    },
+    "retry": []
+   },
+   {
+    "call": 2,
+    "usage": {
+     "inputTokens": 1000,
+     "outputTokens": 7,
+     "totalTokens": 1007,
+     "cacheReadInputTokens": 0,
+     "cacheWriteInputTokens": 0
+    },
+    "retry": []
+   }
+  ]
+ }
+}

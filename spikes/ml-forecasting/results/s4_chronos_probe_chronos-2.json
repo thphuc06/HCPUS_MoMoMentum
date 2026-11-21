@@ -1,0 +1,36 @@
+{
+ "amazon/chronos-2": {
+  "load_s_first": 0.41,
+  "peak_MB_after_load": 903,
+  "rss_MB_after_load": 892,
+  "n_params_M": 119.5,
+  "dtype": "torch.float32",
+  "infer7_ctx90_s": [
+   0.144,
+   0.135,
+   0.135
+  ],
+  "infer7_ctx180_s": [
+   0.203,
+   0.202,
+   0.197
+  ],
+  "infer7_ctx335_s": [
+   0.298,
+   0.289,
+   0.307
+  ],
+  "infer7_ctx180_nocov_s": 0.087,
+  "batch_350series_ctx180_s": 12.23,
+  "batch_350_series_per_s": 28.6,
+  "batch_1050series_ctx180_s": 36.27,
+  "batch_1050_series_per_s": 28.9,
+  "peak_MB_final": 1193,
+  "load_s_second": 0.34
+ },
+ "_env": {
+  "torch": "2.15.0+cpu",
+  "threads": 14,
+  "cpu_count": 20
+ }
+}

@@ -1,0 +1,64 @@
+scipy 1.18.1
+
+CA 1: I=9.000 (có nghiệm; mục tiêu mềm thiếu một phần vì HARD=6.430, GOAL=3.000, còn 2.570)
+  status=0 (Optimization terminated successfully. (HiGHS Status 7: Optim)
+  x   : {'nghia_vu': np.float64(3980.0), 'an_uong': np.float64(2000.0), 'di_chuyen': np.float64(450.0), 'giai_tri': np.float64(170.0), 'mua_sam': np.float64(500.0), 'du_lich': np.float64(900.0), 'du_phong': np.float64(1000.0)}
+  thiếu mục tiêu mềm Σs = 430 {'giai_tri': 430}
+  thiếu nghĩa vụ cứng Σe = 0 {}
+  mục tiêu = 430.0
+
+CA 1b: trọ +300, có phạt thay đổi so với kỳ trước (eps=0,01)
+  status=0 (Optimization terminated successfully. (HiGHS Status 7: Optim)
+  x   : {'nghia_vu': np.float64(4280.0), 'an_uong': np.float64(2000.0), 'di_chuyen': np.float64(450.0), 'giai_tri': np.float64(170.0), 'mua_sam': np.float64(200.0), 'du_lich': np.float64(900.0), 'du_phong': np.float64(1000.0)}
+  thiếu mục tiêu mềm Σs = 730 {'giai_tri': 430, 'mua_sam': 300}
+  thiếu nghĩa vụ cứng Σe = 0 {}
+  mục tiêu = 736.0
+  thay đổi so với kỳ trước: {'nghia_vu': np.float64(300.0), 'an_uong': np.float64(0.0), 'di_chuyen': np.float64(0.0), 'giai_tri': np.float64(0.0), 'mua_sam': np.float64(-300.0), 'du_lich': np.float64(0.0), 'du_phong': np.float64(0.0)}
+
+CA 1c: giãn kỳ hạn mục tiêu (T x 0,5) -> hết thiếu mềm
+  status=0 (Optimization terminated successfully. (HiGHS Status 7: Optim)
+  x   : {'nghia_vu': np.float64(3980.0), 'an_uong': np.float64(2000.0), 'di_chuyen': np.float64(450.0), 'giai_tri': np.float64(300.0), 'mua_sam': np.float64(1320.0), 'du_lich': np.float64(450.0), 'du_phong': np.float64(500.0)}
+  thiếu mục tiêu mềm Σs = 0 {}
+  thiếu nghĩa vụ cứng Σe = 0 {}
+  mục tiêu = 0.0
+
+CA 2a: I=5.500, sàn cứng đặt qua `bounds` (HARD=6.430 > I)
+  status=2 (The problem is infeasible. (HiGHS Status 8: model_status is )
+
+CA 2b: I=5.500, sàn cứng qua x+e>=L (elastic) -> luôn có nghiệm và báo mức thiếu
+  status=0 (Optimization terminated successfully. (HiGHS Status 7: Optim)
+  x   : {'nghia_vu': np.float64(3050.0), 'an_uong': np.float64(2000.0), 'di_chuyen': np.float64(450.0), 'giai_tri': np.float64(0.0), 'mua_sam': np.float64(0.0), 'du_lich': np.float64(0.0), 'du_phong': np.float64(0.0)}
+  thiếu mục tiêu mềm Σs = 3000 {'giai_tri': 600, 'mua_sam': 500, 'du_lich': 900, 'du_phong': 1000}
+  thiếu nghĩa vụ cứng Σe = 930 {'nghia_vu': 930}
+  mục tiêu = 930005900.0
+
+CA 2c: như 2b nhưng M theo ưu tiên
+  status=0 (Optimization terminated successfully. (HiGHS Status 7: Optim)
+  x   : {'nghia_vu': np.float64(3980.0), 'an_uong': np.float64(1520.0), 'di_chuyen': np.float64(0.0), 'giai_tri': np.float64(0.0), 'mua_sam': np.float64(0.0), 'du_lich': np.float64(0.0), 'du_phong': np.float64(0.0)}
+  thiếu mục tiêu mềm Σs = 3000 {'giai_tri': 600, 'mua_sam': 500, 'du_lich': 900, 'du_phong': 1000}
+  thiếu nghĩa vụ cứng Σe = 930 {'an_uong': 480, 'di_chuyen': 450}
+  mục tiêu = 52505900.0
+
+CA 3: I=0
+  status=0 (Optimization terminated successfully. (HiGHS Status 7: Optim)
+  x   : {'nghia_vu': np.float64(-0.0), 'an_uong': np.float64(0.0), 'di_chuyen': np.float64(0.0), 'giai_tri': np.float64(0.0), 'mua_sam': np.float64(0.0), 'du_lich': np.float64(0.0), 'du_phong': np.float64(0.0)}
+  thiếu mục tiêu mềm Σs = 3000 {'giai_tri': 600, 'mua_sam': 500, 'du_lich': 900, 'du_phong': 1000}
+  thiếu nghĩa vụ cứng Σe = 6430 {'nghia_vu': 3980, 'an_uong': 2000, 'di_chuyen': 450}
+  mục tiêu = 6430005900.0
+
+CA 4: x nguyên (integrality=1 trên x, đơn vị k VND)
+  status=0 (Optimization terminated successfully. (HiGHS Status 7: Optim)
+  x   : {'nghia_vu': np.float64(3980.0), 'an_uong': np.float64(2000.0), 'di_chuyen': np.float64(450.0), 'giai_tri': np.float64(600.0), 'mua_sam': np.float64(70.0), 'du_lich': np.float64(900.0), 'du_phong': np.float64(1000.0)}
+  thiếu mục tiêu mềm Σs = 430 {'mua_sam': 430}
+  thiếu nghĩa vụ cứng Σe = 0 {}
+  mục tiêu = 430.0
+
+Thời gian giải (ms, median / p95, 300 lần, 7 hũ, 35 biến):
+  ca 1 highs                     0.97 /   1.05
+  ca 1b có x_prev                1.01 /   1.23
+  ca 2b elastic                  0.98 /   1.27
+  ca 2a vô nghiệm (bounds)       0.71 /   0.86
+  ca 4 MILP nguyên               1.00 /   1.14
+  highs-ds                       1.03 /   1.29
+  highs-ipm                      1.29 /   1.51
+import scipy.optimize: 0 ms (đã nạp)

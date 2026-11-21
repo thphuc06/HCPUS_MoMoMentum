@@ -1,0 +1,36 @@
+{
+ "autogluon/chronos-2-small": {
+  "load_s_first": 0.15,
+  "peak_MB_after_load": 529,
+  "rss_MB_after_load": 524,
+  "n_params_M": 27.9,
+  "dtype": "torch.float32",
+  "infer7_ctx90_s": [
+   0.061,
+   0.047,
+   0.042
+  ],
+  "infer7_ctx180_s": [
+   0.069,
+   0.068,
+   0.064
+  ],
+  "infer7_ctx335_s": [
+   0.081,
+   0.082,
+   0.081
+  ],
+  "infer7_ctx180_nocov_s": 0.029,
+  "batch_350series_ctx180_s": 3.04,
+  "batch_350_series_per_s": 115.2,
+  "batch_1050series_ctx180_s": 8.48,
+  "batch_1050_series_per_s": 123.8,
+  "peak_MB_final": 768,
+  "load_s_second": 0.13
+ },
+ "_env": {
+  "torch": "2.15.0+cpu",
+  "threads": 14,
+  "cpu_count": 20
+ }
+}

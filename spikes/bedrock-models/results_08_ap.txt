@@ -1,0 +1,67 @@
+[ap-southeast-1] novapro (apac.amazon.nova-pro-v1:0)
+   text: {'ttft_text_med': 0.41119470000558067, 'ttft_any_med': 0.41119470000558067, 'total_med': 1.4814686000026995, 'out_tokens': [97, 100, 91]}
+   mẫu: 'Hũ ăn uống' là một phương pháp quản lý chi tiêu cá nhân, trong đó một số tiền cố định được dành riêng cho chi phí ăn uống hàng ngày hoặc hàng tuần, giúp kiểm soát và hạn chế chi tiêu quá mức trong mục này.
+   tool_forced: {"secs": 0.97, "parsed": {"needs_clarification": false, "clarification_question": null, "confidence": 0.9, "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau", "jar": null}, "intent": "what_if_purchase"}, "used_tool": true, "stop": "tool_use", "usage": {"inputTokens": 716, "outputTokens": 80, "to
+   schema: {"error": "ValidationException: This model doesn't support the outputConfig field. Remove outputConfig and try again. (HTTP 400)"}
+[ap-southeast-1] novalite (apac.amazon.nova-lite-v1:0)
+   text: {'ttft_text_med': 0.33051780000096187, 'ttft_any_med': 0.33051780000096187, 'total_med': 0.8509027999971295, 'out_tokens': [93, 126, 76]}
+   mẫu: "Hũ ăn uống" trong quản lý chi tiêu cá nhân đề cập đến ngân sách dành cho chi tiêu hàng ngày như mua thực phẩm và đồ uống. Nó giúp người dùng theo dõi và kiểm soát chi tiêu hàng tháng cho mục này.
+   tool_forced: {"secs": 0.7, "parsed": {"needs_clarification": false, "clarification_question": null, "confidence": 0.9, "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "vi tra sau", "jar": "vi"}, "intent": "what_if_purchase"}, "used_tool": true, "stop": "tool_use", "usage": {"inputTokens": 716, "outputTokens": 80, "tot
+   schema: {"error": "ValidationException: This model doesn't support the outputConfig field. Remove outputConfig and try again. (HTTP 400)"}
+[ap-southeast-1] nova2lite (global.amazon.nova-2-lite-v1:0)
+   text: {'ttft_text_med': 0.6646081000071717, 'ttft_any_med': 0.6646081000071717, 'total_med': 1.2079598999989685, 'out_tokens': [79, 70, 123]}
+   mẫu: **Hũ ăn uống** trong quản lý chi tiêu cá nhân là một phương pháp chia nhỏ ngân sách hàng ngày hoặc hàng tuần cho các món ăn, giúp bạn kiểm soát và hạn chế chi tiêu cho thực phẩm, đồ uống một cách hợp lý. Nó giúp tránh thói quen ăn uống không cần thiết và dễ dà
+   tool_forced: {"secs": 1.03, "parsed": {"intent": "what_if_purchase", "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau", "jar": null}, "confidence": 0.95, "needs_clarification": false, "clarification_question": null}, "used_tool": true, "stop": "tool_use", "usage": {"inputTokens": 1144, "outputTokens": 104, 
+   schema: {"error": "ValidationException: This model doesn't support the outputConfig field. Remove outputConfig and try again. (HTTP 400)"}
+[ap-southeast-1] gpt6luna (global.openai.gpt-6-luna)
+   text: {'error': 'AccessDeniedException: openai.gpt-6-luna is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)', 'partial': 0}
+   tool_forced: {"skipped": "model không gọi được"}
+   schema: {"skipped": "model không gọi được"}
+[ap-southeast-1] gpt6sol (global.openai.gpt-6-sol)
+   text: {'error': 'AccessDeniedException: openai.gpt-6-sol is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)', 'partial': 0}
+   tool_forced: {"skipped": "model không gọi được"}
+   schema: {"skipped": "model không gọi được"}
+[ap-southeast-1] gpt61terra (global.openai.gpt-6.1-terra)
+   text: {'error': 'AccessDeniedException: openai.gpt-6.1-terra is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)', 'partial': 0}
+   tool_forced: {"skipped": "model không gọi được"}
+   schema: {"skipped": "model không gọi được"}
+[ap-southeast-1] gpt61sol (global.openai.gpt-6.1-sol)
+   text: {'error': 'AccessDeniedException: openai.gpt-6.1-sol is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)', 'partial': 0}
+   tool_forced: {"skipped": "model không gọi được"}
+   schema: {"skipped": "model không gọi được"}
+[ap-southeast-1] gpt62astra (global.openai.gpt-6.2-astra)
+   text: {'error': 'AccessDeniedException: openai.gpt-6.2-astra is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)', 'partial': 0}
+   tool_forced: {"skipped": "model không gọi được"}
+   schema: {"skipped": "model không gọi được"}
+[ap-southeast-1] gpt62sol (global.openai.gpt-6.2-sol)
+   text: {'error': 'AccessDeniedException: openai.gpt-6.2-sol is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)', 'partial': 0}
+   tool_forced: {"skipped": "model không gọi được"}
+   schema: {"skipped": "model không gọi được"}
+[ap-southeast-1] gpt55 (global.openai.gpt-5.5)
+   text: {'error': 'AccessDeniedException: openai.gpt-5.5 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)', 'partial': 0}
+   tool_forced: {"skipped": "model không gọi được"}
+   schema: {"skipped": "model không gọi được"}
+[ap-southeast-1] gpt54 (global.openai.gpt-5.4)
+   text: {'error': 'AccessDeniedException: openai.gpt-5.4 is not available for this account. You can explore other available models on Amazon Bedrock. For additional access options, contact AWS Sales at https://aws.amazon.com/contact-us/sales-support/ (HTTP 403)', 'partial': 0}
+   tool_forced: {"skipped": "model không gọi được"}
+   schema: {"skipped": "model không gọi được"}
+[ap-southeast-1] kimik3 (global.moonshotai.kimi-k3)
+   text: {'ttft_text_med': 1.7083560000028228, 'ttft_any_med': 0.6829488999937894, 'total_med': 1.7827949000056833, 'out_tokens': [300, 300, 300]}
+   mẫu: "Hũ ăn uống" là một phần tiền được tách riêng từ thu nhập (thường theo phương pháp quản lý tài chính bằng các hũ của T. Har
+   tool_forced: {"secs": 2.04, "parsed": {"intent": "what_if_purchase", "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau"}, "confidence": 0.95, "needs_clarification": false}, "used_tool": true, "stop": "tool_use", "usage": {"inputTokens": 473, "outputTokens": 281, "totalTokens": 754, "cacheReadInputTokens": 0,
+   schema: {"secs": 1.66, "parsed": {"intent": "what_if_purchase", "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau", "jar": null}, "confidence": 0.92, "needs_clarification": false, "clarification_question": null}, "used_tool": false, "stop": "end_turn", "usage": {"inputTokens": 424, "outputTokens": 266, 
+[ap-southeast-1] kimik31 (global.moonshotai.kimi-k3.1)
+   text: {'ttft_text_med': 1.8923531000036746, 'ttft_any_med': 1.0710210999968695, 'total_med': 1.9240791000047466, 'out_tokens': [300, 300, 300]}
+   mẫu: “Hũ ăn uống” là một khoản ngân sách được tách riêng để chi cho bữa ăn, đồ uống và các chi phí ăn uống khác trong một khoảng thời g
+   tool_forced: {"secs": 1.65, "parsed": {"intent": "what_if_purchase", "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau"}, "confidence": 0.99, "needs_clarification": false}, "used_tool": true, "stop": "tool_use", "usage": {"inputTokens": 473, "outputTokens": 283, "totalTokens": 756, "cacheReadInputTokens": 0,
+   schema: {"secs": 2.03, "parsed": {"intent": "what_if_purchase", "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau", "jar": null}, "confidence": 0.99, "needs_clarification": false, "clarification_question": null}, "used_tool": false, "stop": "end_turn", "usage": {"inputTokens": 424, "outputTokens": 179, 
+[ap-southeast-1] haiku45 (global.anthropic.claude-haiku-4-5-20251001-v1:0)
+   text: {'ttft_text_med': 0.38442800000484567, 'ttft_any_med': 0.38442800000484567, 'total_med': 1.542038900006446, 'out_tokens': [173, 179, 170]}
+   mẫu: # 'Hũ ăn uống' trong quản lý chi tiêu  **'Hũ ăn uống'** là một phần ngân sách được dành riêng cho các chi phí liên quan đến thực phẩm, đồ uống và các bữa ăn hàng ngày của gia đình hoặc cá nhân. Đây là một trong những hạng mục chi tiêu thiết yếu trong kế hoạch 
+   tool_forced: {"secs": 1.08, "parsed": {"intent": "what_if_purchase", "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau", "jar": null}, "confidence": 0.95, "needs_clarification": false, "clarification_question": null}, "used_tool": true, "stop": "tool_use", "usage": {"inputTokens": 1020, "outputTokens": 157, 
+   schema: {"secs": 3.14, "parsed": {"intent": "what_if_purchase", "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau", "jar": null}, "confidence": 0.95, "needs_clarification": false, "clarification_question": null}, "used_tool": false, "stop": "end_turn", "usage": {"inputTokens": 599, "outputTokens": 65, "
+[ap-southeast-1] sonnet46 (global.anthropic.claude-sonnet-4-6)
+   text: {'ttft_text_med': 0.5726290000020526, 'ttft_any_med': 0.5726290000020526, 'total_med': 2.649713500009966, 'out_tokens': [176, 145, 186]}
+   mẫu: **Hũ ăn uống** là một khoản ngân sách được phân bổ riêng biệt dành cho chi phí ăn uống hàng ngày (ăn sáng, trưa, tối, cà phê...), thường chiếm khoảng 10-15% thu nhập trong phương pháp quản lý tài chính theo hũ (JARS). Mục đích là giúp kiểm soát chi tiêu ăn uốn
+   tool_forced: {"secs": 1.35, "parsed": {"intent": "what_if_purchase", "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau", "jar": null}, "confidence": 0.97, "needs_clarification": false, "clarification_question": null}, "used_tool": true, "stop": "tool_use", "usage": {"inputTokens": 983, "outputTokens": 147, "
+   schema: {"secs": 3.37, "parsed": {"intent": "what_if_purchase", "params": {"amount_vnd": 1200000, "item": "tai nghe", "payment_method": "ví trả sau", "jar": null}, "confidence": 0.95, "needs_clarification": false, "clarification_question": null}, "used_tool": false, "stop": "end_turn", "usage": {"inputTokens": 600, "outputTokens": 65, "

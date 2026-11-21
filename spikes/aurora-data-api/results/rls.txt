@@ -1,0 +1,27 @@
+== vai trò
+app  : ['yofina_app', 'false', 'false', 'spikeadmin']
+admin: ['spikeadmin', 'false', 'false', 'rds_superuser']
+== 1. app role, không set_config
+count jars: 0
+== 2. set_config NGOÀI transaction
+is_local=true  rồi gọi riêng SELECT: [{'longValue': 0}, {'stringValue': ''}]
+is_local=false rồi gọi riêng SELECT: [{'longValue': 0}, {'stringValue': ''}]
+rò rỉ session-level qua 30 lần gọi (số lần thấy dòng): 0
+== 3. TRONG transaction (set_config true)
+count jars: 7
+jars của user-b nhìn thấy: 0
+transactions: 2000 | forecasts: 210
+INSERT hộ user-b (WITH CHECK): LỖI DatabaseErrorException: An error occurred (DatabaseErrorException) when calling the ExecuteStatement operation: ERROR: new row violates row-level security policy for table "jars"; SQLState: 42501
+transaction mới: current_setting: [{'stringValue': ''}]
+count jars (transaction mới, chưa set): 0
+sau commit, gọi ngoài tx: 0
+== 4. một lệnh duy nhất
+CTE set_config + SELECT: 7
+nhiều câu ';' trong 1 ExecuteStatement: LỖI ClientError: An error occurred (ValidationException) when calling the ExecuteStatement operation: Multistatements aren't supported.
+CTE MATERIALIZED, tham số user-b: [[{'longValue': 7}]]
+== 5. owner (secret master)
+admin count jars không set_config: 21
+sau FORCE RLS: 21
+== 6. role app tự tắt RLS?
+app: ALTER TABLE jars DISABLE ROW LEVEL SECURITY: LỖI DatabaseErrorException: An error occurred (DatabaseErrorException) when calling the ExecuteStatement operation: ERROR: must be owner of table jars; SQLState: 42501
+app: set_config user khác rồi đọc (app tự khai) : 7

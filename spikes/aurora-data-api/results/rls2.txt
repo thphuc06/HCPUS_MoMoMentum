@@ -1,0 +1,19 @@
+[[{'stringValue': 'rds_superuser'}, {'stringValue': 'false'}, {'stringValue': 'false'}], [{'stringValue': 'spikeadmin'}, {'stringValue': 'false'}, {'stringValue': 'false'}], [{'stringValue': 'yofina_app'}, {'stringValue': 'false'}, {'stringValue': 'false'}]]
+relforcerowsecurity: [[{'stringValue': 'true'}, {'stringValue': 'true'}]]
+admin jars sau FORCE: users thấy: [[{'stringValue': 'user-a,user-b,user-c'}]]
+admin jars sau FORCE + set_config user-a trong tx: [[{'stringValue': 'user-a,user-b,user-c'}]]
+Traceback (most recent call last):
+  File "C:\moMo\spikes\aurora-data-api\t_rls2.py", line 13, in <module>
+    admin.q("ALTER TABLE jars NO FORCE ROW LEVEL SECURITY")
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\moMo\spikes\aurora-data-api\bench_core.py", line 49, in q
+    return self.c.execute_statement(**a)
+           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Users\Phuc\anaconda3\Lib\site-packages\botocore\client.py", line 606, in _api_call
+    return self._make_api_call(operation_name, kwargs)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Phuc\anaconda3\Lib\site-packages\botocore\context.py", line 123, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\Phuc\anaconda3\Lib\site-packages\botocore\client.py", line 1094, in _make_api_call
+    raise error_class(parsed_response, operation_name)
+botocore.errorfactory.StatementTimeoutException: An error occurred (StatementTimeoutException) when calling the ExecuteStatement operation: canceling statement due to statement timeout
