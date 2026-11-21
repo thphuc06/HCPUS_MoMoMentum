@@ -25,6 +25,8 @@ Chọn lựa chọn 2:
 - `@ag-ui/client` làm client mỏng; khối UI render qua registry `type → component` có Zod schema, dùng chung cho màn hình chính và chat.
 - Hướng giao diện như màn hình mẫu của spike: nền kem, màu chủ đạo chàm, thẻ số dư + hành động nhanh, thẻ hũ, thanh tab dưới 5 mục, chat dạng bottom sheet mở từ nút giữa.
 
+**Cập nhật 2026-11-21 (chủ dự án)**: tông màu đổi sang hồng–magenta kiểu ví MoMo thay cho chàm + nền kem; không dùng logo, tên hay linh vật của MoMo. Bảng màu, component và 40 frame thiết kế nằm trong file Figma, xem [figma-ui-design.md](../research/figma-ui-design.md). Bố cục và stack giữ nguyên.
+
 Phiên bản đã chạy được và các lệnh đúng: xem [spike-frontend-stack.md](../research/spike-frontend-stack.md).
 
 ## Hệ quả

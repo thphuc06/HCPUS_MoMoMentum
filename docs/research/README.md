@@ -30,6 +30,10 @@ Bảy ghi chú dưới đây do subagent (Claude Sonnet 5.5) viết ngày 2026-1
 | [agentic-ui-generative-ui.md](agentic-ui-generative-ui.md) | Khối UI từ JSON, hợp đồng khối, luồng xác nhận, UX cho agent |
 | [frontend-fintech-ui.md](frontend-fintech-ui.md) | Stack frontend đề xuất, mẫu thiết kế app ngân hàng, biểu đồ, nhận diện |
 
+### Thiết kế giao diện (Figma, 2026-11-21)
+
+[figma-ui-design.md](figma-ui-design.md): link file Figma, bảng màu (tông hồng–magenta), danh mục component, 40 frame theo luồng demo và ánh xạ màn hình ↔ cảnh demo ↔ tính năng. Frame tĩnh, chưa nối prototype.
+
 ### Kết quả chạy thử (spike, 2026-11-21)
 
 Bảy thử nghiệm đã **chạy thật** (subagent Claude Sonnet 5.5). Chỗ nào spike mâu thuẫn với ghi chú đọc tài liệu thì tin spike; các ghi chú ở trên đã được đánh dấu "[Đã chạy thử 2026-11-21]" tại chỗ. Code thử nằm trong `spikes/<tên>/` (có README chạy lại); đó là bản thử, không phải code sản phẩm.
