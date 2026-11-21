@@ -25,7 +25,9 @@ Tài liệu viết tiếng Việt, thuật ngữ kỹ thuật giữ tiếng Anh.
 | Ghi lại một quyết định kiến trúc | [docs/decisions/README.md](docs/decisions/README.md) |
 | Cách dùng và best practice từng phần stack (AgentCore, Strands/AG-UI, Bedrock, hạ tầng, ML, generative UI, frontend) | [docs/research/README.md](docs/research/README.md) |
 | Link nguồn theo chủ đề | [docs/references/links.md](docs/references/links.md) |
-| Kế hoạch 3 tuần, chia vai, kịch bản demo | [docs/plan/README.md](docs/plan/README.md) |
+| Kế hoạch tổng 6 phase, quyết định áp dụng cho mọi phase, file plan từng phase | [docs/plan/master-plan.md](docs/plan/master-plan.md), [docs/plan/phases/](docs/plan/phases/) |
+| Kế hoạch 3 tuần theo proposal, chia vai, kịch bản demo | [docs/plan/README.md](docs/plan/README.md) |
+| Tài nguyên AWS đã tạo (tên, stack, phase) | [docs/aws-resources.md](docs/aws-resources.md) |
 | Mục lục toàn bộ tài liệu | [docs/README.md](docs/README.md) |
 
 ## Code nằm ở đâu

@@ -7,9 +7,12 @@ Tick `[x]` khi đã chốt và ghi kết quả bên dưới câu hỏi (kèm ng�
 - [ ] Hạn nộp bài chính xác là ngày nào, và tiêu chí chấm có trọng số ra sao? *(kế hoạch hiện giả định nộp trước chung kết 11/12/2026)*
 - [ ] Đội có 2 hay 3 người, ai làm frontend? *(nếu 2 người: gộp vai frontend vào người lo agent và cắt F6 — proposal §15)*
 - [ ] Persona chính là sinh viên đi làm thêm hay người đi làm 1 đến 3 năm?
-- [ ] Demo dùng tên và biểu phí Ví Trả Sau thật, hay một sản phẩm trả sau mô phỏng? *(đề xuất của proposal: mô phỏng, dẫn biểu phí công khai làm ví dụ)*
-- [ ] Tool viết Python toàn bộ, hay tách phần sổ cái sang Java Spring?
-- [ ] Chronos-2 có cần cho MVP không, hay chạy mô hình thống kê trước? *(proposal §14: "MVP nếu kịp, không thì mở rộng")*
+- [x] Demo dùng tên và biểu phí Ví Trả Sau thật, hay một sản phẩm trả sau mô phỏng? *(đề xuất của proposal: mô phỏng, dẫn biểu phí công khai làm ví dụ)*
+  - Chốt 2026-11-21 (chủ dự án): sản phẩm trả sau **mô phỏng**, lấy biểu phí công khai làm ví dụ; giao diện ghi "Trả sau (mô phỏng)".
+- [x] Tool viết Python toàn bộ, hay tách phần sổ cái sang Java Spring?
+  - Chốt 2026-11-21 (chủ dự án): Python toàn bộ.
+- [x] Chronos-2 có cần cho MVP không, hay chạy mô hình thống kê trước? *(proposal §14: "MVP nếu kịp, không thì mở rộng")*
+  - Chốt 2026-11-21 (chủ dự án): để ngoài, cùng SageMaker; dùng hurdle tự viết và baseline thống kê.
 - [ ] Giữ tên Yofina hay đổi tên?
 - [ ] Mở app MoMo kiểm tra lại: đã có dự báo, what-if hay lộ trình theo mục tiêu chưa? Có hũ có số dư riêng chưa? Chuyển tiền cho cá nhân có được tự phân loại không?
 
@@ -17,8 +20,10 @@ Tick `[x]` khi đã chốt và ghi kết quả bên dưới câu hỏi (kèm ng�
 
 Không phải câu hỏi của proposal; ghi nhận ngày 2026-11-21 từ trạng thái máy.
 
-- [ ] **Region triển khai**: AWS CLI đang để mặc định `us-east-1`, proposal nhắc Singapore (`ap-southeast-1`; §13 ghi AgentCore có ở Singapore theo tra cứu 20/11/2026, từng tính năng con cần kiểm riêng trong tuần 1). Cần chốt Region trước khi deploy; sau đó đặt Region tường minh trong cấu hình CDK/CLI. Kiểm tính năng theo Region bằng `get_regional_availability` hoặc tài liệu AWS ([aws-tooling.md](../references/aws-tooling.md)).
+- [x] **Region triển khai**: AWS CLI đang để mặc định `us-east-1`, proposal nhắc Singapore (`ap-southeast-1`; §13 ghi AgentCore có ở Singapore theo tra cứu 20/11/2026, từng tính năng con cần kiểm riêng trong tuần 1). Cần chốt Region trước khi deploy; sau đó đặt Region tường minh trong cấu hình CDK/CLI. Kiểm tính năng theo Region bằng `get_regional_availability` hoặc tài liệu AWS ([aws-tooling.md](../references/aws-tooling.md)).
+  - Chốt 2026-11-21 (chủ dự án): `ap-southeast-1`, đặt tường minh ở mọi nơi.
 - [ ] **Danh tính deploy**: CLI đang đăng nhập bằng root user của tài khoản. Nên tạo IAM user/role riêng (quyền tối thiểu đủ để chạy CDK) cho việc deploy và không dùng root.
+  - Kế hoạch 2026-11-21: việc đầu tiên của [phase 1](../plan/phases/phase-1-nen-va-lat-doc.md#luồng-a--danh-tính-deploy-và-nền-cdk); tick khi xong.
 - [x] **Khung FAST**: kéo FAST về bằng cách nào?
   - Chốt 2026-11-21 (chủ dự án): **không kéo FAST về**. FAST chỉ là nguồn tham khảo; code tự viết theo tài liệu chính thức của từng dịch vụ/thư viện. Khác với proposal §8 và §14 ("khởi đầu từ khung FAST"). Xem [project-structure.md](../architecture/project-structure.md#fast-chỉ-để-tham-khảo).
 - [x] **Frontend**: dùng framework và thư viện giao diện nào?
@@ -31,11 +36,16 @@ Từ bảy ghi chú đọc tài liệu và bảy spike chạy thật trong [../r
 
 ### Cần chủ dự án quyết
 
-- [ ] **Cơ chế xác nhận trước khi ghi**: proposal §9 để Cedar cho tool ghi chạy khi tham số có cờ xác nhận; cờ do LLM điền nên giả mạo được. Đề xuất: người dùng bấm nút → endpoint riêng cấp token dùng một lần (gắn người dùng + tham số, hạn ngắn) → tool ghi kiểm token; Cedar làm lớp phụ (hạn mức, khớp người dùng). **Đã chạy thử** 13 ca đúng kỳ vọng. [spike-agentcore-gateway-identity.md](../research/spike-agentcore-gateway-identity.md), [spike-strands-agui-local.md](../research/spike-strands-agui-local.md)
-- [ ] **Bộ model**: chủ dự án không xin tăng quota được; Claude 5.x bị chặn (`AccessDeniedException`). **Đã gọi thử** ở Singapore: Sonnet 4.6 (planner, đọc ảnh), Haiku 4.5 hoặc Nova 2 Lite/Nova Pro (router, diễn giải), Kimi K3 (dự phòng), Cohere Embed Multilingual v3/v4. Claude 4.x chỉ 10 request/phút mỗi model: đủ demo một người, không đủ cho nhiều người hoặc chạy bộ đánh giá. `us-east-1` có quota rộng hơn (dữ liệu xử lý ở Mỹ). [spike-bedrock-models.md](../research/spike-bedrock-models.md)
-- [ ] **Chronos-2**: **đã đo** trên dữ liệu tổng hợp: hòa với mô hình hurdle tự viết (chỉ cần numpy), thắng ETS; cần torch + container. Đề xuất không đưa vào MVP. Lưu ý hurdle cùng họ với bộ sinh dữ liệu nên được lợi. [spike-ml-forecasting.md](../research/spike-ml-forecasting.md)
-- [ ] **Tên "FinHealth Score"**: dùng Score trong phần mềm thương mại cần license; chưa rõ chỉ số tự tính có bị áp dụng không. Đề xuất gọi "Điểm chống chịu", ghi "lấy cảm hứng từ". Đọc tài liệu. [ml-forecasting.md](../research/ml-forecasting.md)
-- [ ] **Bỏ Bedrock Data Automation**: không liệt kê tiếng Việt; model đọc ảnh trực tiếp đã thử được (Sonnet 4.6, Kimi K3 đúng cả bốn trường trên 3 ảnh dựng). [bedrock.md](../research/bedrock.md), [spike-bedrock-models.md](../research/spike-bedrock-models.md)
+- [x] **Cơ chế xác nhận trước khi ghi**: proposal §9 để Cedar cho tool ghi chạy khi tham số có cờ xác nhận; cờ do LLM điền nên giả mạo được. Đề xuất: người dùng bấm nút → endpoint riêng cấp token dùng một lần (gắn người dùng + tham số, hạn ngắn) → tool ghi kiểm token; Cedar làm lớp phụ (hạn mức, khớp người dùng). **Đã chạy thử** 13 ca đúng kỳ vọng. [spike-agentcore-gateway-identity.md](../research/spike-agentcore-gateway-identity.md), [spike-strands-agui-local.md](../research/spike-strands-agui-local.md)
+  - Chốt 2026-11-21 (chủ dự án): agent chỉ tạo khối xác nhận; người dùng bấm nút thì server cấp token dùng một lần, tool ghi kiểm token; Cedar là lớp phụ; không dùng cờ do LLM điền. Cách ghép cụ thể: [master-plan.md](../plan/master-plan.md#xác-nhận-trước-khi-ghi), sẽ ghi ADR-0002 ở phase 1.
+- [x] **Bộ model**: chủ dự án không xin tăng quota được; Claude 5.x bị chặn (`AccessDeniedException`). **Đã gọi thử** ở Singapore: Sonnet 4.6 (planner, đọc ảnh), Haiku 4.5 hoặc Nova 2 Lite/Nova Pro (router, diễn giải), Kimi K3 (dự phòng), Cohere Embed Multilingual v3/v4. Claude 4.x chỉ 10 request/phút mỗi model: đủ demo một người, không đủ cho nhiều người hoặc chạy bộ đánh giá. `us-east-1` có quota rộng hơn (dữ liệu xử lý ở Mỹ). [spike-bedrock-models.md](../research/spike-bedrock-models.md)
+  - Chốt 2026-11-21 (chủ dự án): Sonnet 4.6 (planner, đọc ảnh), Nova hoặc Haiku 4.5 (router, diễn giải), Kimi K3 dự phòng, Cohere Embed Multilingual. Không tăng quota được; thiết kế và đánh giá tính tới 10 request/phút.
+- [x] **Chronos-2**: **đã đo** trên dữ liệu tổng hợp: hòa với mô hình hurdle tự viết (chỉ cần numpy), thắng ETS; cần torch + container. Đề xuất không đưa vào MVP. Lưu ý hurdle cùng họ với bộ sinh dữ liệu nên được lợi. [spike-ml-forecasting.md](../research/spike-ml-forecasting.md)
+  - Chốt 2026-11-21 (chủ dự án): để ngoài.
+- [x] **Tên "FinHealth Score"**: dùng Score trong phần mềm thương mại cần license; chưa rõ chỉ số tự tính có bị áp dụng không. Đề xuất gọi "Điểm chống chịu", ghi "lấy cảm hứng từ". Đọc tài liệu. [ml-forecasting.md](../research/ml-forecasting.md)
+  - Chốt 2026-11-21 (chủ dự án): gọi "Điểm chống chịu", không dùng tên FinHealth Score.
+- [x] **Bỏ Bedrock Data Automation**: không liệt kê tiếng Việt; model đọc ảnh trực tiếp đã thử được (Sonnet 4.6, Kimi K3 đúng cả bốn trường trên 3 ảnh dựng). [bedrock.md](../research/bedrock.md), [spike-bedrock-models.md](../research/spike-bedrock-models.md)
+  - Chốt 2026-11-21 (chủ dự án): bỏ; cũng bỏ Automated Reasoning.
 - [ ] **Dữ liệu xử lý ngoài Singapore**: nhiều model ở Singapore chỉ có profile `global`; cần ghi rõ trong phần quyền riêng tư. Đọc tài liệu. [bedrock.md](../research/bedrock.md)
 - [ ] **Mục tiêu "ký tự đầu dưới 1,5 giây"** (NFR): **đã đo** không đạt khi phiên Runtime lạnh (event đầu khoảng 2,5 giây; ấm khoảng 0,3 giây). Đề xuất mở phiên ngay khi người dùng vào app, hoặc nới mục tiêu cho lượt đầu. [spike-agentcore-runtime-cors.md](../research/spike-agentcore-runtime-cors.md)
 - [x] **Stack frontend** (chốt 2026-11-21, [ADR-0001](../decisions/0001-frontend-stack.md)): React + Vite SPA, shadcn/ui + Tailwind, Recharts + SVG tự vẽ, Motion, font Plus Jakarta Sans. **Đã dựng thử.**
@@ -60,6 +70,8 @@ Các mục dưới đây đã được phản ánh trong [overview.md](../archit
 - [ ] **Phiên bản** (đã cài thử): `strands-agents` 1.65.0, `ag-ui-strands` 1.0.4, `ag-ui-protocol` 1.0.0, `@ag-ui/client` 1.0.5; thư viện `mcp` 2.x đổi tên hàm so với mẫu của FAST.
 
 ### Chưa thử (cần làm khi dựng thật)
+
+Các điểm này được thử trong [phase 1](../plan/phases/phase-1-nen-va-lat-doc.md) (bảng phép thử) và phase 2, 3, 5; tick khi có kết quả.
 
 - [ ] Nối frontend thật với Runtime thật, gồm interrupt/resume AG-UI qua Runtime và `AgentCoreMemorySessionManager`.
 - [ ] CORS từ domain thật, Safari trên iPhone, Amplify Hosting.

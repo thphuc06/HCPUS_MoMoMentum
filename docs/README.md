@@ -11,7 +11,9 @@
 | Link nguồn theo chủ đề | [references/links.md](references/links.md) |
 | Dùng MCP/skill AWS thế nào | [references/aws-tooling.md](references/aws-tooling.md) |
 | Ghi chú tra cứu internet | [research/README.md](research/README.md) |
-| Kế hoạch 3 tuần, chia vai | [plan/README.md](plan/README.md) |
+| Kế hoạch tổng 6 phase và file plan từng phase | [plan/master-plan.md](plan/master-plan.md), [plan/phases/](plan/phases/) |
+| Kế hoạch 3 tuần theo proposal, chia vai | [plan/README.md](plan/README.md) |
+| Tài nguyên AWS đã tạo | [aws-resources.md](aws-resources.md) |
 | Kịch bản demo | [plan/demo-script.md](plan/demo-script.md) |
 | Lịch sử thay đổi của AI | [ai-log/README.md](ai-log/README.md) (log tháng 11: [ai-log/2026-11.md](ai-log/2026-11.md)) |
 

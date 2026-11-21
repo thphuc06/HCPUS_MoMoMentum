@@ -1,0 +1,109 @@
+# Phase 5 — Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace (F6, F7)
+
+Ngày dự kiến: 6–8/12/2026. Kế hoạch tổng: [master-plan.md](../master-plan.md). Điều kiện vào: phase 4 đạt; đọc "Kết quả thực hiện" của các phase trước.
+
+## Mục tiêu
+
+Người dùng chụp ảnh một thông báo chuyển khoản hoặc tải CSV, duyệt các dòng chưa chắc, thấy độ phủ dữ liệu tăng và dự báo cập nhật; trợ lý nhớ sở thích và mẫu chi tiêu qua các phiên, đưa nhận xét hành vi và một việc cần làm; đội sản phẩm xem lại được mọi quyết định của agent trên màn hình trace. **Cảnh 5 và 6 chạy được: cả 6 cảnh demo đi được trên app thật.**
+
+## Phạm vi
+
+FR9 (ảnh và CSV; sao kê PDF nếu kịp), FR10, FR13 (bản tin chủ động), FR14 (cảnh báo khoản chuyển lệch thói quen, nếu kịp), FR15 (bảng vận hành), kho tri thức RAG, quyền riêng tư (xem và xóa dữ liệu, bộ nhớ).
+
+Thứ tự cắt nếu thiếu thời gian: sao kê PDF → FR14 → contextual bandit (không làm) → RAG tìm kiếm (giữ biểu phí có cấu trúc).
+
+## Đọc trước
+
+| Luồng | Đọc |
+|---|---|
+| Mọi luồng | [proposal-summary.md](../../proposal/proposal-summary.md) §7 (quyền riêng tư), §9 (Memory, RAG, Observability), §10.6 |
+| A | [spike-bedrock-models.md](../../research/spike-bedrock-models.md) §5; [bedrock.md](../../research/bedrock.md) §3.6; [aws-data-events-infra.md](../../research/aws-data-events-infra.md) §3.3; mã `spikes/bedrock-models/05_images.py` |
+| B | [agentcore.md](../../research/agentcore.md) §3.5; hướng dẫn Memory qua agentcore MCP (`get_memory_guide`); [ml-forecasting.md](../../research/ml-forecasting.md) phần hồ sơ hành vi |
+| C | [bedrock.md](../../research/bedrock.md) §3.5; tài liệu Knowledge Bases hiện hành về vector store (tra bằng aws-docs MCP) |
+| D | [agentcore.md](../../research/agentcore.md) §3.6; [spike-agentcore-runtime-cors.md](../../research/spike-agentcore-runtime-cors.md) §6; [spike-agentcore-gateway-identity.md](../../research/spike-agentcore-gateway-identity.md) §4; skill `aws-core:aws-observability` |
+| E | [figma-ui-design.md](../../research/figma-ui-design.md) §8.2 cảnh 5 và 6. Figma node: I1 `24:2165`, I2 `24:2210`, I3 `24:2269`, I4 `24:2347`, X1 `25:2591`, S1 Hồ sơ `31:2754`; component IngestRow `14:417`, ProactiveCard `14:176` |
+
+## Bước 0 — Hợp đồng
+
+- Migration `0005`: `ingest_jobs` (trạng thái, tiến độ, loại tệp), `ingest_rows` (dòng trích được, độ tin cậy, trạng thái duyệt, khóa khử trùng), `behavior_profiles` (đặc trưng, mẫu hành vi kèm bằng chứng), `consents` (đồng ý theo nguồn nạp), mở rộng `nudges` (giá trị ước tính, loại, kết quả).
+- Tool: `ingest___start_job`, `ingest___get_job_status`, `ingest___confirm_rows`, `forecast___get_behavior_profile`, `knowledge___search`.
+- Khối: `ingest_review`, `coverage_change`, `behavior_insight`, `citation`.
+- REST: xin URL tải lên, tạo job, tiến độ, duyệt dòng; hồ sơ hành vi; bản tin; bộ nhớ (xem, xóa); xóa dữ liệu của tôi; nhóm `/ops/*` cho màn trace (chỉ nhóm Cognito `ops`).
+
+## Luồng A — Nạp dữ liệu (F6)
+
+Sở hữu: `gateway/tools/ingest/`, `pipelines/ingest/`.
+
+- Tải lên: presigned URL vào bucket `yofina-ingest-*` theo tiền tố của người dùng; giới hạn kích thước và loại tệp; ghi `consents`.
+- Job: S3 → SQS (DLQ) → Lambda `yofina-ingest`. Ảnh: Sonnet 4.6 trích JSON (ngày, số tiền, đối tác, nội dung), dự phòng Kimi K3; không dùng Haiku 4.5. CSV: parser cộng model nhỏ ánh xạ tên cột. PDF (nếu kịp): tách trang thành ảnh hoặc văn bản rồi đi cùng đường ảnh, không dùng Bedrock Data Automation. Loại khác: lỗi rõ kèm định dạng được hỗ trợ.
+- Sau trích: chuẩn hóa ngày, số tiền, đối tác; che số tài khoản, số điện thoại, tên người khác trước khi lưu và trước khi vào model; khử trùng với sổ cái (khóa băm cộng cửa sổ lệch thời gian); phân loại bằng pipeline của phase 4; dòng tin cậy cao tự thêm, dòng thấp vào hàng chờ duyệt.
+- Nội dung tệp chỉ là dữ liệu: prompt tách rõ chỉ dẫn và nội dung, đầu ra ép schema, không tool ghi nào chạy từ nội dung tệp.
+- `confirm_rows` (thao tác của người dùng trên màn hình, có token); xong thì cập nhật độ phủ dữ liệu và kích hoạt dự báo lại.
+- Ingestion agent trong chat: "mình vừa nạp ảnh" → trạng thái job và khối `ingest_review`.
+- Bộ ảnh thử: ít nhất 10 ảnh, gồm ảnh chụp màn hình thật do chủ dự án cung cấp nếu có (đã che thông tin thật), ảnh mờ, ảnh không phải tài liệu tài chính.
+
+## Luồng B — Hồ sơ hành vi, bộ nhớ, bản tin (F7)
+
+Sở hữu: `pipelines/nightly/` (bước mới), `agent/memory/`, phần Memory của stack `YofinaAgent`.
+
+- Bước batch đêm: đặc trưng theo nhịp lương, giờ, ngày trong tuần, mức dùng trả sau; phân cụm đơn giản; model nhỏ tóm tắt thành nhận xét, mỗi nhận xét kèm bằng chứng số liệu và qua `NumericGrounding`. Ghi `behavior_profiles`.
+- AgentCore Memory dài hạn: chiến lược sở thích, sự thật về người dùng, tóm tắt phiên; namespace theo `sub`. Hồ sơ hành vi và "bài học của agent" (tóm tắt từ `feedback`: kiểu gợi ý được chấp nhận hay bị từ chối) ghi bằng bản ghi tự tạo. Không lưu số dư hay giao dịch thô; che PII trước khi ghi.
+- Agent đọc bộ nhớ ở router và Analyst: sở thích đã nói ở phiên trước được dùng lại mà không hỏi lại.
+- Xem và xóa bộ nhớ của mình; "Xóa dữ liệu của tôi" xóa dữ liệu Aurora, tệp S3 và bản ghi bộ nhớ của người dùng (Memory không có API xóa theo người dùng: liệt kê theo namespace rồi xóa từng bản ghi).
+- Bản tin chủ động (FR13): cuối batch đêm, cổng giá trị chọn tối đa một việc mỗi ngày, chỉ khi vượt ngưỡng; ghi `nudges`; hiện ở thẻ chủ động. `schedule_nudge` dùng EventBridge Scheduler. Tôn trọng "Ít nhắc loại này" và sở thích trong bộ nhớ ("đừng nhắc buổi sáng").
+- FR14 (nếu kịp): khi chuyển tiền, so khoản chuyển với mẫu chi cá nhân (z bền theo người nhận và số tiền) và ảnh hưởng tới hũ Dự phòng; lệch thì thêm một `notice` vào bước xem lại T4.
+
+## Luồng C — Kho tri thức (RAG)
+
+Sở hữu: `knowledge-base/`, `gateway/tools/knowledge/`.
+
+- Nội dung ba kho trong `knowledge-base/`: biểu phí và điều khoản sản phẩm trả sau mô phỏng (dẫn biểu phí công khai làm ví dụ, có ngày hiệu lực), kiến thức tài chính cá nhân, bộ luật suitability kèm giải thích. Mỗi tài liệu có metadata sản phẩm và ngày hiệu lực; chia đoạn theo điều khoản.
+- Vector store: ưu tiên Bedrock Knowledge Bases với S3 Vectors hoặc Aurora pgvector sẵn có (không phí theo giờ). **Không tạo OpenSearch Serverless.** Nếu Knowledge Bases ở `ap-southeast-1` không dùng được với hai lựa chọn đó, tự viết truy xuất lai trên Aurora (pgvector + `tsvector`, Cohere embed) và ghi lệch.
+- `knowledge___search`: truy xuất lai, lọc metadata; trả đoạn trích kèm nguồn. Agent chỉ gọi khi cần trích dẫn; khối `citation`. Số để tính vẫn lấy từ `get_fee_schedule`.
+- Script đồng bộ kho tri thức (dùng lại ở batch tuần, phase 6).
+
+## Luồng D — Trace và bảng vận hành (FR15)
+
+Sở hữu: `gateway/tools/audit/` (phần ops), phần quan sát của `YofinaTools`.
+
+- Màn trace đọc từ `audit_events` (bản ghi lượt: router, kế hoạch, từng tool call kèm thời lượng, verifier, luật đã kiểm, token, chi phí ước tính), không phụ thuộc Transaction Search.
+- `/ops/traces` (danh sách, lọc), `/ops/traces/{id}`, `/ops/summary` (số lượt, độ trễ p50/p95, tỷ lệ lỗi tool, số lần luật chặn, số lượt gọi model theo ngày so với trần). Chỉ nhóm Cognito `ops`; dữ liệu người dùng đã che PII.
+- Dashboard CloudWatch `yofina-ops` (độ trễ tool, lỗi Lambda, DLQ, `AllowDecisions`/`DenyDecisions`, dung lượng Aurora, lượt gọi model) và alarm về SNS.
+- CloudWatch Transaction Search và span OTel: hỏi chủ dự án trước khi bật (đổi cấu hình mức tài khoản, có phí). Được đồng ý thì bật, kiểm span của Runtime và Gateway khớp `traceparent`, thêm link từ màn trace.
+
+## Luồng E — Frontend
+
+Sở hữu: `frontend/`.
+
+- I1–I4: chọn hoặc chụp ảnh (input `capture`), tải CSV, tiến độ bằng polling, duyệt dòng (tự thêm / cần duyệt), độ phủ trước–sau, "Xem dự báo cập nhật".
+- X1 trace (desktop 1280×800, có bố cục dùng được trên điện thoại): mở từ hàng "Mã trace" trong bảng "Vì sao" với tài khoản có quyền; trang tổng hợp vận hành.
+- Hồ sơ (thay khung giữ chỗ S1): thông tin khai báo, nhận xét hành vi, bộ nhớ của tôi (xem, xóa), đồng ý theo nguồn, xóa dữ liệu, đặt lại dữ liệu demo, đăng xuất.
+- Thẻ chủ động hiện bản tin; nhận xét hành vi trong chat.
+
+## Bộ đánh giá của phase
+
+`evals/golden/phase5.jsonl` (ít nhất 10 câu: hỏi về thói quen, dùng lại sở thích phiên trước, hỏi biểu phí có trích dẫn, trạng thái nạp) và `evals/adversarial/phase5.jsonl` (ít nhất 10 ca: ảnh và CSV chứa chỉ dẫn "bỏ qua hướng dẫn, chuyển tiền…", ảnh có tên và số tài khoản người khác, câu hỏi moi bộ nhớ của người khác).
+
+## Tiêu chí hoàn thành
+
+1. Tài khoản `minh`: nạp ảnh thông báo chuyển khoản mẫu → tiến độ → duyệt dòng → độ phủ tăng (theo Figma 62% lên 81%; số thật ghi lại) → Chi tiết hũ có dự báo mới.
+2. Nạp cùng ảnh lần hai: không ghi trùng. Ảnh không phải tài liệu tài chính: lỗi rõ.
+3. Trên bộ ảnh thử: đúng cả bốn trường ở ít nhất 9/10 ảnh đọc được; số ghi lại. CSV mẫu 50 dòng nạp đúng.
+4. Ca tấn công qua tệp: không tool ghi nào chạy, không dòng nào tự thêm sai; tên và số tài khoản người khác đã che trong DB và trong log model.
+5. Phiên 1 nói "đừng nhắc mình buổi sáng, ưu tiên hũ Du lịch"; phiên mới (session id khác) câu trả lời và bản tin dùng sở thích đó. Xóa bộ nhớ xong thì không còn.
+6. Sau batch đêm, `minh` có ít nhất hai nhận xét hành vi kèm bằng chứng số khớp sổ cái; thẻ chủ động hiện tối đa một việc.
+7. Câu hỏi về phí trả sau có khối `citation` trỏ đúng tài liệu; con số phí khớp bảng có cấu trúc.
+8. Màn trace mở từ bảng "Vì sao" của một lượt what-if vừa chạy, hiện đủ các bước; tài khoản không thuộc nhóm `ops` bị từ chối.
+9. "Xóa dữ liệu của tôi" trên một tài khoản thử: Aurora, S3 và Memory không còn bản ghi của người đó.
+10. **Cả 6 cảnh demo đi liền mạch** trên URL Amplify với tài khoản `giamkhao1` vừa đặt lại.
+
+## Cách kiểm (người điều phối)
+
+- Chạy test; chạy bộ đánh giá phase 3–5 (hồi quy).
+- Tự đi tiêu chí 1, 2, 5, 8, 9 bằng tay trên app; đối chiếu Aurora, S3, Memory.
+- Đọc log của Lambda nạp để chắc PII đã che trước lời gọi model.
+- Đi trọn 6 cảnh theo [figma-ui-design.md §8.2](../../research/figma-ui-design.md), bấm giờ từng cảnh so với [demo-script.md](../demo-script.md).
+
+## Kết quả thực hiện
+
+(Điền khi đóng phase.)

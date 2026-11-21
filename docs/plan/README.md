@@ -1,4 +1,8 @@
-# Kế hoạch 3 tuần
+# Kế hoạch
+
+> **Kế hoạch hiện hành (2026-11-21)**: [master-plan.md](master-plan.md) chia dự án thành 6 phase, mỗi phase một file trong [phases/](phases/). Bảng 3 tuần dưới đây là bản theo proposal §15, giữ để tra ngược; thứ tự việc lấy theo master-plan.
+
+## Kế hoạch 3 tuần (theo proposal)
 
 Nguồn: proposal §15. **Giả định đội nộp bài trước chung kết 11/12/2026; hạn nộp chính xác cần xác nhận** ([open-questions](../requirements/open-questions.md)). Hôm nay (2026-11-21) là ngày đầu tuần 1.
 

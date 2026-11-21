@@ -2,58 +2,56 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: 2026-11-21, sau khi chạy bảy spike và đồng bộ tài liệu.
+Cập nhật lần cuối: 2026-11-21, sau khi viết kế hoạch 6 phase. **Kế hoạch đang chờ chủ dự án duyệt; chưa bắt đầu code.**
 
 ## Đang ở đâu trong kế hoạch
 
-Tuần 1 (21–27/11/2026), ngày đầu. Mục tiêu tuần 1 theo proposal §15: "nền chạy được từ đầu đến cuối". Hạn nộp giả định trước chung kết 11/12/2026 (chưa xác nhận). Xem [docs/plan/README.md](docs/plan/README.md).
+Giai đoạn chuẩn bị đã xong (tài liệu, bảy spike, Figma). Kế hoạch thực hiện: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase, mỗi phase một file trong [docs/plan/phases/](docs/plan/phases/). Chưa có dòng code sản phẩm nào, chưa có tài nguyên AWS nào của dự án ([docs/aws-resources.md](docs/aws-resources.md)). Hạn nộp giả định trước 11/12/2026.
 
-## Vừa làm xong
+| Phase | Trạng thái |
+|---|---|
+| [1. Nền và lát dọc](docs/plan/phases/phase-1-nen-va-lat-doc.md) (21–24/11) | Chưa bắt đầu; chờ duyệt kế hoạch và chờ chủ dự án đăng nhập lại AWS |
+| [2. Ví mô phỏng và dự báo](docs/plan/phases/phase-2-vi-va-du-bao.md) (25–28/11) | Chưa bắt đầu |
+| [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) (29/11–2/12) | Chưa bắt đầu |
+| [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) (3–5/12) | Chưa bắt đầu |
+| [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) (6–8/12) | Chưa bắt đầu |
+| [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) (9–10/12) | Chưa bắt đầu |
 
-- Dựng cấu trúc thư mục + README từng thư mục code (chưa có code, chưa có package.json/pyproject/CDK app, chưa cài gì).
-- Chuyển PDF proposal vào `docs/proposal/`; viết [proposal-summary.md](docs/proposal/proposal-summary.md).
-- Viết tài liệu: architecture (project-structure, overview), requirements (FR/NFR, open-questions), decisions (README + template, chưa có ADR), references (links.md, aws-tooling.md), research (README), plan, ai-log.
-- Chủ dự án chốt: **không kéo FAST về, không dùng frontend của FAST**; FAST chỉ để tham khảo, code tự viết theo tài liệu chính thức. Thư mục agent đổi từ `patterns/yofina-agent/` thành `agent/`. Ghi chú layout FAST ở [docs/architecture/project-structure.md](docs/architecture/project-structure.md).
-- Bảy ghi chú nghiên cứu trong [docs/research/](docs/research/README.md) (AgentCore, Strands/AG-UI, Bedrock, hạ tầng, ML, generative UI, frontend fintech). Chỉ đọc tài liệu, chưa chạy thử gì. Các điểm lệch proposal và quyết định còn chờ: [open-questions.md](docs/requirements/open-questions.md#rút-ra-từ-nghiên-cứu-2026-11-21).
-- **Bảy spike đã chạy thật** (bảng ở [docs/research/README.md](docs/research/README.md), code ở `spikes/`): model Bedrock, Strands + AG-UI local, Runtime + CORS, Gateway + Cedar + danh tính, Aurora Data API, ML, stack frontend. Kết quả chính: trình duyệt gọi thẳng Runtime qua SSE được; deploy bằng zip không cần Docker; danh tính xuống tool bằng interceptor + Cedar; token xác nhận do server cấp chạy đúng; Data API đủ nhanh; Sonnet 4.6 / Haiku 4.5 / Nova / Kimi K3 gọi được ngay (Claude 5.x bị chặn); Chronos-2 đề xuất để ngoài MVP (chưa chốt). Tài nguyên AWS của spike đã xóa và đã kiểm lại trên tài khoản.
-- Stack frontend đã chốt ([ADR-0001](docs/decisions/0001-frontend-stack.md)).
-- Chủ dự án muốn UI là app kiểu ngân hàng trên điện thoại: chuyển tiền, biểu đồ, hũ, chatbot có đầu ra JSON để render (ghi ở [frontend/README.md](frontend/README.md)).
-- Đã là git repo, nhánh `main`, đã push lên `github.com/thphuc06/HCPUS_MoMoMentum` (repo public). Commit không kèm dòng Co-Authored-By.
+## Cách làm việc từ đây
 
-## Việc kế tiếp (tuần 1, theo proposal §15)
+Người điều phối (Claude Fable 5.2) giao subagent (Sonnet 5.5, effort high) code từng phase, việc độc lập chạy song song; sau mỗi phase người điều phối tự kiểm trên môi trường đã deploy rồi mới sang phase sau. Đóng phase: điền "Kết quả thực hiện" trong file phase, ai-log, ghi đè file này, tick open-questions, cập nhật aws-resources, commit (không kèm Co-Authored-By) và push. Chi tiết: [master-plan.md mục 3](docs/plan/master-plan.md#3-cách-chia-việc-trong-một-phase).
 
-0. **Chờ chủ dự án**: xin tăng quota Bedrock cho Sonnet 5.5 và Haiku 5.5 (đang bằng 0); cơ chế xác nhận trước khi ghi. (Chủ dự án không xin tăng quota được: đang tìm model thay thế. Stack frontend đã chốt, [ADR-0001](docs/decisions/0001-frontend-stack.md).)
-1. Chốt **Region triển khai** và đổi danh tính deploy khỏi root (xem "Quyết định còn treo"); kiểm tính năng AgentCore/Bedrock theo Region (ghi vào `docs/research/`).
-2. Dựng nền hạ tầng bằng CDK trong `infra-cdk/` (Cognito, AgentCore Runtime, Gateway, Memory, Aurora): đọc tài liệu chính thức trước, xem FAST như một ví dụ khi cần. Triển khai thử nền.
-3. Schema Aurora PostgreSQL (`db/schema/`) theo mô hình dữ liệu ở [overview.md](docs/architecture/overview.md#mô-hình-dữ-liệu).
-4. Bộ sinh dữ liệu 3 persona (`data/personas/`), kèm persona Minh cho demo.
-5. Tool `ledger.*` (`gateway/tools/ledger/`), router và đường nhanh trong agent (`agent/`).
-6. Màn hình khai báo và màn hình hũ (`frontend/`).
+## Việc kế tiếp
+
+1. **Chủ dự án duyệt kế hoạch** (một lần). Ba lựa chọn của người điều phối cần chủ dự án để ý khi duyệt, đều ở [master-plan.md mục 2](docs/plan/master-plan.md#2-quyết-định-áp-dụng-cho-mọi-phase): đồng hồ mô phỏng theo tài khoản (ngày mô phỏng 21/11/2026 khi đặt lại); không dùng Docker nên không deploy StatsForecast; đường ghi đi thẳng REST bằng token, LLM không nằm trên đường ghi.
+2. **Chủ dự án đăng nhập lại AWS**: `aws login` và connector AWS MCP (cả hai đã hết phiên).
+3. Chủ dự án cho biết số tiền ngân sách tháng và email nhận cảnh báo (mặc định đề xuất 100 USD).
+4. Bắt đầu phase 1: bước 0 (hợp đồng) rồi luồng A (danh tính deploy `yofina-deployer`, có ba bước chủ dự án tự làm trong console).
+
+## Quyết định đã chốt (2026-11-21, chủ dự án)
+
+Region `ap-southeast-1`; không kéo FAST; frontend theo [ADR-0001](docs/decisions/0001-frontend-stack.md) và Figma; Cognito tắt tự đăng ký, tài khoản demo có nút đặt lại; bộ model (Sonnet 4.6, Nova hoặc Haiku 4.5, Kimi K3, Cohere), không tăng quota được; xác nhận bằng token dùng một lần do server cấp, Cedar là lớp phụ; Chronos-2 và SageMaker để ngoài; bỏ Bedrock Data Automation và Automated Reasoning; tool Python toàn bộ; sản phẩm trả sau mô phỏng; "Điểm chống chịu". Đã tick trong [open-questions.md](docs/requirements/open-questions.md).
+
+Quyền với AWS: được tạo và sửa tài nguyên `yofina-*` (tag `project=yofina`, ghi vào aws-resources.md) ở `ap-southeast-1` không cần hỏi từng lần; hỏi trước với thứ tính tiền theo giờ đáng kể ngoài Aurora 0,5 ACU và trước khi xóa thứ không do dự án tạo; không đụng `jars-dev*`.
 
 ## Quyết định còn treo
 
-Danh sách đầy đủ và tick khi chốt: [docs/requirements/open-questions.md](docs/requirements/open-questions.md). Nổi bật:
-
-- Hạn nộp chính xác và trọng số chấm; đội 2 hay 3 người (quyết định cắt F6 hay không).
-- Chronos-2 có vào MVP không (hay thống kê trước); tool Python toàn bộ hay tách sổ cái sang Java Spring.
-- Demo dùng Ví Trả Sau thật hay sản phẩm mô phỏng; persona chính; giữ tên Yofina.
+- Hạn nộp chính xác và trọng số chấm; đội 2 hay 3 người; persona chính; giữ tên Yofina; kiểm lại app MoMo ([open-questions.md](docs/requirements/open-questions.md)).
+- Có bật CloudWatch Transaction Search không (hỏi ở phase 5).
 
 ## Môi trường (kiểm ngày 2026-11-21, có thể đã đổi — tự kiểm lại mỗi phiên)
 
-- Windows 11, thư mục `c:\moMo`, là git repo (remote `origin` trên GitHub, public). Shell chính PowerShell, có Git Bash.
-- **AWS CLI** đã đăng nhập (`aws login`); `aws sts get-caller-identity` chạy được. Danh tính là **root user** của tài khoản; region mặc định `~/.aws/config` là `us-east-1`. Không ghi account ID vào tài liệu.
-- **AWS MCP (connector claude.ai)** đã đăng nhập lại và dùng được (STS GetCallerIdentity thành công, 2026-11-21), trỏ cùng tài khoản với CLI (cũng root). Khi gọi AWS API ưu tiên connector này (`run_script`) hơn AWS CLI qua Bash. Đăng nhập CLI và connector là hai việc riêng; connector có thể hết phiên lại.
-- **aws-docs MCP** và **agentcore MCP**: có trong phiên, dùng được để tra tài liệu.
-- Server `aws-serverless`, `terraform`, và `aws-mcp` của plugin aws-core: có cấu hình nhưng không kết nối được trong phiên kiểm tra.
-- Skill `aws-core:*` có sẵn (xem [docs/references/aws-tooling.md](docs/references/aws-tooling.md)).
-- Chưa có project sản phẩm nào được cài (không CDK). Trong `spikes/` còn venv và `node_modules` của bản thử (khoảng 1,5 GB ở `spikes/ml-forecasting/`); ổ C còn khoảng 12 GB trống — xóa các venv đó khi cần chỗ.
-- Docker Desktop không chạy trên máy; deploy Runtime bằng zip không cần Docker.
-- Tài khoản AWS có sẵn tài nguyên không thuộc phiên này ở `ap-southeast-1`: một cluster Aurora và một Cognito pool có từ trước (đang chạy, không đụng tới; chủ dự án cần xác nhận còn dùng không).
+- Windows 11, thư mục `c:\moMo`, git repo nhánh `main`, remote `origin` trên GitHub (public). PowerShell và Git Bash. Python 3.13, uv, Node 24.
+- **AWS CLI: phiên đã hết hạn** (`aws sts get-caller-identity` báo cần `aws login`). Danh tính trước đó là root; region mặc định `us-east-1`. Không ghi account ID vào tài liệu.
+- **AWS MCP (connector claude.ai): kết nối đã bị vô hiệu**, cần kết nối lại trong cài đặt connector.
+- **aws-docs MCP** và **agentcore MCP**: có trong phiên. `aws-serverless`, `terraform`, `aws-mcp` của plugin aws-core: không kết nối được.
+- Figma MCP có trong phiên (file thiết kế `l9vWyORNRjDqiEOXqpbzYm`).
+- Docker Desktop không chạy: kế hoạch không dùng Docker ở đâu cả.
+- Ổ C còn khoảng 12 GB; `.venv` và `node_modules` trong `spikes/` xóa được khi cần chỗ (phase 1 sẽ xóa).
+- Tài khoản AWS có sẵn cluster Aurora và Cognito pool `jars-dev*` ở `ap-southeast-1`: không đụng.
 
 ## Lưu ý
 
-- **Đang dùng root user**: nên tạo IAM user/role riêng (quyền tối thiểu cho CDK) cho việc deploy; tránh tạo/sửa tài nguyên bằng root.
-- **Region**: mặc định CLI là `us-east-1`, proposal nhắc Singapore (`ap-southeast-1`). Chốt Region trước khi deploy, đặt Region tường minh khi gọi.
-- Tạo/sửa/xóa tài nguyên AWS thật: hỏi chủ dự án trước.
-- Link PDF trong [links.md](docs/references/links.md) được trích từ link nhúng trong PDF; ánh xạ link ↔ dòng bảng số liệu §2 suy theo thứ tự, nên đối chiếu nếu cần trích chính xác.
-- Proposal ghi rõ Program-of-Thoughts, Croston/TSB không có link nguồn; cần tìm khi dùng.
+- Repo public: không commit account ID, ARN có account ID, secret, token, mật khẩu demo, email.
+- Mọi lời gọi model đi qua một module có giới hạn tốc độ và trần mỗi ngày (làm ở phase 1); Claude 4.x chỉ 10 request/phút mỗi model.
+- Link PDF trong [links.md](docs/references/links.md) trích từ link nhúng trong PDF; đối chiếu nếu cần trích chính xác.
