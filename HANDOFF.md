@@ -40,7 +40,7 @@ Danh sách đầy đủ và tick khi chốt: [docs/requirements/open-questions.m
 
 ## Môi trường (kiểm ngày 2026-11-21, có thể đã đổi — tự kiểm lại mỗi phiên)
 
-- Windows 11, thư mục `c:\moMo`, chưa phải git repo. Shell chính PowerShell, có Git Bash.
+- Windows 11, thư mục `c:\moMo`, là git repo (remote `origin` trên GitHub, public). Shell chính PowerShell, có Git Bash.
 - **AWS CLI** đã đăng nhập (`aws login`); `aws sts get-caller-identity` chạy được. Danh tính là **root user** của tài khoản; region mặc định `~/.aws/config` là `us-east-1`. Không ghi account ID vào tài liệu.
 - **AWS MCP (connector claude.ai)** đã đăng nhập lại và dùng được (STS GetCallerIdentity thành công, 2026-11-21), trỏ cùng tài khoản với CLI (cũng root). Khi gọi AWS API ưu tiên connector này (`run_script`) hơn AWS CLI qua Bash. Đăng nhập CLI và connector là hai việc riêng; connector có thể hết phiên lại.
 - **aws-docs MCP** và **agentcore MCP**: có trong phiên, dùng được để tra tài liệu.
