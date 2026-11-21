@@ -1,0 +1,87 @@
+{
+  "persona": "khoa",
+  "display_name": "Khoa",
+  "monthly_salary_vnd": 7000000,
+  "payday_day": 5,
+  "risk_tolerance": "medium",
+  "history_days": 18,
+  "seed": 20261123,
+  "jars": [
+    {
+      "code": "an_uong",
+      "name": "Ăn uống",
+      "color_key": "violet",
+      "icon_key": "utensils",
+      "split_percent": 30,
+      "opening_vnd": 350000,
+      "target_vnd": 1250000,
+      "expense_count": 14,
+      "recent_share": 0.85,
+      "merchants": [
+        "Cơm văn phòng",
+        "Highlands Coffee",
+        "GrabFood",
+        "Circle K",
+        "Bách Hóa Xanh"
+      ]
+    },
+    {
+      "code": "di_lai",
+      "name": "Đi lại",
+      "color_key": "sky",
+      "icon_key": "bus",
+      "split_percent": 10,
+      "opening_vnd": 60000,
+      "target_vnd": 520000,
+      "expense_count": 4,
+      "recent_share": 0.85,
+      "merchants": [
+        "Grab",
+        "Xe buýt",
+        "Đổ xăng Petrolimex"
+      ]
+    },
+    {
+      "code": "hoa_don",
+      "name": "Hóa đơn",
+      "color_key": "brown",
+      "icon_key": "receipt",
+      "split_percent": 30,
+      "opening_vnd": 0,
+      "target_vnd": 1650000,
+      "expense_count": 3,
+      "recent_share": 1,
+      "merchants": [
+        "Tiền thuê phòng",
+        "Internet FPT"
+      ]
+    },
+    {
+      "code": "giai_tri",
+      "name": "Giải trí",
+      "color_key": "orchid",
+      "icon_key": "gamepad",
+      "split_percent": 10,
+      "opening_vnd": 0,
+      "target_vnd": 600000,
+      "expense_count": 2,
+      "recent_share": 1,
+      "merchants": [
+        "Netflix",
+        "CGV Cinemas"
+      ]
+    },
+    {
+      "code": "du_phong",
+      "name": "Dự phòng",
+      "color_key": "blue",
+      "icon_key": "shield",
+      "split_percent": 20,
+      "opening_vnd": 0,
+      "target_vnd": 1400000,
+      "expense_count": 0,
+      "recent_share": 0.85,
+      "merchants": []
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "persona": "lan",
+  "display_name": "Lan",
+  "monthly_salary_vnd": 4500000,
+  "payday_day": 5,
+  "risk_tolerance": "low",
+  "history_days": 47,
+  "seed": 20261122,
+  "jars": [
+    {
+      "code": "an_uong", "name": "Ăn uống", "color_key": "violet", "icon_key": "utensils",
+      "split_percent": 40, "opening_vnd": 0, "target_vnd": 520000,
+      "expense_count": 30, "recent_share": 0.5,
+      "merchants": ["Cơm sinh viên", "Trà đá cổng trường", "Bánh mì", "Bách Hóa Xanh", "Highlands Coffee", "Mì cay Seoul"]
+    },
+    {
+      "code": "di_lai", "name": "Đi lại", "color_key": "sky", "icon_key": "bus",
+      "split_percent": 12, "opening_vnd": 0, "target_vnd": 310000,
+      "expense_count": 8, "recent_share": 0.5,
+      "merchants": ["Xe buýt", "Grab", "Gửi xe"]
+    },
+    {
+      "code": "hoa_don", "name": "Hóa đơn", "color_key": "brown", "icon_key": "receipt",
+      "split_percent": 25, "opening_vnd": 0, "target_vnd": 260000,
+      "expense_count": 5, "recent_share": 0.5,
+      "merchants": ["Tiền trọ", "Tiền điện nước", "Điện thoại Viettel"]
+    },
+    {
+      "code": "giai_tri", "name": "Giải trí", "color_key": "orchid", "icon_key": "gamepad",
+      "split_percent": 8, "opening_vnd": 0, "target_vnd": 190000,
+      "expense_count": 4, "recent_share": 0.5,
+      "merchants": ["CGV Cinemas", "Spotify", "Sách Fahasa"]
+    },
+    {
+      "code": "du_phong", "name": "Dự phòng", "color_key": "blue", "icon_key": "shield",
+      "split_percent": 15, "opening_vnd": 400000, "target_vnd": 1750000,
+      "expense_count": 0, "recent_share": 0.5,
+      "merchants": []
+    }
+  ]
+}

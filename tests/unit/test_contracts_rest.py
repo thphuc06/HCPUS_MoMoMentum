@@ -22,13 +22,15 @@ def test_openapi_31_hop_le_ke_ca_tham_chieu_ngoai():
     validate(SPEC, base_uri=SPEC_PATH.as_uri())
 
 
-def test_bon_endpoint_cua_phase_1_va_bearer_jwt():
+def test_cac_endpoint_cua_phase_1_va_bearer_jwt():
     ops = {(m.upper(), p) for p, item in SPEC["paths"].items() for m in item if m != "parameters"}
     assert ops == {
         ("GET", "/jars"),
         ("POST", "/confirmations"),
         ("POST", "/actions"),
         ("POST", "/demo/reset"),
+        ("GET", "/conversations"),
+        ("GET", "/conversations/{conversation_id}"),
     }
     assert SPEC["security"] == [{"bearerAuth": []}]
     scheme = SPEC["components"]["securitySchemes"]["bearerAuth"]
@@ -96,6 +98,28 @@ VALID = {
         "jars_count": 7, "transactions_count": 120,
     },
     "ErrorResponse": {"error": {"code": "TOKEN_REUSED", "message": "Token đã được dùng."}},
+    "ConversationListResponse": {
+        "conversations": [
+            {
+                "conversation_id": "0b1f9c3e-5a7d-4e21-9f3a-6c1d2e8b4a70",
+                "turns": 2,
+                "last_activity_at": "2026-12-10T03:00:00Z",
+                "preview": "số dư các hũ của mình",
+            }
+        ]
+    },
+    "ConversationResponse": {
+        "conversation_id": "0b1f9c3e-5a7d-4e21-9f3a-6c1d2e8b4a70",
+        "turns": [
+            {
+                "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+                "created_at": "2026-12-10T03:00:00Z",
+                "user_text": "số dư các hũ của mình",
+                "assistant_text": "Bạn có 7 hũ.",
+                "blocks": [],
+            }
+        ],
+    },
 }  # fmt: skip
 
 
@@ -133,6 +157,15 @@ def test_action_request_khong_token_van_hop_le_de_server_tra_428(registry):
 )
 def test_vi_du_sai_bi_tu_choi(registry, name, bad):
     assert not schema_validator(registry, name).is_valid(bad)
+
+
+def test_conversation_turn_nhan_khoi_that_cua_hop_dong(registry):
+    block = load_json(CONTRACTS / "fixtures/blocks/valid/receipt.move.json")
+    turn = {**VALID["ConversationResponse"]["turns"][0], "blocks": [block]}
+    body = {"conversation_id": "s" * 40, "turns": [turn]}
+    assert schema_validator(registry, "ConversationResponse").is_valid(body)
+    bad = {"conversation_id": "s" * 40, "turns": [{**turn, "blocks": [{"type": "receipt"}]}]}
+    assert not schema_validator(registry, "ConversationResponse").is_valid(bad)
 
 
 def test_receipt_fixture_la_thanh_cong_hop_le_cua_actions(registry):

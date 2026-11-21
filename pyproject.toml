@@ -13,14 +13,22 @@ package = false
 default-groups = ["dev"]
 
 [tool.uv.workspace]
-members = ["libs/*"]
+members = ["libs/*", "agent"]
 
 [tool.uv.sources]
 yofina-core = { workspace = true }
+yofina-agent = { workspace = true }
 
 [dependency-groups]
 dev = [
     "yofina-core",
+    "yofina-agent",
+    "httpx>=0.28",
+    # credential `aws login` trên máy dev cần awscrt (không đưa vào zip Runtime)
+    "awscrt>=0.23",
+    # test tích hợp và script ledger (luồng B): gọi AWS thật, đăng nhập Cognito SRP
+    "boto3>=1.43",
+    "pycognito>=2024.5",
     "pytest>=8.3",
     "ruff>=0.8",
     # test hợp đồng (contracts/): JSON Schema, OpenAPI
@@ -32,6 +40,8 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["libs/yofina_core/tests", "tests/unit"]
 addopts = "-ra"
+pythonpath = ["gateway/tools/ledger", "data"]
+markers = ["integration: gọi môi trường AWS đã deploy (chạy: pytest tests/integration -m integration)"]
 
 [tool.ruff]
 line-length = 100
@@ -49,4 +59,4 @@ ignore = [
 "**/tests/**" = ["B011"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["yofina_core"]
+known-first-party = ["yofina_core", "yofina_ledger", "personas"]

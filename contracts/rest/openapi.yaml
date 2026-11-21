@@ -31,6 +31,8 @@ security:
 tags:
   - name: ledger
     description: Số dư hũ và thao tác ghi sổ cái.
+  - name: conversations
+    description: Đọc lại các lượt hội thoại đã lưu (không cần LLM).
   - name: demo
     description: Chỉ cho tài khoản demo.
 paths:
@@ -135,6 +137,74 @@ paths:
           $ref: '#/components/responses/NeedsConfirmation'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /conversations:
+    get:
+      tags: [conversations]
+      operationId: listConversations
+      summary: Các cuộc hội thoại gần đây của người dùng đang đăng nhập
+      description: |
+        Mỗi cuộc hội thoại là một `session id` của chat (frontend sinh, giữ ổn định theo cuộc hội thoại).
+        Sắp theo hoạt động gần nhất trước. Chỉ gồm lượt đã được agent lưu (`ledger___save_turn`).
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: limit
+          in: query
+          required: false
+          description: Số cuộc hội thoại tối đa (1 đến 50). Mặc định 20.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Danh sách cuộc hội thoại (rỗng nếu chưa có).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /conversations/{conversation_id}:
+    get:
+      tags: [conversations]
+      operationId: getConversation
+      summary: Các lượt của một cuộc hội thoại, để vẽ lại khi tải lại trang
+      description: |
+        Trả các lượt đã lưu của cuộc hội thoại theo thứ tự cũ tới mới (tối đa 50 lượt gần nhất), mỗi
+        lượt kèm câu hỏi, câu trả lời bằng chữ và các khối UI đã phát (nguyên văn, đúng thứ tự phát).
+        Cuộc hội thoại không có hoặc không thuộc người gọi: **200 với `turns` rỗng** (không phân biệt hai
+        trường hợp để không lộ sự tồn tại của hội thoại người khác). Khối `confirm` được lưu như lúc
+        phát; việc đã bấm xác nhận hay chưa không được lưu ở đây.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 256
+      responses:
+        '200':
+          description: Các lượt đã lưu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
         '503':
           $ref: '#/components/responses/Unavailable'
         '500':
@@ -268,6 +338,71 @@ components:
             $ref: '../blocks/jar_summary.schema.json#/$defs/JarBalance'
         jars_total_vnd:
           $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+    ConversationSummary:
+      type: object
+      required: [conversation_id, turns, last_activity_at, preview]
+      additionalProperties: false
+      properties:
+        conversation_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        turns:
+          type: integer
+          minimum: 1
+          description: Số lượt đã lưu.
+        last_activity_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        preview:
+          type: string
+          maxLength: 120
+          description: Câu hỏi đầu tiên của cuộc hội thoại, cắt tối đa 120 ký tự.
+    ConversationListResponse:
+      type: object
+      required: [conversations]
+      additionalProperties: false
+      properties:
+        conversations:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/ConversationSummary'
+    ConversationTurn:
+      type: object
+      required: [trace_id, created_at, user_text, assistant_text, blocks]
+      additionalProperties: false
+      properties:
+        trace_id:
+          $ref: '../blocks/envelope.schema.json#/$defs/TraceId'
+        created_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        user_text:
+          type: string
+          maxLength: 4000
+        assistant_text:
+          type: string
+          maxLength: 8000
+          description: Câu trả lời bằng chữ agent đã phát (có thể rỗng nếu lượt chỉ có khối).
+        blocks:
+          type: array
+          maxItems: 20
+          description: Khối UI đã phát ở lượt, theo thứ tự phát (`seq`).
+          items:
+            $ref: '../blocks/block.schema.json'
+    ConversationResponse:
+      type: object
+      required: [conversation_id, turns]
+      additionalProperties: false
+      properties:
+        conversation_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        turns:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/ConversationTurn'
     ToolName:
       type: string
       description: Tên tool ngắn (không có tiền tố target). Hiện chỉ có chuyển hũ.

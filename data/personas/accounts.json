@@ -1,0 +1,12 @@
+{
+  "$comment": "Ánh xạ tài khoản demo sang persona. Persona của người gọi lấy từ nhóm Cognito có tiền tố group_prefix (claim cognito:groups trong access token); scripts/seed_demo.py đặt người dùng vào nhóm theo bảng demo_accounts. Mã sản phẩm không rẽ nhánh theo tên hay email.",
+  "group_prefix": "persona-",
+  "demo_accounts": {
+    "minh": "minh",
+    "lan": "lan",
+    "khoa": "khoa",
+    "giamkhao1": "minh",
+    "giamkhao2": "minh",
+    "giamkhao3": "minh"
+  }
+}

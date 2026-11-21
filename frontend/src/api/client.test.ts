@@ -1,0 +1,133 @@
+import { describe, expect, it, vi } from 'vitest'
+import { createApiClient } from './client'
+import { ApiError, ERROR_CODES, ERROR_MESSAGES, HTTP_STATUS, apiErrorFromResponse } from './errors'
+import { validBlock } from '@/test/fixtures'
+import { jarsFromFixture } from '@/test/helpers'
+import { AuthError } from '@/auth/types'
+
+const BASE = 'https://api.example.invalid'
+const move = { from_jar: 'giai_tri', to_jar: 'an_uong', amount_vnd: 100000 }
+
+function json(status: number, body?: unknown): Response {
+  return new Response(body === undefined ? '' : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+}
+
+function setup(responses: Array<Response | Error>, getAccessToken = vi.fn(async (o?: { force?: boolean }) => (o?.force ? 'tok-moi' : 'tok-cu'))) {
+  const calls: Array<{ url: string; init: RequestInit }> = []
+  const fetchImpl = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init: init ?? {} })
+    const r = responses.shift()
+    if (!r) throw new Error('hết phản hồi giả')
+    if (r instanceof Error) throw r
+    return r
+  }) as unknown as typeof fetch
+  return { api: createApiClient({ baseUrl: BASE, getAccessToken, fetchImpl }), calls, getAccessToken }
+}
+
+const headers = (c: { init: RequestInit }) => Object.fromEntries(new Headers(c.init.headers as HeadersInit).entries())
+
+describe('lớp REST', () => {
+  it('GET /jars: Bearer access token + traceparent, trả dữ liệu đã kiểm schema', async () => {
+    const { api, calls } = setup([json(200, jarsFromFixture())])
+    const r = await api.getJars()
+    expect(r.jars).toHaveLength(7)
+    expect(calls[0]!.url).toBe(`${BASE}/jars`)
+    expect(calls[0]!.init.method).toBe('GET')
+    const h = headers(calls[0]!)
+    expect(h.authorization).toBe('Bearer tok-cu')
+    expect(h.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/)
+  })
+
+  it('POST /confirmations và /actions gửi đúng thân JSON', async () => {
+    const receipt = validBlock('receipt.move')
+    const { api, calls } = setup([
+      json(200, { confirm_token: 'abc.def', expires_at: '2026-12-10T03:02:00Z', ttl_seconds: 120, tool: 'move_between_jars', params: move, params_hash: 'a'.repeat(64) }),
+      json(200, receipt),
+    ])
+    const c = await api.createConfirmation({ tool: 'move_between_jars', params: move, params_hash: 'a'.repeat(64) })
+    expect(c.confirm_token).toBe('abc.def')
+    const r = await api.applyAction({ tool: 'move_between_jars', params: move, confirm_token: c.confirm_token })
+    expect(r.type).toBe('receipt')
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ tool: 'move_between_jars', params: move, params_hash: 'a'.repeat(64) })
+    expect(JSON.parse(String(calls[1]!.init.body))).toEqual({ tool: 'move_between_jars', params: move, confirm_token: 'abc.def' })
+    expect(headers(calls[1]!)['content-type']).toBe('application/json')
+  })
+
+  it('POST /demo/reset không có thân', async () => {
+    const { api, calls } = setup([json(200, { reset_at: '2026-12-10T03:00:00Z', app_date: '2026-11-21', clock_offset_days: -19, jars_count: 7, transactions_count: 40 })])
+    const r = await api.resetDemo()
+    expect(r.jars_count).toBe(7)
+    expect(calls[0]!.init.body).toBeUndefined()
+  })
+
+  it('mã lỗi máy đọc được thành thông báo tiếng Việt, kèm trace_id', async () => {
+    const { api } = setup([json(403, { error: { code: 'TOKEN_EXPIRED', message: 'Token expired', trace_id: 'ab12' } })])
+    const err = await api.applyAction({ tool: 'move_between_jars', params: move, confirm_token: 'x.y' }).catch((e) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.code).toBe('TOKEN_EXPIRED')
+    expect(err.status).toBe(403)
+    expect(err.traceId).toBe('ab12')
+    expect(err.message).toBe(ERROR_MESSAGES.TOKEN_EXPIRED)
+    expect(err.message).toMatch(/hết hạn/)
+  })
+
+  it('401: làm mới token (force) rồi thử lại một lần', async () => {
+    const { api, calls, getAccessToken } = setup([json(401), json(200, jarsFromFixture())])
+    await api.getJars()
+    expect(calls).toHaveLength(2)
+    expect(headers(calls[0]!).authorization).toBe('Bearer tok-cu')
+    expect(headers(calls[1]!).authorization).toBe('Bearer tok-moi')
+    expect(getAccessToken).toHaveBeenLastCalledWith({ force: true })
+  })
+
+  it('401 hai lần: UNAUTHENTICATED, không thử lần ba', async () => {
+    const { api, calls } = setup([json(401), json(401)])
+    const err = await api.getJars().catch((e) => e)
+    expect(err.code).toBe('UNAUTHENTICATED')
+    expect(calls).toHaveLength(2)
+  })
+
+  it('hết phiên khi lấy token: SESSION_EXPIRED, không gọi mạng', async () => {
+    const getAccessToken = vi.fn(async () => {
+      throw new AuthError('SESSION_EXPIRED')
+    })
+    const { api, calls } = setup([], getAccessToken)
+    const err = await api.getJars().catch((e) => e)
+    expect(err.code).toBe('SESSION_EXPIRED')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('mất mạng: NETWORK, có thể thử lại', async () => {
+    const { api } = setup([new TypeError('Failed to fetch')])
+    const err = await api.getJars().catch((e) => e)
+    expect(err.code).toBe('NETWORK')
+    expect(err.retryable).toBe(true)
+  })
+
+  it('thân 200 sai schema: INVALID_RESPONSE', async () => {
+    const { api } = setup([json(200, { jars: 'khong-phai-mang' })])
+    const err = await api.getJars().catch((e) => e)
+    expect(err.code).toBe('INVALID_RESPONSE')
+  })
+
+  it('503 thân rỗng: DATABASE_UNAVAILABLE (Aurora đang thức dậy), thử lại được', async () => {
+    const { api } = setup([json(503)])
+    const err = await api.getJars().catch((e) => e)
+    expect(err.code).toBe('DATABASE_UNAVAILABLE')
+    expect(err.retryable).toBe(true)
+  })
+})
+
+describe('bảng mã lỗi', () => {
+  it('mọi mã đều có thông báo tiếng Việt và HTTP status', () => {
+    for (const code of ERROR_CODES) {
+      expect(ERROR_MESSAGES[code]).toMatch(/[a-zàáảãạăâđêôơư]/i)
+      expect(HTTP_STATUS[code]).toBeGreaterThanOrEqual(400)
+    }
+  })
+  it('thân lạ rơi về mã theo HTTP status', () => {
+    expect(apiErrorFromResponse(500, { error: { code: 'MA_LA', message: 'x' } }).code).toBe('INTERNAL_ERROR')
+    expect(apiErrorFromResponse(403, undefined).code).toBe('FORBIDDEN')
+    expect(apiErrorFromResponse(429, undefined).code).toBe('RATE_LIMITED')
+  })
+})

@@ -74,8 +74,13 @@ Các mục dưới đây đã được phản ánh trong [overview.md](../archit
 
 Các điểm này được thử trong [phase 1](../plan/phases/phase-1-nen-va-lat-doc.md) (bảng phép thử) và phase 2, 3, 5; tick khi có kết quả.
 
-- [ ] Nối frontend thật với Runtime thật, gồm interrupt/resume AG-UI qua Runtime và `AgentCoreMemorySessionManager`.
-- [ ] CORS từ domain thật, Safari trên iPhone, Amplify Hosting.
-- [ ] Strands `MCPClient` xử lý thế nào khi Cedar từ chối (lỗi giao thức `-32002`).
+- [ ] Nối frontend thật với Runtime thật. Phía backend đã chạy (22/11): token Cognito → Runtime V2 → Gateway (interceptor + Cedar `ENFORCE`) → Aurora, khối UI qua SSE, lưu và đọc lại hội thoại ([spike-vertical-slice.md](../research/spike-vertical-slice.md)); còn thử từ app đã host bằng trình duyệt.
+- [x] Interrupt/resume AG-UI qua Runtime với session manager bền: **chạy** với `S3SessionManager`, kể cả khi microVM bị dừng; không session manager thì `UNKNOWN_INTERRUPT_ID` sau khi microVM đổi. Yofina không dùng (ADR-0002). `AgentCoreMemorySessionManager` chưa thử ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 5).
+- [ ] CORS từ domain thật, Safari trên iPhone, Amplify Hosting. Đã thử bằng `curl` với Origin là URL Amplify: preflight 200, `Access-Control-Allow-Origin: *`, header frontend được phản chiếu ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 10); còn thử từ trình duyệt thật và Safari iPhone.
+- [x] Strands `MCPClient` xử lý thế nào khi Cedar từ chối (lỗi giao thức `-32002`): với Gateway thật `MCPClient` nuốt thành chuỗi, `_GatewayMCPClient` giữ ngoại lệ gốc và đọc `MCPError.code`; người dùng thấy khối `notice` "Không có quyền thực hiện" ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 3).
+- [x] Cedar `context.input.user_id` khi `user_id` là tham số tùy chọn trong schema: chạy (`has` + so với `principal.id`); không interceptor thì `user_id` của người khác, vắng hoặc rỗng đều bị `-32002` ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 2).
+- [x] Thông điệp từ chối của Gateway khi không bật `DEBUG`: giống bản `DEBUG` với luật toàn `permit`; dùng mức mặc định ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 4).
+- [x] Token hết hạn giữa luồng SSE: luồng đang mở không bị cắt; lời gọi Gateway sau lúc hết hạn ra `403 -32002 insufficient_scope` (agent nhận diện, hiện "cần đăng nhập lại"); Runtime từ chối request mới với token hết hạn hoặc sắp hết hạn trong vòng một phút ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 6).
+- [x] Số đo lát dọc: event đầu lượt 1 phiên lạnh trung vị 2,04 s, lượt 2 0,34 s; trọn lượt 5,75 s và 3,00 s; Gateway ấm có interceptor + Cedar 174 ms so với 140 ms Lambda trực tiếp ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 7).
 - [ ] Sonnet 4.6 làm planner nhiều bước; ảnh chụp màn hình thật; Guardrails; Knowledge Bases.
 - [ ] Mô hình dự báo trên dữ liệu không do cùng bộ sinh tạo ra.

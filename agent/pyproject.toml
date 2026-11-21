@@ -1,0 +1,26 @@
+[project]
+name = "yofina-agent"
+version = "0.1.0"
+description = "Agent Yofina Foresight (Strands + AG-UI) chạy trên Amazon Bedrock AgentCore Runtime."
+requires-python = ">=3.12,<3.14"
+# Phiên bản ghim theo spike đã chạy thật (docs/research/spike-strands-agui-local.md,
+# spike-agentcore-runtime-cors.md). `yofina-core` là thành viên workspace; khi đóng zip thì
+# scripts/agent_build_zip.py chép mã nguồn của nó và cài phụ thuộc của nó.
+dependencies = [
+    "yofina-core",
+    "strands-agents==1.65.0",
+    "ag-ui-protocol==1.0.0",
+    "fastapi==0.165.0",
+    "uvicorn==0.54.0",
+    "boto3==1.44.9",
+]
+
+[tool.uv.sources]
+yofina-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yofina_agent"]

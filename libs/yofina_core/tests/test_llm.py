@@ -1,0 +1,503 @@
+"""Unit test của yofina_core.llm. Client Bedrock, bộ đếm và đồng hồ giả chỉ có ở đây."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from typing import Any
+
+import pytest
+from botocore.exceptions import ClientError
+from pydantic import BaseModel, Field
+
+from yofina_core.config import Config, ConfigError
+from yofina_core.llm import (
+    AllModelsFailed,
+    BudgetCapReached,
+    DynamoUsageStore,
+    LlmGateway,
+    LlmSettings,
+    ModelBudgetExceeded,
+    ModelSpec,
+    RateLimiter,
+    StructuredOutputError,
+    TurnScope,
+    bedrock_json_schema,
+    load_settings,
+    user_message,
+)
+
+
+def client_error(code: str) -> ClientError:
+    return ClientError({"Error": {"Code": code, "Message": "x"}}, "Converse")
+
+
+def ok_response(text: str = "xin chào", tin: int = 10, tout: int = 5) -> dict[str, Any]:
+    return {
+        "output": {"message": {"role": "assistant", "content": [{"text": text}]}},
+        "usage": {"inputTokens": tin, "outputTokens": tout},
+        "stopReason": "end_turn",
+    }
+
+
+def tool_response(name: str, payload: dict[str, Any], tid: str = "t1") -> dict[str, Any]:
+    return {
+        "output": {
+            "message": {
+                "role": "assistant",
+                "content": [{"toolUse": {"toolUseId": tid, "name": name, "input": payload}}],
+            }
+        },
+        "usage": {"inputTokens": 20, "outputTokens": 8},
+        "stopReason": "tool_use",
+    }
+
+
+class FakeClient:
+    """Mỗi phần tử của `script` là phản hồi (dict) hoặc ngoại lệ, tiêu thụ lần lượt."""
+
+    def __init__(self, script: list[Any]) -> None:
+        self.script = list(script)
+        self.calls: list[dict[str, Any]] = []
+
+    def converse(self, **kw: Any) -> dict[str, Any]:
+        self.calls.append(kw)
+        item = self.script.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+
+class FakeUsage:
+    def __init__(self, fail: Exception | None = None, caps_hit: set[str] | None = None) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.fail, self.caps_hit = fail, caps_hit or set()
+        self.counts: dict[tuple[str, str], int] = {}
+
+    def consume(self, *, day: str, model: str, cap: int, ttl_epoch: int) -> int:
+        self.calls.append({"day": day, "model": model, "cap": cap, "ttl": ttl_epoch})
+        if self.fail:
+            raise self.fail
+        if model in self.caps_hit or self.counts.get((day, model), 0) >= cap:
+            raise BudgetCapReached(model)
+        self.counts[(day, model)] = self.counts.get((day, model), 0) + 1
+        return self.counts[(day, model)]
+
+
+def settings(**over: Any) -> LlmSettings:
+    roles = {
+        "planner": (
+            ModelSpec("m-plan-a", rpm=8, daily_cap=3),
+            ModelSpec("m-plan-b", rpm=8, daily_cap=3, temperature=False),
+        ),
+        "small": (
+            ModelSpec("m-small-a", rpm=0, daily_cap=100),
+            ModelSpec("m-small-b", rpm=0, daily_cap=100),
+        ),
+    }
+    return LlmSettings(roles=over.pop("roles", roles), **over)
+
+
+FIXED_NOW = datetime(2026, 11, 21, 15, 0, tzinfo=UTC)
+
+
+def gateway(client: FakeClient, usage: FakeUsage | None = None, **kw: Any) -> LlmGateway:
+    return LlmGateway(
+        kw.pop("settings", settings()),
+        config=Config({}),
+        client=client,
+        usage=usage or FakeUsage(),
+        now=lambda: FIXED_NOW,
+        sleep=kw.pop("sleep", lambda s: None),
+        **kw,
+    )
+
+
+# --- cấu hình -------------------------------------------------------------------------------
+def test_mac_dinh_dong_goi_co_ba_vai_va_tran():
+    s = load_settings(Config({}), env={})
+    assert set(s.roles) == {"planner", "small", "embedding"}
+    assert next(m.id for m in s.roles["planner"]).endswith("claude-sonnet-4-6")
+    assert s.roles["planner"][0].daily_cap == 400
+    assert s.roles["small"][0].daily_cap == 2000
+    assert s.roles["embedding"][0].daily_cap == 3000
+    assert s.roles["planner"][0].rpm == 8
+    assert s.roles["planner"][1].temperature is False  # Kimi K3 không nhận temperature
+
+
+def test_env_ghi_de_tran_theo_vai_va_roles_json():
+    env = {
+        "YOFINA_LLM_DAILY_CAP_PLANNER": "0",
+        "YOFINA_LLM_ROLES": json.dumps(
+            {"small": {"daily_cap": 7, "models": [{"id": "x", "rpm": 3}]}}
+        ),
+    }
+    s = load_settings(Config(env), env=env)
+    assert {m.daily_cap for m in s.roles["planner"]} == {0}  # ghi đè mọi model của vai
+    assert s.roles["small"] == (ModelSpec("x", rpm=3, daily_cap=7),)
+    assert s.roles["embedding"][0].daily_cap == 3000  # vai khác giữ mặc định
+
+
+def test_doc_tran_tu_ssm_duong_dan_llm():
+    class Ssm:
+        class ParameterNotFound(Exception):
+            pass
+
+        def get_parameter(self, *, Name, WithDecryption):
+            if Name == "/yofina/llm/daily_cap_small":
+                return {"Parameter": {"Value": "12"}}
+            raise self.ParameterNotFound(Name)
+
+    env = {"YOFINA_SSM_PREFIX": "/yofina"}
+    s = load_settings(Config(env, Ssm()), env=env)
+    assert {m.daily_cap for m in s.roles["small"]} == {12}
+    assert s.roles["planner"][0].daily_cap == 400
+
+
+def test_roles_json_hong_thi_bao_loi_cau_hinh():
+    env = {"YOFINA_LLM_ROLES": "{khong phai json"}
+    with pytest.raises(ConfigError, match="roles"):
+        load_settings(Config(env), env=env)
+
+
+# --- giới hạn tốc độ ------------------------------------------------------------------------
+def test_cua_so_truot():
+    t = [0.0]
+    rl = RateLimiter(clock=lambda: t[0])
+    assert [rl.try_acquire("m", 2) for _ in range(2)] == [0.0, 0.0]
+    wait = rl.try_acquire("m", 2)
+    assert wait == pytest.approx(60.0)
+    t[0] = 59.0
+    assert rl.try_acquire("m", 2) == pytest.approx(1.0)
+    t[0] = 60.0
+    assert rl.try_acquire("m", 2) == 0.0
+    assert rl.try_acquire("khac", 2) == 0.0  # mỗi model một xô
+    assert rl.try_acquire("m", 0) == 0.0  # 0 = không giới hạn
+
+
+def test_cho_toi_da_roi_chuyen_model_ke_tiep():
+    t = [0.0]
+    sleeps: list[float] = []
+    limiter = RateLimiter(clock=lambda: t[0])
+    limiter.try_acquire("m-plan-a", 8)  # chiếm 1 chỗ, ta đặt rpm=1 để hết chỗ ngay
+    s = settings(
+        roles={
+            "planner": (
+                ModelSpec("m-plan-a", rpm=1, daily_cap=9),
+                ModelSpec("m-plan-b", rpm=0, daily_cap=9),
+            )
+        },
+        rate_limit_max_wait_seconds=5,
+    )
+    client = FakeClient([ok_response("từ b")])
+    gw = gateway(client, settings=s, limiter=limiter, sleep=sleeps.append)
+    res = gw.converse("planner", messages=[user_message("hi")])
+    assert res.model_id == "m-plan-b"
+    assert res.attempts == [("m-plan-a", "RateLimitWaitTooLong")]
+    assert sleeps == []  # 60 giây > 5 giây nên không chờ
+
+
+def test_cho_trong_gioi_han_thi_ngu_roi_goi():
+    t = [0.0]
+    sleeps: list[float] = []
+
+    def fake_sleep(sec: float) -> None:
+        sleeps.append(sec)
+        t[0] += sec
+
+    limiter = RateLimiter(clock=lambda: t[0])
+    limiter.try_acquire("m-plan-a", 1)
+    t[0] = 55.0  # còn 5 giây tới khi có chỗ
+    s = settings(
+        roles={"planner": (ModelSpec("m-plan-a", rpm=1, daily_cap=9),)},
+        rate_limit_max_wait_seconds=10,
+    )
+    gw = gateway(FakeClient([ok_response()]), settings=s, limiter=limiter, sleep=fake_sleep)
+    res = gw.converse("planner", messages=[user_message("hi")])
+    assert res.model_id == "m-plan-a"
+    assert sleeps == [pytest.approx(5.0)]
+
+
+# --- bộ đếm DynamoDB ------------------------------------------------------------------------
+class FakeDdb:
+    def __init__(self, error_code: str | None = None) -> None:
+        self.kw: dict[str, Any] | None = None
+        self.error_code = error_code
+
+    def update_item(self, **kw: Any) -> dict[str, Any]:
+        self.kw = kw
+        if self.error_code:
+            raise ClientError({"Error": {"Code": self.error_code, "Message": "x"}}, "UpdateItem")
+        return {"Attributes": {"count": {"N": "4"}}}
+
+
+def test_dynamo_update_item_co_dieu_kien_va_ten_gia():
+    ddb = FakeDdb()
+    store = DynamoUsageStore("yofina-usage", ddb)
+    n = store.consume(day="2026-11-21", model="m", cap=400, ttl_epoch=123)
+    assert n == 4
+    kw = ddb.kw
+    assert kw["TableName"] == "yofina-usage"
+    assert kw["Key"] == {"day": {"S": "2026-11-21"}, "model": {"S": "m"}}
+    assert kw["ConditionExpression"] == "attribute_not_exists(#c) OR #c < :cap"
+    assert kw["ExpressionAttributeNames"] == {"#c": "count", "#t": "ttl"}  # từ khóa dành riêng
+    assert kw["ExpressionAttributeValues"][":cap"] == {"N": "400"}
+    assert "ADD #c :one" in kw["UpdateExpression"]
+
+
+def test_dynamo_cham_tran_thanh_budget_cap_reached():
+    store = DynamoUsageStore("t", FakeDdb("ConditionalCheckFailedException"))
+    with pytest.raises(BudgetCapReached):
+        store.consume(day="d", model="m", cap=1, ttl_epoch=1)
+
+
+def test_dynamo_loi_khac_khong_bi_nuot():
+    store = DynamoUsageStore("t", FakeDdb("ProvisionedThroughputExceededException"))
+    with pytest.raises(ClientError):
+        store.consume(day="d", model="m", cap=1, ttl_epoch=1)
+
+
+# --- converse -------------------------------------------------------------------------------
+def test_converse_thanh_cong_dem_log_token(caplog):
+    usage = FakeUsage()
+    scope = TurnScope()
+    gw = gateway(FakeClient([ok_response("chào", 11, 7)]), usage)
+    with caplog.at_level("INFO", logger="yofina.llm"):
+        res = gw.converse("planner", messages=[user_message("hi")], system="s", scope=scope)
+    assert res.text == "chào" and res.input_tokens == 11 and res.output_tokens == 7
+    assert [(c["day"], c["model"], c["cap"]) for c in usage.calls] == [
+        ("2026-11-21", "m-plan-a", 3)
+    ]
+    assert usage.calls[0]["ttl"] > FIXED_NOW.timestamp()
+    line = next(json.loads(r.message) for r in caplog.records if r.name == "yofina.llm")
+    assert line["event"] == "llm_call" and line["input_tokens"] == 11 and line["output_tokens"] == 7
+    assert line["role"] == "planner" and line["model"] == "m-plan-a" and "latency_ms" in line
+    assert scope.calls == 1 and scope.usage_by_model()[0]["totalTokens"] == 18
+
+
+def test_ngay_dem_theo_mui_gio_ngan_sach():
+    usage = FakeUsage()
+    gw = LlmGateway(
+        settings(),
+        config=Config({}),
+        client=FakeClient([ok_response()]),
+        usage=usage,
+        now=lambda: datetime(2026, 11, 21, 20, 0, tzinfo=UTC),  # 03:00 ngày 22 giờ Việt Nam
+    )
+    gw.converse("small", messages=[user_message("hi")])
+    assert usage.calls[0]["day"] == "2026-11-22"
+
+
+@pytest.mark.parametrize("code", ["ThrottlingException", "AccessDeniedException"])
+def test_chuoi_du_phong_bat_throttling_va_access_denied(code):
+    client = FakeClient([client_error(code), ok_response("từ b")])
+    usage = FakeUsage()
+    scope = TurnScope()
+    gw = gateway(client, usage)
+    res = gw.converse("planner", messages=[user_message("hi")], scope=scope)
+    assert res.model_id == "m-plan-b" and res.text == "từ b"
+    assert res.attempts == [("m-plan-a", code)]
+    assert [c["modelId"] for c in client.calls] == ["m-plan-a", "m-plan-b"]
+    assert [c["model"] for c in usage.calls] == ["m-plan-a", "m-plan-b"]  # mỗi lời gọi đều được đếm
+    assert scope.calls == 2
+    assert "temperature" in client.calls[0]["inferenceConfig"]
+    assert "temperature" not in client.calls[1]["inferenceConfig"]  # model b không nhận temperature
+
+
+def test_loi_khong_thuoc_chuoi_du_phong_ra_thang():
+    gw = gateway(FakeClient([client_error("ValidationException")]))
+    with pytest.raises(ClientError):
+        gw.converse("planner", messages=[user_message("hi")])
+
+
+def test_het_chuoi_thi_bao_all_models_failed():
+    gw = gateway(
+        FakeClient([client_error("ThrottlingException"), client_error("AccessDeniedException")])
+    )
+    with pytest.raises(AllModelsFailed) as e:
+        gw.converse("planner", messages=[user_message("hi")])
+    assert e.value.attempts == (
+        ("m-plan-a", "ThrottlingException"),
+        ("m-plan-b", "AccessDeniedException"),
+    )
+
+
+def test_cham_tran_ngay_khong_roi_sang_model_du_phong():
+    usage = FakeUsage(caps_hit={"m-plan-a"})
+    client = FakeClient([ok_response()])
+    gw = gateway(client, usage)
+    with pytest.raises(ModelBudgetExceeded) as e:
+        gw.converse("planner", messages=[user_message("hi")])
+    assert e.value.model == "m-plan-a" and e.value.reason == "daily_cap" and e.value.cap == 3
+    assert client.calls == []  # không gọi model
+    assert [c["model"] for c in usage.calls] == ["m-plan-a"]  # không thử model b
+
+
+def test_tran_bang_0_khong_goi_dynamodb_va_khong_goi_model():
+    s = settings(roles={"small": (ModelSpec("x", rpm=0, daily_cap=0),)})
+    usage, client = FakeUsage(), FakeClient([ok_response()])
+    gw = gateway(client, usage, settings=s)
+    with pytest.raises(ModelBudgetExceeded):
+        gw.converse("small", messages=[user_message("hi")])
+    assert usage.calls == [] and client.calls == []
+
+
+def test_khong_doc_duoc_bo_dem_thi_dong_cua_an_toan():
+    usage = FakeUsage(fail=RuntimeError("DDB sập"))
+    client = FakeClient([ok_response()])
+    gw = gateway(client, usage)
+    with pytest.raises(ModelBudgetExceeded) as e:
+        gw.converse("small", messages=[user_message("hi")])
+    assert e.value.reason == "usage_store_unavailable"
+    assert client.calls == []
+
+
+def test_tran_moi_luot_hoi_thoai():
+    scope = TurnScope(max_calls=1)
+    gw = gateway(FakeClient([ok_response(), ok_response()]))
+    gw.converse("small", messages=[user_message("hi")], scope=scope)
+    with pytest.raises(ModelBudgetExceeded) as e:
+        gw.converse("small", messages=[user_message("hi")], scope=scope)
+    assert e.value.reason == "turn_limit"
+
+
+def test_vai_la_khong_co_thi_bao_loi_cau_hinh():
+    with pytest.raises(ConfigError):
+        gateway(FakeClient([])).chain("khong_co")
+
+
+# --- JSON có cấu trúc -----------------------------------------------------------------------
+class Out(BaseModel):
+    intent: str = Field(description="ý định")
+    amount: int | None = None
+
+
+def test_structured_json_hop_le_lan_dau():
+    client = FakeClient([tool_response("report", {"intent": "a", "amount": 5})])
+    gw = gateway(client)
+    r = gw.structured_json("small", output_model=Out, messages=[user_message("hi")], system="s")
+    assert r.value == Out(intent="a", amount=5) and r.attempts == 1 and r.model_id == "m-small-a"
+    req = client.calls[0]
+    assert req["toolConfig"]["toolChoice"] == {"tool": {"name": "report"}}
+    assert "outputConfig" not in req  # Nova không hỗ trợ outputConfig
+
+
+def test_structured_json_sai_schema_thi_gui_loi_va_thu_lai():
+    client = FakeClient(
+        [tool_response("report", {"amount": "abc"}), tool_response("report", {"intent": "b"})]
+    )
+    usage = FakeUsage()
+    gw = gateway(client, usage)
+    r = gw.structured_json("small", output_model=Out, messages=[user_message("hi")], max_attempts=3)
+    assert r.value.intent == "b" and r.attempts == 2
+    retry_msgs = client.calls[1]["messages"]
+    assert retry_msgs[-1]["content"][0]["toolResult"]["status"] == "error"
+    assert len(usage.calls) == 2  # mỗi lần thử là một lượt được đếm
+
+
+def test_structured_json_model_khong_goi_tool_thi_nhac_lai():
+    client = FakeClient([ok_response("trả lời chữ"), tool_response("report", {"intent": "c"})])
+    gw = gateway(client)
+    r = gw.structured_json("small", output_model=Out, messages=[user_message("hi")])
+    assert r.attempts == 2 and r.value.intent == "c"
+
+
+def test_structured_json_het_so_lan_thu():
+    client = FakeClient([tool_response("report", {}), tool_response("report", {})])
+    gw = gateway(client)
+    with pytest.raises(StructuredOutputError) as e:
+        gw.structured_json("small", output_model=Out, messages=[user_message("hi")], max_attempts=2)
+    assert e.value.attempts == 2 and "intent" in e.value.last_error
+    assert len(client.calls) == 2  # chặn vòng lặp không đáy
+
+
+def test_structured_json_tran_ngay_di_thang_ra_ngoai():
+    gw = gateway(FakeClient([]), FakeUsage(caps_hit={"m-small-a"}))
+    with pytest.raises(ModelBudgetExceeded):
+        gw.structured_json("small", output_model=Out, messages=[user_message("hi")])
+
+
+def test_schema_phang_khong_con_ref_va_moi_truong_la_required():
+    class Inner(BaseModel):
+        k: int
+
+    class Outer(BaseModel):
+        name: str
+        maybe: int | None = None
+        inner: Inner
+        kind: str | None = Field(default=None, description="mô tả")
+
+    schema = bedrock_json_schema(Outer)
+    text = json.dumps(schema)
+    assert (
+        "$ref" not in text and "$defs" not in text and "anyOf" not in text and "title" not in text
+    )
+    assert schema["required"] == ["name", "maybe", "inner", "kind"]
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["maybe"]["type"] == ["integer", "null"]
+    assert schema["properties"]["inner"]["properties"]["k"]["type"] == "integer"
+    assert schema["properties"]["kind"]["description"] == "mô tả"
+
+
+# --- nguồn SSM gộp ---------------------------------------------------------------------------
+class FakeSsmBulk:
+    def __init__(self, params: dict[str, str], fail: bool = False) -> None:
+        self.params, self.fail = params, fail
+        self.path_calls: list[dict[str, Any]] = []
+        self.single_calls: list[str] = []
+
+    def get_parameters_by_path(self, **kw: Any) -> dict[str, Any]:
+        self.path_calls.append(kw)
+        if self.fail:
+            raise RuntimeError("AccessDenied")
+        names = sorted(n for n in self.params if n.startswith(kw["Path"] + "/"))
+        start = int(kw.get("NextToken", 0))
+        page = names[start : start + 1]  # mỗi trang một khóa: kiểm phân trang
+        out: dict[str, Any] = {"Parameters": [{"Name": n, "Value": self.params[n]} for n in page]}
+        if start + 1 < len(names):
+            out["NextToken"] = str(start + 1)
+        return out
+
+    def get_parameter(self, *, Name: str, WithDecryption: bool) -> dict[str, Any]:
+        self.single_calls.append(Name)
+        return {"Parameter": {"Value": self.params[Name]}}
+
+
+def test_ssm_gop_mot_loi_goi_cho_ca_nhanh_llm_va_phan_trang():
+    from yofina_core.llm import BulkSsm
+
+    ssm = FakeSsmBulk(
+        {
+            "/yofina/llm/daily_cap_small": "5",
+            "/yofina/llm/usage_ttl_days": "9",
+            "/yofina/other": "x",
+        }
+    )
+    env = {"YOFINA_SSM_PREFIX": "/yofina"}
+    s = load_settings(Config(env, BulkSsm("/yofina", "ap-southeast-1", client=ssm)), env=env)
+    assert {m.daily_cap for m in s.roles["small"]} == {5} and s.usage_ttl_days == 9
+    assert s.roles["planner"][0].daily_cap == 400  # khóa vắng: mặc định
+    assert (
+        len(ssm.path_calls) == 2 and ssm.single_calls == []
+    )  # 2 trang, không GetParameter nào cho khóa llm
+
+
+def test_ssm_khoa_ngoai_nhanh_llm_di_thang_get_parameter():
+    from yofina_core.llm import BulkSsm
+
+    ssm = FakeSsmBulk({"/yofina/dynamodb/usage-table": "yofina-usage"})
+    cfg = Config({"YOFINA_SSM_PREFIX": "/yofina"}, BulkSsm("/yofina", "ap-southeast-1", client=ssm))
+    assert cfg.get("dynamodb/usage-table") == "yofina-usage"
+    assert ssm.single_calls == ["/yofina/dynamodb/usage-table"] and ssm.path_calls == []
+
+
+def test_khong_doc_duoc_nhanh_llm_thi_dung_mac_dinh_va_ghi_log_loi(caplog):
+    from yofina_core.llm import BulkSsm
+
+    ssm = FakeSsmBulk({}, fail=True)
+    env = {"YOFINA_SSM_PREFIX": "/yofina"}
+    with caplog.at_level("ERROR", logger="yofina.llm"):
+        s = load_settings(Config(env, BulkSsm("/yofina", "ap-southeast-1", client=ssm)), env=env)
+    assert s.roles["small"][0].daily_cap == 2000  # trần mặc định vẫn có hiệu lực
+    assert any("llm_ssm_unreadable" in r.message for r in caplog.records)
+    assert len(ssm.path_calls) == 1  # chỉ thử một lần

@@ -109,6 +109,27 @@
         { "$ref": "#/$defs/MoveOk" },
         { "$ref": "#/$defs/ToolError" }
       ]
+    },
+    "SaveTurnOk": {
+      "description": "Đã lưu lượt hội thoại (ghi đè nếu cùng conversation_id và trace_id đã có). Không mang app_date vì không đọc số liệu tài chính.",
+      "type": "object",
+      "required": ["status", "as_of", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "data": {
+          "type": "object",
+          "required": ["blocks_saved"],
+          "additionalProperties": false,
+          "properties": {
+            "blocks_saved": { "type": "integer", "minimum": 0, "maximum": 20 }
+          }
+        }
+      }
+    },
+    "SaveTurnResult": {
+      "oneOf": [{ "$ref": "#/$defs/SaveTurnOk" }, { "$ref": "#/$defs/ToolError" }]
     }
   }
 }

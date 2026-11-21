@@ -1,12 +1,888 @@
-"""Mọi lời gọi Bedrock đi qua module này (luồng D cài ở phase 1; chưa có mã ở bước 0).
+"""Mọi lời gọi Bedrock đi qua module này (agent, Lambda, pipeline, evals).
 
-Sẽ làm ba việc (docs/plan/master-plan.md, mục "Model và giới hạn"):
-- giới hạn tốc độ mỗi model (mặc định 8 request/phút cho Claude 4.x);
-- trần lượt gọi mỗi ngày đếm bằng DynamoDB `yofina-usage`; chạm trần thì ném lỗi có kiểu
-  `ModelBudgetExceeded` (ứng với `ErrorCode.MODEL_BUDGET_EXCEEDED`) để luồng rẽ sang thẻ số
-  liệu tất định;
-- chuỗi dự phòng bắt cả `ThrottlingException` lẫn `AccessDeniedException`; ghi token vào log.
+Việc module làm (docs/plan/master-plan.md, mục "Model và giới hạn"):
 
-Model id, trần và tốc độ lấy từ `yofina_core.config`. Model giả chỉ dùng trong unit test và
-không được import từ mã sản phẩm.
+1. **Vai -> chuỗi model dự phòng.** Cấu hình vai (`planner`, `small`, `embedding`) và danh sách model
+   theo thứ tự dự phòng nằm ở `llm_defaults.json` (đóng gói cùng module) và được ghi đè bằng
+   biến môi trường `YOFINA_LLM_<TÊN>` hoặc SSM `/yofina/llm/<tên>` (xem `load_settings`). Không có
+   model id nào nằm trong logic.
+2. **Giới hạn tốc độ mỗi model** (cửa sổ trượt 60 giây, mặc định 8 request/phút cho Claude 4.x).
+   Chờ tối đa `rate_limit_max_wait_seconds`; quá thì coi model này là "đang nghẽn" và chuyển sang
+   model kế tiếp. Bộ đếm này là **theo tiến trình** (mỗi microVM của Runtime một bộ); trần theo
+   ngày mới là bộ đếm dùng chung.
+3. **Trần lượt gọi mỗi ngày theo model**, đếm nguyên tử ở DynamoDB `yofina-usage` bằng `UpdateItem`
+   có điều kiện (khóa `day` + `model`, thuộc tính `count`, TTL `ttl`). Chạm trần thì ném
+   `ModelBudgetExceeded` (ứng với `ErrorCode.MODEL_BUDGET_EXCEEDED`) và **không** rơi sang model
+   dự phòng: trần là chốt chi phí của cả vai. Không đọc/ghi được bộ đếm cũng coi là chạm trần
+   (đóng cửa an toàn, vì đây là chốt chi phí). Lượt gọi được đếm *trước* khi gửi, nên lời gọi
+   bị throttle vẫn tính vào trần (thiên về an toàn).
+4. **Chuỗi dự phòng** bắt `ThrottlingException` **và** `AccessDeniedException` (Claude 5.x bị chặn
+   theo kiểu này, xem docs/research/spike-bedrock-models.md §1) cùng vài lỗi tạm thời khác.
+5. **Ghi log** mỗi lời gọi: vai, model, token vào/ra, thời lượng, kết quả (JSON một dòng, logger
+   `yofina.llm`).
+6. **JSON có cấu trúc bằng ép tool** (Nova không hỗ trợ `outputConfig`): `structured_json`, có
+   giới hạn số lần thử; mỗi lần thử là một lượt gọi model và được đếm.
+
+Strands dùng chung các lớp kiểm này qua `LlmGateway.chain/reserve*/record`; lớp bọc `Model` của
+Strands nằm ở `yofina_agent.metered_model` (để `yofina_core` không phụ thuộc Strands).
+
+Client giả chỉ dùng trong unit test (truyền `client=`/`usage=`); mã sản phẩm không import chúng.
 """
+
+from __future__ import annotations
+
+import asyncio
+import copy
+import json
+import logging
+import os
+import threading
+import time
+from collections import deque
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from importlib import resources
+from typing import Any, Protocol, TypeVar
+from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel, ValidationError
+
+from yofina_core.config import SSM_PREFIX_ENV, Config, ConfigError
+from yofina_core.errors import ErrorCode
+
+T = TypeVar("T", bound=BaseModel)
+
+logger = logging.getLogger("yofina.llm")
+
+DEFAULTS_FILE = "llm_defaults.json"
+ENV_PREFIX = "YOFINA_LLM_"
+_MISSING: Any = object()
+
+#: Mã lỗi Bedrock làm chuỗi dự phòng rẽ sang model kế tiếp. `AccessDeniedException` nằm trong đó vì
+#: quota 0 của Claude 5.x biểu hiện như vậy (không phải Throttling).
+FALLBACK_ERROR_CODES = frozenset(
+    {
+        "ThrottlingException",
+        "AccessDeniedException",
+        "ServiceUnavailableException",
+        "ModelNotReadyException",
+        "ModelTimeoutException",
+        "InternalServerException",
+        "ResourceNotFoundException",
+    }
+)
+_FALLBACK_EXC_NAMES = frozenset(
+    {
+        "ModelThrottledException",  # strands.types.exceptions
+        "ReadTimeoutError",
+        "ConnectTimeoutError",
+        "EndpointConnectionError",
+    }
+)
+
+
+# --- lỗi có kiểu ----------------------------------------------------------------------------
+class LlmError(RuntimeError):
+    """Gốc của lỗi do lớp bọc này ném."""
+
+
+class ModelBudgetExceeded(LlmError):
+    """Chạm trần lượt gọi (theo ngày hoặc theo lượt hội thoại), hoặc không đọc được bộ đếm.
+
+    Luồng gọi phải rẽ sang thẻ số liệu tất định (không trả luồng rỗng).
+    """
+
+    code = ErrorCode.MODEL_BUDGET_EXCEEDED
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        role: str,
+        model: str | None = None,
+        cap: int | None = None,
+        reason: str = "daily_cap",
+    ) -> None:
+        super().__init__(message)
+        self.role, self.model, self.cap, self.reason = role, model, cap, reason
+
+
+class AllModelsFailed(LlmError):
+    """Mọi model trong chuỗi của vai đều lỗi tạm thời (throttle, bị chặn, nghẽn)."""
+
+    def __init__(self, role: str, attempts: Sequence[tuple[str, str]]) -> None:
+        detail = "; ".join(f"{m}: {c}" for m, c in attempts) or "chuỗi rỗng"
+        super().__init__(f"Vai '{role}': mọi model đều lỗi ({detail})")
+        self.role, self.attempts = role, tuple(attempts)
+
+
+class RateLimitWaitTooLong(LlmError):
+    """Phải chờ quá `rate_limit_max_wait_seconds` mới có chỗ; nội bộ, kích hoạt dự phòng."""
+
+    def __init__(self, model: str, wait_seconds: float) -> None:
+        super().__init__(f"{model}: phải chờ {wait_seconds:.1f}s để qua giới hạn tốc độ")
+        self.model, self.wait_seconds = model, wait_seconds
+
+
+class StructuredOutputError(LlmError):
+    """Hết số lần thử mà model vẫn không trả JSON hợp lệ theo schema."""
+
+    def __init__(self, role: str, attempts: int, last_error: str) -> None:
+        super().__init__(
+            f"Vai '{role}': sau {attempts} lần thử vẫn không có JSON hợp lệ: {last_error}"
+        )
+        self.role, self.attempts, self.last_error = role, attempts, last_error
+
+
+# --- cấu hình -------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ModelSpec:
+    id: str
+    rpm: int  # 0 = không giới hạn
+    daily_cap: int
+    temperature: bool = True  # False: model không nhận `temperature` (Kimi K3)
+
+
+@dataclass(frozen=True)
+class LlmSettings:
+    roles: Mapping[str, tuple[ModelSpec, ...]]
+    rate_limit_max_wait_seconds: float = 20.0
+    budget_timezone: str = "Asia/Ho_Chi_Minh"
+    usage_ttl_days: int = 3
+    read_timeout_seconds: float = 60.0
+
+
+def load_defaults() -> dict[str, Any]:
+    text = resources.files("yofina_core").joinpath(DEFAULTS_FILE).read_text(encoding="utf-8")
+    return json.loads(text)
+
+
+def _param(cfg: Config, env: Mapping[str, str], name: str) -> str | None:
+    """Tra `YOFINA_LLM_<NAME>` rồi SSM `<prefix>/llm/<name>`; không có thì None."""
+    key = ENV_PREFIX + name.upper()
+    if key in env:
+        return env[key]
+    return cfg.get("llm/" + name, default=None)
+
+
+def load_settings(
+    config: Config | None = None, env: Mapping[str, str] | None = None
+) -> LlmSettings:
+    """Đọc cấu hình: mặc định đóng gói, rồi ghi đè bằng env/SSM.
+
+    - `roles` (JSON): thay nguyên cấu hình của từng vai được nêu (vai khác giữ mặc định).
+    - `daily_cap_<vai>` (số nguyên): ghi đè trần ngày của **mọi** model trong vai đó
+      (ví dụ `YOFINA_LLM_DAILY_CAP_PLANNER=0` để thử đường suy giảm).
+    - `rate_limit_max_wait_seconds`, `budget_timezone`, `usage_ttl_days`, `read_timeout_seconds`.
+    """
+    env = os.environ if env is None else env
+    cfg = config or Config(env=env)
+    defaults = load_defaults()
+
+    roles_raw: dict[str, Any] = dict(defaults["roles"])
+    override = _param(cfg, env, "roles")
+    if override:
+        try:
+            parsed = json.loads(override)
+            if not isinstance(parsed, dict):
+                raise ValueError("phải là object")
+            roles_raw.update(parsed)
+        except ValueError as exc:
+            raise ConfigError(f"Cấu hình llm/roles không phải JSON hợp lệ: {exc}") from exc
+
+    roles: dict[str, tuple[ModelSpec, ...]] = {}
+    for role, body in roles_raw.items():
+        cap_override = _param(cfg, env, f"daily_cap_{role}")
+        try:
+            role_cap = int(body.get("daily_cap", 0))
+            if cap_override is not None:
+                cap_override_int: int | None = int(cap_override)
+            else:
+                cap_override_int = None
+            specs = []
+            for m in body["models"]:
+                cap = (
+                    cap_override_int
+                    if cap_override_int is not None
+                    else m.get("daily_cap", role_cap)
+                )
+                specs.append(
+                    ModelSpec(
+                        id=str(m["id"]),
+                        rpm=int(m.get("rpm", body.get("rpm", 0))),
+                        daily_cap=int(cap),
+                        temperature=bool(m.get("temperature", True)),
+                    )
+                )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ConfigError(f"Cấu hình vai '{role}' sai định dạng: {exc!r}") from exc
+        roles[role] = tuple(specs)
+
+    def num(name: str, cast: Callable[[str], Any]) -> Any:
+        raw = _param(cfg, env, name)
+        try:
+            return cast(raw) if raw is not None else defaults[name]
+        except ValueError as exc:
+            raise ConfigError(f"Cấu hình llm/{name} sai định dạng: {raw!r}") from exc
+
+    return LlmSettings(
+        roles=roles,
+        rate_limit_max_wait_seconds=float(num("rate_limit_max_wait_seconds", float)),
+        budget_timezone=str(_param(cfg, env, "budget_timezone") or defaults["budget_timezone"]),
+        usage_ttl_days=int(num("usage_ttl_days", int)),
+        read_timeout_seconds=float(num("read_timeout_seconds", float)),
+    )
+
+
+class BulkSsm:
+    """Nguồn SSM cho `Config`: đọc cả nhánh `<prefix>/llm` bằng **một** lời gọi `GetParametersByPath`.
+
+    `load_settings` tra khoảng chục khóa tùy chọn; hầu hết vắng. Mỗi khóa vắng qua `GetParameter` là một vòng
+    mạng (cả giây ở phiên lạnh), nên gom lại. Khóa ngoài nhánh llm (ví dụ `dynamodb/usage-table`) đi thẳng
+    `GetParameter`. Không đọc được nhánh llm (thiếu quyền, mạng) thì ghi log lỗi và dùng mặc định đóng gói
+    (trần mặc định vẫn có hiệu lực), không làm sập lượt hội thoại.
+    """
+
+    class ParameterNotFound(Exception):  # Config nhận biết "vắng" qua tên lớp này
+        pass
+
+    def __init__(self, prefix: str, region: str, client: Any | None = None) -> None:
+        self._path = prefix.rstrip("/") + "/llm"
+        self._region, self._client = region, client
+        self._params: dict[str, str] | None = None
+        self._lock = threading.Lock()
+
+    def _ssm(self) -> Any:
+        if self._client is None:
+            import boto3
+
+            self._client = boto3.client("ssm", region_name=self._region)
+        return self._client
+
+    def _load(self) -> dict[str, str]:
+        with self._lock:
+            if self._params is None:
+                found: dict[str, str] = {}
+                try:
+                    kw: dict[str, Any] = {
+                        "Path": self._path,
+                        "Recursive": True,
+                        "WithDecryption": True,
+                    }
+                    while True:
+                        page = self._ssm().get_parameters_by_path(**kw)
+                        found.update({p["Name"]: str(p["Value"]) for p in page["Parameters"]})
+                        if not page.get("NextToken"):
+                            break
+                        kw["NextToken"] = page["NextToken"]
+                except Exception as exc:
+                    logger.error(
+                        json.dumps(
+                            {
+                                "event": "llm_ssm_unreadable",
+                                "path": self._path,
+                                "error": repr(exc)[:200],
+                            }
+                        )
+                    )
+                self._params = found
+            return self._params
+
+    def get_parameter(self, *, Name: str, WithDecryption: bool) -> Mapping[str, Any]:
+        if Name.startswith(self._path + "/"):
+            params = self._load()
+            if Name in params:
+                return {"Parameter": {"Value": params[Name]}}
+            raise self.ParameterNotFound(Name)
+        return self._ssm().get_parameter(Name=Name, WithDecryption=WithDecryption)
+
+
+def default_config(env: Mapping[str, str] | None = None) -> Config:
+    """`Config` cho tiến trình thật: nhánh SSM `<prefix>/llm` được đọc gộp một lần (xem `BulkSsm`)."""
+    env = os.environ if env is None else env
+    prefix = env.get(SSM_PREFIX_ENV)
+    if not prefix:
+        return Config(env)
+    cfg = Config(env)
+    return Config(env, BulkSsm(prefix, cfg.region()))
+
+
+# --- bộ đếm theo ngày -----------------------------------------------------------------------
+class BudgetCapReached(Exception):
+    """Bộ đếm báo đã đủ trần (nội bộ; gateway đổi thành `ModelBudgetExceeded`)."""
+
+
+class UsageStore(Protocol):
+    def consume(self, *, day: str, model: str, cap: int, ttl_epoch: int) -> int:
+        """Tăng bộ đếm nguyên tử và trả giá trị mới; ném `BudgetCapReached` nếu đã đủ `cap`."""
+        ...
+
+
+class DynamoUsageStore:
+    """Bộ đếm ở DynamoDB `yofina-usage`: `UpdateItem` có điều kiện, nguyên tử giữa mọi tiến trình."""
+
+    def __init__(self, table_name: str, client: Any) -> None:
+        self._table, self._client = table_name, client
+
+    def consume(self, *, day: str, model: str, cap: int, ttl_epoch: int) -> int:
+        try:
+            resp = self._client.update_item(
+                TableName=self._table,
+                Key={"day": {"S": day}, "model": {"S": model}},
+                # `count` và `ttl` là từ khóa dành riêng của DynamoDB: phải đi qua tên giả.
+                UpdateExpression="ADD #c :one SET #t = if_not_exists(#t, :ttl)",
+                ConditionExpression="attribute_not_exists(#c) OR #c < :cap",
+                ExpressionAttributeNames={"#c": "count", "#t": "ttl"},
+                ExpressionAttributeValues={
+                    ":one": {"N": "1"},
+                    ":cap": {"N": str(cap)},
+                    ":ttl": {"N": str(ttl_epoch)},
+                },
+                ReturnValues="UPDATED_NEW",
+            )
+        except Exception as exc:
+            code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+            if code == "ConditionalCheckFailedException":
+                raise BudgetCapReached(model) from exc
+            raise
+        return int(resp["Attributes"]["count"]["N"])
+
+
+# --- giới hạn tốc độ ------------------------------------------------------------------------
+class RateLimiter:
+    """Cửa sổ trượt theo khóa (model). An toàn đa luồng; chỉ giữ khóa rất ngắn."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic, window: float = 60.0) -> None:
+        self._clock, self._window = clock, window
+        self._lock = threading.Lock()
+        self._hits: dict[str, deque[float]] = {}
+
+    def try_acquire(self, key: str, limit: int) -> float:
+        """Lấy một chỗ. Trả 0.0 nếu lấy được, ngược lại là số giây phải chờ để có chỗ."""
+        if limit <= 0:
+            return 0.0
+        with self._lock:
+            now = self._clock()
+            q = self._hits.setdefault(key, deque())
+            while q and now - q[0] >= self._window:
+                q.popleft()
+            if len(q) < limit:
+                q.append(now)
+                return 0.0
+            return max(q[0] + self._window - now, 0.001)
+
+
+# --- phạm vi một lượt hội thoại -------------------------------------------------------------
+@dataclass
+class CallRecord:
+    role: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+    outcome: str
+
+
+class TurnScope:
+    """Gom các lượt gọi của **một lượt hội thoại**: đếm, đặt trần (`max_calls`), cộng token.
+
+    Truyền tường minh (không dùng contextvar) để chạy đúng qua generator bất đồng bộ và luồng.
+    """
+
+    def __init__(self, max_calls: int | None = None) -> None:
+        self.max_calls = max_calls
+        self.records: list[CallRecord] = []
+        self._started = 0
+        self._lock = threading.Lock()
+
+    def begin_call(self, role: str) -> None:
+        with self._lock:
+            if self.max_calls is not None and self._started >= self.max_calls:
+                raise ModelBudgetExceeded(
+                    f"Đã dùng hết {self.max_calls} lượt gọi model cho một lượt hội thoại",
+                    role=role,
+                    cap=self.max_calls,
+                    reason="turn_limit",
+                )
+            self._started += 1
+
+    def add(self, record: CallRecord) -> None:
+        with self._lock:
+            self.records.append(record)
+
+    @property
+    def calls(self) -> int:
+        """Số lời gọi đã thật sự gửi tới Bedrock (có ghi nhận kết quả), không tính lời gọi bị chặn trước."""
+        return len(self.records)
+
+    def usage_by_model(self) -> list[dict[str, Any]]:
+        """Dạng `usage` của AG-UI (`TokenUsage`): provider, model, inputTokens, outputTokens."""
+        agg: dict[str, list[int]] = {}
+        with self._lock:
+            for r in self.records:
+                a = agg.setdefault(r.model, [0, 0])
+                a[0] += r.input_tokens
+                a[1] += r.output_tokens
+        return [
+            {
+                "provider": "bedrock",
+                "model": m,
+                "inputTokens": a[0],
+                "outputTokens": a[1],
+                "totalTokens": a[0] + a[1],
+            }
+            for m, a in agg.items()
+        ]
+
+
+# --- kết quả --------------------------------------------------------------------------------
+@dataclass
+class ConverseResult:
+    role: str
+    model_id: str
+    response: dict[str, Any]
+    latency_ms: int
+    input_tokens: int
+    output_tokens: int
+    attempts: list[tuple[str, str]] = field(default_factory=list)  # (model, lý do bỏ qua)
+
+    @property
+    def content(self) -> list[dict[str, Any]]:
+        return list(self.response.get("output", {}).get("message", {}).get("content", []))
+
+    @property
+    def text(self) -> str:
+        return "".join(b["text"] for b in self.content if "text" in b)
+
+    @property
+    def tool_uses(self) -> list[dict[str, Any]]:
+        return [b["toolUse"] for b in self.content if "toolUse" in b]
+
+
+@dataclass
+class StructuredResult[T: BaseModel]:
+    value: T
+    role: str
+    model_id: str
+    attempts: int  # số lần gọi model đã dùng (>= 1)
+
+
+def user_message(text: str) -> dict[str, Any]:
+    return {"role": "user", "content": [{"text": text}]}
+
+
+# --- schema cho ép tool ---------------------------------------------------------------------
+def bedrock_json_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """JSON Schema phẳng cho `toolSpec.inputSchema`: giải `$ref`, bỏ `title`/`default`, `X | None`
+    thành `type: [X, "null"]`, mọi thuộc tính đều `required`, `additionalProperties: false`.
+
+    Dạng này đã chạy 14/14 với Nova 2 Lite, Haiku 4.5, Sonnet 4.6 và Kimi K3
+    (spikes/bedrock-models/03_tooluse.py).
+    """
+    schema = model.model_json_schema()
+    defs = schema.pop("$defs", {})
+
+    def walk(node: Any) -> Any:
+        if isinstance(node, list):
+            return [walk(x) for x in node]
+        if not isinstance(node, dict):
+            return node
+        if "$ref" in node:
+            name = node["$ref"].rsplit("/", 1)[-1]
+            return walk(copy.deepcopy(defs[name]))
+        if "anyOf" in node:
+            options = [o for o in node["anyOf"] if o.get("type") != "null"]
+            nullable = len(options) != len(node["anyOf"])
+            if len(options) == 1:
+                merged = walk(options[0])
+                if nullable:
+                    if isinstance(merged.get("type"), str):
+                        merged["type"] = [merged["type"], "null"]
+                    if "enum" in merged:
+                        merged["enum"] = [*merged["enum"], None]
+                if "description" in node:
+                    merged.setdefault("description", node["description"])
+                return merged
+        out = {k: walk(v) for k, v in node.items() if k not in {"title", "default"}}
+        if out.get("type") == "object" and "properties" in out:
+            out["required"] = list(out["properties"])
+            out["additionalProperties"] = False
+        return out
+
+    return walk(schema)
+
+
+# --- cổng gọi model -------------------------------------------------------------------------
+class LlmGateway:
+    """Điểm vào duy nhất để gọi Bedrock. Tạo một lần mỗi tiến trình (giữ bộ giới hạn tốc độ)."""
+
+    def __init__(
+        self,
+        settings: LlmSettings | None = None,
+        *,
+        config: Config | None = None,
+        client: Any | None = None,
+        usage: UsageStore | None = None,
+        limiter: RateLimiter | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
+        self._config = config or default_config()
+        self.settings = settings or load_settings(self._config)
+        self._client = client
+        self._usage = usage
+        self.limiter = limiter or RateLimiter()
+        self._sleep = sleep
+        self._now = now or (lambda: datetime.now(ZoneInfo(self.settings.budget_timezone)))
+        self._init_lock = threading.Lock()
+
+    # -- cấu hình ---------------------------------------------------------------------------
+    def chain(self, role: str) -> tuple[ModelSpec, ...]:
+        try:
+            chain = self.settings.roles[role]
+        except KeyError as exc:
+            raise ConfigError(f"Không có vai model '{role}' trong cấu hình") from exc
+        if not chain:
+            raise ConfigError(f"Vai model '{role}' không có model nào")
+        return chain
+
+    # -- client và bộ đếm (tạo lười) --------------------------------------------------------
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            with self._init_lock:
+                if self._client is None:
+                    import boto3
+                    from botocore.config import Config as BotoConfig
+
+                    self._client = boto3.client(
+                        "bedrock-runtime",
+                        region_name=self._config.region(),
+                        # Không retry ngầm của boto3: chuỗi dự phòng và bộ đếm tự quyết định.
+                        config=BotoConfig(
+                            retries={"max_attempts": 1},
+                            read_timeout=self.settings.read_timeout_seconds,
+                            connect_timeout=5,
+                        ),
+                    )
+        return self._client
+
+    @property
+    def usage(self) -> UsageStore:
+        if self._usage is None:
+            with self._init_lock:
+                if self._usage is None:
+                    import boto3
+
+                    table = os.environ.get("YOFINA_USAGE_TABLE") or self._config.get(
+                        "dynamodb/usage-table"
+                    )
+                    self._usage = DynamoUsageStore(
+                        table, boto3.client("dynamodb", region_name=self._config.region())
+                    )
+        return self._usage
+
+    # -- giữ chỗ trước mỗi lời gọi ----------------------------------------------------------
+    def _consume_budget(self, role: str, spec: ModelSpec) -> None:
+        if spec.daily_cap <= 0:
+            raise ModelBudgetExceeded(
+                f"Trần ngày của {spec.id} bằng {spec.daily_cap}: không gọi model",
+                role=role,
+                model=spec.id,
+                cap=spec.daily_cap,
+            )
+        now = self._now().astimezone(ZoneInfo(self.settings.budget_timezone))
+        ttl = int((now + timedelta(days=self.settings.usage_ttl_days)).timestamp())
+        try:
+            self.usage.consume(
+                day=now.date().isoformat(), model=spec.id, cap=spec.daily_cap, ttl_epoch=ttl
+            )
+        except BudgetCapReached as exc:
+            raise ModelBudgetExceeded(
+                f"Đã chạm trần {spec.daily_cap} lượt/ngày của {spec.id}",
+                role=role,
+                model=spec.id,
+                cap=spec.daily_cap,
+            ) from exc
+        except Exception as exc:
+            logger.error(
+                json.dumps(
+                    {"event": "usage_store_error", "model": spec.id, "error": repr(exc)[:300]}
+                )
+            )
+            raise ModelBudgetExceeded(
+                "Không đọc/ghi được bộ đếm lượt gọi model; từ chối gọi để giữ trần chi phí",
+                role=role,
+                model=spec.id,
+                cap=spec.daily_cap,
+                reason="usage_store_unavailable",
+            ) from exc
+
+    def reserve(self, role: str, spec: ModelSpec, scope: TurnScope | None = None) -> None:
+        """Giữ chỗ cho một lời gọi (đồng bộ): trần lượt hội thoại -> tốc độ -> trần ngày."""
+        if scope is not None:
+            scope.begin_call(role)
+        waited = 0.0
+        while (wait := self.limiter.try_acquire(spec.id, spec.rpm)) > 0:
+            if waited + wait > self.settings.rate_limit_max_wait_seconds:
+                raise RateLimitWaitTooLong(spec.id, wait)
+            self._sleep(wait)
+            waited += wait
+        self._consume_budget(role, spec)
+
+    async def reserve_async(
+        self, role: str, spec: ModelSpec, scope: TurnScope | None = None
+    ) -> None:
+        """Như `reserve` nhưng không chặn event loop (chờ bằng `asyncio.sleep`, DynamoDB trong luồng)."""
+        if scope is not None:
+            scope.begin_call(role)
+        waited = 0.0
+        while (wait := self.limiter.try_acquire(spec.id, spec.rpm)) > 0:
+            if waited + wait > self.settings.rate_limit_max_wait_seconds:
+                raise RateLimitWaitTooLong(spec.id, wait)
+            await asyncio.sleep(wait)
+            waited += wait
+        await asyncio.to_thread(self._consume_budget, role, spec)
+
+    # -- phân loại lỗi và ghi log -----------------------------------------------------------
+    @staticmethod
+    def error_code(exc: BaseException) -> str | None:
+        """Mã lỗi AWS (nếu có) của một ngoại lệ botocore."""
+        response = getattr(exc, "response", None)
+        if isinstance(response, dict):
+            return response.get("Error", {}).get("Code")
+        return None
+
+    @classmethod
+    def is_fallback_error(cls, exc: BaseException) -> bool:
+        """Lỗi tạm thời/quyền: chuỗi dự phòng rẽ sang model kế tiếp."""
+        code = cls.error_code(exc)
+        if code is not None:
+            return code in FALLBACK_ERROR_CODES
+        return type(exc).__name__ in _FALLBACK_EXC_NAMES
+
+    @staticmethod
+    def record(
+        role: str,
+        model: str,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        latency_ms: int,
+        outcome: str,
+        scope: TurnScope | None = None,
+    ) -> None:
+        if scope is not None:
+            scope.add(CallRecord(role, model, input_tokens, output_tokens, latency_ms, outcome))
+        logger.info(
+            json.dumps(
+                {
+                    "event": "llm_call",
+                    "role": role,
+                    "model": model,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "latency_ms": latency_ms,
+                    "outcome": outcome,
+                }
+            )
+        )
+
+    # -- Converse ---------------------------------------------------------------------------
+    def converse(
+        self,
+        role: str,
+        *,
+        messages: list[dict[str, Any]],
+        system: str | None = None,
+        tool_config: dict[str, Any] | None = None,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        scope: TurnScope | None = None,
+    ) -> ConverseResult:
+        """Gọi `Converse` theo chuỗi dự phòng của `role` (đồng bộ)."""
+        skipped: list[tuple[str, str]] = []
+        for spec in self.chain(role):
+            try:
+                self.reserve(role, spec, scope)
+            except RateLimitWaitTooLong as exc:
+                skipped.append((spec.id, "RateLimitWaitTooLong"))
+                logger.warning(json.dumps({"event": "llm_skip", "model": spec.id, "why": str(exc)}))
+                continue
+            started = time.perf_counter()
+            try:
+                response = self.client.converse(
+                    **self._request(spec, messages, system, tool_config, max_tokens, temperature)
+                )
+            except Exception as exc:
+                latency = int((time.perf_counter() - started) * 1000)
+                code = self.error_code(exc) or type(exc).__name__
+                self.record(
+                    role,
+                    spec.id,
+                    input_tokens=0,
+                    output_tokens=0,
+                    latency_ms=latency,
+                    outcome=code,
+                    scope=scope,
+                )
+                if self.is_fallback_error(exc):
+                    skipped.append((spec.id, code))
+                    continue
+                raise
+            return self._result(role, spec, response, started, skipped, scope)
+        raise AllModelsFailed(role, skipped)
+
+    async def aconverse(self, role: str, **kwargs: Any) -> ConverseResult:
+        """`converse` chạy trong luồng nền (không chặn event loop)."""
+        return await asyncio.to_thread(self.converse, role, **kwargs)
+
+    @staticmethod
+    def _request(
+        spec: ModelSpec,
+        messages: list[dict[str, Any]],
+        system: str | None,
+        tool_config: dict[str, Any] | None,
+        max_tokens: int,
+        temperature: float,
+    ) -> dict[str, Any]:
+        inference: dict[str, Any] = {"maxTokens": max_tokens}
+        if spec.temperature:
+            inference["temperature"] = temperature
+        req: dict[str, Any] = {
+            "modelId": spec.id,
+            "messages": messages,
+            "inferenceConfig": inference,
+        }
+        if system:
+            req["system"] = [{"text": system}]
+        if tool_config:
+            req["toolConfig"] = tool_config
+        return req
+
+    def _result(
+        self,
+        role: str,
+        spec: ModelSpec,
+        response: dict[str, Any],
+        started: float,
+        skipped: list[tuple[str, str]],
+        scope: TurnScope | None,
+    ) -> ConverseResult:
+        latency = int((time.perf_counter() - started) * 1000)
+        usage = response.get("usage", {})
+        tin, tout = int(usage.get("inputTokens", 0)), int(usage.get("outputTokens", 0))
+        self.record(
+            role,
+            spec.id,
+            input_tokens=tin,
+            output_tokens=tout,
+            latency_ms=latency,
+            outcome="ok",
+            scope=scope,
+        )
+        return ConverseResult(role, spec.id, response, latency, tin, tout, list(skipped))
+
+    # -- JSON có cấu trúc bằng ép tool ------------------------------------------------------
+    def structured_json(
+        self,
+        role: str,
+        *,
+        output_model: type[T],
+        messages: list[dict[str, Any]],
+        system: str | None = None,
+        tool_name: str = "report",
+        description: str = "Trả kết quả theo đúng schema.",
+        max_attempts: int = 3,
+        max_tokens: int = 512,
+        scope: TurnScope | None = None,
+    ) -> StructuredResult[T]:
+        """Ép model gọi một tool có schema của `output_model` và kiểm bằng Pydantic.
+
+        Không dùng `outputConfig` (Nova không hỗ trợ). Lỗi kiểm schema hoặc model không gọi tool thì
+        gửi lại lỗi cho model và thử lại, tối đa `max_attempts` lần gọi model (mỗi lần được đếm và
+        giới hạn như mọi lời gọi khác). Lỗi `ModelBudgetExceeded`/`AllModelsFailed` đi thẳng ra ngoài.
+        """
+        if max_attempts < 1:
+            raise ValueError("max_attempts phải >= 1")
+        tool_config = {
+            "tools": [
+                {
+                    "toolSpec": {
+                        "name": tool_name,
+                        "description": description,
+                        "inputSchema": {"json": bedrock_json_schema(output_model)},
+                    }
+                }
+            ],
+            "toolChoice": {"tool": {"name": tool_name}},
+        }
+        convo = list(messages)
+        last_error = "model không gọi tool"
+        for attempt in range(1, max_attempts + 1):
+            res = self.converse(
+                role,
+                messages=convo,
+                system=system,
+                tool_config=tool_config,
+                max_tokens=max_tokens,
+                scope=scope,
+            )
+            use = next((u for u in res.tool_uses if u.get("name") == tool_name), None)
+            if use is None:
+                last_error = "model không gọi tool"
+                convo = [
+                    *convo,
+                    res.response["output"]["message"],
+                    user_message(
+                        f"Bạn phải trả kết quả bằng cách gọi tool `{tool_name}` theo đúng schema."
+                    ),
+                ]
+                continue
+            try:
+                return StructuredResult(
+                    output_model.model_validate(use.get("input") or {}), role, res.model_id, attempt
+                )
+            except ValidationError as exc:
+                last_error = "; ".join(
+                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()
+                )[:400]
+                convo = [
+                    *convo,
+                    res.response["output"]["message"],
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "toolResult": {
+                                    "toolUseId": use["toolUseId"],
+                                    "status": "error",
+                                    "content": [
+                                        {
+                                            "text": f"JSON sai schema: {last_error}. Gọi lại tool với giá trị đúng."
+                                        }
+                                    ],
+                                }
+                            }
+                        ],
+                    },
+                ]
+        raise StructuredOutputError(role, max_attempts, last_error)
+
+    async def astructured_json(self, role: str, **kwargs: Any) -> StructuredResult[Any]:
+        return await asyncio.to_thread(self.structured_json, role, **kwargs)
+
+
+_gateway: LlmGateway | None = None
+_gateway_lock = threading.Lock()
+
+
+def get_gateway() -> LlmGateway:
+    """Cổng dùng chung của tiến trình (tạo lần đầu từ cấu hình env/SSM)."""
+    global _gateway
+    if _gateway is None:
+        with _gateway_lock:
+            if _gateway is None:
+                _gateway = LlmGateway()
+    return _gateway

@@ -68,7 +68,66 @@
           "description": "Token xác nhận một lần do hệ thống cấp sau khi người dùng bấm xác nhận. Chỉ truyền khi được cung cấp; không tự tạo."
         }
       },
-      "required": ["from_jar", "to_jar", "amount_vnd"]
+      "required": [
+        "from_jar",
+        "to_jar",
+        "amount_vnd"
+      ]
+    }
+  },
+  {
+    "name": "save_turn",
+    "description": "Lưu một lượt hội thoại (câu người dùng hỏi, câu trả lời và các khối giao diện đã hiển thị) để tải lại trang vẫn thấy. Chỉ dành cho hệ thống, không dùng để trả lời người dùng. Không bao giờ truyền token hay mật khẩu.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "conversation_id": {
+          "type": "string",
+          "description": "Mã cuộc hội thoại (session id), 1 đến 256 ký tự."
+        },
+        "trace_id": {
+          "type": "string",
+          "description": "Mã vết của lượt (32 ký tự hex), 1 đến 64 ký tự."
+        },
+        "user_text": {
+          "type": "string",
+          "description": "Câu người dùng đã gõ ở lượt này (tối đa 4000 ký tự, dài hơn bị cắt)."
+        },
+        "assistant_text": {
+          "type": "string",
+          "description": "Câu trả lời bằng chữ đã phát cho người dùng (tối đa 8000 ký tự, dài hơn bị cắt)."
+        },
+        "blocks": {
+          "type": "array",
+          "description": "Các khối giao diện đã phát ở lượt này theo thứ tự (tối đa 20).",
+          "items": {
+            "type": "object",
+            "description": "Một khối kèm số thứ tự trong lượt.",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "description": "Thứ tự khối trong lượt, bắt đầu từ 0."
+              },
+              "block": {
+                "type": "object",
+                "description": "Khối UI nguyên văn (phong bì v, id, type, trace_id, fallback_text, source, data)."
+              }
+            },
+            "required": [
+              "seq",
+              "block"
+            ]
+          }
+        }
+      },
+      "required": [
+        "conversation_id",
+        "trace_id"
+      ]
     }
   }
 ]

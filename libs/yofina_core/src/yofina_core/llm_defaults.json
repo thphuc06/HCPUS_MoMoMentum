@@ -1,0 +1,27 @@
+{
+  "_ghi_chu": "Cấu hình mặc định của yofina_core.llm. Ghi đè bằng biến môi trường YOFINA_LLM_<TÊN> hoặc SSM /yofina/llm/<tên> (roles, daily_cap_<vai>, rate_limit_max_wait_seconds, budget_timezone, usage_ttl_days, read_timeout_seconds). Model id, tốc độ và trần ngày chỉ nằm ở đây và ở các nguồn ghi đè đó, không nằm trong logic.",
+  "roles": {
+    "planner": {
+      "daily_cap": 400,
+      "models": [
+        { "id": "global.anthropic.claude-sonnet-4-6", "rpm": 8 },
+        { "id": "global.moonshotai.kimi-k3", "rpm": 8, "temperature": false }
+      ]
+    },
+    "small": {
+      "daily_cap": 2000,
+      "models": [
+        { "id": "global.amazon.nova-2-lite-v1:0", "rpm": 18 },
+        { "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0", "rpm": 8 }
+      ]
+    },
+    "embedding": {
+      "daily_cap": 3000,
+      "models": [{ "id": "cohere.embed-multilingual-v3", "rpm": 18 }]
+    }
+  },
+  "rate_limit_max_wait_seconds": 20,
+  "budget_timezone": "Asia/Ho_Chi_Minh",
+  "usage_ttl_days": 3,
+  "read_timeout_seconds": 60
+}

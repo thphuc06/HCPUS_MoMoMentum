@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FRONTEND_MAP = {
     "auth/user-pool-id": "VITE_COGNITO_USER_POOL_ID",
     "auth/client-id": "VITE_COGNITO_CLIENT_ID",
-    "api/base-url": "VITE_API_BASE_URL",
+    "api/url": "VITE_API_URL",
     "agent/runtime-arn": "VITE_AGENT_RUNTIME_ARN",
     "agent/runtime-url": "VITE_AGENT_RUNTIME_URL",
     "frontend/amplify-url": "VITE_APP_URL",

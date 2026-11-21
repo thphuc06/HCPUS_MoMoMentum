@@ -4,7 +4,7 @@ Hạ tầng dạng code bằng AWS CDK (TypeScript). Region `ap-southeast-1`, đ
 
 - Proposal: §8 (kiến trúc), §14 (hạ tầng dạng code). Tự viết CDK theo tài liệu chính thức; `infra-cdk/` của FAST chỉ để tham khảo, không kéo về.
 - Danh sách tài nguyên đã tạo: [../docs/aws-resources.md](../docs/aws-resources.md). Kế hoạch: [../docs/plan/phases/phase-1-nen-va-lat-doc.md](../docs/plan/phases/phase-1-nen-va-lat-doc.md).
-- Đã dựng thử bằng CLI/boto3: Runtime zip + V2, Gateway + interceptor + Cedar, Aurora Data API (xem `docs/research/spike-*.md`).
+- Đã dựng thử bằng CLI/boto3: Runtime zip + V2, Gateway + interceptor + Cedar, Aurora Data API (xem `docs/research/spike-*.md`); bước ghép thật: [spike-vertical-slice.md](../docs/research/spike-vertical-slice.md).
 
 ## Các stack (phase 1)
 
@@ -14,8 +14,10 @@ Hạ tầng dạng code bằng AWS CDK (TypeScript). Region `ap-southeast-1`, đ
 | `YofinaData` | VPC chỉ subnet isolated, Aurora PostgreSQL 17.x Serverless v2 (Data API, 0,5 đến 2 ACU), secret master `yofina-db-master`, secret role `yofina-db-app`, Lambda `yofina-migrator` | termination protection + deletion protection cluster |
 | `YofinaIdentity` | Cognito `yofina-users` (tắt tự đăng ký, đăng nhập email), app client `yofina-web` (SRP, không secret), nhóm `ops` | termination protection |
 | `YofinaFrontend` | Amplify Hosting `yofina-web`, branch `main`, deploy thủ công bằng zip, rewrite SPA | |
+| `YofinaTools` | Lambda `yofina-ledger` (một mã, hai đường vào: Gateway và HTTP API) và HTTP API `yofina-api` (JWT authorizer Cognito, CORS cho Amplify và localhost, 6 route: `/jars`, `/confirmations`, `/actions`, `/demo/reset`, `/conversations`, `/conversations/{conversation_id}`) | cần zip ở `build/lambda/ledger-arm64.zip` (xem dưới); đọc giá trị của stack khác từ SSM lúc deploy |
+| `YofinaAgent` | Gateway MCP `yofina-gateway` (JWT authorizer, interceptor `yofina-gw-interceptor`, policy engine Cedar một policy mỗi tool, target `ledger` với schema từ `contracts/tools/ledger.json`) và AgentCore Runtime `yofina_agent` (CodeZip ARM64, V2, AG-UI) cùng vai IAM của Gateway và Runtime | L1 (`Cfn*` của `aws-cdk-lib/aws-bedrockagentcore`; chưa dùng L2). Cần khóa zip ở SSM `/yofina/agent/zip-key` (`scripts/agent_deploy.py` ghi); đọc `YofinaTools`, `YofinaIdentity`, `YofinaFoundation` qua SSM |
 
-Stack của các phase sau (`YofinaTools`, `YofinaAgent`) thêm vào `bin/yofina.ts`. Mỗi stack ghi giá trị luồng khác cần vào SSM `/yofina/...` (xem bên dưới), nên stack sau đọc SSM hoặc nhận prop, không dùng `Fn::ImportValue` cứng.
+Stack của các phase sau thêm vào `bin/yofina.ts`. Mỗi stack ghi giá trị luồng khác cần vào SSM `/yofina/...` (xem bên dưới), nên stack sau đọc SSM hoặc nhận prop, không dùng `Fn::ImportValue` cứng.
 
 ## Cấu hình
 
@@ -32,6 +34,34 @@ Mặc định ở [config/config.ts](config/config.ts); đổi bằng context (`
 | `accessTokenMinutes` | 60 | Hạn access token Cognito |
 | `region` | `ap-southeast-1` | |
 
+Cấu hình riêng của `YofinaTools` (`loadToolsConfig` trong `lib/tools-stack.ts`, đổi bằng `-c`):
+
+| Context | Mặc định | Ý nghĩa |
+|---|---|---|
+| `ledgerZip` | `../build/lambda/ledger-arm64.zip` | Zip Lambda ledger (tính từ `infra-cdk/`) |
+| `ledgerMemoryMb` / `ledgerTimeoutSeconds` | 512 / 30 | |
+| `confirmTokenTtlSeconds` | 120 | Hạn token xác nhận, tối đa 120 ([ADR-0002](../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md)) |
+| `confirmOfferTtlSeconds` | 600 | Hạn của đề nghị trong khối `confirm` |
+| `moveMaxAmountVnd` | 50000000 | Hạn mức một lần chuyển hũ (cùng giá trị với luật Cedar) |
+| `transactionsDefaultLimit` / `transactionsMaxLimit` | 20 / 50 | `query_transactions` |
+| `appTimezone` / `demoAnchorDate` | `Asia/Ho_Chi_Minh` / `2026-11-21` | Đồng hồ mô phỏng ([ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md)) |
+| `dbResumeMaxWaitSeconds` | 18 | Chờ Aurora dậy trong Lambda (nhỏ hơn timeout) |
+| `apiThrottleRate` / `apiThrottleBurst` | 20 / 40 | Giới hạn mặc định của API |
+| `extraCorsOrigins` | `http://localhost:5173` | Origin CORS ngoài Amplify (phân cách bằng dấu phẩy) |
+
+Cấu hình riêng của `YofinaAgent` (`loadAgentConfig` trong `lib/agent-stack.ts`, đổi bằng `-c`):
+
+| Context | Mặc định | Ý nghĩa |
+|---|---|---|
+| `policyMode` | `ENFORCE` | Chế độ policy engine của Gateway: `LOG_ONLY` (chỉ ghi quyết định lên metric `AWS/Bedrock-AgentCore`) hoặc `ENFORCE` |
+| `gatewayExceptionLevel` | (rỗng) | `DEBUG`: thông điệp lỗi chi tiết hơn (nêu tên policy khi một `forbid` quyết định); rỗng: mức mặc định của Gateway. Với luật `permit` của Yofina hai mức cho cùng thông điệp từ chối |
+| `agentRuntimeName` | `yofina_agent` | Tên Runtime (`[a-zA-Z][a-zA-Z0-9_]*`; đổi tên là thay thế Runtime) |
+| `agentZipKeyParam` | `/yofina/agent/zip-key` | Tham số SSM giữ khóa S3 của zip agent hiện hành |
+| `agentPlatformVersion` | `V2` | Platform của Runtime |
+| `interceptorTimeoutSeconds` | `5` | Timeout Lambda interceptor |
+
+Hạn mức chuyển hũ trong luật Cedar lấy từ `moveMaxAmountVnd` của `YofinaTools` (một giá trị cho cả Lambda và Cedar).
+
 Account lấy từ credential hiện tại (`CDK_DEFAULT_ACCOUNT`, `scripts/cdk.py` đặt sẵn).
 
 ## Synth, diff, deploy
@@ -44,6 +74,9 @@ uv run scripts/cdk.py synth --strict
 uv run scripts/cdk.py diff
 uv run scripts/cdk.py deploy YofinaFoundation --require-approval never
 uv run scripts/cdk.py deploy YofinaData YofinaIdentity YofinaFrontend --concurrency 3 --require-approval never
+uv run scripts/cdk.py deploy YofinaTools --require-approval never   # sau khi đóng zip Lambda ledger (mục "Đóng gói")
+uv run scripts/agent_deploy.py                                       # build agent + upload + deploy YofinaAgent (Gateway, Cedar, Runtime) + chờ READY
+uv run scripts/cdk.py deploy YofinaAgent --require-approval never   # chỉ Gateway/Cedar/interceptor khi mã agent không đổi (nhanh, không đụng Runtime)
 npm run typecheck --prefix infra-cdk              # kiểm kiểu
 ```
 
@@ -99,7 +132,7 @@ URL Amplify: `/yofina/frontend/amplify-url`. Trang đang host lúc này là tran
 ## Đóng gói Lambda / Runtime không Docker
 
 ```bash
-uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64        # build/lambda/ledger-arm64/ và .zip
+uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas   # build/lambda/ledger-arm64/ và .zip
 uv run scripts/build_lambda.py agent --arch arm64 --no-core
 ```
 
@@ -117,4 +150,9 @@ Dùng `uv pip install --python-platform aarch64-manylinux2014 --only-binary=:all
 | `db/cluster-arn`, `db/name`, `db/app-secret-arn`, `db/migrator-function` | Aurora (Data API) và migrator |
 | `auth/user-pool-id`, `auth/client-id`, `auth/discovery-url` | Cognito |
 | `frontend/amplify-app-id`, `frontend/amplify-branch`, `frontend/amplify-url` | Amplify |
+| `api/url` | URL HTTP API `yofina-api` (không có `/` cuối); `print_env.py` ghi thành `VITE_API_BASE_URL` / `YOFINA_API_URL` |
+| `ledger/function-name`, `ledger/function-arn` | Lambda `yofina-ledger` (cho target Gateway của luồng C) |
+| `gateway_url`, `gateway/id`, `gateway/arn` | Gateway `yofina-gateway` (URL MCP; `print_env.py python` ghi thành `YOFINA_GATEWAY_URL`) |
+| `agent/runtime-arn`, `agent/runtime-id`, `agent/runtime-url` | Runtime `yofina_agent`; URL invoke đầy đủ (`.../invocations?qualifier=DEFAULT`) ghi thành `VITE_AGENT_RUNTIME_URL`, ARN thành `VITE_AGENT_RUNTIME_ARN` (chứa account ID, chỉ đi qua SSM và `.env.local`) |
+| `agent/zip-key` | Khóa S3 của zip agent hiện hành (`builds/agent-<hash>.zip`); `scripts/agent_deploy.py` ghi (ngoài CDK) |
 | `alert-email` | Email cảnh báo (SecureString, chỉ `scripts/cdk.py` đọc) |

@@ -1,5 +1,19 @@
 # gateway/policies/
 
-Luật Cedar cho AgentCore Policy tại Gateway (proposal §9, §16: Cedar chuyển về Policy trong AgentCore). Mặc định từ chối; điều kiện theo claim JWT và tham số tool call. Action Cedar có dạng `AgentCore::Action::"ledger___get_jar_balances"` (không wildcard); mỗi tool một policy `user_id == principal.id`. Tool ghi (`ledger___update_profile`, `ledger___record_transaction`, `ledger___move_between_jars`, `ledger___assign_jar`, `planner___save_roadmap`, `planner___schedule_nudge`, `ingest___*`) cần người dùng xác nhận: proposal dùng cờ trong tham số (LLM điền được), đề xuất thay bằng token xác nhận do server cấp, Cedar chỉ là lớp phụ (hạn mức, khớp `user_id`, có `confirm_token`); chưa chốt.
+Luật Cedar của AgentCore Policy tại Gateway `yofina-gateway` (proposal §9, §16). Một file `.cedar` cho **mỗi tool** của [contracts/tools/ledger.json](../../contracts/tools/ledger.json), tên file trùng tên tool; mặc định từ chối, nên tool nào thiếu policy thì không gọi được. Stack `YofinaAgent` (`infra-cdk/lib/agent-stack.ts`) đọc các file này, bỏ dòng chú thích `//`, thay `${GATEWAY_ARN}` (token CloudFormation) và `${MOVE_MAX_AMOUNT_VND}` (cùng giá trị với `moveMaxAmountVnd` của Lambda ledger) rồi tạo `AWS::BedrockAgentCore::Policy` với `validationMode: FAIL_ON_ANY_FINDINGS`. Synth báo lỗi nếu một tool không có file.
 
-Cú pháp đã chạy thật, thứ tự tạo (target rồi policy rồi gắn engine) và bẫy `LOG_ONLY`: [spike-agentcore-gateway-identity.md](../../docs/research/spike-agentcore-gateway-identity.md) mục 3b và 4.
+| File | Điều kiện (`when`) |
+|---|---|
+| `get_jar_balances.cedar`, `query_transactions.cedar`, `save_turn.cedar` | `context.input has user_id && context.input.user_id == principal.id` |
+| `move_between_jars.cedar` | như trên, thêm `context.input.amount_vnd <= ${MOVE_MAX_AMOUNT_VND}` và `if context.input has confirm_token then context.input.confirm_token like "*.*" else true` |
+
+Cedar ở đây là **lớp phụ** ([ADR-0002](../../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md)), không phải cơ chế xác nhận:
+
+- Lớp chính là interceptor ([../interceptor/](../interceptor/README.md)) ghi đè `user_id` từ JWT; Cedar thấy tham số **đã bị ghi đè** (thứ tự `JWT authorizer -> interceptor -> Cedar -> kiểm schema -> Lambda`), nên điều kiện `user_id == principal.id` luôn đúng khi interceptor chạy và đóng vai bảo hiểm cấu hình: gỡ interceptor thì Cedar vẫn chặn (đã thử ở [spike-vertical-slice.md](../../docs/research/spike-vertical-slice.md) mục 2: Gateway thử không interceptor, `user_id` của người khác hoặc vắng đều bị `-32002`).
+- **Cedar không được chặn lời gọi `move_between_jars` thiếu `confirm_token`**: agent gọi tool này không token để nhận `NEEDS_CONFIRMATION` (không ghi). Việc kiểm token (chữ ký HMAC, hạn, tool, người, hash tham số, `jti` dùng một lần) nằm ở Lambda; Cedar không kiểm được chữ ký.
+- Bộ kiểm kiểu của Cedar từ chối `!(context.input has x) || context.input.x ...` ("unable to guarantee safety of access to optional attribute"); dạng `if context.input has x then ... else true` hoặc `has x && ...` thì qua.
+- `user_id` là tham số **tùy chọn** trong schema (LLM thấy "hệ thống tự điền, để trống"); vắng `user_id` ở Cedar thì `has` ra false và bị từ chối, nên interceptor là bắt buộc cho đường chạy bình thường.
+- Chế độ engine đặt bằng context CDK `policyMode` (`LOG_ONLY` hoặc `ENFORCE`, mặc định `ENFORCE`). Đưa lên `LOG_ONLY`, xem metric CloudWatch `AWS/Bedrock-AgentCore` (`AllowDecisions`, `DenyDecisions` theo `Mode`, `ToolName`), rồi `ENFORCE`; test `tests/integration/test_gateway_config.py` khẳng định `ENFORCE` để chạy lại khi đóng phase.
+- Khi Cedar từ chối: HTTP 200, JSON-RPC `error.code = -32002`, thông điệp `Tool Execution Denied: ... [No policy applies to the request (denied by default).]` (tham số sai kiểu thì `... policy evaluation errors: Value does not match expected type`; Cedar chạy trước kiểm schema). Agent đổi thành `ToolKind.DENIED` và khối `notice` "Bạn không có quyền thực hiện thao tác này".
+
+Cú pháp đã chạy thật, thứ tự tạo (target rồi policy rồi gắn engine) và bẫy `LOG_ONLY`: [spike-agentcore-gateway-identity.md](../../docs/research/spike-agentcore-gateway-identity.md) mục 3b và 4; kết quả của bước ghép thật: [spike-vertical-slice.md](../../docs/research/spike-vertical-slice.md).

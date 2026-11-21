@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { App, Tags } from 'aws-cdk-lib';
 import { loadConfig } from '../config/config';
+import { AgentStack, loadAgentConfig } from '../lib/agent-stack';
 import { DataStack } from '../lib/data-stack';
 import { FoundationStack } from '../lib/foundation-stack';
 import { FrontendStack } from '../lib/frontend-stack';
 import { IdentityStack } from '../lib/identity-stack';
+import { ToolsStack, loadToolsConfig } from '../lib/tools-stack';
 
 const app = new App();
 const cfg = loadConfig(app);
@@ -16,5 +18,8 @@ new FoundationStack(app, 'YofinaFoundation', { env, cfg, terminationProtection: 
 new DataStack(app, 'YofinaData', { env, cfg, terminationProtection: true });
 new IdentityStack(app, 'YofinaIdentity', { env, cfg, terminationProtection: true });
 new FrontendStack(app, 'YofinaFrontend', { env, cfg });
+const toolsCfg = loadToolsConfig(app);
+new ToolsStack(app, 'YofinaTools', { env, cfg, tools: toolsCfg });
+new AgentStack(app, 'YofinaAgent', { env, cfg, tools: toolsCfg, agent: loadAgentConfig(app) });
 
 Tags.of(app).add('project', 'yofina');

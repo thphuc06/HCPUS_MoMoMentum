@@ -53,3 +53,20 @@ class ToolStatus(StrEnum):
     OK = "OK"
     NEEDS_CONFIRMATION = "NEEDS_CONFIRMATION"
     ERROR = "ERROR"
+
+
+class YofinaError(Exception):
+    """Lỗi nghiệp vụ có mã máy đọc được (`ErrorCode`) và câu tiếng Việt hiển thị được.
+
+    Dùng xuyên suốt tầng ledger: tool trả `{"status": "ERROR", code, message}`, REST ánh xạ
+    `HTTP_STATUS[code]`. `message` không chứa dữ liệu nhạy cảm (không token, không số dư của người khác).
+    """
+
+    def __init__(self, code: ErrorCode, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+        self.message = message
+
+    @property
+    def http_status(self) -> int:
+        return HTTP_STATUS[self.code]

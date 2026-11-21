@@ -1,0 +1,300 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/plus-jakarta-sans";
+
+/*
+  Token thiết kế lấy từ Figma "Yofina Foresight — UI demo", trang Foundations (node 28:2):
+  biến màu Sáng/Tối, thang chữ "Yofina/*", bo góc (thẻ 24, sheet 28). Bộ Tối đổi theo
+  prefers-color-scheme, hoặc ép bằng <html data-theme="dark|light">.
+  Màu hũ bản Tối và accent-blue-tint bản Tối không đọc được qua Figma MCP (chỉ trả bộ Sáng):
+  hai nhóm này là giá trị chọn lại theo tông "sáng hơn" của figma-ui-design.md §2.
+*/
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+  --bg-app: #faf6f7;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #f4eef0;
+  --bg-tint: #fce7f1;
+  --border-default: #e8dfe3;
+  --text-primary: #2b1a24;
+  --text-secondary: #6e5a66;
+  --text-on-brand: #ffffff;
+  --text-brand: #a50064;
+  --brand-primary: #c8207e;
+  --brand-deep: #a50064;
+  --brand-vivid: #d82d8b;
+  --accent-blue: #3050c8;
+  --accent-blue-tint: #eaf0ff;
+  --status-ok-fg: #0b7a52;
+  --status-ok-bg: #e1f5ec;
+  --status-ok-line: #12a877;
+  --status-warn-fg: #8f5200;
+  --status-warn-bg: #fff0d2;
+  --status-warn-line: #e39a00;
+  --status-bad-fg: #b8330a;
+  --status-bad-bg: #ffe8dc;
+  --status-bad-line: #e8541c;
+  --jar-an-uong: #7c5ce0;
+  --jar-di-lai: #2fa3d6;
+  --jar-hoa-don: #a8794a;
+  --jar-giai-tri: #b05ce0;
+  --jar-du-lich: #1fa6a0;
+  --jar-du-phong: #3b6fd0;
+  --jar-nghia-vu: #7a8794;
+  --elev-card: 0 1px 2px rgba(43, 26, 36, 0.05), 0 10px 28px -14px rgba(43, 26, 36, 0.16);
+  --elev-sheet: 0 -10px 36px rgba(43, 26, 36, 0.18);
+  --stage-bg: #efe6ea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg-app: #17101a;
+    --bg-surface: #241a28;
+    --bg-surface-2: #2f2433;
+    --bg-tint: #3a1c30;
+    --border-default: #3a2e40;
+    --text-primary: #f4eef0;
+    --text-secondary: #b8a9b2;
+    --text-brand: #ff7ebb;
+    --brand-deep: #8c0054;
+    --brand-vivid: #e0348f;
+    --accent-blue: #8fa8ff;
+    --accent-blue-tint: #1f2850;
+    --status-ok-fg: #4fd3a1;
+    --status-ok-bg: #123428;
+    --status-ok-line: #4fd3a1;
+    --status-warn-fg: #ffc25c;
+    --status-warn-bg: #3a2c10;
+    --status-warn-line: #ffc25c;
+    --status-bad-fg: #ff8c5e;
+    --status-bad-bg: #3c2016;
+    --status-bad-line: #ff8c5e;
+    --jar-an-uong: #a58cf2;
+    --jar-di-lai: #5cc0ec;
+    --jar-hoa-don: #c79a6b;
+    --jar-giai-tri: #c98af0;
+    --jar-du-lich: #4fc9c3;
+    --jar-du-phong: #7f9fe8;
+    --jar-nghia-vu: #9aa5b1;
+    --elev-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
+    --elev-sheet: 0 -10px 36px rgba(0, 0, 0, 0.5);
+    --stage-bg: #0f0a12;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app: #17101a;
+  --bg-surface: #241a28;
+  --bg-surface-2: #2f2433;
+  --bg-tint: #3a1c30;
+  --border-default: #3a2e40;
+  --text-primary: #f4eef0;
+  --text-secondary: #b8a9b2;
+  --text-brand: #ff7ebb;
+  --brand-deep: #8c0054;
+  --brand-vivid: #e0348f;
+  --accent-blue: #8fa8ff;
+  --accent-blue-tint: #1f2850;
+  --status-ok-fg: #4fd3a1;
+  --status-ok-bg: #123428;
+  --status-ok-line: #4fd3a1;
+  --status-warn-fg: #ffc25c;
+  --status-warn-bg: #3a2c10;
+  --status-warn-line: #ffc25c;
+  --status-bad-fg: #ff8c5e;
+  --status-bad-bg: #3c2016;
+  --status-bad-line: #ff8c5e;
+  --jar-an-uong: #a58cf2;
+  --jar-di-lai: #5cc0ec;
+  --jar-hoa-don: #c79a6b;
+  --jar-giai-tri: #c98af0;
+  --jar-du-lich: #4fc9c3;
+  --jar-du-phong: #7f9fe8;
+  --jar-nghia-vu: #9aa5b1;
+  --elev-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
+  --elev-sheet: 0 -10px 36px rgba(0, 0, 0, 0.5);
+  --stage-bg: #0f0a12;
+}
+
+/* Ánh xạ sang tên biến của shadcn/ui để các component dựng sẵn dùng đúng bảng màu Yofina. */
+:root {
+  --background: var(--bg-app);
+  --foreground: var(--text-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--brand-primary);
+  --primary-foreground: var(--text-on-brand);
+  --secondary: var(--bg-tint);
+  --secondary-foreground: var(--text-brand);
+  --muted: var(--bg-surface-2);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--bg-tint);
+  --accent-foreground: var(--text-brand);
+  --destructive: var(--status-bad-fg);
+  --border: var(--border-default);
+  --input: var(--border-default);
+  --ring: var(--brand-primary);
+  --radius: 1.5rem;
+}
+
+@theme inline {
+  --font-sans: "Plus Jakarta Sans Variable", system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-surface: var(--bg-surface);
+  --color-surface-2: var(--bg-surface-2);
+  --color-tint: var(--bg-tint);
+  --color-line: var(--border-default);
+  --color-ink: var(--text-primary);
+  --color-ink-2: var(--text-secondary);
+  --color-brand: var(--brand-primary);
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-vivid: var(--brand-vivid);
+  --color-brand-text: var(--text-brand);
+  --color-blue: var(--accent-blue);
+  --color-blue-tint: var(--accent-blue-tint);
+  --color-ok-fg: var(--status-ok-fg);
+  --color-ok-bg: var(--status-ok-bg);
+  --color-ok-line: var(--status-ok-line);
+  --color-warn-fg: var(--status-warn-fg);
+  --color-warn-bg: var(--status-warn-bg);
+  --color-warn-line: var(--status-warn-line);
+  --color-bad-fg: var(--status-bad-fg);
+  --color-bad-bg: var(--status-bad-bg);
+  --color-bad-line: var(--status-bad-line);
+  --color-stage: var(--stage-bg);
+
+  /* Thang chữ "Yofina/*": cỡ / dòng; độ đậm đặt bằng font-* khi dùng. */
+  --text-display: 34px;
+  --text-display--line-height: 40px;
+  --text-amount: 20px;
+  --text-amount--line-height: 28px;
+  --text-title: 24px;
+  --text-title--line-height: 32px;
+  --text-section: 18px;
+  --text-section--line-height: 26px;
+  --text-subtitle: 16px;
+  --text-subtitle--line-height: 24px;
+  --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-small: 13px;
+  --text-small--line-height: 18px;
+  --text-note: 12px;
+  --text-note--line-height: 16px;
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.65);
+  --radius-lg: calc(var(--radius) * 0.8);
+  --radius-xl: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.25);
+  --radius-3xl: calc(var(--radius) * 1.5);
+  --radius-4xl: calc(var(--radius) * 2);
+  --radius-card: 24px;
+  --radius-sheet: 28px;
+
+  --shadow-card: var(--elev-card);
+  --shadow-sheet: var(--elev-sheet);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-stage text-foreground;
+    margin: 0;
+    font-size: 15px;
+    line-height: 22px;
+    overscroll-behavior-y: none;
+  }
+  button {
+    touch-action: manipulation;
+  }
+  /* Số tiền: chữ số đều bề ngang. */
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+}
+
+/*
+  Khung điện thoại: mobile-first, rộng tối đa 390 px. Trên màn hình rộng thì căn giữa thành một khung
+  844 px; transform tạo containing block để mọi phần tử fixed (tab bar, sheet chat) bám theo khung.
+*/
+.phone-frame {
+  position: relative;
+  margin-inline: auto;
+  width: 100%;
+  max-width: 430px;
+  height: 100dvh;
+  background: var(--bg-app);
+  isolation: isolate;
+}
+@media (min-width: 560px) {
+  .phone-stage {
+    display: grid;
+    place-items: center;
+    min-height: 100dvh;
+    padding: 24px 0;
+  }
+  .phone-frame {
+    width: 390px;
+    height: min(844px, calc(100dvh - 48px));
+    overflow: hidden;
+    border-radius: 40px;
+    box-shadow: 0 30px 80px -30px rgba(43, 26, 36, 0.45), 0 0 0 1px var(--border-default);
+    transform: translateZ(0);
+  }
+}
+
+.phone-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  scrollbar-width: none;
+}
+.phone-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -7,6 +7,10 @@
     uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64
     uv run scripts/build_lambda.py agent --arch arm64 --name agent --no-core
     uv run scripts/build_lambda.py <thư mục nguồn> --arch x86_64 --requirements <file>
+    uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas
+
+`--extra NGUỒN[:ĐÍCH]` (lặp được) chép thêm một thư mục (đường dẫn tính từ gốc repo) vào bản build, ví dụ
+dữ liệu persona seed để Lambda ledger đặt lại tài khoản demo; ĐÍCH mặc định là tên thư mục nguồn.
 
 Kết quả (mặc định dưới build/, đã nằm trong .gitignore):
     build/lambda/<name>-<arch>/        thư mục đã giải nén (dùng cho lambda.Code.fromAsset(<thư mục>))
@@ -119,6 +123,13 @@ def main() -> int:
     ap.add_argument("--requirements", type=Path)
     ap.add_argument("--no-core", action="store_true", help="không kèm libs/yofina_core")
     ap.add_argument("--keep-boto", action="store_true")
+    ap.add_argument(
+        "--extra",
+        action="append",
+        default=[],
+        metavar="NGUỒN[:ĐÍCH]",
+        help="chép thêm thư mục (từ gốc repo) vào bản build; lặp được",
+    )
     args = ap.parse_args()
 
     src = args.src if args.src.is_absolute() else (Path.cwd() / args.src)
@@ -201,6 +212,14 @@ def main() -> int:
     if core:
         shutil.copytree(core[0], pkg / "yofina_core", ignore=IGNORE_COPY, dirs_exist_ok=True)
         print(f"kèm yofina_core từ {core[0].relative_to(ROOT)}", file=sys.stderr)
+    for spec in args.extra:
+        src_rel, _, dest_rel = spec.partition(":")
+        extra_src = (ROOT / src_rel).resolve()
+        if not extra_src.is_dir() or ROOT not in extra_src.parents:
+            raise SystemExit(f"--extra: không thấy thư mục trong repo: {src_rel}")
+        dest = pkg / (dest_rel or extra_src.name)
+        shutil.copytree(extra_src, dest, ignore=IGNORE_COPY, dirs_exist_ok=True)
+        print(f"kèm {extra_src.relative_to(ROOT)} -> {dest.relative_to(pkg)}", file=sys.stderr)
     for pyc in pkg.rglob("__pycache__"):
         shutil.rmtree(pyc, ignore_errors=True)
 

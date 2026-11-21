@@ -2,7 +2,7 @@
 
 Aurora PostgreSQL Serverless v2 (+ pgvector): nguồn sự thật duy nhất cho mọi con số.
 
-- `migrations/`: migration theo thứ tự `NNNN_ten.sql`. Hiện có [0001_core.sql](migrations/0001_core.sql).
+- `migrations/`: migration theo thứ tự `NNNN_ten.sql`. Hiện có [0001_core.sql](migrations/0001_core.sql), [0002_jar_view.sql](migrations/0002_jar_view.sql) (hàm `app_get_jar_view`: số dư hũ kèm `clock_offset_days` trong một lệnh gọi) và [0003_conversation_turns.sql](migrations/0003_conversation_turns.sql) (bảng `conversation_turns` cho câu hỏi/câu trả lời của từng lượt, RLS `FORCE`, hàm `app_get_conversation_turns` và `app_list_conversations`); cả ba đã chạy trên Aurora.
 - `schema/`: để dành cho bản mô tả schema tổng hợp (chưa có; nguồn sự thật hiện là chuỗi migration).
 - Truy cập bằng RDS Data API (không psycopg/VPC); tool dùng role riêng `yofina_app` (master vượt RLS), RLS qua hàm plpgsql `SECURITY INVOKER` có `set_config(..., true)`; giữ min 0,5 ACU khi demo; pgvector 0.8.2 chạy được. Số đo và mẫu SQL: [spike-aurora-data-api.md](../docs/research/spike-aurora-data-api.md).
 - Proposal: §7 (mô hình dữ liệu, cổng chất lượng), §14. Mô tả bảng: [../docs/architecture/overview.md](../docs/architecture/overview.md#mô-hình-dữ-liệu).
@@ -31,6 +31,8 @@ Aurora PostgreSQL Serverless v2 (+ pgvector): nguồn sự thật duy nhất cho
 **Quyền của `yofina_app`** (tối thiểu): `users` SELECT, INSERT, UPDATE; `jars` thêm DELETE; `transactions` và `turn_blocks` SELECT, INSERT, DELETE (không sửa sổ cái); `audit_events` SELECT, INSERT; không có quyền gì lên `schema_migrations`; không phải owner nên không tắt được RLS.
 
 **Hàm đọc** (`SECURITY INVOKER`, tự `set_config('app.user_id', ..., true)` bên trong, một lệnh gọi Data API): `app_get_jar_balances(p_user_id)`, `app_get_user(p_user_id)`, `app_query_transactions(p_user_id, p_jar, p_from, p_to, p_limit)` (tối đa 51 dòng), `app_get_conversation_blocks(p_user_id, p_conversation_id, p_limit)` (tối đa 300). Chỉ `yofina_app` được `EXECUTE`. `numeric` và `timestamptz` trả về dạng chuỗi (UTC, không hậu tố); `jsonb` trả về chuỗi JSON.
+
+**Hàm đọc thêm ở 0002**: `app_get_jar_view(p_user_id)` trả mỗi hũ kèm `clock_offset_days` (LEFT JOIN từ `users`, nên người dùng chưa có hũ vẫn có một dòng cột hũ NULL; chưa có hàng `users` thì không có dòng). Dùng cho `GET /jars` và tool `get_jar_balances` (cần cả số dư lẫn ngày mô phỏng, tiết kiệm một lệnh gọi ~50 ms).
 
 **Đường ghi** (không có hàm ghi trong 0001): `BeginTransaction` → `SELECT set_config('app.user_id', :uid, true)` → câu lệnh → `Commit`, luôn `rollback` trong `finally`. Chuyển hũ = trừ hũ nguồn bằng `UPDATE ... WHERE balance_vnd >= :amount` (ràng buộc `balance_vnd >= 0` là lưới cuối), cộng hũ đích, thêm hai dòng `transactions` cùng `transfer_id`, thêm `audit_events`.
 

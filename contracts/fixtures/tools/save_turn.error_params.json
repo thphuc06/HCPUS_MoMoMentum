@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "PARAMS_INVALID",
+  "message": "conversation_id phải dài từ 1 đến 256 ký tự."
+}

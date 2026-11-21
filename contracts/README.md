@@ -7,9 +7,9 @@ Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool và
 | `blocks/envelope.schema.json` | Phong bì chung của khối UI và các kiểu cơ bản (`Vnd`, `JarCode`, `IsoDate`...) | tất cả |
 | `blocks/{jar_summary,confirm,receipt,notice}.schema.json` | Bốn khối của phase 1 | agent (dựng), frontend (vẽ) |
 | `blocks/block.schema.json` | Hợp của các khối đã biết, phân biệt theo `type` | kiểm tra |
-| `tools/ledger.json` | Ba tool `get_jar_balances`, `query_transactions`, `move_between_jars` đúng định dạng `inlinePayload` của AgentCore Gateway (Lambda target) | luồng C (tạo target), D (agent) |
+| `tools/ledger.json` | Bốn tool `get_jar_balances`, `query_transactions`, `move_between_jars`, `save_turn` đúng định dạng `inlinePayload` của AgentCore Gateway (Lambda target) | luồng C (tạo target), D (agent) |
 | `tools/ledger.results.schema.json` | Kết quả JSON Lambda `ledger` trả về cho từng tool | luồng B (trả), D (đọc) |
-| `rest/openapi.yaml` | OpenAPI 3.1: `GET /jars`, `POST /confirmations`, `POST /actions`, `POST /demo/reset` | luồng B (cài), E (gọi) |
+| `rest/openapi.yaml` | OpenAPI 3.1: `GET /jars`, `POST /confirmations`, `POST /actions`, `POST /demo/reset`, `GET /conversations`, `GET /conversations/{conversation_id}` | luồng B (cài), E (gọi) |
 | `fixtures/` | Ví dụ JSON dùng chung cho test Python và TypeScript | test |
 
 Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã tương ứng: Pydantic ở [libs/yofina_core](../libs/yofina_core/README.md) (`blocks.py`), Zod ở `frontend/src/contracts/blocks.ts` (file sinh ra, không sửa tay).
@@ -43,6 +43,7 @@ Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã 
 - Target tên `ledger`; tên đầy đủ qua Gateway là `ledger___<tool>`. Giữ ngắn vì Bedrock Converse giới hạn 64 ký tự.
 - `tools/ledger.json` là mảng `ToolDefinition` đúng như truyền vào `toolSchema.inlinePayload`: `{"name", "description", "inputSchema"}`. Gateway chỉ nhận ở mỗi thuộc tính các khóa `type`, `description`, `items`, `properties`, `required`; **không có `enum`, `minimum`, `pattern`** (test kiểm). Mọi ràng buộc nghiệp vụ nằm ở Lambda và Cedar; mô tả cho LLM nói rõ ràng buộc.
 - `user_id` là tham số tùy chọn, mô tả "hệ thống tự điền, để trống". Interceptor luôn ghi đè từ JWT; Cedar viết `context.input has user_id && context.input.user_id == principal.id` (spike Gateway §8). Tham số thừa không bị Gateway từ chối nên Lambda bỏ qua tham số lạ.
+- `save_turn` (chỉ agent gọi, không nằm trong lời gọi của LLM): lưu lượt hội thoại, xem "Đọc lại hội thoại" bên dưới. `user_id` do interceptor ghi đè; từ chối khối chứa token.
 - `move_between_jars` không có `confirm_token` thì **không ghi**, trả `NEEDS_CONFIRMATION`. Token chỉ do `POST /confirmations` cấp sau khi người dùng bấm; LLM không bao giờ tạo hay điền token.
 - **Kết quả tool** (`tools/ledger.results.schema.json`): `{"status": "OK" | "NEEDS_CONFIRMATION" | "ERROR", ...}`.
   - `OK` và `NEEDS_CONFIRMATION` mang `as_of`, `app_date` và `data`. `data` dùng lại **đúng** `data` của khối tương ứng: `JarSummaryData` (get_jar_balances), `ConfirmData` (NEEDS_CONFIRMATION), `ReceiptData` (move OK), nên agent chỉ việc bọc bằng `build_*`. `query_transactions` trả `{transactions, has_more}`.
@@ -54,6 +55,16 @@ Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã 
 - JWT Bearer của Cognito (access token). Không endpoint nào nhận `user_id`.
 - Lỗi: `{"error": {"code", "message", "trace_id"?}}`, `code` thuộc `ErrorCode`; ánh xạ HTTP status ở `x-http-status` trong `components.schemas.ErrorCode` và ở `yofina_core.errors.HTTP_STATUS` (test kiểm hai nơi khớp nhau). Mã token: `NEEDS_CONFIRMATION` (428), `TOKEN_INVALID` và `TOKEN_EXPIRED` (403), `TOKEN_REUSED` và `PARAMS_MISMATCH` (409). JWT authorizer của HTTP API có thể trả 401 thân rỗng trước khi tới Lambda.
 - `POST /actions` không có `confirm_token` thì trả 428 (token là trường tùy chọn của yêu cầu để mã lỗi do code của chúng ta quyết định, không phải do kiểm schema).
+
+### Đọc lại hội thoại khi tải lại trang (`GET /conversations`)
+
+`ACTIVITY_SNAPSHOT` không nằm trong `MESSAGES_SNAPSHOT`, nên khối UI không tự "phát lại" được. Agent lưu **mọi lượt** (kể cả lượt suy giảm hoặc chỉ có chữ) vào Aurora sau khi phát xong nội dung, ngay trước `RUN_FINISHED`, bằng tool `ledger___save_turn` (tham số `conversation_id`, `trace_id`, `user_text`, `assistant_text`, `blocks[{seq, block}]`; `user_id` do interceptor tiêm; token không bao giờ được lưu). Lỗi lưu không làm hỏng lượt (chỉ log). Frontend đọc lại bằng REST (JWT access token như các endpoint khác, không cần model):
+
+- `conversation_id` **chính là session id** frontend đặt ở header `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id` (UUID v4, giữ ổn định trong `localStorage` suốt cuộc hội thoại). Tải lại trang thì gọi lại với cùng id.
+- `GET /conversations/{conversation_id}` -> `{"conversation_id", "turns": [{"trace_id", "created_at", "user_text", "assistant_text", "blocks": [<khối nguyên văn theo thứ tự phát>]}]}`: tối đa 50 lượt gần nhất, cũ tới mới. Mỗi khối có đúng phong bì và `id` như lúc phát, vẽ bằng cùng registry; cùng `id` trong nhiều lượt thì lấy khối của lượt sau. Hội thoại không có hoặc **không thuộc người gọi: 200 với `turns` rỗng** (không phân biệt, để không lộ sự tồn tại).
+- `GET /conversations?limit=20` (1 đến 50) -> `{"conversations": [{"conversation_id", "turns", "last_activity_at", "preview"}]}`, mới nhất trước; `preview` là câu hỏi đầu tiên (tối đa 120 ký tự).
+- Khối `confirm` được lưu như lúc phát. Việc người dùng đã bấm xác nhận (và `receipt` sinh ra từ `POST /actions`) **không** được lưu vào hội thoại; frontend tự đánh dấu (ví dụ ẩn nút nếu số dư hiện tại đã khác `preview`, hoặc hết hạn `expires_at`). Hỏi phase sau nếu cần lưu receipt.
+- Dựng lại luồng chat sau khi tải trang: vẽ từng `turns[i]` (`user_text` là tin người dùng; `assistant_text` và `blocks` là phía agent), và gửi lại `messages` rút gọn từ `user_text`/`assistant_text` khi người dùng hỏi tiếp (Runtime không giữ lịch sử trong phiên).
 
 ### Tập con JSON Schema được dùng
 

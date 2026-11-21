@@ -31,11 +31,12 @@ def walk(node, path="inputSchema"):
     yield path, node
 
 
-def test_ba_tool_cua_phase_1():
+def test_cac_tool_cua_phase_1():
     assert [t["name"] for t in TOOLS] == [
         "get_jar_balances",
         "query_transactions",
         "move_between_jars",
+        "save_turn",
     ]
 
 
@@ -84,6 +85,23 @@ def test_move_between_jars_theo_dac_ta():
     )  # thiếu token -> NEEDS_CONFIRMATION, không phải lỗi schema
 
 
+def test_save_turn_theo_dac_ta():
+    schema = BY_NAME["save_turn"]["inputSchema"]
+    assert set(schema["properties"]) == {
+        "user_id",
+        "conversation_id",
+        "trace_id",
+        "user_text",
+        "assistant_text",
+        "blocks",
+    }
+    assert set(schema["required"]) == {"conversation_id", "trace_id"}
+    item = schema["properties"]["blocks"]["items"]
+    assert item["properties"]["seq"]["type"] == "integer"
+    assert item["properties"]["block"]["type"] == "object"
+    assert set(item["required"]) == {"seq", "block"}
+
+
 def test_query_transactions_khong_co_tham_so_bat_buoc():
     assert "required" not in BY_NAME["query_transactions"]["inputSchema"]
 
@@ -98,6 +116,7 @@ RESULT_FOR = {
     "get_jar_balances": "GetJarBalancesResult",
     "query_transactions": "QueryTransactionsResult",
     "move_between_jars": "MoveBetweenJarsResult",
+    "save_turn": "SaveTurnResult",
 }
 
 

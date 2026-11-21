@@ -1,0 +1,53 @@
+{
+  "persona": "minh",
+  "display_name": "Minh",
+  "monthly_salary_vnd": 9000000,
+  "payday_day": 5,
+  "risk_tolerance": "medium",
+  "history_days": 47,
+  "seed": 20261121,
+  "jars": [
+    {
+      "code": "an_uong", "name": "Ăn uống", "color_key": "violet", "icon_key": "utensils",
+      "split_percent": 30, "opening_vnd": 0, "target_vnd": 380000,
+      "expense_count": 36, "recent_share": 0.5,
+      "merchants": ["Cơm tấm Cô Ba", "Highlands Coffee", "Phúc Long", "Bún bò Huế O Hương", "GrabFood", "ShopeeFood", "Circle K", "Bách Hóa Xanh", "Bánh mì Huỳnh Hoa", "Trà sữa Gong Cha"]
+    },
+    {
+      "code": "di_lai", "name": "Đi lại", "color_key": "sky", "icon_key": "bus",
+      "split_percent": 7, "opening_vnd": 0, "target_vnd": 640000,
+      "expense_count": 8, "recent_share": 0.5,
+      "merchants": ["Grab", "Be", "Xe buýt", "Đổ xăng Petrolimex"]
+    },
+    {
+      "code": "hoa_don", "name": "Hóa đơn", "color_key": "brown", "icon_key": "receipt",
+      "split_percent": 31, "opening_vnd": 0, "target_vnd": 450000,
+      "expense_count": 8, "recent_share": 0.5,
+      "merchants": ["Tiền thuê phòng", "Tiền điện", "Tiền nước", "Internet FPT", "Điện thoại Viettel"]
+    },
+    {
+      "code": "giai_tri", "name": "Giải trí", "color_key": "orchid", "icon_key": "gamepad",
+      "split_percent": 7, "opening_vnd": 0, "target_vnd": 760000,
+      "expense_count": 5, "recent_share": 0.5,
+      "merchants": ["CGV Cinemas", "Netflix", "Spotify", "Steam"]
+    },
+    {
+      "code": "du_lich", "name": "Du lịch", "color_key": "teal", "icon_key": "plane",
+      "split_percent": 10, "opening_vnd": 0, "target_vnd": 1800000,
+      "expense_count": 0, "recent_share": 0.5,
+      "merchants": []
+    },
+    {
+      "code": "du_phong", "name": "Dự phòng", "color_key": "blue", "icon_key": "shield",
+      "split_percent": 10, "opening_vnd": 900000, "target_vnd": 2700000,
+      "expense_count": 0, "recent_share": 0.5,
+      "merchants": []
+    },
+    {
+      "code": "nghia_vu", "name": "Nghĩa vụ", "color_key": "slate", "icon_key": "wallet",
+      "split_percent": 5, "opening_vnd": 100000, "target_vnd": 1000000,
+      "expense_count": 0, "recent_share": 0.5,
+      "merchants": []
+    }
+  ]
+}

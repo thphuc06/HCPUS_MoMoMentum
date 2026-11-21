@@ -48,12 +48,47 @@ Không thuộc dự án, không được đụng: cluster Aurora và Cognito use
 | `yofina-web` | Amplify Hosting app + branch `main` | 1 | Không (theo băng thông/dung lượng) | Deploy thủ công bằng zip; rewrite SPA; header bảo mật cơ bản. URL: `https://main.dcrwn4u7vqklo.amplifyapp.com` (đang là trang thử hạ tầng) |
 | `/yofina/frontend/…` | SSM Parameter | 1 | Không | app id, branch, URL |
 
+### Stack `YofinaTools` (phase 1, luồng B)
+
+| Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
+|---|---|---|---|---|
+| `yofina-ledger` | Lambda (Python 3.13, arm64, ngoài VPC, 512 MB, timeout 30 s) + IAM role + log group `/aws/lambda/yofina-ledger` (14 ngày) | 1 | Không | Một mã, hai đường vào: HTTP API và AgentCore Gateway (luồng C sẽ gắn target). Zip đóng bằng `scripts/build_lambda.py` (kèm `yofina_core` và `data/personas`). IAM tối thiểu: Data API trên cluster, `GetSecretValue` chỉ trên secret `yofina-db-app` và `yofina-confirm-hmac` (không đọc secret master), `dynamodb:PutItem` trên `yofina-confirm-jti` |
+| `yofina-api` | API Gateway HTTP API (`$default` stage, tự deploy) + JWT authorizer `yofina-cognito` + 4 route (`GET /jars`, `POST /confirmations`, `POST /actions`, `POST /demo/reset`) + permission Lambda | 1 | Không (theo số request) | Authorizer: issuer là user pool `yofina-users`, audience là app client `yofina-web` (HTTP API so với `aud` hoặc `client_id`, nên nhận access token Cognito). CORS cho origin Amplify (SSM) và `http://localhost:5173`. Giới hạn mặc định 20 req/s, burst 40 |
+| `/yofina/api/url`, `/yofina/ledger/function-name`, `/yofina/ledger/function-arn` | SSM Parameter | 1 | Không | URL API (không có dấu `/` cuối) cho frontend (`print_env.py` ghi thành `VITE_API_BASE_URL`); tên và ARN Lambda cho luồng C |
+
+Bước ghép backend (2026-11-22) thêm vào `yofina-api` hai route `GET /conversations` và `GET /conversations/{conversation_id}` (đọc lại các lượt hội thoại đã lưu) và vào `yofina-ledger` tool `save_turn`; bảng Aurora mới `conversation_turns` (migration `0003_conversation_turns`).
+
+### Stack `YofinaAgent` (phase 1, bước ghép, luồng C và D)
+
+| Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
+|---|---|---|---|---|
+| `yofina-gateway` | AgentCore Gateway (MCP) | 1 | Không (theo lời gọi) | JWT authorizer Cognito (discovery URL của `yofina-users`, `allowedClients` = app client `yofina-web`), 1 interceptor `REQUEST` (`passRequestHeaders`), policy engine ở `ENFORCE`, `exceptionLevel` mặc định (không DEBUG); target `ledger` (Lambda `yofina-ledger`, schema từ `contracts/tools/ledger.json`, 4 tool) |
+| `yofina-gw-interceptor` | Lambda (Python 3.13, arm64, ngoài VPC, 128 MB, timeout 5 s) + log group (14 ngày) | 1 | Không | Ghi đè `user_id` bằng `sub` của JWT (mã ở `gateway/interceptor/`, chỉ thư viện chuẩn) |
+| `yofina_policy_engine` + 4 policy `ledger_<tool>_own_user` | AgentCore Policy engine và policy Cedar | 1 | Không (theo lượt đánh giá) | Mã Cedar ở `gateway/policies/`, `FAIL_ON_ANY_FINDINGS` |
+| `yofina-gateway` (role) | IAM role | 1 | Không | Tin `bedrock-agentcore.amazonaws.com` (điều kiện `aws:SourceAccount`, `aws:SourceArn` `gateway/*`); `lambda:InvokeFunction` chỉ trên `yofina-ledger` và `yofina-gw-interceptor`, `GetPolicyEngine`/`AuthorizeAction`/`PartiallyAuthorizeActions` |
+| `yofina_agent` | AgentCore Runtime (CodeZip ARM64, `PYTHON_3_13`, AGUI, platform V2) + endpoint `DEFAULT` + workload identity tự sinh | 1 | Không khi nhàn rỗi (tính theo mức dùng) | `customJWTAuthorizer` (`allowedClients` = `yofina-web`), `requestHeaderAllowlist ["Authorization"]`, mã từ S3 `builds/agent-<hash>.zip`; log group `/aws/bedrock-agentcore/runtimes/yofina_agent-*` tự tạo |
+| `yofina-agent-runtime` | IAM role | 1 | Không | Quyền tối thiểu: `bedrock:InvokeModel*` cho các model/inference profile trong `llm_defaults.json` (Sonnet 4.6, Kimi K3, Nova 2 Lite, Haiku 4.5, Cohere Embed), `dynamodb:UpdateItem` trên `yofina-usage`, `ssm:GetParameter(sByPath)` trên `/yofina/gateway_url`, `/yofina/dynamodb/usage-table`, `/yofina/llm/*`, `s3:GetObject` trên `builds/*`, log, X-Ray, `PutMetricData`, workload identity |
+| `/yofina/gateway_url`, `/yofina/gateway/id`, `/yofina/gateway/arn`, `/yofina/agent/runtime-arn`, `/yofina/agent/runtime-id`, `/yofina/agent/runtime-url` | SSM Parameter | 1 | Không | URL MCP của Gateway; ARN, id và URL invoke của Runtime (chứa account ID: chỉ đi qua SSM và `frontend/.env.local`) |
+
 ## Không do CDK tạo
 
 | Tên | Loại | Cách tạo | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
 |---|---|---|---|---|---|
 | `yofina-demo-accounts` | Secrets Manager | `scripts/create_demo_users.py` | 1 | Có (0,40 USD/tháng) | JSON mật khẩu của 6 tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`); 6 user tương ứng trong `yofina-users` |
+| `persona-minh`, `persona-lan`, `persona-khoa` | Cognito group (trong `yofina-users`) | `scripts/seed_demo.py` (boto3), 2026-11-21 | 1 | Không | Mỗi tài khoản demo thuộc đúng một nhóm theo `data/personas/accounts.json`; `giamkhao1`–`3` ở `persona-minh`. Claim `cognito:groups` của access token cho `POST /demo/reset` biết persona nào cần sinh lại. Không có nhóm thì đặt lại bị từ chối (403) |
+| `/yofina/agent/zip-key` | SSM Parameter (String) | `scripts/agent_deploy.py` (boto3), 2026-11-22 | 1 | Không | Khóa S3 (`builds/agent-<hash>.zip`) của zip agent hiện hành; stack `YofinaAgent` đọc khi deploy nên mỗi mã mới tạo version Runtime mới. Đặt ngoài CDK vì nó là đầu vào của CDK |
+| `builds/agent-<hash>.zip` | Đối tượng S3 trong bucket artifact | `scripts/agent_deploy.py`, 2026-11-22 | 1 | Không (vài xu) | Zip agent ARM64 (khoảng 31 MB); vòng đời `builds/` xóa sau 90 ngày |
 | `/yofina/alert-email` | SSM Parameter (SecureString) | CLI, 2026-11-21 | 1 | Không | Email nhận cảnh báo ngân sách; chỉ `scripts/cdk.py` đọc; không ghi vào repo |
 | `yofina-deployer` | IAM user (không access key) | CLI bằng phiên root, 2026-11-21 | 1 | Không | Gắn `AdministratorAccess` và inline policy `yofina-deny-jars-dev` (Deny RDS, Data API, Cognito, CloudFormation lên tài nguyên `jars-dev*` / stack `Jars*`). Chưa dùng: phase 1 deploy bằng phiên root của CLI (quyết định chủ dự án 2026-11-21) |
 
 Có sẵn trong tài khoản, không do dự án tạo: stack `CDKToolkit` (bootstrap CDK, qualifier mặc định, version 32) ở `ap-southeast-1`. Dự án **dùng lại, không chạy lại bootstrap và không sửa**. Các stack `Jars*` thuộc dự án khác, không đụng.
+
+## Tài nguyên thử tạm (đã tạo và đã xóa, 2026-11-22)
+
+Các phép thử của [spike-vertical-slice.md](research/spike-vertical-slice.md) dựng tạm rồi xóa ngay sau khi thử (tag `project=yofina`, `purpose=probe-temporary`); không còn trong tài khoản.
+
+| Tên | Loại | Dùng để | Trạng thái |
+|---|---|---|---|
+| `yofina-probe-gw`, `yofina_probe_engine`, 1 target, 1 policy, role `yofina-probe-gateway` | Gateway, policy engine, policy, IAM role | Thử Cedar với `user_id` tùy chọn khi không có interceptor | Đã xóa (script tự dọn) |
+| `yofina_probe` (Runtime V1), role `yofina-probe-runtime`, app client `yofina-probe` (access token 5 phút) trong `yofina-users`, `tmp/probe-agent.zip` và `tmp/probe-interrupt/*` trong bucket artifact | AgentCore Runtime, IAM role, Cognito app client, S3 | Thử interrupt/resume AG-UI với session manager S3 và token hết hạn giữa luồng SSE (tạm thêm client thử vào `allowedClients` của Gateway thật rồi khôi phục) | Đã xóa bằng `spikes/vertical-slice/probe_runtime.py down` |
+
