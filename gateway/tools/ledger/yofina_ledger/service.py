@@ -22,6 +22,7 @@ from yofina_core.blocks import (
     ConfirmBlock,
     JarSummaryBlock,
     ReceiptBlock,
+    block_to_wire,
     build_confirm,
     build_jar_summary,
     build_receipt,
@@ -36,14 +37,19 @@ from yofina_core.confirm import (
     ParamsError,
     normalize_params,
 )
+from yofina_core.confirm import params_hash as compute_params_hash
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import to_vnd
-from yofina_ledger.repo import LedgerRepo
+from yofina_ledger.repo import ConfirmClaim, LedgerRepo, MoveResult
 from yofina_ledger.settings import LedgerSettings
 
 log = logging.getLogger("yofina.ledger")
 
 TOOL_PREFIX = "ledger___"
+# Id khối `confirm` do code dựng: `confirm:{trace_id}:{params_hash[:12]}` (contracts/README.md).
+CONFIRM_BLOCK_ID_RE = re.compile(r"^confirm:[A-Za-z0-9_-]{1,64}:[0-9a-f]{12}$")
+CONFIRM_BLOCK_ID_MAX = 128
+ALREADY_APPLIED_MESSAGE = "Đề nghị này đã được thực hiện rồi. Chưa ghi thêm gì."
 _TOKEN_REJECTIONS = {
     ErrorCode.TOKEN_INVALID,
     ErrorCode.TOKEN_EXPIRED,
@@ -93,6 +99,43 @@ def _has_secret_key(node: Any) -> bool:
     if isinstance(node, list):
         return any(_has_secret_key(v) for v in node)
     return False
+
+
+def parse_confirm_ref(
+    conversation_id: Any, confirm_block_id: Any, norm: Mapping[str, Any]
+) -> tuple[str, str] | None:
+    """(conversation_id, confirm_block_id) của đề nghị đang thực hiện, hoặc None nếu client không gửi cả hai.
+
+    Chỉ một trong hai, sai kiểu/độ dài/định dạng -> PARAMS_INVALID. Phần cuối của id khối phải là 12 ký tự
+    đầu của hash tham số đang thực hiện, nếu không -> PARAMS_MISMATCH (id của đề nghị khác không gắn được vào
+    thao tác này).
+    """
+    if conversation_id is None and confirm_block_id is None:
+        return None
+    if conversation_id is None or confirm_block_id is None:
+        raise YofinaError(
+            ErrorCode.PARAMS_INVALID, "conversation_id và confirm_block_id phải đi cùng nhau."
+        )
+    if (
+        not isinstance(conversation_id, str)
+        or not 1 <= len(conversation_id) <= CONVERSATION_ID_MAX
+        or conversation_id != conversation_id.strip()
+    ):
+        raise YofinaError(
+            ErrorCode.PARAMS_INVALID,
+            f"conversation_id phải dài từ 1 đến {CONVERSATION_ID_MAX} ký tự.",
+        )
+    if (
+        not isinstance(confirm_block_id, str)
+        or len(confirm_block_id) > CONFIRM_BLOCK_ID_MAX
+        or not CONFIRM_BLOCK_ID_RE.fullmatch(confirm_block_id)
+    ):
+        raise YofinaError(ErrorCode.PARAMS_INVALID, "confirm_block_id không đúng định dạng.")
+    if confirm_block_id.rsplit(":", 1)[1] != compute_params_hash(MOVE_BETWEEN_JARS, norm)[:12]:
+        raise YofinaError(
+            ErrorCode.PARAMS_MISMATCH, "Khối xác nhận không khớp với thao tác này; hãy hỏi lại."
+        )
+    return conversation_id, confirm_block_id
 
 
 def utc_now() -> datetime:
@@ -263,10 +306,20 @@ class LedgerService:
         params: Mapping[str, Any],
         client_params_hash: str | None,
         trace_id: str,
+        conversation_id: Any = None,
+        confirm_block_id: Any = None,
     ) -> IssuedToken:
-        """Người dùng bấm xác nhận: kiểm nghiệp vụ lần nữa rồi ký token cho (user_id, tool, tham số)."""
+        """Người dùng bấm xác nhận: kiểm nghiệp vụ lần nữa rồi ký token cho (user_id, tool, tham số).
+
+        Có `confirm_block_id` mà đề nghị đã thực hiện rồi thì từ chối ngay (ALREADY_APPLIED), trước cả kiểm
+        số dư (số dư đã đổi vì chính lần thực hiện đó) và không cấp token.
+        """
         if tool != MOVE_BETWEEN_JARS:
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Tool không hỗ trợ xác nhận.")
+        norm = self._normalize_move(params)
+        ref = parse_confirm_ref(conversation_id, confirm_block_id, norm)
+        if ref is not None and self.repo.resolution(user_id, ref[1]) is not None:
+            raise YofinaError(ErrorCode.ALREADY_APPLIED, ALREADY_APPLIED_MESSAGE)
         block = self.prepare_move(
             user_id, params, trace_id=trace_id, source_tool="rest:POST /confirmations"
         )
@@ -287,14 +340,27 @@ class LedgerService:
         trace_id: str,
         channel: str,
         source_tool: str,
+        conversation_id: Any = None,
+        confirm_block_id: Any = None,
     ) -> ReceiptBlock:
         """Kiểm token rồi ghi hai dòng sổ cái + số dư + audit trong một transaction.
 
         Không token -> `NEEDS_CONFIRMATION`, không ghi. Token sai (chữ ký, hạn, người, tool, hash) hoặc
         đã dùng -> từ chối và ghi một dòng audit `rejected`. Token chỉ bị tiêu khi mọi kiểm tra khác đã qua.
+
+        Có `conversation_id` + `confirm_block_id`: đề nghị chỉ được thực hiện MỘT lần. Đã thực hiện rồi thì
+        `ALREADY_APPLIED` (kể cả với token mới hợp lệ), trước khi tiêu token. Chính transaction ghi sổ cái
+        cũng lưu biên nhận gắn với đề nghị; khóa unique ở đó là đường chắc chắn khi hai yêu cầu chạy song
+        song (yêu cầu sau rollback). Không gửi hai trường này (gọi REST trực tiếp, đường Gateway của agent)
+        thì hành vi như cũ.
         """
         norm = self._normalize_move(params)
         self._check_limit(norm)
+        ref = parse_confirm_ref(conversation_id, confirm_block_id, norm)
+        if ref is not None and self.repo.resolution(user_id, ref[1]) is not None:
+            exc = YofinaError(ErrorCode.ALREADY_APPLIED, ALREADY_APPLIED_MESSAGE)
+            self._audit_rejection(user_id, exc, norm, trace_id, channel)
+            raise exc
         try:
             payload = self.confirm.verify_and_consume(
                 confirm_token, sub=user_id, tool=MOVE_BETWEEN_JARS, params=norm
@@ -304,28 +370,43 @@ class LedgerService:
                 self._audit_rejection(user_id, exc, norm, trace_id, channel)
             raise
         now = self.now()
-        result = self.repo.apply_move(
-            user_id,
-            from_jar=norm["from_jar"],
-            to_jar=norm["to_jar"],
-            amount_vnd=norm["amount_vnd"],
-            now=now,
-            tz=self.settings.tz,
-            trace_id=trace_id,
-            channel=channel,
-            jti=payload.jti,
+
+        def receipt_of(res: MoveResult) -> ReceiptBlock:
+            return build_receipt(
+                tool=MOVE_BETWEEN_JARS,
+                transaction_id=res.transfer_id,
+                occurred_at=res.occurred_at,
+                app_date=res.app_date,
+                amount_vnd=res.amount_vnd,
+                from_jar=res.from_jar,
+                to_jar=res.to_jar,
+                trace_id=trace_id,
+                source_tool=source_tool,
+            )
+
+        claim = (
+            ConfirmClaim(ref[0], ref[1], lambda res: block_to_wire(receipt_of(res)))
+            if ref is not None
+            else None
         )
-        return build_receipt(
-            tool=MOVE_BETWEEN_JARS,
-            transaction_id=result.transfer_id,
-            occurred_at=result.occurred_at,
-            app_date=result.app_date,
-            amount_vnd=result.amount_vnd,
-            from_jar=result.from_jar,
-            to_jar=result.to_jar,
-            trace_id=trace_id,
-            source_tool=source_tool,
-        )
+        try:
+            result = self.repo.apply_move(
+                user_id,
+                from_jar=norm["from_jar"],
+                to_jar=norm["to_jar"],
+                amount_vnd=norm["amount_vnd"],
+                now=now,
+                tz=self.settings.tz,
+                trace_id=trace_id,
+                channel=channel,
+                jti=payload.jti,
+                claim=claim,
+            )
+        except YofinaError as exc:
+            if exc.code == ErrorCode.ALREADY_APPLIED:  # thua cuộc đua với yêu cầu song song
+                self._audit_rejection(user_id, exc, norm, trace_id, channel)
+            raise
+        return receipt_of(result)
 
     def _audit_rejection(
         self,
@@ -423,24 +504,35 @@ class LedgerService:
         """
         conv = self._id("conversation_id", conversation_id, CONVERSATION_ID_MAX)
         turns, blocks = self.repo.conversation(user_id, conv)
+        resolved = (
+            {r["confirm_block_id"]: r for r in self.repo.resolutions(user_id, conv)}
+            if turns
+            else {}
+        )
+        now = self.now()
         by_trace: dict[str, list[tuple[int, dict[str, Any]]]] = {}
         for row in blocks:
             by_trace.setdefault(row["trace_id"], []).append((int(row["seq"]), row["block"]))
-        return {
-            "conversation_id": conv,
-            "turns": [
+        out_turns = []
+        for t in turns:
+            turn_blocks = [
+                b for _, b in sorted(by_trace.get(t["trace_id"], []), key=lambda x: x[0])
+            ]
+            out_turns.append(
                 {
                     "trace_id": t["trace_id"],
                     "created_at": format_instant(t["created_at"]),
                     "user_text": t["user_text"],
                     "assistant_text": t["assistant_text"],
-                    "blocks": [
-                        b for _, b in sorted(by_trace.get(t["trace_id"], []), key=lambda x: x[0])
+                    "blocks": turn_blocks,
+                    "resolutions": [
+                        _resolution(b, resolved.get(b["id"]), now)
+                        for b in turn_blocks
+                        if b.get("type") == "confirm" and isinstance(b.get("id"), str)
                     ],
                 }
-                for t in turns
-            ],
-        }
+            )
+        return {"conversation_id": conv, "turns": out_turns}
 
     def conversations_response(self, user_id: str, *, limit: Any = None) -> dict[str, Any]:
         if limit in (None, ""):
@@ -523,6 +615,27 @@ class LedgerService:
             "jars_count": counts.jars,
             "transactions_count": counts.transactions,
         }
+
+
+def _resolution(
+    block: Mapping[str, Any], row: Mapping[str, Any] | None, now: datetime
+) -> dict[str, Any]:
+    """Trạng thái một khối `confirm`: `done` (kèm `receipt`) nếu server đã ghi nhận thực hiện; không thì
+    `expired` khi quá `expires_at` của đề nghị, còn lại `pending`. Đã thực hiện luôn thắng hết hạn."""
+    block_id = block["id"]
+    if row is not None:
+        return {
+            "block_id": block_id,
+            "status": "done",
+            "resolved_at": format_instant(row["resolved_at"]),
+            "receipt": row["receipt"],
+        }
+    expires = (block.get("data") or {}).get("expires_at")
+    try:
+        expired = isinstance(expires, str) and datetime.fromisoformat(expires) <= now
+    except ValueError:
+        expired = False
+    return {"block_id": block_id, "status": "expired" if expired else "pending"}
 
 
 def _tx_json(row: Mapping[str, Any]) -> dict[str, Any]:

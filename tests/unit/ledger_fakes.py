@@ -73,6 +73,8 @@ class FakeRepo:
         self.transactions: dict[str, list[dict[str, Any]]] = {}
         self.turns: dict[str, dict[tuple[str, str], dict[str, Any]]] = {}
         self._turn_seq = 0
+        # confirm_resolutions: (user_id, confirm_block_id) là khóa unique như bảng thật
+        self.resolved: dict[str, dict[str, dict[str, Any]]] = {}
 
     def add_user(self, uid: str, offset: int = -19, jars=JARS) -> None:
         self.users[uid] = {
@@ -114,7 +116,18 @@ class FakeRepo:
         return rows[:limit]
 
     def apply_move(
-        self, uid, *, from_jar, to_jar, amount_vnd, now, tz, trace_id, channel, jti=None
+        self,
+        uid,
+        *,
+        from_jar,
+        to_jar,
+        amount_vnd,
+        now,
+        tz,
+        trace_id,
+        channel,
+        jti=None,
+        claim=None,
     ):
         u = self.users.get(uid)
         if not u or from_jar not in u["jars"] or to_jar not in u["jars"]:
@@ -122,6 +135,9 @@ class FakeRepo:
         src, dst = u["jars"][from_jar], u["jars"][to_jar]
         if src["balance_vnd"] < amount_vnd:
             raise YofinaError(ErrorCode.INSUFFICIENT_FUNDS, "Không đủ số dư.")
+        if claim and claim.confirm_block_id in self.resolved.get(uid, {}):
+            # bảng thật: INSERT ... ON CONFLICT DO NOTHING không ra dòng -> rollback cả transaction
+            raise YofinaError(ErrorCode.ALREADY_APPLIED, "Đề nghị này đã được thực hiện rồi.")
         src["balance_vnd"] -= amount_vnd
         dst["balance_vnd"] += amount_vnd
         tid = str(uuid.uuid4())
@@ -154,7 +170,25 @@ class FakeRepo:
             to_jar={"code": to_jar, "name": dst["name"], "balance_vnd": int(dst["balance_vnd"])},
         )
         self.moves.append(res)
+        if claim:
+            self.resolved.setdefault(uid, {})[claim.confirm_block_id] = {
+                "confirm_block_id": claim.confirm_block_id,
+                "conversation_id": claim.conversation_id,
+                "transfer_id": tid,
+                "receipt": claim.receipt_for(res),
+                "resolved_at": now,
+            }
         return res
+
+    def resolution(self, uid, confirm_block_id):
+        return self.resolved.get(uid, {}).get(confirm_block_id)
+
+    def resolutions(self, uid, conversation_id):
+        return [
+            r
+            for r in self.resolved.get(uid, {}).values()
+            if r["conversation_id"] == conversation_id
+        ]
 
     # --- lượt hội thoại (tách theo user_id như RLS) ---
     def save_turn(self, uid, *, conversation_id, trace_id, user_text, assistant_text, blocks):
@@ -231,6 +265,7 @@ class FakeRepo:
         }
         self.transactions[uid] = []
         self.turns[uid] = {}
+        self.resolved[uid] = {}
         return ResetCounts(len(jars), len(transactions))
 
 

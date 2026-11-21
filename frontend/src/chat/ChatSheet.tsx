@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AiChip } from '@/components/StatusChip'
 import { useAuth } from '@/auth/AuthProvider'
-import { greetingForHour, vietnamHour } from '@/lib/format'
+import { greetingNow } from '@/lib/format'
 import { displayName } from '@/lib/user'
 import { usePhoneFrame } from '@/layout/FrameContext'
 import { useChat } from './ChatProvider'
@@ -23,7 +23,7 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-4" data-testid="chat-empty">
       <h2 className="pt-2 text-section font-bold text-ink">
-        {greetingForHour(vietnamHour())}
+        {greetingNow()}
         {name ? `, ${name}` : ''}. Bạn muốn xem gì hôm nay?
       </h2>
       <section className="rounded-card bg-surface p-4 shadow-card">

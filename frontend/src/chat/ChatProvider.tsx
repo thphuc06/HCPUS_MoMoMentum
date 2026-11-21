@@ -111,9 +111,21 @@ export function ChatProvider({ agentUrl, repository, fetchImpl, children }: Chat
     () => ({
       replaceBlock: (id, raw, newId) => session.replaceBlock(id, raw, newId),
       markBlock: (id, ui) => session.markBlock(id, ui),
-      addSystemNote: (text) => session.addSystemNote(text),
+      addSystemNote: (text, key) => session.addSystemNote(text, key),
+      getConversationId: () => session.getConversationId(),
+      // Server là nguồn sự thật về việc một đề nghị đã thực hiện chưa: chỉ vá trạng thái, không dựng lại cả hội thoại.
+      reloadConversation: async () => {
+        const id = session.getConversationId()
+        if (session.getSnapshot().running) return
+        try {
+          const turns = await repository.load(id)
+          if (id === session.getConversationId() && !session.getSnapshot().running) session.applyResolutions(turns)
+        } catch {
+          // Không tải lại được thì giữ nguyên: thông báo lỗi của lần bấm vẫn hiện.
+        }
+      },
     }),
-    [session],
+    [session, repository],
   )
 
   const value = useMemo<ChatContextValue>(

@@ -20,6 +20,27 @@ function groupItems(items: readonly ChatItem[]): Array<ChatItem | { kind: 'tools
   return out
 }
 
+/**
+ * Mã các tin nhắn của agent thuộc một lượt có đề nghị đã thực hiện. Một "lượt" là đoạn từ một tin của người dùng
+ * tới tin kế tiếp của người dùng. Xử lý ở tầng hiển thị, theo trạng thái của khối (`resolved`), không theo nội dung chữ.
+ */
+export function supersededAssistantIds(items: readonly ChatItem[]): Set<string> {
+  const out = new Set<string>()
+  let segment: ChatItem[] = []
+  const flush = () => {
+    if (segment.some((i) => i.kind === 'block' && i.resolved)) {
+      for (const i of segment) if (i.kind === 'assistant') out.add(i.id)
+    }
+    segment = []
+  }
+  for (const it of items) {
+    if (it.kind === 'user') flush()
+    segment.push(it)
+  }
+  flush()
+  return out
+}
+
 export function MessageList({ items, running, onRetry }: { items: readonly ChatItem[]; running: boolean; onRetry: () => void }) {
   const viewport = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
@@ -41,6 +62,7 @@ export function MessageList({ items, running, onRetry }: { items: readonly ChatI
   }, [items])
 
   const grouped = groupItems(items)
+  const superseded = supersededAssistantIds(items)
   const rows: ReactNode[] = grouped.map((g, idx) => {
     const next = grouped[idx + 1]
     switch (g.kind) {
@@ -50,7 +72,7 @@ export function MessageList({ items, running, onRetry }: { items: readonly ChatI
         const endOfAnswer = g.done && (!next || next.kind === 'user') && !running
         return (
           <div key={g.id} className="space-y-2">
-            <AIMessage text={g.text} done={g.done} />
+            <AIMessage text={g.text} done={g.done} superseded={superseded.has(g.id)} />
             {endOfAnswer && <AiChip>Do AI tạo</AiChip>}
           </div>
         )

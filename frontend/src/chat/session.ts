@@ -1,19 +1,29 @@
 import type { AgentSubscriber, HttpAgent } from '@ag-ui/client'
 import { newTraceparent, newUuid } from '@/lib/ids'
 import { AuthError } from '@/auth/types'
+import { blockSchemas } from '@/contracts/blocks'
 import { chatErrorForCode, chatErrorForHttp, CHAT_MESSAGES, type ChatNoticeSpec } from './errors'
-import type { StoredTurn } from './repository'
+import { receiptNote } from './receiptNote'
+import type { Resolution, StoredTurnInput } from './repository'
 
 /** Khóa activityType của khối UI trong ACTIVITY_SNAPSHOT (hợp đồng với agent). */
 export const BLOCK_ACTIVITY_TYPE = 'yofina.block'
 /** Header session của AgentCore Runtime: UUID ổn định theo cuộc hội thoại (33 đến 256 ký tự). */
 export const SESSION_HEADER = 'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id'
 
+/**
+ * Trạng thái hiển thị gắn thêm cho một khối `confirm` (ngoài nội dung khối): `cancelled` (người dùng bấm "Không",
+ * chỉ ở phiên đang mở), `expired` (server báo quá hạn đề nghị), `done` (server báo đã thực hiện nhưng không
+ * dựng được biên nhận: hiện "đã thực hiện", không nút).
+ */
+export type BlockUi = 'cancelled' | 'expired' | 'done'
+
 export type ChatItem =
   | { kind: 'user'; id: string; text: string }
   | { kind: 'assistant'; id: string; text: string; done: boolean }
   | { kind: 'tool'; id: string; name: string; status: 'running' | 'done' }
-  | { kind: 'block'; id: string; raw: unknown; ui?: 'cancelled' }
+  /** `resolved`: khối này là kết quả của một đề nghị đã thực hiện (biên nhận thay chỗ `confirm`). */
+  | { kind: 'block'; id: string; raw: unknown; ui?: BlockUi; resolved?: boolean }
   | { kind: 'notice'; id: string; title: string; message: string; code?: string; retry: boolean }
 
 export type HistoryMessage = { id: string; role: 'user' | 'assistant' | 'system'; content: string }
@@ -39,6 +49,28 @@ type TurnState = { n: number; started: boolean; finished: boolean; errored: bool
 
 function str(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined
+}
+
+type SettledBlock = { id: string; raw: unknown; ui?: BlockUi; resolved?: boolean; note?: { key: string; text: string } }
+
+/**
+ * Áp trạng thái do server giữ (`resolutions`) lên một khối đã lưu: `done` + biên nhận hợp lệ -> biên nhận thay chỗ
+ * khối `confirm` (không còn nút bấm) và một ghi chú hệ thống cho agent; `done` mà biên nhận hỏng -> giữ khối
+ * nhưng khóa; `expired` -> đánh dấu hết hạn; còn lại giữ nguyên.
+ */
+function settleBlock(raw: unknown, res: Resolution | undefined): SettledBlock {
+  const rawId = (raw as { id?: unknown } | null)?.id
+  const id = typeof rawId === 'string' ? rawId : `blk-${newUuid()}`
+  if (!res) return { id, raw }
+  if (res.status === 'done') {
+    const receipt = blockSchemas.receipt.safeParse(res.receipt)
+    if (receipt.success) {
+      return { id: receipt.data.id, raw: res.receipt, resolved: true, note: { key: receipt.data.id, text: receiptNote(receipt.data) } }
+    }
+    return { id, raw, ui: 'done', resolved: true }
+  }
+  if (res.status === 'expired') return { id, raw, ui: 'expired' }
+  return { id, raw }
 }
 
 /**
@@ -99,10 +131,13 @@ export class ChatSession {
     this.setItems(next)
   }
 
-  /** Thay khối có `id` bằng khối mới ở đúng vị trí (confirm -> receipt). Chưa có thì thêm cuối. */
+  /**
+   * Thay khối `confirm` có `id` bằng kết quả của nó (biên nhận) ở đúng vị trí; đánh dấu `resolved` để phần chữ
+   * của lượt hiện là "trước khi xác nhận". Chưa có thì thêm cuối.
+   */
   replaceBlock(id: string, raw: unknown, newId?: string): void {
     const i = this.items.findIndex((p) => p.kind === 'block' && p.id === id)
-    const item: ChatItem = { kind: 'block', id: newId ?? id, raw }
+    const item: ChatItem = { kind: 'block', id: newId ?? id, raw, resolved: true }
     if (i === -1) return this.setItems([...this.items, item])
     const next = this.items.slice()
     next[i] = item
@@ -113,13 +148,23 @@ export class ChatSession {
     this.setItems(this.items.map((p) => (p.kind === 'block' && p.id === id ? { ...p, ui } : p)))
   }
 
-  /** Thêm một dòng hệ thống vào lịch sử gửi agent ở lượt sau; không hiện cho người dùng. */
-  addSystemNote(content: string): void {
-    this.history = [...this.history, { id: `sys-${newUuid()}`, role: 'system', content }]
+  /**
+   * Thêm một dòng hệ thống vào lịch sử gửi agent ở lượt sau; không hiện cho người dùng. Cùng `key` thì chỉ thêm
+   * một lần (lúc bấm xác nhận và lúc đồng bộ lại từ server cùng cho ra một ghi chú).
+   */
+  addSystemNote(content: string, key?: string): void {
+    const id = `sys-${key ?? newUuid()}`
+    if (this.history.some((m) => m.id === id)) return
+    this.history = [...this.history, { id, role: 'system', content }]
   }
 
-  /** Dựng lại hội thoại từ dữ liệu server (phát lại sau khi tải trang). */
-  hydrate(turns: readonly StoredTurn[]): void {
+  /** Id cuộc hội thoại hiện tại (cũng là session id của Runtime). */
+  getConversationId(): string {
+    return this.conversationId
+  }
+
+  /** Dựng lại hội thoại từ dữ liệu server (phát lại sau khi tải trang), kèm trạng thái từng đề nghị. */
+  hydrate(turns: readonly StoredTurnInput[]): void {
     const items: ChatItem[] = []
     const history: HistoryMessage[] = []
     for (const t of turns) {
@@ -128,18 +173,45 @@ export class ChatSession {
         items.push({ kind: 'user', id, text: t.user_text })
         history.push({ id, role: 'user', content: t.user_text })
       }
+      const byId = new Map((t.resolutions ?? []).map((r) => [r.block_id, r]))
+      const notes: Array<{ key: string; text: string }> = []
       for (const raw of t.blocks) {
-        const id = (raw as { id?: unknown } | null)?.id
-        items.push({ kind: 'block', id: typeof id === 'string' ? id : `blk-${newUuid()}`, raw })
+        const rawId = (raw as { id?: unknown } | null)?.id
+        const s = settleBlock(raw, typeof rawId === 'string' ? byId.get(rawId) : undefined)
+        items.push({ kind: 'block', id: s.id, raw: s.raw, ui: s.ui, resolved: s.resolved })
+        if (s.note) notes.push(s.note)
       }
       if (t.assistant_text) {
         const id = `a-${t.trace_id}`
         items.push({ kind: 'assistant', id, text: t.assistant_text, done: true })
         history.push({ id, role: 'assistant', content: t.assistant_text })
       }
+      // Việc đã thực hiện xảy ra sau lượt này (lúc người dùng bấm): báo agent như lúc bấm.
+      for (const n of notes) history.push({ id: `sys-${n.key}`, role: 'system', content: n.text })
     }
     this.history = history
     this.setItems(items)
+  }
+
+  /**
+   * Đồng bộ trạng thái đề nghị từ server mà KHÔNG dựng lại cả hội thoại (không làm mất mục chưa lưu như thông báo
+   * lỗi): khối `confirm` đang hiện mà server báo `done` thì đổi thành biên nhận. Dùng khi gặp ALREADY_APPLIED.
+   */
+  applyResolutions(turns: readonly StoredTurnInput[]): void {
+    const all = new Map<string, Resolution>()
+    for (const t of turns) for (const r of t.resolutions ?? []) all.set(r.block_id, r)
+    let changed = false
+    const next = this.items.map((it): ChatItem => {
+      if (it.kind !== 'block') return it
+      const res = all.get(it.id)
+      if (!res || res.status === 'pending') return it
+      const s = settleBlock(it.raw, res)
+      if (s.note) this.addSystemNote(s.note.text, s.note.key)
+      if (s.id === it.id && s.ui === it.ui && s.resolved === it.resolved) return it
+      changed = true
+      return { kind: 'block', id: s.id, raw: s.raw, ui: s.ui, resolved: s.resolved }
+    })
+    if (changed) this.setItems(next)
   }
 
   /** Bắt đầu cuộc hội thoại mới (id mới, danh sách trống). */

@@ -29,7 +29,8 @@ FRONTEND_MAP = {
     "auth/user-pool-id": "VITE_COGNITO_USER_POOL_ID",
     "auth/client-id": "VITE_COGNITO_CLIENT_ID",
     "api/url": "VITE_API_URL",
-    "agent/runtime-arn": "VITE_AGENT_RUNTIME_ARN",
+    # Không ghi VITE_AGENT_RUNTIME_ARN: ARN có account ID, mà Vite nhúng mọi VITE_* vào bundle (check:bundle
+    # từ chối "account id trong ARN"). URL đầy đủ của Runtime đã đủ cho frontend.
     "agent/runtime-url": "VITE_AGENT_RUNTIME_URL",
     "frontend/amplify-url": "VITE_APP_URL",
 }

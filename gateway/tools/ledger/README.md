@@ -32,7 +32,17 @@ Tool `save_turn` (agent gọi sau khi phát xong nội dung, trước `RUN_FINIS
 3. `POST /actions` (hoặc tool có `confirm_token`) → kiểm chữ ký, hạn, người, tool, hash tham số, rồi **mới** tiêu `jti` (`PutItem` có điều kiện vào `yofina-confirm-jti`) → một transaction Data API: khóa hai hũ (`FOR UPDATE`), một câu lệnh CTE cập nhật hai số dư + hai dòng sổ cái cùng `transfer_id` + một dòng `audit_events`. Trả khối `receipt`.
 4. Tham số sai (hash lệch) **không** làm mất token; token sai, hết hạn hoặc đã dùng thì từ chối và ghi một dòng `audit_events` kết quả `rejected`.
 
-Mã lỗi: `NEEDS_CONFIRMATION` (428), `TOKEN_INVALID` / `TOKEN_EXPIRED` (403), `TOKEN_REUSED` / `PARAMS_MISMATCH` (409), `INSUFFICIENT_FUNDS` / `AMOUNT_LIMIT_EXCEEDED` (422), `JAR_NOT_FOUND` (404), `PARAMS_INVALID` (400), `DATABASE_UNAVAILABLE` (503; Aurora đang thức dậy, đã retry trong Lambda).
+Mã lỗi: `NEEDS_CONFIRMATION` (428), `TOKEN_INVALID` / `TOKEN_EXPIRED` (403), `TOKEN_REUSED` / `PARAMS_MISMATCH` / `ALREADY_APPLIED` (409), `INSUFFICIENT_FUNDS` / `AMOUNT_LIMIT_EXCEEDED` (422), `JAR_NOT_FOUND` (404), `PARAMS_INVALID` (400), `DATABASE_UNAVAILABLE` (503; Aurora đang thức dậy, đã retry trong Lambda).
+
+## Một đề nghị chỉ được thực hiện một lần (migration 0004)
+
+`POST /confirmations` và `POST /actions` nhận thêm hai trường tùy chọn đi cùng nhau, `conversation_id` và `confirm_block_id` (id của khối `confirm`, dạng `confirm:{trace_id}:{params_hash[:12]}`; `parse_confirm_ref` kiểm định dạng và 12 ký tự cuối phải khớp hash của tham số đang thực hiện, nếu không `PARAMS_MISMATCH`). Có hai trường này:
+
+1. `apply_move` kiểm trước (`repo.resolution`): đã thực hiện thì `ALREADY_APPLIED`, **trước** khi tiêu `jti` và trước kiểm số dư (số dư đã đổi vì chính lần thực hiện đó); ghi một dòng `audit_events` `rejected`. `POST /confirmations` cũng từ chối, không cấp token.
+2. Cùng transaction ghi sổ cái, `LedgerRepo.apply_move(claim=...)` chèn một dòng `confirm_resolutions` (khóa unique `(user_id, confirm_block_id)`, kèm khối `receipt` đã dựng): trùng khóa thì không ra dòng nào, ném `ALREADY_APPLIED` và **cả transaction rollback** (không ghi sổ cái, không audit `ok`). Đây là lưới chắc chắn khi hai yêu cầu chạy song song: yêu cầu sau chờ khóa hai hũ rồi bị rollback (đã thử thật với hai luồng).
+3. `GET /conversations/{id}` trả `resolutions` cho từng khối `confirm` của lượt: `done` kèm `receipt` và `resolved_at`, `expired` (quá `expires_at` lúc đọc) hoặc `pending`.
+
+Không gửi hai trường này (REST trực tiếp, đường Gateway của agent) thì hành vi như cũ. Khóa theo `(user_id, confirm_block_id)` nên id của người khác chỉ tạo dòng của chính người gọi (RLS), không đánh dấu hay chặn đề nghị của ai. Đặt lại demo xóa `confirm_resolutions`.
 
 ## Cấu hình (biến môi trường, do `infra-cdk/lib/tools-stack.ts` đặt)
 

@@ -153,6 +153,6 @@ Dùng `uv pip install --python-platform aarch64-manylinux2014 --only-binary=:all
 | `api/url` | URL HTTP API `yofina-api` (không có `/` cuối); `print_env.py` ghi thành `VITE_API_BASE_URL` / `YOFINA_API_URL` |
 | `ledger/function-name`, `ledger/function-arn` | Lambda `yofina-ledger` (cho target Gateway của luồng C) |
 | `gateway_url`, `gateway/id`, `gateway/arn` | Gateway `yofina-gateway` (URL MCP; `print_env.py python` ghi thành `YOFINA_GATEWAY_URL`) |
-| `agent/runtime-arn`, `agent/runtime-id`, `agent/runtime-url` | Runtime `yofina_agent`; URL invoke đầy đủ (`.../invocations?qualifier=DEFAULT`) ghi thành `VITE_AGENT_RUNTIME_URL`, ARN thành `VITE_AGENT_RUNTIME_ARN` (chứa account ID, chỉ đi qua SSM và `.env.local`) |
+| `agent/runtime-arn`, `agent/runtime-id`, `agent/runtime-url` | Runtime `yofina_agent`; URL invoke đầy đủ (`.../invocations?qualifier=DEFAULT`) ghi thành `VITE_AGENT_RUNTIME_URL`; ARN chứa account ID nên `print_env.py frontend` không ghi nó (Vite nhúng mọi `VITE_*` vào bundle) |
 | `agent/zip-key` | Khóa S3 của zip agent hiện hành (`builds/agent-<hash>.zip`); `scripts/agent_deploy.py` ghi (ngoài CDK) |
 | `alert-email` | Email cảnh báo (SecureString, chỉ `scripts/cdk.py` đọc) |

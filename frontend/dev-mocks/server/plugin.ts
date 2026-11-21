@@ -23,6 +23,8 @@ type Jar = { code: string; name: string; color_key: string; icon_key: string; ba
 const seed = (): Jar[] => fixture('jar_summary.seven_jars.json').data.jars
 let jars: Jar[] = seed()
 const tokens = new Map<string, { hash: string; used: boolean }>()
+// Đề nghị (confirm_block_id) đã thực hiện: như server thật, mỗi đề nghị chỉ được thực hiện một lần (ALREADY_APPLIED).
+const applied = new Set<string>()
 const APP_DATE = '2026-11-21'
 
 const total = () => jars.reduce((s, j) => s + j.balance_vnd, 0)
@@ -214,6 +216,7 @@ function rest(req: IncomingMessage, res: ServerResponse, url: string) {
     }
     if (req.method === 'POST' && url === '/confirmations') {
       const b = await body(req)
+      if (b.confirm_block_id && applied.has(b.confirm_block_id)) return err(res, 409, 'ALREADY_APPLIED', 'Đề nghị này đã được thực hiện rồi.')
       const hash = paramsHash(b.tool, b.params)
       if (b.params_hash && b.params_hash !== hash) return err(res, 409, 'PARAMS_MISMATCH', 'Tham số lệch.')
       const from = jars.find((j) => j.code === b.params?.from_jar)
@@ -227,6 +230,7 @@ function rest(req: IncomingMessage, res: ServerResponse, url: string) {
     if (req.method === 'POST' && url === '/actions') {
       const b = await body(req)
       if (!b.confirm_token) return err(res, 428, 'NEEDS_CONFIRMATION', 'Cần xác nhận.')
+      if (b.confirm_block_id && applied.has(b.confirm_block_id)) return err(res, 409, 'ALREADY_APPLIED', 'Đề nghị này đã được thực hiện rồi.')
       const t = tokens.get(b.confirm_token)
       if (!t) return err(res, 403, 'TOKEN_INVALID', 'Token không hợp lệ.')
       if (t.used) return err(res, 409, 'TOKEN_REUSED', 'Token đã dùng.')
@@ -234,6 +238,7 @@ function rest(req: IncomingMessage, res: ServerResponse, url: string) {
       const from = jars.find((j) => j.code === b.params.from_jar)!
       const to = jars.find((j) => j.code === b.params.to_jar)!
       t.used = true
+      if (b.confirm_block_id) applied.add(b.confirm_block_id)
       from.balance_vnd -= b.params.amount_vnd
       to.balance_vnd += b.params.amount_vnd
       const tx = randomUUID()
@@ -259,6 +264,7 @@ function rest(req: IncomingMessage, res: ServerResponse, url: string) {
     if (req.method === 'POST' && url === '/demo/reset') {
       jars = seed()
       tokens.clear()
+      applied.clear()
       return json(res, 200, { reset_at: nowIso(), app_date: APP_DATE, clock_offset_days: 0, jars_count: jars.length, transactions_count: 0 })
     }
     return err(res, 404, 'PARAMS_INVALID', 'Không có đường dẫn này.')

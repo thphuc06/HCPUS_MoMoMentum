@@ -28,7 +28,7 @@ function json(status: number, body?: unknown) {
   return new Response(body === undefined ? '' : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
-function mountApp(handler: Handler, initial = '/') {
+function mountApp(handler: Handler, initial = '/', cfg: Config = config) {
   const calls: Array<{ url: string; init: RequestInit }> = []
   vi.stubGlobal(
     'fetch',
@@ -40,7 +40,7 @@ function mountApp(handler: Handler, initial = '/') {
   const router = createMemoryRouter(appRoutes(), { initialEntries: [initial] })
   const auth = fakeAuth()
   render(
-    <ConfigContext.Provider value={config}>
+    <ConfigContext.Provider value={cfg}>
       <AuthProvider client={auth}>
         <RouterProvider router={router} />
       </AuthProvider>
@@ -244,5 +244,100 @@ describe('Chat trong ứng dụng', () => {
     await user.click(within(alert).getByRole('button', { name: 'Thử lại' }))
     expect(await within(sheet).findByText('Đây rồi.')).toBeInTheDocument()
     expect(within(sheet).queryByRole('alert')).toBeNull()
+  })
+})
+
+// Tải lại trang rồi mở chat: hội thoại phát lại từ GET /conversations/{id}; trạng thái của từng khối confirm do server
+// giữ (resolutions). Đây là lỗi đã gặp khi tự kiểm: khối đã bấm hiện lại như chưa bấm và bấm lần nữa sẽ chuyển tiền hai lần.
+describe('Phát lại hội thoại sau khi tải lại trang', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => vi.unstubAllGlobals())
+
+  const replayConfig: Config = { ...config, replayEnabled: true }
+  const TRACES = ['1'.repeat(32), '2'.repeat(32), '3'.repeat(32)]
+
+  function confirmFor(trace: string, hash12: string, expiresInMs: number) {
+    const b = validBlock('confirm.move') as { id: string; trace_id: string; data: { expires_at: string; params: unknown; params_hash: string } }
+    b.id = `confirm:${trace}:${hash12}`
+    b.trace_id = trace
+    b.data.expires_at = new Date(Date.now() + expiresInMs).toISOString().replace(/\.\d+Z$/, 'Z')
+    return b
+  }
+
+  function turn(trace: string, block: { id: string }, resolution: Record<string, unknown>) {
+    return {
+      trace_id: trace,
+      created_at: '2026-11-22T01:00:00Z',
+      user_text: 'chuyển 100 nghìn từ Giải trí sang Ăn uống',
+      assistant_text: 'Chưa có khoản tiền nào được chuyển. Bạn bấm Xác nhận trên thẻ.',
+      blocks: [block],
+      resolutions: [{ block_id: block.id, ...resolution }],
+    }
+  }
+
+  it('đã thực hiện -> biên nhận (không nút, lời cũ làm mờ); hết hạn -> không bấm được; còn hạn -> vẫn bấm được', async () => {
+    const done = confirmFor(TRACES[0]!, 'aaaaaaaaaaaa', 10 * 60_000)
+    const expired = confirmFor(TRACES[1]!, 'bbbbbbbbbbbb', -60_000)
+    const pending = confirmFor(TRACES[2]!, 'cccccccccccc', 10 * 60_000)
+    const receipt = validBlock('receipt.move')
+    const { calls } = mountApp((url, init) => {
+      if (url === config.agentUrl && JSON.parse(String(init.body)).forwardedProps?.warmup) return sseResponse([runStarted(), runFinished()])
+      if (url.includes('/conversations/'))
+        return json(200, {
+          conversation_id: 'x',
+          turns: [
+            turn(TRACES[0]!, done, { status: 'done', resolved_at: '2026-11-22T01:01:00Z', receipt }),
+            turn(TRACES[1]!, expired, { status: 'expired' }),
+            turn(TRACES[2]!, pending, { status: 'pending' }),
+          ],
+        })
+      return json(200, jarsFromFixture())
+    }, '/', replayConfig)
+    const user = userEvent.setup()
+    await screen.findByTestId('balance-total')
+    await user.click(screen.getByRole('button', { name: /Hỏi Yofina/ }))
+    const sheet = await screen.findByTestId('chat-sheet')
+
+    await within(sheet).findByText('Đã chuyển 100.000 ₫') // biên nhận thay khối confirm đã thực hiện
+    const buttons = within(sheet).getAllByRole('button', { name: /Xác nhận chuyển/ })
+    expect(buttons).toHaveLength(2) // đã thực hiện không còn nút; hết hạn + còn hạn
+    expect(buttons[0]).toBeDisabled() // hết hạn
+    expect(buttons[1]).toBeEnabled() // còn hạn, chưa thực hiện
+    expect(within(sheet).getByText(/đã hết hạn nên số dư xem trước có thể đã cũ/)).toBeInTheDocument()
+
+    // lời "chưa chuyển" ngay dưới biên nhận được làm mờ và ghi rõ là trước khi xác nhận; hai lượt kia không
+    const messages = within(sheet).getAllByTestId('assistant-message')
+    expect(messages.map((m) => m.getAttribute('data-superseded'))).toEqual(['true', null, null])
+    expect(calls.some((c) => c.url.endsWith('/actions'))).toBe(false) // phát lại không ghi gì
+  })
+
+  it('bấm vào đề nghị mà server báo đã thực hiện (ALREADY_APPLIED): không ghi, tải lại trạng thái và khối đổi thành biên nhận', async () => {
+    const block = confirmFor(TRACES[0]!, 'dddddddddddd', 10 * 60_000)
+    const receipt = validBlock('receipt.move')
+    let applied = false // server: sau lần thực hiện (ở nơi khác), trạng thái chuyển thành done
+    const { calls } = mountApp((url, init) => {
+      if (url === config.agentUrl && JSON.parse(String(init.body)).forwardedProps?.warmup) return sseResponse([runStarted(), runFinished()])
+      if (url.includes('/conversations/'))
+        return json(200, {
+          conversation_id: 'x',
+          turns: [turn(TRACES[0]!, block, applied ? { status: 'done', resolved_at: '2026-11-22T01:01:00Z', receipt } : { status: 'pending' })],
+        })
+      if (url.endsWith('/confirmations')) {
+        applied = true
+        return json(409, { error: { code: 'ALREADY_APPLIED', message: 'Đề nghị này đã được thực hiện rồi.' } })
+      }
+      return json(200, jarsFromFixture())
+    }, '/', replayConfig)
+    const user = userEvent.setup()
+    await screen.findByTestId('balance-total')
+    await user.click(screen.getByRole('button', { name: /Hỏi Yofina/ }))
+    const sheet = await screen.findByTestId('chat-sheet')
+    await user.click(await within(sheet).findByRole('button', { name: /Xác nhận chuyển/ }))
+
+    await within(sheet).findByText('Đã chuyển 100.000 ₫')
+    expect(within(sheet).queryByRole('button', { name: /Xác nhận chuyển/ })).toBeNull()
+    const confirmCall = calls.find((c) => c.url.endsWith('/confirmations'))!
+    expect(bodyOf(confirmCall)).toMatchObject({ confirm_block_id: block.id, conversation_id: expect.any(String) })
+    expect(calls.some((c) => c.url.endsWith('/actions'))).toBe(false) // không cấp token thì không gọi /actions
   })
 })

@@ -122,6 +122,8 @@ def _dispatch(
             params=_params(body),
             client_params_hash=body.get("params_hash"),
             trace_id=trace_id,
+            conversation_id=body.get("conversation_id"),
+            confirm_block_id=body.get("confirm_block_id"),
         )
         return 200, {
             "confirm_token": issued.token,
@@ -146,6 +148,8 @@ def _dispatch(
             trace_id=trace_id,
             channel="rest",
             source_tool="rest:POST /actions",
+            conversation_id=body.get("conversation_id"),
+            confirm_block_id=body.get("confirm_block_id"),
         )
         return 200, block_to_wire(receipt)
 

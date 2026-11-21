@@ -148,4 +148,47 @@ Mỗi phép thử ghi kết quả vào `docs/research/spike-vertical-slice.md` (
 
 ## Kết quả thực hiện
 
-(Điền khi đóng phase: đã làm gì, lệch gì so với kế hoạch, số đo, việc chuyển sang phase sau.)
+Đóng ngày 2026-11-22 (đêm 21 rạng 22/11). Lát dọc chạy thật: đăng nhập Cognito → frontend → agent trên Runtime V2 → Gateway (interceptor + Cedar `ENFORCE`) → Lambda `ledger` → Aurora → khối UI; ghi qua khối `confirm` và token dùng một lần.
+
+### Tiêu chí hoàn thành
+
+| # | Tiêu chí | Kết quả | Cách kiểm |
+|---|---|---|---|
+| 1 | Hỏi số dư ra khối `jar_summary` 7 hũ khớp Aurora | Đạt trên bản build chạy ở localhost nối backend thật; **chưa kiểm trên URL Amplify** (xem dưới) | Người điều phối tự đi trên trình duyệt; test tích hợp Runtime |
+| 2 | Chuyển hũ qua `confirm` → `receipt`, không bấm thì không đổi | Đạt (thử cả câu không có trong test: "chuyển 150k từ du lịch qua hũ hóa đơn giúp mình") | Trình duyệt + test tích hợp |
+| 3 | Token đã dùng, đổi tham số, của người khác bị từ chối | Đạt | Test tích hợp (71 passed sau bản sửa) |
+| 4 | `lan` không đọc được dữ liệu `minh` qua Gateway và REST | Đạt | Test tích hợp |
+| 5 | Đặt lại dữ liệu về số ban đầu | Đạt | Trình duyệt (nút trong Hồ sơ) + test |
+| 6 | Tải lại trang, khối vẫn còn | Đạt sau khi sửa lỗi bên dưới | Trình duyệt |
+| 7 | Trần lượt gọi model về 0 vẫn trả khối số dư + `notice` | Đạt | Test tích hợp Runtime |
+| 8 | Budgets, SNS, aws-resources đủ, repo không có account ID/secret | Đạt; deploy bằng root theo quyết định chủ dự án; subscription email SNS chờ chủ dự án bấm xác nhận | `git grep`, liệt kê tài nguyên theo tag |
+| 9 | Bảng phép thử có kết quả | Đạt trừ hai dòng cần trình duyệt/điện thoại thật | [spike-vertical-slice.md](../../research/spike-vertical-slice.md) |
+| 10 | Số đo event đầu | Lượt 1 phiên lạnh trung vị 2,04 s; lượt 2: 0,34 s; trọn lượt 5,75 s và 3,00 s | spike-vertical-slice.md |
+
+### Còn mở, chờ chủ dự án
+
+- **Chat trên URL Amplify từ trình duyệt thật và Safari iPhone**: chưa ai kiểm. Trình duyệt trong app của người điều phối chặn request từ trang Amplify tới Runtime (`ERR_BLOCKED_BY_CLIENT`, lỗi phía công cụ), và người điều phối không gõ mật khẩu vào trang đã host. Đã có: REST gọi được từ origin Amplify (401 đọc được, tức CORS ổn); preflight tới Runtime bằng `curl` với Origin Amplify trả 200 và `Access-Control-Allow-Origin: *`. Nếu chat trên Amplify lỗi thì đây là việc đầu tiên của phase 2.
+- Bấm link xác nhận trong mail SNS để nhận cảnh báo ngân sách.
+
+### Lỗi tìm thấy khi tự kiểm và đã sửa
+
+- Khối `confirm` phát lại sau khi tải trang hiện như chưa bấm, bấm lại sẽ chuyển tiền lần hai. Sửa: bảng `confirm_resolutions` (migration 0004), server từ chối lần hai với `ALREADY_APPLIED` kể cả với token mới, `GET /conversations/{id}` trả `resolutions`, frontend hiện biên nhận.
+- Migration 0001: `ALTER ROLE … NOSUPERUSER` bị Aurora từ chối; bỏ khỏi câu `ALTER`.
+- Lời chào "buổi sáng" lúc nửa đêm.
+
+### Lệch so với kế hoạch
+
+- Deploy bằng phiên root (chủ dự án chốt); `yofina-deployer` đã tạo nhưng chưa dùng. CDK đã bootstrap sẵn trong tài khoản, dùng lại.
+- Chia việc: ledger là luồng duy nhất deploy ở đợt 1; Gateway + Cedar + Runtime gộp thành một bước ghép backend.
+- Agent viết theo "Cách B" (mã điều khiển trình tự, tự phát event AG-UI), không dùng `ag-ui-strands`.
+- Thêm ngoài kế hoạch: tool `ledger___save_turn`, `GET /conversations`, `GET /conversations/{id}`, migration 0002–0004.
+- Budget tính cả tài khoản (gồm `jars-dev*`), chưa lọc theo tag.
+- Interrupt/resume AG-UI qua Runtime chạy được với `S3SessionManager`, nhưng sản phẩm không dùng.
+
+### Chuyển sang phase sau
+
+- "Tiền vào khác" và "Chưa phân loại" của bảng số Figma (phase 2).
+- Bấm "Không" trên khối `confirm` chưa lưu ở server; server chưa ép hạn `expires_at` tại `POST /actions`.
+- Tên hiển thị lấy từ email; thêm `display_name` vào API.
+- Nova 2 Lite đôi khi viết dài hoặc dùng markdown; đánh giá có hệ thống ở phase 3.
+- Giới hạn tốc độ model là theo từng microVM, chỉ trần ngày dùng chung.

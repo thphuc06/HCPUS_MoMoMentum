@@ -66,6 +66,8 @@ paths:
         Gọi khi người dùng bấm nút trong khối `confirm`. Server xác thực người dùng bằng JWT, chuẩn
         hóa lại tham số, kiểm tra nghiệp vụ (hũ tồn tại, đủ số dư, hạn mức) rồi ký token
         HMAC trên (sub, tool, params_hash, hạn, jti). Token **mờ** với client: không phân tích nó.
+        Nếu gửi `conversation_id` và `confirm_block_id` mà đề nghị đã được thực hiện thì trả 409
+        `ALREADY_APPLIED` và không cấp token.
       parameters:
         - $ref: '#/components/parameters/Traceparent'
       requestBody:
@@ -106,6 +108,12 @@ paths:
         Kiểm token (chữ ký, hạn, tool, sub, hash tham số, `jti` chưa dùng) rồi ghi trong một
         transaction và ghi `audit_events`. Thiếu `confirm_token` thì không ghi, trả 428
         `NEEDS_CONFIRMATION`. Thành công trả khối `receipt`.
+
+        **Một đề nghị chỉ được thực hiện một lần.** Khi client gửi `conversation_id` và
+        `confirm_block_id` (id của khối `confirm` đang được thực hiện), server lưu khối `receipt`
+        gắn với đề nghị đó trong CÙNG transaction với sổ cái; `GET /conversations/{id}` trả lại nó
+        (`resolutions`). Đề nghị đã thực hiện rồi thì trả 409 `ALREADY_APPLIED` và không ghi gì, kể
+        cả khi token mới hợp lệ. Không gửi hai trường này (gọi REST trực tiếp) thì hành vi như cũ.
       parameters:
         - $ref: '#/components/parameters/Traceparent'
       requestBody:
@@ -184,7 +192,8 @@ paths:
         lượt kèm câu hỏi, câu trả lời bằng chữ và các khối UI đã phát (nguyên văn, đúng thứ tự phát).
         Cuộc hội thoại không có hoặc không thuộc người gọi: **200 với `turns` rỗng** (không phân biệt hai
         trường hợp để không lộ sự tồn tại của hội thoại người khác). Khối `confirm` được lưu như lúc
-        phát; việc đã bấm xác nhận hay chưa không được lưu ở đây.
+        phát; trạng thái của từng khối `confirm` (chưa bấm, đã thực hiện kèm biên nhận, hết hạn) nằm ở
+        `resolutions` của lượt, do server giữ (nguồn sự thật, không suy từ số dư).
       parameters:
         - $ref: '#/components/parameters/Traceparent'
         - name: conversation_id
@@ -267,6 +276,7 @@ components:
         - TOKEN_EXPIRED
         - TOKEN_REUSED
         - PARAMS_MISMATCH
+        - ALREADY_APPLIED
         - RATE_LIMITED
         - MODEL_BUDGET_EXCEEDED
         - DATABASE_UNAVAILABLE
@@ -283,6 +293,7 @@ components:
         TOKEN_EXPIRED: 403
         TOKEN_REUSED: 409
         PARAMS_MISMATCH: 409
+        ALREADY_APPLIED: 409
         RATE_LIMITED: 429
         MODEL_BUDGET_EXCEEDED: 503
         DATABASE_UNAVAILABLE: 503
@@ -298,7 +309,8 @@ components:
         TOKEN_INVALID: Token sai định dạng, chữ ký sai, cho tool khác hoặc cho người dùng khác.
         TOKEN_EXPIRED: Token đã hết hạn.
         TOKEN_REUSED: Token đã được dùng (replay).
-        PARAMS_MISMATCH: Tham số khác với tham số đã được xác nhận (hash không khớp).
+        PARAMS_MISMATCH: Tham số khác với tham số đã được xác nhận (hash không khớp), hoặc `confirm_block_id` không thuộc thao tác này.
+        ALREADY_APPLIED: Đề nghị (`confirm_block_id`) này đã được thực hiện rồi; không ghi thêm gì, kể cả khi có token mới hợp lệ.
         RATE_LIMITED: Quá giới hạn tần suất.
         MODEL_BUDGET_EXCEEDED: Chạm trần lượt gọi model trong ngày (agent, không phải REST).
         DATABASE_UNAVAILABLE: Aurora đang thức dậy hoặc không sẵn sàng; thử lại sau vài giây.
@@ -369,7 +381,7 @@ components:
             $ref: '#/components/schemas/ConversationSummary'
     ConversationTurn:
       type: object
-      required: [trace_id, created_at, user_text, assistant_text, blocks]
+      required: [trace_id, created_at, user_text, assistant_text, blocks, resolutions]
       additionalProperties: false
       properties:
         trace_id:
@@ -389,6 +401,12 @@ components:
           description: Khối UI đã phát ở lượt, theo thứ tự phát (`seq`).
           items:
             $ref: '../blocks/block.schema.json'
+        resolutions:
+          type: array
+          maxItems: 20
+          description: Trạng thái của từng khối `confirm` trong `blocks`, cùng thứ tự (một phần tử mỗi khối).
+          items:
+            $ref: '#/components/schemas/ConfirmResolution'
     ConversationResponse:
       type: object
       required: [conversation_id, turns]
@@ -403,6 +421,48 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/ConversationTurn'
+    ConfirmConversationId:
+      description: |
+        Id cuộc hội thoại chứa khối `confirm` (session id của chat). Gửi cùng `confirm_block_id`
+        hoặc không gửi cả hai.
+      type: string
+      minLength: 1
+      maxLength: 256
+    ConfirmBlockRef:
+      description: |
+        `id` của khối `confirm` đang được thực hiện, dạng `confirm:{trace_id}:{params_hash[:12]}`.
+        12 ký tự cuối phải khớp hash của `params` đang gửi, nếu không trả PARAMS_MISMATCH. Một
+        `confirm_block_id` của một người dùng chỉ được thực hiện một lần (ALREADY_APPLIED).
+      type: string
+      maxLength: 128
+      pattern: '^confirm:[A-Za-z0-9_-]{1,64}:[0-9a-f]{12}$'
+    ConfirmResolution:
+      description: |
+        Trạng thái một khối `confirm` trong lượt, do server giữ. `done`: đã thực hiện, kèm `receipt`
+        (đúng khối `POST /actions` đã trả) và `resolved_at`; thắng mọi trạng thái khác. `expired`:
+        chưa thực hiện và đã quá `expires_at` của đề nghị lúc đọc. `pending`: còn hạn, chưa thực hiện.
+        (Việc người dùng bấm "Không" chưa được lưu ở server.)
+      oneOf:
+        - type: object
+          required: [block_id, status, resolved_at, receipt]
+          additionalProperties: false
+          properties:
+            block_id:
+              $ref: '../blocks/envelope.schema.json#/$defs/BlockId'
+            status:
+              const: done
+            resolved_at:
+              $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+            receipt:
+              $ref: '../blocks/receipt.schema.json'
+        - type: object
+          required: [block_id, status]
+          additionalProperties: false
+          properties:
+            block_id:
+              $ref: '../blocks/envelope.schema.json#/$defs/BlockId'
+            status:
+              enum: [pending, expired]
     ToolName:
       type: string
       description: Tên tool ngắn (không có tiền tố target). Hiện chỉ có chuyển hũ.
@@ -417,6 +477,10 @@ components:
         params:
           description: Sao nguyên từ khối `confirm` (đã chuẩn hóa).
           $ref: '../blocks/confirm.schema.json#/$defs/MoveParams'
+        conversation_id:
+          $ref: '#/components/schemas/ConfirmConversationId'
+        confirm_block_id:
+          $ref: '#/components/schemas/ConfirmBlockRef'
         params_hash:
           description: |
             `params_hash` của khối `confirm` người dùng đang nhìn. Nếu gửi, server so với hash tự
@@ -456,6 +520,10 @@ components:
           $ref: '#/components/schemas/ToolName'
         params:
           $ref: '../blocks/confirm.schema.json#/$defs/MoveParams'
+        conversation_id:
+          $ref: '#/components/schemas/ConfirmConversationId'
+        confirm_block_id:
+          $ref: '#/components/schemas/ConfirmBlockRef'
         confirm_token:
           description: Token từ `POST /confirmations`. Vắng thì không ghi, trả 428 NEEDS_CONFIRMATION.
           type: string
@@ -505,7 +573,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: TOKEN_REUSED hoặc PARAMS_MISMATCH.
+      description: TOKEN_REUSED, PARAMS_MISMATCH hoặc ALREADY_APPLIED.
       content:
         application/json:
           schema:

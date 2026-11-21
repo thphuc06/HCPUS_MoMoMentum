@@ -50,11 +50,16 @@ export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
   }
 }
 
+/** Id cuộc hội thoại mà `fakeChatActions` trả về. */
+export const CONVERSATION_ID = '11111111-2222-4333-8444-555555555555'
+
 export function fakeChatActions() {
   return {
     replaceBlock: vi.fn<ChatActions['replaceBlock']>(),
     markBlock: vi.fn<ChatActions['markBlock']>(),
     addSystemNote: vi.fn<ChatActions['addSystemNote']>(),
+    getConversationId: vi.fn<ChatActions['getConversationId']>(() => CONVERSATION_ID),
+    reloadConversation: vi.fn<ChatActions['reloadConversation']>(async () => {}),
   }
 }
 

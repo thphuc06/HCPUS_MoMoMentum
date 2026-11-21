@@ -48,6 +48,7 @@ def test_ma_loi_khop_yofina_core_errors():
         "TOKEN_EXPIRED",
         "TOKEN_REUSED",
         "PARAMS_MISMATCH",
+        "ALREADY_APPLIED",
     }
     assert required <= set(schema["enum"])
 
@@ -93,6 +94,18 @@ VALID = {
         "tool": "move_between_jars", "params": PARAMS, "params_hash": HASH,
     },
     "ActionRequest": {"tool": "move_between_jars", "params": PARAMS, "confirm_token": TOKEN},
+    "ActionRequest.voi_de_nghi": {
+        "tool": "move_between_jars", "params": PARAMS, "confirm_token": TOKEN,
+        "conversation_id": "0b1f9c3e-5a7d-4e21-9f3a-6c1d2e8b4a70",
+        "confirm_block_id": f"confirm:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:{HASH[:12]}",
+    },
+    "ConfirmationRequest.voi_de_nghi": {
+        "tool": "move_between_jars", "params": PARAMS,
+        "conversation_id": "0b1f9c3e-5a7d-4e21-9f3a-6c1d2e8b4a70",
+        "confirm_block_id": f"confirm:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:{HASH[:12]}",
+    },
+    "ConfirmResolution.pending": {"block_id": "confirm:t:" + HASH[:12], "status": "pending"},
+    "ConfirmResolution.expired": {"block_id": "confirm:t:" + HASH[:12], "status": "expired"},
     "ResetResponse": {
         "reset_at": "2026-12-10T03:00:00Z", "app_date": "2026-11-21", "clock_offset_days": -19,
         "jars_count": 7, "transactions_count": 120,
@@ -117,6 +130,7 @@ VALID = {
                 "user_text": "số dư các hũ của mình",
                 "assistant_text": "Bạn có 7 hũ.",
                 "blocks": [],
+                "resolutions": [],
             }
         ],
     },
@@ -125,7 +139,32 @@ VALID = {
 
 @pytest.mark.parametrize("name", VALID)
 def test_vi_du_hop_le_qua_schema_cua_openapi(registry, name):
-    assert list(schema_validator(registry, name).iter_errors(VALID[name])) == []
+    schema = name.split(".")[0]
+    assert list(schema_validator(registry, schema).iter_errors(VALID[name])) == []
+
+
+def test_confirm_resolution_done_mang_receipt_that(registry):
+    receipt = load_json(CONTRACTS / "fixtures/blocks/valid/receipt.move.json")
+    done = {
+        "block_id": "confirm:t:" + HASH[:12],
+        "status": "done",
+        "resolved_at": "2026-12-10T03:00:00Z",
+        "receipt": receipt,
+    }
+    v = schema_validator(registry, "ConfirmResolution")
+    assert v.is_valid(done)
+    assert not v.is_valid({k: x for k, x in done.items() if k != "receipt"})  # done phải có receipt
+    assert not v.is_valid({**done, "receipt": {"type": "receipt"}})
+    assert not v.is_valid({**done, "status": "pending"})  # pending không mang receipt
+    assert not v.is_valid({"block_id": "x", "status": "cancelled"})
+
+
+def test_turn_phai_co_resolutions(registry):
+    turn = {**VALID["ConversationResponse"]["turns"][0]}
+    body = {"conversation_id": "s" * 40, "turns": [turn]}
+    assert schema_validator(registry, "ConversationResponse").is_valid(body)
+    del turn["resolutions"]
+    assert not schema_validator(registry, "ConversationResponse").is_valid(body)
 
 
 def test_action_request_khong_token_van_hop_le_de_server_tra_428(registry):
@@ -152,6 +191,14 @@ def test_action_request_khong_token_van_hop_le_de_server_tra_428(registry):
         ("ConfirmationResponse", {**VALID["ConfirmationResponse"], "confirm_token": "no-dot"}),
         ("ActionRequest", {"tool": "move_between_jars", "params": PARAMS, "user_id": "x"}),
         ("ErrorResponse", {"error": {"code": "NOPE", "message": "x"}}),
+        (
+            "ActionRequest",
+            {"tool": "move_between_jars", "params": PARAMS, "confirm_block_id": "confirm:x:abc"},
+        ),
+        (
+            "ConfirmationRequest",
+            {"tool": "move_between_jars", "params": PARAMS, "conversation_id": ""},
+        ),
         ("JarsResponse", {**VALID["JarsResponse"], "jars_total_vnd": "380000"}),
     ],
 )

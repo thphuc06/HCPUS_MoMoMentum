@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button'
 import { formatCountdown, formatDateTime, formatVnd } from '@/lib/format'
 import type { ConfirmBlock, JarSummaryBlock, NoticeBlock, ReceiptBlock } from '@/contracts/blocks'
 import { useConfirmFlow } from './useConfirmFlow'
+import type { BlockUi } from '@/chat/session'
 import { useNow } from './useNow'
 
-export type BlockViewProps<T> = { block: T; blockId: string; ui?: 'cancelled' }
+export type BlockViewProps<T> = { block: T; blockId: string; ui?: BlockUi }
 
 // ---------------------------------------------------------------- jar_summary
 
@@ -89,15 +90,19 @@ export function ConfirmView({ block, blockId, ui }: BlockViewProps<ConfirmBlock>
   const flow = useConfirmFlow({ block, blockId })
   const expiresAt = Date.parse(d.expires_at)
   const cancelled = ui === 'cancelled'
-  const now = useNow(1000, !cancelled && flow.phase !== 'working' && flow.phase !== 'done')
+  // Server báo đã thực hiện mà không dựng được biên nhận: không còn nút nào, kể cả khi hết hạn.
+  const applied = ui === 'done'
+  const settled = cancelled || applied
+  const now = useNow(1000, !settled && flow.phase !== 'working' && flow.phase !== 'done')
   const remaining = expiresAt - now
-  const expired = !cancelled && remaining <= 0 && flow.phase !== 'done'
-  const canAct = !cancelled && !expired && flow.phase !== 'working' && flow.phase !== 'done' && flow.phase !== 'blocked'
+  // `ui === 'expired'`: server đã báo quá hạn (nguồn sự thật); đồng hồ máy chỉ để đếm ngược và bắt kịp lúc quá hạn khi đang mở.
+  const expired = !settled && (ui === 'expired' || remaining <= 0) && flow.phase !== 'done'
+  const canAct = !settled && !expired && flow.phase !== 'working' && flow.phase !== 'done' && flow.phase !== 'blocked'
 
   return (
     <section
       data-block="confirm"
-      data-phase={cancelled ? 'cancelled' : expired ? 'expired' : flow.phase}
+      data-phase={cancelled ? 'cancelled' : applied ? 'applied' : expired ? 'expired' : flow.phase}
       className="rounded-card border-2 border-brand bg-surface p-4"
     >
       <header className="flex items-center justify-between gap-2">
@@ -123,6 +128,10 @@ export function ConfirmView({ block, blockId, ui }: BlockViewProps<ConfirmBlock>
         <p className="mt-3 text-small font-semibold text-ink-2" role="status">
           Đã hủy. Chưa có gì được ghi.
         </p>
+      ) : applied ? (
+        <p className="mt-3 text-small font-semibold text-ink-2" role="status">
+          Đề nghị này đã được thực hiện rồi. Bạn kiểm tra số dư ở Tổng quan nhé.
+        </p>
       ) : expired ? (
         <p className="mt-3 text-small font-semibold text-warn-fg" role="status">
           Đề nghị này đã hết hạn nên số dư xem trước có thể đã cũ. Hỏi lại Yofina để xem số mới.
@@ -142,7 +151,7 @@ export function ConfirmView({ block, blockId, ui }: BlockViewProps<ConfirmBlock>
         </p>
       )}
 
-      {!cancelled && (
+      {!settled && (
         <div className="mt-4 flex flex-col gap-3">
           <Button type="button" disabled={!canAct} onClick={() => void flow.confirm()} aria-busy={flow.phase === 'working'}>
             {flow.phase === 'working' ? 'Đang xác nhận…' : `Xác nhận chuyển ${formatVnd(d.params.amount_vnd)}`}

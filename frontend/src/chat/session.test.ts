@@ -300,4 +300,92 @@ describe('ChatSession: khối và phát lại', () => {
     expect(kinds(items)).toEqual(['user', 'block', 'assistant'])
     expect(session.getHistory().map((m) => m.role)).toEqual(['user', 'assistant'])
   })
+
+  it('replaceBlock đánh dấu khối là kết quả của đề nghị đã thực hiện (resolved)', async () => {
+    const confirm = validBlock('confirm.move')
+    const receipt = validBlock('receipt.move')
+    const { session } = makeSession([() => sseResponse([runStarted(), blockSnapshot(String(confirm.id), confirm), runFinished()])])
+    await session.send('chuyển')
+    session.replaceBlock(String(confirm.id), receipt, String(receipt.id))
+    expect(session.getSnapshot().items[1]).toMatchObject({ kind: 'block', id: receipt.id, resolved: true })
+  })
+
+  it('addSystemNote cùng key chỉ thêm một lần', () => {
+    const { session } = makeSession([])
+    session.addSystemNote('đã chuyển', 'receipt:x')
+    session.addSystemNote('đã chuyển', 'receipt:x')
+    expect(session.getHistory().filter((m) => m.role === 'system')).toHaveLength(1)
+  })
+})
+
+// Trạng thái của khối confirm do server giữ (`resolutions`); phát lại phải theo đó, không theo số dư hay đồng hồ.
+describe('ChatSession: phát lại trạng thái đề nghị từ server', () => {
+  const TRACE = 'a'.repeat(32)
+  const confirm = () => validBlock('confirm.move') as { id: string; data: { expires_at: string } }
+  const turnWith = (block: unknown, resolutions: unknown[]) =>
+    ({ trace_id: TRACE, created_at: '2026-11-21T01:00:00Z', user_text: 'chuyển 100 nghìn', assistant_text: 'Chưa có khoản tiền nào được chuyển. Bạn bấm Xác nhận.', blocks: [block], resolutions }) as never
+
+  it('done: biên nhận thay chỗ khối confirm (không còn nút), kèm ghi chú hệ thống cho agent', () => {
+    const { session } = makeSession([])
+    const c = confirm()
+    const receipt = validBlock('receipt.move')
+    session.hydrate([turnWith(c, [{ block_id: c.id, status: 'done', resolved_at: '2026-11-21T01:01:00Z', receipt }])])
+    const items = session.getSnapshot().items
+    expect(kinds(items)).toEqual(['user', 'block', 'assistant'])
+    expect(items[1]).toMatchObject({ kind: 'block', id: receipt.id, raw: receipt, resolved: true })
+    expect(items.some((i) => i.kind === 'block' && i.id === c.id)).toBe(false)
+    // agent biết việc đã làm, ngay sau lượt đó
+    expect(session.getHistory().map((m) => m.role)).toEqual(['user', 'assistant', 'system'])
+    expect(session.getHistory()[2]!.content).toContain(String((receipt.data as { transaction_id: string }).transaction_id))
+  })
+
+  it('done mà biên nhận hỏng: giữ khối confirm nhưng khóa (ui=done), không để bấm lại', () => {
+    const { session } = makeSession([])
+    const c = confirm()
+    session.hydrate([turnWith(c, [{ block_id: c.id, status: 'done', receipt: { type: 'receipt' } }])])
+    expect(session.getSnapshot().items[1]).toMatchObject({ id: c.id, ui: 'done', resolved: true })
+  })
+
+  it('expired: khối confirm được đánh dấu hết hạn (ui=expired)', () => {
+    const { session } = makeSession([])
+    const c = confirm()
+    session.hydrate([turnWith(c, [{ block_id: c.id, status: 'expired' }])])
+    expect(session.getSnapshot().items[1]).toMatchObject({ id: c.id, ui: 'expired' })
+    expect(session.getSnapshot().items[1]).not.toHaveProperty('resolved', true)
+    expect(session.getHistory().map((m) => m.role)).toEqual(['user', 'assistant']) // chưa thực hiện: không có ghi chú
+  })
+
+  it('pending và server cũ không có resolutions: khối nguyên vẹn, chưa đánh dấu gì', () => {
+    const { session } = makeSession([])
+    const c = confirm()
+    session.hydrate([turnWith(c, [{ block_id: c.id, status: 'pending' }])])
+    expect(session.getSnapshot().items[1]).toMatchObject({ id: c.id, raw: c })
+    expect(session.getSnapshot().items[1]).toMatchObject({ ui: undefined, resolved: undefined })
+    session.hydrate([{ trace_id: TRACE, created_at: '2026-11-21T01:00:00Z', user_text: 'q', assistant_text: 'a', blocks: [c] }])
+    expect(session.getSnapshot().items[1]).toMatchObject({ id: c.id, ui: undefined })
+  })
+
+  it('applyResolutions: chỉ vá khối đang hiện, không dựng lại hội thoại (giữ thông báo lỗi chưa lưu)', async () => {
+    const c = confirm()
+    const receipt = validBlock('receipt.move')
+    const { session } = makeSession([
+      () => sseResponse([runStarted(), blockSnapshot(c.id, c), runFinished()]),
+      () => sseResponse([]), // lượt lỗi: sinh thông báo, chưa được server lưu
+    ])
+    await session.send('chuyển')
+    await session.send('thử tiếp')
+    const before = session.getSnapshot().items
+    expect(before.some((i) => i.kind === 'notice')).toBe(true)
+
+    session.applyResolutions([turnWith(c, [{ block_id: c.id, status: 'done', receipt }])])
+    const items = session.getSnapshot().items
+    expect(items.some((i) => i.kind === 'notice')).toBe(true) // không bị xóa
+    const blk = items.find((i) => i.kind === 'block')!
+    expect(blk).toMatchObject({ id: receipt.id, resolved: true })
+    expect(session.getHistory().filter((m) => m.role === 'system')).toHaveLength(1)
+
+    // gọi lại cùng dữ liệu: không đổi, không thêm ghi chú thứ hai
+    session.applyResolutions([turnWith(c, [{ block_id: c.id, status: 'done', receipt }])])
+    expect(session.getHistory().filter((m) => m.role === 'system')).toHaveLength(1)
+  })
 })

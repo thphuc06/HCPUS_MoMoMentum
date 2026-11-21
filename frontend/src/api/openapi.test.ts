@@ -1,8 +1,8 @@
 import { parse } from 'yaml'
 import { describe, expect, it } from 'vitest'
 import { ERROR_CODES, HTTP_STATUS } from './errors'
-import { ConversationResponse, StoredTurn } from '@/chat/repository'
-import { JarsResponse, ResetResponse } from './schemas'
+import { ConversationResponse, Resolution, StoredTurn } from '@/chat/repository'
+import { ActionRequest, ConfirmationRequest, JarsResponse, ResetResponse } from './schemas'
 import { jarsFromFixture } from '@/test/helpers'
 
 // Đối chiếu code frontend với contracts/rest/openapi.yaml (nguồn duy nhất của hợp đồng REST).
@@ -18,6 +18,9 @@ const spec = parse(raw) as {
       ResetResponse: { required: string[] }
       ConversationResponse: { required: string[] }
       ConversationTurn: { required: string[] }
+      ConfirmResolution: { oneOf: Array<{ properties: { status: { const?: string; enum?: string[] } } }> }
+      ActionRequest: { properties: Record<string, unknown> }
+      ConfirmationRequest: { properties: Record<string, unknown> }
     }
   }
 }
@@ -41,6 +44,17 @@ describe('khớp openapi.yaml', () => {
     expect(Object.keys(JarsResponse.shape).sort()).toEqual([...spec.components.schemas.JarsResponse.required].sort())
     expect(Object.keys(ResetResponse.shape).sort()).toEqual([...spec.components.schemas.ResetResponse.required].sort())
     expect(JarsResponse.safeParse(jarsFromFixture()).success).toBe(true)
+  })
+
+  it('trạng thái đề nghị: Resolution khớp ConfirmResolution; hai yêu cầu nhận conversation_id + confirm_block_id', () => {
+    const statuses = spec.components.schemas.ConfirmResolution.oneOf.flatMap((o) => o.properties.status.enum ?? [o.properties.status.const!])
+    expect(statuses.sort()).toEqual([...Resolution.shape.status.options].sort())
+    for (const name of ['ActionRequest', 'ConfirmationRequest'] as const) {
+      const props = Object.keys(spec.components.schemas[name].properties)
+      expect(props).toEqual(expect.arrayContaining(['conversation_id', 'confirm_block_id']))
+    }
+    expect(Object.keys(ActionRequest.shape)).toEqual(expect.arrayContaining(['conversation_id', 'confirm_block_id']))
+    expect(Object.keys(ConfirmationRequest.shape)).toEqual(expect.arrayContaining(['conversation_id', 'confirm_block_id']))
   })
 
   it('ConversationResponse và ConversationTurn (phát lại hội thoại) có đúng các trường bắt buộc', () => {

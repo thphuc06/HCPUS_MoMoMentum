@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatAppDate, formatCountdown, formatDateTime, formatVnd, formatVndNumber, formatVndShort, greetingForHour } from './format'
+import { formatAppDate, formatCountdown, formatDateTime, formatVnd, formatVndNumber, formatVndShort, greetingForHour, greetingNow } from './format'
 
 const NBSP = ' '
 
@@ -40,9 +40,18 @@ describe('ngày giờ', () => {
     expect(formatCountdown(-5)).toBe('00:00')
   })
   it('lời chào theo giờ', () => {
+    expect(greetingForHour(0)).toBe('Chào buổi tối') // 0 giờ đêm không phải buổi sáng
+    expect(greetingForHour(1)).toBe('Chào buổi tối')
+    expect(greetingForHour(4)).toBe('Chào buổi tối')
+    expect(greetingForHour(5)).toBe('Chào buổi sáng')
     expect(greetingForHour(7)).toBe('Chào buổi sáng')
     expect(greetingForHour(12)).toBe('Chào buổi trưa')
     expect(greetingForHour(16)).toBe('Chào buổi chiều')
     expect(greetingForHour(21)).toBe('Chào buổi tối')
+  })
+  it('lời chào theo giờ của thiết bị (giờ địa phương của Date)', () => {
+    expect(greetingNow(new Date(2026, 10, 22, 1, 0))).toBe('Chào buổi tối')
+    expect(greetingNow(new Date(2026, 10, 22, 8, 30))).toBe('Chào buổi sáng')
+    expect(greetingNow(new Date(2026, 10, 22, 15, 0))).toBe('Chào buổi chiều')
   })
 })

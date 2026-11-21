@@ -20,12 +20,22 @@ export const JarsResponse = z.object({
 export type JarsResponse = z.infer<typeof JarsResponse>
 
 export const ToolName = z.enum(['move_between_jars'])
+
+/**
+ * Đề nghị (khối `confirm`) đang được thực hiện: server chỉ cho thực hiện một lần và lưu biên nhận gắn với nó.
+ * Gửi cả hai trường hoặc không gửi.
+ */
+const ConfirmRef = {
+  conversation_id: z.string().min(1).max(256).optional(),
+  confirm_block_id: z.string().max(128).optional(),
+}
 export type ToolName = z.infer<typeof ToolName>
 
 export const ConfirmationRequest = z.object({
   tool: ToolName,
   params: MoveParams,
   params_hash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  ...ConfirmRef,
 })
 export type ConfirmationRequest = z.infer<typeof ConfirmationRequest>
 
@@ -43,6 +53,7 @@ export const ActionRequest = z.object({
   tool: ToolName,
   params: MoveParams,
   confirm_token: z.string().max(1024).optional(),
+  ...ConfirmRef,
 })
 export type ActionRequest = z.infer<typeof ActionRequest>
 

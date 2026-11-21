@@ -21,12 +21,17 @@ export function UserBubble({ text }: { text: string }) {
 }
 
 // Figma AIMessage (10:242): chữ trực tiếp trên nền, không bong bóng. Con trỏ nhấp nháy khi còn chạy.
-export function AIMessage({ text, done }: { text: string; done: boolean }) {
+// `superseded`: lượt này có đề nghị đã được thực hiện, nên lời trước đó ("chưa chuyển gì, bấm xác nhận...") không còn
+// đúng ở thời điểm hiện tại: làm mờ và ghi rõ đó là lời trước khi xác nhận (không sửa nội dung).
+export function AIMessage({ text, done, superseded = false }: { text: string; done: boolean; superseded?: boolean }) {
   return (
-    <p data-testid="assistant-text" className="text-body whitespace-pre-wrap text-ink">
-      {text}
-      {!done && <span aria-hidden className="ml-0.5 inline-block h-4 w-0.5 translate-y-0.5 animate-pulse bg-brand" />}
-    </p>
+    <div data-testid="assistant-message" data-superseded={superseded ? 'true' : undefined} className={cn(superseded && 'opacity-60')}>
+      {superseded && <p className="mb-0.5 text-note font-semibold text-ink-2">Trước khi bạn xác nhận</p>}
+      <p data-testid="assistant-text" className="text-body whitespace-pre-wrap text-ink">
+        {text}
+        {!done && <span aria-hidden className="ml-0.5 inline-block h-4 w-0.5 translate-y-0.5 animate-pulse bg-brand" />}
+      </p>
+    </div>
   )
 }
 

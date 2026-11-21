@@ -8,9 +8,19 @@ import { ApiError, apiErrorFromResponse } from '@/api/errors'
 //   GET /conversations/{conversation_id}   (JWT Bearer)
 //   200 -> { conversation_id, turns: [ { trace_id, created_at, user_text, assistant_text, blocks: [khối UI] } ] }
 //   (cũ -> mới, tối đa 50 lượt). Hội thoại không có hoặc không thuộc người gọi: 200 với `turns` rỗng.
-//   Khối `confirm` được lưu như lúc phát; việc đã bấm xác nhận hay chưa KHÔNG được lưu, nên sau khi tải lại
-//   một khối confirm cũ hiện lại như chưa bấm (nút còn hạn thì bấm được; quá hạn thì hiện "hết hạn").
+//   Khối `confirm` được lưu nguyên văn trong `blocks`; trạng thái của nó do server giữ ở `resolutions` của lượt
+//   (nguồn sự thật, không suy từ số dư): `done` kèm `receipt` (đã thực hiện), `expired` (quá hạn đề nghị),
+//   `pending` (còn hạn, chưa thực hiện: nút vẫn bấm được).
 // Tắt phía frontend bằng VITE_CONVERSATION_REPLAY=0. Route chưa deploy (404) coi như chưa có gì.
+
+/** Trạng thái một khối `confirm`. `receipt` được kiểm bằng schema khối ở chỗ dùng (lỗi một khối không làm mất cả hội thoại). */
+export const Resolution = z.object({
+  block_id: z.string().min(1),
+  status: z.enum(['pending', 'done', 'expired']),
+  resolved_at: z.string().optional(),
+  receipt: z.unknown().optional(),
+})
+export type Resolution = z.infer<typeof Resolution>
 
 export const StoredTurn = z.object({
   trace_id: z.string().min(1),
@@ -18,8 +28,12 @@ export const StoredTurn = z.object({
   user_text: z.string(),
   assistant_text: z.string(),
   blocks: z.array(z.unknown()),
+  // Server cũ chưa có trường này: coi như không có đề nghị nào đã thực hiện.
+  resolutions: z.array(Resolution).default([]),
 })
 export type StoredTurn = z.infer<typeof StoredTurn>
+/** Dạng đầu vào (server cũ có thể chưa gửi `resolutions`). */
+export type StoredTurnInput = z.input<typeof StoredTurn>
 
 export const ConversationResponse = z.object({
   conversation_id: z.string(),

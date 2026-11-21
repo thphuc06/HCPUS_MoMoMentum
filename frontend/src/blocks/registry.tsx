@@ -2,13 +2,14 @@ import { Component, type ComponentType, type ReactNode } from 'react'
 import { Info } from 'lucide-react'
 import type { z } from 'zod'
 import { BLOCK_TYPES, blockSchemas, type BlockType } from '@/contracts/blocks'
+import type { BlockUi } from '@/chat/session'
 import { ConfirmView, JarSummaryView, NoticeView, ReceiptView, type BlockViewProps } from './views'
 
 // Registry `type -> { schema Zod, Component }`. Thêm một loại khối: schema ở contracts/ (sinh Zod), một dòng ở đây.
 // Parse TỪNG khối riêng; type lạ hoặc sai schema hiện fallback_text; error boundary bọc từng khối.
 
 type Entry = {
-  render: (raw: unknown, props: { blockId: string; ui?: 'cancelled' }) => ReactNode
+  render: (raw: unknown, props: { blockId: string; ui?: BlockUi }) => ReactNode
   parse: (raw: unknown) => boolean
 }
 
@@ -78,7 +79,7 @@ class BlockBoundary extends Component<{ raw: unknown; children: ReactNode }, { f
   }
 }
 
-export function BlockRenderer({ raw, blockId, ui }: { raw: unknown; blockId: string; ui?: 'cancelled' }) {
+export function BlockRenderer({ raw, blockId, ui }: { raw: unknown; blockId: string; ui?: BlockUi }) {
   const type = raw && typeof raw === 'object' ? (raw as { type?: unknown }).type : undefined
   if (!isBlockType(type)) return <FallbackBlock raw={raw} reason="unknown_type" />
   const entry = registry[type]

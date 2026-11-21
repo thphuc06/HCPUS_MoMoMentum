@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -41,6 +41,19 @@ class MoveResult:
     amount_vnd: int
     from_jar: dict[str, Any]  # code, name, balance_vnd (sau khi chuyển)
     to_jar: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ConfirmClaim:
+    """Đề nghị (khối `confirm`) mà thao tác chuyển hũ này thực hiện (migration 0004).
+
+    `receipt_for` dựng khối `receipt` (dạng JSON gửi ra ngoài) từ kết quả ghi; repo lưu nó cùng transaction
+    với sổ cái để phát lại sau khi tải trang.
+    """
+
+    conversation_id: str
+    confirm_block_id: str
+    receipt_for: Callable[[MoveResult], Mapping[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -96,6 +109,18 @@ WITH moved AS (
 SELECT code, name, balance_vnd FROM moved
 """
 
+# Đánh dấu đề nghị đã thực hiện (migration 0004). Trùng (user_id, confirm_block_id) thì không chèn và không
+# trả dòng nào: người gọi coi là ALREADY_APPLIED và rollback cả transaction.
+SQL_CLAIM_CONFIRM = (
+    "INSERT INTO confirm_resolutions (user_id, confirm_block_id, conversation_id, transfer_id, receipt) "
+    "VALUES (:uid, :cbid, :conv, CAST(:transfer_id AS uuid), CAST(:receipt AS jsonb)) "
+    "ON CONFLICT (user_id, confirm_block_id) DO NOTHING RETURNING id"
+)
+SQL_GET_RESOLUTION = "SELECT * FROM app_get_confirm_resolution(:uid, :cbid)"
+SQL_GET_RESOLUTIONS = (
+    "SELECT * FROM app_get_confirm_resolutions(:uid, :conv, CAST(:lim AS integer))"
+)
+
 SQL_AUDIT = (
     "INSERT INTO audit_events (user_id, trace_id, event_type, tool, outcome, code, params, details) "
     "VALUES (:uid, :trace_id, :event_type, :tool, :outcome, :code, "
@@ -122,9 +147,11 @@ SQL_LIST_CONVERSATIONS = "SELECT * FROM app_list_conversations(:uid, CAST(:lim A
 
 TURNS_PER_CONVERSATION = 50
 BLOCKS_PER_CONVERSATION = 300  # trần của app_get_conversation_blocks
+RESOLUTIONS_PER_CONVERSATION = 300  # trần của app_get_confirm_resolutions
 
 SQL_RESET_TRANSACTIONS = "DELETE FROM transactions WHERE user_id = :uid"
 SQL_RESET_BLOCKS = "DELETE FROM turn_blocks WHERE user_id = :uid"
+SQL_RESET_RESOLUTIONS = "DELETE FROM confirm_resolutions WHERE user_id = :uid"
 SQL_RESET_TURNS = "DELETE FROM conversation_turns WHERE user_id = :uid"
 SQL_RESET_JARS = "DELETE FROM jars WHERE user_id = :uid"
 SQL_UPSERT_USER = """
@@ -196,9 +223,14 @@ class LedgerRepo:
         trace_id: str,
         channel: str,
         jti: str | None = None,
+        claim: ConfirmClaim | None = None,
     ) -> MoveResult:
         """Chuyển tiền giữa hai hũ trong MỘT transaction. Ném `YofinaError` (JAR_NOT_FOUND,
-        INSUFFICIENT_FUNDS); ngoại lệ bất kỳ thì rollback, không ghi gì."""
+        INSUFFICIENT_FUNDS, ALREADY_APPLIED); ngoại lệ bất kỳ thì rollback, không ghi gì.
+
+        Có `claim`: cuối transaction đánh dấu đề nghị đã thực hiện (kèm biên nhận). Đề nghị đã thực hiện
+        rồi thì ném ALREADY_APPLIED và cả sổ cái được rollback; hai yêu cầu song song cùng đề nghị thì
+        yêu cầu sau chờ khóa unique rồi bị rollback."""
         with self.db.transaction(user_id) as tx:
             rows = tx.execute(
                 SQL_LOCK_JARS, {"uid": user_id, "from_jar": from_jar, "to_jar": to_jar}
@@ -228,25 +260,42 @@ class LedgerRepo:
                     "details": {"transfer_id": transfer_id, "channel": channel, "jti": jti},
                 },
             )
-        after = {r["code"]: r for r in out}
-        if len(after) != 2:  # không thể xảy ra: hai hũ đã khóa ở trên
-            raise YofinaError(ErrorCode.INTERNAL_ERROR, "Không ghi được giao dịch.")
-        return MoveResult(
-            transfer_id=transfer_id,
-            occurred_at=now,
-            app_date=app_date,
-            amount_vnd=amount_vnd,
-            from_jar={
-                "code": from_jar,
-                "name": after[from_jar]["name"],
-                "balance_vnd": to_vnd(after[from_jar]["balance_vnd"]),
-            },
-            to_jar={
-                "code": to_jar,
-                "name": after[to_jar]["name"],
-                "balance_vnd": to_vnd(after[to_jar]["balance_vnd"]),
-            },
-        )
+            after = {r["code"]: r for r in out}
+            if len(after) != 2:  # không thể xảy ra: hai hũ đã khóa ở trên
+                raise YofinaError(ErrorCode.INTERNAL_ERROR, "Không ghi được giao dịch.")
+            result = MoveResult(
+                transfer_id=transfer_id,
+                occurred_at=now,
+                app_date=app_date,
+                amount_vnd=amount_vnd,
+                from_jar={
+                    "code": from_jar,
+                    "name": after[from_jar]["name"],
+                    "balance_vnd": to_vnd(after[from_jar]["balance_vnd"]),
+                },
+                to_jar={
+                    "code": to_jar,
+                    "name": after[to_jar]["name"],
+                    "balance_vnd": to_vnd(after[to_jar]["balance_vnd"]),
+                },
+            )
+            if claim is not None:
+                claimed = tx.execute(
+                    SQL_CLAIM_CONFIRM,
+                    {
+                        "uid": user_id,
+                        "cbid": claim.confirm_block_id,
+                        "conv": claim.conversation_id,
+                        "transfer_id": transfer_id,
+                        "receipt": dict(claim.receipt_for(result)),
+                    },
+                )
+                if not claimed:
+                    raise YofinaError(
+                        ErrorCode.ALREADY_APPLIED,
+                        "Đề nghị này đã được thực hiện rồi. Chưa ghi thêm gì.",
+                    )
+        return result
 
     # --- lượt hội thoại ---------------------------------------------------------------
     def save_turn(
@@ -288,6 +337,21 @@ class LedgerRepo:
             max_rows=BLOCKS_PER_CONVERSATION,
         )
         return turns, blocks
+
+    def resolution(self, user_id: str, confirm_block_id: str) -> Row | None:
+        """Đề nghị đã thực hiện (kèm biên nhận) hoặc None. RLS nên đề nghị của người khác ra None."""
+        rows = self.db.query(
+            SQL_GET_RESOLUTION, {"uid": user_id, "cbid": confirm_block_id}, max_rows=1
+        )
+        return rows[0] if rows else None
+
+    def resolutions(self, user_id: str, conversation_id: str) -> list[Row]:
+        """Các đề nghị đã thực hiện của một cuộc hội thoại, cũ tới mới."""
+        return self.db.query(
+            SQL_GET_RESOLUTIONS,
+            {"uid": user_id, "conv": conversation_id, "lim": RESOLUTIONS_PER_CONVERSATION},
+            max_rows=RESOLUTIONS_PER_CONVERSATION,
+        )
 
     def list_conversations(self, user_id: str, *, limit: int) -> list[Row]:
         return self.db.query(SQL_LIST_CONVERSATIONS, {"uid": user_id, "lim": limit}, max_rows=50)
@@ -333,7 +397,13 @@ class LedgerRepo:
     ) -> ResetCounts:
         """Xóa dữ liệu của chính người gọi rồi nạp lại (một transaction). `audit_events` chỉ thêm."""
         with self.db.transaction(user_id) as tx:
-            for sql in (SQL_RESET_TRANSACTIONS, SQL_RESET_BLOCKS, SQL_RESET_TURNS, SQL_RESET_JARS):
+            for sql in (
+                SQL_RESET_TRANSACTIONS,
+                SQL_RESET_BLOCKS,
+                SQL_RESET_TURNS,
+                SQL_RESET_RESOLUTIONS,
+                SQL_RESET_JARS,
+            ):
                 tx.execute(sql, {"uid": user_id})
             tx.execute(SQL_UPSERT_USER, {"uid": user_id, **profile})
             tx.batch(SQL_INSERT_JAR, [{"uid": user_id, **j} for j in jars])

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/auth/AuthProvider'
 import { useJars } from '@/api/ApiProvider'
-import { greetingForHour, vietnamHour } from '@/lib/format'
+import { greetingNow } from '@/lib/format'
 import { displayName } from '@/lib/user'
 import type { JarsResponse } from '@/api/schemas'
 
@@ -21,7 +21,7 @@ function Header() {
         {name.charAt(0).toUpperCase()}
       </span>
       <div className="min-w-0">
-        <p className="text-small text-ink-2">{greetingForHour(vietnamHour())}</p>
+        <p className="text-small text-ink-2">{greetingNow()}</p>
         <h1 className="truncate text-section font-bold text-ink">{name}</h1>
       </div>
     </header>

@@ -35,6 +35,28 @@ describe('phát lại hội thoại từ server', () => {
     expect(new Headers(init.headers as HeadersInit).get('authorization')).toBe('Bearer tok')
   })
 
+  it('resolutions của lượt được đọc; server cũ không gửi thì là mảng rỗng', async () => {
+    const t = turn()
+    const withRes = {
+      ...t,
+      resolutions: [
+        { block_id: 'confirm:x:aaaaaaaaaaaa', status: 'done', resolved_at: '2026-11-21T10:01:00Z', receipt: validBlock('receipt.move') },
+        { block_id: 'confirm:y:bbbbbbbbbbbb', status: 'expired' },
+      ],
+    }
+    const turns = await repo(new Response(JSON.stringify({ conversation_id: ID, turns: [withRes, t] }), { status: 200 })).r.load(ID)
+    expect(turns[0]!.resolutions.map((r) => r.status)).toEqual(['done', 'expired'])
+    expect(turns[0]!.resolutions[0]!.receipt).toMatchObject({ type: 'receipt' })
+    expect(turns[1]!.resolutions).toEqual([])
+  })
+
+  it('status lạ trong resolutions: INVALID_RESPONSE (hợp đồng chỉ có pending, done, expired)', async () => {
+    const bad = { ...turn(), resolutions: [{ block_id: 'x', status: 'cancelled' }] }
+    await expect(repo(new Response(JSON.stringify({ conversation_id: ID, turns: [bad] }), { status: 200 })).r.load(ID)).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
+  })
+
   it('hội thoại chưa có gì: turns rỗng; route chưa deploy (404) cũng coi như rỗng', async () => {
     expect(await repo(new Response(JSON.stringify({ conversation_id: ID, turns: [] }), { status: 200 })).r.load(ID)).toEqual([])
     expect(await repo(new Response('{"message":"Not Found"}', { status: 404 })).r.load(ID)).toEqual([])

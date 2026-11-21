@@ -2,31 +2,35 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: 2026-11-21, sau khi viết kế hoạch 6 phase. **Kế hoạch đang chờ chủ dự án duyệt; chưa bắt đầu code.**
+Cập nhật lần cuối: 2026-11-22 (rạng sáng), sau khi đóng phase 1.
 
 ## Đang ở đâu trong kế hoạch
 
-Giai đoạn chuẩn bị đã xong (tài liệu, bảy spike, Figma). Kế hoạch thực hiện: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase, mỗi phase một file trong [docs/plan/phases/](docs/plan/phases/). Chưa có dòng code sản phẩm nào, chưa có tài nguyên AWS nào của dự án ([docs/aws-resources.md](docs/aws-resources.md)). Hạn nộp giả định trước 11/12/2026.
+Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase trong [docs/plan/phases/](docs/plan/phases/). Hạn nộp giả định trước 11/12/2026.
 
 | Phase | Trạng thái |
 |---|---|
-| [1. Nền và lát dọc](docs/plan/phases/phase-1-nen-va-lat-doc.md) (21–24/11) | Chưa bắt đầu; chờ duyệt kế hoạch và chờ chủ dự án đăng nhập lại AWS |
-| [2. Ví mô phỏng và dự báo](docs/plan/phases/phase-2-vi-va-du-bao.md) (25–28/11) | Chưa bắt đầu |
-| [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) (29/11–2/12) | Chưa bắt đầu |
-| [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) (3–5/12) | Chưa bắt đầu |
-| [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) (6–8/12) | Chưa bắt đầu |
-| [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) (9–10/12) | Chưa bắt đầu |
+| [1. Nền và lát dọc](docs/plan/phases/phase-1-nen-va-lat-doc.md) | **Xong 22/11**, trừ hai việc chờ chủ dự án (xem dưới). Kết quả ở cuối file phase |
+| [2. Ví mô phỏng và dự báo](docs/plan/phases/phase-2-vi-va-du-bao.md) (25–28/11) | Chưa bắt đầu; là việc kế tiếp |
+| [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | Chưa bắt đầu |
+| [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | Chưa bắt đầu |
+| [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) | Chưa bắt đầu |
+| [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) | Chưa bắt đầu |
 
-## Cách làm việc từ đây
+## Đang chạy trên AWS (`ap-southeast-1`)
 
-Người điều phối (Claude Fable 5.2) giao subagent (Sonnet 5.5, effort high) code từng phase, việc độc lập chạy song song; sau mỗi phase người điều phối tự kiểm trên môi trường đã deploy rồi mới sang phase sau. Đóng phase: điền "Kết quả thực hiện" trong file phase, ai-log, ghi đè file này, tick open-questions, cập nhật aws-resources, commit (không kèm Co-Authored-By) và push. Chi tiết: [master-plan.md mục 3](docs/plan/master-plan.md#3-cách-chia-việc-trong-một-phase).
+Sáu stack: `YofinaFoundation`, `YofinaData`, `YofinaIdentity`, `YofinaTools`, `YofinaAgent`, `YofinaFrontend`. Danh sách đầy đủ: [docs/aws-resources.md](docs/aws-resources.md). App: `https://main.dcrwn4u7vqklo.amplifyapp.com`. Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. Aurora 0,5 ACU chạy liên tục (khoảng 2,4 USD/ngày).
+
+Lệnh hay dùng (chi tiết ở `scripts/README.md`, `infra-cdk/README.md`, `agent/README.md`): `uv run pytest`; `uv run pytest tests/integration -m integration` (71 test, gọi môi trường thật); `uv run scripts/cdk.py deploy <Stack> --require-approval never`; `uv run scripts/agent_deploy.py`; `uv run scripts/migrate.py`; `uv run scripts/seed_demo.py`; `uv run scripts/print_env.py frontend --write` rồi `npm run build` trong `frontend/` và `uv run scripts/deploy_frontend.py frontend/dist`.
+
+## Cách làm việc
+
+Người điều phối giao subagent (Sonnet 5.5, effort high) code từng phase, tự kiểm trên môi trường thật rồi mới sang phase sau. **Không hardcode, không giả lập** ([master-plan mục 2](docs/plan/master-plan.md#2-quyết-định-áp-dụng-cho-mọi-phase)). Chỉ một luồng deploy tại một thời điểm. Đóng phase: điền "Kết quả thực hiện", ai-log, ghi đè file này, tick open-questions, cập nhật aws-resources, commit (không Co-Authored-By) và push.
 
 ## Việc kế tiếp
 
-1. **Chủ dự án duyệt kế hoạch** (một lần). Ba lựa chọn của người điều phối cần chủ dự án để ý khi duyệt, đều ở [master-plan.md mục 2](docs/plan/master-plan.md#2-quyết-định-áp-dụng-cho-mọi-phase): đồng hồ mô phỏng theo tài khoản (ngày mô phỏng 21/11/2026 khi đặt lại); không dùng Docker nên không deploy StatsForecast; đường ghi đi thẳng REST bằng token, LLM không nằm trên đường ghi.
-2. **Chủ dự án đăng nhập lại AWS**: `aws login` và connector AWS MCP (cả hai đã hết phiên).
-3. Chủ dự án cho biết số tiền ngân sách tháng và email nhận cảnh báo (mặc định đề xuất 100 USD).
-4. Bắt đầu phase 1: bước 0 (hợp đồng) rồi luồng A (danh tính deploy `yofina-deployer`, có ba bước chủ dự án tự làm trong console).
+1. **Chủ dự án**: mở app trên Chrome máy tính và Safari iPhone, đăng nhập `minh`, thử hỏi "số dư các hũ của mình" (chat trên URL Amplify chưa ai kiểm từ trình duyệt thật). Bấm link xác nhận trong mail SNS.
+2. Bắt đầu [phase 2](docs/plan/phases/phase-2-vi-va-du-bao.md): bước 0 (hợp đồng, migration 0005 trở đi), rồi bốn luồng. Mang theo mục "Chuyển sang phase sau" của phase 1.
 
 ## Quyết định đã chốt (2026-11-21, chủ dự án)
 
@@ -42,12 +46,12 @@ Quyền với AWS: được tạo và sửa tài nguyên `yofina-*` (tag `projec
 ## Môi trường (kiểm ngày 2026-11-21, có thể đã đổi — tự kiểm lại mỗi phiên)
 
 - Windows 11, thư mục `c:\moMo`, git repo nhánh `main`, remote `origin` trên GitHub (public). PowerShell và Git Bash. Python 3.13, uv, Node 24.
-- **AWS CLI: phiên đã hết hạn** (`aws sts get-caller-identity` báo cần `aws login`). Danh tính trước đó là root; region mặc định `us-east-1`. Không ghi account ID vào tài liệu.
-- **AWS MCP (connector claude.ai): kết nối đã bị vô hiệu**, cần kết nối lại trong cài đặt connector.
+- **AWS CLI**: đăng nhập bằng `aws login`, danh tính **root** (chủ dự án chốt dùng root; `yofina-deployer` có sẵn nhưng chưa dùng); region mặc định `us-east-1`, luôn truyền `--region ap-southeast-1`. Không ghi account ID vào tài liệu.
+- **AWS MCP (connector claude.ai)**: kết nối bị vô hiệu, đang dùng AWS CLI/boto3 thay.
 - **aws-docs MCP** và **agentcore MCP**: có trong phiên. `aws-serverless`, `terraform`, `aws-mcp` của plugin aws-core: không kết nối được.
 - Figma MCP có trong phiên (file thiết kế `l9vWyORNRjDqiEOXqpbzYm`).
 - Docker Desktop không chạy: kế hoạch không dùng Docker ở đâu cả.
-- Ổ C còn khoảng 12 GB; `.venv` và `node_modules` trong `spikes/` xóa được khi cần chỗ (phase 1 sẽ xóa).
+- Ổ C ít chỗ; `.venv` và `node_modules` trong `spikes/` đã xóa.
 - Tài khoản AWS có sẵn cluster Aurora và Cognito pool `jars-dev*` ở `ap-southeast-1`: không đụng.
 
 ## Lưu ý

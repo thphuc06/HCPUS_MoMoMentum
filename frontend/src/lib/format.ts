@@ -66,16 +66,18 @@ export function formatCountdown(ms: number): string {
   return `${mm}:${ss}`
 }
 
-/** Lời chào theo giờ Việt Nam. */
+/**
+ * Lời chào theo giờ (0 đến 23). Khuya (0 đến 4 giờ) vẫn là "buổi tối": chưa ai chào "buổi sáng" lúc 1 giờ đêm.
+ */
 export function greetingForHour(hour: number): string {
+  if (hour < 5) return 'Chào buổi tối'
   if (hour < 11) return 'Chào buổi sáng'
   if (hour < 14) return 'Chào buổi trưa'
   if (hour < 18) return 'Chào buổi chiều'
   return 'Chào buổi tối'
 }
 
-export function vietnamHour(now: Date = new Date()): number {
-  return Number(
-    new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(now),
-  ) % 24
+/** Lời chào theo giờ của thiết bị người dùng (không theo múi giờ cố định). */
+export function greetingNow(now: Date = new Date()): string {
+  return greetingForHour(now.getHours())
 }
