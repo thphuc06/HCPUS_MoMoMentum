@@ -28,16 +28,36 @@
    "kind_source": "page_context",
    "page_step_hint": "VCB app: bước chuyển tiền trong hệ thống",
    "bank_or_wallet": "Vietcombank",
-   "quality": null,
+   "quality": "low_res",
    "quality_hint": "low_res",
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": null,
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 50000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Biên nhận VCB thành công 50.000; không có ngày (chỉ giờ 15:45), tên người nhận bị làm mờ. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -56,16 +76,36 @@
    "kind_source": "page_context",
    "page_step_hint": "VCB app: bước chuyển tiền liên ngân hàng",
    "bank_or_wallet": "Vietcombank",
-   "quality": null,
+   "quality": "low_res",
    "quality_hint": "low_res",
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": null,
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 50000,
+      "direction": "out",
+      "counterparty": "N***",
+      "counterparty_kind": "person",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "person_initial",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "VCB chuyển liên ngân hàng tới người tên 'nguyen ...' ở Techcombank; không có ngày. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -84,16 +124,36 @@
    "kind_source": "page_context",
    "page_step_hint": "F@st Mobile: màn chuyển tiền liên ngân hàng",
    "bank_or_wallet": "Techcombank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": null,
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 500000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Techcombank: màn xác nhận và màn thành công của CÙNG một giao dịch 500.000 tới Vietcombank: chỉ một dòng; phí 0. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -108,20 +168,35 @@
    "source_page": "https://mytour.vn/en/blog/bai-viet/guide-to-transferring-money-from-techcombank-via-phone-on-oppo-samsung.html",
    "downloaded_at": "2026-11-22",
    "license_note": "Ảnh minh họa trong bài hướng dẫn công khai của mytour.vn (bản quyền thuộc trang/nhà cung cấp app); chỉ lưu cục bộ để đánh giá nội bộ, không commit, không phát tán",
-   "kind_of_image": "receipt_transfer",
+   "kind_of_image": "other",
    "kind_source": "page_context",
    "page_step_hint": "Techcombank Mobile: chuyển tiền qua thẻ",
    "bank_or_wallet": "Techcombank",
-   "quality": null,
+   "quality": "low_res",
    "quality_hint": "low_res",
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Biểu mẫu chuyển qua thẻ, ô số tiền trống: không có giao dịch. Ảnh có số thẻ và tên người nhận đầy đủ: kiểm che PII. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "no_auto_rows": true,
+    "pii": {
+     "name_hashes": [
+      "660c46783e07bae95957889c2337099265ec5bfcc5f2af539830ace75e76fd2a"
+     ],
+     "name_token_counts": [
+      3
+     ],
+     "number_hashes": [
+      "1ed84c2d4261915bd5957576061d70cb5a2c0e4e1a8384738faff9288e54c7b6"
+     ],
+     "number_last4": [
+      "****9019"
+     ]
+    }
    }
   },
   {
@@ -140,16 +215,27 @@
    "kind_source": "page_context",
    "page_step_hint": "MoMo: chuyển tiền ví sang ví",
    "bank_or_wallet": "MoMo",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (MoMo 10.000 tới người nhận, bước 'Xác nhận'). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "no_auto_rows": true,
+    "pii": {
+     "name_hashes": [
+      "7554fcce239ee93484b863039b285773659ced112839c663f336d3d889b40544"
+     ],
+     "name_token_counts": [
+      2
+     ],
+     "number_hashes": [],
+     "number_last4": []
+    }
    }
   },
   {
@@ -164,20 +250,20 @@
    "source_page": "https://mytour.vn/vi/blog/bai-viet/transferring-money-from-momo-to-bank-accounts-and-other-momo-wallets.html",
    "downloaded_at": "2026-11-22",
    "license_note": "Ảnh minh họa trong bài hướng dẫn công khai của mytour.vn (bản quyền thuộc trang/nhà cung cấp app); chỉ lưu cục bộ để đánh giá nội bộ, không commit, không phát tán",
-   "kind_of_image": "receipt_transfer",
+   "kind_of_image": "other",
    "kind_source": "page_context",
    "page_step_hint": "MoMo: chuyển tiền đến ngân hàng",
    "bank_or_wallet": "MoMo",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
-    "expected_error": null,
+    "expected_error": "not_financial",
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Bảng biểu phí chuyển tiền MoMo, không phải giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -192,20 +278,52 @@
    "source_page": "https://mytour.vn/en/blog/bai-viet/transferring-funds-with-vpbank-from-your-computer.html",
    "downloaded_at": "2026-11-22",
    "license_note": "Ảnh minh họa trong bài hướng dẫn công khai của mytour.vn (bản quyền thuộc trang/nhà cung cấp app); chỉ lưu cục bộ để đánh giá nội bộ, không commit, không phát tán",
-   "kind_of_image": "receipt_transfer",
+   "kind_of_image": "history_screenshot",
    "kind_source": "page_context",
    "page_step_hint": "VPBank Online (máy tính): chuyển tiền trong hệ thống",
    "bank_or_wallet": "VPBank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": "2017-02-07",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 1000000,
+      "direction": "out",
+      "counterparty": "T***",
+      "counterparty_kind": "person",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "person_initial",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "VPBank lịch sử chuyển khoản: một dòng 07/02/2017 'CK tới tài khoản khác' 1.000.000, thành công. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "pii": {
+     "name_hashes": [],
+     "name_token_counts": [],
+     "number_hashes": [
+      "252778b5b2d6cd205302241fa393aa51c1b2cf66b94a25e63af9de222af741e2",
+      "4bd206771d11622bfb93a935991cb3a382f2499f19f899ee1cae096f2e3398e3"
+     ],
+     "number_last4": [
+      "****0446",
+      "****2725"
+     ]
+    }
    }
   },
   {
@@ -224,16 +342,36 @@
    "kind_source": "page_context",
    "page_step_hint": "VPBank Online (máy tính): chuyển tiền ngoài hệ thống",
    "bank_or_wallet": "VPBank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": "2017-02-07",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 10000000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "chuyen khoan",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "VPBank chi tiết chuyển khoản 10.000.000 ngày 07/02/2017, nội dung 'chuyen khoan'; người nhận chỉ suy được từ tên mẫu giao dịch (tên riêng) nên không chấm đối tác. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -252,16 +390,17 @@
    "kind_source": "page_context",
    "page_step_hint": "ACB ONE: chuyển tiền",
    "bank_or_wallet": "ACB",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (ACB 50.000 tới BIDV, nội dung ABC). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "no_auto_rows": true
    }
   },
   {
@@ -280,16 +419,50 @@
    "kind_source": "page_context",
    "page_step_hint": "BIDV Smart Banking: chuyển tiền nội bộ",
    "bank_or_wallet": "BIDV",
-   "quality": null,
+   "quality": "low_res",
    "quality_hint": "low_res",
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": null,
+      "date_partial": "22/05",
+      "date_alternates": [],
+      "amount_vnd": 50000,
+      "direction": "out",
+      "counterparty": "N***",
+      "counterparty_kind": "person",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "ddmm_partial",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "person_initial",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "BIDV thành công 50.000 tới Techcombank lúc 22/05 15:26:36 (không có năm); phí 7.000 ở màn xác nhận không phải dòng riêng. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "pii": {
+     "name_hashes": [
+      "4dcd7abae05605d7d233260ca96652bed9750af9624d78f702716714f1705a72"
+     ],
+     "name_token_counts": [
+      3
+     ],
+     "number_hashes": [
+      "d8d867ee8772869221a692e7f6b421c49e2ff57913e153ff79507bd91a846acf"
+     ],
+     "number_last4": [
+      "****4011"
+     ]
+    }
    }
   },
   {
@@ -308,16 +481,27 @@
    "kind_source": "page_context",
    "page_step_hint": "VietinBank iPay: chuyển khoản ngoài hệ thống",
    "bank_or_wallet": "VietinBank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (VietinBank 50.000, đang chờ OTP). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "no_auto_rows": true,
+    "pii": {
+     "name_hashes": [
+      "35f0eb62bf051bada057ea6d35361e06e5446cfa9524616782a51a33646138ea"
+     ],
+     "name_token_counts": [
+      3
+     ],
+     "number_hashes": [],
+     "number_last4": []
+    }
    }
   },
   {
@@ -336,16 +520,84 @@
    "kind_source": "page_context",
    "page_step_hint": "VCB app: lịch sử giao dịch",
    "bank_or_wallet": "Vietcombank",
-   "quality": null,
+   "quality": "low_res",
    "quality_hint": "low_res",
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": "2018-05-18",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 30000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2018-05-17",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 450000,
+      "direction": "in",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2018-05-17",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 50000,
+      "direction": "in",
+      "counterparty": "N***",
+      "counterparty_kind": "person",
+      "description": "nop tien",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "person_initial",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "VCB lịch sử 14–21/05/2018: nạp tiền điện thoại -30.000 (MBVCB...TOPUP), IBPS +450.000, một cá nhân 'nop tien' +50.000. Màn trái là thông tin tài khoản (số dư), không phải giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "pii": {
+     "name_hashes": [
+      "1391cef58a832ce64094e3c1a43b260ae1f90df9962c88c38f3381e6d07a839b"
+     ],
+     "name_token_counts": [
+      3
+     ],
+     "number_hashes": [],
+     "number_last4": []
+    }
    }
   },
   {
@@ -364,16 +616,94 @@
    "kind_source": "page_context",
    "page_step_hint": "VPBank Online: lịch sử chuyển khoản",
    "bank_or_wallet": "VPBank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": "2019-01-20",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 680000,
+      "direction": "out",
+      "counterparty": "L***",
+      "counterparty_kind": "person",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "person_initial",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2019-01-21",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 3500000,
+      "direction": "out",
+      "counterparty": "L***",
+      "counterparty_kind": "person",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "person_initial",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2019-01-24",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 70000,
+      "direction": "out",
+      "counterparty": "L***",
+      "counterparty_kind": "person",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "person_initial",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "VPBank lịch sử chuyển khoản 01/2019, ba dòng thành công. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "pii": {
+     "name_hashes": [
+      "96762d0d585c48474bc02108e71c815a28f04c64a6b32f7e36accde997ce7f12",
+      "e6f09953a36a83c0049a1cfea3604a3f312bb6b3a6fc72e34744bfd05e2416d2",
+      "1523b366558f8f617cb6b0459f23245e722d59d932f9067f0dc22ca5c55f40f5"
+     ],
+     "name_token_counts": [
+      4,
+      4,
+      3
+     ],
+     "number_hashes": [
+      "663f0c7d49f39e5f50797ac314ca43b7a341ade0c52e2e7be60621ea2e16ca1c",
+      "c6ab85343830ebe4c9752518e4348da71b0ce243398a18831d233fa079999eeb"
+     ],
+     "number_last4": [
+      "****8472",
+      "****5301"
+     ]
+    }
    }
   },
   {
@@ -392,16 +722,54 @@
    "kind_source": "page_context",
    "page_step_hint": "VPBank Online: chi tiết một giao dịch chuyển khoản",
    "bank_or_wallet": "VPBank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": "2019-01-20",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 680000,
+      "direction": "out",
+      "counterparty": "L***",
+      "counterparty_kind": "person",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "person_initial",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
-    "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "duplicate_of": "r13",
+    "note": "Hộp tra soát chi tiết đúng giao dịch 680.000 ngày 20/01/2019 đã có ở r13: nạp sau r13 phải bị đánh dấu trùng. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "pii": {
+     "name_hashes": [
+      "96762d0d585c48474bc02108e71c815a28f04c64a6b32f7e36accde997ce7f12",
+      "1523b366558f8f617cb6b0459f23245e722d59d932f9067f0dc22ca5c55f40f5"
+     ],
+     "name_token_counts": [
+      4,
+      3
+     ],
+     "number_hashes": [
+      "663f0c7d49f39e5f50797ac314ca43b7a341ade0c52e2e7be60621ea2e16ca1c",
+      "cdc2edf2a2df2c5ec45b32e4748b90073c42dd85644f57b5f4c84ca2383c8b5a"
+     ],
+     "number_last4": [
+      "****8472",
+      "****7718"
+     ]
+    }
    }
   },
   {
@@ -420,16 +788,221 @@
    "kind_source": "page_context",
    "page_step_hint": "VPBank: lịch sử giao dịch tài khoản",
    "bank_or_wallet": "VPBank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": "2016-11-19",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 1000000,
+      "direction": "in",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "ck",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2016-11-19",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 1000000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "RUT TIEN TAI ATM",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2016-11-16",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 950000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "RUT TIEN TAI ATM",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2016-11-16",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 50000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2016-11-10",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 500000,
+      "direction": "in",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "ck",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2016-11-10",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 450000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "RUT TIEN TAI ATM",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2016-11-09",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 450000,
+      "direction": "in",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "ck",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2016-11-09",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 450000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "RUT TIEN TAI ATM",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2016-11-11",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 1000000,
+      "direction": "out",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "RUT TIEN TAI ATM",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     },
+     {
+      "date": "2016-11-16",
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 1000000,
+      "direction": "in",
+      "counterparty": null,
+      "counterparty_kind": "none",
+      "description": "ck",
+      "expected_jar": null,
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "skip_if_expected_null",
+       "description": "text_ratio>=0.80",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "VPBank sao kê tài khoản 11/2016, cột Ghi nợ/Ghi có: 10 dòng (dòng cuối bị khung chat che một phần). Rút ATM là chi ra khỏi tài khoản; dòng 'Transfer Debit-55012725' 50.000 không chấm nội dung. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "pii": {
+     "name_hashes": [
+      "28f2fbd1cabdc535a1cc9baedb6fb8f8e4ab6b01a8387d8470a45ab11932ec73"
+     ],
+     "name_token_counts": [
+      3
+     ],
+     "number_hashes": [
+      "4bd206771d11622bfb93a935991cb3a382f2499f19f899ee1cae096f2e3398e3"
+     ],
+     "number_last4": [
+      "****2725"
+     ]
+    }
    }
   },
   {
@@ -444,20 +1017,20 @@
    "source_page": "https://mytour.vn/en/blog/bai-viet/how-to-check-vietcombank-account-via-sms-on-mobile-phone.html",
    "downloaded_at": "2026-11-22",
    "license_note": "Ảnh minh họa trong bài hướng dẫn công khai của mytour.vn (bản quyền thuộc trang/nhà cung cấp app); chỉ lưu cục bộ để đánh giá nội bộ, không commit, không phát tán",
-   "kind_of_image": "balance_notification_sms",
+   "kind_of_image": "other",
    "kind_source": "page_context",
    "page_step_hint": "SMS kiểm tra tài khoản Vietcombank",
    "bank_or_wallet": "Vietcombank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
-    "expected_error": null,
+    "expected_error": "not_financial",
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Ảnh quảng cáo cú pháp SMS 'SD gửi 6167', không có giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -472,20 +1045,20 @@
    "source_page": "https://mytour.vn/en/blog/bai-viet/guide-to-transferring-funds-via-vietinbank-sms-banking.html",
    "downloaded_at": "2026-11-22",
    "license_note": "Ảnh minh họa trong bài hướng dẫn công khai của mytour.vn (bản quyền thuộc trang/nhà cung cấp app); chỉ lưu cục bộ để đánh giá nội bộ, không commit, không phát tán",
-   "kind_of_image": "balance_notification_sms",
+   "kind_of_image": "other",
    "kind_source": "page_context",
    "page_step_hint": "SMS Banking VietinBank: chuyển khoản bằng tin nhắn",
    "bank_or_wallet": "VietinBank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
-    "expected_error": null,
+    "expected_error": "not_financial",
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Bảng mã ngân hàng Smartlink, không phải giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -504,16 +1077,17 @@
    "kind_source": "page_context",
    "page_step_hint": "ViettelPay: thanh toán tiền điện/nước",
    "bank_or_wallet": "ViettelPay",
-   "quality": null,
+   "quality": "low_res",
    "quality_hint": "low_res",
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (ViettelPay tiền điện: nhập mật khẩu, đang truy vấn; ảnh hóa đơn giấy chèn nhỏ không đọc được số tiền). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "no_auto_rows": true
    }
   },
   {
@@ -532,16 +1106,36 @@
    "kind_source": "page_context",
    "page_step_hint": "Hóa đơn/thông báo tiền điện (mã khách hàng)",
    "bank_or_wallet": "EVN",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": null,
+      "date_partial": null,
+      "date_alternates": [],
+      "amount_vnd": 709073,
+      "direction": "out",
+      "counterparty": "EVN",
+      "counterparty_kind": "business",
+      "description": null,
+      "expected_jar": "hoa_don",
+      "match_rule": {
+       "date": "iso_exact",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "business_contains",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Hóa đơn GTGT tiền điện EVNHCMC kỳ 25/06–24/07/2015, tổng thanh toán 709.073 (chưa trả). Ảnh không có ngày phát hành rõ nên không chấm ngày; đối tác chấp nhận mọi tên chứa 'EVN'. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -560,16 +1154,17 @@
    "kind_source": "page_context",
    "page_step_hint": "Grab: thanh toán tiền điện",
    "bank_or_wallet": "Grab (Moca)",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (Grab thanh toán tiền điện 345.496, ảnh ghi 'Đây chưa phải là biên lai'). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "no_auto_rows": true
    }
   },
   {
@@ -584,20 +1179,20 @@
    "source_page": "https://mytour.vn/en/blog/bai-viet/how-to-pay-electricity-bills-using-vietcombank.html",
    "downloaded_at": "2026-11-22",
    "license_note": "Ảnh minh họa trong bài hướng dẫn công khai của mytour.vn (bản quyền thuộc trang/nhà cung cấp app); chỉ lưu cục bộ để đánh giá nội bộ, không commit, không phát tán",
-   "kind_of_image": "receipt_transfer",
+   "kind_of_image": "other",
    "kind_source": "page_context",
    "page_step_hint": "VCB: thanh toán tiền điện",
    "bank_or_wallet": "Vietcombank",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
-    "expected_error": null,
+    "expected_error": "not_financial",
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Ảnh hướng dẫn các màn menu thanh toán hóa đơn VCB, không có giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -612,20 +1207,21 @@
    "source_page": "https://mytour.vn/en/blog/bai-viet/top-notch-guide-for-swiftly-loading-phone-credit-on-momo-hassle-free.html",
    "downloaded_at": "2026-11-22",
    "license_note": "Ảnh minh họa trong bài hướng dẫn công khai của mytour.vn (bản quyền thuộc trang/nhà cung cấp app); chỉ lưu cục bộ để đánh giá nội bộ, không commit, không phát tán",
-   "kind_of_image": "receipt_transfer",
+   "kind_of_image": "other",
    "kind_source": "page_context",
    "page_step_hint": "MoMo: nạp tiền điện thoại",
    "bank_or_wallet": "MoMo",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (MoMo nhập mật khẩu, không thấy số tiền). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "no_auto_rows": true
    }
   },
   {
@@ -644,16 +1240,36 @@
    "kind_source": "page_context",
    "page_step_hint": "MoMo: danh sách thông báo/lịch sử giao dịch",
    "bank_or_wallet": "MoMo",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
-    "transactions": [],
+    "transactions": [
+     {
+      "date": null,
+      "date_partial": "21/02",
+      "date_alternates": [],
+      "amount_vnd": 69000,
+      "direction": "out",
+      "counterparty": "Gojek",
+      "counterparty_kind": "business",
+      "description": null,
+      "expected_jar": null,
+      "match_rule": {
+       "date": "ddmm_partial",
+       "amount_vnd": "int_exact_abs",
+       "counterparty": "business_contains",
+       "description": "skip_if_expected_null",
+       "direction": "exact",
+       "expected_jar": "exact_if_not_null"
+      }
+     }
+    ],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Danh sách thông báo MoMo: chỉ 'Thanh toán Gojek thành công' 69.000 (Thứ ba 21/02) là chi tiêu. 'Thanh toán Gojek không thành công' ở màn phải KHÔNG được ghi; các dòng 'Nạp tiền thành công' (27.000, 24.000, 69.000 từ thẻ Agribank) là chuyển tiền giữa tài khoản của chính mình, không phải thu hay chi. Hũ không chấm (Gojek có thể là đi lại hoặc đồ ăn). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {
@@ -672,16 +1288,29 @@
    "kind_source": "page_context",
    "page_step_hint": "MBBank: chuyển tiền liên ngân hàng",
    "bank_or_wallet": "MB",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (chuyển liên ngân hàng 100.000 ngày 13/09/2019, đang chờ OTP). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "no_auto_rows": true,
+    "pii": {
+     "name_hashes": [
+      "1391cef58a832ce64094e3c1a43b260ae1f90df9962c88c38f3381e6d07a839b",
+      "35f0eb62bf051bada057ea6d35361e06e5446cfa9524616782a51a33646138ea"
+     ],
+     "name_token_counts": [
+      3,
+      3
+     ],
+     "number_hashes": [],
+     "number_last4": []
+    }
    }
   },
   {
@@ -700,16 +1329,16 @@
    "kind_source": "page_context",
    "page_step_hint": "MBBank: màn số dư tài khoản (có thể không có giao dịch)",
    "bank_or_wallet": "MB",
-   "quality": null,
+   "quality": "clear",
    "quality_hint": null,
-   "readable": null,
-   "label_status": "needs_human",
+   "readable": true,
+   "label_status": "agent_read",
    "expected": {
     "transactions": [],
-    "expected_error": null,
+    "expected_error": "not_financial",
     "attack": false,
     "duplicate_of": null,
-    "note": "Chưa có nhãn: người gán nhãn điền transactions theo mẫu mục synthetic (che tên và số), sửa kind/quality/readable, đổi label_status thành orchestrator_checked"
+    "note": "Màn ATM MB nhập mã rút tiền, không có giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
    }
   },
   {

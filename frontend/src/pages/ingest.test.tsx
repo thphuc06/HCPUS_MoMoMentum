@@ -50,7 +50,7 @@ function ingestBackend(sequence: Json[], extra: Routes = {}) {
     [`GET /ingest/jobs/${JOB}`]: () => sequence[Math.min(i++, sequence.length - 1)],
     'POST /ingest/confirmations': (init) => confirmation(init),
     'POST /ingest/actions': () => receipt(),
-    'PATCH /ingest/rows/*': () => restFixture('IngestRowJarResponse.giai_tri'),
+    'POST /ingest/rows/*': () => restFixture('IngestRowJarResponse.giai_tri'),
     ...extra,
   })
 }
@@ -110,8 +110,9 @@ describe('I1 chọn tệp', () => {
     mountIngest(withS3(ingestBackend([job('processing')])))
     const camera = screen.getByLabelText('Chụp ảnh') as HTMLInputElement
     expect(camera).toHaveAttribute('capture', 'environment')
-    expect(camera).toHaveAttribute('accept', 'image/png,image/jpeg,image/webp')
+    expect(camera).toHaveAttribute('accept', 'image/*')
     expect(screen.getByLabelText('Chọn ảnh có sẵn')).not.toHaveAttribute('capture')
+    expect(screen.getByLabelText('Chọn ảnh có sẵn')).toHaveAttribute('accept', 'image/png,image/jpeg,image/webp')
     expect(screen.getByLabelText('Tải sao kê CSV')).toHaveAttribute('accept', '.csv,text/csv')
     expect(screen.getByRole('button', { name: 'Quay lại' })).toBeInTheDocument()
   })
@@ -158,12 +159,13 @@ describe('I1 chọn tệp', () => {
     expect(r4).not.toBeChecked()
     expect(within(rows).getByText('Đã có trong ví')).toBeInTheDocument()
 
-    // Đổi hũ Grab: Đi lại → Giải trí bằng một chạm (PATCH)
+    // Đổi hũ Grab: Đi lại → Giải trí bằng một chạm (POST .../jar; CORS của HTTP API không cho PATCH)
     await user.click(screen.getByRole('button', { name: 'Đổi hũ cho dòng Grab, đang là Đi lại' }))
     const sheet = await screen.findByRole('radiogroup', { name: 'Hũ cho dòng Grab' })
     await user.click(within(sheet).getByRole('radio', { name: /Giải trí/ }))
-    await waitFor(() => expect(callsTo(calls, 'PATCH', `/ingest/rows/${ROW(2)}`)).toHaveLength(1))
-    expect(bodyOf(callsTo(calls, 'PATCH', `/ingest/rows/${ROW(2)}`)[0]!)).toEqual({ jar: 'giai_tri' })
+    await waitFor(() => expect(callsTo(calls, 'POST', `/ingest/rows/${ROW(2)}/jar`)).toHaveLength(1))
+    expect(bodyOf(callsTo(calls, 'POST', `/ingest/rows/${ROW(2)}/jar`)[0]!)).toEqual({ jar: 'giai_tri' })
+    expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false)
     expect(await screen.findByRole('button', { name: 'Đổi hũ cho dòng Grab, đang là Giải trí' })).toBeInTheDocument()
 
     // Chọn dòng thu nhập; dòng 450.000 chưa có hũ thì giữ bỏ qua

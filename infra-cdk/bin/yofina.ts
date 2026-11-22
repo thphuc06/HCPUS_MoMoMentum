@@ -7,6 +7,7 @@ import { FoundationStack } from '../lib/foundation-stack';
 import { loadForecastConfig } from '../lib/forecast-pipeline';
 import { FrontendStack } from '../lib/frontend-stack';
 import { IdentityStack } from '../lib/identity-stack';
+import { IngestStack, loadIngestConfig } from '../lib/ingest-stack';
 import { ToolsStack, loadToolsConfig } from '../lib/tools-stack';
 
 const app = new App();
@@ -22,5 +23,6 @@ new FrontendStack(app, 'YofinaFrontend', { env, cfg });
 const toolsCfg = loadToolsConfig(app);
 new ToolsStack(app, 'YofinaTools', { env, cfg, tools: toolsCfg, forecast: loadForecastConfig(app) });
 new AgentStack(app, 'YofinaAgent', { env, cfg, tools: toolsCfg, agent: loadAgentConfig(app) });
+new IngestStack(app, 'YofinaIngest', { env, cfg, tools: toolsCfg, ingest: loadIngestConfig(app) });
 
 Tags.of(app).add('project', 'yofina');

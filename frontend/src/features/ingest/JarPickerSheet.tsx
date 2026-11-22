@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn'
 
 /**
  * Sheet chọn hũ một chạm cho một dòng của bảng duyệt: danh sách hũ lấy từ `ingest_review.data.jars` (hũ người dùng, không có
- * hũ hệ thống). Chạm một hũ là chọn và đóng sheet; nơi gọi gửi `PATCH /ingest/rows/{row_id}`.
+ * hũ hệ thống). Chạm một hũ là chọn và đóng sheet; nơi gọi gửi `POST /ingest/rows/{row_id}/jar`.
  */
 export function JarPickerSheet({
   open,

@@ -99,6 +99,22 @@ Thay đổi trên tài nguyên có sẵn (phase 2, luồng C): `yofina-ledger` t
 | `yofina-agent-runtime` | IAM role | 1 | Không | Quyền tối thiểu: `bedrock:InvokeModel*` cho các model/inference profile trong `llm_defaults.json` (Sonnet 4.6, Kimi K3, Nova 2 Lite, Haiku 4.5, Cohere Embed), `dynamodb:UpdateItem` trên `yofina-usage`, `ssm:GetParameter(sByPath)` trên `/yofina/gateway_url`, `/yofina/dynamodb/usage-table`, `/yofina/llm/*`, `s3:GetObject` trên `builds/*`, log, X-Ray, `PutMetricData`, workload identity |
 | `/yofina/gateway_url`, `/yofina/gateway/id`, `/yofina/gateway/arn`, `/yofina/agent/runtime-arn`, `/yofina/agent/runtime-id`, `/yofina/agent/runtime-url` | SSM Parameter | 1 | Không | URL MCP của Gateway; ARN, id và URL invoke của Runtime (chứa account ID: chỉ đi qua SSM và `frontend/.env.local`) |
 
+### Stack `YofinaIngest` (phase 5, F6 nạp dữ liệu từ ảnh và CSV) — **chưa deploy**
+
+Code ở `infra-cdk/lib/ingest-stack.ts`; chưa có tài nguyên nào trong tài khoản. Không có thứ tính tiền theo giờ.
+
+| Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
+|---|---|---|---|---|
+| `yofina-ingest-<account-id>-ap-southeast-1` | S3 bucket | 5 | Không (vài xu theo dung lượng) | Chặn public, `enforceSSL`, SSE-S3, không versioning, `BucketOwnerEnforced`, xóa object sau 30 ngày, hủy multipart dở sau 1 ngày, CORS `POST` (Amplify + localhost) cho presigned POST; ObjectCreated `u/` -> SQS; RETAIN |
+| `yofina-ingest-jobs`, `yofina-ingest-jobs-dlq` | SQS (SSE-SQS, bắt TLS) | 5 | Không | Visibility 720 s (6 × 120 s), `maxReceiveCount` 3, DLQ giữ 14 ngày; queue policy cho `s3.amazonaws.com` có `aws:SourceArn` + `aws:SourceAccount` |
+| `yofina-ingest-jobs-dlq-not-empty` | CloudWatch alarm | 5 | Không (trong 10 alarm miễn phí; vượt thì 0,10 USD/tháng) | -> SNS `yofina-alerts` |
+| `yofina-ingest-api` | Lambda (Python 3.13, arm64, 512 MB, 30 s, `handler_api.handler`) + IAM role + log group `/aws/lambda/yofina-ingest-api` (14 ngày) | 5 | Không | REST `/ingest/*`: presigned POST (`s3:PutObject` chỉ khi `s3:authType = POST`), tiến độ job, đổi hũ đề xuất, tự cấp/kiểm token `confirm_rows` bằng `yofina_core.confirm` (cùng secret HMAC, cùng bảng jti với ledger) |
+| `yofina-ingest` | Lambda (Python 3.13, arm64, 1024 MB, 120 s, `handler_worker.handler`) + IAM role + log group `/aws/lambda/yofina-ingest` (14 ngày) + event source SQS (batch 1, `ReportBatchItemFailures`, max concurrency 2, không reserved concurrency) | 5 | Không | Worker đọc ảnh/CSV bằng Bedrock Converse (model của vai `ingest_vision`, `ingest_columns`, global cross-Region inference); đọc/xóa `u/*` |
+| `yofina-cognito-ingest` | JWT authorizer trên HTTP API `yofina-api` (có sẵn) | 5 | Không | Cùng issuer/audience với `yofina-cognito`; thuộc stack `YofinaIngest`, không sửa `YofinaTools` |
+| 6 route `/ingest/*` + 1 integration | Route và integration trên `yofina-api` | 5 | Không (theo request) | `POST /ingest/uploads`, `GET /ingest/jobs`, `GET /ingest/jobs/{job_id}`, `POST /ingest/rows/{row_id}/jar`, `POST /ingest/confirmations`, `POST /ingest/actions`; chỉ GET/POST (CORS của `yofina-api` chỉ cho GET, POST, OPTIONS); JWT; `AWS_PROXY` 2.0 |
+| `/yofina/ingest/bucket-name`, `/yofina/ingest/api-function-name`, `/yofina/ingest/worker-function-name`, `/yofina/ingest/queue-url` | SSM Parameter | 5 | Không | |
+| Lambda tạm của CDK cho `Custom::S3BucketNotifications` + role | Lambda | 5 | Không | CDK tự sinh để gắn notification vào bucket |
+
 ## Không do CDK tạo
 
 | Tên | Loại | Cách tạo | Phase | Tính tiền khi nhàn rỗi | Ghi chú |

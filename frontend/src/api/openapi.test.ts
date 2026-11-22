@@ -79,7 +79,7 @@ describe('khớp openapi.yaml', () => {
       ['/conversations/{conversation_id}', 'get', 'getConversation'],
       ['/ingest/uploads', 'post', 'createIngestUpload'],
       ['/ingest/jobs/{job_id}', 'get', 'getIngestJob'],
-      ['/ingest/rows/{row_id}', 'patch', 'setIngestRowJar'],
+      ['/ingest/rows/{row_id}/jar', 'post', 'setIngestRowJar'],
     ]
     for (const [path, method, op] of expected) expect(spec.paths[path]?.[method]?.operationId, `${method} ${path}`).toBe(op)
   })

@@ -10,7 +10,7 @@ import { useApi } from '@/api/ApiProvider'
 import { ApiError, ERROR_CODES, ERROR_MESSAGES, type ErrorCode } from '@/api/errors'
 import type { ConfirmRowsParams, IngestJobResponse, IngestSourceKind } from '@/api/ingestSchemas'
 import { CoverageChangeBlock, IngestReviewBlock, type IngestJar, type IngestReviewData, type IngestRow as Row } from '@/contracts/blocks'
-import { ACCEPT_CSV, ACCEPT_IMAGE, DEFAULT_LIMITS, RETENTION_DAYS, useIngestPollTiming } from '@/features/ingest/config'
+import { ACCEPT_CAMERA, ACCEPT_CSV, ACCEPT_IMAGE, DEFAULT_LIMITS, RETENTION_DAYS, useIngestPollTiming } from '@/features/ingest/config'
 import { checkFile, mimeOf, uploadToS3 } from '@/features/ingest/upload'
 import { useIngestJob } from '@/features/ingest/useIngestJob'
 import { useIngestConfirm } from '@/features/ingest/useIngestConfirm'
@@ -68,7 +68,8 @@ function PickStep({ busy, error, pending, onFile, onConsent, onCancelConsent }: 
           Chụp thông báo chuyển khoản, hóa đơn, hoặc tải sao kê ngân hàng. Yofina đọc các dòng chi tiêu và thu nhập để dự báo sát hơn; số dư hũ không đổi.
         </p>
         <div className="mt-4 flex flex-col gap-2.5">
-          <FilePick kind="image" label="Chụp ảnh" accept={ACCEPT_IMAGE} capture Icon={Camera} disabled={busy} onFile={onFile} />
+          {/* Ô chụp dùng `image/*`: Chrome Android chỉ mở thẳng camera khi accept là image/*; máy ảnh luôn ra JPEG, loại vẫn được checkFile kiểm. */}
+          <FilePick kind="image" label="Chụp ảnh" accept={ACCEPT_CAMERA} capture Icon={Camera} disabled={busy} onFile={onFile} />
           <FilePick kind="image" label="Chọn ảnh có sẵn" accept={ACCEPT_IMAGE} Icon={ImageUp} disabled={busy} onFile={onFile} />
           <FilePick kind="csv" label="Tải sao kê CSV" accept={ACCEPT_CSV} Icon={FileSpreadsheet} disabled={busy} onFile={onFile} />
         </div>

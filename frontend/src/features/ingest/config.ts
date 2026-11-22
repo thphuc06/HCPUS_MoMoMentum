@@ -15,6 +15,8 @@ export const DEFAULT_LIMITS: Record<IngestSourceKind, SourceLimits> = {
 /** `accept` của ô chọn tệp. */
 export const ACCEPT_IMAGE = 'image/png,image/jpeg,image/webp'
 export const ACCEPT_CSV = '.csv,text/csv'
+/** `accept` của ô chụp ảnh (kèm `capture="environment"`). */
+export const ACCEPT_CAMERA = 'image/*'
 
 /** Hỏi tiến độ: lần đầu ngay sau khi tải lên, rồi 1,5 s, lùi dần x1,5 tới 5 s; quá 90 s thì báo "lâu hơn thường lệ". */
 export type PollTiming = { firstDelayMs: number; delayMs: number; maxDelayMs: number; backoff: number; timeoutMs: number }

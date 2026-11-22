@@ -15,6 +15,6 @@
     "noEmit": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["bin/**/*.ts", "lib/**/*.ts", "config/**/*.ts"],
+  "include": ["bin/**/*.ts", "lib/**/*.ts", "config/**/*.ts", "test/**/*.ts"],
   "exclude": ["node_modules", "cdk.out"]
 }

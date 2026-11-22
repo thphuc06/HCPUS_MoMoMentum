@@ -66,7 +66,7 @@ export type ApiClient = {
   /** Xin presigned POST để tải tệp thẳng lên S3 và tạo job. */
   createIngestUpload(req: IngestUploadRequest): Promise<IngestUploadResponse>
   getIngestJob(jobId: string): Promise<IngestJobResponse>
-  /** Đổi hũ ĐỀ XUẤT của một dòng chi (không ghi sổ cái, không token). */
+  /** Đổi hũ ĐỀ XUẤT của một dòng chi (không ghi sổ cái, không token). `POST .../jar` vì CORS của HTTP API chỉ cho GET, POST, OPTIONS. */
   setIngestRowJar(rowId: string, req: IngestRowJarRequest): Promise<IngestRowJarResponse>
   /** Xin token + xem trước cho `confirm_rows` (cùng hình dạng `POST /confirmations`, không gửi conversation_id). */
   createIngestConfirmation(req: ConfirmationRequest): Promise<ConfirmationResponse>
@@ -161,7 +161,7 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     resetDemo: () => call('POST', '/demo/reset', ResetResponse, undefined, RESET_TIMEOUT_MS),
     createIngestUpload: (req) => call('POST', '/ingest/uploads', IngestUploadResponse, req),
     getIngestJob: (id) => call('GET', `/ingest/jobs/${enc(id)}`, IngestJobResponse),
-    setIngestRowJar: (id, req) => call('PATCH', `/ingest/rows/${enc(id)}`, IngestRowJarResponse, req),
+    setIngestRowJar: (id, req) => call('POST', `/ingest/rows/${enc(id)}/jar`, IngestRowJarResponse, req),
     createIngestConfirmation: (req) => call('POST', '/ingest/confirmations', ConfirmationResponse, req),
     applyIngestAction: (req) => call('POST', '/ingest/actions', ActionResponse, req),
   }

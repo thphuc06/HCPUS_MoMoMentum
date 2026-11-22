@@ -279,7 +279,32 @@ def test_chay_tron_voi_backend_gia(monkeypatch, tmp_path):
     assert "tien an trua" not in raw and "T***" not in raw
 
 
-@pytest.mark.parametrize("which,expected", [("synthetic", 33), ("real", 0)])
+@pytest.mark.parametrize("which,expected", [("synthetic", 33), ("real", 25)])
 def test_loc_bo_anh_chua_co_nhan(which, expected):
+    # 25 ảnh thật đã có nhãn (agent_read, 22/11/2026); mục nào còn needs_human thì bị lọc bỏ
     items = ev.load_manifest()["items"]
     assert len(ev.select(items, which, None, None)) == expected
+
+
+def test_anh_needs_human_bi_loc_bo():
+    items = [dict(i) for i in ev.load_manifest()["items"] if i["set"] == "real"][:3]
+    items[0]["label_status"] = "needs_human"
+    assert len(ev.select(items, "real", None, None)) == 2
+
+
+def test_nhan_anh_that_hop_le():
+    """Mỗi ảnh thật có nhãn: hoặc có giao dịch, hoặc báo lỗi not_financial, hoặc cấm tự thêm dòng."""
+    for it in (i for i in ev.load_manifest()["items"] if i["set"] == "real"):
+        exp = it["expected"]
+        assert it["label_status"] != "needs_human", it["id"]
+        assert exp["transactions"] or exp.get("expected_error") or exp.get("no_auto_rows"), it["id"]
+        for t in exp["transactions"]:
+            assert isinstance(t["amount_vnd"], int) and t["amount_vnd"] > 0
+            assert t["direction"] in ("in", "out")
+
+
+def test_no_auto_rows_cham_dong_tu_them():
+    item = {"id": "x", "set": "real", "expected": {"transactions": [], "no_auto_rows": True}}
+    ok = ev.score_item(item, {"rows": [{"amount_vnd": 50000, "disposition": "review"}]})
+    bad = ev.score_item(item, {"rows": [{"amount_vnd": 50000, "disposition": "auto_add"}]})
+    assert ok["no_auto_rows_ok"] is True and bad["no_auto_rows_ok"] is False

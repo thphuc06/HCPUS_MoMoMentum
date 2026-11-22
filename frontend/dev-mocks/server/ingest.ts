@@ -127,8 +127,8 @@ export function handleIngest(c: Ctx): Reply | null {
     if (!job || job.email !== c.email) return fail(404, 'INGEST_JOB_NOT_FOUND', 'Không có lần nạp này.')
     return ok(view(job))
   }
-  const rm = /^\/ingest\/rows\/([0-9a-f-]{36})$/.exec(p)
-  if (method === 'PATCH' && rm) {
+  const rm = /^\/ingest\/rows\/([0-9a-f-]{36})\/jar$/.exec(p)
+  if (method === 'POST' && rm) {
     for (const job of jobs.values()) {
       if (job.email !== c.email || !job.review) continue
       const row = job.review.data.rows.find((r: any) => r.row_id === rm[1])
