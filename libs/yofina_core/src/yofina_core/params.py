@@ -28,12 +28,14 @@ from yofina_core.money import to_vnd
 from yofina_core.schedule import first_due_from_day, midpoint
 from yofina_core.wallet import (
     ASSIGN_JAR,
+    CONFIRM_ROWS,
     CONFIRM_SALARY,
     DECLARABLE_OBLIGATION_KINDS,
     MOVE_BETWEEN_JARS,
     OBLIGATION_CYCLES,
     OTHER_INCOME_JAR_CODE,
     RECORD_TRANSACTION,
+    RECORDABLE_FUNDING_SOURCES,
     RULE_SCOPES,
     SALARY_DECISIONS,
     SAVE_JARS,
@@ -51,7 +53,8 @@ UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 MAX_VND = 99_999_999_999_999  # numeric(14,0)
 RISK_LEVELS = ("low", "medium", "high")
 TRANSACTION_KINDS_WRITABLE = ("expense", "income")
-FUNDING_CHOICES = ("jar", "credit")
+FUNDING_CHOICES = RECORDABLE_FUNDING_SOURCES  # external chỉ vào sổ cái qua confirm_rows
+CONFIRM_ROWS_MAX = 500  # trần số dòng của một lần chốt (khớp app_insert_ingest_rows)
 JAR_CODE_MAX = 32
 
 
@@ -514,6 +517,54 @@ def normalize_confirm_salary(params: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+# --- confirm_rows (phase 5, F6) -------------------------------------------------------------------------
+def _uuid_list(name: str, raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
+        raise ParamsError(f"{name} phải là danh sách")
+    return [_uuid(name, x) for x in raw]
+
+
+def normalize_confirm_rows(params: Mapping[str, Any]) -> dict[str, Any]:
+    """`job_id`; `rows` là các dòng ĐƯỢC GHI vào sổ cái, mỗi dòng `{row_id, jar?}` (`jar` là hũ của dòng chi; vắng với dòng thu
+    hoặc khi giữ hũ đề xuất đã hiển thị), sắp theo `row_id`; `reject_row_ids` sắp tăng dần. Không cần trạng thái server nên
+    idempotent không cần ngữ cảnh. Một dòng không được vừa ghi vừa bỏ; phải có ít nhất một dòng."""
+    if _clean(params.get("job_id")) is None:
+        raise ParamsError("Thiếu tham số: job_id")
+    raw_rows = params.get("rows")
+    if raw_rows is None:
+        raw_rows = []
+    if not isinstance(raw_rows, Sequence) or isinstance(raw_rows, (str, bytes)):
+        raise ParamsError("rows phải là danh sách")
+    rows: dict[str, dict[str, Any]] = {}
+    for item in raw_rows:
+        if not isinstance(item, Mapping):
+            raise ParamsError("Mỗi dòng trong rows phải là một đối tượng {row_id, jar}")
+        rid = _uuid("row_id", item.get("row_id"))
+        if rid in rows:
+            raise ParamsError(f"row_id lặp lại: {rid}")
+        row: dict[str, Any] = {"row_id": rid}
+        jar = _clean(item.get("jar"))
+        if jar is not None:
+            row["jar"] = _jar_code("jar", jar)
+        rows[rid] = row
+    rejects = _uuid_list("reject_row_ids", params.get("reject_row_ids"))
+    if len(set(rejects)) != len(rejects):
+        raise ParamsError("reject_row_ids có id lặp lại")
+    both = set(rows) & set(rejects)
+    if both:
+        raise ParamsError("Một dòng không thể vừa ghi vừa bỏ")
+    if not rows and not rejects:
+        raise ParamsError("Cần ít nhất một dòng để ghi hoặc bỏ")
+    if len(rows) > CONFIRM_ROWS_MAX or len(rejects) > CONFIRM_ROWS_MAX:
+        raise ParamsError(f"Tối đa {CONFIRM_ROWS_MAX} dòng mỗi lần")
+    out: dict[str, Any] = {"job_id": _uuid("job_id", params["job_id"])}
+    out["rows"] = [rows[k] for k in sorted(rows)]
+    out["reject_row_ids"] = sorted(rejects)
+    return out
+
+
 def normalize_params(
     tool: str, params: Mapping[str, Any], ctx: NormContext | None = None
 ) -> dict[str, Any]:
@@ -530,4 +581,6 @@ def normalize_params(
         return normalize_save_jars(params, ctx)
     if tool == CONFIRM_SALARY:
         return normalize_confirm_salary(params)
+    if tool == CONFIRM_ROWS:
+        return normalize_confirm_rows(params)
     raise ParamsError(f"Tool không hỗ trợ xác nhận: {tool!r}")

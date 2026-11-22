@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/blocks/block.schema.json",
   "title": "Block",
-  "description": "Hợp của các khối đã biết (mười bốn), phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema.",
+  "description": "Hợp của các khối đã biết (mười sáu), phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema.",
   "oneOf": [
     { "$ref": "jar_summary.schema.json" },
     { "$ref": "confirm.schema.json" },
@@ -17,6 +17,8 @@
     { "$ref": "options.schema.json" },
     { "$ref": "explain.schema.json" },
     { "$ref": "clarify.schema.json" },
-    { "$ref": "suggestions.schema.json" }
+    { "$ref": "suggestions.schema.json" },
+    { "$ref": "ingest_review.schema.json" },
+    { "$ref": "coverage_change.schema.json" }
   ]
 }

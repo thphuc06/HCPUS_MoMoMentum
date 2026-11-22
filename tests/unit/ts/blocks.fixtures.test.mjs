@@ -16,16 +16,17 @@ function fixtures(dir) {
     .map((f) => ({ file: `${dir}/${f}`, prefix: f.split('.')[0], json: JSON.parse(readFileSync(resolve(FIXTURES, dir, f), 'utf8')) }))
 }
 
-test('blockSchemas có đủ mười bốn khối theo thứ tự của block.schema.json; BLOCK_TYPES (registry frontend) gồm tám khối đã có view', () => {
-  const registered = [
+test('blockSchemas có đủ mười sáu khối theo thứ tự của block.schema.json; BLOCK_TYPES (registry frontend) gồm mười khối đã có view', () => {
+  const phase2 = [
     'jar_summary', 'confirm', 'receipt', 'notice',
     'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action',
   ]
   // Phase 3 thêm sáu khối vào hợp đồng; luồng frontend của phase 3 thêm chúng vào REGISTERED_BY_FRONTEND cùng lúc với view.
-  const all = [
-    ...registered,
-    'affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions',
-  ]
+  const phase3 = ['affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions']
+  // phase 5 (F6): frontend đã đăng ký view cho hai khối nạp dữ liệu (REGISTERED_BY_FRONTEND trong scripts/gen_contracts.mjs)
+  const phase5 = ['ingest_review', 'coverage_change']
+  const registered = [...phase2, ...phase5]
+  const all = [...phase2, ...phase3, ...phase5]
   assert.deepEqual([...ALL_BLOCK_TYPES], all)
   assert.deepEqual(Object.keys(blockSchemas), all)
   assert.deepEqual([...BLOCK_TYPES], registered)

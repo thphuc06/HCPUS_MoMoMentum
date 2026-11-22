@@ -17,9 +17,9 @@
   },
   "$defs": {
     "ConfirmActionTool": {
-      "description": "Tool ghi dùng khối này (tên ngắn, không có tiền tố target). `schedule_nudge` (target planner, phase 3) đi qua cùng luồng token.",
+      "description": "Tool ghi dùng khối này (tên ngắn, không có tiền tố target). `schedule_nudge` (target planner, phase 3) đi qua cùng luồng token. confirm_rows (phase 5) là tool của target ingest: chốt các dòng của một lần nạp vào sổ cái.",
       "type": "string",
-      "enum": ["record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary", "schedule_nudge"]
+      "enum": ["record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary", "schedule_nudge", "confirm_rows"]
     },
     "ActionChange": {
       "description": "Một dòng 'trước -> sau' để hiển thị, do code định dạng sẵn (ví dụ nhãn 'Số dư Ăn uống', trước '380.000 ₫', sau '180.000 ₫'). Giao diện chỉ vẽ, không tính lại.",

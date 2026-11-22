@@ -210,9 +210,10 @@ def test_tap_gia_tri_khop_yofina_core_wallet():
     assert check_values(ALL, "obligations_cycle_check") == set(wallet.OBLIGATION_CYCLES)
     assert check_values(ALL, "obligations_status_check") == set(wallet.OBLIGATION_STATUSES)
     assert check_values(ALL, "obligations_source_check") == set(wallet.OBLIGATION_SOURCES)
+    # 0005 chỉ có jar và credit; external thêm ở 0050 (tests/unit/test_migration_0050.py)
     assert re.search(r"funding_source IN \('jar', 'credit'\)", ALL) and set(
         wallet.FUNDING_SOURCES
-    ) == {"jar", "credit"}
+    ) - {"external"} == {"jar", "credit"}
     classified = re.search(r"classified_by IN \((.*?)\)", ALL).group(1)
     assert set(re.findall(r"'(\w+)'", classified)) == set(wallet.CLASSIFIED_BY)
     salary = re.search(r"status IN \('pending', 'confirmed', 'kept_other'\)", ALL)

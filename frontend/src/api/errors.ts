@@ -34,13 +34,24 @@ export const ERROR_CODES = [
   'FEE_SCHEDULE_NOT_FOUND',
   'FORECAST_NOT_APPLICABLE',
   'SCENARIO_INVALID',
+  // phase 5 (F6, nạp dữ liệu)
+  'CONSENT_REQUIRED',
+  'INGEST_JOB_NOT_FOUND',
+  'INGEST_JOB_NOT_READY',
+  'INGEST_UNSUPPORTED_TYPE',
+  'INGEST_TOO_LARGE',
+  'INGEST_NOT_FINANCIAL',
+  'INGEST_DUPLICATE_FILE',
 ] as const
 
 export const ErrorCode = z.enum(ERROR_CODES)
 export type ErrorCode = z.infer<typeof ErrorCode>
 
-/** Mã do phía client tự đặt khi chưa có phản hồi hợp lệ từ server. */
-export type ClientErrorCode = 'NETWORK' | 'TIMEOUT' | 'INVALID_RESPONSE' | 'SESSION_EXPIRED'
+/**
+ * Mã do phía client tự đặt khi chưa có phản hồi hợp lệ từ server. `UPLOAD_FAILED`: tải tệp thẳng lên S3 (presigned POST)
+ * bị từ chối hoặc đứt, không có mã lỗi của API.
+ */
+export type ClientErrorCode = 'NETWORK' | 'TIMEOUT' | 'INVALID_RESPONSE' | 'SESSION_EXPIRED' | 'UPLOAD_FAILED'
 export type ApiErrorCode = ErrorCode | ClientErrorCode
 
 /** Ánh xạ HTTP status của hợp đồng (x-http-status). */
@@ -76,6 +87,13 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   FEE_SCHEDULE_NOT_FOUND: 404,
   FORECAST_NOT_APPLICABLE: 404,
   SCENARIO_INVALID: 422,
+  CONSENT_REQUIRED: 403,
+  INGEST_JOB_NOT_FOUND: 404,
+  INGEST_JOB_NOT_READY: 409,
+  INGEST_UNSUPPORTED_TYPE: 415,
+  INGEST_TOO_LARGE: 413,
+  INGEST_NOT_FINANCIAL: 422,
+  INGEST_DUPLICATE_FILE: 409,
 }
 
 /** Thông báo tiếng Việt cho từng mã lỗi (thay vì hiện mã thô hay chữ tiếng Anh của server). */
@@ -111,10 +129,18 @@ export const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   FEE_SCHEDULE_NOT_FOUND: 'Chưa có biểu phí cho khoản này.',
   FORECAST_NOT_APPLICABLE: 'Hũ hệ thống không có dự báo.',
   SCENARIO_INVALID: 'Kịch bản này chưa hợp lý (ví dụ ngày đã qua). Bạn chọn lại nhé.',
+  CONSENT_REQUIRED: 'Bạn cần đồng ý cho phép đọc tệp này trước khi tải lên.',
+  INGEST_JOB_NOT_FOUND: 'Không tìm thấy lần nạp này trong tài khoản của bạn.',
+  INGEST_JOB_NOT_READY: 'Lần nạp này chưa đọc xong hoặc đã được chốt rồi.',
+  INGEST_UNSUPPORTED_TYPE: 'Loại tệp này chưa được hỗ trợ. Hãy dùng ảnh PNG, JPEG, WEBP hoặc tệp CSV.',
+  INGEST_TOO_LARGE: 'Tệp lớn hơn giới hạn cho phép. Hãy chọn tệp nhỏ hơn.',
+  INGEST_NOT_FINANCIAL: 'Ảnh này không phải biên lai hay sao kê nên chưa đọc được dòng nào. Hãy chọn ảnh hóa đơn, thông báo chuyển khoản hoặc tệp sao kê.',
+  INGEST_DUPLICATE_FILE: 'Tệp này đã được nạp trước đó rồi, không nạp thêm lần nữa.',
   NETWORK: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
   TIMEOUT: 'Máy chủ phản hồi quá lâu. Nếu bạn vừa ghi một giao dịch, kiểm tra ở Hoạt động trước khi thử lại.',
   INVALID_RESPONSE: 'Máy chủ trả dữ liệu không đọc được. Thử lại sau ít phút.',
   SESSION_EXPIRED: 'Phiên đăng nhập đã hết hạn. Bạn đăng nhập lại nhé.',
+  UPLOAD_FAILED: 'Chưa tải được tệp lên. Kiểm tra mạng rồi thử lại.',
 }
 
 export class ApiError extends Error {
@@ -130,7 +156,7 @@ export class ApiError extends Error {
     this.code = code
     this.status = status
     this.traceId = traceId
-    this.retryable = code === 'DATABASE_UNAVAILABLE' || code === 'FORECAST_UNAVAILABLE' || code === 'NETWORK' || code === 'TIMEOUT' || code === 'RATE_LIMITED' || code === 'INTERNAL_ERROR'
+    this.retryable = code === 'DATABASE_UNAVAILABLE' || code === 'FORECAST_UNAVAILABLE' || code === 'NETWORK' || code === 'TIMEOUT' || code === 'RATE_LIMITED' || code === 'INTERNAL_ERROR' || code === 'UPLOAD_FAILED'
   }
 }
 

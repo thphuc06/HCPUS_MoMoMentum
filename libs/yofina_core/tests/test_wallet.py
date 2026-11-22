@@ -62,4 +62,6 @@ def test_so_tien_am_bi_tu_choi():
 def test_tool_ghi_tren_man_hinh_va_cho_agent_khong_trung_nhau_o_nhom_con_lai():
     assert set(wallet.AGENT_WRITE_TOOLS) <= set(wallet.ACTION_TOOLS)
     assert wallet.MOVE_BETWEEN_JARS not in wallet.GENERIC_ACTION_TOOLS
-    assert len(set(wallet.ACTION_TOOLS)) == len(wallet.ACTION_TOOLS) == 7
+    # phase 5 thêm confirm_rows (target ingest, ghi qua POST /actions như các tool khác)
+    assert len(set(wallet.ACTION_TOOLS)) == len(wallet.ACTION_TOOLS) == 8
+    assert wallet.ACTION_TOOLS[-1] == wallet.CONFIRM_ROWS

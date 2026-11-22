@@ -228,8 +228,11 @@ def test_ma_loi_phase_3_co_trong_openapi_voi_dung_http_status():
     for code, status in expected.items():
         assert code in schema["enum"] and schema["x-http-status"][code] == status
         assert HTTP_STATUS[ErrorCode(code)] == status
-    # thêm CUỐI danh sách, không đổi thứ tự mã cũ
-    assert schema["enum"][-6:] == list(expected)
+    # thêm SAU mã cũ, không đổi thứ tự mã cũ; sáu mã phase 3 liền nhau (phase 5 thêm mã ingest ngay sau chúng)
+    enum = schema["enum"]
+    start = enum.index("OFFER_EXPIRED")
+    assert enum[start : start + 6] == list(expected)
+    assert enum[start - 1] == "FORECAST_UNAVAILABLE"
 
 
 def test_offer_expired_tach_khoi_token_expired_trong_mo_ta_va_phan_hoi_410():
@@ -555,9 +558,11 @@ def test_notice_kind_co_du_bon_loai_va_loi_co_thu_lai():
 def test_cac_tap_gia_tri_phase_3_khop_hang_so():
     opt = load_json(CONTRACTS / "blocks" / "options.schema.json")["$defs"]
     assert tuple(opt["OptionItem"]["properties"]["kind"]["enum"]) == wallet.OPTION_KINDS
-    assert tuple(opt["OptionAction"]["properties"]["tool"]["enum"]) == wallet.ACTION_TOOLS
+    # confirm_rows (phase 5, target ingest) không phải việc một phương án đề xuất: phương án chỉ dẫn tới tool của phase 1 tới 3
+    option_tools = tuple(t for t in wallet.ACTION_TOOLS if t != wallet.CONFIRM_ROWS)
+    assert tuple(opt["OptionAction"]["properties"]["tool"]["enum"]) == option_tools
     assert tuple(b.OptionKind.__args__) == wallet.OPTION_KINDS
-    assert tuple(b.ActionToolName.__args__) == wallet.ACTION_TOOLS
+    assert tuple(b.ActionToolName.__args__) == option_tools
     notice = load_json(CONTRACTS / "blocks" / "notice.schema.json")["$defs"]["NoticeData"][
         "properties"
     ]

@@ -1,0 +1,47 @@
+{
+  "status": "NEEDS_CONFIRMATION",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "tool": "confirm_rows",
+    "params": {
+      "job_id": "5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+      "rows": [
+        {
+          "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000001"
+        },
+        {
+          "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000002",
+          "jar": "giai_tri"
+        },
+        {
+          "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000005"
+        }
+      ],
+      "reject_row_ids": [
+        "9a1b2c3d-4e5f-4a6b-8c7d-000000000003"
+      ]
+    },
+    "params_hash": "5b5dbac555567617d71ef1f2286be672eca93b7acd23e94f023f65e955c92667",
+    "summary": "Thêm 3 dòng ngoài ví vào lịch sử chi tiêu, bỏ 1 dòng",
+    "changes": [
+      {
+        "label": "Chi ngoài ví",
+        "after": "205.000 ₫ (2 dòng)"
+      },
+      {
+        "label": "Thu nhập ngoài ví",
+        "after": "2.000.000 ₫ (1 dòng)"
+      },
+      {
+        "label": "Số dư các hũ",
+        "before": "không đổi",
+        "after": "không đổi"
+      }
+    ],
+    "warnings": [
+      "Dòng ngoài ví không đổi số dư hũ; chỉ thêm vào lịch sử chi và dự báo."
+    ],
+    "expires_at": "2026-12-10T03:10:00Z"
+  }
+}

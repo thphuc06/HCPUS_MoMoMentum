@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "INGEST_JOB_NOT_READY",
+  "message": "Lần nạp này chưa đọc xong hoặc đã chốt rồi."
+}

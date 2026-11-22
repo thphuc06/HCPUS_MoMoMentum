@@ -1,0 +1,18 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "upload_path": "/ingest",
+    "limits": [
+      {
+        "source_kind": "csv",
+        "max_bytes": 2000000,
+        "mime_types": [
+          "text/csv"
+        ]
+      }
+    ],
+    "consent_required": true
+  }
+}

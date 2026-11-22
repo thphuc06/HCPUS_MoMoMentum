@@ -22,7 +22,12 @@ USER_JAR_KINDS = ("spending", "saving", "obligation")  # hũ người dùng tạ
 
 # --- giao dịch ---------------------------------------------------------------------------------
 TRANSACTION_KINDS = ("expense", "income", "transfer")
-FUNDING_SOURCES = ("jar", "credit")  # credit: mua bằng hạn mức trả sau, không đổi số dư hũ
+#: jar: trừ hoặc cộng số dư hũ. credit: mua bằng hạn mức trả sau, không đổi số dư hũ. external (phase 5, migration 0050): chi
+#: hoặc thu NGOÀI ví, nạp từ ảnh hay CSV, không bao giờ đổi số dư hũ (jar_code chỉ để tính hành vi chi của hũ).
+FUNDING_SOURCES = ("jar", "credit", "external")
+EXTERNAL_FUNDING = "external"
+#: nguồn trả mà `record_transaction` nhận (external chỉ vào sổ cái qua `confirm_rows` của luồng nạp)
+RECORDABLE_FUNDING_SOURCES = ("jar", "credit")
 CLASSIFIED_BY = ("user", "type_map", "rule", "embedding", "llm", "seed")
 TX_TYPE_SALARY = "salary"
 TX_TYPE_SALARY_SPLIT = "salary_split"
@@ -59,6 +64,8 @@ CONFIRM_SALARY = "confirm_salary"
 SCHEDULE_NUDGE = (
     "schedule_nudge"  # phase 3: nhắc (target planner); ghi bảng nudges, đi qua cùng luồng token
 )
+#: phase 5 (F6): chốt các dòng của một lần nạp vào sổ cái (funding external). Target Gateway là `ingest`, không phải `ledger`.
+CONFIRM_ROWS = "confirm_rows"
 
 #: Mọi `tool` mà /confirmations và /actions nhận, theo thứ tự trong OpenAPI.
 ACTION_TOOLS = (
@@ -69,6 +76,7 @@ ACTION_TOOLS = (
     SAVE_JARS,
     CONFIRM_SALARY,
     SCHEDULE_NUDGE,
+    CONFIRM_ROWS,
 )
 #: Tool ghi mà agent gọi qua Gateway (target `ledger`); phần còn lại chỉ có ở REST (màn hình).
 AGENT_WRITE_TOOLS = (UPDATE_PROFILE, RECORD_TRANSACTION, MOVE_BETWEEN_JARS, ASSIGN_JAR)

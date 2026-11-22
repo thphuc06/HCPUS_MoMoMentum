@@ -24,6 +24,13 @@ import {
   type ConfirmationRequest,
   type TransactionQuery,
 } from './schemas'
+import {
+  IngestJobResponse,
+  IngestRowJarResponse,
+  IngestUploadResponse,
+  type IngestRowJarRequest,
+  type IngestUploadRequest,
+} from './ingestSchemas'
 
 /** Thời gian chờ mỗi lời gọi: dài hơn trần 30 giây của HTTP API nên lỗi hết giờ ở server luôn tới trước. */
 export const REQUEST_TIMEOUT_MS = 40_000
@@ -55,6 +62,16 @@ export type ApiClient = {
   cancelConfirmation(req: CancelConfirmationRequest): Promise<CancelConfirmationResponse>
   applyAction(req: ActionRequest): Promise<ActionResponse>
   resetDemo(): Promise<ResetResponse>
+  // ---- nạp dữ liệu (phase 5, F6): REST `/ingest/*` của Lambda ingest
+  /** Xin presigned POST để tải tệp thẳng lên S3 và tạo job. */
+  createIngestUpload(req: IngestUploadRequest): Promise<IngestUploadResponse>
+  getIngestJob(jobId: string): Promise<IngestJobResponse>
+  /** Đổi hũ ĐỀ XUẤT của một dòng chi (không ghi sổ cái, không token). */
+  setIngestRowJar(rowId: string, req: IngestRowJarRequest): Promise<IngestRowJarResponse>
+  /** Xin token + xem trước cho `confirm_rows` (cùng hình dạng `POST /confirmations`, không gửi conversation_id). */
+  createIngestConfirmation(req: ConfirmationRequest): Promise<ConfirmationResponse>
+  /** Chốt các dòng bằng token (cùng hình dạng `POST /actions`); trả `receipt_action` kèm `coverage_change`. */
+  applyIngestAction(req: ActionRequest): Promise<ActionResponse>
 }
 
 async function readBody(res: Response): Promise<unknown> {
@@ -142,5 +159,10 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     cancelConfirmation: (req) => call('POST', '/confirmations/cancel', CancelConfirmationResponse, req),
     applyAction: (req) => call('POST', '/actions', ActionResponse, req),
     resetDemo: () => call('POST', '/demo/reset', ResetResponse, undefined, RESET_TIMEOUT_MS),
+    createIngestUpload: (req) => call('POST', '/ingest/uploads', IngestUploadResponse, req),
+    getIngestJob: (id) => call('GET', `/ingest/jobs/${enc(id)}`, IngestJobResponse),
+    setIngestRowJar: (id, req) => call('PATCH', `/ingest/rows/${enc(id)}`, IngestRowJarResponse, req),
+    createIngestConfirmation: (req) => call('POST', '/ingest/confirmations', ConfirmationResponse, req),
+    applyIngestAction: (req) => call('POST', '/ingest/actions', ActionResponse, req),
   }
 }

@@ -37,6 +37,8 @@ import {
   TOOL_NAMES,
 } from './schemas'
 import { createApiClient } from './client'
+import { IngestJobResponse, IngestRowJarRequest, IngestRowJarResponse, IngestUploadRequest, IngestUploadResponse } from './ingestSchemas'
+import { IngestReviewBlock, CoverageChangeBlock } from '@/contracts/blocks'
 import { jarsFromFixture } from '@/test/helpers'
 import { restFixtureEntries, restInvalidEntries } from '@/test/fixtures'
 
@@ -75,6 +77,9 @@ describe('khớp openapi.yaml', () => {
       ['/actions', 'post', 'applyAction'],
       ['/demo/reset', 'post', 'resetDemo'],
       ['/conversations/{conversation_id}', 'get', 'getConversation'],
+      ['/ingest/uploads', 'post', 'createIngestUpload'],
+      ['/ingest/jobs/{job_id}', 'get', 'getIngestJob'],
+      ['/ingest/rows/{row_id}', 'patch', 'setIngestRowJar'],
     ]
     for (const [path, method, op] of expected) expect(spec.paths[path]?.[method]?.operationId, `${method} ${path}`).toBe(op)
   })
@@ -84,7 +89,7 @@ describe('khớp openapi.yaml', () => {
     expect(HTTP_STATUS).toEqual(schemas.ErrorCode!['x-http-status'])
   })
 
-  it('ToolName: đủ sáu tool ghi của hợp đồng', () => {
+  it('ToolName: đủ bảy tool ghi của hợp đồng (kể cả confirm_rows của phase 5)', () => {
     expect([...TOOL_NAMES].sort()).toEqual([...(schemas.ToolName!.enum ?? [])].sort())
   })
 
@@ -109,6 +114,11 @@ describe('khớp openapi.yaml', () => {
     ['ConfirmationResponse', ConfirmationResponse, schemas.ConfirmationResponse!.required!],
     ['CancelConfirmationRequest', CancelConfirmationRequest, schemas.CancelConfirmationRequest!.required!],
     ['CancelConfirmationResponse', CancelConfirmationResponse, schemas.CancelConfirmationResponse!.required!],
+    ['IngestUploadRequest', IngestUploadRequest, schemas.IngestUploadRequest!.required!],
+    ['IngestUploadResponse', IngestUploadResponse, schemas.IngestUploadResponse!.required!],
+    ['IngestJobResponse', IngestJobResponse, schemas.IngestJobResponse!.required!],
+    ['IngestRowJarRequest', IngestRowJarRequest, schemas.IngestRowJarRequest!.required!],
+    ['IngestRowJarResponse', IngestRowJarResponse, schemas.IngestRowJarResponse!.required!],
     ['Transaction', Transaction, ledgerResults.$defs.Transaction!.required!],
     ['Obligation', Obligation, ledgerResults.$defs.Obligation!.required!],
     ['CreditLine', CreditLine, ledgerResults.$defs.CreditLine!.required!],
@@ -161,6 +171,11 @@ describe('fixture REST của hợp đồng', () => {
     ConfirmationRequest,
     ActionRequest,
     ActionResponse,
+    IngestUploadRequest,
+    IngestUploadResponse,
+    IngestJobResponse,
+    IngestRowJarRequest,
+    IngestRowJarResponse,
   }
 
   for (const [file, body] of restFixtureEntries()) {
@@ -186,6 +201,15 @@ describe('fixture REST của hợp đồng', () => {
       expect(byName[file.split('.')[0]!]!.safeParse(body).success).toBe(false)
     })
   }
+
+  it('IngestJobResponse review/done: khối review và coverage_change đi kèm parse được bằng schema khối', () => {
+    const entries = Object.fromEntries(restFixtureEntries())
+    for (const name of ['IngestJobResponse.review', 'IngestJobResponse.done']) {
+      const j = IngestJobResponse.parse(entries[name])
+      expect(IngestReviewBlock.safeParse(j.review).success, name).toBe(true)
+    }
+    expect(CoverageChangeBlock.safeParse(IngestJobResponse.parse(entries['IngestJobResponse.done']).coverage_change).success).toBe(true)
+  })
 
   it('POST /actions: nhận cả khối receipt lẫn receipt_action', async () => {
     const entries = Object.fromEntries(restFixtureEntries())

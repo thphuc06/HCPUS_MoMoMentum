@@ -63,7 +63,7 @@
       ]
     },
     "Transaction": {
-      "description": "Một dòng sổ cái. Số tiền có dấu: âm là tiền ra khỏi hũ, dương là tiền vào hũ. Dòng funding_source credit (mua bằng Trả sau) là chi tiêu nhưng KHÔNG đổi số dư hũ.",
+      "description": "Một dòng sổ cái. Số tiền có dấu: âm là tiền ra khỏi hũ, dương là tiền vào hũ. Dòng funding_source credit (mua bằng Trả sau) là chi tiêu nhưng KHÔNG đổi số dư hũ; dòng external (chi hoặc thu ngoài ví, nạp từ tệp) cũng KHÔNG đổi số dư hũ.",
       "type": "object",
       "required": [
         "id",
@@ -118,11 +118,12 @@
           "pattern": "^[a-z][a-z0-9_]{0,39}$"
         },
         "funding_source": {
-          "description": "jar (trừ số dư hũ) hoặc credit (hạn mức Trả sau mô phỏng).",
+          "description": "jar (trừ số dư hũ), credit (hạn mức Trả sau mô phỏng) hoặc external (chi hoặc thu ngoài ví, nạp từ ảnh hay CSV; không đổi số dư hũ).",
           "type": "string",
           "enum": [
             "jar",
-            "credit"
+            "credit",
+            "external"
           ]
         },
         "payee_id": {
@@ -608,7 +609,7 @@
               "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
             },
             "spent_vnd": {
-              "description": "Tổng chi tiêu (mọi nguồn trả, kể cả Trả sau), không gồm chuyển hũ.",
+              "description": "Tổng chi tiêu CỦA VÍ (nguồn trả jar và credit, kể cả Trả sau), không gồm chuyển hũ và không gồm chi ngoài ví (xem external).",
               "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
             },
             "by_jar": {

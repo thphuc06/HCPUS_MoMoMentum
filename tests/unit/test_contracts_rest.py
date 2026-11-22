@@ -53,6 +53,10 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
         ("POST", "/affordability"),
         ("GET", "/traces/{trace_id}"),
         ("POST", "/feedback"),
+        # phase 5 (F6): nạp dữ liệu
+        ("POST", "/ingest/uploads"),
+        ("GET", "/ingest/jobs/{job_id}"),
+        ("PATCH", "/ingest/rows/{row_id}"),
     }
     assert SPEC["security"] == [{"bearerAuth": []}]
     scheme = SPEC["components"]["securitySchemes"]["bearerAuth"]
@@ -60,9 +64,10 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
 
 
 def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
-    """Mọi thao tác ghi đi qua token xác nhận: ngoài hai endpoint đó chỉ có huỷ đề nghị (không ghi sổ cái), demo/reset,
-    `POST /affordability` (POST chỉ để có thân yêu cầu, không ghi gì) và `POST /feedback` (một dòng phản hồi, không đụng
-    tiền). Lời nhắc (`schedule_nudge`) KHÔNG có endpoint riêng: đi qua /confirmations và /actions."""
+    """Mọi thao tác ghi SỔ CÁI đi qua token xác nhận: ngoài hai endpoint đó chỉ có huỷ đề nghị (không ghi sổ cái), demo/reset,
+    `POST /affordability` (POST chỉ để có thân yêu cầu, không ghi gì), `POST /feedback` (một dòng phản hồi, không đụng
+    tiền) và hai endpoint nạp dữ liệu (phase 5, không ghi sổ cái): xin URL tải lên (tạo job, ghi đồng ý) và đổi hũ ĐỀ XUẤT
+    của một dòng. Lời nhắc (`schedule_nudge`) KHÔNG có endpoint riêng: đi qua /confirmations và /actions."""
     writes = {op for op in operations() if op[0] != "GET"}
     assert writes == {
         ("POST", "/confirmations"),
@@ -71,8 +76,13 @@ def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
         ("POST", "/demo/reset"),
         ("POST", "/affordability"),
         ("POST", "/feedback"),
+        ("POST", "/ingest/uploads"),
+        ("PATCH", "/ingest/rows/{row_id}"),
     }
     assert not any("nudge" in path for _, path in operations())
+    for path, method in (("/ingest/uploads", "post"), ("/ingest/rows/{row_id}", "patch")):
+        text = SPEC["paths"][path][method]["description"]
+        assert "không ghi sổ cái" in text or "presigned" in text, path
 
 
 def test_moi_operation_co_id_duy_nhat_va_x_lambda_hop_le():
@@ -80,7 +90,7 @@ def test_moi_operation_co_id_duy_nhat_va_x_lambda_hop_le():
     for path, item in SPEC["paths"].items():
         for method, op in item.items():
             ids.append(op["operationId"])
-            assert op.get("x-lambda", "ledger") in {"ledger", "forecast", "audit"}, (method, path)
+            assert op.get("x-lambda", "ledger") in {"ledger", "forecast", "audit", "ingest"}, (method, path)
             assert op["tags"], (method, path)
     assert len(ids) == len(set(ids))
     assert SPEC["paths"]["/forecasts/{jar_code}"]["get"]["x-lambda"] == "forecast"
@@ -96,6 +106,10 @@ def test_moi_operation_co_id_duy_nhat_va_x_lambda_hop_le():
     assert served_by("forecast") == {"/forecasts/{jar_code}", "/affordability"}
     assert served_by("audit") == set()  # phase 3: audit chạy chung Lambda ledger
     assert {"/traces/{trace_id}", "/feedback"} <= served_by("ledger")
+    ingest = {
+        p for p, item in SPEC["paths"].items() for op in item.values() if op.get("x-lambda") == "ingest"
+    }
+    assert ingest == {p for p in SPEC["paths"] if p.startswith("/ingest/")}
 
 
 def test_moi_endpoint_doc_co_loi_401_va_503():

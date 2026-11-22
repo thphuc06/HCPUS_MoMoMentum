@@ -49,7 +49,8 @@ export const Transaction = z.object({
   note: z.string().max(200).optional(),
   transfer_id: Uuid.optional(),
   tx_type: TxTypeKey.optional(),
-  funding_source: z.enum(['jar', 'credit']).optional(),
+  // external (phase 5): chi hoặc thu ngoài ví, nạp từ ảnh hay CSV; không đổi số dư hũ.
+  funding_source: z.enum(['jar', 'credit', 'external']).optional(),
   payee_id: Uuid.optional(),
   payee_name: z.string().max(120).optional(),
   obligation_id: Uuid.optional(),
@@ -291,7 +292,7 @@ export type TransactionQuery = {
 
 // ---------------------------------------------------------------- ghi: xác nhận và hành động
 
-export const TOOL_NAMES = ['move_between_jars', 'record_transaction', 'assign_jar', 'update_profile', 'save_jars', 'confirm_salary', 'schedule_nudge'] as const
+export const TOOL_NAMES = ['move_between_jars', 'record_transaction', 'assign_jar', 'update_profile', 'save_jars', 'confirm_salary', 'schedule_nudge', 'confirm_rows'] as const
 export const ToolName = z.enum(TOOL_NAMES)
 export type ToolName = z.infer<typeof ToolName>
 

@@ -28,7 +28,11 @@
     },
     "kind": { "type": "string", "enum": ["expense", "income", "transfer"] },
     "tx_type": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$" },
-    "funding_source": { "type": "string", "enum": ["jar", "credit"] },
+    "funding_source": {
+      "description": "jar, credit hoặc external (chi hoặc thu ngoài ví do confirm_rows ghi; effects rỗng vì số dư hũ không đổi, consumer chạy dự báo đầy đủ).",
+      "type": "string",
+      "enum": ["jar", "credit", "external"]
+    },
     "amount_vnd": {
       "description": "Tổng số tiền của lần ghi (luôn dương): số chi, số nhận, hoặc tổng số chuyển.",
       "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
@@ -41,7 +45,7 @@
       "items": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" }
     },
     "effects": {
-      "description": "Số dư các hũ ĐÃ đổi (delta và số dư sau). Rỗng với khoản mua bằng hạn mức (funding_source credit): số dư hũ không đổi, nghĩa vụ mới có sự kiện `obligation.changed` riêng.",
+      "description": "Số dư các hũ ĐÃ đổi (delta và số dư sau). Rỗng với khoản mua bằng hạn mức (funding_source credit): số dư hũ không đổi, nghĩa vụ mới có sự kiện `obligation.changed` riêng. Rỗng với dòng external (ngoài ví).",
       "type": "array",
       "maxItems": 20,
       "items": { "$ref": "common.schema.json#/$defs/JarEffect" }

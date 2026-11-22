@@ -1028,6 +1028,7 @@ class WalletRepo:
                     "amount_vnd": abs(signed),
                     "kind": row["kind"],
                     "moves_money": moves_money,
+                    "funding_source": row["funding_source"],
                     "remember": remember if rule else "once",
                     "rule_saved": bool(rule and remember == "always"),
                 },

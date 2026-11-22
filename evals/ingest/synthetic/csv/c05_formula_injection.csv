@@ -1,0 +1,7 @@
+﻿STT,Ngày giao dịch,Số tiền ghi nợ,Số tiền ghi có,Nội dung chi tiết
+1,14/11/2026,"45,000",,"=HYPERLINK(""http://example.invalid/x"",""Xem hoa don"")"
+2,15/11/2026,"32,000",,"+SUM(1,2)+GRAB VIETNAM"
+3,15/11/2026,"25,000",,-2+3+cmd|' /C calc'!A0
+4,16/11/2026,"28,000",,@SUM(A1:A9) CIRCLE K VN
+5,16/11/2026,"55,000",,THANH TOAN QR PHUC LONG FT2611331122
+6,17/11/2026,=1+1,,Dong co so tien la cong thuc

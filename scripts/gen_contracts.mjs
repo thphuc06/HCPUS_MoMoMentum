@@ -33,6 +33,8 @@ const FILES = [
   'envelope', 'jar_summary', 'confirm', 'receipt', 'notice',
   'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action',
   'suggestions', 'obligation_impact', 'options', 'affordability_card', 'explain', 'clarify',
+  // phase 5 (F6): luồng frontend thêm vào REGISTERED_BY_FRONTEND khi đăng ký view
+  'coverage_change', 'ingest_review',
 ]
 const UNION_FILE = 'block'
 
@@ -184,7 +186,8 @@ import { z } from 'zod'
 // registry.tsx. `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` luôn gồm MỌI khối trong block.schema.json.
 // Phase 3 thêm sáu khối (affordability_card, obligation_impact, options, explain, clarify, suggestions) vào hợp đồng nhưng
 // CHƯA vào danh sách dưới đây: luồng frontend của phase 3 thêm chúng cùng lúc với việc đăng ký view trong registry.tsx.
-const REGISTERED_BY_FRONTEND = ['jar_summary', 'confirm', 'receipt', 'notice', 'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action']
+// Phase 5 (F6) đã đăng ký view cho ingest_review và coverage_change.
+const REGISTERED_BY_FRONTEND = ['jar_summary', 'confirm', 'receipt', 'notice', 'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action', 'coverage_change', 'ingest_review']
 for (const t of REGISTERED_BY_FRONTEND) {
   if (!registry.some(([name]) => name === t)) throw new Error(`REGISTERED_BY_FRONTEND có type lạ: ${t}`)
 }

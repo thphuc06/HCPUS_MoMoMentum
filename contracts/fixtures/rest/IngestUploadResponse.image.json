@@ -1,0 +1,21 @@
+{
+  "job_id": "5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+  "key": "sub-minh/5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+  "url": "https://yofina-ingest-example.s3.amazonaws.com/",
+  "fields": {
+    "key": "sub-minh/5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+    "Content-Type": "image/png",
+    "x-amz-algorithm": "AWS4-HMAC-SHA256",
+    "x-amz-credential": "EXAMPLE/20261210/ap-southeast-1/s3/aws4_request",
+    "x-amz-date": "20261210T030000Z",
+    "policy": "eyJleGFtcGxlIjp0cnVlfQ==",
+    "x-amz-signature": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "expires_at": "2026-12-10T03:05:00Z",
+  "max_bytes": 3750000,
+  "mime_types": [
+    "image/png",
+    "image/jpeg",
+    "image/webp"
+  ]
+}

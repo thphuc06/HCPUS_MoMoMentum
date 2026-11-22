@@ -10,13 +10,15 @@ Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, RE
 | `blocks/proactive_card.schema.json` | Thẻ chủ động (một việc) trên Tổng quan | luồng A (dựng), D (vẽ) |
 | `blocks/{confirm_action,receipt_action}.schema.json` | Xác nhận và biên nhận của MỌI tool ghi khác chuyển hũ | luồng A, agent (dựng), D (vẽ) |
 | `blocks/{affordability_card,obligation_impact,options,explain,clarify,suggestions}.schema.json` | Sáu khối phase 3 (xem mục "Phase 3"); `notice` và `forecast_timeline` được mở rộng tương thích ngược | luồng A (dựng số), agent, C (vẽ) |
-| `blocks/block.schema.json` | Hợp của mười bốn khối, phân biệt theo `type` | kiểm tra |
+| `blocks/{ingest_review,coverage_change}.schema.json` | Bảng duyệt một lần nạp ảnh hoặc CSV và độ phủ dữ liệu trước/sau (phase 5) | luồng A phase 5 (dựng), frontend (vẽ) |
+| `blocks/block.schema.json` | Hợp của mười sáu khối, phân biệt theo `type` | kiểm tra |
 | `tools/ledger.json` | Mười tool của target `ledger` (chín tool của overview và `save_turn`) đúng định dạng `inlinePayload` của AgentCore Gateway (Lambda target) | luồng A (cài), agent |
 | `tools/forecast.json` | Ba tool của target `forecast`: `get_forecast` (phase 2), `run_scenario`, `affordability_check` (phase 3) | luồng C phase 2, A phase 3 (cài), agent |
 | `tools/{knowledge,planner,audit}.json` | Target mới của phase 3: `get_fee_schedule`; `check_suitability`, `schedule_nudge` (tool GHI qua token); `get_trace` | luồng A (cài), agent |
+| `tools/ingest.json`, `tools/ingest.results.schema.json` | Ba tool của target `ingest` (phase 5) và kết quả | luồng A phase 5 (cài), agent |
 | `scenario/scenario_spec.schema.json` | `ScenarioSpec`: sáu loại kịch bản what-if (FR5), nguồn chung cho `run_scenario`, bảng `scenarios`, `yofina_core.scenario` | agent (dựng), luồng A (kiểm, chạy) |
 | `tools/{ledger,forecast,knowledge,planner,audit}.results.schema.json` | Kết quả JSON Lambda trả về cho từng tool; `ledger.results` còn chứa các $defs dùng chung với REST (`Transaction`, `Obligation`, `CreditLine`, `Payee`, `SalaryEvent`) | luồng A, C (trả), agent (đọc) |
-| `rest/openapi.yaml` | OpenAPI 3.1: 21 endpoint (xem mục "REST" và "Phase 3") | luồng A, C (cài), D (gọi) |
+| `rest/openapi.yaml` | OpenAPI 3.1: 24 endpoint (xem mục "REST", "Phase 3" và "Phase 5") | luồng A, C (cài), D (gọi) |
 | `events/*.schema.json` | `detail` của sự kiện trên EventBridge bus `yofina-bus`: `transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`, `forecast.updated` | luồng A (phát), C (nghe) |
 | `ml/forecast_io.schema.json` | Dạng JSON của đầu vào và đầu ra `yofina_ml.forecast_user` | luồng B, C |
 | `fixtures/` | Ví dụ JSON dùng chung cho test Python và TypeScript (`blocks/`, `tools/`, `rest/`, `events/`, `ml/`, `scenario/`) | test |
@@ -282,6 +284,115 @@ uv run pytest tests/unit/test_contracts_phase3.py tests/unit/test_migration_0010
 ```
 
 Hai test cũ đã sửa cho phase 3: `test_contracts_rest.py` (tập endpoint, `x-lambda`) và `test_contracts_phase2.py` (tool ghi có thêm `schedule_nudge`). Frontend: `frontend/src/api/errors.ts` thêm sáu mã lỗi và `api/schemas.ts` thêm `schedule_nudge` vào `TOOL_NAMES` (để `openapi.test.ts` xanh); sáu khối mới đã có Zod trong `blocks.ts` nhưng CHƯA ở `REGISTERED_BY_FRONTEND`. Luồng C thêm chúng vào danh sách đó trong `scripts/gen_contracts.mjs` rồi sinh lại, cùng lúc đăng ký view trong `registry.tsx`.
+
+## Phase 5 (F6): nạp dữ liệu
+
+Hợp đồng cho luồng A của [phase 5](../docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md): nạp chi tiêu và thu nhập NGOÀI ví (ngân hàng khác, thẻ) từ ảnh chụp màn hình hoặc CSV. Ví mô phỏng khép kín nên độ phủ dữ liệu của nó luôn đầy đủ; dữ liệu nạp thêm phần ngoài ví ("phương án A" đã chốt với chủ dự án). Migration: [db/migrations/0050_ingest.sql](../db/migrations/0050_ingest.sql) (đánh số 0050 vì 0010 tới 0049 để cho luồng khác). **0050 đã thay hàm `app_get_daily_spend` (của 0005) và `app_get_forecast_context` (của 0009)**, cùng chữ ký và cùng hình dạng kết quả, để Lambda dự báo đã deploy nhận công thức mới mà không phải deploy lại.
+
+### Nguồn trả `external`
+
+- `transactions.funding_source` có thêm `external`: chi (`kind = expense`, bắt buộc có `jar_code`) hoặc thu (`kind = income`) ngoài ví. **Không bao giờ đổi số dư hũ** (như `credit`). Không có dòng chuyển hũ external, không gắn nghĩa vụ (ràng buộc `transactions_funding_check` mới, DROP rồi ADD trong 0050). Bất biến của sổ cái giữ nguyên: số dư mỗi hũ = tổng `amount_vnd` các dòng `jar` của hũ đó.
+- Chỉ `confirm_rows` ghi dòng external. `record_transaction` không nhận `funding = external` (`yofina_core.wallet.RECORDABLE_FUNDING_SOURCES`; `FUNDING_SOURCES` có cả ba giá trị). Dòng do `confirm_rows` ghi có `source = 'ingest'`, `needs_review = false`, `occurred_at` là thời điểm thật lúc chốt, `app_date` là ngày trên tệp.
+- Đây là thay đổi tương thích ngược (thêm giá trị enum ở `Transaction.funding_source` của `tools/ledger.results.schema.json`, `events/transaction.recorded.schema.json`, Zod frontend `api/schemas.ts`).
+
+### Độ phủ dữ liệu
+
+Công thức không đổi (`yofina_ml.quality.data_coverage`): `clamp((spend + balance_end - balance_start) / income, 0, 1)`. Đổi là các thành phần, tính trong SQL (`app_coverage_facts`, dùng chung cho `app_get_forecast_context` và `app_get_data_coverage`), trong cửa sổ từ `history_start`:
+
+| Thành phần | 0009 | 0050 |
+|---|---|---|
+| `income_vnd` | lương vào ví (`income`, `tx_type = salary`) | lương vào ví (`income`, `salary`, `jar`) + mọi thu nhập ngoài ví (`income`, `external`) |
+| `spend_vnd` | chi dòng `jar` | chi dòng `jar` + chi dòng `external` |
+| `balance_start_vnd`, `balance_end_vnd` | số dư hũ trong ví | như cũ (chỉ dòng `jar`) |
+
+Không thêm cột hồ sơ: thu nhập ngoài ví lấy từ chính dòng `income`/`external` đã nạp. **Bất biến**: người dùng không có dòng external thì mọi số của `coverage`, mọi dòng `jar` (kể cả `spend`) và mọi nghĩa vụ của `app_get_forecast_context` Y HỆT bản 0009 (test chạy bản 0009 dưới tên khác trên minh, lan, khoa); nhãn tin cậy và `is_initial_estimate` cũng không đổi. `app_get_data_coverage` trả các thành phần thô (cùng ngày mô phỏng, cùng `history_start` với `p_window_days = forecast_history_window_days`) và phần ngoài ví; Python tính tỷ lệ bằng `yofina_core.ingest.coverage_ratio` (test khóa nó bằng chính `quality.data_coverage`), nên `coverage_change.before/after` khớp dải độ phủ của dự báo.
+
+### Rà mọi đường đọc sổ cái với `external`
+
+Test: `tests/local_pg/test_external_funding.py` (PostgreSQL 16 cục bộ, role `yofina_app`, RLS thật). Ca chuẩn: chèn một dòng chi external 150.000 ₫ vào hũ `an_uong` của minh ngày 19/11.
+
+| Đường đọc | Hành vi với `external` | Test |
+|---|---|---|
+| `SQL_RECOMPUTE_BALANCES` (đặt lại demo), `app_get_jar_state`, `app_list_jars`, tool `get_jar_balances` | Chỉ cộng dòng `jar`: số dư hũ không đổi | `test_so_du_hu_va_dung_lai_so_du_khong_doi` |
+| `app_get_overview` (tổng ví, `recent_transactions`, `review_count`) | Tổng ví = tổng số dư hũ, không đổi. **Thay trong 0050**: giao dịch gần đây của Tổng quan là của VÍ, bỏ dòng external. Số cần xem lại không đổi (dòng external có `needs_review = false`, hũ người dùng) | `test_tong_quan_tong_so_du_gan_day_va_can_xem_lai_khong_doi` |
+| `app_get_overview_extras` (0005, không còn mã gọi) | Thay trong 0050 cho khớp `app_get_overview`: bỏ dòng external khỏi gần đây | cùng test trên |
+| `app_get_review_stats`, `app_get_unclassified` | Không đổi (không gồm dòng external vì chúng không cần xem lại và không ở Chưa phân loại) | cùng test trên |
+| `app_list_transactions` (Hoạt động, `query_transactions`), `app_get_jar_detail`, `app_get_transaction` | CÓ dòng external, kèm `funding_source = external` (frontend hiện nhãn nguồn, như "Trả sau") | `test_lich_su_va_chi_tiet_hu_co_dong_external_kem_nguon` |
+| `app_get_cashflow_summary`, tool `get_cashflow_summary` | **Thay trong 0050**: `by_jar` và `income_by_type` chỉ là luồng tiền CỦA VÍ (`jar`, `credit`), không gồm external; khóa mới `external {spent_vnd, income_vnd, tx_count}` tách riêng. Lý do: cộng chi ngoài ví vào "đã chi" làm số lớn hơn tiền thật rời ví; tool giữ nguyên hình dạng nên agent không đổi | `test_dong_tien_cua_vi_khong_gom_external_va_tach_rieng` |
+| `app_get_daily_spend` | **Thay trong 0050**: tính chi `jar` và `external` (vẫn bỏ dòng gắn nghĩa vụ, hũ hệ thống, dòng `credit`); chi của hũ đổi đúng bằng số tiền | `test_daily_spend_va_spend_cua_context_doi_dung_so_tien`, `test_credit_va_dong_gan_nghia_vu_van_khong_vao_lich_su_chi` |
+| `app_get_forecast_context` | **Thay trong 0050**: `spend` của hũ (qua `app_get_daily_spend`) và `coverage` theo bảng trên; `balance_vnd` của hũ không đổi | cùng test trên, `test_thu_nhap_ngoai_vi_vao_do_phu_khong_doi_so_du_tien_vao_khac`, `test_khong_co_external_thi_context_y_het_ban_0009`, `test_khong_co_external_thi_nhan_tin_cay_va_uoc_luong_ban_dau_khong_doi` |
+| `assign_jar` (`moves_money = funding_source == 'jar'`) | Dòng external đổi hũ thì KHÔNG chuyển tiền (như `credit`). Sự kiện `transaction.recorded` nay mang nguồn trả THẬT của dòng (sửa `wallet_writes.py`, `repo_wallet.py`: bản cũ ghi `credit` cho mọi dòng không chuyển tiền) | `test_assign_jar_dong_external_khong_chuyen_tien_va_su_kien_chay_day_du` |
+| Consumer `yofina-on-transaction` (`plan_event`) | `funding_source = external` thì chạy dự báo ĐẦY ĐỦ (fit lại lịch sử chi), không chỉnh nhanh, không trừ số dư. **Chỉ có hiệu lực khi deploy lúc ghép**; trước đó backend ingest không phụ thuộc vào nó: sau `confirm_rows` gọi tính lại đầy đủ (`yofina-forecast-batch`, như đặt lại demo) hoặc phát `profile.updated` | `test_consumer_external_luon_chay_day_du`, `tests/unit/pipeline` |
+| `RESET_DELETES` (đặt lại demo) | Xóa `ingest_rows`, `ingest_jobs`, `consents` TRƯỚC `transactions` (dòng external bị xóa cùng sổ cái). `consents` xóa vì đặt lại đưa tài khoản demo về trạng thái chưa từng nạp; bằng chứng đồng ý vẫn ở `audit_events` (chỉ thêm) | `test_dat_lai_xoa_external_va_du_lieu_nap_dung_nguoi` |
+| `record_transaction` | Không ghi được external (PARAMS_INVALID) | `test_record_transaction_khong_ghi_duoc_external` |
+| `app_query_transactions` (0001, không còn mã gọi), `app_get_jar_usage` (đếm dòng của hũ) | Không đổi: dòng external hiện ở lịch sử; hũ có dòng external (kể cả số dư 0) không bỏ được, như hũ có dòng `credit` | rà tay |
+
+### Bảng và hàm (0050)
+
+- `ingest_jobs`: một lần nạp một tệp. `source_kind` (`image`, `csv`), `s3_key` (`{user_id}/{job_id}`, không có tên tệp gốc), `content_sha256`, `mime`, `size_bytes`, `status` (`awaiting_upload`, `queued`, `processing`, `review`, `done`, `failed`, `rejected`), `error_code`, `error_message`, `progress` 0..100, bốn bộ đếm dòng, `coverage_before`/`coverage_after` (`numeric(4,3)`), `model`. Cùng `content_sha256` chỉ một job còn sống mỗi người dùng.
+- `ingest_rows`: dòng ĐÃ che PII. `kind` (`expense`, `income`), `amount_vnd` dương, `counterparty`, `description`, `extract_confidence`, `suggested_jar_code`, `jar_confidence`, `jar_source` (`type_map`, `rule`, `model`, `user`), `tx_type`, `review_status` (`auto_added`, `pending`, `approved`, `rejected`, `duplicate`), `duplicate_of_transaction_id`, `transaction_id` (không khóa ngoại cứng), `dedupe_key` duy nhất theo người dùng. Không cột nào chứa ảnh hay văn bản thô.
+- `consents`: `(user_id, source)` với `source` ∈ `image_upload`, `csv_upload`; `granted_at`, `revoked_at`, `version`.
+- Hàm (SECURITY INVOKER, tự đặt `app.user_id`, có LIMIT): `app_create_ingest_job`, `app_find_ingest_job_by_content`, `app_update_ingest_job` (chuyển trạng thái hợp lệ, tiến độ không lùi; `failed`/`rejected` xóa dòng chưa chốt để nạp lại được), `app_insert_ingest_rows` (tối đa 500, trùng khóa thì bỏ qua), `app_get_ingest_job` (dòng `job` rồi các dòng `row`, tối đa 500), `app_list_ingest_jobs`, `app_set_ingest_row_jar` (chỉ đổi đề xuất), `app_grant_consent`, `app_get_consents`, `app_get_data_coverage`, `app_find_ingest_matches`, `app_fold_text` (khớp `params.fold_text`). Ghi sổ cái của `confirm_rows` là câu INSERT trong transaction của Lambda (như ledger), không phải hàm DB.
+- **`auto_added` không ghi sổ cái** (đã chốt với chủ dự án): dòng tin cậy cao chỉ được CHỌN SẴN trong khối duyệt; mọi dòng vào `transactions` khi người dùng bấm `confirm_rows` (có token, ADR-0002). Một đường ghi duy nhất, đúng quy tắc "không tool ghi nào chạy từ nội dung tệp".
+
+### Khử trùng
+
+- Khóa dòng: `yofina_core.ingest.row_dedupe_key` = công thức "Khử trùng" ở trên với `client_ref = ingest:{content_sha256[:16]}:{seq}`. Cùng khóa ở `ingest_rows.dedupe_key` và `transactions.dedupe_key` của dòng đã ghi: nạp lại cùng tệp không sinh dòng thứ hai ở cả hai bảng.
+- Chéo nguồn: trước khi chèn dòng, worker gọi `app_find_ingest_matches(p_user_id, p_rows, p_window_days)` với `p_window_days = ingest_dedupe_window_days`: mỗi ứng viên `{idx, app_date, amount_vnd, counterparty, kind}` nhận các giao dịch ĐÃ CÓ ở MỌI nguồn trả (`jar`, `credit`, `external`), cùng `kind`, cùng số tiền tuyệt đối, lệch ngày trong cửa sổ, kèm `day_diff` và `counterparty_match`. Luật chọn (worker, luồng A): có khớp thì dòng thành `duplicate` với giao dịch khớp gần ngày nhất (đối tác khớp được ưu tiên). Một khoản không thể vừa ở trong ví vừa ở ngoài ví.
+
+### Khối `ingest_review` và `coverage_change`
+
+- `ingest_review` (id `ingest_review:{job_id}`): `job_id`, `status`, `source_kind`, `rows` (tối đa 200 theo `seq`; mỗi dòng `row_id`, `seq`, `kind`, `app_date`, `amount_vnd`, `counterparty?`, `description?`, `extract_confidence`, `suggested_jar? {code,name,color_key,icon_key}`, `jar_confidence?`, `jar_source?`, `review_status`, `duplicate_of?`), `rows_total`, `counts {auto_added, pending, approved, rejected, duplicate}`, `jars` (hũ người dùng để đổi hũ một chạm). Dòng thu nhập không có hũ.
+- `coverage_change` (id `coverage_change:{job_id}`): `job_id`, `before?`, `after?` (`Ratio`, vắng khi chưa tính được), `rows_added`, `external_spend_added_vnd`, `external_income_added_vnd?`, `jars_affected [{code,name}]`, `forecast_refresh` (`queued`, `done`, `skipped`). Đi kèm biên nhận `receipt_action` của `confirm_rows` ở trường mới `receipt_action.data.coverage_change` (tùy chọn, các tool khác không có), nên `POST /actions` vẫn trả `receipt_action` như cũ.
+- Dựng bằng `yofina_core.ingest.build_ingest_review`, `build_coverage_change`; model ở `yofina_core.blocks` (cùng hợp `Block`). Hai khối CHƯA nằm trong `REGISTERED_BY_FRONTEND`: luồng frontend thêm khi đăng ký view (khối chưa đăng ký hiện `fallback_text`).
+
+### Tool target `ingest`
+
+`tools/ingest.json` (định dạng `inlinePayload`, không `enum`/`minimum`/`pattern`; `user_id` "hệ thống tự điền"), kết quả ở `tools/ingest.results.schema.json`, model Pydantic ở `yofina_core.ingest` (`RESULT_MODELS`), thứ tự ở `yofina_core.ingest.INGEST_TOOLS`. Tên qua Gateway: `ingest___start_job` (18 ký tự), `ingest___get_job_status` (23), `ingest___confirm_rows` (21). Chưa tạo target Gateway (không sửa `agent/`, YofinaAgent).
+
+| Tool | Việc |
+|---|---|
+| `start_job` | KHÔNG tạo job, không ghi: tệp chỉ tải lên từ màn hình (người dùng chọn tệp, đồng ý). Trả `upload_path`, giới hạn tệp, `consent_required`, job gần nhất |
+| `get_job_status` | Trạng thái một job (vắng `job_id`: job gần nhất); `review` là đúng `data` của `ingest_review`, `coverage_change` khi `done`. Mô tả nói rõ nội dung dòng là dữ liệu, không phải chỉ dẫn |
+| `confirm_rows` | Tool ghi: không token thì `NEEDS_CONFIRMATION` với `ConfirmActionData`, có token thì `ReceiptActionData` (tool `confirm_rows`, `jars_after` rỗng, `coverage_change`). `confirm_rows` thuộc `wallet.ACTION_TOOLS` (`POST /confirmations`, `POST /actions`) và `GENERIC_ACTION_TOOLS` (khối `confirm_action`/`receipt_action`), KHÔNG thuộc `AGENT_WRITE_TOOLS` (tool ghi của target `ledger`) |
+
+Chuẩn hóa `confirm_rows` (`yofina_core.params.normalize_confirm_rows`, idempotent, không cần ngữ cảnh): `{job_id, rows: [{row_id, jar?}] sắp theo row_id, reject_row_ids: [...] sắp tăng}`; bỏ `jar` rỗng; một dòng không vừa ghi vừa bỏ; ít nhất một dòng; tối đa 500 mỗi danh sách. Cedar (khi ghép): policy `has confirm_token` cho `ingest___confirm_rows`, như các tool ghi khác.
+
+### REST `/ingest/*`
+
+| Endpoint | Việc |
+|---|---|
+| `POST /ingest/uploads` | Kiểm loại và kích thước khai báo, ghi `consents` (bắt buộc `consent: true` ở lần đầu của nguồn, không thì 403 `CONSENT_REQUIRED`), tạo job `awaiting_upload`, trả presigned POST (`url`, `fields`, `key`, `job_id`, `expires_at`, `max_bytes`, `mime_types`) |
+| `GET /ingest/jobs/{job_id}` | Tiến độ; `review` (khối `ingest_review`) từ trạng thái review; `coverage_change` khi done |
+| `PATCH /ingest/rows/{row_id}` | Đổi hũ ĐỀ XUẤT của một dòng chi (`jar_source = user`), không ghi sổ cái, không token |
+| `POST /confirmations`, `POST /actions` với `tool = confirm_rows` | Luồng xác nhận sẵn có, không đổi; trả `receipt_action` kèm `coverage_change` |
+
+**Bắt đầu job bằng sự kiện S3** (`ObjectCreated` qua SQS có DLQ), không có endpoint "bắt đầu": tải lên chính là tín hiệu, không có trạng thái "đã tải mà chưa bấm", không thêm đường ghi từ client. Tệp tới khi job không còn `awaiting_upload` thì bỏ qua; cùng nội dung với một job còn sống thì job mới thành `rejected` (`INGEST_DUPLICATE_FILE`). `x-lambda: ingest` cho ba route mới.
+
+Mã lỗi mới (thêm cuối `ErrorCode`, khớp `yofina_core.errors`, OpenAPI và `frontend/src/api/errors.ts`): `CONSENT_REQUIRED` (403), `INGEST_JOB_NOT_FOUND` (404), `INGEST_JOB_NOT_READY` (409), `INGEST_UNSUPPORTED_TYPE` (415), `INGEST_TOO_LARGE` (413), `INGEST_NOT_FINANCIAL` (422), `INGEST_DUPLICATE_FILE` (409).
+
+### Sự kiện
+
+Không thêm sự kiện mới: `confirm_rows` phát một `transaction.recorded` mỗi lần chốt với `funding_source = external`, `effects` rỗng (enum của schema đã có `external`). Consumer mới chạy đầy đủ; consumer đã deploy coi nó như chi `jar` và chỉnh nhanh với số dư KHÔNG đổi (lần chạy nhanh dùng phân phối cũ, không trừ tiền), nên backend ingest gọi thêm tính lại đầy đủ sau khi chốt (xem bảng rà).
+
+### Cấu hình (một nơi: `yofina_core.ingest.IngestSettings`)
+
+Khóa là tên trường (biến `YOFINA_<TÊN>` hoặc SSM `<prefix>/<tên>`); vắng thì dùng mặc định:
+
+| Khóa | Mặc định | Ghi chú |
+|---|---|---|
+| `ingest_image_max_bytes` | 3.750.000 | giới hạn 3,75 MB mỗi ảnh của Bedrock Converse |
+| `ingest_csv_max_bytes` | 2.000.000 | |
+| `ingest_csv_max_rows` | 500 | trần của `app_insert_ingest_rows` |
+| `ingest_image_mime_types` | `image/png,image/jpeg,image/webp` | |
+| `ingest_csv_mime_types` | `text/csv,application/vnd.ms-excel` | |
+| `ingest_upload_url_ttl_seconds` | 300 | 60..3600 |
+| `ingest_dedupe_window_days` | 3 | 0..30 (hàm DB kẹp cùng khoảng): lệch ngày ghi sổ giữa ngân hàng và ví thường 1 tới 2 ngày làm việc |
+| `ingest_auto_extract_min_confidence` | 0.90 | dòng chọn sẵn khi đạt CẢ HAI ngưỡng (dòng thu chỉ cần ngưỡng trích) |
+| `ingest_auto_jar_min_confidence` | 0.80 | |
+| `ingest_consent_version` | `2026-12` | ghi vào `consents.version` |
+
+Cửa sổ độ phủ dùng chung `forecast_history_window_days` của dự báo.
 
 ## Cách chọn công cụ sinh
 

@@ -1,0 +1,134 @@
+{
+  "v": 1,
+  "id": "ingest_review:5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Đã đọc 5 dòng ngoài ví; 4 dòng chờ bạn duyệt, 1 dòng trùng.",
+  "source": {
+    "tool": "rest:GET /ingest/jobs/{job_id}",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "ingest_review",
+  "data": {
+    "job_id": "5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+    "status": "review",
+    "source_kind": "image",
+    "rows": [
+      {
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000001",
+        "seq": 1,
+        "kind": "expense",
+        "app_date": "2026-11-18",
+        "amount_vnd": 85000,
+        "counterparty": "Cơm tấm Phúc Lộc",
+        "description": "Thanh toán thẻ",
+        "extract_confidence": 0.97,
+        "suggested_jar": {
+          "code": "an_uong",
+          "name": "Ăn uống",
+          "color_key": "violet",
+          "icon_key": "utensils"
+        },
+        "jar_confidence": 0.9,
+        "jar_source": "type_map",
+        "review_status": "auto_added",
+        "raw_text": "STK 0123456789 NGUYEN VAN A"
+      },
+      {
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000002",
+        "seq": 2,
+        "kind": "expense",
+        "app_date": "2026-11-19",
+        "amount_vnd": 120000,
+        "counterparty": "Grab",
+        "description": "GRAB *TRIP",
+        "extract_confidence": 0.95,
+        "suggested_jar": {
+          "code": "di_lai",
+          "name": "Đi lại",
+          "color_key": "sky",
+          "icon_key": "bus"
+        },
+        "jar_confidence": 0.88,
+        "jar_source": "rule",
+        "review_status": "auto_added"
+      },
+      {
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000003",
+        "seq": 3,
+        "kind": "expense",
+        "app_date": "2026-11-19",
+        "amount_vnd": 450000,
+        "counterparty": "Cửa hàng ***",
+        "description": "Chuyển khoản tới ***1234",
+        "extract_confidence": 0.78,
+        "review_status": "pending"
+      },
+      {
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000004",
+        "seq": 4,
+        "kind": "expense",
+        "app_date": "2026-11-20",
+        "amount_vnd": 200000,
+        "counterparty": "Cơm tấm",
+        "description": "Thanh toán",
+        "extract_confidence": 0.96,
+        "suggested_jar": {
+          "code": "an_uong",
+          "name": "Ăn uống",
+          "color_key": "violet",
+          "icon_key": "utensils"
+        },
+        "jar_confidence": 0.92,
+        "jar_source": "type_map",
+        "review_status": "duplicate",
+        "duplicate_of": "3b9f6c1e-2d4a-4e8b-9c7f-1a2b3c4d5e6f"
+      },
+      {
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000005",
+        "seq": 5,
+        "kind": "income",
+        "app_date": "2026-11-15",
+        "amount_vnd": 2000000,
+        "counterparty": "Công ty ***",
+        "description": "Lương phần 2",
+        "extract_confidence": 0.93,
+        "review_status": "pending"
+      }
+    ],
+    "rows_total": 5,
+    "counts": {
+      "auto_added": 2,
+      "pending": 2,
+      "approved": 0,
+      "rejected": 0,
+      "duplicate": 1
+    },
+    "jars": [
+      {
+        "code": "an_uong",
+        "name": "Ăn uống",
+        "color_key": "violet",
+        "icon_key": "utensils"
+      },
+      {
+        "code": "di_lai",
+        "name": "Đi lại",
+        "color_key": "sky",
+        "icon_key": "bus"
+      },
+      {
+        "code": "hoa_don",
+        "name": "Hóa đơn",
+        "color_key": "brown",
+        "icon_key": "receipt"
+      },
+      {
+        "code": "giai_tri",
+        "name": "Giải trí",
+        "color_key": "orchid",
+        "icon_key": "gamepad"
+      }
+    ]
+  }
+}

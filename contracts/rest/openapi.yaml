@@ -27,7 +27,7 @@ info:
     được bỏ; và màn hình tự dựng bản xem lại từ `params` đã nhập. Các endpoint `GET` còn lại
     không ghi gì. Bảng `tool` -> việc trên màn hình nằm ở mô tả của `POST /actions`.
 
-    **Lambda phục vụ**: trường `x-lambda` của thao tác (`ledger`, `forecast` hoặc `audit`) cho CDK nối route
+    **Lambda phục vụ**: trường `x-lambda` của thao tác (`ledger`, `forecast`, `audit` hoặc `ingest`) cho CDK nối route
     vào đúng Lambda; không có thì mặc định là `ledger`. `GET /forecasts/{jar_code}` và `POST /affordability` do `forecast`;
     `GET /traces/{trace_id}` và `POST /feedback` do `ledger` (phase 3: mã tool `audit`, `planner`, `knowledge` chạy chung Lambda `yofina-ledger`).
 
@@ -36,6 +36,7 @@ info:
     chỉ dùng POST để có thân yêu cầu, không ghi gì. `POST /feedback` ghi một dòng phản hồi không đụng tiền nên KHÔNG đi qua
     token xác nhận (lý do ở "Quyết định hợp đồng phase 3"). Lời nhắc (`schedule_nudge`) là thao tác ghi thật nên vẫn đi qua
     `POST /confirmations` rồi `POST /actions`, không có endpoint ghi riêng.
+    Các route `/ingest/*` (phase 5) do `ingest`; tool `confirm_rows` vẫn đi qua `POST /actions` của `ledger` (một đường ghi duy nhất).
 
     Mã lỗi (`ErrorCode`) dùng chung với kết quả tool và `notice.data.code`; ánh xạ HTTP status ở
     `x-http-status`. Schema khối UI và tham số được tham chiếu tới `../blocks/*.schema.json` và
@@ -63,6 +64,11 @@ tags:
     description: Bảng "Vì sao" (trace của chính người dùng) và phản hồi về phương án.
   - name: demo
     description: Chỉ cho tài khoản demo.
+  - name: ingest
+    description: |
+      Nạp chi tiêu và thu nhập NGOÀI ví từ ảnh hoặc CSV (phase 5, F6). Tải lên bằng presigned POST thẳng vào S3; S3 tự bắt
+      đầu job (sự kiện ObjectCreated qua SQS). Đọc trạng thái và bảng duyệt; đổi hũ đề xuất của một dòng (không ghi sổ cái).
+      Chốt dòng vào sổ cái là tool `confirm_rows` qua `POST /confirmations` rồi `POST /actions` (không có đường ghi tắt).
 paths:
   /jars:
     get:
@@ -193,6 +199,7 @@ paths:
         | `save_jars` | Tạo, sửa hũ, tỷ lệ chia lương, mục tiêu và hạn (thay cả danh sách hũ của người dùng, tổng tỷ lệ bằng 100) | không (chỉ màn hình) |
         | `confirm_salary` | Xác nhận một chạm lương về: chia vào hũ theo luật, hoặc giữ ở Tiền vào khác; tùy chọn cập nhật lương đã khai | không (chỉ màn hình) |
         | `schedule_nudge` | Đặt (`op` create) hoặc hủy (`op` cancel, nút Hoàn tác) một lời nhắc vào một ngày mô phỏng; ghi bảng `nudges`. Agent gọi qua target `planner` | có |
+        | `confirm_rows` | Chốt các dòng của một lần nạp ảnh hoặc CSV (phase 5): dòng được ghi vào sổ cái với `funding_source = external` (KHÔNG đổi số dư hũ), dòng bị bỏ thì đánh dấu; trả `receipt_action` kèm khối `coverage_change` (độ phủ dữ liệu trước và sau) và kích hoạt tính lại dự báo | có (target `ingest`, `ingest___confirm_rows`) |
 
         **Một đề nghị chỉ được thực hiện một lần.** Khi client gửi `conversation_id` và
         `confirm_block_id` (id của khối `confirm` đang được thực hiện), server lưu khối `receipt`
@@ -818,6 +825,129 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '500':
           $ref: '#/components/responses/InternalError'
+  /ingest/uploads:
+    post:
+      tags: [ingest]
+      operationId: createIngestUpload
+      summary: Xin URL tải tệp lên (presigned POST) và tạo job
+      x-lambda: ingest
+      description: |
+        Kiểm loại tệp và kích thước khai báo theo cấu hình (`ingest_image_max_bytes`, `ingest_csv_max_bytes`,
+        `ingest_image_mime_types`, `ingest_csv_mime_types`), ghi đồng ý của nguồn này (bảng `consents`) khi `consent` đúng,
+        tạo job `awaiting_upload` rồi trả presigned POST của S3 (`url`, `fields`) với khóa
+        `{user_id}/{job_id}` (không có tên tệp gốc) và chính sách `content-length-range` cùng `Content-Type` cố định, hết hạn sau
+        `ingest_upload_url_ttl_seconds`.
+
+        **Đồng ý**: người dùng chưa đồng ý (hoặc đã rút) cho nguồn này mà không gửi `consent: true` thì 403 `CONSENT_REQUIRED`
+        và không tạo gì. Đã đồng ý thì `consent` có thể bỏ.
+
+        **Bắt đầu job**: không có endpoint "bắt đầu". Tải lên thành công thì sự kiện S3 `ObjectCreated` (qua SQS có DLQ) tự đưa
+        job sang `queued` rồi `processing`; frontend chỉ cần `GET /ingest/jobs/{job_id}`. Lý do: tải lên chính là tín hiệu bắt
+        đầu, không có trạng thái "đã tải mà quên bấm bắt đầu", và không có thêm một đường ghi từ client. Tệp tới mà job không
+        còn ở `awaiting_upload` (tải lại cùng URL) thì bị bỏ qua. Cùng nội dung tệp với một job còn sống thì job mới thành
+        `rejected` với `INGEST_DUPLICATE_FILE` (so `content_sha256`).
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestUploadRequest'
+      responses:
+        '200':
+          description: Đã tạo job và cấp URL tải lên.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /ingest/jobs/{job_id}:
+    get:
+      tags: [ingest]
+      operationId: getIngestJob
+      summary: Tiến độ một lần nạp, kèm bảng duyệt khi đã đọc xong
+      x-lambda: ingest
+      description: |
+        `status` và `progress` để vẽ thanh tiến độ (gọi lại mỗi vài giây khi chưa tới `review`). Từ `review` có `review`
+        (khối `ingest_review`, id `ingest_review:{job_id}`); `done` có thêm `coverage_change` (khối của lần chốt).
+        `failed` và `rejected` có `error_code` (ví dụ `INGEST_NOT_FINANCIAL`) và câu `error_message` hiển thị được.
+        Job không có hoặc không thuộc người gọi: 404 `INGEST_JOB_NOT_FOUND` (không phân biệt).
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/JobIdPath'
+      responses:
+        '200':
+          description: Trạng thái job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /ingest/rows/{row_id}:
+    patch:
+      tags: [ingest]
+      operationId: setIngestRowJar
+      summary: Đổi hũ đề xuất của một dòng chi (một chạm), không ghi sổ cái
+      x-lambda: ingest
+      description: |
+        Chỉ đổi ĐỀ XUẤT trong bảng duyệt (`ingest_rows.suggested_jar_code`, `jar_source = user`); không ghi sổ cái, không cần
+        token. Dòng phải là dòng chi còn mở (`auto_added` hoặc `pending`) của một job đang `review`, hũ phải là hũ người dùng
+        (không phải hũ hệ thống). Ghi thật chỉ xảy ra khi chốt bằng `confirm_rows`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/RowIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRowJarRequest'
+      responses:
+        '200':
+          description: Đã đổi đề xuất.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestRowJarResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -834,6 +964,20 @@ components:
       schema:
         type: string
         pattern: '^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+    JobIdPath:
+      name: job_id
+      in: path
+      required: true
+      description: Id lần nạp (UUID).
+      schema:
+        $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+    RowIdPath:
+      name: row_id
+      in: path
+      required: true
+      description: Id một dòng của lần nạp (UUID).
+      schema:
+        $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
     JarCodePath:
       name: jar_code
       in: path
@@ -884,6 +1028,13 @@ components:
         - FEE_SCHEDULE_NOT_FOUND
         - FORECAST_NOT_APPLICABLE
         - SCENARIO_INVALID
+        - CONSENT_REQUIRED
+        - INGEST_JOB_NOT_FOUND
+        - INGEST_JOB_NOT_READY
+        - INGEST_UNSUPPORTED_TYPE
+        - INGEST_TOO_LARGE
+        - INGEST_NOT_FINANCIAL
+        - INGEST_DUPLICATE_FILE
       x-http-status:
         UNAUTHENTICATED: 401
         FORBIDDEN: 403
@@ -916,6 +1067,13 @@ components:
         FEE_SCHEDULE_NOT_FOUND: 404
         FORECAST_NOT_APPLICABLE: 404
         SCENARIO_INVALID: 422
+        CONSENT_REQUIRED: 403
+        INGEST_JOB_NOT_FOUND: 404
+        INGEST_JOB_NOT_READY: 409
+        INGEST_UNSUPPORTED_TYPE: 415
+        INGEST_TOO_LARGE: 413
+        INGEST_NOT_FINANCIAL: 422
+        INGEST_DUPLICATE_FILE: 409
       x-meaning:
         UNAUTHENTICATED: Thiếu hoặc sai access token.
         FORBIDDEN: Không được phép (token xác nhận không thuộc người dùng này, v.v.).
@@ -948,6 +1106,13 @@ components:
         FEE_SCHEDULE_NOT_FOUND: Không có biểu phí cho loại phí hoặc sản phẩm này.
         FORECAST_NOT_APPLICABLE: Hũ hệ thống (Tiền vào khác, Chưa phân loại) không có dự báo.
         SCENARIO_INVALID: Kịch bản đúng dạng nhưng vô lý (ngày đã qua, hũ sai loại, vượt khoảng dự báo).
+        CONSENT_REQUIRED: Chưa đồng ý cho nguồn nạp này (ảnh hoặc CSV); gửi lại với consent true sau khi người dùng đồng ý.
+        INGEST_JOB_NOT_FOUND: Lần nạp (hoặc dòng của nó) không tồn tại với người dùng này.
+        INGEST_JOB_NOT_READY: Lần nạp chưa ở trạng thái làm được việc này (chưa đọc xong, đã chốt, đã lỗi), hoặc dòng không còn mở.
+        INGEST_UNSUPPORTED_TYPE: Loại tệp không được hỗ trợ; thông điệp liệt kê loại được hỗ trợ.
+        INGEST_TOO_LARGE: Tệp lớn hơn giới hạn cấu hình của loại này.
+        INGEST_NOT_FINANCIAL: Tệp không phải tài liệu tài chính (sao kê, hóa đơn, lịch sử giao dịch) nên không đọc dòng nào.
+        INGEST_DUPLICATE_FILE: Cùng nội dung tệp đã được nạp ở một lần nạp khác còn hiệu lực.
     ErrorResponse:
       type: object
       required: [error]
@@ -1417,7 +1582,7 @@ components:
           type: string
           pattern: '^[a-z][a-z0-9_]{0,39}$'
         funding:
-          description: jar (mặc định) hoặc credit (hạn mức Trả sau mô phỏng; chỉ với chi tiêu).
+          description: jar (mặc định) hoặc credit (hạn mức Trả sau mô phỏng; chỉ với chi tiêu). external (ngoài ví) chỉ vào sổ cái qua confirm_rows.
           type: string
           enum: [jar, credit]
         payee_id:
@@ -1586,6 +1751,147 @@ components:
           enum: [split, keep_as_other]
         update_declared_salary:
           type: boolean
+    IngestSourceKind:
+      description: image (ảnh chụp màn hình, hóa đơn) hoặc csv (tệp sao kê).
+      type: string
+      enum: [image, csv]
+    IngestUploadRequest:
+      type: object
+      required: [source_kind, mime, size_bytes]
+      additionalProperties: false
+      properties:
+        source_kind:
+          $ref: '#/components/schemas/IngestSourceKind'
+        mime:
+          description: MIME của tệp (phải thuộc danh sách cho phép của loại này; S3 ép đúng giá trị này).
+          type: string
+          minLength: 3
+          maxLength: 100
+        size_bytes:
+          description: Kích thước tệp (byte), không vượt giới hạn của loại này; S3 ép bằng content-length-range.
+          type: integer
+          minimum: 1
+        consent:
+          description: |
+            Người dùng vừa đồng ý cho nguồn này (ảnh hoặc CSV) trên màn hình. Bắt buộc là true ở lần nạp đầu của nguồn (và sau khi
+            rút đồng ý); server ghi `consents` với phiên bản văn bản đồng ý hiện hành (`ingest_consent_version`).
+          type: boolean
+    IngestUploadResponse:
+      type: object
+      required: [job_id, key, url, fields, expires_at, max_bytes, mime_types]
+      additionalProperties: false
+      properties:
+        job_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        key:
+          description: Khóa S3 của tệp, dạng `{user_id}/{job_id}` (không có tên tệp gốc).
+          type: string
+          minLength: 1
+          maxLength: 512
+        url:
+          description: URL của presigned POST (bucket `yofina-ingest-*`).
+          type: string
+          pattern: '^https://'
+          maxLength: 2048
+        fields:
+          description: Các trường form phải gửi kèm (nguyên văn, trước trường `file`), gồm policy và chữ ký.
+          type: object
+          additionalProperties:
+            type: string
+        expires_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        max_bytes:
+          type: integer
+          minimum: 1
+        mime_types:
+          description: Loại tệp được hỗ trợ của nguồn này (để hiển thị).
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: string
+    IngestJobResponse:
+      type: object
+      required: [job_id, status, source_kind, progress, rows_total, created_at, updated_at]
+      additionalProperties: false
+      properties:
+        job_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        status:
+          $ref: '../blocks/ingest_review.schema.json#/$defs/IngestJobStatus'
+        source_kind:
+          $ref: '#/components/schemas/IngestSourceKind'
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        rows_total:
+          type: integer
+          minimum: 0
+        error_code:
+          $ref: '#/components/schemas/ErrorCode'
+        error_message:
+          type: string
+          minLength: 1
+          maxLength: 280
+        created_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        updated_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        finished_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        review:
+          description: Có từ trạng thái review (cả khi done).
+          $ref: '../blocks/ingest_review.schema.json'
+        coverage_change:
+          description: Có khi done.
+          $ref: '../blocks/coverage_change.schema.json'
+    IngestRowJarRequest:
+      type: object
+      required: [jar]
+      additionalProperties: false
+      properties:
+        jar:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+    IngestRowJarResponse:
+      type: object
+      required: [row_id, suggested_jar, jar_source]
+      additionalProperties: false
+      properties:
+        row_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        suggested_jar:
+          $ref: '../blocks/ingest_review.schema.json#/$defs/IngestJar'
+        jar_source:
+          const: user
+    ConfirmRowsParams:
+      description: |
+        Tham số của `confirm_rows`. Chuẩn hóa (`yofina_core.params.normalize_confirm_rows`, idempotent, không cần trạng thái):
+        `rows` sắp theo `row_id`, mỗi dòng `{row_id, jar?}`; `reject_row_ids` sắp tăng dần; một dòng không được vừa ghi vừa bỏ;
+        ít nhất một dòng. Dòng ghi phải còn mở (`auto_added`, `pending`); dòng `duplicate` không ghi được.
+      type: object
+      required: [job_id]
+      additionalProperties: false
+      properties:
+        job_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        rows:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [row_id]
+            additionalProperties: false
+            properties:
+              row_id:
+                $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+              jar:
+                $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        reject_row_ids:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
     ActionResponse:
       description: Biên nhận của `POST /actions`, phân biệt bằng `type`.
       oneOf:
@@ -1755,7 +2061,7 @@ components:
       description: |
         Tên tool ghi (ngắn, không có tiền tố target). Mỗi giá trị có schema `params` riêng, xem `allOf` của
         `ConfirmationRequest` và `ActionRequest` và bảng ở mô tả của `POST /actions`.
-      enum: [move_between_jars, record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge]
+      enum: [move_between_jars, record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge, confirm_rows]
     ParamsByTool:
       description: |
         Ràng buộc `params` theo `tool` (dùng chung cho `ConfirmationRequest` và `ActionRequest`). `params` chưa chuẩn hóa
@@ -1817,6 +2123,14 @@ components:
             properties:
               params:
                 $ref: '#/components/schemas/ScheduleNudgeParams'
+        - if:
+            properties:
+              tool:
+                const: confirm_rows
+          then:
+            properties:
+              params:
+                $ref: '#/components/schemas/ConfirmRowsParams'
     ConfirmationRequest:
       allOf:
         - $ref: '#/components/schemas/ParamsByTool'
@@ -2060,25 +2374,25 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Forbidden:
-      description: FORBIDDEN, TOKEN_INVALID hoặc TOKEN_EXPIRED.
+      description: FORBIDDEN, TOKEN_INVALID, TOKEN_EXPIRED hoặc CONSENT_REQUIRED.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: JAR_NOT_FOUND, TRANSACTION_NOT_FOUND, OBLIGATION_NOT_FOUND, PAYEE_NOT_FOUND, SALARY_EVENT_NOT_FOUND, TRACE_NOT_FOUND, NUDGE_NOT_FOUND, FEE_SCHEDULE_NOT_FOUND hoặc FORECAST_NOT_APPLICABLE.
+      description: JAR_NOT_FOUND, TRANSACTION_NOT_FOUND, OBLIGATION_NOT_FOUND, PAYEE_NOT_FOUND, SALARY_EVENT_NOT_FOUND, TRACE_NOT_FOUND, NUDGE_NOT_FOUND, FEE_SCHEDULE_NOT_FOUND, FORECAST_NOT_APPLICABLE hoặc INGEST_JOB_NOT_FOUND.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: TOKEN_REUSED, PARAMS_MISMATCH, ALREADY_APPLIED hoặc DUPLICATE_TRANSACTION.
+      description: TOKEN_REUSED, PARAMS_MISMATCH, ALREADY_APPLIED, DUPLICATE_TRANSACTION, INGEST_JOB_NOT_READY hoặc INGEST_DUPLICATE_FILE.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Unprocessable:
-      description: INSUFFICIENT_FUNDS, AMOUNT_LIMIT_EXCEEDED, CREDIT_LIMIT_EXCEEDED, JAR_PROTECTED, PROFILE_INCOMPLETE hoặc SCENARIO_INVALID.
+      description: INSUFFICIENT_FUNDS, AMOUNT_LIMIT_EXCEEDED, CREDIT_LIMIT_EXCEEDED, JAR_PROTECTED, PROFILE_INCOMPLETE, SCENARIO_INVALID hoặc INGEST_NOT_FINANCIAL.
       content:
         application/json:
           schema:
@@ -2091,6 +2405,18 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     NeedsConfirmation:
       description: NEEDS_CONFIRMATION. Chưa ghi gì; hãy lấy token ở `POST /confirmations`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: INGEST_TOO_LARGE.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnsupportedMediaType:
+      description: INGEST_UNSUPPORTED_TYPE (thông điệp liệt kê loại tệp được hỗ trợ).
       content:
         application/json:
           schema:

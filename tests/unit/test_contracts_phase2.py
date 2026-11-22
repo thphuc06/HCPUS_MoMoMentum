@@ -65,10 +65,12 @@ def test_giao_dich_va_nguon_tra():
     assert enum_of(RESULTS["Transaction"]["properties"]["funding_source"]) == wallet.FUNDING_SOURCES
     assert enum_of(event("transaction.recorded")["funding_source"]) == wallet.FUNDING_SOURCES
     assert enum_of(event("transaction.recorded")["kind"]) == wallet.TRANSACTION_KINDS
+    # external (phase 5) chỉ vào sổ cái qua confirm_rows, không qua record_transaction
     assert (
         enum_of(SCHEMAS["RecordTransactionParams"]["properties"]["funding"])
-        == wallet.FUNDING_SOURCES
+        == wallet.RECORDABLE_FUNDING_SOURCES
     )
+    assert set(wallet.FUNDING_SOURCES) - set(wallet.RECORDABLE_FUNDING_SOURCES) == {"external"}
     assert enum_of(SCHEMAS["RecordTransactionParams"]["properties"]["kind"]) == (
         "expense",
         "income",
@@ -115,10 +117,13 @@ def test_tool_ghi():
     assert set(wallet.PLANNER_WRITE_TOOLS) <= planner  # phase 3: schedule_nudge ở target planner
     # tool chỉ có ở màn hình thì KHÔNG được lộ cho agent qua Gateway
     assert not ({"save_jars", "confirm_salary"} & ledger)
+    # confirm_rows (phase 5) agent gọi được nhưng qua target `ingest`, không qua `ledger`
+    assert "confirm_rows" not in ledger
     assert set(wallet.ACTION_TOOLS) - set(wallet.AGENT_WRITE_TOOLS) == {
         "save_jars",
         "confirm_salary",
         "schedule_nudge",
+        "confirm_rows",
     }
 
 

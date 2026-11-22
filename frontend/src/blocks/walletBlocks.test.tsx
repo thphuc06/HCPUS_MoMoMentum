@@ -7,7 +7,7 @@ import { ApiError } from '@/api/errors'
 import { ChatLauncherContext } from '@/chat/launcher'
 import type { BlockUi } from '@/chat/session'
 import type { ActionResponse } from '@/api/schemas'
-import { BLOCK_TYPES, blockSchemas } from '@/contracts/blocks'
+import { ALL_BLOCK_TYPES, BLOCK_TYPES, blockSchemas } from '@/contracts/blocks'
 import { CONVERSATION_ID, Providers, fakeApi, fakeChatActions } from '@/test/helpers'
 import { restFixture, validBlock } from '@/test/fixtures'
 import { forecastSummary } from '@/features/forecast/ForecastBlock'
@@ -16,13 +16,16 @@ import { receiptNote } from './useConfirmFlow'
 
 type Json = Record<string, any>
 
-describe('registry: đủ tám khối của hợp đồng', () => {
-  it('bốn khối phase 2 đã đăng ký, có schema, và BLOCK_TYPES khớp ALL_BLOCK_TYPES', () => {
-    for (const t of ['forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action'] as const) {
+describe('registry: mười trong mười sáu khối của hợp đồng đã có view', () => {
+  it('bốn khối phase 2 và hai khối phase 5 đã đăng ký, có schema; BLOCK_TYPES là phần của ALL_BLOCK_TYPES', () => {
+    for (const t of ['forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action', 'ingest_review', 'coverage_change'] as const) {
       expect(REGISTERED_TYPES).toContain(t)
       expect(blockSchemas[t]).toBeDefined()
     }
-    expect(BLOCK_TYPES).toHaveLength(8)
+    // sáu khối phase 3 đã có trong hợp đồng nhưng CHƯA có view (luồng frontend phase 3 đăng ký sau)
+    expect(ALL_BLOCK_TYPES).toHaveLength(16)
+    expect(BLOCK_TYPES).toHaveLength(10)
+    for (const t of BLOCK_TYPES) expect(ALL_BLOCK_TYPES).toContain(t)
   })
 })
 

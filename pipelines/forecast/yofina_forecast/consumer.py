@@ -4,7 +4,7 @@ Luật xử lý (contracts/README.md, mục "Sự kiện"):
 
 | Sự kiện | Việc |
 |---|---|
-| `transaction.recorded` | chỉnh NHANH các hũ trong `jar_codes` (`update_forecast`); khoản mua bằng hạn mức (`funding_source` credit) không đổi số dư hũ nên bỏ qua (nghĩa vụ mới đã có sự kiện `obligation.changed`); dòng gắn nghĩa vụ (`obligation_id`) làm đổi lịch nên chạy ĐẦY ĐỦ |
+| `transaction.recorded` | chỉnh NHANH các hũ trong `jar_codes` (`update_forecast`); khoản mua bằng hạn mức (`funding_source` credit) không đổi số dư hũ nên bỏ qua (nghĩa vụ mới đã có sự kiện `obligation.changed`); dòng gắn nghĩa vụ (`obligation_id`) làm đổi lịch nên chạy ĐẦY ĐỦ; dòng ngoài ví (`funding_source` external, nạp từ tệp) không đổi số dư nhưng đổi lịch sử chi nên chạy ĐẦY ĐỦ |
 | `salary.confirmed`, `obligation.changed`, `profile.updated` | chạy ĐẦY ĐỦ mọi hũ |
 
 Nhiều sự kiện của cùng một người dùng trong một lô được gộp thành MỘT lần chạy (hợp các hũ; chỉ cần một sự kiện đòi chạy đầy đủ là
@@ -52,6 +52,10 @@ def plan_event(ev: LedgerEvent) -> Plan:
         return Plan(True, ())
     if d.get("funding_source") == "credit":
         return Plan(False, ())
+    if d.get("funding_source") == "external":
+        # chi hoặc thu ngoài ví (nạp từ tệp, migration 0050): số dư hũ không đổi nhưng lịch sử chi và độ phủ dữ liệu đổi,
+        # nên phải fit lại (chạy ĐẦY ĐỦ), không chỉnh nhanh trên phân phối cũ.
+        return Plan(True, ())
     jars = tuple(dict.fromkeys(str(c) for c in d.get("jar_codes") or ()))
     return Plan(False, jars)
 
