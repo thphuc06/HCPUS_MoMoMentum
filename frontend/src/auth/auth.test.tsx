@@ -49,7 +49,7 @@ describe('route guard', () => {
     const router = renderRoutes(fakeAuth(null))
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
     expect(screen.queryByText('Nội dung riêng tư')).toBeNull()
-    expect(screen.getByRole('heading', { name: 'Đăng nhập' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Đăng nhập' })).toBeInTheDocument()
   })
 
   it('đã có phiên: vào được trang', async () => {

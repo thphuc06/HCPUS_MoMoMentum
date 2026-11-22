@@ -409,5 +409,5 @@ export type AnyBlockType = keyof typeof blockSchemas
 export const ALL_BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action"] as const
 
 /** Khối mà registry frontend đã đăng ký (xem scripts/gen_contracts.mjs, REGISTERED_BY_FRONTEND). */
-export const BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice"] as const
+export const BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action"] as const
 export type BlockType = (typeof BLOCK_TYPES)[number]

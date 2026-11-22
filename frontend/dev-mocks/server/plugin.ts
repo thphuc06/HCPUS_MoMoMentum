@@ -1,11 +1,10 @@
 // CHỈ cho `npm run dev:mock` (vite --mode mock): máy chủ giả để xem giao diện bằng mắt khi backend chưa sẵn sàng.
 // Không nằm trong bundle production (vite.config.ts chỉ import file này khi mode === 'mock'; tsconfig.app không include).
 // Dữ liệu mẫu lấy từ contracts/fixtures. Đây KHÔNG phải agent: câu trả lời chọn theo từ khóa chỉ để thử giao diện.
-import { createHash, randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import path from 'node:path'
 import type { Plugin } from 'vite'
+import { APP_DATE, forecastBlockFor, handleWallet, jarsOf, paramsHash } from './wallet.ts'
 
 export const MOCK_ENV: Record<string, string> = {
   VITE_AWS_REGION: 'ap-southeast-1',
@@ -16,32 +15,16 @@ export const MOCK_ENV: Record<string, string> = {
   VITE_DEMO_EMAIL: 'demo@example.invalid',
 }
 
-const FIXTURES = path.resolve(import.meta.dirname, '../../../contracts/fixtures/blocks/valid')
-const fixture = (name: string) => JSON.parse(readFileSync(path.join(FIXTURES, name), 'utf8')) as Record<string, any>
-
 type Jar = { code: string; name: string; color_key: string; icon_key: string; balance_vnd: number; split_percent: number }
-const seed = (): Jar[] => fixture('jar_summary.seven_jars.json').data.jars
-let jars: Jar[] = seed()
-const tokens = new Map<string, { hash: string; used: boolean }>()
-// Đề nghị (confirm_block_id) đã thực hiện: như server thật, mỗi đề nghị chỉ được thực hiện một lần (ALREADY_APPLIED).
-const applied = new Set<string>()
-const APP_DATE = '2026-11-21'
-
-const total = () => jars.reduce((s, j) => s + j.balance_vnd, 0)
+const totalOf = (jars: Jar[]) => jars.reduce((s, j) => s + j.balance_vnd, 0)
 const nowIso = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z')
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')} ₫`
 const source = (tool: string) => ({ tool, as_of: nowIso(), app_date: APP_DATE })
-const traceOf = (req: IncomingMessage) => (String(req.headers.traceparent ?? '').split('-')[1] ?? randomUUID().replace(/-/g, ''))
-
-function canonical(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`
-  if (v && typeof v === 'object') {
-    const o = v as Record<string, unknown>
-    return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(',')}}`
-  }
-  return JSON.stringify(v)
+const emailOf = (req: IncomingMessage) => {
+  const t = String(req.headers.authorization ?? '').replace(/^Bearer /, '')
+  return t.startsWith('mock-access-token:') ? decodeURIComponent(t.slice('mock-access-token:'.length)) : 'demo@example.invalid'
 }
-const paramsHash = (tool: string, params: unknown) => createHash('sha256').update(canonical({ tool, params })).digest('hex')
+const traceOf = (req: IncomingMessage) => (String(req.headers.traceparent ?? '').split('-')[1] ?? randomUUID().replace(/-/g, ''))
 
 async function body(req: IncomingMessage): Promise<any> {
   const chunks: Buffer[] = []
@@ -60,15 +43,15 @@ function json(res: ServerResponse, status: number, data: unknown) {
 }
 const err = (res: ServerResponse, status: number, code: string, message: string) => json(res, status, { error: { code, message } })
 
-function jarsBlock(trace: string) {
+function jarsBlock(trace: string, jars: Jar[]) {
   return {
     v: 1,
     id: `jar_summary:${trace}`,
     type: 'jar_summary',
     trace_id: trace,
-    fallback_text: `Số dư ${jars.length} hũ, tổng ${vnd(total())}.`,
+    fallback_text: `Số dư ${jars.length} hũ, tổng ${vnd(totalOf(jars))}.`,
     source: source('ledger___get_jar_balances'),
-    data: { jars, jars_total_vnd: total() },
+    data: { jars, jars_total_vnd: totalOf(jars) },
   }
 }
 
@@ -98,7 +81,7 @@ function confirmBlock(trace: string, from: Jar, to: Jar, amount: number) {
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').toLowerCase()
 
-function findJar(text: string, fromIdx = 0): { jar: Jar; at: number } | null {
+function findJar(jars: Jar[], text: string, fromIdx = 0): { jar: Jar; at: number } | null {
   const t = norm(text)
   let best: { jar: Jar; at: number } | null = null
   for (const j of jars) {
@@ -132,6 +115,8 @@ async function agent(req: IncomingMessage, res: ServerResponse) {
   const last = [...msgs].reverse().find((m) => m.role === 'user')?.content ?? ''
   const q = norm(last)
   const trace = traceOf(req)
+  const email = emailOf(req)
+  const jars = jarsOf(email)
   if (input.forwardedProps?.warmup) {
     res.writeHead(200, { 'content-type': 'text/event-stream' })
     res.write(`data: ${JSON.stringify({ type: 'RUN_STARTED', threadId: input.threadId, runId: input.runId })}
@@ -184,8 +169,8 @@ async function agent(req: IncomingMessage, res: ServerResponse) {
   }
   if (q.includes('chuyen')) {
     const amount = parseAmount(last)
-    const a = findJar(last)
-    const b = a ? findJar(last, a.at + 1) : null
+    const a = findJar(jars, last)
+    const b = a ? findJar(jars, last, a.at + 1) : null
     // "chuyển X từ A sang B": hũ nguồn là hũ đứng sau chữ "tu"
     const tuAt = q.indexOf(' tu ')
     const sangAt = q.indexOf(' sang ')
@@ -201,72 +186,27 @@ async function agent(req: IncomingMessage, res: ServerResponse) {
     block(confirmBlock(trace, from, to, amount))
     return end()
   }
+  if (q.includes('du bao') || q.includes('can') || q.includes('tru duoc')) {
+    const fb = forecastBlockFor(email, trace, q)
+    if (fb) {
+      await tool('tc1', 'forecast___get_forecast')
+      block(fb)
+      await say('m1', 'Đây là dự báo 30 ngày của hũ bạn hỏi.')
+      return end()
+    }
+  }
   await tool('tc1', 'ledger___get_jar_balances')
-  block(jarsBlock(trace))
+  block(jarsBlock(trace, jars))
   await say('m1', 'Đây là số dư các hũ của bạn.')
   return end()
 }
 
-function rest(req: IncomingMessage, res: ServerResponse, url: string) {
+function rest(req: IncomingMessage, res: ServerResponse, url: string, query: URLSearchParams) {
   return (async () => {
     if (!String(req.headers.authorization ?? '').startsWith('Bearer ')) return err(res, 401, 'UNAUTHENTICATED', 'Thiếu token.')
-    const trace = traceOf(req)
-    if (req.method === 'GET' && url === '/jars') {
-      return json(res, 200, { app_date: APP_DATE, as_of: nowIso(), jars, jars_total_vnd: total() })
-    }
-    if (req.method === 'POST' && url === '/confirmations') {
-      const b = await body(req)
-      if (b.confirm_block_id && applied.has(b.confirm_block_id)) return err(res, 409, 'ALREADY_APPLIED', 'Đề nghị này đã được thực hiện rồi.')
-      const hash = paramsHash(b.tool, b.params)
-      if (b.params_hash && b.params_hash !== hash) return err(res, 409, 'PARAMS_MISMATCH', 'Tham số lệch.')
-      const from = jars.find((j) => j.code === b.params?.from_jar)
-      const to = jars.find((j) => j.code === b.params?.to_jar)
-      if (!from || !to) return err(res, 404, 'JAR_NOT_FOUND', 'Không có hũ này.')
-      if (from.balance_vnd < b.params.amount_vnd) return err(res, 422, 'INSUFFICIENT_FUNDS', 'Không đủ số dư.')
-      const token = `${randomUUID().replace(/-/g, '')}.${randomUUID().replace(/-/g, '').slice(0, 16)}`
-      tokens.set(token, { hash, used: false })
-      return json(res, 200, { confirm_token: token, expires_at: new Date(Date.now() + 120_000).toISOString().replace(/\.\d+Z$/, 'Z'), ttl_seconds: 120, tool: b.tool, params: b.params, params_hash: hash })
-    }
-    if (req.method === 'POST' && url === '/actions') {
-      const b = await body(req)
-      if (!b.confirm_token) return err(res, 428, 'NEEDS_CONFIRMATION', 'Cần xác nhận.')
-      if (b.confirm_block_id && applied.has(b.confirm_block_id)) return err(res, 409, 'ALREADY_APPLIED', 'Đề nghị này đã được thực hiện rồi.')
-      const t = tokens.get(b.confirm_token)
-      if (!t) return err(res, 403, 'TOKEN_INVALID', 'Token không hợp lệ.')
-      if (t.used) return err(res, 409, 'TOKEN_REUSED', 'Token đã dùng.')
-      if (t.hash !== paramsHash(b.tool, b.params)) return err(res, 409, 'PARAMS_MISMATCH', 'Tham số lệch.')
-      const from = jars.find((j) => j.code === b.params.from_jar)!
-      const to = jars.find((j) => j.code === b.params.to_jar)!
-      t.used = true
-      if (b.confirm_block_id) applied.add(b.confirm_block_id)
-      from.balance_vnd -= b.params.amount_vnd
-      to.balance_vnd += b.params.amount_vnd
-      const tx = randomUUID()
-      return json(res, 200, {
-        v: 1,
-        id: `receipt:${tx}`,
-        type: 'receipt',
-        trace_id: trace,
-        fallback_text: `Đã chuyển ${vnd(b.params.amount_vnd)} từ ${from.name} sang ${to.name}.`,
-        source: source('rest:POST /actions'),
-        data: {
-          tool: 'move_between_jars',
-          transaction_id: tx,
-          occurred_at: nowIso(),
-          app_date: APP_DATE,
-          amount_vnd: b.params.amount_vnd,
-          summary: `Đã chuyển ${vnd(b.params.amount_vnd)} từ ${from.name} sang ${to.name}`,
-          from_jar: { code: from.code, name: from.name, balance_after_vnd: from.balance_vnd },
-          to_jar: { code: to.code, name: to.name, balance_after_vnd: to.balance_vnd },
-        },
-      })
-    }
-    if (req.method === 'POST' && url === '/demo/reset') {
-      jars = seed()
-      tokens.clear()
-      applied.clear()
-      return json(res, 200, { reset_at: nowIso(), app_date: APP_DATE, clock_offset_days: 0, jars_count: jars.length, transactions_count: 0 })
-    }
+    const method = req.method ?? 'GET'
+    const reply = handleWallet({ method, path: url, query, body: method === 'POST' ? await body(req) : {}, email: emailOf(req), trace: traceOf(req) })
+    if (reply) return json(res, reply.status, reply.body)
     return err(res, 404, 'PARAMS_INVALID', 'Không có đường dẫn này.')
   })()
 }
@@ -278,7 +218,11 @@ export function mockPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const url = req.url ?? ''
-        if (url.startsWith('/mock-api/')) return void rest(req, res, url.slice('/mock-api'.length).split('?')[0]!).catch(() => err(res, 500, 'INTERNAL_ERROR', 'Lỗi giả.'))
+        if (url.startsWith('/mock-api/')) {
+          const rest0 = url.slice('/mock-api'.length)
+          const [p0, q0] = [rest0.split('?')[0]!, new URLSearchParams(rest0.split('?')[1] ?? '')]
+          return void rest(req, res, p0, q0).catch(() => err(res, 500, 'INTERNAL_ERROR', 'Lỗi giả.'))
+        }
         if (url.startsWith('/mock-agent/invocations')) return void agent(req, res).catch(() => res.end())
         next()
       })

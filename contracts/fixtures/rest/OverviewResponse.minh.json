@@ -26,7 +26,8 @@
       "status": "short",
       "runout_date": "2026-11-29",
       "p_shortfall": 0.71,
-      "confidence_band": "medium"
+      "confidence_band": "medium",
+      "forecast_floor_vnd": -910000
     },
     {
       "code": "di_lai",

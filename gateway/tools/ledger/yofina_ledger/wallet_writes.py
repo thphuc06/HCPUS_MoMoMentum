@@ -1,0 +1,1220 @@
+"""Phía GHI của ví mô phỏng (phase 2): chuẩn hóa, kiểm nghiệp vụ, xem trước (`confirm_action`), ghi, biên nhận, sự kiện.
+
+Mixin của `LedgerService` cho năm tool ghi ngoài chuyển hũ: `record_transaction`, `assign_jar`, `update_profile`,
+`save_jars`, `confirm_salary`. Cùng cơ chế ADR-0002 với chuyển hũ: không token thì chỉ xem trước (không ghi), có token hợp lệ
+(dùng một lần, gắn người + tool + hash tham số) thì mỗi thao tác MỘT transaction rồi phát sự kiện SAU commit.
+
+Luồng của một thao tác: `_normalize` (tham số + trạng thái -> bản chuẩn hóa đầy đủ) -> `_validate` (nghiệp vụ + xem trước)
+-> [cấp token] -> `apply_action` (kiểm token, ghi, biên nhận, sự kiện).
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
+
+from yofina_core.blocks import (
+    ConfirmActionBlock,
+    ReceiptActionBlock,
+    block_to_wire,
+    build_confirm_action,
+    build_receipt_action,
+)
+from yofina_core.clock import latest_payday, next_payday
+from yofina_core.confirm import ParamsError
+from yofina_core.errors import ErrorCode, YofinaError
+from yofina_core.money import format_vnd
+from yofina_core.params import NormContext, compute_dedupe_key, normalize_params
+from yofina_core.schedule import advance_due, bnpl_due_date
+from yofina_core.wallet import (
+    ASSIGN_JAR,
+    BNPL_PRODUCT_CODE,
+    CONFIRM_SALARY,
+    OTHER_INCOME_JAR_CODE,
+    RECORD_TRANSACTION,
+    SAVE_JARS,
+    UNCLASSIFIED_JAR_CODE,
+    UPDATE_PROFILE,
+    split_amount,
+)
+from yofina_ledger import convert, events
+from yofina_ledger.repo_wallet import ClaimSpec, WriteResult
+
+log = logging.getLogger("yofina.ledger.writes")
+
+TX_TYPE_SALARY = "salary"
+SOURCE_APP = "app"
+
+
+def _dm(value: date) -> str:
+    return f"{value.day:02d}/{value.month:02d}"
+
+
+def _clip(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _change(label: str, after: str, before: str | None = None) -> dict[str, str]:
+    item = {"label": _clip(label, 60), "after": _clip(after, 120)}
+    if before is not None:
+        item["before"] = _clip(before, 80)
+    return item
+
+
+@dataclass
+class UserState:
+    """Trạng thái người dùng đọc một lần cho một thao tác: độ lệch đồng hồ và mọi hũ (kể cả hũ hệ thống)."""
+
+    offset: int | None
+    jars: dict[str, dict[str, Any]]
+    today: date
+    now: datetime
+
+    @property
+    def exists(self) -> bool:
+        return self.offset is not None
+
+    def user_jars(self) -> list[dict[str, Any]]:
+        return sorted(
+            (j for j in self.jars.values() if j.get("kind") != "system"),
+            key=lambda j: (j.get("sort_order") or 0, j["code"]),
+        )
+
+
+@dataclass
+class Prepared:
+    tool: str
+    norm: dict[str, Any]
+    summary: str
+    changes: list[dict[str, str]]
+    warnings: list[str] = field(default_factory=list)
+    state: UserState | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+class WalletWrites:
+    """Mixin: ghi. Thuộc tính dùng: repo, confirm, settings, ref, events, now(), _app_date()."""
+
+    events: events.EventPublisher | None
+
+    # --- trạng thái và chuẩn hóa -----------------------------------------------------------------------------
+    def _load_state(self, user_id: str) -> UserState:
+        now = self.now()
+        view = self.repo.jar_view(user_id)
+        return UserState(
+            offset=view.clock_offset_days,
+            jars={j["code"]: j for j in view.jars},
+            today=self._app_date(view.clock_offset_days, now),
+            now=now,
+        )
+
+    def _norm_ctx(self, st: UserState) -> NormContext:
+        user_jars = st.user_jars()
+        return NormContext(
+            today=st.today,
+            tx_types=self.ref.tx_types(),
+            jar_codes=frozenset(st.jars),
+            obligation_jar=next(
+                (j["code"] for j in user_jars if j.get("kind") == "obligation"), None
+            ),
+        )
+
+    def _normalize(
+        self, user_id: str, tool: str, params: Mapping[str, Any]
+    ) -> tuple[dict[str, Any], UserState]:
+        st = self._load_state(user_id)
+        try:
+            norm = normalize_params(tool, params, self._norm_ctx(st))
+        except ParamsError as exc:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
+        return norm, st
+
+    # --- kiểm nghiệp vụ và xem trước ---------------------------------------------------------------------------
+    def _validate(
+        self, user_id: str, tool: str, norm: dict[str, Any], st: UserState, *, name_hint: str | None
+    ) -> Prepared:
+        if tool == RECORD_TRANSACTION:
+            return self._prep_record(user_id, norm, st)
+        if tool == ASSIGN_JAR:
+            return self._prep_assign(user_id, norm, st)
+        if tool == UPDATE_PROFILE:
+            return self._prep_profile(user_id, norm, st, name_hint)
+        if tool == SAVE_JARS:
+            return self._prep_save_jars(user_id, norm, st)
+        if tool == CONFIRM_SALARY:
+            return self._prep_salary(user_id, norm, st)
+        raise YofinaError(ErrorCode.PARAMS_INVALID, "Tool không hỗ trợ xác nhận.")
+
+    def _jar_name(self, st: UserState, code: str) -> str:
+        j = st.jars.get(code)
+        return j["name"] if j else code
+
+    def _check_amount_limit(self, amount: int) -> None:
+        cap = self.settings.transaction_max_amount_vnd
+        if cap and amount > cap:
+            raise YofinaError(
+                ErrorCode.AMOUNT_LIMIT_EXCEEDED, "Số tiền vượt hạn mức cho một giao dịch."
+            )
+
+    def _prep_record(self, user_id: str, norm: dict[str, Any], st: UserState) -> Prepared:
+        kind, amount = norm["kind"], norm["amount_vnd"]
+        self._check_amount_limit(amount)
+        if not st.exists:
+            raise YofinaError(
+                ErrorCode.PROFILE_INCOMPLETE, "Bạn chưa khai lương và ngày nhận lương."
+            )
+        jar = st.jars.get(norm["jar"])
+        if jar is None:
+            code = ErrorCode.PROFILE_INCOMPLETE if kind == "income" else ErrorCode.JAR_NOT_FOUND
+            raise YofinaError(code, "Không tìm thấy hũ bạn chọn.")
+        tx_types = self.ref.tx_types()
+        type_label = (
+            tx_types[norm["tx_type"]].label if norm["tx_type"] in tx_types else norm["tx_type"]
+        )
+        extra: dict[str, Any] = {"tx_type_label": type_label}
+        warnings: list[str] = []
+        changes: list[dict[str, str]] = []
+        payee = None
+        if "payee_id" in norm:
+            payee = next(
+                (p for p in self.repo.list_payees(user_id) if str(p["id"]) == norm["payee_id"]),
+                None,
+            )
+            if payee is None:
+                raise YofinaError(ErrorCode.PAYEE_NOT_FOUND, "Không tìm thấy người nhận này.")
+            extra["payee_name"] = payee["name"]
+        who = norm.get("counterparty") or (payee["name"] if payee else None)
+        balance = convert.vnd(jar["balance_vnd"])
+
+        if kind == "income":
+            is_salary = norm["tx_type"] == TX_TYPE_SALARY
+            changes.append(
+                _change(f"Hũ {jar['name']}", format_vnd(balance + amount), format_vnd(balance))
+            )
+            changes.append(_change("Loại", type_label))
+            if who:
+                changes.append(_change("Người gửi", who))
+            summary = f"Nhận {format_vnd(amount)} vào hũ {jar['name']}" + (
+                " (lương)" if is_salary else ""
+            )
+            if is_salary:
+                info = self._salary_info(user_id, amount, st)
+                extra["salary"] = info
+                if info["expected_vnd"]:
+                    dev = info["deviation_percent"]
+                    changes.append(
+                        _change("So với lương đã khai", f"{dev:+.2f}%".replace(".00%", "%"))
+                    )
+                if info["ask_update_salary"]:
+                    warnings.append(
+                        "Số nhận lệch nhiều so với lương đã khai; bạn sẽ được hỏi có cập nhật lương không."
+                    )
+            else:
+                warnings.append("Tiền này nằm ở Tiền vào khác và không được tính là thu nhập.")
+            return Prepared(RECORD_TRANSACTION, norm, summary, changes, warnings, st, extra)
+
+        if norm["funding"] == "credit":
+            return self._prep_credit(user_id, norm, st, jar, who, extra, changes, warnings)
+
+        if jar.get("system_role") != "unclassified" and balance < amount:
+            raise YofinaError(ErrorCode.INSUFFICIENT_FUNDS, f"Hũ {jar['name']} không đủ số dư.")
+        after = balance - amount
+        if jar.get("system_role") == "unclassified":
+            changes.append(
+                _change("Đã chi, chưa xếp hũ", format_vnd(abs(after)), format_vnd(abs(balance)))
+            )
+            warnings.append("Khoản chi sẽ nằm ở Chưa phân loại cho tới khi bạn xếp vào một hũ.")
+        else:
+            changes.append(_change(f"Hũ {jar['name']}", format_vnd(after), format_vnd(balance)))
+        if "obligation_id" in norm:
+            ob = self._find_obligation(user_id, norm["obligation_id"])
+            extra["obligation"] = ob
+            expected = convert.vnd(ob["amount_vnd"])
+            nxt = advance_due(ob["due_date"], ob["cycle"], ob.get("due_day"))
+            changes.append(
+                _change(
+                    f"Khoản {ob['name']}",
+                    f"hạn kế tiếp {_dm(nxt)}" if nxt else "hoàn tất",
+                    f"đến hạn {_dm(ob['due_date'])}",
+                )
+            )
+            if amount != expected:
+                warnings.append(f"Số tiền khác số phải trả dự kiến ({format_vnd(expected)}).")
+            summary = f"Trả {ob['name']} {format_vnd(amount)} từ hũ {jar['name']}"
+        elif who:
+            changes.append(_change("Người nhận" if payee else "Đối tác", who))
+            summary = f"Chi {format_vnd(amount)} cho {who} từ hũ {jar['name']}"
+        else:
+            summary = f"Chi {format_vnd(amount)} từ hũ {jar['name']}"
+        changes.append(_change("Loại", type_label))
+        if norm.get("note"):
+            changes.append(_change("Lời nhắn", norm["note"]))
+        return Prepared(RECORD_TRANSACTION, norm, summary, changes, warnings, st, extra)
+
+    def _find_obligation(self, user_id: str, obligation_id: str) -> dict[str, Any]:
+        rows = self.repo.list_obligations(user_id, status="all", limit=100)
+        ob = next((o for o in rows if str(o["id"]) == obligation_id), None)
+        if ob is None:
+            raise YofinaError(ErrorCode.OBLIGATION_NOT_FOUND, "Không tìm thấy khoản nghĩa vụ.")
+        if ob["status"] != "active":
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Khoản nghĩa vụ này không còn hoạt động.")
+        return ob
+
+    def _salary_info(self, user_id: str, amount: int, st: UserState) -> dict[str, Any]:
+        """Số nhận so với lương đã khai: `deviation_percent = round((nhận - khai) / khai * 100, 2)`; hỏi cập nhật lương khi
+        lệch tuyệt đối vượt ngưỡng cấu hình `salary_deviation_ask_percent`; kỳ lương là ngày lương gần nhất với ngày nhận."""
+        row = self.repo.user_row(user_id)
+        expected = (
+            convert.vnd(row["monthly_salary_vnd"])
+            if row and row["monthly_salary_vnd"] is not None
+            else None
+        )
+        payday = int(row["payday_day"]) if row and row["payday_day"] is not None else None
+        deviation = Decimal(0)
+        if expected:
+            deviation = ((Decimal(amount) - expected) / expected * 100).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        period = st.today
+        if payday:
+            before, after = latest_payday(payday, st.today), next_payday(payday, st.today)
+            period = before if (st.today - before) <= (after - st.today) else after
+        return {
+            "expected_vnd": expected,
+            "deviation_percent": deviation,
+            "ask_update_salary": abs(deviation) > self.settings.salary_deviation_ask_percent,
+            "period_date": period,
+        }
+
+    def _prep_credit(
+        self,
+        user_id: str,
+        norm: dict[str, Any],
+        st: UserState,
+        jar: dict[str, Any],
+        who: str | None,
+        extra: dict[str, Any],
+        changes: list[dict[str, str]],
+        warnings: list[str],
+    ) -> Prepared:
+        amount = norm["amount_vnd"]
+        line = self.repo.credit_line(user_id)
+        if line is None or line["status"] != "active":
+            raise YofinaError(
+                ErrorCode.CREDIT_LIMIT_EXCEEDED,
+                "Bạn chưa có hạn mức Trả sau (mô phỏng) đang hoạt động.",
+            )
+        limit, outstanding = convert.vnd(line["limit_vnd"]), convert.vnd(line["outstanding_vnd"])
+        label = self.ref.product_label(line["product_code"], st.today)
+        if outstanding + amount > limit:
+            raise YofinaError(
+                ErrorCode.CREDIT_LIMIT_EXCEEDED,
+                f"Vượt hạn mức {label}: còn {format_vnd(limit - outstanding)}.",
+            )
+        due = bnpl_due_date(int(line["due_day"]), st.today)
+        fee_row = self.ref.bnpl_monthly_fee(st.today)
+        fee = fee_row.amount_vnd or 0 if fee_row else 0
+        existing = next(
+            (
+                o
+                for o in self.repo.list_obligations(user_id, status="active", limit=100)
+                if o["kind"] == "bnpl" and o["due_date"] == due
+            ),
+            None,
+        )
+        before_total = convert.vnd(existing["amount_vnd"]) if existing else 0
+        after_total = before_total + amount + (0 if existing else fee)
+        extra.update(
+            credit_line=line,
+            credit_label=label,
+            due_date=due,
+            fee=fee,
+            fee_row=fee_row,
+            existing_bnpl=existing,
+            after_total=after_total,
+        )
+        changes.append(_change("Nguồn trả", label))
+        changes.append(
+            _change(
+                f"Phải trả ngày {_dm(due)}",
+                format_vnd(after_total),
+                format_vnd(before_total) if existing else "chưa có",
+            )
+        )
+        changes.append(
+            _change(
+                "Hạn mức còn lại",
+                format_vnd(limit - outstanding - amount),
+                format_vnd(limit - outstanding),
+            )
+        )
+        changes.append(_change("Tính chi tiêu vào hũ", jar["name"]))
+        if who:
+            changes.append(_change("Đối tác", who))
+        if not existing and fee:
+            warnings.append(
+                f"Phí dịch vụ {format_vnd(fee)} tính một lần cho tháng có giao dịch (theo biểu phí đã công bố)."
+            )
+        summary = f"Mua {format_vnd(amount)} bằng {label}, trả ngày {_dm(due)}"
+        return Prepared(RECORD_TRANSACTION, norm, summary, changes, warnings, st, extra)
+
+    def _prep_salary(self, user_id: str, norm: dict[str, Any], st: UserState) -> Prepared:
+        row = next(
+            (
+                e
+                for e in self.repo.salary_events(user_id, "all")
+                if str(e["id"]) == norm["salary_event_id"]
+            ),
+            None,
+        )
+        if row is None:
+            raise YofinaError(ErrorCode.SALARY_EVENT_NOT_FOUND, "Không tìm thấy lương này.")
+        if row["status"] != "pending":
+            raise YofinaError(ErrorCode.ALREADY_APPLIED, "Khoản lương này đã được xử lý rồi.")
+        amount = convert.vnd(row["amount_vnd"])
+        warnings: list[str] = []
+        changes: list[dict[str, str]] = []
+        if norm["decision"] == "keep_as_other":
+            summary = f"Giữ {format_vnd(amount)} ở Tiền vào khác"
+            changes.append(_change("Tiền vào khác", f"giữ {format_vnd(amount)}"))
+            warnings.append("Tiền này không được chia vào hũ và không tính là thu nhập.")
+            return Prepared(CONFIRM_SALARY, norm, summary, changes, warnings, st, {"event": row})
+        parts = self._salary_parts(st.user_jars(), amount)
+        for code, part in parts.items():
+            if part > 0:
+                j = st.jars[code]
+                bal = convert.vnd(j["balance_vnd"])
+                changes.append(_change(f"Hũ {j['name']}", format_vnd(bal + part), format_vnd(bal)))
+        other = st.jars.get(OTHER_INCOME_JAR_CODE)
+        if other is None or convert.vnd(other["balance_vnd"]) < amount:
+            raise YofinaError(
+                ErrorCode.INSUFFICIENT_FUNDS, "Hũ Tiền vào khác không còn đủ số tiền lương để chia."
+            )
+        if norm.get("update_declared_salary"):
+            changes.append(_change("Lương đã khai", format_vnd(amount)))
+        elif row["ask_update_salary"]:
+            warnings.append(
+                f"Số nhận lệch {convert.percent(row['deviation_percent'])}% so với lương đã khai; "
+                "bạn có thể chọn cập nhật lương."
+            )
+        summary = (
+            f"Chia {format_vnd(amount)} lương vào {sum(1 for p in parts.values() if p > 0)} hũ"
+        )
+        return Prepared(
+            CONFIRM_SALARY,
+            norm,
+            summary,
+            changes[:20],
+            warnings,
+            st,
+            {"event": row, "parts": parts},
+        )
+
+    @staticmethod
+    def _salary_parts(user_jars: Sequence[Mapping[str, Any]], amount: int) -> dict[str, int]:
+        """Phần lương của từng hũ người dùng theo `split_percent` bằng `split_amount` (cùng quy tắc với dự báo)."""
+        if not user_jars:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Bạn chưa có hũ nào để chia lương.")
+        try:
+            return split_amount(amount, [(j["code"], j["split_percent"]) for j in user_jars])
+        except ValueError as exc:
+            raise YofinaError(
+                ErrorCode.PARAMS_INVALID, "Tổng tỷ lệ chia lương của các hũ chưa bằng 100."
+            ) from exc
+
+    def _prep_assign(self, user_id: str, norm: dict[str, Any], st: UserState) -> Prepared:
+        tx = self.repo.transaction_by_id(user_id, norm["transaction_id"])
+        if tx is None:
+            raise YofinaError(ErrorCode.TRANSACTION_NOT_FOUND, "Không tìm thấy giao dịch.")
+        if tx["kind"] == "transfer":
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Dòng chuyển hũ không gán lại được.")
+        if tx["kind"] == "income" and tx["tx_type"] == TX_TYPE_SALARY:
+            raise YofinaError(
+                ErrorCode.PARAMS_INVALID,
+                "Tiền lương được chia bằng bước xác nhận lương, không gán vào một hũ.",
+            )
+        dst = st.jars.get(norm["jar"])
+        if dst is None:
+            raise YofinaError(ErrorCode.JAR_NOT_FOUND, "Không tìm thấy hũ bạn chọn.")
+        if dst["kind"] == "system":
+            raise YofinaError(ErrorCode.JAR_PROTECTED, "Không gán vào hũ hệ thống.")
+        source = st.jars.get(tx["jar_code"]) if tx["jar_code"] else None
+        if tx["jar_code"] == norm["jar"]:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Giao dịch đã nằm ở hũ này rồi.")
+        signed = convert.vnd(tx["amount_vnd"])
+        moves = tx["funding_source"] == "jar"
+        who = tx.get("payee_name") or tx.get("merchant") or "Giao dịch"
+        changes = [_change("Giao dịch", f"{who}, {format_vnd(signed)}")]
+        if source is not None:
+            changes.append(_change("Hũ", dst["name"], source["name"]))
+        if moves:
+            dst_bal = convert.vnd(dst["balance_vnd"])
+            if dst_bal + signed < 0:
+                raise YofinaError(ErrorCode.INSUFFICIENT_FUNDS, f"Hũ {dst['name']} không đủ số dư.")
+            if source is not None:
+                src_bal = convert.vnd(source["balance_vnd"])
+                if src_bal - signed < 0 and source.get("system_role") != "unclassified":
+                    raise YofinaError(
+                        ErrorCode.INSUFFICIENT_FUNDS, f"Hũ {source['name']} không đủ số dư."
+                    )
+                changes.append(
+                    _change(
+                        f"Hũ {source['name']}", format_vnd(src_bal - signed), format_vnd(src_bal)
+                    )
+                )
+            changes.append(
+                _change(f"Hũ {dst['name']}", format_vnd(dst_bal + signed), format_vnd(dst_bal))
+            )
+        warnings = []
+        if norm["remember"] == "always":
+            if not (tx["payee_id"] or tx["merchant"]):
+                raise YofinaError(
+                    ErrorCode.PARAMS_INVALID,
+                    "Giao dịch này không có người nhận hay đối tác để nhớ thành luật.",
+                )
+            changes.append(_change("Nhớ cho lần sau", f"luôn xếp {who} vào hũ {dst['name']}"))
+        summary = f"Xếp {who} ({format_vnd(abs(signed))}) vào hũ {dst['name']}"
+        return Prepared(ASSIGN_JAR, norm, summary, changes, warnings, st, {"tx": tx})
+
+    def _prep_profile(
+        self, user_id: str, norm: dict[str, Any], st: UserState, name_hint: str | None
+    ) -> Prepared:
+        row = self.repo.user_row(user_id) if st.exists else None
+        changes: list[dict[str, str]] = []
+        warnings: list[str] = []
+        extra: dict[str, Any] = {"existing": row, "name_hint": name_hint}
+        if row is None and (
+            norm.get("monthly_salary_vnd") is None or norm.get("payday_day") is None
+        ):
+            raise YofinaError(
+                ErrorCode.PROFILE_INCOMPLETE,
+                "Cần khai cả lương mỗi tháng và ngày nhận lương để bắt đầu.",
+            )
+        if "monthly_salary_vnd" in norm:
+            before = (
+                format_vnd(convert.vnd(row["monthly_salary_vnd"]))
+                if row and row["monthly_salary_vnd"] is not None
+                else None
+            )
+            changes.append(
+                _change("Lương mỗi tháng", format_vnd(norm["monthly_salary_vnd"]), before)
+            )
+        if "payday_day" in norm:
+            before = f"ngày {row['payday_day']}" if row and row["payday_day"] is not None else None
+            changes.append(_change("Ngày nhận lương", f"ngày {norm['payday_day']}", before))
+        if "risk_tolerance" in norm:
+            labels = {"low": "thấp", "medium": "vừa", "high": "cao"}
+            before = labels.get(row["risk_tolerance"]) if row and row["risk_tolerance"] else None
+            changes.append(_change("Mức chấp nhận rủi ro", labels[norm["risk_tolerance"]], before))
+        if "display_name" in norm:
+            changes.append(
+                _change("Tên hiển thị", norm["display_name"], row["display_name"] if row else None)
+            )
+        if row is None:
+            summary = (
+                "Tạo hồ sơ: lương "
+                + format_vnd(norm["monthly_salary_vnd"])
+                + f", nhận ngày {norm['payday_day']}"
+            )
+            templates = [t for t in self.ref.templates() if t.is_default]
+            if templates:
+                changes.append(_change("Hũ mặc định", f"{len(templates)} hũ, bạn sửa được sau"))
+            warnings.append(
+                "Hệ thống tạo sẵn các hũ mặc định và hai hũ Tiền vào khác, Chưa phân loại."
+            )
+        else:
+            parts = [c["label"].lower() for c in changes]
+            summary = "Cập nhật " + ", ".join(parts) if parts else "Cập nhật hồ sơ"
+        if "obligation" in norm:
+            had_other = bool(changes)
+            ob_summary, ob_values = self._prep_obligation(
+                user_id, norm["obligation"], st, changes, extra, row is None
+            )
+            extra["obligation_values"] = ob_values
+            summary = (
+                f"{summary}; {ob_summary[0].lower()}{ob_summary[1:]}" if had_other else ob_summary
+            )
+        return Prepared(UPDATE_PROFILE, norm, summary, changes[:20], warnings, st, extra)
+
+    def _prep_obligation(
+        self,
+        user_id: str,
+        ob: dict[str, Any],
+        st: UserState,
+        changes: list[dict[str, str]],
+        extra: dict[str, Any],
+        onboarding: bool,
+    ) -> tuple[str, dict[str, Any]]:
+        pay = ob.get("pay_jar")
+        if pay is not None:
+            j = st.jars.get(pay)
+            if j is None and not onboarding:
+                raise YofinaError(ErrorCode.JAR_NOT_FOUND, "Không tìm thấy hũ trả cho khoản này.")
+            if j is not None and j["kind"] == "system":
+                raise YofinaError(
+                    ErrorCode.JAR_PROTECTED, "Không dùng hũ hệ thống để trả nghĩa vụ."
+                )
+        if ob["op"] == "delete":
+            cur = self._find_obligation(user_id, ob["obligation_id"])
+            if cur["kind"] == "bnpl":
+                raise YofinaError(
+                    ErrorCode.PARAMS_INVALID, "Khoản Trả sau tự sinh khi mua, không xóa được."
+                )
+            changes.append(
+                _change(
+                    f"Hủy khoản {cur['name']}",
+                    "không còn trong lịch",
+                    format_vnd(convert.vnd(cur["amount_vnd"])),
+                )
+            )
+            extra["obligation_current"] = cur
+            return f"Hủy khoản {cur['name']}", {
+                "op": "delete",
+                "obligation_id": ob["obligation_id"],
+            }
+        if "obligation_id" in ob:
+            cur = self._find_obligation(user_id, ob["obligation_id"])
+            if cur["kind"] == "bnpl":
+                raise YofinaError(
+                    ErrorCode.PARAMS_INVALID, "Khoản Trả sau tự sinh khi mua, không sửa được."
+                )
+            extra["obligation_current"] = cur
+            values = {"op": "update", **{k: v for k, v in ob.items() if k != "op"}}
+            if "amount_vnd" in ob:
+                changes.append(
+                    _change(
+                        f"Khoản {cur['name']}",
+                        format_vnd(ob["amount_vnd"]),
+                        format_vnd(convert.vnd(cur["amount_vnd"])),
+                    )
+                )
+            if "due_date" in ob:
+                changes.append(
+                    _change(
+                        "Ngày đến hạn",
+                        _dm(date.fromisoformat(ob["due_date"])),
+                        _dm(cur["due_date"]),
+                    )
+                )
+            if "name" in ob:
+                changes.append(_change("Tên khoản", ob["name"], cur["name"]))
+            return f"Sửa khoản {ob.get('name') or cur['name']}", values
+        values = {"op": "create", **{k: v for k, v in ob.items() if k != "op"}}
+        if "due_date" not in values:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Khoản nghĩa vụ mới cần ngày đến hạn.")
+        amount_text = format_vnd(ob["amount_vnd"])
+        if "amount_min_vnd" in ob:
+            amount_text = (
+                f"{format_vnd(ob['amount_min_vnd'])} đến {format_vnd(ob['amount_max_vnd'])}"
+            )
+        cycle = {
+            "once": "một lần",
+            "weekly": "mỗi tuần",
+            "monthly": "mỗi tháng",
+            "yearly": "mỗi năm",
+        }[ob["cycle"]]
+        pay_name = self._jar_name(st, pay) if pay else None
+        changes.append(
+            _change(
+                f"Khoản mới: {ob['name']}",
+                f"{amount_text} {cycle}, đến hạn {_dm(date.fromisoformat(ob['due_date']))}"
+                + (f", trả từ hũ {pay_name}" if pay_name else ""),
+            )
+        )
+        return f"Khai {ob['name']} {amount_text}", values
+
+    def _prep_save_jars(self, user_id: str, norm: dict[str, Any], st: UserState) -> Prepared:
+        if not st.exists:
+            raise YofinaError(
+                ErrorCode.PROFILE_INCOMPLETE, "Bạn chưa khai lương và ngày nhận lương."
+            )
+        existing = {j["code"]: j for j in st.user_jars()}
+        wanted = [j["code"] for j in norm["jars"]]
+        usage = {u["code"]: u for u in self.repo.jars_usage(user_id)}
+        changes: list[dict[str, str]] = []
+        for j in norm["jars"]:
+            cur = existing.get(j["code"])
+            pct = convert.percent(j["split_percent"])
+            if cur is None:
+                changes.append(_change(f"Hũ mới: {j['name']}", f"{pct}% lương"))
+            else:
+                old = convert.percent(cur["split_percent"])
+                if old != pct or cur["name"] != j["name"]:
+                    changes.append(_change(f"Hũ {j['name']}", f"{pct}%", f"{old}%"))
+        for code, cur in existing.items():
+            if code in wanted:
+                continue
+            u = usage.get(code)
+            if convert.vnd(cur["balance_vnd"]) != 0 or (
+                u and (int(u["active_obligations"]) or int(u["tx_count"]))
+            ):
+                reason = (
+                    "còn tiền"
+                    if convert.vnd(cur["balance_vnd"]) != 0
+                    else "còn nghĩa vụ trả bằng hũ này"
+                    if u and int(u["active_obligations"])
+                    else "đã có lịch sử giao dịch"
+                )
+                raise YofinaError(
+                    ErrorCode.JAR_PROTECTED, f"Hũ {cur['name']} {reason} nên chưa bỏ được."
+                )
+            changes.append(_change(f"Bỏ hũ {cur['name']}", "không còn"))
+        if not changes:
+            changes.append(_change("Danh sách hũ", "không đổi"))
+        return Prepared(
+            SAVE_JARS,
+            norm,
+            f"Lưu {len(norm['jars'])} hũ và tỷ lệ chia lương",
+            changes[:20],
+            [],
+            st,
+            {},
+        )
+
+    # --- xem trước (không ghi) ---------------------------------------------------------------------------------
+    def _confirm_block(
+        self, prep: Prepared, *, trace_id: str, source_tool: str
+    ) -> ConfirmActionBlock:
+        st = prep.state
+        assert st is not None
+        return build_confirm_action(
+            tool=prep.tool,
+            params=prep.norm,
+            summary=prep.summary,
+            changes=prep.changes or [_change("Thay đổi", "xem chi tiết")],
+            warnings=prep.warnings[:5],
+            trace_id=trace_id,
+            source_tool=source_tool,
+            as_of=st.now,
+            app_date=st.today,
+            expires_at=st.now + timedelta(seconds=self.settings.offer_ttl_seconds),
+        )
+
+    def prepare_action(
+        self,
+        user_id: str,
+        tool: str,
+        params: Mapping[str, Any],
+        *,
+        trace_id: str,
+        source_tool: str,
+        name_hint: str | None = None,
+    ) -> tuple[Prepared, ConfirmActionBlock]:
+        norm, st = self._normalize(user_id, tool, params)
+        prep = self._validate(user_id, tool, norm, st, name_hint=name_hint)
+        return prep, self._confirm_block(prep, trace_id=trace_id, source_tool=source_tool)
+
+    # --- ghi -----------------------------------------------------------------------------------------------------
+    def _publish(self, user_id: str, trace_id: str, evs: list[events.Event]) -> None:
+        """Phát sau commit; thất bại không làm hỏng thao tác đã ghi (log + metric trong publisher, audit `error` ở đây)."""
+        if not evs or self.events is None:
+            return
+        try:
+            ok = self.events.publish(evs, trace_id=trace_id)
+        except Exception:  # publisher không được ném, nhưng đây là lưới cuối
+            log.exception("publish_unexpected trace_id=%s", trace_id)
+            ok = False
+        if ok:
+            return
+        try:
+            self.repo.audit(
+                user_id,
+                trace_id=trace_id,
+                event_type="event_publish",
+                tool=None,
+                outcome="error",
+                code="EVENT_PUBLISH_FAILED",
+                params=None,
+                details={"detail_types": [e.detail_type for e in evs]},
+            )
+        except Exception:
+            log.warning("không ghi được audit lỗi phát sự kiện", exc_info=True)
+
+    def _audit(
+        self, prep: Prepared, trace_id: str, channel: str, jti: str | None
+    ) -> dict[str, Any]:
+        return {
+            "trace_id": trace_id,
+            "event_type": prep.tool,
+            "params": prep.norm,
+            "details": {"channel": channel, "jti": jti},
+        }
+
+    def apply_generic(
+        self,
+        user_id: str,
+        prep: Prepared,
+        jti: str | None,
+        *,
+        trace_id: str,
+        channel: str,
+        source_tool: str,
+        claim_ref: tuple[str, str] | None,
+    ) -> ReceiptActionBlock:
+        """Ghi một thao tác (không phải chuyển hũ) rồi dựng biên nhận và phát sự kiện. Token đã được kiểm và tiêu."""
+        st = prep.state
+        assert st is not None
+        now = self.now()
+        app_date = self._app_date(st.offset, now)
+        audit = self._audit(prep, trace_id, channel, jti)
+
+        def receipt_of(res: WriteResult) -> ReceiptActionBlock:
+            return self._receipt(prep, res, trace_id=trace_id, source_tool=source_tool)
+
+        claim = (
+            ClaimSpec(claim_ref[0], claim_ref[1], lambda res: _wire(receipt_of(res)))
+            if claim_ref
+            else None
+        )
+        tool, norm = prep.tool, prep.norm
+        if tool == RECORD_TRANSACTION:
+            result = self._write_record(user_id, prep, now, app_date, audit, claim)
+        elif tool == ASSIGN_JAR:
+            result = self.repo.write_assign_jar(
+                user_id, norm=norm, now=now, app_date=app_date, audit=audit, claim=claim, tool=tool
+            )
+        elif tool == CONFIRM_SALARY:
+            result = self.repo.write_confirm_salary(
+                user_id,
+                norm=norm,
+                now=now,
+                app_date=app_date,
+                shares_for=lambda jars, amount: self._salary_parts(jars, amount),
+                audit=audit,
+                claim=claim,
+                tool=tool,
+            )
+        elif tool == SAVE_JARS:
+            result = self.repo.write_save_jars(
+                user_id, norm=norm, now=now, app_date=app_date, audit=audit, claim=claim, tool=tool
+            )
+        elif tool == UPDATE_PROFILE:
+            result = self._write_profile(user_id, prep, now, app_date, audit, claim)
+        else:  # pragma: no cover - ACTION_TOOLS đã được kiểm ở service
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Tool không hỗ trợ xác nhận.")
+        self._publish(user_id, trace_id, self._events_of(user_id, prep, result, trace_id))
+        return receipt_of(result)
+
+    def _write_profile(
+        self,
+        user_id: str,
+        prep: Prepared,
+        now: datetime,
+        app_date: date,
+        audit: dict[str, Any],
+        claim: ClaimSpec | None,
+    ) -> WriteResult:
+        return self.repo.write_update_profile(
+            user_id,
+            norm=prep.norm,
+            display_name_default=prep.extra.get("name_hint") or self.settings.default_display_name,
+            credit_limit_default=self.settings.default_credit_limit_vnd,
+            credit_product_code=BNPL_PRODUCT_CODE,
+            obligation_values=prep.extra.get("obligation_values"),
+            now=now,
+            app_date=app_date,
+            audit=audit,
+            claim=claim,
+            tool=UPDATE_PROFILE,
+        )
+
+    def _write_record(
+        self,
+        user_id: str,
+        prep: Prepared,
+        now: datetime,
+        app_date: date,
+        audit: dict[str, Any],
+        claim: ClaimSpec | None,
+    ) -> WriteResult:
+        norm, extra = prep.norm, prep.extra
+        amount, kind = norm["amount_vnd"], norm["kind"]
+        signed = amount if kind == "income" else -amount
+        merchant = norm.get("counterparty") or extra.get("payee_name")
+        jar = prep.state.jars[norm["jar"]] if prep.state else {}
+        tx_type = norm["tx_type"]
+        info = self.ref.tx_types().get(tx_type)
+        unclassified = jar.get("system_role") == "unclassified"
+        if unclassified:
+            classified_by = None
+        elif info is not None and info.default_jar_code == norm["jar"]:
+            classified_by = "type_map"
+        else:
+            classified_by = "user"
+        tx = {
+            "tx_id": str(uuid.uuid4()),
+            "occurred_at": now,
+            "app_date": app_date,
+            "kind": kind,
+            "jar": norm["jar"],
+            "signed": signed,
+            "merchant": merchant,
+            "note": norm.get("note"),
+            "source": SOURCE_APP,
+            "tx_type": tx_type,
+            "funding": norm["funding"],
+            "payee_id": norm.get("payee_id"),
+            "obligation_id": norm.get("obligation_id"),
+            "dedupe_key": (
+                compute_dedupe_key(
+                    app_date=app_date,
+                    amount_vnd=amount,
+                    payee_id=norm.get("payee_id"),
+                    counterparty=norm.get("counterparty") or merchant,
+                    client_ref=norm["client_ref"],
+                )
+                if "client_ref" in norm
+                else None
+            ),
+            "classified_by": classified_by,
+            "needs_review": unclassified and kind == "expense",
+        }
+        tool = RECORD_TRANSACTION
+        if kind == "income":
+            salary = None
+            if tx_type == TX_TYPE_SALARY:
+                info_s = extra["salary"]
+                salary = {
+                    "id": str(uuid.uuid4()),
+                    "period_date": info_s["period_date"],
+                    "expected_vnd": info_s["expected_vnd"],
+                    "deviation_percent": info_s["deviation_percent"],
+                    "ask_update_salary": info_s["ask_update_salary"],
+                }
+            return self.repo.write_jar_transaction(
+                user_id, tx=tx, salary=salary, audit=audit, claim=claim, tool=tool
+            )
+        if norm["funding"] == "credit":
+            fee_row = extra.get("fee_row")
+            fee = {
+                "amount_vnd": extra["fee"],
+                "id": fee_row.id if fee_row else None,
+                "name": extra["credit_label"],
+            }
+            first_obligation_jar = (
+                next(
+                    (j["code"] for j in prep.state.user_jars() if j.get("kind") == "obligation"),
+                    None,
+                )
+                if prep.state
+                else None
+            )
+
+            def limit_check(line: Mapping[str, Any]) -> None:
+                if not line or line.get("status") != "active":
+                    raise YofinaError(
+                        ErrorCode.CREDIT_LIMIT_EXCEEDED,
+                        "Bạn chưa có hạn mức Trả sau (mô phỏng) đang hoạt động.",
+                    )
+                if convert.vnd(line["outstanding_vnd"]) + amount > convert.vnd(line["limit_vnd"]):
+                    raise YofinaError(
+                        ErrorCode.CREDIT_LIMIT_EXCEEDED, "Vượt hạn mức Trả sau (mô phỏng) còn lại."
+                    )
+
+            return self.repo.write_credit_purchase(
+                user_id,
+                tx=tx,
+                fee=fee,
+                pay_jar=first_obligation_jar,
+                audit=audit,
+                claim=claim,
+                tool=tool,
+                due_date_for=lambda due_day: bnpl_due_date(due_day, app_date),
+                limit_check=limit_check,
+            )
+        if "obligation_id" in norm:
+            return self.repo.write_obligation_payment(
+                user_id,
+                tx=tx,
+                audit=audit,
+                claim=claim,
+                tool=tool,
+                next_due_for=lambda ob: advance_due(ob["due_date"], ob["cycle"], ob.get("due_day")),
+            )
+        return self.repo.write_jar_transaction(
+            user_id, tx=tx, salary=None, audit=audit, claim=claim, tool=tool
+        )
+
+    # --- biên nhận ------------------------------------------------------------------------------------------------
+    def _receipt(
+        self, prep: Prepared, res: WriteResult, *, trace_id: str, source_tool: str
+    ) -> ReceiptActionBlock:
+        tool, norm, f = prep.tool, prep.norm, res.facts
+        details: list[dict[str, str]] = []
+        follow_up: dict[str, Any] | None = None
+        amount: int | None = None
+        jars_after = res.jars_after
+        if tool == RECORD_TRANSACTION:
+            amount = norm["amount_vnd"]
+            jar_name = self._jar_name(prep.state, norm["jar"]) if prep.state else norm["jar"]
+            label = prep.extra.get("tx_type_label", norm["tx_type"])
+            who = norm.get("counterparty") or prep.extra.get("payee_name")
+            details.append({"label": "Loại", "value": label})
+            if who:
+                details.append({"label": "Đối tác", "value": _clip(who, 120)})
+            if norm["kind"] == "income":
+                summary = f"Đã ghi tiền vào {format_vnd(amount)} vào {jar_name}"
+                if f.get("salary_event_id"):
+                    s = prep.extra["salary"]
+                    follow_up = {
+                        "kind": "confirm_salary",
+                        "label": "Xác nhận chia lương vào các hũ",
+                        "salary_event_id": f["salary_event_id"],
+                        "received_vnd": amount,
+                        "deviation_percent": float(s["deviation_percent"]),
+                        "ask_update_salary": bool(s["ask_update_salary"]),
+                    }
+                    if s["expected_vnd"]:
+                        follow_up["expected_vnd"] = s["expected_vnd"]
+            elif norm["funding"] == "credit":
+                label_credit = prep.extra.get("credit_label", "Trả sau (mô phỏng)")
+                summary = f"Đã mua {format_vnd(amount)} bằng {label_credit}"
+                due = f["due_date"]
+                details.append(
+                    {"label": f"Phải trả ngày {_dm(due)}", "value": format_vnd(f["amount_vnd"])}
+                )
+                if f.get("fee_vnd"):
+                    details.append(
+                        {"label": "Trong đó phí dịch vụ", "value": format_vnd(f["fee_vnd"])}
+                    )
+                details.append(
+                    {
+                        "label": "Hạn mức còn lại",
+                        "value": format_vnd(f["limit_vnd"] - f["outstanding_vnd"]),
+                    }
+                )
+            elif "obligation_id" in norm:
+                summary = f"Đã trả {f.get('obligation_name', 'khoản nghĩa vụ')} {format_vnd(amount)} từ hũ {jar_name}"
+                if f.get("obligation_status") == "paid":
+                    details.append({"label": "Khoản này", "value": "đã hoàn tất"})
+                elif f.get("obligation_due"):
+                    details.append({"label": "Hạn kế tiếp", "value": _dm(f["obligation_due"])})
+            else:
+                summary = f"Đã chi {format_vnd(amount)} từ hũ {jar_name}"
+                if prep.state and prep.state.jars[norm["jar"]].get("system_role") == "unclassified":
+                    follow_up = {
+                        "kind": "review_unclassified",
+                        "label": "Xếp khoản chi này vào một hũ",
+                    }
+        elif tool == ASSIGN_JAR:
+            amount = f["amount_vnd"]
+            summary = f"Đã xếp giao dịch vào hũ {f['to_jar_name']}"
+            details.append({"label": "Từ hũ", "value": f["from_jar_name"]})
+            details.append({"label": "Sang hũ", "value": f["to_jar_name"]})
+            if f.get("rule_saved"):
+                details.append({"label": "Luật đã nhớ", "value": "luôn xếp vào hũ này"})
+        elif tool == CONFIRM_SALARY:
+            amount = f["amount_vnd"]
+            if f["decision"] == "keep_as_other":
+                summary = f"Đã giữ {format_vnd(amount)} ở Tiền vào khác"
+            else:
+                n = len(f["split"])
+                summary = f"Đã chia {format_vnd(amount)} lương vào {n} hũ"
+                names = {j["code"]: j["name"] for j in res.jars_after}
+                for part in f["split"][:20]:
+                    details.append(
+                        {
+                            "label": f"Hũ {names.get(part['jar'], part['jar'])}",
+                            "value": f"+{format_vnd(part['amount_vnd'])}",
+                        }
+                    )
+                if f.get("salary_updated"):
+                    details.append({"label": "Lương đã khai", "value": format_vnd(amount)})
+        elif tool == UPDATE_PROFILE:
+            ob = f.get("obligation")
+            if f.get("created"):
+                summary = f"Đã tạo hồ sơ: lương {format_vnd(f['monthly_salary_vnd'])}, nhận ngày {f['payday_day']}"
+            elif ob and len(prep.changes) == 1:
+                verb = {"created": "Đã khai", "updated": "Đã sửa", "cancelled": "Đã hủy"}[ob["op"]]
+                summary = f"{verb} khoản {ob['name']}"
+            else:
+                summary = "Đã cập nhật hồ sơ"
+            details.extend({"label": c["label"], "value": c["after"]} for c in prep.changes)
+        else:  # SAVE_JARS
+            summary = f"Đã lưu {f['count']} hũ và tỷ lệ chia lương"
+            if f.get("removed"):
+                details.append({"label": "Đã bỏ", "value": f"{len(f['removed'])} hũ"})
+            jars_after = []
+        return build_receipt_action(
+            tool=tool,
+            occurred_at=res.occurred_at,
+            app_date=res.app_date,
+            summary=summary,
+            trace_id=trace_id,
+            source_tool=source_tool,
+            reference_id=res.reference_id,
+            amount_vnd=amount,
+            jars_after=jars_after,
+            details=details[:20],
+            follow_up=follow_up,
+        )
+
+    # --- sự kiện ---------------------------------------------------------------------------------------------------
+    def _events_of(
+        self, user_id: str, prep: Prepared, res: WriteResult, trace_id: str
+    ) -> list[events.Event]:
+        tool, norm, f = prep.tool, prep.norm, res.facts
+        balances = {j["code"]: j["balance_vnd"] for j in res.jars_after}
+        out: list[events.Event] = []
+        if tool == RECORD_TRANSACTION:
+            jar = norm["jar"]
+            deltas = dict(res.deltas)
+            ob_id = f.get("obligation_id") if norm["funding"] != "credit" else None
+            out.append(
+                events.transaction_recorded(
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    transaction_id=str(res.reference_id),
+                    occurred_at=res.occurred_at,
+                    app_date=res.app_date,
+                    kind=norm["kind"],
+                    tx_type=norm["tx_type"],
+                    funding_source=norm["funding"],
+                    amount_vnd=norm["amount_vnd"],
+                    jar_codes=[jar],
+                    deltas=deltas,
+                    balances=balances,
+                    payee_id=norm.get("payee_id"),
+                    obligation_id=ob_id,
+                    needs_classification=(
+                        norm["kind"] == "expense" and jar == UNCLASSIFIED_JAR_CODE
+                    ),
+                )
+            )
+            if norm["funding"] == "credit":
+                out.append(
+                    events.obligation_changed(
+                        user_id=user_id,
+                        trace_id=trace_id,
+                        obligation_id=f["obligation_id"],
+                        occurred_at=res.occurred_at,
+                        app_date=res.app_date,
+                        change="created" if f.get("obligation_created") else "updated",
+                        kind="bnpl",
+                        pay_jar=None,
+                        due_date=f.get("due_date"),
+                    )
+                )
+            elif "obligation_id" in norm:
+                out.append(
+                    events.obligation_changed(
+                        user_id=user_id,
+                        trace_id=trace_id,
+                        obligation_id=norm["obligation_id"],
+                        occurred_at=res.occurred_at,
+                        app_date=res.app_date,
+                        change="paid",
+                        kind=f.get("obligation_kind", "bill"),
+                        pay_jar=f.get("pay_jar"),
+                        due_date=f.get("obligation_due"),
+                    )
+                )
+        elif tool == ASSIGN_JAR:
+            codes = [f["from_jar"], f["to_jar"]]
+            out.append(
+                events.transaction_recorded(
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    transaction_id=norm["transaction_id"],
+                    event_id=str(uuid.uuid4()),
+                    occurred_at=res.occurred_at,
+                    app_date=res.app_date,
+                    kind=f["kind"],
+                    tx_type="jar_assign",
+                    funding_source="jar" if f["moves_money"] else "credit",
+                    amount_vnd=f["amount_vnd"],
+                    jar_codes=codes,
+                    deltas=res.deltas,
+                    balances=balances,
+                )
+            )
+        elif tool == CONFIRM_SALARY:
+            out.append(
+                events.salary_confirmed(
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    salary_event_id=norm["salary_event_id"],
+                    occurred_at=res.occurred_at,
+                    app_date=res.app_date,
+                    period_date=convert.to_date(f["period_date"]),  # type: ignore[arg-type]
+                    decision=f["decision"],
+                    amount_vnd=f["amount_vnd"],
+                    salary_updated=bool(f.get("salary_updated")),
+                    deltas=res.deltas,
+                    balances=balances,
+                )
+            )
+            if f["decision"] == "split" and res.deltas:
+                out.append(
+                    events.transaction_recorded(
+                        user_id=user_id,
+                        trace_id=trace_id,
+                        transaction_id=str(res.reference_id),
+                        occurred_at=res.occurred_at,
+                        app_date=res.app_date,
+                        kind="transfer",
+                        tx_type="salary_split",
+                        funding_source="jar",
+                        amount_vnd=f["amount_vnd"],
+                        jar_codes=list(res.deltas),
+                        deltas=res.deltas,
+                        balances=balances,
+                    )
+                )
+        elif tool == UPDATE_PROFILE:
+            fields = []
+            if f.get("created"):
+                fields.append("onboarding")
+            if "monthly_salary_vnd" in norm:
+                fields.append("salary")
+            if "payday_day" in norm:
+                fields.append("payday")
+            if "risk_tolerance" in norm:
+                fields.append("risk")
+            if "display_name" in norm:
+                fields.append("display_name")
+            if fields:
+                out.append(
+                    events.profile_updated(
+                        user_id=user_id,
+                        trace_id=trace_id,
+                        occurred_at=res.occurred_at,
+                        app_date=res.app_date,
+                        fields=fields,
+                    )
+                )
+            ob = f.get("obligation")
+            if ob:
+                out.append(
+                    events.obligation_changed(
+                        user_id=user_id,
+                        trace_id=trace_id,
+                        obligation_id=str(ob["id"]),
+                        occurred_at=res.occurred_at,
+                        app_date=res.app_date,
+                        change=ob["op"],
+                        kind=ob["kind"],
+                        pay_jar=ob.get("pay_jar_code"),
+                        due_date=convert.to_date(ob.get("due_date")),
+                    )
+                )
+        elif tool == SAVE_JARS:
+            out.append(
+                events.profile_updated(
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    occurred_at=res.occurred_at,
+                    app_date=res.app_date,
+                    fields=["jars"],
+                )
+            )
+        return out
+
+
+def _wire(block: ReceiptActionBlock) -> dict[str, Any]:
+    return block_to_wire(block)

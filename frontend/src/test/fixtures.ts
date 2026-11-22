@@ -19,3 +19,11 @@ export const validBlockEntries = (): [string, Json][] =>
   Object.entries(valid).map(([k, v]) => [k.split('/').pop()!.replace('.json', ''), structuredClone(v)])
 export const invalidBlockEntries = (): [string, Json][] =>
   Object.entries(invalid).map(([k, v]) => [k.split('/').pop()!.replace('.json', ''), structuredClone(v)])
+
+// Fixture REST (contracts/fixtures/rest/*.json): thân phản hồi và yêu cầu mẫu, chung với phía Python.
+const rest = import.meta.glob('../../../contracts/fixtures/rest/*.json', { eager: true, import: 'default' }) as Record<string, Json>
+const restInvalid = import.meta.glob('../../../contracts/fixtures/rest/invalid/*.json', { eager: true, import: 'default' }) as Record<string, Json>
+
+export const restFixture = (name: string): Json => pick(rest, name)
+export const restFixtureEntries = (): [string, Json][] => Object.entries(rest).map(([k, v]) => [k.split('/').pop()!.replace('.json', ''), structuredClone(v)])
+export const restInvalidEntries = (): [string, Json][] => Object.entries(restInvalid).map(([k, v]) => [k.split('/').pop()!.replace('.json', ''), structuredClone(v)])

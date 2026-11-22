@@ -81,6 +81,7 @@ def forecast_inputs_from_dict(o: dict[str, Any]) -> ForecastInputs:
         jars=tuple(_jar_from(x) for x in o["jars"]),
         coverage=CoverageInputs(**o["coverage"]) if o.get("coverage") else None,
         config=forecast_config_from_dict(o["config"]) if "config" in o else ForecastConfig(),
+        payday_day=o.get("payday_day"),
     )  # fmt: skip
 
 
@@ -93,6 +94,8 @@ def forecast_inputs_to_dict(i: ForecastInputs) -> dict[str, Any]:
     }  # fmt: skip
     if i.coverage is not None:
         out["coverage"] = asdict(i.coverage)
+    if i.payday_day is not None:
+        out["payday_day"] = i.payday_day
     return out
 
 

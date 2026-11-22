@@ -50,11 +50,17 @@ describe('phát lại hội thoại từ server', () => {
     expect(turns[1]!.resolutions).toEqual([])
   })
 
-  it('status lạ trong resolutions: INVALID_RESPONSE (hợp đồng chỉ có pending, done, expired)', async () => {
-    const bad = { ...turn(), resolutions: [{ block_id: 'x', status: 'cancelled' }] }
+  it('status lạ trong resolutions: INVALID_RESPONSE (hợp đồng có pending, done, expired, cancelled)', async () => {
+    const bad = { ...turn(), resolutions: [{ block_id: 'x', status: 'archived' }] }
     await expect(repo(new Response(JSON.stringify({ conversation_id: ID, turns: [bad] }), { status: 200 })).r.load(ID)).rejects.toMatchObject({
       code: 'INVALID_RESPONSE',
     })
+  })
+
+  it('status cancelled (người dùng đã bấm "Không") được nhận', async () => {
+    const ok = { ...turn(), resolutions: [{ block_id: 'x', status: 'cancelled', resolved_at: '2026-12-10T03:00:00Z' }] }
+    const turns = await repo(new Response(JSON.stringify({ conversation_id: ID, turns: [ok] }), { status: 200 })).r.load(ID)
+    expect(turns[0]!.resolutions[0]).toMatchObject({ status: 'cancelled' })
   })
 
   it('hội thoại chưa có gì: turns rỗng; route chưa deploy (404) cũng coi như rỗng', async () => {

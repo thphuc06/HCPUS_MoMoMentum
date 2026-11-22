@@ -4,11 +4,25 @@ import { AuthError } from '@/auth/types'
 import { ApiError, apiErrorFromResponse } from './errors'
 import {
   ActionResponse,
+  CancelConfirmationResponse,
   ConfirmationResponse,
+  CreditLineResponse,
+  ForecastResponse,
+  JarDetailResponse,
+  JarTemplatesResponse,
   JarsResponse,
+  ObligationsResponse,
+  OverviewResponse,
+  PayeesResponse,
+  ProfileResponse,
   ResetResponse,
+  SalaryEventsResponse,
+  TransactionsResponse,
+  TxTypesResponse,
   type ActionRequest,
+  type CancelConfirmationRequest,
   type ConfirmationRequest,
+  type TransactionQuery,
 } from './schemas'
 
 export type ApiClientDeps = {
@@ -20,7 +34,20 @@ export type ApiClientDeps = {
 
 export type ApiClient = {
   getJars(): Promise<JarsResponse>
+  getOverview(): Promise<OverviewResponse>
+  getProfile(): Promise<ProfileResponse>
+  getJar(jarCode: string): Promise<JarDetailResponse>
+  getForecast(jarCode: string): Promise<ForecastResponse>
+  listTransactions(query?: TransactionQuery): Promise<TransactionsResponse>
+  listTxTypes(): Promise<TxTypesResponse>
+  listPayees(): Promise<PayeesResponse>
+  listObligations(): Promise<ObligationsResponse>
+  getCreditLine(): Promise<CreditLineResponse>
+  listSalaryEvents(): Promise<SalaryEventsResponse>
+  listJarTemplates(): Promise<JarTemplatesResponse>
   createConfirmation(req: ConfirmationRequest): Promise<ConfirmationResponse>
+  /** Ghi việc người dùng bấm "Không" với một đề nghị trong chat (server lưu `cancelled`). */
+  cancelConfirmation(req: CancelConfirmationRequest): Promise<CancelConfirmationResponse>
   applyAction(req: ActionRequest): Promise<ActionResponse>
   resetDemo(): Promise<ResetResponse>
 }
@@ -78,9 +105,31 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     return parsed.data
   }
 
+  const enc = encodeURIComponent
   return {
     getJars: () => call('GET', '/jars', JarsResponse),
+    getOverview: () => call('GET', '/overview', OverviewResponse),
+    getProfile: () => call('GET', '/profile', ProfileResponse),
+    getJar: (code) => call('GET', `/jars/${enc(code)}`, JarDetailResponse),
+    getForecast: (code) => call('GET', `/forecasts/${enc(code)}`, ForecastResponse),
+    listTransactions: (q = {}) => {
+      const qs = new URLSearchParams()
+      if (q.jar) qs.set('jar', q.jar)
+      if (q.kind) qs.set('kind', q.kind)
+      if (q.needsReview) qs.set('needs_review', 'true')
+      if (q.limit) qs.set('limit', String(q.limit))
+      if (q.cursor) qs.set('cursor', q.cursor)
+      const tail = qs.toString()
+      return call('GET', `/transactions${tail ? `?${tail}` : ''}`, TransactionsResponse)
+    },
+    listTxTypes: () => call('GET', '/tx-types', TxTypesResponse),
+    listPayees: () => call('GET', '/payees', PayeesResponse),
+    listObligations: () => call('GET', '/obligations', ObligationsResponse),
+    getCreditLine: () => call('GET', '/credit-line', CreditLineResponse),
+    listSalaryEvents: () => call('GET', '/salary-events', SalaryEventsResponse),
+    listJarTemplates: () => call('GET', '/jar-templates', JarTemplatesResponse),
     createConfirmation: (req) => call('POST', '/confirmations', ConfirmationResponse, req),
+    cancelConfirmation: (req) => call('POST', '/confirmations/cancel', CancelConfirmationResponse, req),
     applyAction: (req) => call('POST', '/actions', ActionResponse, req),
     resetDemo: () => call('POST', '/demo/reset', ResetResponse),
   }

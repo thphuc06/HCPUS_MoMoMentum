@@ -5,6 +5,8 @@
   (spike Gateway §3a). Lambda không thấy JWT. Tham số lạ bị bỏ qua (Gateway không từ chối chúng).
 - Kết quả theo `contracts/tools/ledger.results.schema.json`; lỗi nghiệp vụ là kết quả thành công
   của Lambda: `{"status": "ERROR", "code", "message"}`.
+- Mười tool (đúng thứ tự `yofina_core.wallet.LEDGER_TOOLS`): năm tool đọc, bốn tool ghi, `save_turn`. Tool ghi KHÔNG có
+  `confirm_token` thì không ghi, trả `NEEDS_CONFIRMATION` kèm bản xem trước. `save_jars` và `confirm_salary` chỉ có ở REST.
 """
 
 from __future__ import annotations
@@ -15,17 +17,43 @@ import time
 from collections.abc import Mapping
 from typing import Any
 
-from yofina_core.blocks import new_trace_id
+from yofina_core.blocks import block_to_wire, new_trace_id
 from yofina_core.confirm import MOVE_BETWEEN_JARS
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
+from yofina_core.wallet import AGENT_WRITE_TOOLS
 from yofina_ledger.service import TOOL_PREFIX, LedgerService
 
 log = logging.getLogger("yofina.ledger.gateway")
 
 _ARG_KEYS: dict[str, tuple[str, ...]] = {
     "get_jar_balances": (),
-    "query_transactions": ("jar", "from_date", "to_date", "limit"),
+    "query_transactions": ("jar", "kind", "tx_type", "from_date", "to_date", "limit", "cursor"),
+    "get_cashflow_summary": ("from_date", "to_date"),
+    "get_obligations": ("status", "within_days", "limit"),
+    "get_unclassified": ("limit",),
+    "update_profile": (
+        "display_name",
+        "monthly_salary_vnd",
+        "payday_day",
+        "risk_tolerance",
+        "obligation",
+        "confirm_token",
+    ),
+    "record_transaction": (
+        "kind",
+        "amount_vnd",
+        "jar",
+        "tx_type",
+        "funding",
+        "payee_id",
+        "counterparty",
+        "note",
+        "obligation_id",
+        "client_ref",
+        "confirm_token",
+    ),
     MOVE_BETWEEN_JARS: ("from_jar", "to_jar", "amount_vnd", "confirm_token"),
+    "assign_jar": ("transaction_id", "jar", "remember", "confirm_token"),
     "save_turn": ("conversation_id", "trace_id", "user_text", "assistant_text", "blocks"),
 }
 
@@ -84,32 +112,46 @@ def _run(
     if tool == "get_jar_balances":
         return service.get_jar_balances_result(user_id, trace_id=trace_id)
     if tool == "query_transactions":
-        return service.query_transactions_result(
-            user_id,
-            jar=args.get("jar"),
-            from_date=args.get("from_date"),
-            to_date=args.get("to_date"),
-            limit=args.get("limit"),
-        )
+        return service.query_transactions_result(user_id, **args)
+    if tool == "get_cashflow_summary":
+        return service.cashflow_result(user_id, **args)
+    if tool == "get_obligations":
+        resp = service.obligations_response(user_id, include_credit_line=True, **args)
+        data: dict[str, Any] = {
+            "obligations": resp["obligations"],
+            "total_due_vnd": resp["total_due_vnd"],
+        }
+        if "credit_line" in resp:
+            data["credit_line"] = resp["credit_line"]
+        return {
+            "status": str(ToolStatus.OK),
+            "as_of": resp["as_of"],
+            "app_date": resp["app_date"],
+            "data": data,
+        }
+    if tool == "get_unclassified":
+        return service.unclassified_result(user_id, **args)
     if tool == "save_turn":
         return service.save_turn_result(user_id, **args)
-    # move_between_jars
-    token = args.get("confirm_token")
+    # tool ghi: move_between_jars, update_profile, record_transaction, assign_jar
+    assert tool == MOVE_BETWEEN_JARS or tool in AGENT_WRITE_TOOLS
+    token = args.pop("confirm_token", None)
     if token in (None, ""):
-        return service.needs_confirmation_result(user_id, args, trace_id=trace_id)
+        return service.needs_confirmation_for(user_id, tool, args, trace_id=trace_id)
     if not isinstance(token, str):
         raise YofinaError(ErrorCode.PARAMS_INVALID, "confirm_token phải là chuỗi.")
-    receipt = service.apply_move(
+    receipt = service.apply_action(
         user_id,
+        tool,
         args,
         token,
         trace_id=trace_id,
         channel="gateway",
-        source_tool=f"{TOOL_PREFIX}{MOVE_BETWEEN_JARS}",
+        source_tool=f"{TOOL_PREFIX}{tool}",
     )
     return {
         "status": str(ToolStatus.OK),
         "as_of": receipt.source.as_of,
         "app_date": receipt.source.app_date,
-        "data": receipt.data.model_dump(mode="json"),
+        "data": block_to_wire(receipt)["data"],
     }

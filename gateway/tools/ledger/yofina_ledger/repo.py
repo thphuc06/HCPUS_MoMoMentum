@@ -18,13 +18,15 @@ from yofina_core.clock import app_today
 from yofina_core.db import DataApi, Row
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import to_vnd
+from yofina_ledger.repo_wallet import WalletRepo
 
-JARS_PER_USER = 20  # khớp LIMIT của app_get_jar_view và maxItems của hợp đồng
+JARS_PER_USER = 40  # khớp LIMIT của app_get_jar_state (20 hũ người dùng + hũ hệ thống)
 
 
 @dataclass(frozen=True)
 class JarView:
-    """Số dư các hũ cùng độ lệch đồng hồ của người dùng. `clock_offset_days` None = chưa có người dùng."""
+    """Số dư MỌI hũ (kể cả hũ hệ thống) cùng độ lệch đồng hồ của người dùng. `clock_offset_days` None = chưa có
+    người dùng. Mỗi hũ có `kind` và `system_role`; `GET /jars` và tool `get_jar_balances` lọc bỏ hũ hệ thống."""
 
     clock_offset_days: int | None
     jars: tuple[Row, ...]
@@ -56,13 +58,7 @@ class ConfirmClaim:
     receipt_for: Callable[[MoveResult], Mapping[str, Any]]
 
 
-@dataclass(frozen=True)
-class ResetCounts:
-    jars: int
-    transactions: int
-
-
-SQL_JAR_VIEW = "SELECT * FROM app_get_jar_view(:uid)"
+SQL_JAR_VIEW = "SELECT * FROM app_get_jar_state(:uid)"
 
 SQL_QUERY_TRANSACTIONS = (
     "SELECT * FROM app_query_transactions("
@@ -93,12 +89,12 @@ WITH moved AS (
   RETURNING code, name, balance_vnd
 ), led AS (
   INSERT INTO transactions
-    (user_id, occurred_at, app_date, kind, jar_code, amount_vnd, note, transfer_id, source)
+    (user_id, occurred_at, app_date, kind, jar_code, amount_vnd, note, transfer_id, source, tx_type)
   VALUES
     (:uid, CAST(:occurred_at AS timestamptz), CAST(:app_date AS date), 'transfer', :from_jar,
-     -CAST(:amount AS numeric), :note_out, CAST(:transfer_id AS uuid), 'move'),
+     -CAST(:amount AS numeric), :note_out, CAST(:transfer_id AS uuid), 'move', 'jar_transfer'),
     (:uid, CAST(:occurred_at AS timestamptz), CAST(:app_date AS date), 'transfer', :to_jar,
-     CAST(:amount AS numeric), :note_in, CAST(:transfer_id AS uuid), 'move')
+     CAST(:amount AS numeric), :note_in, CAST(:transfer_id AS uuid), 'move', 'jar_transfer')
   RETURNING id
 ), aud AS (
   INSERT INTO audit_events (user_id, trace_id, event_type, tool, outcome, params, details)
@@ -149,11 +145,22 @@ TURNS_PER_CONVERSATION = 50
 BLOCKS_PER_CONVERSATION = 300  # trần của app_get_conversation_blocks
 RESOLUTIONS_PER_CONVERSATION = 300  # trần của app_get_confirm_resolutions
 
-SQL_RESET_TRANSACTIONS = "DELETE FROM transactions WHERE user_id = :uid"
-SQL_RESET_BLOCKS = "DELETE FROM turn_blocks WHERE user_id = :uid"
-SQL_RESET_RESOLUTIONS = "DELETE FROM confirm_resolutions WHERE user_id = :uid"
-SQL_RESET_TURNS = "DELETE FROM conversation_turns WHERE user_id = :uid"
-SQL_RESET_JARS = "DELETE FROM jars WHERE user_id = :uid"
+# --- đặt lại dữ liệu demo: xóa đúng thứ tự khóa ngoại rồi nạp lại -----------------------------------------------
+# forecast_runs kéo theo forecast_jar_summaries và forecasts (ON DELETE CASCADE); salary_events và category_rules trước
+# transactions; transactions trước obligations và payees (khóa ngoại); jars cuối cùng.
+RESET_DELETES = (
+    "DELETE FROM forecast_runs WHERE user_id = :uid",
+    "DELETE FROM salary_events WHERE user_id = :uid",
+    "DELETE FROM category_rules WHERE user_id = :uid",
+    "DELETE FROM transactions WHERE user_id = :uid",
+    "DELETE FROM obligations WHERE user_id = :uid",
+    "DELETE FROM payees WHERE user_id = :uid",
+    "DELETE FROM credit_lines WHERE user_id = :uid",
+    "DELETE FROM turn_blocks WHERE user_id = :uid",
+    "DELETE FROM conversation_turns WHERE user_id = :uid",
+    "DELETE FROM confirm_resolutions WHERE user_id = :uid",
+    "DELETE FROM jars WHERE user_id = :uid",
+)
 SQL_UPSERT_USER = """
 INSERT INTO users (id, display_name, monthly_salary_vnd, payday_day, risk_tolerance, clock_offset_days)
 VALUES (:uid, :display_name, :salary, :payday, :risk, :clock_offset_days)
@@ -166,18 +173,59 @@ ON CONFLICT (id) DO UPDATE SET
   updated_at = now()
 """
 SQL_INSERT_JAR = (
-    "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order) "
-    "VALUES (:uid, :code, :name, :color_key, :icon_key, :balance, CAST(:split AS numeric), :sort_order)"
+    "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind, "
+    "goal_vnd, goal_date) "
+    "VALUES (:uid, :code, :name, :color_key, :icon_key, 0, CAST(:split AS numeric), :sort_order, :kind, "
+    "CAST(:goal_vnd AS numeric), CAST(:goal_date AS date))"
+)
+SQL_ENSURE_SYSTEM = "SELECT app_ensure_system_jars(:uid) AS created"
+SQL_INSERT_PAYEE = (
+    "INSERT INTO payees (id, user_id, name, account_hint, is_favorite, last_used_at) "
+    "VALUES (CAST(:id AS uuid), :uid, :name, :account_hint, :is_favorite, CAST(:last_used_at AS timestamptz))"
+)
+SQL_INSERT_OBLIGATION_SEED = (
+    "INSERT INTO obligations (id, user_id, kind, name, amount_vnd, amount_min_vnd, amount_max_vnd, fee_vnd, "
+    "principal_vnd, due_date, cycle, due_day, status, pay_jar_code, is_essential, source, fee_schedule_id) "
+    "VALUES (CAST(:id AS uuid), :uid, :kind, :name, CAST(:amount AS numeric), CAST(:amount_min AS numeric), "
+    "CAST(:amount_max AS numeric), CAST(:fee AS numeric), CAST(:principal AS numeric), CAST(:due_date AS date), "
+    ":cycle, CAST(:due_day AS smallint), 'active', :pay_jar, :is_essential, :source, CAST(:fee_id AS uuid))"
+)
+SQL_INSERT_CREDIT_LINE = (
+    "INSERT INTO credit_lines (user_id, product_code, limit_vnd, outstanding_vnd, due_day) "
+    "VALUES (:uid, :product, CAST(:lim AS numeric), CAST(:outstanding AS numeric), CAST(:due_day AS smallint))"
 )
 SQL_INSERT_TX = (
     "INSERT INTO transactions "
-    "(user_id, occurred_at, app_date, kind, jar_code, amount_vnd, merchant, note, source) "
-    "VALUES (:uid, CAST(:occurred_at AS timestamptz), CAST(:app_date AS date), :kind, :jar_code, "
-    ":amount, :merchant, :note, :source)"
+    "(id, user_id, occurred_at, app_date, kind, jar_code, amount_vnd, merchant, note, transfer_id, source, "
+    "tx_type, funding_source, payee_id, obligation_id, needs_review, classified_by) "
+    "VALUES (CAST(:id AS uuid), :uid, CAST(:occurred_at AS timestamptz), CAST(:app_date AS date), :kind, :jar_code, "
+    "CAST(:amount AS numeric), :merchant, :note, CAST(:transfer_id AS uuid), :source, :tx_type, :funding_source, "
+    "CAST(:payee_id AS uuid), CAST(:obligation_id AS uuid), :needs_review, :classified_by)"
+)
+SQL_INSERT_SALARY_EVENT = (
+    "INSERT INTO salary_events (id, user_id, period_date, transaction_id, received_on, expected_vnd, amount_vnd, "
+    "deviation_percent, ask_update_salary, status, split, confirmed_at) "
+    "VALUES (CAST(:id AS uuid), :uid, CAST(:period_date AS date), CAST(:transaction_id AS uuid), "
+    "CAST(:received_on AS date), CAST(:expected AS numeric), CAST(:amount AS numeric), CAST(:deviation AS numeric), "
+    "false, :status, CAST(:split AS jsonb), CAST(:confirmed_at AS timestamptz))"
+)
+# Số dư mỗi hũ = tổng các dòng trả bằng hũ (bất biến của sổ cái): dựng từ chính sổ cái vừa nạp.
+SQL_RECOMPUTE_BALANCES = (
+    "UPDATE jars SET balance_vnd = coalesce((SELECT sum(t.amount_vnd) FROM transactions t "
+    "WHERE t.user_id = jars.user_id AND t.jar_code = jars.code AND t.funding_source = 'jar'), 0) "
+    "WHERE user_id = :uid"
 )
 
 
-class LedgerRepo:
+@dataclass(frozen=True)
+class ResetCounts:
+    jars: int
+    transactions: int
+    obligations: int = 0
+    payees: int = 0
+
+
+class LedgerRepo(WalletRepo):
     def __init__(self, db: DataApi) -> None:
         self.db = db
 
@@ -391,23 +439,31 @@ class LedgerRepo:
         *,
         profile: dict[str, Any],
         jars: Sequence[dict[str, Any]],
+        payees: Sequence[dict[str, Any]],
+        obligations: Sequence[dict[str, Any]],
+        credit_line: dict[str, Any] | None,
         transactions: Sequence[dict[str, Any]],
+        salary_events: Sequence[dict[str, Any]],
         trace_id: str,
         details: dict[str, Any],
     ) -> ResetCounts:
-        """Xóa dữ liệu của chính người gọi rồi nạp lại (một transaction). `audit_events` chỉ thêm."""
+        """Xóa dữ liệu của chính người gọi rồi nạp lại (một transaction). `audit_events` chỉ thêm.
+
+        Thứ tự nạp theo khóa ngoại: người dùng, hũ (cộng hai hũ hệ thống), người nhận, nghĩa vụ, hạn mức, sổ cái, sự kiện
+        lương; cuối cùng số dư hũ được dựng lại từ sổ cái."""
         with self.db.transaction(user_id) as tx:
-            for sql in (
-                SQL_RESET_TRANSACTIONS,
-                SQL_RESET_BLOCKS,
-                SQL_RESET_TURNS,
-                SQL_RESET_RESOLUTIONS,
-                SQL_RESET_JARS,
-            ):
+            for sql in RESET_DELETES:
                 tx.execute(sql, {"uid": user_id})
             tx.execute(SQL_UPSERT_USER, {"uid": user_id, **profile})
             tx.batch(SQL_INSERT_JAR, [{"uid": user_id, **j} for j in jars])
+            tx.execute(SQL_ENSURE_SYSTEM, {"uid": user_id})
+            tx.batch(SQL_INSERT_PAYEE, [{"uid": user_id, **p} for p in payees])
+            tx.batch(SQL_INSERT_OBLIGATION_SEED, [{"uid": user_id, **o} for o in obligations])
+            if credit_line is not None:
+                tx.execute(SQL_INSERT_CREDIT_LINE, {"uid": user_id, **credit_line})
             tx.batch(SQL_INSERT_TX, [{"uid": user_id, **t} for t in transactions])
+            tx.batch(SQL_INSERT_SALARY_EVENT, [{"uid": user_id, **e} for e in salary_events])
+            tx.execute(SQL_RECOMPUTE_BALANCES, {"uid": user_id})
             tx.execute(
                 SQL_AUDIT,
                 {
@@ -421,4 +477,9 @@ class LedgerRepo:
                     "details": details,
                 },
             )
-        return ResetCounts(jars=len(jars), transactions=len(transactions))
+        return ResetCounts(
+            jars=len(jars),
+            transactions=len(transactions),
+            obligations=len(obligations),
+            payees=len(payees),
+        )

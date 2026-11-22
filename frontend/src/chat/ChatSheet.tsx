@@ -12,9 +12,9 @@ import { useChat } from './ChatProvider'
 import { MessageList } from './MessageList'
 import { ChatInput } from './parts'
 
-// Gợi ý là câu mẫu để bấm, không phải dữ liệu; phase 1 chỉ có xem số dư và chuyển giữa hai hũ.
-const SUGGESTIONS = ['Số dư các hũ của mình', 'Chuyển tiền giữa hai hũ giúp mình']
-const CAN_DO = ['Cho bạn xem số dư các hũ', 'Chuyển tiền giữa hai hũ khi bạn xác nhận']
+// Gợi ý là câu mẫu để bấm, không phải dữ liệu; phase 2: xem số dư, dự báo 30 ngày của hũ, chuyển giữa hai hũ.
+const SUGGESTIONS = ['Số dư các hũ của mình', 'Hũ của mình còn trụ được bao lâu?', 'Chuyển tiền giữa hai hũ giúp mình']
+const CAN_DO = ['Cho bạn xem số dư các hũ', 'Cho bạn xem dự báo 30 ngày của từng hũ', 'Chuyển tiền giữa hai hũ khi bạn xác nhận']
 const CANNOT_DO = ['Tự chuyển tiền: mọi thay đổi số dư luôn cần bạn xác nhận', 'Tư vấn chọn cổ phiếu hay quỹ cụ thể']
 
 function EmptyState({ onPick }: { onPick: (t: string) => void }) {

@@ -1,57 +1,13 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '@/auth/AuthProvider'
-import { ConfigContext } from '@/AppContext'
 import type { Config } from '@/lib/config'
-import { appRoutes } from './router'
-import { fakeAuth, jarsFromFixture } from '@/test/helpers'
-import { validBlock } from '@/test/fixtures'
+import { bodyOf, config, isWarmup, json, mountApp, restDefault, runCalls } from '@/test/mountApp'
+import { restFixture, validBlock } from '@/test/fixtures'
 import { blockSnapshot, runFinished, runStarted, sseResponse, textMessage, toolCall } from '@/test/sse'
 
 // Kiểm tích hợp ở mức ứng dụng: khung, Tổng quan, sheet chat, khối confirm -> receipt, với fetch giả (REST + Runtime).
-// Đây là test; mock chỉ sống ở đây và ở dev-mocks/, không import từ src/.
-
-const config: Config = {
-  region: 'ap-southeast-1',
-  userPoolId: 'p',
-  clientId: 'c',
-  apiUrl: 'https://api.example.invalid',
-  agentUrl: 'https://rt.example.invalid/invocations?qualifier=DEFAULT',
-  replayEnabled: false,
-}
-
-type Handler = (url: string, init: RequestInit) => Response | Promise<Response>
-
-function json(status: number, body?: unknown) {
-  return new Response(body === undefined ? '' : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
-}
-
-function mountApp(handler: Handler, initial = '/', cfg: Config = config) {
-  const calls: Array<{ url: string; init: RequestInit }> = []
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
-      calls.push({ url: String(url), init: init ?? {} })
-      return handler(String(url), init ?? {})
-    }),
-  )
-  const router = createMemoryRouter(appRoutes(), { initialEntries: [initial] })
-  const auth = fakeAuth()
-  render(
-    <ConfigContext.Provider value={cfg}>
-      <AuthProvider client={auth}>
-        <RouterProvider router={router} />
-      </AuthProvider>
-    </ConfigContext.Provider>,
-  )
-  return { calls, router, auth }
-}
-
-const bodyOf = (c: { init: RequestInit }) => JSON.parse(String(c.init.body))
-const isWarmup = (c: { url: string; init: RequestInit }) => c.url === config.agentUrl && bodyOf(c).forwardedProps?.warmup === true
-const runCalls = (calls: Array<{ url: string; init: RequestInit }>) => calls.filter((c) => c.url === config.agentUrl && !isWarmup(c))
+// Đây là test; mock chỉ sống ở đây (test/mountApp) và ở dev-mocks/, không import từ src/ sản phẩm.
 
 describe('Tổng quan', () => {
   beforeEach(() => localStorage.clear())
@@ -61,15 +17,15 @@ describe('Tổng quan', () => {
     let release!: () => void
     const gate = new Promise<void>((r) => (release = r))
     mountApp(async (url) => {
-      if (url.endsWith('/jars')) {
+      if (url.endsWith('/overview')) {
         await gate
-        return json(200, jarsFromFixture())
+        return restDefault(url)
       }
       return json(404)
     })
     expect(await screen.findByTestId('overview-skeleton')).toBeInTheDocument()
     release()
-    expect(await screen.findByTestId('balance-total')).toHaveTextContent('7.730.000 ₫')
+    expect(await screen.findByTestId('balance-total')).toHaveTextContent('7.900.000 ₫')
     expect(screen.queryByTestId('overview-skeleton')).toBeNull()
     const list = screen.getByRole('list', { name: 'Danh sách hũ' })
     expect(within(list).getAllByRole('article')).toHaveLength(7)
@@ -81,29 +37,32 @@ describe('Tổng quan', () => {
   it('lỗi tải: thông báo tiếng Việt và nút Thử lại gọi lại API', async () => {
     let n = 0
     const { calls } = mountApp((url) => {
-      if (url.endsWith('/jars')) {
+      if (url.endsWith('/overview')) {
         n += 1
-        return n === 1 ? json(503, { error: { code: 'DATABASE_UNAVAILABLE', message: 'x' } }) : json(200, jarsFromFixture())
+        return n === 1 ? json(503, { error: { code: 'DATABASE_UNAVAILABLE', message: 'x' } }) : json(200, restFixture('OverviewResponse.minh'))
       }
       return json(404)
     })
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Chưa tải được số dư')
+    expect(alert).toHaveTextContent('Chưa tải được tổng quan')
     expect(alert).toHaveTextContent('Hệ thống đang khởi động')
     await userEvent.setup().click(screen.getByRole('button', { name: 'Thử lại' }))
-    expect(await screen.findByTestId('balance-total')).toHaveTextContent('7.730.000 ₫')
-    expect(calls.filter((c) => c.url.endsWith('/jars'))).toHaveLength(2)
+    expect(await screen.findByTestId('balance-total')).toHaveTextContent('7.900.000 ₫')
+    expect(calls.filter((c) => c.url.endsWith('/overview'))).toHaveLength(2)
     expect(new Headers(calls[0]!.init.headers as HeadersInit).get('authorization')).toBe('Bearer access-1')
   })
 
-  it('tab chưa làm hiện trạng thái rỗng, không số giả', async () => {
-    mountApp(() => json(200, jarsFromFixture()), '/foresight')
-    expect(await screen.findByTestId('empty-tab')).toHaveTextContent('Chưa có số liệu dự báo nào')
+  it('tab Nhìn trước: hũ cần chú ý nhất lên đầu, số lấy từ API', async () => {
+    mountApp((url) => restDefault(url), '/foresight')
+    const list = await screen.findByRole('list', { name: 'Hũ theo mức cần chú ý' })
     expect(screen.getByRole('heading', { name: 'Nhìn trước' })).toBeInTheDocument()
+    const first = within(list).getAllByRole('listitem')[0]!
+    expect(first).toHaveTextContent('Ăn uống')
+    expect(first).toHaveTextContent('Cạn ngày 29/11')
   })
 
   it('tab bar có 5 mục, nút giữa Hỏi Yofina', async () => {
-    mountApp(() => json(200, jarsFromFixture()))
+    mountApp((url) => restDefault(url))
     const nav = await screen.findByRole('navigation', { name: 'Điều hướng chính' })
     for (const name of ['Tổng quan', 'Hũ', 'Hỏi Yofina', 'Nhìn trước', 'Hồ sơ']) {
       expect(within(nav).getByText(name)).toBeInTheDocument()
@@ -117,7 +76,7 @@ describe('Hồ sơ', () => {
 
   it('Đặt lại dữ liệu: hộp xác nhận -> POST /demo/reset -> tải lại số dư; Hủy thì không gọi', async () => {
     const { calls } = mountApp((url, init) => {
-      if (url.endsWith('/jars')) return json(200, jarsFromFixture())
+      if (url.endsWith('/overview')) return restDefault(url)
       if (url.endsWith('/demo/reset') && init.method === 'POST')
         return json(200, { reset_at: '2026-12-10T03:00:00Z', app_date: '2026-11-21', clock_offset_days: -19, jars_count: 7, transactions_count: 41 })
       return json(404)
@@ -133,11 +92,11 @@ describe('Hồ sơ', () => {
     await user.click(await screen.findByRole('button', { name: 'Đặt lại' }))
     expect(await screen.findByText(/Đã đặt lại: 7 hũ, 41 giao dịch\. Ngày mô phỏng 21\/11\/2026/)).toBeInTheDocument()
     expect(calls.filter((c) => c.url.endsWith('/demo/reset'))).toHaveLength(1)
-    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/jars')).length).toBeGreaterThanOrEqual(2))
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/overview')).length).toBeGreaterThanOrEqual(2))
   })
 
   it('Đăng xuất đưa về màn Đăng nhập', async () => {
-    const { router } = mountApp(() => json(200, jarsFromFixture()), '/profile')
+    const { router } = mountApp((url) => restDefault(url), '/profile')
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Đăng xuất' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
   })
@@ -166,7 +125,7 @@ describe('Chat trong ứng dụng', () => {
               : [runStarted(), ...textMessage('m1', 'Đã ghi nhận.'), runFinished()]
         return sseResponse(sse)
       }
-      if (url.endsWith('/jars')) return json(200, jarsFromFixture())
+      if (url.endsWith('/overview')) return restDefault(url)
       if (url.endsWith('/confirmations'))
         return json(200, { confirm_token: 'aaa.bbb', expires_at: '2026-12-10T03:02:00Z', ttl_seconds: 120, tool: 'move_between_jars', params: confirm.data.params, params_hash: confirm.data.params_hash })
       if (url.endsWith('/actions')) return json(200, receipt)
@@ -210,7 +169,7 @@ describe('Chat trong ứng dụng', () => {
     expect(calls.filter((c) => c.url.endsWith('/confirmations'))).toHaveLength(1)
     expect(calls.filter((c) => c.url.endsWith('/actions'))).toHaveLength(1)
     expect(JSON.parse(String(calls.find((c) => c.url.endsWith('/actions'))!.init.body)).confirm_token).toBe('aaa.bbb')
-    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/jars')).length).toBeGreaterThanOrEqual(2)) // Tổng quan được làm mới
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/overview')).length).toBeGreaterThanOrEqual(2)) // Tổng quan được làm mới
 
     // lượt sau: lịch sử gửi lại đủ, gồm một dòng hệ thống về việc đã làm; người dùng không thấy dòng đó
     await user.type(within(sheet).getByLabelText('Tin nhắn'), 'xong chưa')
@@ -231,7 +190,7 @@ describe('Chat trong ứng dụng', () => {
         runs += 1
         return runs === 1 ? sseResponse([]) : sseResponse([runStarted(), ...textMessage('m1', 'Đây rồi.'), runFinished()])
       }
-      return json(200, jarsFromFixture())
+      return restDefault(url)
     })
     const user = userEvent.setup()
     await screen.findByTestId('balance-total')
@@ -291,7 +250,7 @@ describe('Phát lại hội thoại sau khi tải lại trang', () => {
             turn(TRACES[2]!, pending, { status: 'pending' }),
           ],
         })
-      return json(200, jarsFromFixture())
+      return restDefault(url)
     }, '/', replayConfig)
     const user = userEvent.setup()
     await screen.findByTestId('balance-total')
@@ -326,7 +285,7 @@ describe('Phát lại hội thoại sau khi tải lại trang', () => {
         applied = true
         return json(409, { error: { code: 'ALREADY_APPLIED', message: 'Đề nghị này đã được thực hiện rồi.' } })
       }
-      return json(200, jarsFromFixture())
+      return restDefault(url)
     }, '/', replayConfig)
     const user = userEvent.setup()
     await screen.findByTestId('balance-total')

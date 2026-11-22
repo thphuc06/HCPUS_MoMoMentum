@@ -129,6 +129,10 @@ class ForecastInputs:
     jars: tuple[JarInput, ...]  # chỉ hũ spending, saving, obligation
     coverage: CoverageInputs | None = None
     config: ForecastConfig = field(default_factory=ForecastConfig)
+    #: ngày lương hằng tháng (1..31, lớn hơn số ngày của tháng thì lấy ngày cuối tháng). TÙY CHỌN (thêm ở phase 2 luồng B):
+    #: model dùng để biết mỗi ngày lịch sử nằm ở đâu trong kỳ lương (nửa đầu hay nửa sau). Vắng thì suy ra từ
+    #: `next_payday.day` (sai chỉ khi ngày lương kế tiếp bị kẹp cuối tháng ngắn, ví dụ lương ngày 31 rơi vào 28/2).
+    payday_day: int | None = None
 
 
 # =====================================================================================

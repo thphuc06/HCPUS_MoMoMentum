@@ -2,7 +2,21 @@
 
 Web app Yofina ưu tiên điện thoại (khung 390 px; trên màn rộng căn giữa thành khung điện thoại). Stack theo [ADR-0001](../docs/decisions/0001-frontend-stack.md): React + Vite + TypeScript, Tailwind 4, shadcn/ui (Base UI), `@ag-ui/client`, Zod. Thiết kế theo Figma `l9vWyORNRjDqiEOXqpbzYm` ([figma-ui-design.md](../docs/research/figma-ui-design.md)).
 
-Trạng thái: **phase 1** ([luồng E](../docs/plan/phases/phase-1-nen-va-lat-doc.md#luồng-e--frontend)). Có: đăng nhập Cognito SRP, Tổng quan (số dư các hũ), Hồ sơ (đặt lại dữ liệu, đăng xuất), sheet chat với khối `jar_summary`, `confirm`, `receipt`, `notice`. Tab Hũ và Nhìn trước là trạng thái rỗng (chưa có số liệu giả).
+Trạng thái: **phase 2, luồng D** ([các màn ví và dự báo](../docs/plan/phases/phase-2-vi-va-du-bao.md#luồng-d--frontend-các-màn-hình-ví-và-dự-báo)), xây trên phase 1. Có: đăng nhập Cognito SRP; **Tổng quan** (một lệnh `GET /overview`), **Hũ**, **Chi tiết hũ** với biểu đồ dự báo 30 ngày, **Nhìn trước**, **Chuyển tiền** (T1, T2, T4, T5), **Hoạt động**, **Onboarding** (O1–O3), **Nghĩa vụ** (thêm, sửa, xóa), **Tiền vào** và ô Tiền vào khác, **Lương về** (xác nhận một chạm), **Giữa hũ**, **Thêm hoặc sửa hũ**, **Hồ sơ** (sửa lương và ngày nhận, đặt lại dữ liệu, đăng xuất); sheet chat với tám khối (`jar_summary`, `confirm`, `receipt`, `notice`, `forecast_timeline`, `proactive_card`, `confirm_action`, `receipt_action`). Thẻ kiểm tra đủ/sát/hụt (T3) là phase 3; Quét QR và "Kiểm tra" ở Tổng quan là nút vô hiệu có nhãn "Sắp có".
+
+**Màn hình và đường dẫn** (hash router; màn toàn khung không có tab bar):
+
+| Đường dẫn | Màn | Dữ liệu |
+|---|---|---|
+| `/` | Tổng quan (chưa khai thì chuyển sang `/onboarding`) | `GET /overview` |
+| `/jars`, `/jars/:code`, `/jars/edit` | Danh sách hũ; Chi tiết hũ; thêm/sửa hũ | `/overview`; `GET /jars/{code}` + `GET /forecasts/{code}` song song; `save_jars` |
+| `/foresight` | Nhìn trước: hũ nào cạn trước, chất lượng dự báo | `/overview` |
+| `/transfer` → `/amount` → `/review` → `/receipt` | Chuyển tiền T1, T2, T4, T5 | `GET /payees`, `/credit-line`, `/tx-types`; `record_transaction` |
+| `/activity` | Hoạt động (lọc theo hũ, "Cần xem lại", con trỏ) | `GET /transactions` |
+| `/onboarding` | O1 lương + ngày nhận (bắt buộc), O2 hũ + tỷ lệ, O3 chi phí cố định | `update_profile`, `save_jars`, `GET /jar-templates` |
+| `/obligations`, `/obligations/new`, `/obligations/:id` | Nghĩa vụ và hạn mức Trả sau | `GET /obligations`, `/credit-line`; `update_profile` |
+| `/income`, `/salary`, `/move` | Tiền vào + Tiền vào khác; xác nhận lương về; chuyển giữa hũ | `record_transaction`, `confirm_salary`, `move_between_jars` |
+| `/profile` | Hồ sơ | `/overview`; `update_profile`; `POST /demo/reset` |
 
 ## Chạy
 
@@ -12,6 +26,8 @@ npm install
 cp .env.example .env.local        # điền giá trị (hoặc: uv run scripts/print_env.py frontend --write ở gốc repo)
 npm run dev                       # backend thật
 npm run dev:mock                  # máy chủ giả trong dev-mocks/, không cần backend và không cần đăng nhập thật
+                                  # (email bất kỳ + mật khẩu bất kỳ khác "sai"; email bắt đầu "trang" = tài khoản chưa khai để thử onboarding,
+                                  #  "moi" = tài khoản ít dữ liệu "ước lượng ban đầu"; trạng thái giữ trong bộ nhớ theo email, khởi động lại là về ban đầu)
 
 npm test                          # Vitest + Testing Library (unit và tích hợp mức ứng dụng)
 npm run typecheck                 # tsc -b
@@ -49,15 +65,18 @@ src/
   index.css                                       # token Figma: màu Sáng/Tối, thang chữ, bo góc, bóng, khung điện thoại
   contracts/blocks.ts                             # Zod SINH TỰ ĐỘNG từ ../contracts (node scripts/gen_contracts.mjs); không sửa tay
   auth/       # AuthClient (giao diện), CognitoAuthClient (SRP), AuthProvider (làm mới token), RequireAuth (route guard)
-  api/        # createApiClient (REST có kiểu, Bearer, traceparent, lỗi tiếng Việt), ApiProvider + JarsProvider (số dư dùng chung)
-  chat/       # ChatSession (lõi: luồng AG-UI, lỗi, lịch sử), ChatProvider, ChatSheet, MessageList, repository (phát lại)
-  blocks/     # registry type -> { schema Zod, Component }, views (jar_summary, confirm, receipt, notice), useConfirmFlow
-  components/ # BalanceCard, JarCard, JarGlass (SVG), JarIcon, StatusChip, Notice, ui/ (shadcn: button, input, drawer, ...)
-  layout/     # PhoneFrame, AppShell, TabBar
-  pages/      # LoginPage, OverviewPage, ProfilePage, EmptyTabPage
-  lib/        # format (Intl), config (import.meta.env), ids (uuid, traceparent), cn, user
+  api/        # createApiClient (REST có kiểu, Bearer, traceparent, lỗi tiếng Việt), schemas (Zod của phản hồi REST), errors (25 mã lỗi),
+              # ApiProvider (+ "phiên bản dữ liệu"), OverviewProvider (GET /overview dùng chung), resource (useApiResource), useWrite (luồng ghi của màn hình)
+  chat/       # ChatSession (lõi: luồng AG-UI, lỗi, lịch sử), ChatProvider, ChatSheet, MessageList, repository (phát lại), launcher (mở chat từ màn khác)
+  blocks/     # registry type -> { schema Zod, Component } cho 8 khối; views (phase 1), walletViews (4 khối phase 2), useConfirmFlow
+  features/   # forecast (model.ts thuần hàm, ForecastChart = Recharts tách chunk, ForecastBlock dùng chung màn + chat), transfer, jars, obligations, overview
+  components/ # BalanceCard, JarCard, JarRow, JarGlass (SVG, vạch dự báo), JarIcon, JarStatusChip, StatusChip, ProactiveCard, MiniTimeline, TxRow, Numpad,
+              # MoneyInput, ScreenHeader, StateViews (lỗi/rỗng/skeleton), SimNote, Notice, ui/ (shadcn: button, input, drawer, ...)
+  layout/     # PhoneFrame, AppShell (provider + tab bar ẩn ở màn toàn khung + launcher chat), TabBar
+  pages/      # Login, Overview, Jars, JarDetail, JarsEdit, Foresight, Activity, Onboarding, Obligations, ObligationEdit, Income, Salary, Move, Profile, transfer/*
+  lib/        # format (Intl; thêm vndInWords, formatVndAxis...), dates (số học ngày), jar (mực nước, chip trạng thái), nudgePrefs, config, ids, cn, user
   test/       # helper, fixture dùng chung với phía Python (contracts/fixtures), dựng SSE giả
-dev-mocks/    # CHỈ cho `npm run dev:mock`: client/mock-auth.ts, server/plugin.ts (REST + SSE giả). Không vào bundle
+dev-mocks/    # CHỈ cho `npm run dev:mock`: client/mock-auth.ts, server/plugin.ts (SSE giả + định tuyến), server/wallet.ts (REST ví và dự báo giả, có trạng thái). Không vào bundle
 scripts/check-bundle.mjs
 ```
 
@@ -76,6 +95,14 @@ scripts/check-bundle.mjs
 
 **Token thiết kế**: lấy từ Figma Foundations (`28:2`) thành biến CSS ở `src/index.css`; bộ Tối đổi theo `prefers-color-scheme` hoặc `<html data-theme="dark|light">`. Dùng qua class Tailwind: `bg-surface`, `text-ink`, `text-ink-2`, `bg-tint`, `text-brand-text`, `bg-ok-bg text-ok-fg` (đủ), `warn` (sát), `bad` (hụt), cỡ chữ `text-display/amount/title/section/subtitle/body/small/note`, `rounded-card` (24), `rounded-sheet` (28), `shadow-card`. `cn` (tương thích tailwind-merge) được cấu hình biết các tên tự đặt này ở `src/lib/cn.ts`; thêm cỡ chữ mới thì thêm vào đó, nếu không `text-xxx` bị coi là màu và xóa mất màu chữ đứng trước.
 
+**Dữ liệu và làm mới sau khi ghi** (phase 2): mọi GET đi qua `useApiResource` (loading → ready | error, `reload` cho nút Thử lại, bỏ kết quả về muộn). `ApiProvider` giữ một "phiên bản dữ liệu" tăng sau mỗi lần ghi thành công (`useRefreshAfterWrite()`); mọi tài nguyên đang hiện (tổng quan, Chi tiết hũ, dự báo, giao dịch, nghĩa vụ...) nghe số này và tải lại, giữ số cũ trong lúc tải. `GET /overview` được nạp một lần ở `OverviewProvider` và dùng chung cho Tổng quan, tab Hũ, Nhìn trước, Hoạt động, chuyển tiền.
+
+**Luồng ghi của màn hình** (`api/useWrite.ts`, ADR-0002): người dùng bấm nút nêu rõ việc sẽ làm → `POST /confirmations` (`tool` + `params` tự dựng, không `conversation_id`) → `POST /actions` kèm token và đúng `params` đã được server chuẩn hóa → biên nhận do server trả (`receipt_action`, hoặc `receipt` với chuyển hũ) → làm mới dữ liệu. Frontend không tự tính số nghiệp vụ: số dư sau, phí, tổng phải trả gồm phí, ngày cạn, trạng thái đủ/sát/hụt đều là số server trả (xem "Ràng buộc"). Mã chống ghi trùng `client_ref` (`ui-<uuid>`) sinh một lần cho mỗi lần chuyển hoặc ghi và dùng lại khi bấm lại sau lỗi tạm thời.
+
+**Biểu đồ dự báo** (`features/forecast`): `model.ts` đổi khối `forecast_timeline` thành dữ liệu vẽ (điểm gốc là số dư lúc chạy, rồi mỗi ngày P10/P50/P90; mốc nghĩa vụ và lương; điểm cạn nội suy đúng trên đường P50; vùng hụt tới ngày lương; mốc trục 1-2-5); `ForecastChart.tsx` vẽ bằng Recharts 3.11 (dải P10–P90, đường P50 màu `accent/blue`, mốc, điểm cạn) và là **chunk riêng** (`React.lazy`), không nằm trong phần tải đầu; `ForecastBlock.tsx` là component dùng chung cho Chi tiết hũ và khối `forecast_timeline` trong chat (qua registry), nên hai nơi luôn cùng số. Chạm vào biểu đồ chọn một ngày (dòng đọc số bên trên, vì tooltip nổi khó chạm trên điện thoại); có thêm thanh chọn ngày dùng bằng bàn phím hoặc chạm, và danh sách mốc dạng văn bản. Hiện ngày cạn, xác suất hụt HOẶC nhóm tin cậy (theo trường nào có), độ phủ dữ liệu, thời điểm tính, nhãn "Ước lượng ban đầu" và "Số liệu cũ".
+
+**Khối `confirm` và `confirm_action` hủy được**: nút "Không" gọi `POST /confirmations/cancel` (server lưu `cancelled`, tải lại trang vẫn thấy đã hủy); gặp `ALREADY_APPLIED` thì không đánh dấu hủy mà đồng bộ lại từ server. Đề nghị quá hạn do server ép (403 `TOKEN_EXPIRED` khi xin token) hiện như "hết hạn, hỏi lại Yofina", không cho bấm lại.
+
 ## Thêm một loại khối UI
 
 1. Tạo `contracts/blocks/<type>.schema.json`, thêm vào `block.schema.json` và `FILES` trong `scripts/gen_contracts.mjs`, viết `build_*` phía Python, thêm fixture hợp lệ/không hợp lệ ([contracts/README.md](../contracts/README.md)).
@@ -87,14 +114,20 @@ Frontend parse **từng khối riêng**: type lạ hoặc sai schema hiện `fal
 
 ## Ràng buộc đã giữ
 
-- Không có dữ liệu persona, fixture hay mock trong `src/`; số trên màn hình đến từ `GET /jars`, khối do agent phát, hoặc biên nhận của server. `npm run check:bundle` kiểm bằng grep trên `dist/`. Fixture chỉ được nạp trong test (`src/**/*.test.*`, `src/test/`); mock server chỉ ở `dev-mocks/` (vite.config.ts chỉ import khi `--mode mock`).
+- Không có dữ liệu persona, fixture hay mock trong `src/`; số trên màn hình đến từ các GET REST (chủ yếu `GET /overview`), khối do agent phát, hoặc biên nhận của server. `npm run check:bundle` kiểm bằng grep trên `dist/`. Fixture chỉ được nạp trong test (`src/**/*.test.*`, `src/test/`); mock server chỉ ở `dev-mocks/` (vite.config.ts chỉ import khi `--mode mock`).
 - Không có mật khẩu nào trong mã; "Dùng tài khoản demo" chỉ điền email từ `VITE_DEMO_EMAIL`.
 - Không dùng tên "MoMo", "Ví Trả Sau", "FinHealth" trên giao diện; sản phẩm trả sau sau này sẽ là "Trả sau (mô phỏng)". Mọi màn ghi "Ví mô phỏng · ngày mô phỏng dd/mm/yyyy".
-- Ba trạng thái đủ/sát/hụt luôn có biểu tượng + chữ (`StatusChip`); phase 1 chưa có dự báo nên chỉ dùng "hụt" cho hũ hết tiền.
+- Ba trạng thái đủ/sát/hụt luôn có biểu tượng + chữ (`StatusChip`, `JarStatusChip`); nhãn lấy từ `status` của server. Hũ chưa có dự báo ghi "Chưa có dự báo" (không đoán); hũ hết tiền mà chưa có dự báo ghi "Đã hết tiền".
+- Không tự tính số nghiệp vụ mà server đã trả (phí, tổng gồm phí, số dư sau, ngày cạn, xác suất, trạng thái). Việc duy nhất giao diện tự tính là đổi ngày thành tọa độ, mức nước hũ để vẽ, và sắp xếp hũ theo mức cần chú ý.
+- "Tiền vào khác" và "Chưa phân loại" (hũ hệ thống) nằm trong tổng số dư; Chưa phân loại có thể âm, ghi "Đã chi, chưa xếp hũ" theo giá trị tuyệt đối.
+- localStorage chỉ giữ conversation id và tùy chọn hiển thị "Để sau" / "Ít nhắc loại này" (quyết định hợp đồng số 15); không giữ dữ liệu tài chính.
+- Vùng chạm >= 44 px, `Intl` cho tiền và ngày, hỗ trợ Sáng/Tối, mọi màn có skeleton, trạng thái lỗi (nút Thử lại) và rỗng, dòng "Ví mô phỏng · ngày mô phỏng dd/mm/yyyy".
 
 ## Phiên bản đã ghim (xem `package.json`, đã chạy được)
 
-`vite` 8.3.8, `react`/`react-dom` 19.3.1, `typescript` 7.0.2, `tailwindcss` + `@tailwindcss/vite` 4.3.5, `shadcn` 4.23.0 (preset `base-nova`) + `@base-ui/react` 1.9.0, `cn` 0.5.2, `react-router` 8.5.2 (cần Node >= 22.22), `@ag-ui/client` 1.0.5, `zod` 4.6.7, `amazon-cognito-identity-js` 6.3.22, `@fontsource-variable/plus-jakarta-sans` 5.3.0 (tự host, có subset tiếng Việt), `lucide-react` 1.77.0, `vitest` 5.1.1, `@testing-library/react` 16.3.3, `jsdom` 31.0.1, `oxlint` 1.94.0. Đã bỏ khỏi spike: Recharts, Motion, NumberFlow, d3 (chưa cần ở phase 1; Recharts quay lại khi làm biểu đồ dự báo).
+`vite` 8.3.8, `react`/`react-dom` 19.3.1, `typescript` 7.0.2, `tailwindcss` + `@tailwindcss/vite` 4.3.5, `shadcn` 4.23.0 (preset `base-nova`) + `@base-ui/react` 1.9.0, `cn` 0.5.2, `react-router` 8.5.2 (cần Node >= 22.22), `@ag-ui/client` 1.0.5, `zod` 4.6.7, `amazon-cognito-identity-js` 6.3.22, `@fontsource-variable/plus-jakarta-sans` 5.3.0 (tự host, có subset tiếng Việt), `lucide-react` 1.77.0, `vitest` 5.1.1, `@testing-library/react` 16.3.3, `jsdom` 31.0.1, `oxlint` 1.94.0. Phase 2 thêm `recharts` 3.11.0 (đúng bản spike đã chứng minh; tải lười ở chunk riêng). Motion và NumberFlow của spike **chưa dùng** (mực nước hũ chuyển động bằng CSS transition, số tiền không đếm chạy), nên bundle không gánh thêm khoảng 50 KB.
+
+**Kích thước bản build** (`npm run build`, gzip, JS + CSS): phần tải đầu khoảng 238 KB (`index`, React, Zod, Base UI, CSS); chunk biểu đồ `ForecastChart` (Recharts) khoảng 115 KB chỉ tải khi mở Chi tiết hũ hoặc khối dự báo trong chat; sheet chat khoảng 16 KB và `@ag-ui/client` khoảng 53 KB tải khi mở chat; các màn ít dùng (Chuyển tiền, Hoạt động, Onboarding, Nghĩa vụ, Tiền vào, Lương về, Giữa hũ, Thêm hoặc sửa hũ, Chi tiết hũ) mỗi màn 1 đến 4 KB, tải theo route; tổng mọi chunk khoảng 455 KB.
 
 Ghi chú vận hành: `amazon-cognito-identity-js` cần `define: { global: 'globalThis' }` (đã đặt trong `vite.config.ts`); Drawer có vá của spike (snap points, `padding-bottom` theo `--drawer-snap-point-offset`, vùng chạm >= 44 px) và được portal vào khung điện thoại; `build.target` là `es2023` (Tailwind 4 cần Safari >= 16.4).
 

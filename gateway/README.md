@@ -12,8 +12,8 @@ agent (Runtime) --Bearer access token--> Gateway `yofina-gateway` (MCP, JWT auth
 ```
 
 - `interceptor/`: [README](interceptor/README.md) — ghi đè `user_id` từ JWT cho mọi `tools/call`, đóng cửa khi thiếu danh tính.
-- `policies/`: [README](policies/README.md) — Cedar lớp phụ (khớp `user_id`, hạn mức chuyển hũ, dạng `confirm_token`); không phải cơ chế xác nhận (ADR-0002).
-- `tools/`: một thư mục con cho mỗi nhóm tool, xem [tools/README.md](tools/README.md). Hiện có `ledger` (4 tool: `get_jar_balances`, `query_transactions`, `move_between_jars`, `save_turn`).
+- `policies/`: [README](policies/README.md) — Cedar lớp phụ, một policy mỗi tool (khớp `user_id`; tool ghi thêm hạn mức số tiền và dạng `confirm_token`); không phải cơ chế xác nhận (ADR-0002).
+- `tools/`: một thư mục con cho mỗi nhóm tool, xem [tools/README.md](tools/README.md). Hiện có `ledger` (10 tool: năm đọc `get_jar_balances`, `query_transactions`, `get_cashflow_summary`, `get_obligations`, `get_unclassified`; bốn ghi có xác nhận `update_profile`, `record_transaction`, `move_between_jars`, `assign_jar`; và `save_turn`). `save_jars` và `confirm_salary` chỉ có ở REST, không lộ cho agent.
 
 ## Cấu hình, deploy, ngoài CDK
 

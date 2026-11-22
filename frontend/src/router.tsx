@@ -1,22 +1,19 @@
+import type { ComponentType } from 'react'
 import { Navigate, Outlet, createHashRouter, type RouteObject } from 'react-router'
-import { TrendingUp } from 'lucide-react'
 import { RequireAuth } from '@/auth/RequireAuth'
 import { AppShell } from '@/layout/AppShell'
 import { PhoneFrame } from '@/layout/PhoneFrame'
-import { EmptyTabPage } from '@/pages/EmptyTabPage'
+import { TransferFlowProvider } from '@/features/transfer/TransferFlow'
+import { ForesightPage } from '@/pages/ForesightPage'
+import { JarsPage } from '@/pages/JarsPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { OverviewPage } from '@/pages/OverviewPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 
-function JarGlyphLarge({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <rect x="8" y="2.5" width="8" height="3.5" rx="1" />
-      <path d="M7 8.5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2V18a3.5 3.5 0 0 1-3.5 3.5h-3A3.5 3.5 0 0 1 7 18z" />
-      <path d="M7 13h10" />
-    </svg>
-  )
-}
+// Màn ít dùng hơn tải theo route (chunk riêng) để phần tải đầu nhẹ: Tổng quan, Hũ, Nhìn trước, Hồ sơ và Đăng nhập vẫn nằm sẵn.
+const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => ({
+  lazy: async () => ({ Component: (await load())[name] }),
+})
 
 export function appRoutes(): RouteObject[] {
   return [
@@ -37,26 +34,33 @@ export function appRoutes(): RouteObject[] {
           ),
           children: [
             { index: true, element: <OverviewPage /> },
+            { path: 'onboarding', ...page(() => import('@/pages/OnboardingPage'), 'OnboardingPage') },
+            { path: 'jars', element: <JarsPage /> },
+            { path: 'jars/edit', ...page(() => import('@/pages/JarsEditPage'), 'JarsEditPage') },
+            { path: 'jars/:code', ...page(() => import('@/pages/JarDetailPage'), 'JarDetailPage') },
+            { path: 'foresight', element: <ForesightPage /> },
             {
-              path: 'jars',
+              // Chuyển tiền T1 → T2 → T4 → T5; trạng thái nháp nằm trong TransferFlowProvider.
+              path: 'transfer',
               element: (
-                <EmptyTabPage
-                  title="Hũ"
-                  Icon={JarGlyphLarge}
-                  message="Danh sách và chi tiết từng hũ sẽ có ở phiên bản sau. Bây giờ bạn xem số dư các hũ ở Tổng quan."
-                />
+                <TransferFlowProvider>
+                  <Outlet />
+                </TransferFlowProvider>
               ),
+              children: [
+                { index: true, ...page(() => import('@/pages/transfer/TransferPayeePage'), 'TransferPayeePage') },
+                { path: 'amount', ...page(() => import('@/pages/transfer/TransferAmountPage'), 'TransferAmountPage') },
+                { path: 'review', ...page(() => import('@/pages/transfer/TransferReviewPage'), 'TransferReviewPage') },
+                { path: 'receipt', ...page(() => import('@/pages/transfer/TransferReceiptPage'), 'TransferReceiptPage') },
+              ],
             },
-            {
-              path: 'foresight',
-              element: (
-                <EmptyTabPage
-                  title="Nhìn trước"
-                  Icon={TrendingUp}
-                  message="Dự báo ngày mỗi hũ cạn sẽ có ở phiên bản sau. Chưa có số liệu dự báo nào ở đây."
-                />
-              ),
-            },
+            { path: 'activity', ...page(() => import('@/pages/ActivityPage'), 'ActivityPage') },
+            { path: 'obligations', ...page(() => import('@/pages/ObligationsPage'), 'ObligationsPage') },
+            { path: 'obligations/new', ...page(() => import('@/pages/ObligationEditPage'), 'ObligationEditPage') },
+            { path: 'obligations/:id', ...page(() => import('@/pages/ObligationEditPage'), 'ObligationEditPage') },
+            { path: 'income', ...page(() => import('@/pages/IncomePage'), 'IncomePage') },
+            { path: 'move', ...page(() => import('@/pages/MovePage'), 'MovePage') },
+            { path: 'salary', ...page(() => import('@/pages/SalaryPage'), 'SalaryPage') },
             { path: 'profile', element: <ProfilePage /> },
           ],
         },

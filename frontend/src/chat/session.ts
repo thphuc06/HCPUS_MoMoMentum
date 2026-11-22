@@ -64,11 +64,14 @@ function settleBlock(raw: unknown, res: Resolution | undefined): SettledBlock {
   if (!res) return { id, raw }
   if (res.status === 'done') {
     const receipt = blockSchemas.receipt.safeParse(res.receipt)
-    if (receipt.success) {
-      return { id: receipt.data.id, raw: res.receipt, resolved: true, note: { key: receipt.data.id, text: receiptNote(receipt.data) } }
+    const receiptAction = blockSchemas.receipt_action.safeParse(res.receipt)
+    const parsed = receipt.success ? receipt : receiptAction.success ? receiptAction : null
+    if (parsed) {
+      return { id: parsed.data.id, raw: res.receipt, resolved: true, note: { key: parsed.data.id, text: receiptNote(parsed.data) } }
     }
     return { id, raw, ui: 'done', resolved: true }
   }
+  if (res.status === 'cancelled') return { id, raw, ui: 'cancelled' }
   if (res.status === 'expired') return { id, raw, ui: 'expired' }
   return { id, raw }
 }

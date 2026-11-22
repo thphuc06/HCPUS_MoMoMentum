@@ -14,7 +14,7 @@ Hạ tầng dạng code bằng AWS CDK (TypeScript). Region `ap-southeast-1`, đ
 | `YofinaData` | VPC chỉ subnet isolated, Aurora PostgreSQL 17.x Serverless v2 (Data API, 0,5 đến 2 ACU), secret master `yofina-db-master`, secret role `yofina-db-app`, Lambda `yofina-migrator` | termination protection + deletion protection cluster |
 | `YofinaIdentity` | Cognito `yofina-users` (tắt tự đăng ký, đăng nhập email), app client `yofina-web` (SRP, không secret), nhóm `ops` | termination protection |
 | `YofinaFrontend` | Amplify Hosting `yofina-web`, branch `main`, deploy thủ công bằng zip, rewrite SPA | |
-| `YofinaTools` | Lambda `yofina-ledger` (một mã, hai đường vào: Gateway và HTTP API) và HTTP API `yofina-api` (JWT authorizer Cognito, CORS cho Amplify và localhost, 6 route: `/jars`, `/confirmations`, `/actions`, `/demo/reset`, `/conversations`, `/conversations/{conversation_id}`) | cần zip ở `build/lambda/ledger-arm64.zip` (xem dưới); đọc giá trị của stack khác từ SSM lúc deploy |
+| `YofinaTools` | Lambda `yofina-ledger` (một mã, hai đường vào: Gateway và HTTP API), HTTP API `yofina-api` (JWT authorizer Cognito, CORS cho Amplify và localhost, 18 route: `/jars`, `/jars/{jar_code}`, `/overview`, `/profile`, `/transactions`, `/tx-types`, `/payees`, `/obligations`, `/credit-line`, `/salary-events`, `/jar-templates`, `/forecasts/{jar_code}`, `/confirmations`, `/confirmations/cancel`, `/actions`, `/demo/reset`, `/conversations`, `/conversations/{conversation_id}`), EventBridge bus `yofina-bus` và alarm `yofina-ledger-event-publish-failed` | cần zip ở `build/lambda/ledger-arm64.zip` (xem dưới); đọc giá trị của stack khác từ SSM lúc deploy |
 | `YofinaAgent` | Gateway MCP `yofina-gateway` (JWT authorizer, interceptor `yofina-gw-interceptor`, policy engine Cedar một policy mỗi tool, target `ledger` với schema từ `contracts/tools/ledger.json`) và AgentCore Runtime `yofina_agent` (CodeZip ARM64, V2, AG-UI) cùng vai IAM của Gateway và Runtime | L1 (`Cfn*` của `aws-cdk-lib/aws-bedrockagentcore`; chưa dùng L2). Cần khóa zip ở SSM `/yofina/agent/zip-key` (`scripts/agent_deploy.py` ghi); đọc `YofinaTools`, `YofinaIdentity`, `YofinaFoundation` qua SSM |
 
 Stack của các phase sau thêm vào `bin/yofina.ts`. Mỗi stack ghi giá trị luồng khác cần vào SSM `/yofina/...` (xem bên dưới), nên stack sau đọc SSM hoặc nhận prop, không dùng `Fn::ImportValue` cứng.
@@ -43,7 +43,14 @@ Cấu hình riêng của `YofinaTools` (`loadToolsConfig` trong `lib/tools-stack
 | `confirmTokenTtlSeconds` | 120 | Hạn token xác nhận, tối đa 120 ([ADR-0002](../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md)) |
 | `confirmOfferTtlSeconds` | 600 | Hạn của đề nghị trong khối `confirm` |
 | `moveMaxAmountVnd` | 50000000 | Hạn mức một lần chuyển hũ (cùng giá trị với luật Cedar) |
-| `transactionsDefaultLimit` / `transactionsMaxLimit` | 20 / 50 | `query_transactions` |
+| `transactionsDefaultLimit` / `transactionsMaxLimit` | 20 / 50 | `query_transactions` và `GET /transactions` |
+| `transactionMaxAmountVnd` | 50000000 | Hạn mức một giao dịch `record_transaction` (cùng giá trị với luật Cedar) |
+| `salaryDeviationAskPercent` | 10 | Số nhận lệch lương đã khai quá ngưỡng này (phần trăm) thì hỏi có cập nhật lương không |
+| `defaultCreditLimitVnd` | 3000000 | Hạn mức Trả sau (mô phỏng) của tài khoản mới (VND) |
+| `defaultDisplayName` | `Bạn` | Tên hiển thị khi tài khoản chưa có hồ sơ và JWT không có tên (không dùng email) |
+| `forecastFreshnessSeconds` | 3600 | Quá hạn này thì dự báo bị đánh dấu `stale` |
+| `proactiveObligationDays` | 3 | Thẻ chủ động báo nghĩa vụ đến hạn trong N ngày tới |
+| `referenceCacheSeconds` | 300 | Giữ bảng tra (loại giao dịch, biểu phí, hũ mẫu) trong bộ nhớ Lambda |
 | `appTimezone` / `demoAnchorDate` | `Asia/Ho_Chi_Minh` / `2026-11-21` | Đồng hồ mô phỏng ([ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md)) |
 | `dbResumeMaxWaitSeconds` | 18 | Chờ Aurora dậy trong Lambda (nhỏ hơn timeout) |
 | `apiThrottleRate` / `apiThrottleBurst` | 20 / 40 | Giới hạn mặc định của API |
@@ -60,7 +67,7 @@ Cấu hình riêng của `YofinaAgent` (`loadAgentConfig` trong `lib/agent-stack
 | `agentPlatformVersion` | `V2` | Platform của Runtime |
 | `interceptorTimeoutSeconds` | `5` | Timeout Lambda interceptor |
 
-Hạn mức chuyển hũ trong luật Cedar lấy từ `moveMaxAmountVnd` của `YofinaTools` (một giá trị cho cả Lambda và Cedar).
+Hạn mức trong luật Cedar lấy từ `moveMaxAmountVnd` và `transactionMaxAmountVnd` của `YofinaTools` (một giá trị cho cả Lambda và Cedar). Target `ledger` lấy schema từ `contracts/tools/ledger.json` (10 tool) và mỗi tool cần một file `gateway/policies/<tool>.cedar` (thiếu thì synth báo lỗi). Đổi schema tool là cập nhật tại chỗ target (không thay thế).
 
 Account lấy từ credential hiện tại (`CDK_DEFAULT_ACCOUNT`, `scripts/cdk.py` đặt sẵn).
 
@@ -152,6 +159,7 @@ Dùng `uv pip install --python-platform aarch64-manylinux2014 --only-binary=:all
 | `frontend/amplify-app-id`, `frontend/amplify-branch`, `frontend/amplify-url` | Amplify |
 | `api/url` | URL HTTP API `yofina-api` (không có `/` cuối); `print_env.py` ghi thành `VITE_API_BASE_URL` / `YOFINA_API_URL` |
 | `ledger/function-name`, `ledger/function-arn` | Lambda `yofina-ledger` (cho target Gateway của luồng C) |
+| `events/bus-name`, `events/bus-arn` | EventBridge bus `yofina-bus` (sự kiện của ledger; consumer ở đợt sau; test tích hợp dựng rule tạm trên bus này rồi dọn) |
 | `gateway_url`, `gateway/id`, `gateway/arn` | Gateway `yofina-gateway` (URL MCP; `print_env.py python` ghi thành `YOFINA_GATEWAY_URL`) |
 | `agent/runtime-arn`, `agent/runtime-id`, `agent/runtime-url` | Runtime `yofina_agent`; URL invoke đầy đủ (`.../invocations?qualifier=DEFAULT`) ghi thành `VITE_AGENT_RUNTIME_URL`; ARN chứa account ID nên `print_env.py frontend` không ghi nó (Vite nhúng mọi `VITE_*` vào bundle) |
 | `agent/zip-key` | Khóa S3 của zip agent hiện hành (`builds/agent-<hash>.zip`); `scripts/agent_deploy.py` ghi (ngoài CDK) |

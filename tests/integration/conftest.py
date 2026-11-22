@@ -84,7 +84,7 @@ def accounts(sess):
 
 @pytest.fixture(scope="session")
 def tokens(sess, accounts):
-    return {n: login_access_token(n, sess=sess, accounts=accounts) for n in ("minh", "lan")}
+    return {n: login_access_token(n, sess=sess, accounts=accounts) for n in ("minh", "lan", "khoa")}
 
 
 def jwt_sub(token: str) -> str:
@@ -179,12 +179,153 @@ def reset_account(api, who: str) -> dict:
 
 @pytest.fixture(scope="module")
 def fresh(api):
-    """Đặt lại `minh` và `lan` về dữ liệu ban đầu trước và sau mỗi module."""
-    reset_account(api, "minh")
-    reset_account(api, "lan")
+    """Đặt lại `minh`, `lan` và `khoa` về dữ liệu ban đầu trước và sau mỗi module."""
+    for who in ("minh", "lan", "khoa"):
+        reset_account(api, who)
     yield
-    reset_account(api, "minh")
-    reset_account(api, "lan")
+    for who in ("minh", "lan", "khoa"):
+        reset_account(api, who)
 
 
 __all__ = ["REGION"]
+
+
+# --- ví mô phỏng (phase 2): thêm khoa, tài khoản trắng tạm thời, hàng đợi hứng sự kiện tạm thời ----------------
+def master_data_api(sess):
+    """Data API bằng secret MASTER (chỉ để DỌN tài khoản thử; sản phẩm không bao giờ dùng master)."""
+    from yofina_core.db import DataApi, DataApiSettings
+
+    secret_arn = sess.client("secretsmanager").describe_secret(SecretId="yofina-db-master")["ARN"]
+    return DataApi(
+        DataApiSettings(
+            cluster_arn=ssm_param("db/cluster-arn", sess=sess),
+            secret_arn=secret_arn,
+            database=ssm_param("db/name", sess=sess),
+        ),
+        region=REGION,
+    )
+
+
+@pytest.fixture(scope="session")
+def khoa_token(sess, accounts):
+    return login_access_token("khoa", sess=sess, accounts=accounts)
+
+
+@pytest.fixture(scope="module")
+def blank_account(sess):
+    """Tài khoản Cognito trắng, tạo bằng script rồi DỌN (xóa user Cognito và mọi dòng DB của nó). Trả (token, sub)."""
+    import secrets
+    import uuid
+
+    idp = sess.client("cognito-idp")
+    pool = ssm_param("auth/user-pool-id", sess=sess)
+    email = f"yofina-test-{uuid.uuid4().hex[:12]}@example.com"  # sinh lúc chạy, không ghi vào repo
+    password = "Aa1!" + secrets.token_urlsafe(18)
+    idp.admin_create_user(
+        UserPoolId=pool,
+        Username=email,
+        TemporaryPassword=password,
+        MessageAction="SUPPRESS",
+        UserAttributes=[
+            {"Name": "email", "Value": email},
+            {"Name": "email_verified", "Value": "true"},
+        ],
+    )
+    sub = None
+    try:
+        idp.admin_set_user_password(
+            UserPoolId=pool, Username=email, Password=password, Permanent=True
+        )
+        token = login_access_token(
+            "blank", sess=sess, accounts={"blank": {"email": email, "password": password}}
+        )
+        sub = jwt_sub(token)
+        yield token, sub
+    finally:
+        idp.admin_delete_user(UserPoolId=pool, Username=email)
+        if sub:
+            db = master_data_api(sess)
+            with db.transaction(sub) as tx:
+                tx.execute(
+                    "DELETE FROM users WHERE id = :id", {"id": sub}
+                )  # kéo theo mọi dòng (ON DELETE CASCADE)
+
+
+@pytest.fixture()
+def event_sink(sess):
+    """Hàng đợi SQS tạm hứng sự kiện của `yofina-bus` qua một rule tạm; dọn sạch khi xong (không để lại rác)."""
+    import json
+    import uuid
+
+    events, sqs = sess.client("events"), sess.client("sqs")
+    bus = ssm_param("events/bus-name", sess=sess)
+    suffix = uuid.uuid4().hex[:10]
+    queue_name, rule = f"yofina-test-events-{suffix}", f"yofina-test-rule-{suffix}"
+    qurl = sqs.create_queue(QueueName=queue_name, Attributes={"MessageRetentionPeriod": "60"})[
+        "QueueUrl"
+    ]
+    qarn = sqs.get_queue_attributes(QueueUrl=qurl, AttributeNames=["QueueArn"])["Attributes"][
+        "QueueArn"
+    ]
+    try:
+        rule_arn = events.put_rule(
+            Name=rule,
+            EventBusName=bus,
+            EventPattern=json.dumps({"source": ["yofina.ledger"]}),
+            State="ENABLED",
+        )["RuleArn"]
+        sqs.set_queue_attributes(
+            QueueUrl=qurl,
+            Attributes={
+                "Policy": json.dumps(
+                    {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Principal": {"Service": "events.amazonaws.com"},
+                                "Action": "sqs:SendMessage",
+                                "Resource": qarn,
+                                "Condition": {"ArnEquals": {"aws:SourceArn": rule_arn}},
+                            }
+                        ],
+                    }
+                )
+            },
+        )
+        events.put_targets(Rule=rule, EventBusName=bus, Targets=[{"Id": "q", "Arn": qarn}])
+
+        def drain(expected: int, timeout: float = 60.0) -> list[dict]:
+            import time
+
+            got: list[dict] = []
+            end = time.time() + timeout
+            while len(got) < expected and time.time() < end:
+                resp = sqs.receive_message(QueueUrl=qurl, MaxNumberOfMessages=10, WaitTimeSeconds=5)
+                for m in resp.get("Messages", []):
+                    got.append(json.loads(m["Body"]))
+                    sqs.delete_message(QueueUrl=qurl, ReceiptHandle=m["ReceiptHandle"])
+            return got
+
+        yield drain
+    finally:
+        try:
+            events.remove_targets(Rule=rule, EventBusName=bus, Ids=["q"])
+        finally:
+            try:
+                events.delete_rule(Name=rule, EventBusName=bus)
+            finally:
+                sqs.delete_queue(QueueUrl=qurl)
+
+
+def flow(api, who, tool, params, **extra):
+    """Luồng đủ qua REST: POST /confirmations rồi POST /actions. Trả (status, body) của /actions (hoặc lỗi của bước một)."""
+    status, conf = api(who, "POST", "/confirmations", {"tool": tool, "params": params, **extra})
+    if status != 200:
+        return status, conf
+    return api(
+        who,
+        "POST",
+        "/actions",
+        {"tool": tool, "params": conf["params"], "confirm_token": conf["confirm_token"], **extra},
+    )

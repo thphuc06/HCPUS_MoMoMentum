@@ -181,7 +181,7 @@ import { z } from 'zod'
 // `BlockType` và `BLOCK_TYPES` chỉ gồm các khối này để registry biên dịch được và hiện fallback_text cho khối
 // chưa đăng ký. Luồng frontend (phase 2) thêm bốn khối mới vào danh sách ĐỒNG THỜI với việc đăng ký view trong
 // registry.tsx. `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` luôn gồm MỌI khối trong block.schema.json.
-const REGISTERED_BY_FRONTEND = ['jar_summary', 'confirm', 'receipt', 'notice']
+const REGISTERED_BY_FRONTEND = ['jar_summary', 'confirm', 'receipt', 'notice', 'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action']
 for (const t of REGISTERED_BY_FRONTEND) {
   if (!registry.some(([name]) => name === t)) throw new Error(`REGISTERED_BY_FRONTEND có type lạ: ${t}`)
 }

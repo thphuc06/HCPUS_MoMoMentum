@@ -1,16 +1,20 @@
 # gateway/policies/
 
-Luật Cedar của AgentCore Policy tại Gateway `yofina-gateway` (proposal §9, §16). Một file `.cedar` cho **mỗi tool** của [contracts/tools/ledger.json](../../contracts/tools/ledger.json), tên file trùng tên tool; mặc định từ chối, nên tool nào thiếu policy thì không gọi được. Stack `YofinaAgent` (`infra-cdk/lib/agent-stack.ts`) đọc các file này, bỏ dòng chú thích `//`, thay `${GATEWAY_ARN}` (token CloudFormation) và `${MOVE_MAX_AMOUNT_VND}` (cùng giá trị với `moveMaxAmountVnd` của Lambda ledger) rồi tạo `AWS::BedrockAgentCore::Policy` với `validationMode: FAIL_ON_ANY_FINDINGS`. Synth báo lỗi nếu một tool không có file.
+Luật Cedar của AgentCore Policy tại Gateway `yofina-gateway` (proposal §9, §16). Một file `.cedar` cho **mỗi tool** của [contracts/tools/ledger.json](../../contracts/tools/ledger.json), tên file trùng tên tool; mặc định từ chối, nên tool nào thiếu policy thì không gọi được. Stack `YofinaAgent` (`infra-cdk/lib/agent-stack.ts`) đọc các file này, bỏ dòng chú thích `//`, thay `${GATEWAY_ARN}` (token CloudFormation), `${MOVE_MAX_AMOUNT_VND}` và `${TRANSACTION_MAX_AMOUNT_VND}` (cùng giá trị với `moveMaxAmountVnd` và `transactionMaxAmountVnd` của Lambda ledger) rồi tạo `AWS::BedrockAgentCore::Policy` với `validationMode: FAIL_ON_ANY_FINDINGS`. Synth báo lỗi nếu một tool không có file.
 
 | File | Điều kiện (`when`) |
 |---|---|
-| `get_jar_balances.cedar`, `query_transactions.cedar`, `save_turn.cedar` | `context.input has user_id && context.input.user_id == principal.id` |
+| `get_jar_balances.cedar`, `query_transactions.cedar`, `get_cashflow_summary.cedar`, `get_obligations.cedar`, `get_unclassified.cedar`, `save_turn.cedar` | `context.input has user_id && context.input.user_id == principal.id` |
 | `move_between_jars.cedar` | như trên, thêm `context.input.amount_vnd <= ${MOVE_MAX_AMOUNT_VND}` và `if context.input has confirm_token then context.input.confirm_token like "*.*" else true` |
+| `record_transaction.cedar` | như `move_between_jars` với hạn mức `${TRANSACTION_MAX_AMOUNT_VND}` |
+| `update_profile.cedar`, `assign_jar.cedar` | khớp `user_id` và, nếu có `confirm_token`, dạng `"*.*"`; không có số tiền một lần nên không có hạn mức |
+
+`save_jars` và `confirm_salary` không có policy vì không lộ cho agent (chỉ REST). Test `tests/unit/test_ledger_wallet.py` khẳng định mỗi tool của hợp đồng có đúng một file, đúng dạng, và hạn mức luôn đi qua placeholder (không có số gắn cứng).
 
 Cedar ở đây là **lớp phụ** ([ADR-0002](../../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md)), không phải cơ chế xác nhận:
 
 - Lớp chính là interceptor ([../interceptor/](../interceptor/README.md)) ghi đè `user_id` từ JWT; Cedar thấy tham số **đã bị ghi đè** (thứ tự `JWT authorizer -> interceptor -> Cedar -> kiểm schema -> Lambda`), nên điều kiện `user_id == principal.id` luôn đúng khi interceptor chạy và đóng vai bảo hiểm cấu hình: gỡ interceptor thì Cedar vẫn chặn (đã thử ở [spike-vertical-slice.md](../../docs/research/spike-vertical-slice.md) mục 2: Gateway thử không interceptor, `user_id` của người khác hoặc vắng đều bị `-32002`).
-- **Cedar không được chặn lời gọi `move_between_jars` thiếu `confirm_token`**: agent gọi tool này không token để nhận `NEEDS_CONFIRMATION` (không ghi). Việc kiểm token (chữ ký HMAC, hạn, tool, người, hash tham số, `jti` dùng một lần) nằm ở Lambda; Cedar không kiểm được chữ ký.
+- **Cedar không được chặn lời gọi tool ghi (`move_between_jars`, `record_transaction`, `update_profile`, `assign_jar`) thiếu `confirm_token`**: agent gọi các tool này không token để nhận `NEEDS_CONFIRMATION` (không ghi). Việc kiểm token (chữ ký HMAC, hạn, tool, người, hash tham số, `jti` dùng một lần) nằm ở Lambda; Cedar không kiểm được chữ ký.
 - Bộ kiểm kiểu của Cedar từ chối `!(context.input has x) || context.input.x ...` ("unable to guarantee safety of access to optional attribute"); dạng `if context.input has x then ... else true` hoặc `has x && ...` thì qua.
 - `user_id` là tham số **tùy chọn** trong schema (LLM thấy "hệ thống tự điền, để trống"); vắng `user_id` ở Cedar thì `has` ra false và bị từ chối, nên interceptor là bắt buộc cho đường chạy bình thường.
 - Chế độ engine đặt bằng context CDK `policyMode` (`LOG_ONLY` hoặc `ENFORCE`, mặc định `ENFORCE`). Đưa lên `LOG_ONLY`, xem metric CloudWatch `AWS/Bedrock-AgentCore` (`AllowDecisions`, `DenyDecisions` theo `Mode`, `ToolName`), rồi `ENFORCE`; test `tests/integration/test_gateway_config.py` khẳng định `ENFORCE` để chạy lại khi đóng phase.

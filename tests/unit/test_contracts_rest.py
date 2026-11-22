@@ -32,6 +32,7 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
         # phase 1
         ("GET", "/jars"),
         ("POST", "/confirmations"),
+        ("POST", "/confirmations/cancel"),
         ("POST", "/actions"),
         ("POST", "/demo/reset"),
         ("GET", "/conversations"),
@@ -55,9 +56,14 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
 
 
 def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
-    """Mọi thao tác ghi đi qua token xác nhận: ngoài hai endpoint đó chỉ có demo/reset là POST."""
+    """Mọi thao tác ghi đi qua token xác nhận: ngoài hai endpoint đó chỉ có huỷ đề nghị (không ghi sổ cái) và demo/reset."""
     writes = {op for op in operations() if op[0] != "GET"}
-    assert writes == {("POST", "/confirmations"), ("POST", "/actions"), ("POST", "/demo/reset")}
+    assert writes == {
+        ("POST", "/confirmations"),
+        ("POST", "/confirmations/cancel"),
+        ("POST", "/actions"),
+        ("POST", "/demo/reset"),
+    }
 
 
 def test_moi_operation_co_id_duy_nhat_va_x_lambda_hop_le():
@@ -145,6 +151,18 @@ VALID = {
     "ConfirmationResponse": {
         "confirm_token": TOKEN, "expires_at": "2026-12-10T03:02:00Z", "ttl_seconds": 120,
         "tool": "move_between_jars", "params": PARAMS, "params_hash": HASH,
+    },
+    "ConfirmationResponse.co_xem_truoc": {
+        "confirm_token": TOKEN, "expires_at": "2026-12-10T03:02:00Z", "ttl_seconds": 120,
+        "tool": "move_between_jars", "params": PARAMS, "params_hash": HASH,
+        "preview": {
+            "summary": "Chuyển 100.000 ₫ từ Giải trí sang Ăn uống",
+            "changes": [
+                {"label": "Hũ Giải trí", "before": "760.000 ₫", "after": "660.000 ₫"},
+                {"label": "Phải trả ngày 05/12", "before": "chưa có", "after": "333.000 ₫"},
+            ],
+            "warnings": ["Phí dịch vụ 33.000 ₫ tính một lần cho tháng có giao dịch."],
+        },
     },
     "ActionRequest": {"tool": "move_between_jars", "params": PARAMS, "confirm_token": TOKEN},
     "ActionRequest.voi_de_nghi": {

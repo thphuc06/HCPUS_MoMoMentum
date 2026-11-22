@@ -33,55 +33,29 @@ from typing import Any, Protocol
 
 from yofina_core.config import Config
 from yofina_core.errors import ErrorCode, YofinaError
-from yofina_core.money import to_vnd
 
-MOVE_BETWEEN_JARS = "move_between_jars"
-JAR_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
-MAX_VND = 99_999_999_999_999  # numeric(14,0)
+# Chuẩn hóa tham số nằm ở yofina_core.params; re-export để mã cũ vẫn import từ đây.
+from yofina_core.params import (
+    JAR_CODE_RE,
+    MAX_VND,
+    NormContext,
+    ParamsError,
+    TxTypeInfo,
+    normalize_move_params,
+    normalize_params,
+)
+from yofina_core.wallet import MOVE_BETWEEN_JARS
 
-_MOVE_KEYS = ("from_jar", "to_jar", "amount_vnd")
-
-
-class ParamsError(ValueError):
-    """Tham số tool không hợp lệ (ứng với `ErrorCode.PARAMS_INVALID`)."""
-
-
-def _jar_code(name: str, value: Any) -> str:
-    if not isinstance(value, str):
-        raise ParamsError(f"{name} phải là chuỗi mã hũ")
-    code = value.strip().lower()
-    if not JAR_CODE_RE.fullmatch(code):
-        raise ParamsError(f"{name} không phải mã hũ hợp lệ: {value!r}")
-    return code
-
-
-def normalize_move_params(params: Mapping[str, Any]) -> dict[str, Any]:
-    """Chuẩn hóa tham số của `move_between_jars`.
-
-    Chỉ giữ `from_jar`, `to_jar`, `amount_vnd` (bỏ `user_id`, `confirm_token` và tham số lạ);
-    mã hũ cắt khoảng trắng và hạ chữ thường; số tiền là số nguyên VND trong [1, MAX_VND].
-    Idempotent: chuẩn hóa hai lần cho cùng kết quả.
-    """
-    missing = [k for k in _MOVE_KEYS if k not in params]
-    if missing:
-        raise ParamsError(f"Thiếu tham số: {', '.join(missing)}")
-    from_jar = _jar_code("from_jar", params["from_jar"])
-    to_jar = _jar_code("to_jar", params["to_jar"])
-    if from_jar == to_jar:
-        raise ParamsError("Hũ nguồn và hũ đích phải khác nhau")
-    try:
-        amount = to_vnd(params["amount_vnd"])
-    except (TypeError, ValueError) as exc:
-        raise ParamsError(f"amount_vnd không hợp lệ: {exc}") from exc
-    if not 1 <= amount <= MAX_VND:
-        raise ParamsError(f"amount_vnd phải trong khoảng 1..{MAX_VND}")
-    return {"from_jar": from_jar, "to_jar": to_jar, "amount_vnd": amount}
-
-
-def normalize_params(tool: str, params: Mapping[str, Any]) -> dict[str, Any]:
-    if tool == MOVE_BETWEEN_JARS:
-        return normalize_move_params(params)
-    raise ParamsError(f"Tool không hỗ trợ xác nhận: {tool!r}")
+__all__ = [
+    "JAR_CODE_RE",
+    "MAX_VND",
+    "MOVE_BETWEEN_JARS",
+    "NormContext",
+    "ParamsError",
+    "TxTypeInfo",
+    "normalize_move_params",
+    "normalize_params",
+]
 
 
 def canonical_json(obj: Any) -> str:
@@ -99,7 +73,8 @@ def hash_normalized_params(tool: str, normalized: Mapping[str, Any]) -> str:
 
 
 def params_hash(tool: str, params: Mapping[str, Any]) -> str:
-    """sha256 (hex thường, 64 ký tự) của `{"tool", "params"}` đã chuẩn hóa."""
+    """sha256 (hex thường, 64 ký tự) của `{"tool", "params"}` đã chuẩn hóa (không cần ngữ cảnh: bản đã chuẩn hóa
+    đầy đủ thì chuẩn hóa lại không đổi)."""
     return hash_normalized_params(tool, normalize_params(tool, params))
 
 
@@ -383,6 +358,10 @@ class ConfirmService:
         )
         check_binding(payload, sub=sub, tool=tool, params_hash=params_hash(tool, normalized))
         return payload
+
+    def consume(self, payload: TokenPayload) -> None:
+        """Tiêu `jti` của token đã `verify` (dùng một lần). Tách khỏi `verify` để nghiệp vụ kiểm trước khi mất token."""
+        self._jti.consume(payload.jti, payload.exp)
 
     def verify_and_consume(
         self, token: str | None, *, sub: str, tool: str, params: Mapping[str, Any]

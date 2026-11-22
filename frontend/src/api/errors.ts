@@ -19,6 +19,15 @@ export const ERROR_CODES = [
   'MODEL_BUDGET_EXCEEDED',
   'DATABASE_UNAVAILABLE',
   'INTERNAL_ERROR',
+  'PROFILE_INCOMPLETE',
+  'TRANSACTION_NOT_FOUND',
+  'OBLIGATION_NOT_FOUND',
+  'PAYEE_NOT_FOUND',
+  'SALARY_EVENT_NOT_FOUND',
+  'JAR_PROTECTED',
+  'CREDIT_LIMIT_EXCEEDED',
+  'DUPLICATE_TRANSACTION',
+  'FORECAST_UNAVAILABLE',
 ] as const
 
 export const ErrorCode = z.enum(ERROR_CODES)
@@ -46,6 +55,15 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   MODEL_BUDGET_EXCEEDED: 503,
   DATABASE_UNAVAILABLE: 503,
   INTERNAL_ERROR: 500,
+  PROFILE_INCOMPLETE: 422,
+  TRANSACTION_NOT_FOUND: 404,
+  OBLIGATION_NOT_FOUND: 404,
+  PAYEE_NOT_FOUND: 404,
+  SALARY_EVENT_NOT_FOUND: 404,
+  JAR_PROTECTED: 422,
+  CREDIT_LIMIT_EXCEEDED: 422,
+  DUPLICATE_TRANSACTION: 409,
+  FORECAST_UNAVAILABLE: 503,
 }
 
 /** Thông báo tiếng Việt cho từng mã lỗi (thay vì hiện mã thô hay chữ tiếng Anh của server). */
@@ -66,6 +84,15 @@ export const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   MODEL_BUDGET_EXCEEDED: 'Trợ lý đã dùng hết lượt hôm nay. Số liệu vẫn xem được.',
   DATABASE_UNAVAILABLE: 'Hệ thống đang khởi động. Thử lại sau vài giây.',
   INTERNAL_ERROR: 'Có lỗi ở phía hệ thống. Thử lại sau ít phút.',
+  PROFILE_INCOMPLETE: 'Bạn cần khai lương và ngày nhận lương trước thì mới làm được việc này.',
+  TRANSACTION_NOT_FOUND: 'Không tìm thấy giao dịch này trong tài khoản của bạn.',
+  OBLIGATION_NOT_FOUND: 'Không tìm thấy khoản nghĩa vụ này. Có thể nó đã được xóa.',
+  PAYEE_NOT_FOUND: 'Không tìm thấy người nhận này trong danh bạ của bạn.',
+  SALARY_EVENT_NOT_FOUND: 'Không tìm thấy khoản lương cần xác nhận. Có thể nó đã được xử lý.',
+  JAR_PROTECTED: 'Hũ hệ thống, hũ còn tiền hoặc còn nghĩa vụ thì chưa sửa hay bỏ được.',
+  CREDIT_LIMIT_EXCEEDED: 'Vượt hạn mức Trả sau còn lại. Chọn số tiền nhỏ hơn hoặc trả từ hũ.',
+  DUPLICATE_TRANSACTION: 'Giao dịch này đã được ghi rồi, không ghi thêm. Bạn kiểm tra ở Hoạt động nhé.',
+  FORECAST_UNAVAILABLE: 'Chưa có dự báo cho hũ này và chưa tính được ngay. Thử lại sau ít phút.',
   NETWORK: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
   INVALID_RESPONSE: 'Máy chủ trả dữ liệu không đọc được. Thử lại sau ít phút.',
   SESSION_EXPIRED: 'Phiên đăng nhập đã hết hạn. Bạn đăng nhập lại nhé.',
@@ -84,7 +111,7 @@ export class ApiError extends Error {
     this.code = code
     this.status = status
     this.traceId = traceId
-    this.retryable = code === 'DATABASE_UNAVAILABLE' || code === 'NETWORK' || code === 'RATE_LIMITED' || code === 'INTERNAL_ERROR'
+    this.retryable = code === 'DATABASE_UNAVAILABLE' || code === 'FORECAST_UNAVAILABLE' || code === 'NETWORK' || code === 'RATE_LIMITED' || code === 'INTERNAL_ERROR'
   }
 }
 

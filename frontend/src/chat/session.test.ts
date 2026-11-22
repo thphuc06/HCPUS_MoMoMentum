@@ -355,6 +355,29 @@ describe('ChatSession: phát lại trạng thái đề nghị từ server', () =
     expect(session.getHistory().map((m) => m.role)).toEqual(['user', 'assistant']) // chưa thực hiện: không có ghi chú
   })
 
+  it('cancelled (đã bấm "Không", server giữ): khối giữ lại, đánh dấu hủy, không ghi chú hệ thống; hũ khối confirm_action cũng vậy', () => {
+    const { session } = makeSession([])
+    const c = confirm()
+    session.hydrate([turnWith(c, [{ block_id: c.id, status: 'cancelled', resolved_at: '2026-11-21T01:01:00Z' }])])
+    expect(session.getSnapshot().items[1]).toMatchObject({ id: c.id, ui: 'cancelled' })
+    expect(session.getSnapshot().items[1]).not.toHaveProperty('resolved', true)
+    expect(session.getHistory().map((m) => m.role)).toEqual(['user', 'assistant'])
+    const a = validBlock('confirm_action.record_transaction') as { id: string }
+    session.hydrate([turnWith(a, [{ block_id: a.id, status: 'cancelled', resolved_at: '2026-11-21T01:01:00Z' }])])
+    expect(session.getSnapshot().items[1]).toMatchObject({ id: a.id, ui: 'cancelled' })
+  })
+
+  it('done với biên nhận receipt_action (thao tác ghi khác chuyển hũ): biên nhận thay chỗ khối confirm_action', () => {
+    const { session } = makeSession([])
+    const a = validBlock('confirm_action.record_transaction') as { id: string }
+    const receipt = validBlock('receipt_action.record_transaction') as { id: string }
+    session.hydrate([turnWith(a, [{ block_id: a.id, status: 'done', resolved_at: '2026-11-21T01:01:00Z', receipt }])])
+    const items = session.getSnapshot().items
+    expect(items[1]).toMatchObject({ kind: 'block', id: receipt.id, resolved: true })
+    expect(session.getHistory().map((m) => m.role)).toEqual(['user', 'assistant', 'system'])
+    expect(session.getHistory()[2]!.content).toContain('Hệ thống ghi nhận')
+  })
+
   it('pending và server cũ không có resolutions: khối nguyên vẹn, chưa đánh dấu gì', () => {
     const { session } = makeSession([])
     const c = confirm()

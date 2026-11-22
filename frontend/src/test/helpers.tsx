@@ -1,12 +1,26 @@
 import type { ReactNode } from 'react'
 import { vi } from 'vitest'
-import { ApiProvider, JarsProvider } from '@/api/ApiProvider'
+import { ApiProvider } from '@/api/ApiProvider'
+import { OverviewProvider } from '@/api/OverviewProvider'
 import type { ApiClient } from '@/api/client'
-import type { JarsResponse } from '@/api/schemas'
+import type {
+  CreditLineResponse,
+  ForecastResponse,
+  JarDetailResponse,
+  JarTemplatesResponse,
+  JarsResponse,
+  ObligationsResponse,
+  OverviewResponse,
+  PayeesResponse,
+  ProfileResponse,
+  SalaryEventsResponse,
+  TransactionsResponse,
+  TxTypesResponse,
+} from '@/api/schemas'
 import { AuthProvider } from '@/auth/AuthProvider'
 import type { AuthClient, AuthSession } from '@/auth/types'
 import { ChatActionsContext, type ChatActions } from '@/chat/actions'
-import { validBlock } from './fixtures'
+import { restFixture, validBlock } from './fixtures'
 
 export function session(overrides: Partial<AuthSession> = {}): AuthSession {
   return { accessToken: 'access-1', expiresAt: Date.now() + 60 * 60_000, email: 'nguoi.dung@example.invalid', ...overrides }
@@ -34,12 +48,27 @@ export function jarsFromFixture(): JarsResponse {
   return { app_date: '2026-11-21', as_of: '2026-12-10T03:00:00Z', jars: b.data.jars, jars_total_vnd: b.data.jars_total_vnd }
 }
 
+const fx = <T,>(name: string) => restFixture(name) as unknown as T
+
+/** Mặc định mọi GET trả fixture hợp đồng (persona minh); test ghi đè từng hàm khi cần. */
 export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
   return {
     getJars: vi.fn(async () => jarsFromFixture()),
+    getOverview: vi.fn(async () => fx<OverviewResponse>('OverviewResponse.minh')),
+    getProfile: vi.fn(async () => fx<ProfileResponse>('ProfileResponse.minh')),
+    getJar: vi.fn(async () => fx<JarDetailResponse>('JarDetailResponse.an_uong')),
+    getForecast: vi.fn(async () => validBlock('forecast_timeline.short') as unknown as ForecastResponse),
+    listTransactions: vi.fn(async () => fx<TransactionsResponse>('TransactionsResponse.page')),
+    listTxTypes: vi.fn(async () => fx<TxTypesResponse>('TxTypesResponse.default')),
+    listPayees: vi.fn(async () => fx<PayeesResponse>('PayeesResponse.default')),
+    listObligations: vi.fn(async () => fx<ObligationsResponse>('ObligationsResponse.active')),
+    getCreditLine: vi.fn(async () => fx<CreditLineResponse>('CreditLineResponse.default')),
+    listSalaryEvents: vi.fn(async () => fx<SalaryEventsResponse>('SalaryEventsResponse.pending')),
+    listJarTemplates: vi.fn(async () => fx<JarTemplatesResponse>('JarTemplatesResponse.default')),
     createConfirmation: vi.fn(async () => {
       throw new Error('createConfirmation chưa được giả')
     }),
+    cancelConfirmation: vi.fn(async (req) => ({ block_id: req.confirm_block_id, status: 'cancelled' as const, resolved_at: '2026-12-10T03:00:00Z' })),
     applyAction: vi.fn(async () => {
       throw new Error('applyAction chưa được giả')
     }),
@@ -66,9 +95,9 @@ export function fakeChatActions() {
 export function Providers({ api, actions, auth, children }: { api: ApiClient; actions?: ChatActions; auth?: AuthClient; children: ReactNode }) {
   const inner = (
     <ApiProvider client={api}>
-      <JarsProvider>
+      <OverviewProvider>
         <ChatActionsContext.Provider value={actions ?? fakeChatActions()}>{children}</ChatActionsContext.Provider>
-      </JarsProvider>
+      </OverviewProvider>
     </ApiProvider>
   )
   return auth ? <AuthProvider client={auth}>{inner}</AuthProvider> : inner

@@ -3,6 +3,10 @@ import * as path from 'path';
 import { App, CfnOutput, Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as sns from 'aws-cdk-lib/aws-sns';
 import { HttpJwtAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -30,6 +34,20 @@ export interface ToolsConfig {
   readonly moveMaxAmountVnd: number;
   readonly transactionsDefaultLimit: number;
   readonly transactionsMaxLimit: number;
+  /** Hạn mức số tiền một giao dịch ghi bằng `record_transaction` (VND); cùng giá trị với luật Cedar. */
+  readonly transactionMaxAmountVnd: number;
+  /** Số nhận lệch lương đã khai quá ngưỡng này (phần trăm) thì hỏi có cập nhật lương không. */
+  readonly salaryDeviationAskPercent: number;
+  /** Hạn mức Trả sau (mô phỏng) của tài khoản mới (VND). */
+  readonly defaultCreditLimitVnd: number;
+  /** Tên hiển thị khi tài khoản chưa có hồ sơ và JWT không có tên. */
+  readonly defaultDisplayName: string;
+  /** Quá hạn độ tươi này (giây) thì dự báo bị đánh dấu `stale`. */
+  readonly forecastFreshnessSeconds: number;
+  /** Thẻ chủ động báo nghĩa vụ đến hạn trong N ngày tới. */
+  readonly proactiveObligationDays: number;
+  /** Giữ bảng tra (loại giao dịch, biểu phí, hũ mẫu) trong bộ nhớ Lambda bao lâu (giây). */
+  readonly referenceCacheSeconds: number;
   /** Múi giờ ứng dụng và ngày neo của đồng hồ mô phỏng (ADR-0003). */
   readonly appTimezone: string;
   readonly demoAnchorDate: string;
@@ -74,6 +92,13 @@ export function loadToolsConfig(app: App): ToolsConfig {
     moveMaxAmountVnd: ctxNum(app, 'moveMaxAmountVnd', 50_000_000),
     transactionsDefaultLimit: ctxNum(app, 'transactionsDefaultLimit', 20),
     transactionsMaxLimit: ctxNum(app, 'transactionsMaxLimit', 50),
+    transactionMaxAmountVnd: ctxNum(app, 'transactionMaxAmountVnd', 50_000_000),
+    salaryDeviationAskPercent: ctxNum(app, 'salaryDeviationAskPercent', 10),
+    defaultCreditLimitVnd: ctxNum(app, 'defaultCreditLimitVnd', 3_000_000),
+    defaultDisplayName: ctxStr(app, 'defaultDisplayName', 'Bạn'),
+    forecastFreshnessSeconds: ctxNum(app, 'forecastFreshnessSeconds', 3600),
+    proactiveObligationDays: ctxNum(app, 'proactiveObligationDays', 3),
+    referenceCacheSeconds: ctxNum(app, 'referenceCacheSeconds', 300),
     appTimezone: ctxStr(app, 'appTimezone', 'Asia/Ho_Chi_Minh'),
     demoAnchorDate: ctxStr(app, 'demoAnchorDate', '2026-11-21'),
     dbResumeMaxWaitSeconds: resume,
@@ -102,6 +127,7 @@ export interface ToolsProps extends StackProps {
 export class ToolsStack extends Stack {
   public readonly ledger: lambda.Function;
   public readonly api: apigwv2.HttpApi;
+  public readonly bus: events.EventBus;
 
   constructor(scope: Construct, id: string, props: ToolsProps) {
     super(scope, id, props);
@@ -123,10 +149,13 @@ export class ToolsStack extends Stack {
     const clientId = param('auth/client-id');
     const amplifyUrl = param('frontend/amplify-url');
 
+    // --- EventBridge bus: sự kiện của ledger (transaction.recorded, salary.confirmed, ...). Consumer ở đợt sau. -----
+    this.bus = new events.EventBus(this, 'Bus', { eventBusName: `${p}-bus` });
+
     // --- Lambda ledger ---------------------------------------------------------------------
     this.ledger = new lambda.Function(this, 'Ledger', {
       functionName: `${p}-ledger`,
-      description: 'Tool ledger: so du hu, giao dich, chuyen hu co xac nhan; Gateway va HTTP API',
+      description: 'Tool ledger: vi mo phong (hu, giao dich, nghia vu, tra sau, luong, du bao doc); Gateway va HTTP API',
       runtime: lambda.Runtime.PYTHON_3_13,
       architecture: lambda.Architecture.ARM_64,
       handler: 'handler.lambda_handler',
@@ -153,6 +182,14 @@ export class ToolsStack extends Stack {
         YOFINA_MOVE_MAX_AMOUNT_VND: String(tools.moveMaxAmountVnd),
         YOFINA_TRANSACTIONS_DEFAULT_LIMIT: String(tools.transactionsDefaultLimit),
         YOFINA_TRANSACTIONS_MAX_LIMIT: String(tools.transactionsMaxLimit),
+        YOFINA_TRANSACTION_MAX_AMOUNT_VND: String(tools.transactionMaxAmountVnd),
+        YOFINA_SALARY_DEVIATION_ASK_PERCENT: String(tools.salaryDeviationAskPercent),
+        YOFINA_DEFAULT_CREDIT_LIMIT_VND: String(tools.defaultCreditLimitVnd),
+        YOFINA_DEFAULT_DISPLAY_NAME: tools.defaultDisplayName,
+        YOFINA_FORECAST_FRESHNESS_SECONDS: String(tools.forecastFreshnessSeconds),
+        YOFINA_PROACTIVE_OBLIGATION_DAYS: String(tools.proactiveObligationDays),
+        YOFINA_REFERENCE_CACHE_SECONDS: String(tools.referenceCacheSeconds),
+        YOFINA_EVENT_BUS_NAME: this.bus.eventBusName,
         YOFINA_APP_TIMEZONE: tools.appTimezone,
         YOFINA_DEMO_ANCHOR_DATE: tools.demoAnchorDate,
       },
@@ -188,6 +225,14 @@ export class ToolsStack extends Stack {
       }),
     );
 
+    this.ledger.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'PublishLedgerEvents',
+        actions: ['events:PutEvents'],
+        resources: [this.bus.eventBusArn],
+      }),
+    );
+
     // --- HTTP API + JWT authorizer của Cognito -----------------------------------------------
     // Frontend chỉ gửi ACCESS token (có `client_id`, không có `aud`): HTTP API so `jwtAudience` với `aud` hoặc `client_id`.
     const issuer = `https://cognito-idp.${cfg.region}.amazonaws.com/${userPoolId}`;
@@ -211,9 +256,23 @@ export class ToolsStack extends Stack {
       },
     });
     const integration = new HttpLambdaIntegration('LedgerIntegration', this.ledger);
+    // Mọi route do Lambda ledger phục vụ (contracts/rest/openapi.yaml). `GET /forecasts/{jar_code}` đọc bảng dự báo
+    // ở đợt này nên cũng đi vào ledger; luồng C có thể chuyển sang Lambda `forecast` (x-lambda trong OpenAPI) khi cài.
     const routes: Array<[string, apigwv2.HttpMethod]> = [
       ['/jars', apigwv2.HttpMethod.GET],
+      ['/jars/{jar_code}', apigwv2.HttpMethod.GET],
+      ['/overview', apigwv2.HttpMethod.GET],
+      ['/profile', apigwv2.HttpMethod.GET],
+      ['/transactions', apigwv2.HttpMethod.GET],
+      ['/tx-types', apigwv2.HttpMethod.GET],
+      ['/payees', apigwv2.HttpMethod.GET],
+      ['/obligations', apigwv2.HttpMethod.GET],
+      ['/credit-line', apigwv2.HttpMethod.GET],
+      ['/salary-events', apigwv2.HttpMethod.GET],
+      ['/jar-templates', apigwv2.HttpMethod.GET],
+      ['/forecasts/{jar_code}', apigwv2.HttpMethod.GET],
       ['/confirmations', apigwv2.HttpMethod.POST],
+      ['/confirmations/cancel', apigwv2.HttpMethod.POST],
       ['/actions', apigwv2.HttpMethod.POST],
       ['/demo/reset', apigwv2.HttpMethod.POST],
       ['/conversations', apigwv2.HttpMethod.GET],
@@ -230,8 +289,28 @@ export class ToolsStack extends Stack {
       };
     }
 
+    // Cảnh báo khi phát sự kiện lỗi: metric EventPublishFailed do Lambda ghi bằng EMF (không cần quyền PutMetricData).
+    const alertTopic = sns.Topic.fromTopicArn(this, 'AlertTopic', param('sns/alert-topic-arn'));
+    const publishFailed = new cloudwatch.Metric({
+      namespace: 'Yofina/Ledger',
+      metricName: 'EventPublishFailed',
+      statistic: 'Sum',
+      period: Duration.minutes(5),
+      dimensionsMap: { DetailType: 'transaction.recorded' },
+    });
+    new cloudwatch.Alarm(this, 'EventPublishFailedAlarm', {
+      alarmName: `${p}-ledger-event-publish-failed`,
+      alarmDescription: 'Ledger khong phat duoc su kien transaction.recorded len yofina-bus (viec ghi van thanh cong; nightly bu)',
+      metric: publishFailed,
+      threshold: 1,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    }).addAlarmAction(new cwActions.SnsAction(alertTopic));
+
     const apiUrl = this.api.apiEndpoint;
     publishParams(this, {
+      'events/bus-name': this.bus.eventBusName,
+      'events/bus-arn': this.bus.eventBusArn,
       'api/url': apiUrl,
       'ledger/function-name': this.ledger.functionName,
       'ledger/function-arn': this.ledger.functionArn,

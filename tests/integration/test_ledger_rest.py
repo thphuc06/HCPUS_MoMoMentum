@@ -297,7 +297,7 @@ def test_dat_lai_dua_ve_dung_so_ban_dau(api, schema_validator):
     status, body = api("minh", "POST", "/demo/reset", timeout=60)
     assert status == 200, body
     schema_validator.openapi("ResetResponse", body)
-    assert body["jars_count"] == 7 and 30 <= body["transactions_count"] <= 120
+    assert body["jars_count"] == 7 and body["transactions_count"] >= 100
     assert balances(api, "minh")[0] == MINH_BALANCES
     # đồng hồ mô phỏng về ngày neo: ngày mô phỏng = 2026-11-21 ngay sau khi đặt lại
     assert body["app_date"] == "2026-11-21"

@@ -282,7 +282,7 @@ def test_tx_type_map_ma_hu_chuan_deu_co_trong_jar_templates_va_loai_noi_bo_khong
         parts = [p.strip() for p in re.findall(r"'[^']*'|[A-Za-z0-9_]+", r)]
         rows.append(parts)
     assert len(rows) >= 28
-    for tx_type, _label, direction, jar, role, selectable, _order in rows:
+    for tx_type, _label, direction, jar, role, selectable, _order, _person in rows:
         tx_type, direction = tx_type.strip("'"), direction.strip("'")
         assert re.fullmatch(r"[a-z][a-z0-9_]{0,39}", tx_type)
         assert (jar == "NULL") or jar.strip("'") in jar_codes, (tx_type, jar)

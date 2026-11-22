@@ -29,6 +29,14 @@ SETTINGS = LedgerSettings(
     transactions_max_limit=50,
     app_timezone="Asia/Ho_Chi_Minh",
     demo_anchor_date=date(2026, 11, 21),
+    transaction_max_amount_vnd=50_000_000,
+    salary_deviation_ask_percent=Decimal(10),
+    default_credit_limit_vnd=3_000_000,
+    default_display_name="Bạn",
+    forecast_freshness_seconds=900,
+    proactive_obligation_days=3,
+    reference_cache_seconds=300,
+    event_bus_name="",
 )
 
 JARS = [
@@ -104,16 +112,61 @@ class FakeRepo:
     def clock_offset(self, uid: str) -> int:
         return self.users[uid]["offset"] if uid in self.users else 0
 
-    def query_transactions(self, uid, *, jar, from_date, to_date, limit):
+    def list_transactions(
+        self,
+        uid,
+        *,
+        jar=None,
+        from_date=None,
+        to_date=None,
+        kind=None,
+        tx_type=None,
+        needs_review=None,
+        cursor=None,
+        limit=20,
+    ):
         rows = [
             t
             for t in self.transactions.get(uid, [])
             if (jar is None or t["jar_code"] == jar)
+            and (kind is None or t["kind"] == kind)
             and (from_date is None or t["app_date"] >= from_date)
             and (to_date is None or t["app_date"] <= to_date)
         ]
         rows.sort(key=lambda t: t["occurred_at"], reverse=True)
         return rows[:limit]
+
+    # --- bảng tra (ReferenceData đọc qua các hàm này) ---
+    def reference_tx_types(self):
+        return []
+
+    def reference_fees(self):
+        return []
+
+    def reference_templates(self):
+        return []
+
+    def confirm_block(self, uid, conversation_id, block_id):
+        for t in sorted(self.turns.get(uid, {}).values(), key=lambda t: t["id"], reverse=True):
+            if t["conversation_id"] != conversation_id:
+                continue
+            for _, block in t["blocks"]:
+                if block.get("id") == block_id:
+                    return block
+        return None
+
+    def cancel_offer(self, uid, conversation_id, confirm_block_id):
+        existing = self.resolved.get(uid, {}).get(confirm_block_id)
+        if existing is not None:
+            return existing.get("status", "done"), existing["resolved_at"]
+        self.resolved.setdefault(uid, {})[confirm_block_id] = {
+            "confirm_block_id": confirm_block_id,
+            "conversation_id": conversation_id,
+            "status": "cancelled",
+            "receipt": None,
+            "resolved_at": self.clock(),
+        }
+        return "cancelled", self.clock()
 
     def apply_move(
         self,
@@ -175,6 +228,7 @@ class FakeRepo:
                 "confirm_block_id": claim.confirm_block_id,
                 "conversation_id": claim.conversation_id,
                 "transfer_id": tid,
+                "status": "done",
                 "receipt": claim.receipt_for(res),
                 "resolved_at": now,
             }
@@ -244,10 +298,37 @@ class FakeRepo:
     ):
         self.audits.append({"uid": uid, "outcome": outcome, "code": code, "params": params})
 
-    def reset_user(self, uid, *, profile, jars, transactions, trace_id, details):
+    def reset_user(
+        self,
+        uid,
+        *,
+        profile,
+        jars,
+        transactions,
+        trace_id,
+        details,
+        payees=(),
+        obligations=(),
+        credit_line=None,
+        salary_events=(),
+    ):
         self.resets.append(
-            {"uid": uid, "profile": profile, "jars": jars, "transactions": transactions}
+            {
+                "uid": uid,
+                "profile": profile,
+                "jars": jars,
+                "transactions": transactions,
+                "payees": payees,
+                "obligations": obligations,
+                "credit_line": credit_line,
+                "salary_events": salary_events,
+            }
         )
+        # số dư hũ dựng từ sổ cái như bản thật: tổng các dòng trả bằng hũ
+        totals: dict[str, int] = {}
+        for t in transactions:
+            if t["funding_source"] == "jar":
+                totals[t["jar_code"]] = totals.get(t["jar_code"], 0) + t["amount"]
         self.users[uid] = {
             "offset": profile["clock_offset_days"],
             "jars": {
@@ -256,7 +337,8 @@ class FakeRepo:
                     "name": j["name"],
                     "color_key": j["color_key"],
                     "icon_key": j["icon_key"],
-                    "balance_vnd": Decimal(j["balance"]),
+                    "kind": j["kind"],
+                    "balance_vnd": Decimal(totals.get(j["code"], 0)),
                     "split_percent": Decimal(j["split"]),
                     "sort_order": j["sort_order"],
                 }
@@ -266,7 +348,7 @@ class FakeRepo:
         self.transactions[uid] = []
         self.turns[uid] = {}
         self.resolved[uid] = {}
-        return ResetCounts(len(jars), len(transactions))
+        return ResetCounts(len(jars), len(transactions), len(obligations), len(payees))
 
 
 def make_service(

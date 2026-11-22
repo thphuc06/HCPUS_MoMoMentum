@@ -1,31 +1,38 @@
 # data/personas/
 
-Dữ liệu persona **seed** cho demo: hồ sơ, hũ và sổ cái giao dịch tất định theo seed, nạp vào Aurora khi bấm "Đặt lại dữ liệu" (`POST /demo/reset`) hoặc chạy `scripts/seed_demo.py`. Dự án không có API giao dịch thật nên seed là cách duy nhất đưa dữ liệu vào; theo master-plan ("Không hardcode, không giả lập") thì **dữ liệu này nằm ở đây, không nằm trong mã nghiệp vụ Lambda hay frontend**, và mọi con số trên màn hình vẫn đi từ Aurora qua tool.
+Dữ liệu persona **seed** cho demo: hồ sơ, hũ (kể cả hai hũ hệ thống), người nhận, nghĩa vụ, hạn mức Trả sau và sổ cái giao dịch tất định theo seed, nạp vào Aurora khi bấm "Đặt lại dữ liệu" (`POST /demo/reset`) hoặc chạy `scripts/seed_demo.py`. Dự án không có API giao dịch thật nên seed là cách duy nhất đưa dữ liệu vào; theo master-plan ("Không hardcode, không giả lập") thì **dữ liệu này nằm ở đây, không nằm trong mã nghiệp vụ Lambda hay frontend**, và mọi con số trên màn hình vẫn đi từ Aurora qua tool.
 
 | File | Nội dung |
 |---|---|
-| `specs/<persona>.json` | Dữ liệu đầu vào của một persona: lương, ngày lương, mức rủi ro, số ngày lịch sử, seed, danh sách hũ (mã, tên, khóa màu/biểu tượng, tỷ lệ chia, số dư đầu kỳ, **số dư cần đạt**, số khoản chi, cửa hàng) |
-| `generator.py` | `generate(persona, anchor=...)` dựng sổ cái; `materialize(...)` ghép với đồng hồ mô phỏng ([ADR-0003](../../docs/decisions/0003-dong-ho-mo-phong.md)); `persona_from_groups`, `parse_groups_claim` |
+| `specs/<persona>.json` | Dữ liệu đầu vào của một persona: lương, ngày lương, mức rủi ro, số ngày lịch sử, seed, **nhịp chi tiêu** (`rhythm_defaults`, `rhythm` của từng hũ), danh sách hũ (mã, tên, loại, khóa màu/biểu tượng, tỷ lệ chia, số dư đầu kỳ, **số dư cần đạt**, số khoản chi, cửa hàng kèm `tx_type`, mục tiêu), `payees`, `obligations`, `credit_line`, `bnpl.purchases`, `system_jars` |
+| `generator.py` | `generate(persona, anchor=...)` dựng sổ cái; `materialize(...)` ghép với đồng hồ mô phỏng ([ADR-0003](../../docs/decisions/0003-dong-ho-mo-phong.md)) và dựng id tất định; `persona_from_groups`, `parse_groups_claim` |
 | `accounts.json` | Ánh xạ tài khoản demo → persona và tiền tố nhóm Cognito (`persona-`). Mã sản phẩm không rẽ nhánh theo email: persona của người gọi lấy từ nhóm Cognito (claim `cognito:groups`) |
 
 ## Persona
 
 | Persona | Dùng cho | Hồ sơ | Hũ | Lịch sử |
 |---|---|---|---|---|
-| `minh` | `minh`, `giamkhao1`–`3` | Lương 9.000.000 ₫ ngày 5, rủi ro vừa | 7 hũ khớp [bảng số Figma §5](../../docs/research/figma-ui-design.md): Ăn uống 380.000, Đi lại 640.000, Hóa đơn 450.000, Giải trí 760.000, Du lịch 1.800.000, Dự phòng 2.700.000, Nghĩa vụ 1.000.000 (tổng 7.730.000), tỷ lệ chia 30/7/31/7/10/10/5 | 47 ngày trước ngày neo 21/11/2026 (từ 5/10, hai kỳ lương), 72 dòng |
-| `lan` | `lan` (sinh viên làm thêm) | Lương 4.500.000 ₫ ngày 5, rủi ro thấp | 5 hũ (Ăn uống, Đi lại, Hóa đơn, Giải trí, Dự phòng) | 47 ngày, 57 dòng |
-| `khoa` | `khoa` (tài khoản mới, ít dữ liệu: độ tin cậy thấp) | Lương 7.000.000 ₫ ngày 5 | 5 hũ | 18 ngày, một kỳ lương, 30 dòng |
+| `minh` | `minh`, `giamkhao1`–`3` | Lương 9.000.000 ₫ ngày 5, rủi ro vừa | 7 hũ khớp [bảng số Figma §5](../../docs/research/figma-ui-design.md): Ăn uống 380.000, Đi lại 640.000, Hóa đơn 450.000, Giải trí 760.000, Du lịch 1.800.000 (mục tiêu 6.000.000 ₫ đến 1/4/2027), Dự phòng 2.700.000, Nghĩa vụ 1.000.000 (tổng 7.730.000), tỷ lệ chia 30/7/31/7/10/10/5. Hai hũ hệ thống: **Tiền vào khác +350.000** (Huy trả lại tiền ăn) và **Chưa phân loại −180.000** (hai khoản CHI chưa xếp hũ: QR 120.000 và chuyển tiền 60.000). Tổng số dư 7.900.000 ₫ (Figma ghi 8.260.000 vì coi Chưa phân loại là +180.000; hợp đồng cho số dư có dấu, xem quyết định số 2 của phase 2) | 47 ngày trước ngày neo 21/11/2026 (từ 5/10, hai kỳ lương), 125 dòng |
+| `lan` | `lan` (sinh viên làm thêm) | Lương 4.500.000 ₫ ngày 5, rủi ro thấp | 5 hũ (Ăn uống, Đi lại, Hóa đơn, Giải trí, Dự phòng); hạn mức Trả sau 2.000.000 ₫, không có khoản trả sau sẵn | 47 ngày, 106 dòng |
+| `khoa` | `khoa` (tài khoản mới, ít dữ liệu: độ tin cậy thấp) | Lương 7.000.000 ₫ ngày 5 | 5 hũ; tiền thuê phòng 1.400.000 ₫ đến hạn ngày 1 (chưa trả trong 18 ngày lịch sử) | 18 ngày, một kỳ lương, 46 dòng |
 
-Phase 1 chưa có "Tiền vào khác" 350.000 ₫ và "Chưa phân loại" 180.000 ₫ của bảng số Figma (cần giao dịch chưa gán hũ; phase 2).
+**Nghĩa vụ của `minh`** (ngày đến hạn kế tiếp tính từ ngày neo): Tiền điện 375.000 ₫ (khoảng 300.000 đến 450.000, ngày 26, hũ Hóa đơn), Trả sau (mô phỏng) **1.000.000 ₫ = gốc 967.000 + phí 33.000** đến hạn 5/12 trả từ hũ Nghĩa vụ (phí lấy từ bảng `fee_schedules` lúc nạp, không gắn cứng), Tiền thuê phòng 2.000.000 ₫ (ngày 6), Internet FPT 220.000 ₫ (ngày 12), Netflix 180.000 ₫ (ngày 15, hũ Giải trí), Cước điện thoại 100.000 ₫ (ngày 20). Hạn mức Trả sau 5.000.000 ₫, dư nợ gốc 967.000 ₫ (hai giao dịch mua bằng hạn mức trong lịch sử: 520.000 và 447.000). Người nhận: Trần Quang Huy (yêu thích, người nhận của cảnh chuyển tiền demo), Nguyễn Thu Hà, Mẹ, Lê Minh Châu. Hóa đơn tháng 11 chưa tới hạn tiền điện nên hũ Hóa đơn (450.000) "sát" như Figma.
 
 ## Cách bộ sinh dựng sổ cái
 
-1. Mỗi hũ: dòng `income` "Số dư đầu kỳ" (nếu có `opening_vnd`) + một dòng `income` "Lương" mỗi ngày lương trong lịch sử (lương × tỷ lệ chia).
-2. Tổng chi `T = đầu kỳ + lương chia - số dư cần đạt` (phải ≥ 0, bội của 1.000). `recent_share` của `T` rơi vào khoảng sau ngày lương gần nhất (chi tiêu dồn về cuối kỳ: hũ Ăn uống của Minh cạn dần tới ngày 23/11); phần còn lại chia theo số ngày cho các khoảng trước.
-3. Mỗi khoảng sinh vài khoản chi: ngày, giờ, cửa hàng, số tiền lấy từ `random.Random(f"{seed}:{persona}:{hũ}")`, làm tròn 1.000 ₫, khoản lớn nhất nhận phần dư để tổng khớp.
-4. Bất biến (bộ sinh tự kiểm, test kiểm lại): số dư cuối từng hũ bằng đúng `target_vnd`; số dư chạy không bao giờ âm; cùng (persona, seed, ngày neo) cho cùng kết quả.
+Mô tả đầy đủ ở đầu [generator.py](generator.py). Tóm tắt:
 
-Số dư cần đạt (`target_vnd`) là **đầu vào** (hiệu chỉnh persona để ra đúng tình huống demo là hợp lệ); cả sổ cái là đầu ra tính toán. Engine dự báo của phase 2 cho số khác Figma thì dùng số của engine.
+1. **Lương đúng cách ví thật ghi**: mỗi ngày lương một dòng `income` (`tx_type salary`) vào Tiền vào khác, rồi dòng chuyển `salary_split` (cùng `transfer_id`) trừ Tiền vào khác và cộng các hũ theo `yofina_core.wallet.split_amount` (cùng quy tắc `confirm_salary`). Số dư đầu kỳ (`opening_vnd`) là dòng chuyển một phía.
+2. **Khoản trả nghĩa vụ định kỳ** (`paid_in_history`) là dòng chi gắn `obligation_id` đúng ngày đến hạn từng tháng; dự báo bỏ qua dòng này (lịch nghĩa vụ đã có), nên không đếm hai lần. Khoản biến động (tiền điện) lấy số tiền trong khoảng theo seed.
+3. **Chi tiêu còn lại** `T = đầu kỳ + lương chia − số dư cần đạt − tổng khoản trả nghĩa vụ` (≥ 0, bội của 1.000). `recent_share` của `T` nằm sau ngày lương gần nhất (chi tiêu dồn về cuối kỳ), phần còn lại chia theo số ngày cho các kỳ trước.
+4. **Nhịp**: trong mỗi khoảng, số khoản chi của từng ngày theo hạn ngạch tỷ lệ với trọng số (`weekend_multiplier` cho thứ bảy và chủ nhật, `early_period_multiplier` cho `early_period_days` ngày đầu kỳ lương; phần lẻ phát theo nhiễu nhỏ của seed), mỗi ngày tối đa `max_per_day` khoản; số tiền theo lognormal (`amount_sigma`), làm tròn 1.000 ₫, khoản lớn nhất nhận phần dư. Hũ Ăn uống của `minh`: 70 khoản trải trên cả 47 ngày, chi mỗi ngày cuối tuần cao hơn ngày thường khoảng 1,45 lần; `lan` khoảng 2,2 lần (test khẳng định trên 1,15 cho `minh`).
+5. **Bất biến** (bộ sinh tự kiểm, test kiểm lại): số dư cuối từng hũ bằng đúng `target_vnd`; số dư chạy không bao giờ âm (trừ Chưa phân loại); mỗi nhóm chuyển có tổng 0; tổng gốc Trả sau không vượt hạn mức; cùng (persona, seed, ngày neo) cho cùng kết quả. Khi nạp vào DB, số dư hũ **được dựng lại từ sổ cái** (`UPDATE jars ... sum(amount_vnd)`), nên số dư luôn đúng bất biến "bằng tổng các dòng trả bằng hũ".
+
+Số dư cần đạt (`target_vnd`), số khoản chi và mọi tham số nhịp là **đầu vào** (hiệu chỉnh persona để ra đúng tình huống demo là hợp lệ); sổ cái là đầu ra tính toán. **Mức chi trung bình mỗi hũ** = `(đầu kỳ + lương chia − target_vnd − khoản trả nghĩa vụ) / số ngày`: chỉnh bằng `opening_vnd`, `target_vnd`, `recent_share` và `expense_count` của hũ; **nhịp** chỉnh bằng khối `rhythm_defaults` (hoặc `rhythm` của một hũ). Việc hiệu chỉnh để hũ Ăn uống cạn đúng 23/11 mô phỏng làm ở đợt sau, khi có engine dự báo: chỉ sửa các số này trong `specs/minh.json`, không sửa mã. `seed_salary_events` (mặc định `false`) bật việc nạp sự kiện lương `confirmed` của các kỳ trong lịch sử; mặc định tắt để kỳ lương hiện tại ở trạng thái `expected` như bảng số Figma ("còn 14 ngày tới kỳ lương").
+
+## Nạp vào Aurora
+
+`LedgerService.reset_demo` (xem [gateway/tools/ledger/README.md](../../gateway/tools/ledger/README.md)) gọi `generate` + `materialize` (truyền `user_id` để id dòng là `uuid5(người dùng, persona, khóa)`: hai tài khoản cùng persona như `minh` và `giamkhao1` không đụng khóa chính toàn cục) rồi `LedgerRepo.reset_user`: MỘT transaction xóa đúng thứ tự khóa ngoại (`forecast_runs`, `salary_events`, `category_rules`, `transactions`, `obligations`, `payees`, `credit_lines`, `turn_blocks`, `conversation_turns`, `confirm_resolutions`, `jars`), nạp hũ, gọi `app_ensure_system_jars`, nạp người nhận, nghĩa vụ, hạn mức, sổ cái, rồi dựng lại số dư hũ. `audit_events` chỉ thêm, không xóa. Sau đó phát `profile.updated` để pipeline dự báo tính lại.
 
 ## Đồng hồ mô phỏng
 
@@ -33,4 +40,4 @@ Số dư cần đạt (`target_vnd`) là **đầu vào** (hiệu chỉnh persona
 
 ## Thêm persona
 
-Thêm `specs/<tên>.json` (theo mẫu), thêm tài khoản vào `accounts.json`, chạy `uv run pytest tests/unit/test_personas.py` (kiểm bất biến), rồi `uv run scripts/seed_demo.py <tài khoản>`. Test đóng gói: `uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas` kèm thư mục này vào Lambda ledger.
+Thêm `specs/<tên>.json` (theo mẫu `minh.json`), thêm tài khoản vào `accounts.json`, chạy `uv run pytest tests/unit/test_personas.py` (kiểm bất biến), rồi `uv run scripts/seed_demo.py <tài khoản>`. Đóng gói: `uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas` kèm thư mục này vào Lambda ledger.

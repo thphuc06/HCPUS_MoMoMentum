@@ -27,6 +27,8 @@ def check_inputs(inputs: ForecastInputs) -> list[str]:
         errs.append("payday_dates phải tăng dần và không trùng")
     if any(not inputs.app_date < d <= end for d in inputs.payday_dates):
         errs.append("payday_dates phải nằm trong (app_date, app_date + horizon_days]")
+    if inputs.payday_day is not None and not 1 <= inputs.payday_day <= 31:
+        errs.append("payday_day phải trong 1..31")
     codes = [j.code for j in inputs.jars]
     if len(set(codes)) != len(codes):
         errs.append("mã hũ trùng nhau")

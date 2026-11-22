@@ -133,12 +133,13 @@ def test_khop_khoi_forecast_timeline_o_truong_dung_chung():
 
 
 # --- giao diện hàm ---------------------------------------------------------------------------
-def test_ham_cong_khai_co_chu_ky_va_chua_cai():
+def test_ham_cong_khai_chay_va_dat_bo_kiem_hop_dong():
+    """Từ phase 2 luồng B hai hàm đã cài: đầu ra qua bộ kiểm bất biến (kiểm kỹ ở tests/unit/ml/)."""
     inputs, _ = pair("default")
-    with pytest.raises(NotImplementedError):
-        forecast_user(inputs)
-    with pytest.raises(NotImplementedError):
-        update_forecast(inputs, pair("default")[1], ["an_uong"])
+    result = forecast_user(inputs)
+    assert contract.check_result(inputs, result) == []
+    updated = update_forecast(inputs, result, ["an_uong"])
+    assert contract.check_result(inputs, updated, subset=True) == []
 
 
 def test_goi_ml_chi_phu_thuoc_thu_vien_chuan_trong_types_va_serde():

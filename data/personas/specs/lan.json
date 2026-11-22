@@ -1,41 +1,82 @@
 {
   "persona": "lan",
   "display_name": "Lan",
+  "employer": "Quán cà phê (làm thêm)",
   "monthly_salary_vnd": 4500000,
   "payday_day": 5,
   "risk_tolerance": "low",
   "history_days": 47,
   "seed": 20261122,
+  "rhythm_defaults": {
+    "weekend_multiplier": 2.0,
+    "early_period_multiplier": 1.25,
+    "early_period_days": 14,
+    "amount_sigma": 0.5,
+    "max_per_day": 3
+  },
   "jars": [
     {
-      "code": "an_uong", "name": "Ăn uống", "color_key": "violet", "icon_key": "utensils",
+      "code": "an_uong", "name": "Ăn uống", "color_key": "violet", "icon_key": "utensils", "kind": "spending",
       "split_percent": 40, "opening_vnd": 0, "target_vnd": 520000,
-      "expense_count": 30, "recent_share": 0.5,
-      "merchants": ["Cơm sinh viên", "Trà đá cổng trường", "Bánh mì", "Bách Hóa Xanh", "Highlands Coffee", "Mì cay Seoul"]
+      "expense_count": 60, "recent_share": 0.5,
+      "merchants": [
+        {"name": "Cơm sinh viên", "tx_type": "food_drink", "weight": 3},
+        {"name": "Trà đá cổng trường", "tx_type": "qr_food"},
+        {"name": "Bánh mì", "tx_type": "food_drink", "weight": 2},
+        {"name": "Bách Hóa Xanh", "tx_type": "grocery", "weight": 2},
+        {"name": "Highlands Coffee", "tx_type": "qr_food"},
+        {"name": "Mì cay Seoul", "tx_type": "food_drink"}
+      ]
     },
     {
-      "code": "di_lai", "name": "Đi lại", "color_key": "sky", "icon_key": "bus",
+      "code": "di_lai", "name": "Đi lại", "color_key": "sky", "icon_key": "bus", "kind": "spending",
       "split_percent": 12, "opening_vnd": 0, "target_vnd": 310000,
-      "expense_count": 8, "recent_share": 0.5,
-      "merchants": ["Xe buýt", "Grab", "Gửi xe"]
+      "expense_count": 14, "recent_share": 0.5,
+      "merchants": [
+        {"name": "Xe buýt", "tx_type": "public_transport", "weight": 3},
+        {"name": "Grab", "tx_type": "ride_hailing"},
+        {"name": "Gửi xe", "tx_type": "qr_transport"}
+      ]
     },
     {
-      "code": "hoa_don", "name": "Hóa đơn", "color_key": "brown", "icon_key": "receipt",
+      "code": "hoa_don", "name": "Hóa đơn", "color_key": "brown", "icon_key": "receipt", "kind": "spending",
       "split_percent": 25, "opening_vnd": 0, "target_vnd": 260000,
-      "expense_count": 5, "recent_share": 0.5,
-      "merchants": ["Tiền trọ", "Tiền điện nước", "Điện thoại Viettel"]
+      "expense_count": 3, "recent_share": 0.9,
+      "merchants": [
+        {"name": "Nạp điện thoại", "tx_type": "phone_topup"},
+        {"name": "Cửa hàng điện nước", "tx_type": "bill_water"}
+      ]
     },
     {
-      "code": "giai_tri", "name": "Giải trí", "color_key": "orchid", "icon_key": "gamepad",
+      "code": "giai_tri", "name": "Giải trí", "color_key": "orchid", "icon_key": "gamepad", "kind": "spending",
       "split_percent": 8, "opening_vnd": 0, "target_vnd": 190000,
-      "expense_count": 4, "recent_share": 0.5,
-      "merchants": ["CGV Cinemas", "Spotify", "Sách Fahasa"]
+      "expense_count": 8, "recent_share": 0.6,
+      "merchants": [
+        {"name": "CGV Cinemas", "tx_type": "entertainment"},
+        {"name": "Spotify", "tx_type": "subscription"},
+        {"name": "Sách Fahasa", "tx_type": "entertainment"}
+      ]
     },
     {
-      "code": "du_phong", "name": "Dự phòng", "color_key": "blue", "icon_key": "shield",
+      "code": "du_phong", "name": "Dự phòng", "color_key": "blue", "icon_key": "shield", "kind": "saving",
       "split_percent": 15, "opening_vnd": 400000, "target_vnd": 1750000,
-      "expense_count": 0, "recent_share": 0.5,
-      "merchants": []
+      "expense_count": 0, "recent_share": 0.5, "merchants": []
     }
-  ]
+  ],
+  "payees": [
+    {"name": "Phạm Thanh Mai", "account_hint": "•••• 2284", "is_favorite": true, "used_days_ago": 9},
+    {"name": "Bố", "account_hint": "•••• 5517", "is_favorite": true, "used_days_ago": 35}
+  ],
+  "obligations": [
+    {"kind": "rent", "name": "Tiền trọ", "amount_vnd": 750000, "due_day": 6, "cycle": "monthly",
+     "pay_jar": "hoa_don", "is_essential": true, "paid_in_history": true, "tx_type": "rent", "merchant": "Chủ trọ"},
+    {"kind": "bill", "name": "Tiền điện nước", "amount_vnd": 200000, "amount_min_vnd": 150000, "amount_max_vnd": 250000,
+     "due_day": 26, "cycle": "monthly", "pay_jar": "hoa_don", "is_essential": true, "paid_in_history": true,
+     "tx_type": "bill_electricity", "merchant": "Tiền điện nước"},
+    {"kind": "bill", "name": "Cước điện thoại", "amount_vnd": 70000, "due_day": 20, "cycle": "monthly",
+     "pay_jar": "hoa_don", "is_essential": true, "paid_in_history": true, "tx_type": "bill_phone",
+     "merchant": "Điện thoại Viettel"}
+  ],
+  "credit_line": {"limit_vnd": 2000000, "due_day": 5},
+  "system_jars": {"other_income": [], "unclassified": []}
 }

@@ -9,14 +9,14 @@ import { ApiError, apiErrorFromResponse } from '@/api/errors'
 //   200 -> { conversation_id, turns: [ { trace_id, created_at, user_text, assistant_text, blocks: [khối UI] } ] }
 //   (cũ -> mới, tối đa 50 lượt). Hội thoại không có hoặc không thuộc người gọi: 200 với `turns` rỗng.
 //   Khối `confirm` được lưu nguyên văn trong `blocks`; trạng thái của nó do server giữ ở `resolutions` của lượt
-//   (nguồn sự thật, không suy từ số dư): `done` kèm `receipt` (đã thực hiện), `expired` (quá hạn đề nghị),
-//   `pending` (còn hạn, chưa thực hiện: nút vẫn bấm được).
+//   (nguồn sự thật, không suy từ số dư): `done` kèm `receipt` (đã thực hiện), `cancelled` (người dùng đã bấm "Không"),
+//   `expired` (quá hạn đề nghị), `pending` (còn hạn, chưa thực hiện: nút vẫn bấm được).
 // Tắt phía frontend bằng VITE_CONVERSATION_REPLAY=0. Route chưa deploy (404) coi như chưa có gì.
 
 /** Trạng thái một khối `confirm`. `receipt` được kiểm bằng schema khối ở chỗ dùng (lỗi một khối không làm mất cả hội thoại). */
 export const Resolution = z.object({
   block_id: z.string().min(1),
-  status: z.enum(['pending', 'done', 'expired']),
+  status: z.enum(['pending', 'done', 'expired', 'cancelled']),
   resolved_at: z.string().optional(),
   receipt: z.unknown().optional(),
 })

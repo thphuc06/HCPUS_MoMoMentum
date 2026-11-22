@@ -9,11 +9,21 @@ from __future__ import annotations
 import pytest
 from agentcore_helpers import McpFailure, raw_gateway_post
 
+# Mười tool của target `ledger` (chín tool của overview và save_turn); save_jars và confirm_salary KHÔNG lộ cho agent.
 EXPECTED_TOOLS = {
-    "ledger___get_jar_balances",
-    "ledger___query_transactions",
-    "ledger___move_between_jars",
-    "ledger___save_turn",
+    "ledger___" + name
+    for name in (
+        "get_jar_balances",
+        "query_transactions",
+        "get_cashflow_summary",
+        "get_obligations",
+        "get_unclassified",
+        "update_profile",
+        "record_transaction",
+        "move_between_jars",
+        "assign_jar",
+        "save_turn",
+    )
 }
 MOVE = {"from_jar": "giai_tri", "to_jar": "an_uong", "amount_vnd": 100_000}
 

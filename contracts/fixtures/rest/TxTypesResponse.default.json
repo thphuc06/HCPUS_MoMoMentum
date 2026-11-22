@@ -4,19 +4,22 @@
       "tx_type": "food_drink",
       "label": "Ăn uống",
       "direction": "out",
-      "default_jar": "an_uong"
+      "default_jar": "an_uong",
+      "is_person_transfer": false
     },
     {
       "tx_type": "transfer_person",
       "label": "Chuyển tiền cho người khác",
       "direction": "out",
-      "system_role": "unclassified"
+      "system_role": "unclassified",
+      "is_person_transfer": true
     },
     {
       "tx_type": "salary",
       "label": "Lương",
       "direction": "in",
-      "system_role": "other_income"
+      "system_role": "other_income",
+      "is_person_transfer": false
     }
   ]
 }

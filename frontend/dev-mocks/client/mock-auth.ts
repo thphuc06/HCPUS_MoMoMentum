@@ -6,7 +6,8 @@ const KEY = 'yofina.mock.session'
 const TTL_MS = 60 * 60_000
 
 function make(email: string): AuthSession {
-  return { accessToken: 'mock-access-token', expiresAt: Date.now() + TTL_MS, email, displayName: undefined }
+  // Email nằm trong token để máy chủ giả giữ trạng thái riêng cho từng tài khoản ("trang..." = chưa khai, "moi..." = ít dữ liệu).
+  return { accessToken: `mock-access-token:${encodeURIComponent(email)}`, expiresAt: Date.now() + TTL_MS, email, displayName: undefined }
 }
 
 export class MockAuthClient implements AuthClient {

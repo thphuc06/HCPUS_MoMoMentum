@@ -59,14 +59,15 @@ interface LlmDefaults {
 }
 
 /** Bỏ dòng chú thích `//` và thay `${GATEWAY_ARN}` bằng token CloudFormation (Fn::Join). */
-function renderCedar(file: string, gatewayArn: string, maxAmount: number): string {
+function renderCedar(file: string, gatewayArn: string, limits: { move: number; transaction: number }): string {
   const raw = fs
     .readFileSync(file, 'utf-8')
     .split(/\r?\n/)
     .filter((l) => !l.trimStart().startsWith('//'))
     .join('\n')
     .trim()
-    .replace(/\$\{MOVE_MAX_AMOUNT_VND\}/g, String(maxAmount));
+    .replace(/\$\{MOVE_MAX_AMOUNT_VND\}/g, String(limits.move))
+    .replace(/\$\{TRANSACTION_MAX_AMOUNT_VND\}/g, String(limits.transaction));
   const parts = raw.split('${GATEWAY_ARN}');
   const pieces: string[] = [];
   parts.forEach((p, i) => {
@@ -183,7 +184,7 @@ export class AgentStack extends Stack {
     const target = new agentcore.CfnGatewayTarget(this, 'LedgerTarget', {
       gatewayIdentifier: gateway.attrGatewayIdentifier,
       name: 'ledger',
-      description: 'Lambda yofina-ledger: so du hu, giao dich, chuyen hu co xac nhan, luu luot hoi thoai',
+      description: 'Lambda yofina-ledger: 9 tool vi mo phong (doc, ghi co xac nhan) va luu luot hoi thoai',
       targetConfiguration: {
         mcp: { lambda: { lambdaArn: ledgerArn, toolSchema: { inlinePayload: toolDefs as any } } },
       },
@@ -199,7 +200,14 @@ export class AgentStack extends Stack {
         policyEngineId: engine.attrPolicyEngineId,
         name: `ledger_${tool.name}_own_user`,
         description: `Cedar cho ledger___${tool.name}`,
-        definition: { cedar: { statement: renderCedar(file, gateway.attrGatewayArn, tools.moveMaxAmountVnd) } },
+        definition: {
+          cedar: {
+            statement: renderCedar(file, gateway.attrGatewayArn, {
+              move: tools.moveMaxAmountVnd,
+              transaction: tools.transactionMaxAmountVnd,
+            }),
+          },
+        },
         validationMode: 'FAIL_ON_ANY_FINDINGS',
       });
       policy.node.addDependency(target);

@@ -12,8 +12,10 @@ import logging
 import os
 from typing import Any
 
+from yofina_core.config import Config
 from yofina_core.confirm import ConfirmService
 from yofina_core.db import DataApi
+from yofina_ledger.events import EventPublisher
 from yofina_ledger.gateway_api import handle_gateway
 from yofina_ledger.repo import LedgerRepo
 from yofina_ledger.rest_api import handle_http
@@ -28,10 +30,12 @@ _SERVICE: LedgerService | None = None
 def get_service() -> LedgerService:
     global _SERVICE
     if _SERVICE is None:
+        settings = LedgerSettings.from_config()
         _SERVICE = LedgerService(
             LedgerRepo(DataApi.from_config()),
             ConfirmService.from_config(),
-            LedgerSettings.from_config(),
+            settings,
+            events=EventPublisher(settings.event_bus_name, region=Config().region()),
         )
     return _SERVICE
 

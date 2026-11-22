@@ -1,87 +1,77 @@
 {
   "persona": "khoa",
   "display_name": "Khoa",
+  "employer": "Công ty thương mại",
   "monthly_salary_vnd": 7000000,
   "payday_day": 5,
   "risk_tolerance": "medium",
   "history_days": 18,
   "seed": 20261123,
+  "rhythm_defaults": {
+    "weekend_multiplier": 1.5,
+    "early_period_multiplier": 1.3,
+    "early_period_days": 14,
+    "amount_sigma": 0.6,
+    "max_per_day": 3
+  },
   "jars": [
     {
-      "code": "an_uong",
-      "name": "Ăn uống",
-      "color_key": "violet",
-      "icon_key": "utensils",
-      "split_percent": 30,
-      "opening_vnd": 350000,
-      "target_vnd": 1250000,
-      "expense_count": 14,
-      "recent_share": 0.85,
+      "code": "an_uong", "name": "Ăn uống", "color_key": "violet", "icon_key": "utensils", "kind": "spending",
+      "split_percent": 30, "opening_vnd": 350000, "target_vnd": 1250000,
+      "expense_count": 24, "recent_share": 0.85,
       "merchants": [
-        "Cơm văn phòng",
-        "Highlands Coffee",
-        "GrabFood",
-        "Circle K",
-        "Bách Hóa Xanh"
+        {"name": "Cơm văn phòng", "tx_type": "food_drink", "weight": 3},
+        {"name": "Highlands Coffee", "tx_type": "qr_food", "weight": 2},
+        {"name": "GrabFood", "tx_type": "food_delivery"},
+        {"name": "Circle K", "tx_type": "grocery"},
+        {"name": "Bách Hóa Xanh", "tx_type": "grocery"}
       ]
     },
     {
-      "code": "di_lai",
-      "name": "Đi lại",
-      "color_key": "sky",
-      "icon_key": "bus",
-      "split_percent": 10,
-      "opening_vnd": 60000,
-      "target_vnd": 520000,
-      "expense_count": 4,
-      "recent_share": 0.85,
+      "code": "di_lai", "name": "Đi lại", "color_key": "sky", "icon_key": "bus", "kind": "spending",
+      "split_percent": 10, "opening_vnd": 60000, "target_vnd": 520000,
+      "expense_count": 6, "recent_share": 0.85,
       "merchants": [
-        "Grab",
-        "Xe buýt",
-        "Đổ xăng Petrolimex"
+        {"name": "Grab", "tx_type": "ride_hailing"},
+        {"name": "Xe buýt", "tx_type": "public_transport"},
+        {"name": "Đổ xăng Petrolimex", "tx_type": "fuel"}
       ]
     },
     {
-      "code": "hoa_don",
-      "name": "Hóa đơn",
-      "color_key": "brown",
-      "icon_key": "receipt",
-      "split_percent": 30,
-      "opening_vnd": 0,
-      "target_vnd": 1650000,
-      "expense_count": 3,
-      "recent_share": 1,
+      "code": "hoa_don", "name": "Hóa đơn", "color_key": "brown", "icon_key": "receipt", "kind": "spending",
+      "split_percent": 30, "opening_vnd": 0, "target_vnd": 1650000,
+      "expense_count": 3, "recent_share": 1,
       "merchants": [
-        "Tiền thuê phòng",
-        "Internet FPT"
+        {"name": "Nạp điện thoại", "tx_type": "phone_topup"},
+        {"name": "Cửa hàng điện nước", "tx_type": "bill_water"}
       ]
     },
     {
-      "code": "giai_tri",
-      "name": "Giải trí",
-      "color_key": "orchid",
-      "icon_key": "gamepad",
-      "split_percent": 10,
-      "opening_vnd": 0,
-      "target_vnd": 600000,
-      "expense_count": 2,
-      "recent_share": 1,
+      "code": "giai_tri", "name": "Giải trí", "color_key": "orchid", "icon_key": "gamepad", "kind": "spending",
+      "split_percent": 10, "opening_vnd": 0, "target_vnd": 600000,
+      "expense_count": 3, "recent_share": 1,
       "merchants": [
-        "Netflix",
-        "CGV Cinemas"
+        {"name": "Netflix", "tx_type": "subscription"},
+        {"name": "CGV Cinemas", "tx_type": "entertainment"}
       ]
     },
     {
-      "code": "du_phong",
-      "name": "Dự phòng",
-      "color_key": "blue",
-      "icon_key": "shield",
-      "split_percent": 20,
-      "opening_vnd": 0,
-      "target_vnd": 1400000,
-      "expense_count": 0,
-      "recent_share": 0.85,
-      "merchants": []
+      "code": "du_phong", "name": "Dự phòng", "color_key": "blue", "icon_key": "shield", "kind": "saving",
+      "split_percent": 20, "opening_vnd": 0, "target_vnd": 1400000,
+      "expense_count": 0, "recent_share": 0.85, "merchants": []
     }
-  ]
+  ],
+  "payees": [
+    {"name": "Đỗ Hoàng Nam", "account_hint": "•••• 9042", "is_favorite": true, "used_days_ago": 4},
+    {"name": "Võ Thị Lan", "account_hint": "•••• 3371", "is_favorite": false, "used_days_ago": 12}
+  ],
+  "obligations": [
+    {"kind": "rent", "name": "Tiền thuê phòng", "amount_vnd": 1400000, "due_day": 1, "cycle": "monthly",
+     "pay_jar": "hoa_don", "is_essential": true, "paid_in_history": false, "tx_type": "rent", "merchant": "Chủ nhà"},
+    {"kind": "bill", "name": "Internet FPT", "amount_vnd": 200000, "due_day": 12, "cycle": "monthly",
+     "pay_jar": "hoa_don", "is_essential": true, "paid_in_history": true, "tx_type": "bill_internet",
+     "merchant": "Internet FPT"}
+  ],
+  "credit_line": {"limit_vnd": 3000000, "due_day": 5},
+  "system_jars": {"other_income": [], "unclassified": []}
 }

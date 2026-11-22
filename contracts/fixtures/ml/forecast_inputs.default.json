@@ -166,5 +166,6 @@
     "spend_vnd": 5000000,
     "balance_start_vnd": 2000000,
     "balance_end_vnd": 7900000
-  }
+  },
+  "payday_day": 28
 }

@@ -28,7 +28,11 @@ def test_chay_bang_role_yofina_app(db):
 
 
 def test_khong_set_config_thi_khong_thay_dong_nao(db):
-    for table in ("users", "jars", "transactions", "audit_events", "turn_blocks"):
+    for table in (
+        "users", "jars", "transactions", "audit_events", "turn_blocks", "confirm_resolutions",
+        "payees", "obligations", "credit_lines", "category_rules", "salary_events",
+        "forecast_runs", "forecast_jar_summaries", "forecasts",
+    ):  # fmt: skip
         (row,) = db.query(f"SELECT count(*) AS n FROM {table}")
         assert row["n"] == 0, table
 
@@ -42,13 +46,13 @@ def test_nguoi_dung_nay_khong_doc_duoc_nguoi_dung_kia(db, subs):
         txs = tx.execute(
             "SELECT count(*) AS n FROM transactions WHERE user_id = :other", {"other": subs["minh"]}
         )[0]["n"]
-    assert (mine, theirs, txs) == (5, 0, 0)
+    assert (mine, theirs, txs) == (7, 0, 0)  # 5 hũ của Lan và 2 hũ hệ thống
 
 
 def test_ham_doc_theo_user_id_chi_tra_du_lieu_cua_user_do(db, subs):
-    rows = db.query("SELECT * FROM app_get_jar_view(:u)", {"u": subs["lan"]})
-    assert len(rows) == 5
-    assert db.query("SELECT * FROM app_get_jar_view(:u)", {"u": "khong-ton-tai"}) == []
+    rows = db.query("SELECT * FROM app_get_jar_state(:u)", {"u": subs["lan"]})
+    assert len(rows) == 7  # 5 hũ và 2 hũ hệ thống
+    assert db.query("SELECT * FROM app_get_jar_state(:u)", {"u": "khong-ton-tai"}) == []
 
 
 def test_khong_ghi_ho_duoc_nguoi_khac_va_khong_sua_duoc_so_cai(db, subs):
@@ -70,3 +74,21 @@ def test_khong_ghi_ho_duoc_nguoi_khac_va_khong_sua_duoc_so_cai(db, subs):
 def test_yofina_app_khong_tat_duoc_rls(db, subs):
     with pytest.raises(YofinaError), db.transaction(subs["lan"]) as tx:
         tx.execute("ALTER TABLE jars DISABLE ROW LEVEL SECURITY")
+
+
+def test_bang_phase_2_cung_bi_rls_chan_nguoi_khac(db, subs):
+    """Lan (có hồ sơ, nghĩa vụ, người nhận) không thấy một dòng nào của Minh ở mọi bảng phase 2."""
+    tables = ("payees", "obligations", "credit_lines", "salary_events", "confirm_resolutions")
+    with db.transaction(subs["lan"]) as tx:
+        mine = {t: tx.execute(f"SELECT count(*) AS n FROM {t}")[0]["n"] for t in tables}
+        theirs = {
+            t: tx.execute(f"SELECT count(*) AS n FROM {t} WHERE user_id = :o", {"o": subs["minh"]})[
+                0
+            ]["n"]
+            for t in tables
+        }
+    assert mine["payees"] == 2 and mine["obligations"] == 3 and mine["credit_lines"] == 1
+    assert all(n == 0 for n in theirs.values())
+    # ghi hộ người khác: WITH CHECK chặn
+    with pytest.raises(YofinaError), db.transaction(subs["lan"]) as tx:
+        tx.execute("INSERT INTO payees (user_id, name) VALUES (:o, 'Kẻ gian')", {"o": subs["minh"]})

@@ -94,8 +94,8 @@ describe('luồng xác nhận (ADR-0002)', () => {
     expect(note).toContain('100.000 ₫')
     expect(note).toContain(receipt.data.transaction_id)
 
-    // JarsProvider: lần nạp đầu + lần làm mới sau khi ghi
-    await waitFor(() => expect(api.getJars).toHaveBeenCalledTimes(2))
+    // OverviewProvider: lần nạp đầu + lần làm mới sau khi ghi
+    await waitFor(() => expect(api.getOverview).toHaveBeenCalledTimes(2))
   })
 
   it('bấm hai lần liên tiếp vẫn chỉ gọi một lần', async () => {
@@ -111,13 +111,36 @@ describe('luồng xác nhận (ADR-0002)', () => {
     await act(async () => release(issued()))
   })
 
-  it('"Không": đánh dấu hủy, không gọi API nào', async () => {
+  it('"Không": ghi việc hủy ở server (POST /confirmations/cancel) rồi đánh dấu hủy; không cấp token, không ghi gì', async () => {
     const { api, actions, block, user } = setup()
     await user.click(screen.getByRole('button', { name: 'Không' }))
-    expect(actions.markBlock).toHaveBeenCalledWith(block.id, 'cancelled')
+    await waitFor(() => expect(actions.markBlock).toHaveBeenCalledWith(block.id, 'cancelled'))
+    expect(api.cancelConfirmation).toHaveBeenCalledWith({ conversation_id: CONVERSATION_ID, confirm_block_id: block.id })
     expect(api.createConfirmation).not.toHaveBeenCalled()
     expect(api.applyAction).not.toHaveBeenCalled()
     expect(actions.replaceBlock).not.toHaveBeenCalled()
+  })
+
+  it('"Không" mà server chưa trả lời được: vẫn đánh dấu hủy tại chỗ (hủy là an toàn, không có gì được ghi)', async () => {
+    const { actions, block, user } = setup({ cancelConfirmation: vi.fn(async () => { throw new ApiError('NETWORK', 0) }) })
+    await user.click(screen.getByRole('button', { name: 'Không' }))
+    await waitFor(() => expect(actions.markBlock).toHaveBeenCalledWith(block.id, 'cancelled'))
+  })
+
+  it('"Không" mà đề nghị đã được thực hiện ở nơi khác (409 ALREADY_APPLIED): không đánh dấu hủy, đồng bộ lại từ server', async () => {
+    const { actions, user } = setup({ cancelConfirmation: vi.fn(async () => { throw new ApiError('ALREADY_APPLIED', 409) }) })
+    await user.click(screen.getByRole('button', { name: 'Không' }))
+    await waitFor(() => expect(actions.reloadConversation).toHaveBeenCalled())
+    expect(actions.markBlock).not.toHaveBeenCalled()
+    expect(await screen.findByRole('alert')).toHaveTextContent('đã được thực hiện')
+  })
+
+  it('server báo đề nghị quá hạn khi xin token (403 TOKEN_EXPIRED): hiện như hết hạn, hỏi lại; không cho bấm lại', async () => {
+    const { user } = setup({ createConfirmation: vi.fn(async () => { throw new ApiError('TOKEN_EXPIRED', 403) }) })
+    await user.click(confirmButton())
+    expect(await screen.findByText(/đã hết hạn nên số dư xem trước có thể đã cũ/)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(confirmButton()).toBeDisabled()
   })
 
   it('đã hủy (ui=cancelled): chỉ còn dòng "Đã hủy", không còn nút', () => {
@@ -152,7 +175,7 @@ describe('luồng xác nhận (ADR-0002)', () => {
     await user.click(confirmButton())
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('đã được thực hiện trước đó'))
     expect(confirmButton()).toBeDisabled()
-    await waitFor(() => expect(api.getJars).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(api.getOverview).toHaveBeenCalledTimes(2))
   })
 
   it('đề nghị đã thực hiện rồi (409 ALREADY_APPLIED): khóa nút, tải lại số dư và đồng bộ trạng thái từ server', async () => {
@@ -162,7 +185,7 @@ describe('luồng xác nhận (ADR-0002)', () => {
     expect(confirmButton()).toBeDisabled()
     expect(actions.replaceBlock).not.toHaveBeenCalled()
     await waitFor(() => expect(actions.reloadConversation).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(api.getJars).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(api.getOverview).toHaveBeenCalledTimes(2))
   })
 
   it('server từ chối cấp token vì đề nghị đã thực hiện (409 ALREADY_APPLIED ở /confirmations): cũng khóa nút', async () => {

@@ -246,9 +246,17 @@ def test_reset_sinh_lai_persona_dat_dong_ho_ve_ngay_neo(schema_ok, groups):
     (reset,) = repo.resets
     assert reset["uid"] == "sub-moi" and reset["profile"]["salary"] == 9_000_000
     assert len(reset["jars"]) == 7 and body["jars_count"] == 7
-    assert body["transactions_count"] == len(reset["transactions"]) > 30
-    balances = {j["code"]: j["balance"] for j in reset["jars"]}
-    assert balances["an_uong"] == 380_000 and balances["du_phong"] == 2_700_000
+    assert body["transactions_count"] == len(reset["transactions"]) > 100
+    assert (
+        body["obligations_count"] == len(reset["obligations"]) == 6
+        and body["forecast_ready"] is False
+    )
+    # số dư dựng từ sổ cái (bản thật làm bằng SQL; bản giả cộng các dòng trả bằng hũ)
+    jars = repo.users["sub-moi"]["jars"]
+    assert (
+        jars["an_uong"]["balance_vnd"] == 380_000 and jars["du_phong"]["balance_vnd"] == 2_700_000
+    )
+    assert reset["credit_line"]["lim"] == 5_000_000 and len(reset["payees"]) == 4
 
 
 def test_reset_chi_xoa_du_lieu_cua_chinh_nguoi_goi():

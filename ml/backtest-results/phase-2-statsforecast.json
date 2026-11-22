@@ -1,0 +1,39 @@
+{
+ "statsforecast": {
+  "seasonal_naive (numpy, của dự án)": {
+   "rel_pl": 1.0,
+   "cov_daily": 0.8524485596707819
+  },
+  "hurdle_calendar (của dự án)": {
+   "rel_pl": 0.6449488917161998,
+   "cov_daily": 0.9094444444444446
+  },
+  "StatsForecast SeasonalNaive (native)": {
+   "rel_pl": 1.4693604254309973,
+   "cov_daily": 0.9425308641975308
+  },
+  "StatsForecast AutoETS (native)": {
+   "rel_pl": 1.0151033940124528,
+   "cov_daily": 0.908456790123457
+  }
+ },
+ "horizon": 30,
+ "default_calibration": {
+  "version": "phase2-2026-11-22",
+  "dense": {
+   "rho": 0.0,
+   "level_sigma": 0.25,
+   "probability_ok": true
+  },
+  "sparse": {
+   "rho": 0.0,
+   "level_sigma": 0.0,
+   "probability_ok": true
+  },
+  "cold_start": {
+   "rho": 0.8,
+   "level_sigma": 0.8,
+   "probability_ok": false
+  }
+ }
+}

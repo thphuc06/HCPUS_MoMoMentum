@@ -81,3 +81,77 @@ export function greetingForHour(hour: number): string {
 export function greetingNow(now: Date = new Date()): string {
   return greetingForHour(now.getHours())
 }
+
+export { formatDayMonth } from './dates'
+
+/** Nhãn trục tiền gọn: 1500000 -> "1,5tr", -500000 -> "−500k", 0 -> "0". */
+export function formatVndAxis(n: number): string {
+  if (Math.round(n) === 0) return '0'
+  const a = Math.abs(n)
+  const s = sign(n)
+  if (a >= 1e9) return `${s}${oneDecimalFmt.format(a / 1e9)}tỷ`
+  if (a >= 1e6) return `${s}${oneDecimalFmt.format(a / 1e6)}tr`
+  if (a >= 1e3) return `${s}${integerFmt.format(Math.round(a / 1e3))}k`
+  return `${s}${integerFmt.format(Math.round(a))}`
+}
+
+/** Tiền có dấu rõ ràng cho danh sách giao dịch: "−65.000 ₫" hoặc "+9.000.000 ₫". */
+export function formatSignedVnd(n: number): string {
+  return `${n > 0 ? '+' : ''}${formatVnd(n)}`
+}
+
+/** Tỷ lệ 0..1 -> "71%" (làm tròn đến số nguyên; chỉ để hiển thị số server trả). */
+export function formatRatioPercent(r: number): string {
+  return `${Math.round(r * 100)}%`
+}
+
+/** Phần trăm 0..100 (ví dụ tỷ lệ chia lương): bỏ phần thập phân thừa, "31%" hoặc "12,5%". */
+export function formatPercent(p: number): string {
+  return `${oneDecimalFmt.format(p)}%`
+}
+
+const UNITS = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín']
+
+function readTriple(n: number, full: boolean): string {
+  const h = Math.floor(n / 100)
+  const t = Math.floor((n % 100) / 10)
+  const u = n % 10
+  const parts: string[] = []
+  if (h > 0 || full) parts.push(`${UNITS[h]} trăm`)
+  if (t > 1) parts.push(`${UNITS[t]} mươi`)
+  else if (t === 1) parts.push('mười')
+  else if (u > 0 && (h > 0 || full)) parts.push('lẻ')
+  if (u > 0) {
+    if (t > 1 && u === 1) parts.push('mốt')
+    else if (t > 0 && u === 5) parts.push('lăm')
+    else if (t > 1 && u === 4) parts.push('tư')
+    else parts.push(UNITS[u]!)
+  }
+  return parts.join(' ')
+}
+
+function readInt(n: number): string {
+  if (n === 0) return 'không'
+  const billions = Math.floor(n / 1e9)
+  const rest = n % 1e9
+  const parts: string[] = []
+  if (billions > 0) parts.push(`${readInt(billions)} tỷ`)
+  const groups: Array<[number, string]> = [
+    [Math.floor(rest / 1e6), 'triệu'],
+    [Math.floor((rest % 1e6) / 1e3), 'nghìn'],
+    [rest % 1e3, ''],
+  ]
+  let started = billions > 0
+  for (const [g, name] of groups) {
+    if (g === 0) continue
+    parts.push(`${readTriple(g, started)}${name ? ` ${name}` : ''}`)
+    started = true
+  }
+  return parts.join(' ')
+}
+
+/** 250000 -> "hai trăm năm mươi nghìn đồng" (để người dùng soát lại số tiền đã gõ). */
+export function vndInWords(n: number): string {
+  const v = Math.max(0, Math.round(n))
+  return `${readInt(v)} đồng`
+}

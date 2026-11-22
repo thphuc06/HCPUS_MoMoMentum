@@ -56,15 +56,24 @@ Không thuộc dự án, không được đụng: cluster Aurora và Cognito use
 | `yofina-api` | API Gateway HTTP API (`$default` stage, tự deploy) + JWT authorizer `yofina-cognito` + 4 route (`GET /jars`, `POST /confirmations`, `POST /actions`, `POST /demo/reset`) + permission Lambda | 1 | Không (theo số request) | Authorizer: issuer là user pool `yofina-users`, audience là app client `yofina-web` (HTTP API so với `aud` hoặc `client_id`, nên nhận access token Cognito). CORS cho origin Amplify (SSM) và `http://localhost:5173`. Giới hạn mặc định 20 req/s, burst 40 |
 | `/yofina/api/url`, `/yofina/ledger/function-name`, `/yofina/ledger/function-arn` | SSM Parameter | 1 | Không | URL API (không có dấu `/` cuối) cho frontend (`print_env.py` ghi thành `VITE_API_BASE_URL`); tên và ARN Lambda cho luồng C |
 
+**Phase 2, luồng A (2026-11-22)** thêm vào stack `YofinaTools`:
+
+| Tên | Loại | Tính tiền khi nhàn rỗi | Ghi chú |
+|---|---|---|---|
+| `yofina-bus` | EventBridge event bus (tùy biến) | Không (theo số sự kiện) | Nhận sự kiện của ledger sau mỗi lần ghi: `transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated` (source `yofina.ledger`). Chưa có consumer (đợt sau: Lambda `yofina-on-transaction` qua SQS có DLQ). SSM: `/yofina/events/bus-name`, `/yofina/events/bus-arn` |
+| `yofina-ledger-event-publish-failed` | CloudWatch alarm (1 metric) | Không đáng kể (khoảng 0,10 USD/tháng) | Metric `EventPublishFailed` của namespace `Yofina/Ledger` do Lambda ghi bằng log EMF; có sự cố phát sự kiện thì gửi SNS `yofina-alerts` |
+
+Thay đổi trên tài nguyên có sẵn: `yofina-ledger` thêm quyền `events:PutEvents` (chỉ trên `yofina-bus`) và 8 biến môi trường nghiệp vụ mới; `yofina-api` có 18 route (thêm 12: `/jars/{jar_code}`, `/overview`, `/profile`, `/transactions`, `/tx-types`, `/payees`, `/obligations`, `/credit-line`, `/salary-events`, `/jar-templates`, `/forecasts/{jar_code}`, `/confirmations/cancel`); Aurora chạy migration `0007_wallet_ops`. Test tích hợp tạo rồi **xóa** các thứ tạm: một user Cognito (và mọi dòng DB của nó), một rule EventBridge và một hàng đợi SQS trên `yofina-bus` (tiền tố `yofina-test-`); không để lại tài nguyên nào.
+
 Bước ghép backend (2026-11-22) thêm vào `yofina-api` hai route `GET /conversations` và `GET /conversations/{conversation_id}` (đọc lại các lượt hội thoại đã lưu) và vào `yofina-ledger` tool `save_turn`; bảng Aurora mới `conversation_turns` (migration `0003_conversation_turns`).
 
 ### Stack `YofinaAgent` (phase 1, bước ghép, luồng C và D)
 
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
 |---|---|---|---|---|
-| `yofina-gateway` | AgentCore Gateway (MCP) | 1 | Không (theo lời gọi) | JWT authorizer Cognito (discovery URL của `yofina-users`, `allowedClients` = app client `yofina-web`), 1 interceptor `REQUEST` (`passRequestHeaders`), policy engine ở `ENFORCE`, `exceptionLevel` mặc định (không DEBUG); target `ledger` (Lambda `yofina-ledger`, schema từ `contracts/tools/ledger.json`, 4 tool) |
+| `yofina-gateway` | AgentCore Gateway (MCP) | 1 | Không (theo lời gọi) | JWT authorizer Cognito (discovery URL của `yofina-users`, `allowedClients` = app client `yofina-web`), 1 interceptor `REQUEST` (`passRequestHeaders`), policy engine ở `ENFORCE`, `exceptionLevel` mặc định (không DEBUG); target `ledger` (Lambda `yofina-ledger`, schema từ `contracts/tools/ledger.json`, 10 tool từ phase 2) |
 | `yofina-gw-interceptor` | Lambda (Python 3.13, arm64, ngoài VPC, 128 MB, timeout 5 s) + log group (14 ngày) | 1 | Không | Ghi đè `user_id` bằng `sub` của JWT (mã ở `gateway/interceptor/`, chỉ thư viện chuẩn) |
-| `yofina_policy_engine` + 4 policy `ledger_<tool>_own_user` | AgentCore Policy engine và policy Cedar | 1 | Không (theo lượt đánh giá) | Mã Cedar ở `gateway/policies/`, `FAIL_ON_ANY_FINDINGS` |
+| `yofina_policy_engine` + 10 policy `ledger_<tool>_own_user` (phase 2: thêm 6) | AgentCore Policy engine và policy Cedar | 1 | Không (theo lượt đánh giá) | Mã Cedar ở `gateway/policies/`, `FAIL_ON_ANY_FINDINGS` |
 | `yofina-gateway` (role) | IAM role | 1 | Không | Tin `bedrock-agentcore.amazonaws.com` (điều kiện `aws:SourceAccount`, `aws:SourceArn` `gateway/*`); `lambda:InvokeFunction` chỉ trên `yofina-ledger` và `yofina-gw-interceptor`, `GetPolicyEngine`/`AuthorizeAction`/`PartiallyAuthorizeActions` |
 | `yofina_agent` | AgentCore Runtime (CodeZip ARM64, `PYTHON_3_13`, AGUI, platform V2) + endpoint `DEFAULT` + workload identity tự sinh | 1 | Không khi nhàn rỗi (tính theo mức dùng) | `customJWTAuthorizer` (`allowedClients` = `yofina-web`), `requestHeaderAllowlist ["Authorization"]`, mã từ S3 `builds/agent-<hash>.zip`; log group `/aws/bedrock-agentcore/runtimes/yofina_agent-*` tự tạo |
 | `yofina-agent-runtime` | IAM role | 1 | Không | Quyền tối thiểu: `bedrock:InvokeModel*` cho các model/inference profile trong `llm_defaults.json` (Sonnet 4.6, Kimi K3, Nova 2 Lite, Haiku 4.5, Cohere Embed), `dynamodb:UpdateItem` trên `yofina-usage`, `ssm:GetParameter(sByPath)` trên `/yofina/gateway_url`, `/yofina/dynamodb/usage-table`, `/yofina/llm/*`, `s3:GetObject` trên `builds/*`, log, X-Ray, `PutMetricData`, workload identity |

@@ -306,8 +306,8 @@ def test_query_transactions_tham_so_sai(check, args):
 def test_query_transactions_gioi_han_limit_theo_cau_hinh():
     svc, repo, _ = make_service()
     seen = []
-    orig = repo.query_transactions
-    repo.query_transactions = lambda uid, **kw: (seen.append(kw["limit"]), orig(uid, **kw))[1]
+    orig = repo.list_transactions
+    repo.list_transactions = lambda uid, **kw: (seen.append(kw["limit"]), orig(uid, **kw))[1]
     call(svc, "query_transactions", {"user_id": MINH, "limit": 9999})
     call(svc, "query_transactions", {"user_id": MINH})
     call(svc, "query_transactions", {"user_id": MINH, "limit": 0})

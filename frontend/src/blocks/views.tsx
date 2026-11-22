@@ -96,8 +96,8 @@ export function ConfirmView({ block, blockId, ui }: BlockViewProps<ConfirmBlock>
   const now = useNow(1000, !settled && flow.phase !== 'working' && flow.phase !== 'done')
   const remaining = expiresAt - now
   // `ui === 'expired'`: server đã báo quá hạn (nguồn sự thật); đồng hồ máy chỉ để đếm ngược và bắt kịp lúc quá hạn khi đang mở.
-  const expired = !settled && (ui === 'expired' || remaining <= 0) && flow.phase !== 'done'
-  const canAct = !settled && !expired && flow.phase !== 'working' && flow.phase !== 'done' && flow.phase !== 'blocked'
+  const expired = !settled && (ui === 'expired' || remaining <= 0 || flow.offerExpired) && flow.phase !== 'done'
+  const canAct = !settled && !expired && !flow.cancelling && flow.phase !== 'working' && flow.phase !== 'done' && flow.phase !== 'blocked'
 
   return (
     <section
@@ -156,7 +156,7 @@ export function ConfirmView({ block, blockId, ui }: BlockViewProps<ConfirmBlock>
           <Button type="button" disabled={!canAct} onClick={() => void flow.confirm()} aria-busy={flow.phase === 'working'}>
             {flow.phase === 'working' ? 'Đang xác nhận…' : `Xác nhận chuyển ${formatVnd(d.params.amount_vnd)}`}
           </Button>
-          <Button type="button" variant="outline" disabled={flow.phase === 'working' || flow.phase === 'done'} onClick={flow.cancel}>
+          <Button type="button" variant="outline" disabled={flow.phase === 'working' || flow.phase === 'done' || flow.cancelling} onClick={() => void flow.cancel()}>
             Không
           </Button>
         </div>

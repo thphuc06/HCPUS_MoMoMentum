@@ -89,7 +89,13 @@
         },
         "jars": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/JarInput" } },
         "coverage": { "$ref": "#/$defs/CoverageInputs" },
-        "config": { "$ref": "#/$defs/ForecastConfig" }
+        "config": { "$ref": "#/$defs/ForecastConfig" },
+        "payday_day": {
+          "description": "Tùy chọn: ngày lương hằng tháng (1..31; lớn hơn số ngày của tháng thì lấy ngày cuối tháng). Vắng thì ML suy ra từ next_payday.day.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31
+        }
       }
     },
     "DayQuantiles": {

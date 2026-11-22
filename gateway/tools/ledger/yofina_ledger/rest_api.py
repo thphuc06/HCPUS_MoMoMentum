@@ -22,6 +22,7 @@ from yofina_core.blocks import (
     trace_id_from_traceparent,
 )
 from yofina_core.errors import HTTP_STATUS, ErrorCode, YofinaError
+from yofina_core.wallet import ACTION_TOOLS
 from yofina_ledger.service import LedgerService
 
 log = logging.getLogger("yofina.ledger.rest")
@@ -108,15 +109,87 @@ def handle_http(event: Mapping[str, Any], service: LedgerService) -> dict[str, A
         )
 
 
+def _name_hint(event: Mapping[str, Any]) -> str | None:
+    """Tên hiển thị gợi ý cho tài khoản chưa có hồ sơ: claim `name`, rồi `cognito:username` nếu không giống email.
+    Không bao giờ dùng email (không đưa email lên giao diện hay vào hồ sơ)."""
+    claims = _claims(event)
+    for key in ("name", "cognito:username"):
+        value = claims.get(key)
+        if isinstance(value, str) and value.strip() and "@" not in value:
+            return value.strip()[:80]
+    return None
+
+
+def _query(event: Mapping[str, Any]) -> Mapping[str, Any]:
+    return event.get("queryStringParameters") or {}
+
+
+def _path_param(event: Mapping[str, Any], name: str, prefix: str) -> str:
+    """Tham số đường dẫn: lấy từ pathParameters (HTTP API đã giải mã), thiếu thì cắt từ rawPath."""
+    value = (event.get("pathParameters") or {}).get(name)
+    if value:
+        return str(value)
+    raw = str(event.get("rawPath") or "")
+    return raw[len(prefix) :].strip("/") if raw.startswith(prefix) else ""
+
+
 def _dispatch(
     route: str, event: Mapping[str, Any], sub: str, trace_id: str, service: LedgerService
 ) -> tuple[int, dict[str, Any]]:
+    # --- đọc -----------------------------------------------------------------------------------------
     if route == "GET /jars":
         return 200, service.jars_response(sub, trace_id=trace_id)
+    if route == "GET /overview":
+        return 200, service.overview_response(sub, trace_id=trace_id, name_hint=_name_hint(event))
+    if route == "GET /profile":
+        return 200, service.profile_response(sub, name_hint=_name_hint(event))
+    if route.startswith("GET /jars/"):
+        return 200, service.jar_detail_response(sub, _path_param(event, "jar_code", "/jars/"))
+    if route == "GET /transactions":
+        q = _query(event)
+        return 200, service.transactions_response(
+            sub,
+            jar=q.get("jar"),
+            kind=q.get("kind"),
+            tx_type=q.get("tx_type"),
+            from_date=q.get("from"),
+            to_date=q.get("to"),
+            needs_review=q.get("needs_review"),
+            limit=q.get("limit"),
+            cursor=q.get("cursor"),
+        )
+    if route == "GET /tx-types":
+        return 200, service.tx_types_response()
+    if route == "GET /payees":
+        return 200, service.payees_response(sub)
+    if route == "GET /obligations":
+        q = _query(event)
+        return 200, service.obligations_response(
+            sub, status=q.get("status"), within_days=q.get("within_days")
+        )
+    if route == "GET /credit-line":
+        return 200, service.credit_line_response(sub)
+    if route == "GET /salary-events":
+        return 200, service.salary_events_response(sub, status=_query(event).get("status"))
+    if route == "GET /jar-templates":
+        return 200, service.jar_templates_response()
+    if route.startswith("GET /forecasts/"):
+        jar = _path_param(event, "jar_code", "/forecasts/")
+        return 200, service.forecast_response(sub, jar, trace_id=trace_id)
+
+    # --- ghi: một đường duy nhất (xác nhận rồi thực hiện) ------------------------------------------------
+    if route == "POST /confirmations/cancel":
+        body = _body(event)
+        return 200, service.cancel_offer(
+            sub,
+            conversation_id=body.get("conversation_id"),
+            confirm_block_id=body.get("confirm_block_id"),
+            trace_id=trace_id,
+        )
 
     if route == "POST /confirmations":
         body = _body(event)
-        issued = service.issue_confirmation(
+        issued, preview = service.issue_confirmation_with_preview(
             sub,
             tool=body.get("tool"),
             params=_params(body),
@@ -124,6 +197,7 @@ def _dispatch(
             trace_id=trace_id,
             conversation_id=body.get("conversation_id"),
             confirm_block_id=body.get("confirm_block_id"),
+            name_hint=_name_hint(event),
         )
         return 200, {
             "confirm_token": issued.token,
@@ -132,17 +206,20 @@ def _dispatch(
             "tool": issued.tool,
             "params": issued.params,
             "params_hash": issued.params_hash,
+            "preview": preview,
         }
 
     if route == "POST /actions":
         body = _body(event)
-        if body.get("tool") != "move_between_jars":
+        tool = body.get("tool")
+        if tool not in ACTION_TOOLS:
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Tool không được hỗ trợ.")
         token = body.get("confirm_token")
         if token is not None and not isinstance(token, str):
             raise YofinaError(ErrorCode.PARAMS_INVALID, "confirm_token phải là chuỗi.")
-        receipt = service.apply_move(
+        receipt = service.apply_action(
             sub,
+            tool,
             _params(body),
             token,
             trace_id=trace_id,
@@ -150,12 +227,12 @@ def _dispatch(
             source_tool="rest:POST /actions",
             conversation_id=body.get("conversation_id"),
             confirm_block_id=body.get("confirm_block_id"),
+            name_hint=_name_hint(event),
         )
         return 200, block_to_wire(receipt)
 
     if route == "GET /conversations":
-        query = event.get("queryStringParameters") or {}
-        return 200, service.conversations_response(sub, limit=query.get("limit"))
+        return 200, service.conversations_response(sub, limit=_query(event).get("limit"))
 
     if route.startswith("GET /conversations/"):
         # HTTP API đã giải mã tham số đường dẫn: lấy từ pathParameters, không tự tách chuỗi

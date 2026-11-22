@@ -83,8 +83,9 @@ paths:
         Gọi khi người dùng bấm nút trong khối `confirm`. Server xác thực người dùng bằng JWT, chuẩn
         hóa lại tham số, kiểm tra nghiệp vụ (hũ tồn tại, đủ số dư, hạn mức) rồi ký token
         HMAC trên (sub, tool, params_hash, hạn, jti). Token **mờ** với client: không phân tích nó.
-        Nếu gửi `conversation_id` và `confirm_block_id` mà đề nghị đã được thực hiện thì trả 409
-        `ALREADY_APPLIED` và không cấp token.
+        Nếu gửi `conversation_id` và `confirm_block_id` mà đề nghị đã được thực hiện hoặc đã bị hủy thì trả 409
+        `ALREADY_APPLIED` và không cấp token; đề nghị đã quá `expires_at` của khối `confirm` đã lưu thì trả 403
+        `TOKEN_EXPIRED` ("đề nghị đã hết hạn, hãy hỏi lại"): server ép hạn của đề nghị, không chỉ giao diện.
       parameters:
         - $ref: '#/components/parameters/Traceparent'
       requestBody:
@@ -112,6 +113,44 @@ paths:
           $ref: '#/components/responses/Unprocessable'
         '429':
           $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /confirmations/cancel:
+    post:
+      tags: [ledger]
+      operationId: cancelConfirmation
+      summary: Ghi việc người dùng bấm "Không" với một đề nghị
+      x-lambda: ledger
+      description: |
+        Lưu ở server trạng thái `cancelled` của đề nghị (khối `confirm` hoặc `confirm_action` có id `confirm_block_id`
+        trong cuộc hội thoại `conversation_id`). Không ghi sổ cái, không cần token. Sau đó `GET /conversations/{id}` trả
+        `resolutions` có phần tử `cancelled`, và `POST /confirmations` hoặc `POST /actions` với cùng `confirm_block_id`
+        trả 409 `ALREADY_APPLIED` (thông điệp nói đề nghị đã bị hủy). Hủy lại đề nghị đã hủy trả đúng kết quả cũ
+        (idempotent). Đề nghị đã thực hiện (`done`) thì không hủy được: 409 `ALREADY_APPLIED`. Đề nghị không có trong
+        hội thoại của người gọi (hoặc của người khác): 400 `PARAMS_INVALID`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelConfirmationRequest'
+      responses:
+        '200':
+          description: Đã ghi trạng thái hủy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelConfirmationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/Unavailable'
         '500':
@@ -861,6 +900,12 @@ components:
           $ref: '../blocks/envelope.schema.json#/$defs/Ratio'
         confidence_band:
           $ref: '../blocks/forecast_timeline.schema.json#/$defs/ConfidenceBand'
+        forecast_floor_vnd:
+          description: |
+            Số dư dự báo (P50) THẤP NHẤT từ ngày dự báo đầu tiên tới trước kỳ lương của lần chạy mới nhất có chứa hũ, để vẽ vạch
+            "mực dự báo" trên thẻ hũ. Có dấu (âm là hụt). Vắng khi hũ chưa có dự báo. Server tính từ bảng `forecasts` (hàm
+            `app_get_forecast_summaries`, migration 0008); pipeline dự báo không ghi thêm gì.
+          $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
     OverviewBalance:
       type: object
       required: [total_vnd, jars_total_vnd, other_income_vnd, unclassified_vnd]
@@ -1061,6 +1106,11 @@ components:
           description: out (chi), in (tiền vào).
           type: string
           enum: [out, in]
+        is_person_transfer:
+          description: |
+            Đúng với loại "chuyển tiền cho người khác" (`transfer_person`): màn chọn người nhận dùng cờ này, không đoán theo tên.
+            Cờ ở bảng tra `tx_type_map.is_person_transfer` (migration 0008). Server luôn gửi.
+          type: boolean
         default_jar:
           description: Hũ chuẩn của loại này (bước 0 của phân loại), nếu người dùng có hũ đó.
           $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
@@ -1256,6 +1306,12 @@ components:
         cần `kind`, `name` và số tiền (`amount_vnd`, hoặc cặp `amount_min_vnd` + `amount_max_vnd` khi đó
         `amount_vnd` là trung điểm làm tròn xuống); có `obligation_id` là sửa. `delete` cần `obligation_id`
         (đặt trạng thái cancelled). Khoản trả sau (`bnpl`) không khai được.
+
+        **`due_day` hay `due_date`**: `due_day` (1 đến 31) là NGÀY TRONG THÁNG của khoản lặp (`monthly`, và cũng dùng cho `yearly`
+        khi cần): kẹp ngày cuối tháng, giữ nguyên qua các kỳ. `due_date` là NGÀY ĐẾN HẠN CỤ THỂ kế tiếp. Khoản `once` bắt buộc
+        `due_date`. Khoản `monthly` chỉ cần một trong hai: có `due_day` thì server suy `due_date` (ngày đó sớm nhất không trước
+        hôm nay mô phỏng); có `due_date` mà không `due_day` thì `due_day` lấy theo ngày của `due_date`. Khoản `weekly` cần
+        `due_date` (kỳ sau cộng 7 ngày; `due_day` không dùng). Khi sửa (`obligation_id`) không điền mặc định nào.
       type: object
       required: [op]
       additionalProperties: false
@@ -1488,10 +1544,10 @@ components:
       pattern: '^confirm:[A-Za-z0-9_-]{1,64}:[0-9a-f]{12}$'
     ConfirmResolution:
       description: |
-        Trạng thái một khối `confirm` trong lượt, do server giữ. `done`: đã thực hiện, kèm `receipt`
-        (đúng khối `POST /actions` đã trả) và `resolved_at`; thắng mọi trạng thái khác. `expired`:
-        chưa thực hiện và đã quá `expires_at` của đề nghị lúc đọc. `pending`: còn hạn, chưa thực hiện.
-        (Việc người dùng bấm "Không" chưa được lưu ở server.)
+        Trạng thái một khối `confirm` hoặc `confirm_action` trong lượt, do server giữ. `done`: đã thực hiện,
+        kèm `receipt` (đúng khối `POST /actions` đã trả) và `resolved_at`; thắng mọi trạng thái khác. `cancelled`:
+        người dùng đã bấm "Không" (`POST /confirmations/cancel`), kèm `resolved_at`, không có `receipt`; cũng thắng
+        `expired`. `expired`: chưa xử lý và đã quá `expires_at` của đề nghị lúc đọc. `pending`: còn hạn, chưa xử lý.
       oneOf:
         - type: object
           required: [block_id, status, resolved_at, receipt]
@@ -1506,6 +1562,16 @@ components:
             receipt:
               $ref: '#/components/schemas/ActionResponse'
         - type: object
+          required: [block_id, status, resolved_at]
+          additionalProperties: false
+          properties:
+            block_id:
+              $ref: '../blocks/envelope.schema.json#/$defs/BlockId'
+            status:
+              const: cancelled
+            resolved_at:
+              $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        - type: object
           required: [block_id, status]
           additionalProperties: false
           properties:
@@ -1513,6 +1579,26 @@ components:
               $ref: '../blocks/envelope.schema.json#/$defs/BlockId'
             status:
               enum: [pending, expired]
+    CancelConfirmationRequest:
+      type: object
+      required: [conversation_id, confirm_block_id]
+      additionalProperties: false
+      properties:
+        conversation_id:
+          $ref: '#/components/schemas/ConfirmConversationId'
+        confirm_block_id:
+          $ref: '#/components/schemas/ConfirmBlockRef'
+    CancelConfirmationResponse:
+      type: object
+      required: [block_id, status, resolved_at]
+      additionalProperties: false
+      properties:
+        block_id:
+          $ref: '../blocks/envelope.schema.json#/$defs/BlockId'
+        status:
+          const: cancelled
+        resolved_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
     ToolName:
       type: string
       description: |
@@ -1621,6 +1707,33 @@ components:
         params_hash:
           type: string
           pattern: '^[0-9a-f]{64}$'
+        preview:
+          description: |
+            Bản XEM TRƯỚC do SERVER tính (không ghi gì), cùng hình dạng `changes` và `warnings` của khối `confirm_action`, để
+            màn "Xem lại" không tự tính gì: số dư trước và sau của từng hũ, với Trả sau (mô phỏng) thì khoản phải trả ngày
+            đến hạn (đã gồm phí lấy từ `fee_schedules`) và hạn mức còn lại, với lương thì phần chia vào từng hũ. Luôn có
+            ở phase 2; `warnings` vắng khi không có.
+          type: object
+          required: [summary, changes]
+          additionalProperties: false
+          properties:
+            summary:
+              type: string
+              minLength: 1
+              maxLength: 120
+            changes:
+              type: array
+              minItems: 1
+              maxItems: 20
+              items:
+                $ref: '../blocks/confirm_action.schema.json#/$defs/ActionChange'
+            warnings:
+              type: array
+              maxItems: 5
+              items:
+                type: string
+                minLength: 1
+                maxLength: 140
     ActionRequest:
       allOf:
         - $ref: '#/components/schemas/ParamsByTool'
