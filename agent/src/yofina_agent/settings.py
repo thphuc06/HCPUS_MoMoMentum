@@ -21,11 +21,31 @@ def _defaults() -> dict[str, Any]:
     return json.loads(text)
 
 
+def _as_bool(raw: str) -> bool:
+    v = str(raw).strip().lower()
+    if v in {"1", "true", "yes", "on"}:
+        return True
+    if v in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(raw)
+
+
+def _ssm_get(cfg: Config, name: str) -> str | None:
+    """Tra SSM một khóa lười; lỗi quyền/mạng không làm hỏng việc nạp cấu hình (guardrail sẽ tự tắt và ghi log)."""
+    try:
+        return cfg.get(name, default=None) or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 @dataclass(frozen=True)
 class AgentSettings:
     gateway_url: str | None
     gateway_tool_prefix: str
     forecast_tool_prefix: str
+    planner_tool_prefix: str
+    knowledge_tool_prefix: str
+    audit_tool_prefix: str
     run_timeout_seconds: float
     max_model_calls_per_turn: int
     max_tool_calls_per_turn: int
@@ -43,6 +63,24 @@ class AgentSettings:
     turn_blocks_tool: str
     turn_blocks_timeout_seconds: float
     log_level: str
+    # Harness phase 3
+    guardrail_enabled: bool
+    guardrail_timeout_seconds: float
+    guardrail_fail_open: bool
+    guardrail_id: str | None
+    guardrail_version: str | None
+    tool_retry_attempts: int
+    orchestrator_max_tokens: int
+    analyst_max_tokens: int
+    verifier_max_rounds: int
+    plan_max_tokens: int
+    affordability_text_timeout_seconds: float
+    affordability_text_max_tokens: int
+    low_data_days: int
+    low_coverage_threshold: float
+    router_min_confidence: float
+    turn_record_tool: str
+    turn_record_timeout_seconds: float
 
     @classmethod
     def load(cls, env: Mapping[str, str] | None = None) -> AgentSettings:
@@ -60,6 +98,9 @@ class AgentSettings:
             gateway_url=cfg.get("gateway_url", default=None) or None,
             gateway_tool_prefix=get("gateway_tool_prefix"),
             forecast_tool_prefix=get("forecast_tool_prefix"),
+            planner_tool_prefix=get("planner_tool_prefix"),
+            knowledge_tool_prefix=get("knowledge_tool_prefix"),
+            audit_tool_prefix=get("audit_tool_prefix"),
             run_timeout_seconds=get("run_timeout_seconds", float),
             max_model_calls_per_turn=get("max_model_calls_per_turn", int),
             max_tool_calls_per_turn=get("max_tool_calls_per_turn", int),
@@ -77,9 +118,34 @@ class AgentSettings:
             turn_blocks_tool=get("turn_blocks_tool"),
             turn_blocks_timeout_seconds=get("turn_blocks_timeout_seconds", float),
             log_level=get("log_level"),
+            guardrail_enabled=get("guardrail_enabled", _as_bool),
+            guardrail_timeout_seconds=get("guardrail_timeout_seconds", float),
+            guardrail_fail_open=get("guardrail_fail_open", _as_bool),
+            # id/version: biến môi trường, rồi SSM `<prefix>/guardrail/id` và `/guardrail/version` (CDK `guardrail.ts` ghi)
+            guardrail_id=env_only.get("guardrail_id", default=None) or _ssm_get(cfg, "guardrail/id"),
+            guardrail_version=env_only.get("guardrail_version", default=None)
+            or _ssm_get(cfg, "guardrail/version"),
+            tool_retry_attempts=get("tool_retry_attempts", int),
+            orchestrator_max_tokens=get("orchestrator_max_tokens", int),
+            analyst_max_tokens=get("analyst_max_tokens", int),
+            verifier_max_rounds=get("verifier_max_rounds", int),
+            plan_max_tokens=get("plan_max_tokens", int),
+            affordability_text_timeout_seconds=get("affordability_text_timeout_seconds", float),
+            affordability_text_max_tokens=get("affordability_text_max_tokens", int),
+            low_data_days=get("low_data_days", int),
+            low_coverage_threshold=get("low_coverage_threshold", float),
+            router_min_confidence=get("router_min_confidence", float),
+            turn_record_tool=get("turn_record_tool"),
+            turn_record_timeout_seconds=get("turn_record_timeout_seconds", float),
         )
 
     def tool(self, short_name: str, *, target: str = "ledger") -> str:
         """Tên tool trên Gateway: `<target>___<tool>` (ví dụ `ledger___get_jar_balances`, `forecast___get_forecast`)."""
-        prefix = self.forecast_tool_prefix if target == "forecast" else self.gateway_tool_prefix
+        prefix = {
+            "ledger": self.gateway_tool_prefix,
+            "forecast": self.forecast_tool_prefix,
+            "planner": self.planner_tool_prefix,
+            "knowledge": self.knowledge_tool_prefix,
+            "audit": self.audit_tool_prefix,
+        }[target]
         return f"{prefix}{short_name}"

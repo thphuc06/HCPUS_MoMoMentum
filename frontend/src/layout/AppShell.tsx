@@ -64,7 +64,7 @@ export function AppShell() {
   return (
     <ApiProvider client={apiClient}>
       <OverviewProvider>
-        <ChatProvider agentUrl={config.agentUrl} repository={repository}>
+        <ChatProvider agentUrl={config.agentUrl} repository={repository} warmupEnabled={config.warmupEnabled} undoWindowMs={config.undoWindowSeconds * 1000}>
           <Frame>
             <Outlet />
           </Frame>

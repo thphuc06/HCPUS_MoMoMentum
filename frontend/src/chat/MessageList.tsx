@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { BlockRenderer } from '@/blocks/registry'
+import { blockSchemas } from '@/contracts/blocks'
 import { Notice } from '@/components/Notice'
 import { AiChip } from '@/components/StatusChip'
 import { AIMessage, ToolProgress, UserBubble } from './parts'
@@ -41,9 +42,62 @@ export function supersededAssistantIds(items: readonly ChatItem[]): Set<string> 
   return out
 }
 
-export function MessageList({ items, running, onRetry }: { items: readonly ChatItem[]; running: boolean; onRetry: () => void }) {
+/**
+ * Id các khối xác nhận mà một khối `options` tham chiếu (`options.action.block_id`). Khối xác nhận được agent phát sẵn trong
+ * lượt nhưng chỉ hiện sau khi người dùng "Chọn" phương án tương ứng (hợp đồng phase 3, quyết định số 11).
+ */
+export function referencedConfirmIds(items: readonly ChatItem[]): Set<string> {
+  const out = new Set<string>()
+  for (const it of items) {
+    if (it.kind !== 'block') continue
+    const parsed = blockSchemas.options.safeParse(it.raw)
+    if (!parsed.success) continue
+    for (const o of parsed.data.data.options) if (o.action) out.add(o.action.block_id)
+  }
+  return out
+}
+
+/** Id các khối đã có tin nhắn mới của người dùng đứng sau (khối hỏi lại không còn bấm được). */
+function staleBlockIds(items: readonly ChatItem[]): Set<string> {
+  const out = new Set<string>()
+  let lastUser = -1
+  items.forEach((it, i) => {
+    if (it.kind === 'user') lastUser = i
+  })
+  items.forEach((it, i) => {
+    if (it.kind === 'block' && i < lastUser) out.add(it.id)
+  })
+  return out
+}
+
+export function MessageList({
+  items,
+  running,
+  onRetry,
+  revealed,
+}: {
+  items: readonly ChatItem[]
+  running: boolean
+  onRetry: () => void
+  revealed?: ReadonlySet<string>
+}) {
   const viewport = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
+  const shown = revealed ?? EMPTY
+  const lastRevealed = useRef<number>(0)
+
+  // "Chọn" một phương án: cuộn tới khối xác nhận vừa hiện.
+  useEffect(() => {
+    if (shown.size === lastRevealed.current) return
+    lastRevealed.current = shown.size
+    const id = [...shown].pop()
+    if (!id) return
+    const raf = requestAnimationFrame(() => {
+      const el = viewport.current?.querySelector(`[data-block-id="${id.replace(/["\\]/g, '')}"]`)
+      if (el && 'scrollIntoView' in el) (el as HTMLElement).scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [shown])
 
   // Tự cuộn xuống đáy khi có nội dung mới, trừ khi người dùng đã cuộn lên xem.
   useEffect(() => {
@@ -63,6 +117,8 @@ export function MessageList({ items, running, onRetry }: { items: readonly ChatI
 
   const grouped = groupItems(items)
   const superseded = supersededAssistantIds(items)
+  const referenced = referencedConfirmIds(items)
+  const stale = staleBlockIds(items)
   const rows: ReactNode[] = grouped.map((g, idx) => {
     const next = grouped[idx + 1]
     switch (g.kind) {
@@ -80,9 +136,11 @@ export function MessageList({ items, running, onRetry }: { items: readonly ChatI
       case 'tools':
         return <ToolProgress key={g.id} tools={g.tools} />
       case 'block':
+        // Khối xác nhận do một phương án tham chiếu: ẩn cho tới khi chọn phương án (đã thực hiện, hủy hay hết hạn thì luôn hiện).
+        if (referenced.has(g.id) && !shown.has(g.id) && !g.resolved && !g.ui) return null
         return (
-          <div key={g.id} data-testid="block-item">
-            <BlockRenderer raw={g.raw} blockId={g.id} ui={g.ui} />
+          <div key={g.id} data-testid="block-item" data-block-id={g.id}>
+            <BlockRenderer raw={g.raw} blockId={g.id} ui={g.ui} doneAt={g.doneAt} stale={stale.has(g.id)} />
           </div>
         )
       case 'notice':
@@ -115,6 +173,8 @@ export function MessageList({ items, running, onRetry }: { items: readonly ChatI
     </div>
   )
 }
+
+const EMPTY: ReadonlySet<string> = new Set()
 
 function lastNoticeId(items: readonly ChatItem[]): string | undefined {
   for (let i = items.length - 1; i >= 0; i--) {

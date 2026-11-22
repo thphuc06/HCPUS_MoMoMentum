@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ForecastTimelineData } from '@/contracts/blocks'
 import { validBlock } from '@/test/fixtures'
-import { buildChartModel, jarReference, lowestP50BeforePayday, niceTicks, rowAt, xToLabel } from './model'
+import { buildChartModel, jarReference, lowestP50BeforePayday, niceTicks, rowAt, stackLevels, xToLabel } from './model'
 
 const data = (name: string): ForecastTimelineData => (validBlock(name) as unknown as { data: ForecastTimelineData }).data
 
@@ -100,5 +100,46 @@ describe('niceTicks', () => {
   it('miền suy biến không làm vỡ', () => {
     expect(niceTicks(0, 0)).toEqual([0, 1])
     expect(niceTicks(5, 5).length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('nhãn mốc không chồng nhau (lỗi nhỏ phase 2)', () => {
+  it('stackLevels: mốc gần nhau (dưới 4 ngày) lên tầng khác nhau, đủ xa thì về tầng 0', () => {
+    expect(stackLevels([0, 2, 3, 20])).toEqual([0, 1, 2, 0])
+    expect(stackLevels([5, 5, 5, 5])).toEqual([0, 1, 2, 0]) // tối đa 3 tầng rồi quay vòng
+    expect(stackLevels([])).toEqual([])
+    expect(stackLevels([1, 10, 20])).toEqual([0, 0, 0])
+  })
+
+  it('buildChartModel sắp mốc theo ngày và trả tầng cho từng mốc', () => {
+    const d = structuredClone(data('forecast_timeline.short'))
+    d.events = [
+      { date: '2026-11-25', kind: 'obligation', label: 'A', amount_vnd: 1000 },
+      { date: '2026-11-24', kind: 'obligation', label: 'B', amount_vnd: 1000 },
+    ]
+    const m = buildChartModel(d)
+    expect(m.events.map((e) => e.label)).toEqual(['B', 'A'])
+    expect(m.eventLevels).toEqual([0, 1])
+  })
+})
+
+describe('biến thể trước-sau (compare)', () => {
+  const d = data('forecast_timeline.what_if')
+  const m = buildChartModel(d)
+
+  it('ghép đường SAU theo ngày, giữ nguyên số engine; dải chênh lệch là khoảng giữa hai đường P50', () => {
+    expect(m.hasCompare).toBe(true)
+    const after = d.compare!.after
+    const row = m.rows.find((r) => r.date === after.days[2]!.date)!
+    expect(row.after).toBe(after.days[2]!.p50_vnd)
+    expect(row.gap).toEqual([Math.min(row.p50, row.after!), Math.max(row.p50, row.after!)])
+    expect(m.rows[0]!.after).toBe(d.start_balance_vnd) // cùng điểm xuất phát
+  })
+
+  it('khối không có compare thì không có đường SAU', () => {
+    const plain = buildChartModel(data('forecast_timeline.short'))
+    expect(plain.hasCompare).toBe(false)
+    expect(plain.rows.every((r) => r.after === undefined && r.gap === undefined)).toBe(true)
+    expect(plain.afterRunout).toBeNull()
   })
 })

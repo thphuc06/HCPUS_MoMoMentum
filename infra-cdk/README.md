@@ -157,9 +157,9 @@ URL Amplify: `/yofina/frontend/amplify-url`. Trang đang host lúc này là tran
 ## Đóng gói Lambda / Runtime không Docker
 
 ```bash
-uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas   # build/lambda/ledger-arm64/ và .zip
+uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas --extra gateway/tools/planner/yofina_planner:yofina_planner --extra gateway/tools/planner/rules:rules --extra gateway/tools/knowledge/yofina_knowledge:yofina_knowledge --extra gateway/tools/audit/yofina_audit:yofina_audit   # build/lambda/ledger-arm64/ và .zip
 uv run scripts/build_lambda.py agent --arch arm64 --no-core
-uv run scripts/build_lambda.py pipelines/forecast --arch arm64 --name forecast --slim   --extra ml/yofina_ml:yofina_ml --extra gateway/tools/ledger/yofina_ledger:yofina_ledger   # numpy + scipy: 46 MB nén, 156 MB giải nén
+uv run scripts/build_lambda.py pipelines/forecast --arch arm64 --name forecast --slim   --extra ml/yofina_ml:yofina_ml --extra gateway/tools/ledger/yofina_ledger:yofina_ledger --extra gateway/tools/planner/yofina_planner:yofina_planner --extra gateway/tools/planner/rules:rules --extra gateway/tools/knowledge/yofina_knowledge:yofina_knowledge --extra gateway/tools/audit/yofina_audit:yofina_audit   # numpy + scipy: 46 MB nén, 156 MB giải nén
 ```
 
 Dùng `uv pip install --python-platform aarch64-manylinux2014 --only-binary=:all:` để cài wheel Linux ngay trên Windows, kèm `libs/yofina_core` nếu có. Trong CDK dùng `lambda.Code.fromAsset('<đường dẫn>.zip')`. Chi tiết và giới hạn ở docstring của script.

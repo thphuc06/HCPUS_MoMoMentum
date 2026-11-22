@@ -4,6 +4,9 @@ import { AuthError } from '@/auth/types'
 import { ApiError, apiErrorFromResponse } from './errors'
 import {
   ActionResponse,
+  AffordabilityResponse,
+  FeedbackResponse,
+  TraceResponse,
   CancelConfirmationResponse,
   ConfirmationResponse,
   CreditLineResponse,
@@ -20,6 +23,8 @@ import {
   TransactionsResponse,
   TxTypesResponse,
   type ActionRequest,
+  type AffordabilityRequest,
+  type FeedbackRequest,
   type CancelConfirmationRequest,
   type ConfirmationRequest,
   type TransactionQuery,
@@ -55,6 +60,12 @@ export type ApiClient = {
   cancelConfirmation(req: CancelConfirmationRequest): Promise<CancelConfirmationResponse>
   applyAction(req: ActionRequest): Promise<ActionResponse>
   resetDemo(): Promise<ResetResponse>
+  /** Kiểm tra trước khi quẹt (T3): tất định, không qua LLM, không ghi gì. Trả khối `affordability_card`. */
+  checkAffordability(req: AffordabilityRequest): Promise<AffordabilityResponse>
+  /** Bảng "Vì sao" của một lượt trả lời của agent (chỉ của chính người dùng; người khác hoặc không có thì TRACE_NOT_FOUND). */
+  getTrace(traceId: string): Promise<TraceResponse>
+  /** Ghi chấp nhận hoặc từ chối một phương án (không qua token). */
+  submitFeedback(req: FeedbackRequest): Promise<FeedbackResponse>
 }
 
 async function readBody(res: Response): Promise<unknown> {
@@ -142,5 +153,8 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     cancelConfirmation: (req) => call('POST', '/confirmations/cancel', CancelConfirmationResponse, req),
     applyAction: (req) => call('POST', '/actions', ActionResponse, req),
     resetDemo: () => call('POST', '/demo/reset', ResetResponse, undefined, RESET_TIMEOUT_MS),
+    checkAffordability: (req) => call('POST', '/affordability', AffordabilityResponse, req),
+    getTrace: (traceId) => call('GET', `/traces/${enc(traceId)}`, TraceResponse),
+    submitFeedback: (req) => call('POST', '/feedback', FeedbackResponse, req),
   }
 }

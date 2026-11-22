@@ -17,6 +17,8 @@ const config: Config = {
   apiUrl: 'https://api.example.invalid',
   agentUrl: 'https://rt.example.invalid/i',
   replayEnabled: false,
+  warmupEnabled: true,
+  undoWindowSeconds: 30,
 }
 
 function renderRoutes(auth: ReturnType<typeof fakeAuth>, cfg: Config = config, initial = '/') {

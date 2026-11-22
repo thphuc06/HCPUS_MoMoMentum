@@ -85,7 +85,7 @@ describe('luồng xác nhận (ADR-0002)', () => {
     ]
     expect(order[0]).toBeLessThan(order[1]!)
 
-    expect(actions.replaceBlock).toHaveBeenCalledWith(block.id, receipt, receipt.id)
+    expect(actions.replaceBlock).toHaveBeenCalledWith(block.id, receipt, receipt.id, { fresh: true }) // vừa thực hiện: còn trong cửa sổ Hoàn tác
     expect(actions.addSystemNote).toHaveBeenCalledTimes(1)
     expect(actions.addSystemNote.mock.calls[0]![1]).toBe(receipt.id) // cùng khóa với lúc đồng bộ lại từ server: chỉ một ghi chú
     const note = actions.addSystemNote.mock.calls[0]![0] as string

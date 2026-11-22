@@ -63,6 +63,14 @@ class FakeTools:
             "get_forecast": lambda args: classify_result(
                 "x", mcp_ok(fixture("get_forecast.ok.json"))
             ),
+            # phase 3
+            "get_obligations": lambda args: classify_result("x", mcp_ok(fixture("get_obligations.ok.json"))),
+            "get_fee_schedule": lambda args: classify_result("x", mcp_ok(fixture("get_fee_schedule.ok.json"))),
+            "run_scenario": lambda args: classify_result("x", mcp_ok(fixture("run_scenario.ok_bnpl.json"))),
+            "check_suitability": lambda args: classify_result("x", mcp_ok(fixture("check_suitability.ok.json"))),
+            "affordability_check": lambda args: classify_result("x", mcp_ok(fixture("affordability_check.ok.json"))),
+            "update_profile": lambda args: classify_result("x", mcp_ok(fixture("update_profile.needs_confirmation.json"))),
+            "schedule_nudge": lambda args: classify_result("x", mcp_ok(fixture("schedule_nudge.needs_confirmation.json"))),
         }
         self.results = {**base, **(results or {})}
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -105,15 +113,61 @@ class FakeUsage:
         return len(self.calls)
 
 
+_LEGACY_INTENT = {
+    "balance_lookup": ("lookup", "balance"),
+    "transactions_lookup": ("lookup", "transactions"),
+    "forecast_lookup": ("lookup", "forecast"),
+    "move_between_jars": ("move", None),
+}
+_PARAM_KEYS = (
+    "jar_text", "from_jar_text", "to_jar_text", "amount_vnd", "days_back", "limit", "funding", "scenario_kind",
+    "label", "date_text", "salary_vnd", "payday_day", "obligation_name", "obligation_kind", "due_day",
+)  # fmt: skip
+
+
 def route_response(**fields: Any) -> dict[str, Any]:
+    """Phản hồi của router giả. Nhận cả tên ý định cũ của phase 1 và 2 (`balance_lookup`...) và đổi sang `IntentResult` của phase 3."""
+    intent = fields.pop("intent")
+    lookup_kind = fields.pop("lookup_kind", None)
+    if intent in _LEGACY_INTENT:
+        intent, lk = _LEGACY_INTENT[intent]
+        lookup_kind = lookup_kind or lk
+    clarify = fields.pop("clarify", None)
+    reply = fields.pop("reply", None)
+    confidence = fields.pop("confidence", 0.9)
+    needs = fields.pop("needs_clarification", clarify is not None)
+    params = {k: fields.pop(k) for k in _PARAM_KEYS if k in fields}
+    if lookup_kind:
+        params["lookup_kind"] = lookup_kind
+    if fields:
+        raise AssertionError(f"trường lạ cho route_response: {sorted(fields)}")
+    out: dict[str, Any] = {"intent": intent, "params": params, "confidence": confidence, "needs_clarification": needs}
+    if clarify is not None:
+        out["clarify"] = clarify
+    if reply is not None:
+        out["reply"] = reply
     return {
         "output": {
             "message": {
                 "role": "assistant",
-                "content": [{"toolUse": {"toolUseId": "r1", "name": "route", "input": fields}}],
+                "content": [{"toolUse": {"toolUseId": "r1", "name": "route", "input": out}}],
             }
         },
         "usage": {"inputTokens": 100, "outputTokens": 20},
+        "stopReason": "tool_use",
+    }
+
+
+def tool_response(name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Phản hồi giả của model khi bị ép gọi tool `name` với `payload` (planner, Analyst...)."""
+    return {
+        "output": {
+            "message": {
+                "role": "assistant",
+                "content": [{"toolUse": {"toolUseId": f"t-{name}", "name": name, "input": payload}}],
+            }
+        },
+        "usage": {"inputTokens": 300, "outputTokens": 80},
         "stopReason": "tool_use",
     }
 
@@ -201,6 +255,8 @@ def run_turn(
     settings: AgentSettings | None = None,
     messages: list[dict[str, Any]] | None = None,
     store: Any = None,
+    guardrail: Any = None,
+    records: Any = None,
 ) -> tuple[list[Any], FakeTools, FakeWriter]:
     tools = tools or FakeTools()
     writer = writer or FakeWriter()
@@ -212,6 +268,8 @@ def run_turn(
         llm=lambda: gateway,
         store=store or UnconfiguredTurnBlockStore(),
         tools_factory=lambda identity: tools,  # type: ignore[arg-type,return-value]
+        guardrail=guardrail,
+        **({"records": records} if records is not None else {}),
     )
     turn = Turn(
         deps,
@@ -264,3 +322,40 @@ def check_agui_order(events: list[Any]) -> None:
             open_tools.pop(e.tool_call_id)
             json.loads(e.content)  # nội dung là chuỗi JSON
     assert open_msg is None and not open_tools, "còn tin nhắn/tool call chưa đóng"
+
+
+class FakeRecords:
+    """Thay `TurnRecordStore`: ghi lại các bản ghi lượt."""
+
+    def __init__(self) -> None:
+        self.saved: list[dict[str, Any]] = []
+
+    async def save(self, *, tools: Any, record: dict[str, Any]) -> bool:
+        self.saved.append(record)
+        return True
+
+
+class FakeGuardrailClient:
+    """Client bedrock-runtime giả cho `ApplyGuardrail`: chặn khi văn bản chứa một trong `block_words`."""
+
+    def __init__(self, block_words: tuple[str, ...] = (), error: BaseException | None = None) -> None:
+        self.block_words, self.error, self.calls = block_words, error, []
+
+    def apply_guardrail(self, **kw: Any) -> dict[str, Any]:
+        self.calls.append(kw)
+        if self.error:
+            raise self.error
+        text = kw["content"][0]["text"]["text"].lower()
+        if any(w in text for w in self.block_words):
+            return {
+                "action": "GUARDRAIL_INTERVENED",
+                "assessments": [{"topicPolicy": {"topics": [{"name": "specific-investment-advice", "type": "DENY", "action": "BLOCKED"}]}}],
+            }
+        return {"action": "NONE", "assessments": []}
+
+
+def make_guardrail(client: Any, **over: Any) -> Any:
+    from yofina_agent.guardrail import Guardrail
+
+    st = agent_settings(guardrail_enabled=True, guardrail_id="gr-test", guardrail_version="1", **over)
+    return Guardrail(st, region="ap-southeast-1", client=client)

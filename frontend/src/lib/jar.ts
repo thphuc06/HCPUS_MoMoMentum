@@ -30,10 +30,17 @@ export function jarForecastLevel(
 }
 
 /** Chip trạng thái từ `status` của server (đủ/sát/hụt): luôn có biểu tượng + chữ (StatusChip). */
-export function jarStatusChip(status: JarStatus, runoutDate?: string): { kind: ChipKind; label: string } {
+export function jarStatusChip(status: JarStatus, runoutDate?: string, emptyNow = false): { kind: ChipKind; label: string } {
   if (status === 'ok') return { kind: 'ok', label: 'Đủ tới kỳ lương' }
   if (status === 'tight') return { kind: 'warn', label: 'Sát, cần nhắc' }
+  // Hũ đã không còn tiền (0 ₫): không nói "cạn ngày ..." như thể còn tiền để cạn.
+  if (emptyNow) return { kind: 'bad', label: 'Đang hết tiền' }
   return { kind: 'bad', label: runoutDate ? `Cạn ngày ${formatDayMonth(runoutDate)}` : 'Hụt tiền' }
+}
+
+/** Nhãn ngắn của ba trạng thái (Đủ, Sát, Hụt) cho thẻ kiểm tra: luôn đi cùng biểu tượng của StatusChip, không chỉ màu. */
+export function statusShortChip(status: JarStatus): { kind: ChipKind; label: string } {
+  return status === 'ok' ? { kind: 'ok', label: 'Đủ' } : status === 'tight' ? { kind: 'warn', label: 'Sát' } : { kind: 'bad', label: 'Hụt' }
 }
 
 export const CONFIDENCE_LABEL = { high: 'Cao', medium: 'Vừa', low: 'Thấp' } as const

@@ -41,6 +41,8 @@ class MemoryRepo:
                     "run_app_date": run["result"].run.app_date,
                     "model": run["result"].run.model,
                     "is_initial_estimate": run["result"].run.is_initial_estimate,
+                    "history_days": run["result"].run.history_days,
+                    "data_coverage": run["result"].run.data_coverage,
                     "start_balance_vnd": s.start_balance_vnd,
                     "payday_date": s.payday_date,
                     "days_to_payday": s.days_to_payday,

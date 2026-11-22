@@ -14,9 +14,12 @@ chuyển router sang kiểu này.
 
 from __future__ import annotations
 
+import ast
+import json
+import re
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from yofina_core.blocks import ActionToolName, ClarifySlot, JarCode, OptionKind, RuleId
 from yofina_core.scenario import SCENARIO_ADAPTER, ScenarioSpec
@@ -77,9 +80,14 @@ class ClarifyRequest(_Model):
         return self
 
 
+LookupKind = Literal["balance", "transactions", "forecast", "obligations"]
+ObligationKind = Literal["rent", "bill", "subscription", "loan"]
+
+
 class IntentParams(_Model):
     """Tham số người dùng nói (router không đoán). Tên hũ giữ nguyên chữ họ gõ."""
 
+    lookup_kind: LookupKind | None = None  # chỉ với intent `lookup`: tra số dư, giao dịch, dự báo một hũ hay nghĩa vụ
     jar_text: str | None = None
     from_jar_text: str | None = None
     to_jar_text: str | None = None
@@ -93,6 +101,12 @@ class IntentParams(_Model):
     label: Annotated[str, Field(max_length=80)] | None = None
     days_back: Annotated[int, Field(ge=1)] | None = None
     limit: Annotated[int, Field(ge=1)] | None = None
+    # khai báo hồ sơ bằng chat (profile_update): lương, ngày nhận lương, hoặc MỘT khoản nghĩa vụ
+    salary_vnd: Annotated[int, Field(ge=1)] | None = None
+    payday_day: Annotated[int, Field(ge=1, le=31)] | None = None
+    obligation_name: Annotated[str, Field(max_length=80)] | None = None
+    obligation_kind: ObligationKind | None = None
+    due_day: Annotated[int, Field(ge=1, le=31)] | None = None
 
 
 class IntentResult(_Model):
@@ -102,6 +116,24 @@ class IntentResult(_Model):
     needs_clarification: bool
     clarify: ClarifyRequest | None = None
     reply: Annotated[str, Field(max_length=400)] | None = None
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def _params_lenient(cls, value: Any) -> Any:
+        """Model nhỏ đôi khi trả `params` thành CHUỖI (JSON hoặc dạng Python có `None`) hoặc null: đọc lại thay vì bắt thử lại."""
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            text = re.sub(r"\bnull\b", "None", re.sub(r"\btrue\b", "True", re.sub(r"\bfalse\b", "False", value)))
+            try:
+                parsed = ast.literal_eval(text)
+            except (ValueError, SyntaxError):
+                try:
+                    parsed = json.loads(value)
+                except ValueError:
+                    return value
+            return parsed if isinstance(parsed, dict) else value
+        return value
 
     @model_validator(mode="after")
     def _consistent(self) -> IntentResult:
@@ -172,6 +204,7 @@ class AnalysisOption(_Model):
     proposal: Proposal
     action: OptionActionSpec | None = None
     jar_code: JarCode | None = None
+    recommended: bool | None = None
 
 
 class Analysis(_Model):
@@ -251,6 +284,8 @@ __all__ = [
     "GroundingResult",
     "Intent",
     "IntentParams",
+    "LookupKind",
+    "ObligationKind",
     "IntentResult",
     "OptionActionSpec",
     "OptionSuitability",

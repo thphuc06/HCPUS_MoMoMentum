@@ -9,8 +9,14 @@ export { receiptNote }
 
 export type ConfirmPhase = 'idle' | 'working' | 'done' | 'blocked'
 
-/** Mã lỗi khi xin token cho đề nghị đã quá hạn (server ép hạn của đề nghị, không chỉ giao diện). */
-const OFFER_EXPIRED = 'TOKEN_EXPIRED'
+/**
+ * Đề nghị đã quá hạn (server ép hạn của đề nghị, không chỉ giao diện): mã riêng `OFFER_EXPIRED` (410, hợp đồng phase 3),
+ * khác `TOKEN_EXPIRED` (token quá 2 phút: bấm xác nhận lại là có token mới). Server chưa đổi mã thì vẫn trả TOKEN_EXPIRED
+ * khi XIN token cho đề nghị quá hạn: ở bước xin token coi cả hai là đề nghị hết hạn (xem `isOfferExpired`).
+ */
+export function isOfferExpired(code: string, stage: 'issue' | 'apply'): boolean {
+  return code === 'OFFER_EXPIRED' || (stage === 'issue' && code === 'TOKEN_EXPIRED')
+}
 
 /** Lỗi mà bấm lại cũng vô ích (số dư đổi, đã ghi rồi, tham số lệch): khóa nút, người dùng bấm "Không" hoặc hỏi lại. */
 const BLOCKING: ReadonlySet<string> = new Set<ErrorCode>([
@@ -59,14 +65,14 @@ export function useConfirmFlow({ block, blockId }: { block: ConfirmBlock | Confi
       const issued = await api.createConfirmation({ tool, params, params_hash, ...ref })
       stage = 'apply'
       const receipt = await api.applyAction({ tool: issued.tool, params: issued.params, confirm_token: issued.confirm_token, ...ref })
-      actions.replaceBlock(blockId, receipt, receipt.id)
+      actions.replaceBlock(blockId, receipt, receipt.id, { fresh: true })
       actions.addSystemNote(receiptNote(receipt), receipt.id)
       setPhase('done')
       refresh(receipt.source.as_of) // làm mới mọi dữ liệu đang hiện (tổng quan, hũ, dự báo, giao dịch...)
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError('INTERNAL_ERROR', 0)
-      // Xin token mà bị TOKEN_EXPIRED: là ĐỀ NGHỊ quá hạn (không phải token), bấm lại vô ích: hiện như hết hạn, hỏi lại Yofina.
-      if (stage === 'issue' && err.code === OFFER_EXPIRED) {
+      // Đề nghị quá hạn (không phải token): bấm lại vô ích, hiện như hết hạn và mời hỏi lại để có đề nghị mới.
+      if (isOfferExpired(err.code, stage)) {
         setOfferExpired(true)
         setPhase('blocked')
         return

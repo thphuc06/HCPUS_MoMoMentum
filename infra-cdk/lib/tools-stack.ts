@@ -140,7 +140,7 @@ export class ToolsStack extends Stack {
 
     if (!fs.existsSync(tools.ledgerZip)) {
       throw new Error(
-        `Chưa có ${tools.ledgerZip}. Chạy: uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas`,
+        `Chưa có ${tools.ledgerZip}. Chạy: uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas --extra gateway/tools/planner/yofina_planner:yofina_planner --extra gateway/tools/planner/rules:rules --extra gateway/tools/knowledge/yofina_knowledge:yofina_knowledge --extra gateway/tools/audit/yofina_audit:yofina_audit`,
       );
     }
 
@@ -212,6 +212,7 @@ export class ToolsStack extends Stack {
         YOFINA_EVENT_BUS_NAME: this.bus.eventBusName,
         YOFINA_FORECAST_FUNCTION_NAME: this.forecast.batch.functionName,
         YOFINA_FORECAST_SYNC_TIMEOUT_SECONDS: String(Math.max(tools.ledgerTimeoutSeconds - 8, 5)),
+        YOFINA_SUITABILITY_WINDOW_DAYS: String(props.forecast.horizonDays),
         YOFINA_APP_TIMEZONE: tools.appTimezone,
         YOFINA_DEMO_ANCHOR_DATE: tools.demoAnchorDate,
       },
@@ -301,10 +302,18 @@ export class ToolsStack extends Stack {
       ['/demo/reset', apigwv2.HttpMethod.POST],
       ['/conversations', apigwv2.HttpMethod.GET],
       ['/conversations/{conversation_id}', apigwv2.HttpMethod.GET],
+      ['/traces/{trace_id}', apigwv2.HttpMethod.GET],
+      ['/feedback', apigwv2.HttpMethod.POST],
     ];
     for (const [routePath, method] of routes) {
       this.api.addRoutes({ path: routePath, methods: [method], integration });
     }
+    // `POST /affordability` (x-lambda: forecast): Lambda yofina-forecast (có engine), cùng JWT authorizer.
+    this.api.addRoutes({
+      path: '/affordability',
+      methods: [apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration('AffordIntegration', this.forecast.tool),
+    });
     const stage = this.api.defaultStage?.node.defaultChild as apigwv2.CfnStage | undefined;
     if (stage) {
       stage.defaultRouteSettings = {

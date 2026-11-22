@@ -113,3 +113,49 @@ class GatewayToolTurnBlockStore:
 
 def make_store(tool_name: str) -> TurnBlockStore:
     return GatewayToolTurnBlockStore(tool_name) if tool_name else UnconfiguredTurnBlockStore()
+
+
+# --- bản ghi lượt (audit_events, event_type agent_turn) ---------------------------------------
+class TurnRecordStore(Protocol):
+    async def save(self, *, tools: GatewayTools, record: dict[str, Any]) -> bool:
+        """Ghi MỘT bản ghi lượt (`trace.build_record`). Trả True nếu đã ghi."""
+        ...
+
+
+class UnconfiguredTurnRecordStore:
+    """Chưa nối đường ghi: ghi log rõ ràng rồi bỏ qua. Cần một tool backend (xem agent/README.md, mục "Bản ghi lượt")."""
+
+    async def save(self, *, tools: GatewayTools, record: dict[str, Any]) -> bool:
+        log.info(
+            json.dumps(
+                {
+                    "event": "turn_record_not_persisted",
+                    "reason": "turn_record_tool chưa cấu hình",
+                    "trace_id": record.get("trace_id"),
+                    "intent": record.get("intent"),
+                }
+            )
+        )
+        return False
+
+
+class GatewayToolTurnRecordStore:
+    """Ghi bằng một tool của Gateway: tham số là đúng `record` (user_id do interceptor ghi đè từ JWT); phía tool `INSERT ... ON CONFLICT DO NOTHING`."""
+
+    def __init__(self, tool_name: str) -> None:
+        self._tool = tool_name
+
+    async def save(self, *, tools: GatewayTools, record: dict[str, Any]) -> bool:
+        outcome = await tools.call(self._tool, dict(record))
+        if not outcome.ok:
+            log.warning(
+                json.dumps(
+                    {"event": "turn_record_save_failed", "kind": outcome.kind.value, "detail": outcome.detail},
+                    ensure_ascii=False,
+                )
+            )
+        return outcome.ok
+
+
+def make_record_store(tool_name: str) -> TurnRecordStore:
+    return GatewayToolTurnRecordStore(tool_name) if tool_name else UnconfiguredTurnRecordStore()

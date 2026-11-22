@@ -71,6 +71,16 @@ const TOOL_LABELS: Record<string, { running: string; done: string }> = {
   get_jar_balances: { running: 'Đang đọc số dư các hũ…', done: 'Đã đọc số dư các hũ' },
   query_transactions: { running: 'Đang đọc lịch sử giao dịch…', done: 'Đã đọc lịch sử giao dịch' },
   move_between_jars: { running: 'Đang chuẩn bị chuyển tiền giữa hai hũ…', done: 'Đã chuẩn bị chuyển tiền giữa hai hũ' },
+  get_forecast: { running: 'Đang đọc dự báo 30 ngày của hũ…', done: 'Đã đọc dự báo 30 ngày của hũ' },
+  run_scenario: { running: 'Đang chạy kịch bản "nếu"…', done: 'Đã chạy kịch bản "nếu"' },
+  affordability_check: { running: 'Đang kiểm tra trước khi trả…', done: 'Đã kiểm tra trước khi trả' },
+  get_fee_schedule: { running: 'Đang tra biểu phí…', done: 'Đã tra biểu phí' },
+  check_suitability: { running: 'Đang kiểm tra các luật tài chính…', done: 'Đã kiểm tra các luật tài chính' },
+  get_obligations: { running: 'Đang đọc các khoản nghĩa vụ…', done: 'Đã đọc các khoản nghĩa vụ' },
+  get_cashflow_summary: { running: 'Đang tổng hợp thu chi…', done: 'Đã tổng hợp thu chi' },
+  get_unclassified: { running: 'Đang đọc các khoản chưa phân loại…', done: 'Đã đọc các khoản chưa phân loại' },
+  schedule_nudge: { running: 'Đang chuẩn bị lời nhắc…', done: 'Đã chuẩn bị lời nhắc' },
+  get_trace: { running: 'Đang đọc bản ghi của lượt trả lời…', done: 'Đã đọc bản ghi của lượt trả lời' },
 }
 
 export function toolLabel(name: string, status: 'running' | 'done'): string {

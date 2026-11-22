@@ -1,6 +1,8 @@
 import { CheckCircle2, ChevronRight, Clock } from 'lucide-react'
 import { useInRouterContext, useNavigate } from 'react-router'
-import { AiChip } from '@/components/StatusChip'
+import { AiChip, StatusChip } from '@/components/StatusChip'
+import { useOptionalChatActions } from '@/chat/actions'
+import { useExplain } from '@/features/explain/context'
 import { ProactiveCard } from '@/components/ProactiveCard'
 import { Button } from '@/components/ui/button'
 import { ForecastBlock } from '@/features/forecast/ForecastBlock'
@@ -8,6 +10,7 @@ import { useProactiveActions } from '@/features/overview/useProactiveActions'
 import { useChatLauncher } from '@/chat/launcher'
 import { formatCountdown, formatSimMoment, formatVnd } from '@/lib/format'
 import type { ConfirmActionBlock, ForecastTimelineBlock, ProactiveCardBlock, ReceiptActionBlock } from '@/contracts/blocks'
+import { UndoBar } from './UndoBar'
 import { useConfirmFlow } from './useConfirmFlow'
 import { useNow } from './useNow'
 import type { BlockViewProps } from './views'
@@ -18,7 +21,10 @@ import type { BlockViewProps } from './views'
 
 /** Cùng ForecastBlock với màn Chi tiết hũ, nên chat và màn hình luôn cùng số. */
 export function ForecastTimelineView({ block }: BlockViewProps<ForecastTimelineBlock>) {
-  return <ForecastBlock data={block.data} />
+  // "Vì sao" chỉ có trong chat: khối do agent phát mang `trace_id` của lượt (có bản ghi để giải thích). Khối do REST dựng
+  // (Chi tiết hũ) không có bản ghi lượt, nên màn đó tự hỏi Yofina (xem JarDetailPage).
+  const explain = useExplain()
+  return <ForecastBlock data={block.data} onAskWhy={explain ? () => explain.open(block.trace_id) : undefined} />
 }
 
 // ---------------------------------------------------------------- proactive_card
@@ -41,6 +47,7 @@ export function ProactiveCardView({ block }: BlockViewProps<ProactiveCardBlock>)
 
 export function ConfirmActionView({ block, blockId, ui }: BlockViewProps<ConfirmActionBlock>) {
   const d = block.data
+  const actions = useOptionalChatActions()
   const flow = useConfirmFlow({ block, blockId })
   const expiresAt = Date.parse(d.expires_at)
   const cancelled = ui === 'cancelled'
@@ -99,9 +106,16 @@ export function ConfirmActionView({ block, blockId, ui }: BlockViewProps<Confirm
           Đề nghị này đã được thực hiện rồi. Bạn kiểm tra số dư ở Tổng quan nhé.
         </p>
       ) : expired ? (
-        <p className="mt-3 text-small font-semibold text-warn-fg" role="status">
-          Đề nghị này đã hết hạn nên số liệu xem trước có thể đã cũ. Hỏi lại Yofina để xem số mới.
-        </p>
+        <div role="status" className="mt-3">
+          <p className="text-small font-semibold text-warn-fg">
+            Đề nghị này đã hết hạn nên số liệu xem trước có thể đã cũ.
+          </p>
+          {actions && (
+            <Button type="button" variant="soft" size="sm" className="mt-2" onClick={actions.askAgain}>
+              Hỏi lại để có đề nghị mới
+            </Button>
+          )}
+        </div>
       ) : (
         <p className="mt-3 flex items-center gap-2 text-small text-ink-2">
           <Clock className="size-4 shrink-0" aria-hidden />
@@ -147,7 +161,7 @@ function FollowUpButton({ followUp }: { followUp: NonNullable<ReceiptActionBlock
   )
 }
 
-export function ReceiptActionView({ block }: BlockViewProps<ReceiptActionBlock>) {
+export function ReceiptActionView({ block, blockId, ui, doneAt }: BlockViewProps<ReceiptActionBlock>) {
   const d = block.data
   const inRouter = useInRouterContext()
   return (
@@ -162,6 +176,12 @@ export function ReceiptActionView({ block }: BlockViewProps<ReceiptActionBlock>)
         </div>
         <AiChip />
       </header>
+      {ui === 'undone' && (
+        <p role="status" data-testid="undone-note" className="mt-2 flex items-center gap-2 text-small font-semibold text-ink-2">
+          <StatusChip kind="info">Đã hoàn tác</StatusChip>
+          Đây là thao tác ngược của lần trước.
+        </p>
+      )}
       {(d.details.length > 0 || d.jars_after.length > 0 || d.reference_id) && (
         <dl className="mt-3 space-y-1.5 text-body">
           {d.details.map((x, i) => (
@@ -186,6 +206,7 @@ export function ReceiptActionView({ block }: BlockViewProps<ReceiptActionBlock>)
       )}
       {d.follow_up && inRouter && <FollowUpButton followUp={d.follow_up} />}
       {d.follow_up && !inRouter && <p className="mt-3 text-small font-semibold text-brand-text">{d.follow_up.label}</p>}
+      <UndoBar receipt={block} blockId={blockId} doneAt={doneAt} />
     </section>
   )
 }

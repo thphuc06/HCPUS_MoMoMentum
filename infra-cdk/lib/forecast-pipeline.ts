@@ -49,6 +49,12 @@ export interface ForecastPipelineConfig {
   readonly idempotencyTtlSeconds: number;
   readonly idempotencyLeaseSeconds: number;
   readonly nightlyMaxUsers: number;
+  /** Phase 3: số đường Monte Carlo của what-if, số kịch bản giữ lại, ngưỡng hụt/sát của kiểm tra trước khi quẹt (VND), cache bảng tra. */
+  readonly scenarioNPaths: number;
+  readonly scenarioKeep: number;
+  readonly affordShortP50FloorVnd: number;
+  readonly affordTightP10FloorVnd: number;
+  readonly referenceCacheSeconds: number;
   readonly nightlyConcurrency: number;
   /** Giờ và phút chạy batch đêm (múi giờ Asia/Ho_Chi_Minh, đặt ở `appTimezone` của YofinaTools). */
   readonly nightlyHour: number;
@@ -107,6 +113,11 @@ export function loadForecastConfig(app: App): ForecastPipelineConfig {
     idempotencyTtlSeconds: ctxNum(app, 'forecastIdempotencyTtlSeconds', 259200),
     idempotencyLeaseSeconds: ctxNum(app, 'forecastIdempotencyLeaseSeconds', Math.max(eventTimeout + 30, 120)),
     nightlyMaxUsers: ctxNum(app, 'forecastNightlyMaxUsers', 200),
+    scenarioNPaths: ctxNum(app, 'forecastScenarioNPaths', 5000),
+    scenarioKeep: ctxNum(app, 'forecastScenarioKeep', 50),
+    affordShortP50FloorVnd: ctxNum(app, 'affordabilityShortP50FloorVnd', 0),
+    affordTightP10FloorVnd: ctxNum(app, 'affordabilityTightP10FloorVnd', 0),
+    referenceCacheSeconds: ctxNum(app, 'referenceCacheSeconds', 300),
     nightlyConcurrency: ctxNum(app, 'forecastNightlyConcurrency', 3),
     nightlyHour: ctxNum(app, 'forecastNightlyHour', 2),
     nightlyMinute: ctxNum(app, 'forecastNightlyMinute', 0),
@@ -194,6 +205,11 @@ export class ForecastPipeline extends Construct {
       YOFINA_FORECAST_IDEMPOTENCY_TTL_SECONDS: String(f.idempotencyTtlSeconds),
       YOFINA_FORECAST_IDEMPOTENCY_LEASE_SECONDS: String(f.idempotencyLeaseSeconds),
       YOFINA_FORECAST_NIGHTLY_MAX_USERS: String(f.nightlyMaxUsers),
+      YOFINA_FORECAST_SCENARIO_N_PATHS: String(f.scenarioNPaths),
+      YOFINA_FORECAST_SCENARIO_KEEP: String(f.scenarioKeep),
+      YOFINA_AFFORDABILITY_SHORT_P50_FLOOR_VND: String(f.affordShortP50FloorVnd),
+      YOFINA_AFFORDABILITY_TIGHT_P10_FLOOR_VND: String(f.affordTightP10FloorVnd),
+      YOFINA_REFERENCE_CACHE_SECONDS: String(f.referenceCacheSeconds),
     };
 
     const code = lambda.Code.fromAsset(f.zip);

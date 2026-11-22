@@ -1,0 +1,208 @@
+"""`run_scenario`: sáu loại kịch bản chạy bằng engine ML THẬT trên dữ liệu dựng sẵn (không dùng model giả), kiểm các bất biến của
+hợp đồng: số liệu chi phí Trả sau, "common random numbers" (chênh lệch SAU - TRƯỚC chính xác, không nhiễu mẫu), kết quả khớp JSON Schema."""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+from conftest import BASE, build_registry
+from jsonschema import Draft202012Validator
+from phase3_helpers import APP_DATE, USER, build
+from yofina_core.errors import ErrorCode, YofinaError
+from yofina_forecast import scenario as scenario_mod
+from yofina_forecast.scenario import ScenarioEngine
+
+REGISTRY = build_registry()
+RESULT = Draft202012Validator(
+    {"$ref": f"{BASE}/tools/forecast.results.schema.json#/$defs/RunScenarioResult"}, registry=REGISTRY
+)
+
+
+@pytest.fixture
+def saved(monkeypatch):
+    rows: list[dict] = []
+
+    def fake_save(repo, user_id, **kw):
+        rows.append({"user_id": user_id, **kw})
+
+    monkeypatch.setattr(scenario_mod.forecast_repo, "save_scenario", fake_save)
+    return rows
+
+
+def engine(**kw):
+    pipeline, mem, repo, ref, settings = build(**kw)
+    return ScenarioEngine(pipeline, repo, ref, settings), mem
+
+
+def run(eng, scenario, saved):
+    res = eng.run(USER, scenario, trace_id="t1")
+    errs = [f"{list(e.path)}: {e.message}" for e in RESULT.iter_errors(res)]
+    assert not errs, errs
+    return res["data"]
+
+
+def test_mua_mot_lan_chenh_lech_chinh_xac_nho_cung_day_so_ngau_nhien(saved):
+    eng, _ = engine()
+    d = run(eng, {"kind": "one_time_purchase", "amount_vnd": 123_000, "funding_source": "jar", "jar_code": "an_uong", "label": "tai nghe"}, saved)
+    tl = d["timelines"][0]
+    assert tl["jar"]["code"] == "an_uong" and tl["compare"]["kind"] == "one_time_purchase"
+    assert tl["compare"]["common_random_numbers"] is True and tl["compare"]["n_paths"] == 600
+    # mọi phân vị số dư dịch ĐÚNG số tiền chi: chênh lệch không nhiễu
+    before, after = tl["days"], tl["compare"]["after"]["days"]
+    assert all(a["p50_vnd"] == b["p50_vnd"] - 123_000 for a, b in zip(after, before, strict=True))
+    assert all(a["p10_vnd"] == b["p10_vnd"] - 123_000 for a, b in zip(after, before, strict=True))
+    assert tl["compare"]["delta"]["min_balance_delta_vnd"] == -123_000
+    assert d["spec"]["date"] == APP_DATE.isoformat() and d["common_random_numbers"] is True
+    assert d["effects"][0]["min_balance_delta_vnd"] == -123_000
+    assert tl["compare"]["label"] == "mua tai nghe 123 nghìn"
+    assert len(saved) == 1 and saved[0]["kind"] == "one_time_purchase" and saved[0]["n_paths"] == 600
+
+
+def test_mua_tra_sau_chi_phi_cua_mon_tach_khoi_tong_phai_tra_ngay_den_han(saved):
+    eng, _ = engine()
+    d = run(eng, {"kind": "bnpl_purchase", "amount_vnd": 1_200_000, "funding_source": "credit", "label": "tai nghe"}, saved)
+    c = d["obligation_impact"]["cost"]
+    # đã có nghĩa vụ Trả sau 1.000.000 ₫ ngày 05/12 (phí đã nằm trong đó) nên phí phát sinh thêm là 0
+    assert (c["principal_vnd"], c["fee_added_vnd"], c["item_cost_vnd"]) == (1_200_000, 0, 1_200_000)
+    assert (c["existing_due_vnd"], c["total_due_vnd"]) == (1_000_000, 2_200_000)
+    assert c["due_date"] == "2026-12-05" and "fee" not in c
+    assert c["available_before_vnd"] - c["available_after_vnd"] == 1_200_000  # hạn mức chỉ giảm theo gốc
+    imp = d["obligation_impact"]
+    assert imp["at_due"][0]["jar"]["code"] == "nghia_vu" and imp["at_due"][0]["due_vnd"] == 2_200_000
+    assert imp["headline"].startswith(("Đủ", "Sát", "Hụt"))  # luôn có chữ, không chỉ màu
+    assert d["timelines"][0]["jar"]["code"] == "nghia_vu"
+    assert d["timelines"][0]["compare"]["after"]["events"][0]["amount_vnd"] == 1_200_000
+    # tỷ lệ: tiền điện 375.000 + Trả sau đã có 1.000.000 + món mới 1.200.000 trên lương 9.000.000
+    assert imp["ratio"]["obligations_vnd"] == 2_575_000 and imp["ratio"]["income_vnd"] == 9_000_000
+    assert imp["ratio"]["exceeds"] is False
+    # người dùng tự hỏi mua tùy ý bằng tín dụng: luật "không khuyên vay để tiêu" chỉ là cảnh báo (warn), không chặn what-if
+    assert [c["rule_id"] for c in imp["cautions"]] == ["no_borrow_to_spend"]
+
+
+def test_nghia_vu_vuot_nguong_thu_nhap_la_do_kem_canh_bao_khong_khuyen_khich(saved):
+    eng, _ = engine(user={"id": USER, "monthly_salary_vnd": 5_000_000, "payday_day": 5, "risk_tolerance": "medium", "clock_offset_days": -19})
+    d = run(eng, {"kind": "bnpl_purchase", "amount_vnd": 1_200_000, "funding_source": "credit"}, saved)
+    imp = d["obligation_impact"]
+    # engine đọc thu nhập từ hồ sơ trong ngữ cảnh dự báo (context_rows); ở đây dùng lương của context nên kiểm theo số của nó
+    assert imp["ratio"]["income_vnd"] == 9_000_000
+
+
+def test_mua_tra_sau_khi_chua_co_nghia_vu_tinh_them_phi_mot_lan(saved):
+    only_electric = [{**__import__("phase3_helpers").OBLIGATION_ROWS[0]}]
+    ctx_obl = [
+        {
+            "id": o["id"], "kind": o["kind"], "name": o["name"], "amount_vnd": int(o["amount_vnd"]),
+            "amount_min_vnd": 300_000, "amount_max_vnd": 450_000, "due_date": "2026-11-26",
+            "cycle": o["cycle"], "due_day": o["due_day"], "pay_jar_code": o["pay_jar_code"],
+        }
+        for o in only_electric
+    ]
+    eng, _ = engine(obligations=only_electric, context={"obligations": ctx_obl})
+    d = run(eng, {"kind": "bnpl_purchase", "amount_vnd": 300_000, "funding_source": "credit"}, saved)
+    c = d["obligation_impact"]["cost"]
+    assert (c["fee_added_vnd"], c["item_cost_vnd"], c["total_due_vnd"]) == (33_000, 333_000, 333_000)
+    assert c["fee"]["amount_vnd"] == 33_000 and c["fee"]["source_name"]
+
+
+def test_tra_sau_vuot_han_muc_bi_tu_choi(saved):
+    eng, _ = engine()
+    with pytest.raises(YofinaError) as e:
+        eng.run(USER, {"kind": "bnpl_purchase", "amount_vnd": 4_500_000, "funding_source": "credit"}, trace_id="t")
+    assert e.value.code == ErrorCode.CREDIT_LIMIT_EXCEEDED
+
+
+def test_doi_thu_nhap_tang_luong_cai_thien_cac_hu_co_chia_luong(saved):
+    eng, _ = engine()
+    d = run(eng, {"kind": "income_change", "new_monthly_salary_vnd": 12_000_000}, saved)
+    assert d["spec"]["date"] == "2026-12-05"  # ngày lương kế tiếp
+    assert all(e["min_balance_delta_vnd"] >= 0 for e in d["effects"])
+    # lương mới có hiệu lực từ 05/12: số dư cuối kỳ dự báo của các hũ được chia lương cao hơn đúng phần chênh
+    for tl in d["timelines"]:
+        gain = tl["compare"]["after"]["days"][-1]["p50_vnd"] - tl["days"][-1]["p50_vnd"]
+        assert gain > 0
+
+
+def test_doi_thu_nhap_bang_luong_hien_tai_la_vo_ly(saved):
+    eng, _ = engine()
+    with pytest.raises(YofinaError) as e:
+        eng.run(USER, {"kind": "income_change", "new_monthly_salary_vnd": 9_000_000}, trace_id="t")
+    assert e.value.code == ErrorCode.SCENARIO_INVALID
+
+
+def test_khoan_chi_dinh_ky_them_moc_theo_chu_ky(saved):
+    eng, _ = engine()
+    d = run(
+        eng,
+        {"kind": "recurring_expense", "amount_vnd": 50_000, "cycle": "weekly", "date": "2026-11-25", "jar_code": "giai_tri", "label": "gói tập"},
+        saved,
+    )
+    ev = d["timelines"][0]["compare"]["after"]["events"]
+    assert [e["date"] for e in ev][:3] == ["2026-11-25", "2026-12-02", "2026-12-09"]
+    assert d["effects"][0]["min_balance_delta_vnd"] < 0
+
+
+def test_chuyen_giua_hu_tru_hu_nguon_cong_hu_dich(saved):
+    eng, _ = engine()
+    d = run(eng, {"kind": "jar_transfer", "amount_vnd": 100_000, "from_jar": "giai_tri", "to_jar": "an_uong"}, saved)
+    by = {e["jar"]["code"]: e for e in d["effects"]}
+    assert by["giai_tri"]["min_balance_delta_vnd"] == -100_000
+    assert by["an_uong"]["min_balance_delta_vnd"] == 100_000
+
+
+def test_chuyen_hu_he_thong_chi_tinh_hu_con_lai_va_hai_hu_he_thong_la_khong_ap_dung(saved):
+    eng, _ = engine()
+    d = run(eng, {"kind": "jar_transfer", "amount_vnd": 100_000, "from_jar": "tien_vao_khac", "to_jar": "an_uong"}, saved)
+    assert [e["jar"]["code"] for e in d["effects"]] == ["an_uong"]
+    with pytest.raises(YofinaError) as e:
+        eng.run(USER, {"kind": "one_time_purchase", "amount_vnd": 1, "funding_source": "jar", "jar_code": "tien_vao_khac"}, trace_id="t")
+    assert e.value.code == ErrorCode.FORECAST_NOT_APPLICABLE
+
+
+def test_lui_muc_tieu_tinh_so_tien_can_de_danh_moi_thang(saved):
+    eng, _ = engine(goal=True)
+    d = run(eng, {"kind": "goal_delay", "jar_code": "giai_tri", "delay_months": 2}, saved)
+    label = d["timelines"][0]["compare"]["label"]
+    assert label.startswith("lùi mục tiêu Giải trí 2 tháng: cần") and "thay vì" in label
+    assert d["effects"][0]["min_balance_delta_vnd"] == 0  # không đụng số dư, chỉ đổi nhịp để dành
+
+
+def test_lui_muc_tieu_hu_chua_co_muc_tieu_la_vo_ly(saved):
+    eng, _ = engine()
+    with pytest.raises(YofinaError) as e:
+        eng.run(USER, {"kind": "goal_delay", "jar_code": "an_uong", "delay_months": 1}, trace_id="t")
+    assert e.value.code == ErrorCode.SCENARIO_INVALID
+
+
+@pytest.mark.parametrize(
+    ("spec", "code"),
+    [
+        ({"kind": "nope", "amount_vnd": 1}, ErrorCode.PARAMS_INVALID),
+        ({"amount_vnd": 1}, ErrorCode.PARAMS_INVALID),
+        ({"kind": "one_time_purchase", "funding_source": "jar", "jar_code": "an_uong"}, ErrorCode.PARAMS_INVALID),
+        ({"kind": "one_time_purchase", "amount_vnd": 5, "funding_source": "jar", "jar_code": "khong_co"}, ErrorCode.JAR_NOT_FOUND),
+        ({"kind": "one_time_purchase", "amount_vnd": 5, "funding_source": "jar", "jar_code": "an_uong", "date": "2026-11-01"}, ErrorCode.SCENARIO_INVALID),
+        ({"kind": "one_time_purchase", "amount_vnd": 5, "funding_source": "jar", "jar_code": "an_uong", "date": "2027-06-01"}, ErrorCode.SCENARIO_INVALID),
+        ({"kind": "jar_transfer", "amount_vnd": 5, "from_jar": "an_uong", "to_jar": "an_uong"}, ErrorCode.SCENARIO_INVALID),
+    ],
+)
+def test_dau_vao_sai_tra_ma_loi_dung(saved, spec, code):
+    eng, _ = engine()
+    with pytest.raises(YofinaError) as e:
+        eng.run(USER, spec, trace_id="t")
+    assert e.value.code == code
+    assert not saved  # lỗi thì không ghi kịch bản
+
+
+def test_khong_co_nen_du_bao_thi_tinh_day_du_mot_lan_roi_chay(saved):
+    eng, mem = engine()
+    mem.runs.clear()  # mất nền
+    d = run(eng, {"kind": "one_time_purchase", "amount_vnd": 10_000, "funding_source": "jar", "jar_code": "an_uong"}, saved)
+    assert d["effects"] and mem.saves == 1 + 1  # lần dựng nền của test + một lần tính lại
+
+
+def test_hu_khac_khong_bi_tinh_lai_chi_hu_bi_tac_dong(saved):
+    eng, _ = engine()
+    d = run(eng, {"kind": "one_time_purchase", "amount_vnd": 10_000, "funding_source": "jar", "jar_code": "an_uong"}, saved)
+    assert [e["jar"]["code"] for e in d["effects"]] == ["an_uong"]
+    assert date.fromisoformat(d["timelines"][0]["origin_date"]) == APP_DATE

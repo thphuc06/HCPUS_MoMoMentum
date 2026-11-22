@@ -376,3 +376,71 @@ def forecast_block(outcome: ToolOutcome, trace_id: str) -> B.ForecastTimelineBlo
         )
     except (KeyError, ValueError, ValidationError) as exc:
         raise ContractMismatch(f"get_forecast sai hợp đồng: {exc}") from exc
+
+
+def confirm_action_block(outcome: ToolOutcome, trace_id: str) -> B.ConfirmActionBlock:
+    """Khối `confirm_action` từ `NEEDS_CONFIRMATION` của tool ghi KHÁC chuyển hũ (update_profile, schedule_nudge...).
+
+    `params_hash` do code tính lại từ chính `params` tool trả; lệch với `data` của tool thì coi là sai hợp đồng. Agent không điền token."""
+    payload = outcome.payload or {}
+    try:
+        d = B.ConfirmActionData.model_validate(payload["data"])
+        block = B.build_confirm_action(
+            tool=d.tool,
+            params=d.params,
+            summary=d.summary,
+            changes=[c.model_dump(exclude_none=True) for c in d.changes],
+            trace_id=trace_id,
+            source_tool=outcome.name,
+            as_of=_parse_instant(payload["as_of"]),
+            app_date=date.fromisoformat(payload["app_date"]),
+            expires_at=_parse_instant(d.expires_at),
+            warnings=d.warnings or (),
+        )
+    except (KeyError, ValueError, ValidationError) as exc:
+        raise ContractMismatch(f"{outcome.name} sai hợp đồng xác nhận: {exc}") from exc
+    if block.data.params_hash != d.params_hash:
+        raise ContractMismatch("params_hash của tool không khớp tham số (không phát khối xác nhận)")
+    return block
+
+
+def affordability_block(outcome: ToolOutcome, trace_id: str) -> B.AffordabilityCardBlock:
+    """Khối `affordability_card` từ `forecast___affordability_check` (cùng số với `POST /affordability`, không qua model)."""
+    payload = outcome.payload or {}
+    try:
+        return B.build_affordability_card(
+            data=payload["data"],
+            trace_id=trace_id,
+            source_tool=outcome.name,
+            as_of=_parse_instant(payload["as_of"]),
+            app_date=date.fromisoformat(payload["app_date"]),
+        )
+    except (KeyError, ValueError, ValidationError) as exc:
+        raise ContractMismatch(f"affordability_check sai hợp đồng: {exc}") from exc
+
+
+def scenario_blocks(outcome: ToolOutcome, trace_id: str) -> list[B.ForecastTimelineBlock | B.ObligationImpactBlock]:
+    """Các khối số liệu của `forecast___run_scenario`: `forecast_timeline` trước-sau (hũ bị tác động nhiều nhất trước) rồi `obligation_impact`."""
+    payload = outcome.payload or {}
+    try:
+        as_of, app_date = _parse_instant(payload["as_of"]), date.fromisoformat(payload["app_date"])
+        data = payload["data"]
+        out: list[B.ForecastTimelineBlock | B.ObligationImpactBlock] = [
+            B.build_forecast_timeline_from_data(
+                data=t, trace_id=trace_id, source_tool=outcome.name, as_of=as_of, app_date=app_date
+            )
+            for t in data["timelines"]
+        ]
+        if data.get("obligation_impact"):
+            out.append(
+                B.build_obligation_impact(
+                    data=data["obligation_impact"],
+                    trace_id=trace_id,
+                    source_tool=outcome.name,
+                    as_of=as_of,
+                    app_date=app_date,
+                )
+            )
+        return out
+    except (KeyError, ValueError, ValidationError) as exc:
+        raise ContractMismatch(f"run_scenario sai hợp đồng: {exc}") from exc

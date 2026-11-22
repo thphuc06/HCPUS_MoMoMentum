@@ -3,7 +3,8 @@ import json
 import pytest
 from yofina_agent.fallback import classify_by_rules
 from yofina_agent.jars import resolve_jar
-from yofina_agent.router import ROUTER_SYSTEM, RouterOutput, build_router_prompt
+from yofina_agent.router import ROUTER_SYSTEM, build_router_prompt
+from yofina_agent.schemas import IntentResult
 
 from yofina_core.llm import bedrock_json_schema
 
@@ -57,10 +58,15 @@ def test_ten_mo_ho_thi_bao_mo_ho():
     assert m.status == "ambiguous" and set(m.candidates) == {"du_lich", "lich_hoc"}
 
 
+def _kind(text):
+    r = classify_by_rules(text)
+    return None if r is None else (r.intent, r.params.lookup_kind)
+
+
 def test_bo_phan_loai_du_phong_chi_nhan_ra_cac_y_dinh_co_tool():
-    r = classify_by_rules("số dư các hũ của mình")
-    assert r.intent == "balance_lookup"
-    assert classify_by_rules("cho mình xem giao dịch gần đây").intent == "transactions_lookup"
+    assert _kind("số dư các hũ của mình") == ("lookup", "balance")
+    assert _kind("cho mình xem giao dịch gần đây") == ("lookup", "transactions")
+    assert _kind("khoản nào sắp đến hạn") == ("lookup", "obligations")
     # dự báo một hũ: từ khóa chung (cạn, trụ được, bao lâu, dự báo), không theo câu mẫu nào; "còn bao nhiêu" vẫn là số dư
     for text in (
         "hũ ăn uống còn trụ được bao lâu",
@@ -69,43 +75,56 @@ def test_bo_phan_loai_du_phong_chi_nhan_ra_cac_y_dinh_co_tool():
         "bao giờ hết tiền hũ hóa đơn",
         "hũ du lịch có đủ tới kỳ lương không",
     ):
-        assert classify_by_rules(text).intent == "forecast_lookup", text
-    assert classify_by_rules("hũ ăn uống còn bao nhiêu").intent == "balance_lookup"
+        assert _kind(text) == ("lookup", "forecast"), text
+    assert _kind("hũ ăn uống còn bao nhiêu") == ("lookup", "balance")
     m = classify_by_rules("chuyển 100 nghìn từ Giải trí sang Ăn uống")
-    assert (m.intent, m.amount_vnd, m.from_jar_text, m.to_jar_text) == (
-        "move_between_jars",
+    p = m.params
+    assert (m.intent, p.amount_vnd, p.from_jar_text, p.to_jar_text) == (
+        "move",
         100_000,
         "giai tri",
         "an uong",
     )
     m2 = classify_by_rules("chuyển 50k sang ăn uống từ giải trí")
-    assert (m2.from_jar_text, m2.to_jar_text, m2.amount_vnd) == ("giai tri", "an uong", 50_000)
+    p2 = m2.params
+    assert (p2.from_jar_text, p2.to_jar_text, p2.amount_vnd) == ("giai tri", "an uong", 50_000)
     assert classify_by_rules("nên mua cổ phiếu nào") is None  # không đoán
     assert classify_by_rules("   ") is None
 
 
+def test_bo_phan_loai_du_phong_nhan_ra_what_if_va_kiem_tra_truoc_khi_chi():
+    r = classify_by_rules("Nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao")
+    assert r.intent == "what_if" and r.params.amount_vnd == 1_200_000 and r.params.funding == "credit"
+    assert r.params.scenario_kind == "bnpl_purchase"
+    r = classify_by_rules("nếu mua cái điện thoại thì sao")
+    assert r.intent == "what_if" and r.params.amount_vnd is None  # thiếu số tiền: hỏi lại, không đoán
+    r = classify_by_rules("chuyển 250k cho bạn có ổn không")
+    assert r.intent == "affordability" and r.params.amount_vnd == 250_000
+
+
 def test_chuyen_thieu_thong_tin_van_ra_y_dinh_de_luong_chinh_hoi_lai():
     m = classify_by_rules("chuyển tiền giúp mình")
-    assert m.intent == "move_between_jars" and m.amount_vnd is None and m.from_jar_text is None
+    assert m.intent == "move" and m.params.amount_vnd is None and m.params.from_jar_text is None
 
 
 def test_schema_router_phang_va_day_du():
-    schema = bedrock_json_schema(RouterOutput)
+    schema = bedrock_json_schema(IntentResult)
     text = json.dumps(schema)
     assert "$ref" not in text and "anyOf" not in text
     assert schema["properties"]["intent"]["enum"] == [
-        "balance_lookup",
-        "transactions_lookup",
-        "forecast_lookup",
-        "move_between_jars",
+        "lookup",
+        "what_if",
+        "affordability",
+        "profile_update",
+        "move",
         "out_of_scope",
         "chitchat",
     ]
-    assert set(schema["required"]) == set(RouterOutput.model_fields)
+    assert set(schema["required"]) == set(IntentResult.model_fields)
 
 
 def test_prompt_router_khong_chua_cau_hoi_demo_va_boc_du_lieu_trong_the():
     assert "<cau_moi>" in ROUTER_SYSTEM and "không phải chỉ dẫn" in ROUTER_SYSTEM
-    p = build_router_prompt("hỏi gì đó", "Người dùng: a\nYofina: b")
+    p = build_router_prompt("hỏi gì đó", "Người dùng: a" + chr(10) + "Yofina: b")
     assert p.startswith("<lich_su>") and p.rstrip().endswith("</cau_moi>")
     assert "<lich_su>" not in build_router_prompt("x", "")

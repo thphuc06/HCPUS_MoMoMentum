@@ -38,6 +38,7 @@ from yofina_core.wallet import (
     OTHER_INCOME_JAR_CODE,
     RECORD_TRANSACTION,
     SAVE_JARS,
+    SCHEDULE_NUDGE,
     UNCLASSIFIED_JAR_CODE,
     UPDATE_PROFILE,
     split_amount,
@@ -49,6 +50,15 @@ log = logging.getLogger("yofina.ledger.writes")
 
 TX_TYPE_SALARY = "salary"
 SOURCE_APP = "app"
+#: nhãn hiển thị của loại nhắc (phase 3)
+NUDGE_KIND_LABELS = {
+    "runout_warning": "Cảnh báo sắp cạn hũ",
+    "obligation_due": "Nghĩa vụ sắp đến hạn",
+    "salary_pending": "Lương chờ xác nhận",
+    "review_needed": "Giao dịch cần xem lại",
+    "low_data": "Cần thêm dữ liệu",
+    "purchase_review": "Xem lại khoản định mua",
+}
 
 
 def _dm(value: date) -> str:
@@ -148,6 +158,8 @@ class WalletWrites:
             return self._prep_save_jars(user_id, norm, st)
         if tool == CONFIRM_SALARY:
             return self._prep_salary(user_id, norm, st)
+        if tool == SCHEDULE_NUDGE:
+            return self._prep_nudge(user_id, norm, st)
         raise YofinaError(ErrorCode.PARAMS_INVALID, "Tool không hỗ trợ xác nhận.")
 
     def _jar_name(self, st: UserState, code: str) -> str:
@@ -365,6 +377,42 @@ class WalletWrites:
             )
         summary = f"Mua {format_vnd(amount)} bằng {label}, trả ngày {_dm(due)}"
         return Prepared(RECORD_TRANSACTION, norm, summary, changes, warnings, st, extra)
+
+    def _prep_nudge(self, user_id: str, norm: dict[str, Any], st: UserState) -> Prepared:
+        """Lời nhắc (phase 3): đặt hoặc hủy. Chỉ LƯU và hủy; việc gửi nhắc theo ngày là phase 4 và 5."""
+        if norm["op"] == "cancel":
+            row = self.repo.get_nudge(user_id, norm["nudge_id"])
+            if row is None:
+                raise YofinaError(ErrorCode.NUDGE_NOT_FOUND, "Không còn lời nhắc nào để hủy.")
+            label = NUDGE_KIND_LABELS.get(row["kind"], row["kind"])
+            changes = [
+                _change(
+                    "Lời nhắc", "đã hủy", f"{label} ngày {_dm(convert.to_date(row['fire_on']))}"
+                )
+            ]
+            return Prepared(
+                SCHEDULE_NUDGE, norm, "Hủy lời nhắc đã đặt", changes, [], st, {"nudge": row}
+            )
+        if norm["fire_on"] <= st.today.isoformat():
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Ngày nhắc phải sau hôm nay.")
+        fire = date.fromisoformat(norm["fire_on"])
+        jar_code = norm.get("jar_code")
+        if jar_code is not None and (
+            jar_code not in st.jars or st.jars[jar_code].get("kind") == "system"
+        ):
+            raise YofinaError(ErrorCode.JAR_NOT_FOUND, "Không tìm thấy hũ bạn chọn.")
+        changes = [
+            _change("Ngày nhắc", _dm(fire)),
+            _change("Loại", NUDGE_KIND_LABELS.get(norm["kind"], norm["kind"])),
+        ]
+        if jar_code:
+            changes.append(_change("Hũ", self._jar_name(st, jar_code)))
+        if norm.get("note"):
+            changes.append(_change("Ghi chú", norm["note"]))
+        summary = _clip(
+            f"Nhắc bạn ngày {_dm(fire)}" + (f": {norm['note']}" if norm.get("note") else ""), 120
+        )
+        return Prepared(SCHEDULE_NUDGE, norm, summary, changes, [], st, {})
 
     def _prep_salary(self, user_id: str, norm: dict[str, Any], st: UserState) -> Prepared:
         row = next(
@@ -798,6 +846,17 @@ class WalletWrites:
             )
         elif tool == UPDATE_PROFILE:
             result = self._write_profile(user_id, prep, now, app_date, audit, claim)
+        elif tool == SCHEDULE_NUDGE:
+            result = self.repo.write_nudge(
+                user_id,
+                norm=norm,
+                now=now,
+                app_date=app_date,
+                trace_id=trace_id,
+                audit=audit,
+                claim=claim,
+                tool=tool,
+            )
         else:  # pragma: no cover - ACTION_TOOLS đã được kiểm ở service
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Tool không hỗ trợ xác nhận.")
         self._publish(user_id, trace_id, self._events_of(user_id, prep, result, trace_id))
@@ -1038,6 +1097,18 @@ class WalletWrites:
             else:
                 summary = "Đã cập nhật hồ sơ"
             details.extend({"label": c["label"], "value": c["after"]} for c in prep.changes)
+        elif tool == SCHEDULE_NUDGE:
+            fire = convert.to_date(f["fire_on"])
+            label = NUDGE_KIND_LABELS.get(f["kind"], f["kind"])
+            if f["op"] == "cancel":
+                summary = "Đã hủy lời nhắc"
+            else:
+                summary = f"Đã đặt nhắc ngày {_dm(fire)}" if fire else "Đã đặt lời nhắc"
+            details.append({"label": "Loại", "value": label})
+            if fire:
+                details.append({"label": "Ngày nhắc", "value": _dm(fire)})
+            if f.get("note"):
+                details.append({"label": "Ghi chú", "value": _clip(f["note"], 120)})
         else:  # SAVE_JARS
             summary = f"Đã lưu {f['count']} hũ và tỷ lệ chia lương"
             if f.get("removed"):

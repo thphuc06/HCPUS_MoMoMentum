@@ -37,6 +37,7 @@ export function TabBar({ onOpenChat, chatOpen }: { onOpenChat: () => void; chatO
         <button
           type="button"
           onClick={onOpenChat}
+          aria-label="Hỏi Yofina"
           aria-haspopup="dialog"
           aria-expanded={chatOpen}
           className="-mt-5 flex min-h-14 flex-col items-center gap-0.5 text-note font-medium text-ink-2 outline-none"

@@ -11,6 +11,13 @@ export type Config = {
   agentUrl: string
   /** Phát lại hội thoại từ GET /conversations/{id} (mặc định bật; VITE_CONVERSATION_REPLAY=0 để tắt). */
   replayEnabled: boolean
+  /**
+   * Làm nóng phiên Runtime khi mở sheet chat (mặc định bật; `VITE_CHAT_WARMUP=0` tắt). Giả định: agent có đường nhẹ không gọi
+   * model cho lời gọi làm nóng (hiện là `forwardedProps.warmup`); người điều phối nối lại khi luồng agent chốt đường ping.
+   */
+  warmupEnabled: boolean
+  /** Cửa sổ Hoàn tác sau khi thực hiện một đề nghị trong chat, tính bằng giây (mặc định 30; `VITE_UNDO_WINDOW_SECONDS`, 5 đến 300). */
+  undoWindowSeconds: number
   demoEmail?: string
 }
 
@@ -25,12 +32,21 @@ const envSchema = z.object({
   VITE_AGENT_RUNTIME_URL: z.string().trim().optional(),
   VITE_AGENT_RUNTIME_ARN: z.string().trim().optional(),
   VITE_CONVERSATION_REPLAY: z.string().trim().optional(),
+  VITE_CHAT_WARMUP: z.string().trim().optional(),
+  VITE_UNDO_WINDOW_SECONDS: z.string().trim().optional(),
   VITE_DEMO_EMAIL: z.string().trim().optional(),
 })
 
 /** https://bedrock-agentcore.<region>.amazonaws.com/runtimes/<ARN url-encode>/invocations?qualifier=DEFAULT */
 export function buildRuntimeUrl(arn: string, region: string, qualifier = 'DEFAULT'): string {
   return `https://bedrock-agentcore.${region}.amazonaws.com/runtimes/${encodeURIComponent(arn)}/invocations?qualifier=${qualifier}`
+}
+
+export const DEFAULT_UNDO_SECONDS = 30
+
+function parseUndoSeconds(v: string | undefined): number {
+  const n = v ? Number(v) : Number.NaN
+  return Number.isFinite(n) ? Math.min(300, Math.max(5, Math.round(n))) : DEFAULT_UNDO_SECONDS
 }
 
 function trimSlash(s: string): string {
@@ -63,6 +79,8 @@ export function parseConfig(rawEnv: Record<string, unknown>): ConfigResult {
       apiUrl: trimSlash(apiUrl),
       agentUrl,
       replayEnabled: env.VITE_CONVERSATION_REPLAY !== '0',
+      warmupEnabled: env.VITE_CHAT_WARMUP !== '0',
+      undoWindowSeconds: parseUndoSeconds(env.VITE_UNDO_WINDOW_SECONDS),
       demoEmail: env.VITE_DEMO_EMAIL || undefined,
     },
   }

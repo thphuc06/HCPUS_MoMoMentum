@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { MessageList, supersededAssistantIds } from './MessageList'
+import { MessageList, referencedConfirmIds, supersededAssistantIds } from './MessageList'
 import type { ChatItem } from './session'
 import { Providers, fakeApi } from '@/test/helpers'
 import { validBlock } from '@/test/fixtures'
@@ -37,5 +37,44 @@ describe('lời của agent trong lượt có đề nghị đã thực hiện', 
     expect(msgs[1]).toHaveTextContent('Chưa có khoản tiền nào được chuyển') // nội dung không bị sửa
     expect(screen.getAllByText('Trước khi bạn xác nhận')).toHaveLength(1)
     expect(screen.getByText('Đã chuyển 100.000 ₫')).toBeInTheDocument()
+  })
+})
+
+describe('khối xác nhận do phương án tham chiếu (hợp đồng phase 3, quyết định số 11)', () => {
+  const options = (): ChatItem => ({ kind: 'block', id: 'options:t1', raw: validBlock('options.move_remind_skip') })
+  const refId = () => (validBlock('options.move_remind_skip') as { data: { options: Array<{ action?: { block_id: string } }> } }).data.options[0]!.action!.block_id
+  const refConfirm = (extra: Partial<Extract<ChatItem, { kind: 'block' }>> = {}): ChatItem => {
+    const raw = validBlock('confirm.move') as { id: string; data: { expires_at: string } }
+    raw.id = refId()
+    raw.data.expires_at = new Date(Date.now() + 5 * 60_000).toISOString().replace(/\.\d+Z$/, 'Z')
+    return { kind: 'block', id: raw.id, raw, ...extra }
+  }
+  const render_ = (items: ChatItem[], revealed?: ReadonlySet<string>) =>
+    render(
+      <Providers api={fakeApi()}>
+        <MessageList items={items} running={false} onRetry={vi.fn()} revealed={revealed} />
+      </Providers>,
+    )
+
+  it('referencedConfirmIds liệt kê đúng id mà các phương án trỏ tới', () => {
+    expect([...referencedConfirmIds([user('u1'), options()])]).toEqual(expect.arrayContaining([refId()]))
+    expect(referencedConfirmIds([user('u1'), confirm()]).size).toBe(0)
+  })
+
+  it('khối xác nhận được tham chiếu ẩn cho tới khi "Chọn" phương án; khối xác nhận không ai tham chiếu vẫn hiện như cũ', () => {
+    const a = render_([user('u1'), options(), refConfirm()])
+    expect(a.container.querySelector('[data-block="confirm"]')).toBeNull()
+    expect(screen.getAllByTestId('block-item')).toHaveLength(1) // chỉ khối options
+    a.unmount()
+    const b = render_([user('u1'), options(), refConfirm()], new Set([refId()]))
+    expect(b.container.querySelector('[data-block="confirm"]')).not.toBeNull()
+    b.unmount()
+    const c = render_([user('u1'), confirm()])
+    expect(c.container.querySelector('[data-block="confirm"]')).not.toBeNull()
+  })
+
+  it('đã hủy hoặc hết hạn thì luôn hiện (không để mất trạng thái), kể cả chưa chọn lại', () => {
+    const { container } = render_([user('u1'), options(), refConfirm({ ui: 'cancelled' })])
+    expect(container.querySelector('[data-block="confirm"]')).toHaveAttribute('data-phase', 'cancelled')
   })
 })

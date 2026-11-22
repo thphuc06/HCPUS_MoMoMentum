@@ -18,6 +18,7 @@ from yofina_core.clock import app_today
 from yofina_core.db import DataApi, Row
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import to_vnd
+from yofina_ledger.repo_phase3 import Phase3Repo
 from yofina_ledger.repo_wallet import WalletRepo
 
 JARS_PER_USER = 40  # khớp LIMIT của app_get_jar_state (20 hũ người dùng + hũ hệ thống)
@@ -149,6 +150,9 @@ RESOLUTIONS_PER_CONVERSATION = 300  # trần của app_get_confirm_resolutions
 # forecast_runs kéo theo forecast_jar_summaries và forecasts (ON DELETE CASCADE); salary_events và category_rules trước
 # transactions; transactions trước obligations và payees (khóa ngoại); jars cuối cùng.
 RESET_DELETES = (
+    "DELETE FROM scenarios WHERE user_id = :uid",
+    "DELETE FROM nudges WHERE user_id = :uid",
+    "DELETE FROM feedback WHERE user_id = :uid",
     "DELETE FROM forecast_runs WHERE user_id = :uid",
     "DELETE FROM salary_events WHERE user_id = :uid",
     "DELETE FROM category_rules WHERE user_id = :uid",
@@ -225,7 +229,7 @@ class ResetCounts:
     payees: int = 0
 
 
-class LedgerRepo(WalletRepo):
+class LedgerRepo(WalletRepo, Phase3Repo):
     def __init__(self, db: DataApi) -> None:
         self.db = db
 

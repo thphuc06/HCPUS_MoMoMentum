@@ -1,24 +1,24 @@
 """Một lượt hội thoại: mã điều khiển thứ tự + tự phát event AG-UI ("Cách B" của docs/research/strands-agui.md).
 
-Vì sao không dùng `StrandsAgent` của `ag-ui-strands` (Cách A): router, đường nhanh một tool, khối UI, đường suy
-giảm và `turn_blocks` đều nằm *ngoài* vòng lặp của một Agent, và cần giữ đúng thứ tự event (khối UI trước
-`TOOL_CALL_RESULT`, luôn kết thúc bằng `RUN_FINISHED`, không bao giờ luồng rỗng). Strands vẫn được dùng cho
-`MCPClient` (tool), `Agent` viết câu trả lời, và `Model` đo đếm (`MeteredModel`).
+Vì sao không dùng `StrandsAgent` của `ag-ui-strands` (Cách A): router, đường nhanh một tool, khối UI, đường suy giảm và `turn_blocks` đều nằm *ngoài*
+vòng lặp của một Agent, và cần giữ đúng thứ tự event (khối UI trước `TOOL_CALL_RESULT`, luôn kết thúc bằng `RUN_FINISHED`, không bao giờ luồng rỗng).
+Strands vẫn được dùng cho `MCPClient` (tool), `Agent` viết câu trả lời, và `Model` đo đếm (`MeteredModel`).
 
 Luồng (mã điều khiển, không để LLM quyết định thứ tự):
 
     RUN_STARTED
-      -> router (model nhỏ, JSON ép tool) | nếu không gọi được: bộ phân loại dự phòng bằng luật
+      -> L0: che PII (yofina_core.pii) -> router (model nhỏ, ép tool) song song với Guardrail đầu vào
+         (router lỗi: bộ phân loại dự phòng bằng luật; Guardrail chặn: coi như ngoài phạm vi)
+      -> thiếu ô bắt buộc (số tiền, cách trả, hũ): khối `clarify` đúng một câu, kết thúc lượt (lượt sau router ghép với câu trước)
       -> ý định:
-           balance_lookup      get_jar_balances  -> khối jar_summary -> câu trả lời ngắn
-           transactions_lookup get_jar_balances (ánh xạ tên hũ) + query_transactions -> câu trả lời ngắn
-           forecast_lookup     get_jar_balances (ánh xạ tên hũ) + forecast___get_forecast -> khối forecast_timeline
-                               -> câu trả lời ngắn (số trong câu phải có trong kết quả tool)
-           move_between_jars   get_jar_balances (ánh xạ tên hũ) + move_between_jars KHÔNG token
-                               -> NEEDS_CONFIRMATION -> khối confirm -> câu nhắc xác nhận
-           out_of_scope        khối notice + câu nói rõ giới hạn
-           chitchat            câu trả lời ngắn
-      -> khối notice (nếu suy giảm) -> lưu turn_blocks -> RUN_FINISHED
+           lookup (balance|transactions|forecast|obligations)   đường nhanh: một tool + một câu của model nhỏ
+           what_if            L2 Orchestrator -> tool song song -> run_scenario -> khối số liệu -> L3 Analyst -> L4 Verifier -> L5 Composer (whatif.py)
+           affordability      affordability_check -> khối affordability_card ngay -> model nhỏ viết 2 câu trong thời hạn (quá hạn/lỗi: bỏ phần lời)
+           profile_update     update_profile KHÔNG token -> khối confirm_action
+           move               get_jar_balances + move_between_jars KHÔNG token -> khối confirm
+           out_of_scope       notice + suggestions (không có câu do model viết)
+           chitchat           câu của router (đã qua kiểm số và Guardrail) hoặc model nhỏ
+      -> khối notice (nếu suy giảm) -> lưu turn_blocks + bản ghi lượt -> RUN_FINISHED
 
 Agent không bao giờ điền cờ xác nhận hay token; đường ghi thật do frontend gọi REST (ADR-0002).
 """
@@ -29,45 +29,77 @@ import asyncio
 import contextlib
 import json
 import logging
-from collections.abc import AsyncIterator, Callable, Mapping
-from dataclasses import dataclass
+import time
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from ag_ui.core import BaseEvent, RunAgentInput
 
 from yofina_agent import events as ev
-from yofina_agent import notices
+from yofina_agent import notices, trace
+from yofina_agent.clarify import resolve_clarify
 from yofina_agent.compact import (
+    compact_affordability,
     compact_confirm,
+    compact_confirm_action,
     compact_forecast,
     compact_jars,
+    compact_obligations,
     compact_transactions,
 )
 from yofina_agent.fallback import classify_by_rules
+from yofina_agent.guardrail import Guardrail, GuardrailResult
 from yofina_agent.identity import Identity
 from yofina_agent.jars import JarMatch, resolve_jar
-from yofina_agent.router import RouterOutput, route
+from yofina_agent.router import route
+from yofina_agent.schemas import ClarifyRequest, IntentParams, IntentResult, Verdict
 from yofina_agent.settings import AgentSettings
-from yofina_agent.store import TurnBlockStore
+from yofina_agent.store import (
+    TurnBlockStore,
+    TurnRecordStore,
+    UnconfiguredTurnRecordStore,
+)
+from yofina_agent.textutil import normalize
 from yofina_agent.tools import (
     ContractMismatch,
     GatewayTools,
     ToolKind,
     ToolOutcome,
+    affordability_block,
+    confirm_action_block,
     confirm_block,
     forecast_block,
     jar_summary_block,
 )
+from yofina_agent.verifier import Allowed, NumericGrounding
+from yofina_agent.whatif import WhatIfState, run_what_if
 from yofina_agent.writer import check_grounding, write_stream
 from yofina_core import blocks as B
 from yofina_core.clock import app_timezone
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
+from yofina_core.pii import mask_pii
+from yofina_core.suitability import SuitabilityVerdict
 
 log = logging.getLogger("yofina.agent.turn")
 
 _DONE = object()
+
+#: lỗi tạm thời của tool đáng thử lại một lần (lỗi nghiệp vụ như hết tiền, từ chối quyền thì không)
+_TRANSIENT_CODES = {
+    ErrorCode.DATABASE_UNAVAILABLE.value,
+    ErrorCode.INTERNAL_ERROR.value,
+    ErrorCode.RATE_LIMITED.value,
+}
+_DEGRADED_REASON = {
+    ErrorCode.MODEL_BUDGET_EXCEEDED.value: "model_budget",
+    ErrorCode.RATE_LIMITED.value: "model_error",
+    ErrorCode.INTERNAL_ERROR.value: "model_error",
+    "NUMERIC_UNVERIFIED": "verifier_failed",
+}
+_PENDING_INTENTS = {"what_if", "affordability", "move", "profile_update"}
 
 
 @dataclass
@@ -79,13 +111,19 @@ class TurnDeps:
     store: TurnBlockStore
     tools_factory: Callable[[Identity], GatewayTools]
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
+    guardrail: Guardrail | None = None  # None: không lọc (test hoặc chưa cấu hình)
+    records: TurnRecordStore = field(default_factory=UnconfiguredTurnRecordStore)
 
 
 @dataclass
 class CallResult:
     outcome: ToolOutcome
     compact: dict[str, Any] | None
-    block: B.JarSummaryBlock | B.ConfirmBlock | B.ForecastTimelineBlock | None
+    blocks: list[Any] = field(default_factory=list)
+
+    @property
+    def block(self) -> Any:
+        return self.blocks[0] if self.blocks else None
 
 
 def _jar_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -110,6 +148,7 @@ class Turn:
         self.tools = deps.tools_factory(identity)
         self.blocks: dict[str, dict[str, Any]] = {}  # id khối -> dạng dây (giữ thứ tự phát)
         self.user_text = ""
+        self.history = ""
         self.assistant_parts: list[str] = []  # các tin nhắn chữ đã phát, để lưu cùng lượt
         self.intent: str | None = None
         self.tool_calls = 0
@@ -120,21 +159,99 @@ class Turn:
         self._llm: LlmGateway | None = None
         self._jars: CallResult | None = None
         self._jar_rows: list[dict[str, Any]] = []
+        # dấu vết cho bản ghi lượt
+        self._t0 = time.perf_counter()
+        self.steps: list[tuple[str, int]] = []
+        self.tool_log: list[ToolOutcome] = []
+        self.compacts: dict[str, dict[str, Any]] = {}
+        self.bases: list[Mapping[str, Any]] = []
+        self.suitability: list[SuitabilityVerdict] = []
+        self.extra_rules: dict[str, B.RuleCheck] = {}
+        self.verified: bool | None = None
+        self.outcome = "ok"
+        self.outcome_code: str | None = None
+        self.whatif: WhatIfState | None = None
+        self.guardrail_reason: str | None = None
+
+    # --- dấu vết ----------------------------------------------------------------------------
+    @contextlib.contextmanager
+    def step(self, name: str) -> Iterator[None]:
+        started = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.steps.append((name, int((time.perf_counter() - started) * 1000)))
+
+    def note_basis(self, basis: Mapping[str, Any] | None) -> None:
+        """Ghi cơ sở của dự báo (độ tin cậy) và phát `notice` độ tin cậy thấp nếu dữ liệu ít hoặc chỉ là ước lượng ban đầu."""
+        if not basis:
+            return
+        self.bases.append(basis)
+        if basis["is_initial_estimate"] or int(basis["history_days"]) < self.s.low_data_days:
+            t, m = notices.LOW_DATA
+            self.emit_notice(
+                kind="low_data", code=None, title=t, message=m, degraded_reason="short_history", block_id=f"notice:{self.trace_id}:short_history"
+            )
+        elif float(basis["coverage"]) < self.s.low_coverage_threshold:
+            t, m = notices.LOW_COVERAGE
+            self.emit_notice(
+                kind="low_data", code=None, title=t, message=m, degraded_reason="low_coverage", block_id=f"notice:{self.trace_id}:low_coverage"
+            )
+
+    def record_verdict(self, verdict: Verdict, checked: list[tuple[Any, SuitabilityVerdict]]) -> None:
+        self.suitability = [v for _, v in checked]
+        self.verified = verdict.ok
+        self.extra_rules["numeric_grounding"] = B.RuleCheck(
+            rule_id="numeric_grounding",
+            label="Số liệu có căn cứ",
+            outcome="pass" if verdict.grounding.ok else "fail",
+            detail=f"Đã kiểm {verdict.grounding.checked_count} con số trong lời giải thích.",
+        )
+
+    def compact_of(self, short_name: str) -> dict[str, Any] | None:
+        return self.compacts.get(short_name)
+
+    def grounding_payloads(self) -> list[Any]:
+        return [o.payload for o in self.tool_log if o.kind is ToolKind.OK and o.payload]
+
+    @property
+    def jar_rows(self) -> list[dict[str, Any]]:
+        return self._jar_rows
+
+    def model_calls_left(self) -> int:
+        if self.llm_down:
+            return 0
+        cap = self.scope.max_calls
+        return 10**6 if cap is None else max(cap - self.scope.calls, 0)
+
+    def degrade_if_no_model(self) -> None:
+        if self.degrade_code is None:
+            self.degrade_code = ErrorCode.MODEL_BUDGET_EXCEEDED.value
+
+    def block_app_date(self) -> date:
+        return self.app_date or datetime.now(app_timezone()).date()
 
     # --- phát event -------------------------------------------------------------------------
     def emit(self, event: BaseEvent) -> None:
         self.queue.put_nowait(event)
 
-    def emit_block(
-        self,
-        block: B.JarSummaryBlock | B.ConfirmBlock | B.NoticeBlock | B.ForecastTimelineBlock,
-    ) -> None:
+    def emit_block(self, block: B._BlockBase) -> None:
         wire = B.block_to_wire(block)
         self.blocks[wire["id"]] = wire
         self.emit(ev.block_snapshot(wire))
 
     def emit_notice(
-        self, *, kind: B.NoticeKind, code: str | None, title: str, message: str
+        self,
+        *,
+        kind: B.NoticeKind,
+        code: str | None,
+        title: str,
+        message: str,
+        retryable: bool | None = None,
+        degraded_reason: str | None = None,
+        missing: list[str] | None = None,
+        suggestions: list[dict[str, str]] | None = None,
+        block_id: str | None = None,
     ) -> None:
         self.emit_block(
             B.build_notice(
@@ -144,8 +261,13 @@ class Turn:
                 trace_id=self.trace_id,
                 source_tool="agent",
                 as_of=self.d.now(),
-                app_date=self.app_date or datetime.now(app_timezone()).date(),
+                app_date=self.block_app_date(),
                 code=code,
+                retryable=retryable,
+                degraded_reason=degraded_reason,
+                missing=missing,
+                suggestions=suggestions,
+                block_id=block_id,
             )
         )
 
@@ -213,17 +335,28 @@ class Turn:
             title, message = message_override or notices.DEGRADED.get(
                 self.degrade_code, notices.DEGRADED[ErrorCode.INTERNAL_ERROR]
             )
-            self.emit_notice(kind="degraded", code=self.degrade_code, title=title, message=message)
+            self.emit_notice(
+                kind="degraded",
+                code=self.degrade_code,
+                title=title,
+                message=message,
+                degraded_reason=_DEGRADED_REASON.get(self.degrade_code),
+                retryable=self.degrade_code != ErrorCode.MODEL_BUDGET_EXCEEDED.value,
+            )
             self.degrade_noticed = True
 
-    def tool_failure(self, outcome: ToolOutcome) -> None:
+    def tool_failure(self, outcome: ToolOutcome, *, retryable: bool | None = None) -> None:
         """Lỗi tool -> khối `notice` (kind `error`), dùng đúng thông điệp an toàn của tool."""
         code = outcome.code or ErrorCode.INTERNAL_ERROR.value
+        self.outcome, self.outcome_code = "error", code
+        transient = outcome.kind is ToolKind.UNAVAILABLE or code in _TRANSIENT_CODES
         self.emit_notice(
             kind="error",
             code=code,
             title=notices.ERROR_TITLES.get(code, notices.DEFAULT_ERROR_TITLE),
             message=outcome.message or notices.GENERIC_ERROR_MESSAGE,
+            retryable=retryable if retryable is not None else (transient or None),
+            degraded_reason="tool_error" if transient else None,
         )
 
     # --- gọi tool ---------------------------------------------------------------------------
@@ -235,10 +368,12 @@ class Turn:
         compact: Callable[[ToolOutcome], dict[str, Any]] | None = None,
         block: Callable[[ToolOutcome, str], Any] | None = None,
         target: str = "ledger",
+        emit: bool = True,
     ) -> CallResult:
         """TOOL_CALL_START/ARGS/END -> gọi Gateway -> [ACTIVITY_SNAPSHOT khối] -> TOOL_CALL_RESULT bản gọn.
 
-        Khối UI phát **trước** `TOOL_CALL_RESULT`; model chỉ thấy bản gọn.
+        Khối UI phát **trước** `TOOL_CALL_RESULT`; model chỉ thấy bản gọn. `block` trả một khối hoặc danh sách khối. `emit=False`: dựng khối
+        nhưng chưa phát (người gọi tự phát, ví dụ khối xác nhận đi sau khối `options`).
         """
         name = self.s.tool(short_name, target=target)
         tcid = ev.new_id("tc-")
@@ -262,9 +397,7 @@ class Turn:
                 outcome = await self.tools.call(name, args)
                 finished = True
             finally:
-                if (
-                    not finished
-                ):  # bị hủy/hết giờ/lỗi bất ngờ giữa chừng: vẫn đóng tool call cho hợp lệ
+                if not finished:  # bị hủy/hết giờ/lỗi bất ngờ giữa chừng: vẫn đóng tool call cho hợp lệ
                     interrupted = {
                         "status": "ERROR",
                         "code": ErrorCode.INTERNAL_ERROR.value,
@@ -272,12 +405,13 @@ class Turn:
                     }
                     self.emit(ev.tool_call_result(tcid, interrupted))
 
-        built_block = None
+        built: list[Any] = []
         compact_view: dict[str, Any] | None = None
         if outcome.ok:
             try:
                 if block is not None:
-                    built_block = block(outcome, self.trace_id)
+                    made = block(outcome, self.trace_id)
+                    built = list(made) if isinstance(made, (list, tuple)) else [made]
                 if compact is not None:
                     compact_view = compact(outcome)
             except (ContractMismatch, KeyError, ValueError) as exc:
@@ -289,12 +423,16 @@ class Turn:
                     detail=str(exc)[:300],
                     args=args,
                 )
-                built_block = compact_view = None
+                built, compact_view = [], None
         if outcome.payload and isinstance(outcome.payload.get("app_date"), str):
             with contextlib.suppress(ValueError):
                 self.app_date = date.fromisoformat(outcome.payload["app_date"])
-        if built_block is not None:
-            self.emit_block(built_block)
+        self.tool_log.append(outcome)
+        if compact_view is not None:
+            self.compacts[short_name] = compact_view
+        if emit:
+            for b in built:
+                self.emit_block(b)
         if outcome.ok:
             result_view = (
                 compact_view if compact_view is not None else {"status": outcome.payload["status"]}
@@ -302,12 +440,26 @@ class Turn:
         else:
             result_view = {"status": "ERROR", "code": outcome.code, "message": outcome.message}
         self.emit(ev.tool_call_result(tcid, result_view))
-        return CallResult(outcome, compact_view, built_block)
+        return CallResult(outcome, compact_view, built)
+
+    async def call_tool_retry(self, short_name: str, args: dict[str, Any], **kw: Any) -> CallResult:
+        """`call_tool`, thử lại tối đa `tool_retry_attempts` lần khi lỗi tạm thời (hết giờ, dịch vụ chưa sẵn sàng)."""
+        res = await self.call_tool(short_name, args, **kw)
+        for _ in range(self.s.tool_retry_attempts):
+            o = res.outcome
+            transient = o.kind is ToolKind.UNAVAILABLE or (
+                o.kind in (ToolKind.TOOL_ERROR, ToolKind.BAD_RESULT) and o.code in _TRANSIENT_CODES
+            )
+            if o.ok or not transient:
+                break
+            log.info(json.dumps({"event": "tool_retry", "tool": o.name, "code": o.code}))
+            res = await self.call_tool(short_name, args, **kw)
+        return res
 
     async def ensure_jars(self) -> CallResult:
         """Danh sách hũ của chính người dùng (để ánh xạ tên hũ và lấy ngày mô phỏng); gọi một lần mỗi lượt."""
         if self._jars is None:
-            self._jars = await self.call_tool(
+            self._jars = await self.call_tool_retry(
                 "get_jar_balances", {}, compact=lambda o: compact_jars(o.payload or {}), block=None
             )
             if self._jars.outcome.ok:
@@ -344,6 +496,58 @@ class Turn:
             log.warning(json.dumps({"event": "numeric_ungrounded", "values": bad[:5]}))
             self.degrade_code = self.degrade_code or "NUMERIC_UNVERIFIED"
 
+    async def write_buffered(self, task: str, question: str, compact: Mapping[str, Any], *, timeout: float, max_tokens: int) -> None:
+        """Như `write` nhưng chờ trọn câu trong `timeout` giây rồi mới phát (F3: quá hạn hoặc lỗi thì BỎ phần lời, thẻ số liệu đã hiện)."""
+        if self.llm_down or self.model_calls_left() < 1:
+            return
+
+        async def collect() -> str:
+            parts = []
+            async for delta in write_stream(
+                self.llm,
+                task=task,
+                question=question,
+                compact=compact,
+                scope=self.scope,
+                max_tokens=max_tokens,
+                turn_limit=self.s.writer_turn_limit,
+                output_token_limit=self.s.writer_output_token_limit,
+            ):
+                parts.append(delta)
+            return "".join(parts)
+
+        try:
+            text = await asyncio.wait_for(collect(), timeout=timeout)
+        except TimeoutError:
+            log.info(json.dumps({"event": "writer_timeout", "task": task, "seconds": timeout}))
+            return
+        except Exception as exc:
+            self.llm_failed(exc)
+            return
+        if not text.strip():
+            return
+        if check_grounding(text, compact):  # số lạ: bỏ phần lời thay vì phát điều chưa kiểm chứng
+            log.warning(json.dumps({"event": "numeric_ungrounded", "task": task}))
+            return
+        gr = await self.check_output(text)
+        if gr is not None and gr.blocked:
+            return
+        await self.emit_fixed_text(text)
+
+    async def check_output(self, text: str) -> GuardrailResult | None:
+        """Guardrail đầu ra cho văn bản hoàn chỉnh trước khi phát (None nếu không có guardrail)."""
+        g = self.d.guardrail
+        if g is None or not g.enabled:
+            return None
+        with self.step("guardrail_out"):
+            res = await g.check(mask_pii(text).text, "OUTPUT")
+        self.extra_rules["guardrail_output"] = B.RuleCheck(
+            rule_id="guardrail_output",
+            label="Lọc nội dung đầu ra",
+            outcome="fail" if res.blocked else "pass",
+        )
+        return res
+
     # --- điều khiển -------------------------------------------------------------------------
     async def execute(self) -> None:
         try:
@@ -374,19 +578,43 @@ class Turn:
                         "degraded": self.degrade_code is not None,
                         "model_calls": self.scope.calls,
                         "tool_calls": self.tool_calls,
+                        "verifier_rounds": self.whatif.attempts if self.whatif else 0,
                     },
                     usage=self.scope.usage_by_model(),
                 )
             )
             self.queue.put_nowait(_DONE)
 
+    def turn_record(self) -> dict[str, Any]:
+        """Bản ghi lượt (`agent_turn`): một lần mỗi lượt, do mã dựng từ dấu vết, không do LLM viết."""
+        extra = list(self.extra_rules.values())
+        outcome = self.outcome
+        if self.intent == "out_of_scope" and outcome == "ok":
+            outcome = "rejected"
+        return trace.build_record(
+            trace_id=self.trace_id,
+            conversation_id=self.conversation_id,
+            intent=self.intent,
+            outcome=outcome,
+            code=self.outcome_code or self.degrade_code,
+            outcomes=self.tool_log,
+            suitability=self.suitability,
+            extra_rules=extra,
+            bases=self.bases,
+            blocks=list(self.blocks.values()),
+            usage_by_model=self.scope.usage_by_model(),
+            model_calls=self.scope.calls,
+            steps=self.steps,
+            duration_ms=int((time.perf_counter() - self._t0) * 1000),
+            verified=self.verified,
+        )
+
     async def persist(self) -> None:
-        """Lưu lượt (kể cả lượt suy giảm hoặc chỉ có chữ). Lỗi lưu không làm hỏng lượt."""
+        """Lưu lượt (kể cả lượt suy giảm hoặc chỉ có chữ) và bản ghi lượt. Lỗi lưu không làm hỏng lượt."""
         assistant_text = "\n\n".join(self.assistant_parts)
-        if not (self.blocks or self.user_text or assistant_text):
-            return
-        try:
-            await asyncio.wait_for(
+        jobs = []
+        if self.blocks or self.user_text or assistant_text:
+            jobs.append(
                 self.d.store.save(
                     tools=self.tools,
                     conversation_id=self.conversation_id,
@@ -394,11 +622,23 @@ class Turn:
                     blocks=list(self.blocks.values()),
                     user_text=self.user_text,
                     assistant_text=assistant_text,
-                ),
-                timeout=self.s.turn_blocks_timeout_seconds,
+                )
             )
-        except Exception as exc:
-            log.warning(json.dumps({"event": "turn_blocks_error", "error": repr(exc)[:200]}))
+        if self.intent is not None:
+            jobs.append(self.d.records.save(tools=self.tools, record=self.turn_record()))
+        if not jobs:
+            return
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*jobs, return_exceptions=True),
+                timeout=max(self.s.turn_blocks_timeout_seconds, self.s.turn_record_timeout_seconds),
+            )
+        except TimeoutError:
+            log.warning(json.dumps({"event": "turn_persist_timeout"}))
+            return
+        for r in results:
+            if isinstance(r, BaseException):
+                log.warning(json.dumps({"event": "turn_persist_error", "error": repr(r)[:200]}))
 
     async def flow(self) -> None:
         found = ev.last_user_text(self.run_input)
@@ -410,42 +650,76 @@ class Turn:
                 message=notices.EMPTY_INPUT_MESSAGE,
             )
             return
-        question, index = found
+        raw_question, index = found
+        # L0: che PII trước khi vào LLM, vào log và vào bản lưu
+        question = mask_pii(raw_question).text
         self.user_text = question
-        history = ev.format_history(
-            self.run_input,
-            before_index=index,
-            max_messages=self.s.history_messages,
-            max_chars=self.s.history_chars_per_message,
-        )
+        self.history = mask_pii(
+            ev.format_history(
+                self.run_input,
+                before_index=index,
+                max_messages=self.s.history_messages,
+                max_chars=self.s.history_chars_per_message,
+            )
+        ).text
 
         await self.ensure_llm()
-        routed = await self.classify(question, history)
+        routed = await self.classify_guarded(question, self.history)
         if routed is None:
             return
         self.intent = routed.intent
         handler = {
-            "balance_lookup": self.on_balance,
-            "transactions_lookup": self.on_transactions,
-            "forecast_lookup": self.on_forecast,
-            "move_between_jars": self.on_move,
+            "lookup": self.on_lookup,
+            "what_if": self.on_what_if,
+            "affordability": self.on_affordability,
+            "profile_update": self.on_profile_update,
+            "move": self.on_move,
             "out_of_scope": self.on_out_of_scope,
             "chitchat": self.on_chitchat,
         }[routed.intent]
+        if req := resolve_clarify(routed):
+            await self.emit_clarify(req, routed)
+            return
         await handler(routed, question)
 
-    async def classify(self, question: str, history: str) -> RouterOutput | None:
+    async def classify_guarded(self, question: str, history: str) -> IntentResult | None:
+        """Router song song với Guardrail đầu vào. Guardrail chặn thì coi là ngoài phạm vi (kết quả của router bị bỏ)."""
+        g = self.d.guardrail
+        gtask = None
+        if g is not None and g.enabled:
+            gtask = asyncio.create_task(self._timed_guardrail(g, question))
+        routed = await self.classify(question, history)
+        if gtask is not None:
+            gr = await gtask
+            self.extra_rules["guardrail_input"] = B.RuleCheck(
+                rule_id="guardrail_input",
+                label="Lọc nội dung đầu vào",
+                outcome="fail" if gr.blocked else "pass",
+            )
+            if gr.blocked:
+                self.guardrail_reason = gr.reason
+                return IntentResult(
+                    intent="out_of_scope", params=IntentParams(), confidence=1.0, needs_clarification=False
+                )
+        return routed
+
+    async def _timed_guardrail(self, g: Guardrail, text: str) -> GuardrailResult:
+        with self.step("guardrail_in"):
+            return await g.check(text, "INPUT")
+
+    async def classify(self, question: str, history: str) -> IntentResult | None:
         """Router bằng LLM; không gọi được thì bộ phân loại dự phòng bằng luật (suy giảm có kiểm soát)."""
         if not self.llm_down:
             try:
-                res = await route(
-                    self.llm,
-                    question,
-                    history,
-                    max_attempts=self.s.router_max_attempts,
-                    max_tokens=self.s.router_max_tokens,
-                    scope=self.scope,
-                )
+                with self.step("router"):
+                    res = await route(
+                        self.llm,
+                        question,
+                        history,
+                        max_attempts=self.s.router_max_attempts,
+                        max_tokens=self.s.router_max_tokens,
+                        scope=self.scope,
+                    )
                 return res.value
             except (
                 Exception
@@ -463,9 +737,18 @@ class Turn:
             self.intent = fallback.intent
         return fallback
 
-    # --- các ý định -------------------------------------------------------------------------
-    async def on_balance(self, r: RouterOutput, question: str) -> None:
-        res = await self.call_tool(
+    # --- tra cứu (đường nhanh) --------------------------------------------------------------
+    async def on_lookup(self, r: IntentResult, question: str) -> None:
+        kind = r.params.lookup_kind or "balance"
+        await {
+            "balance": self.on_balance,
+            "transactions": self.on_transactions,
+            "forecast": self.on_forecast,
+            "obligations": self.on_obligations,
+        }[kind](r, question)
+
+    async def on_balance(self, r: IntentResult, question: str) -> None:
+        res = await self.call_tool_retry(
             "get_jar_balances",
             {},
             compact=lambda o: compact_jars(o.payload or {}),
@@ -477,29 +760,40 @@ class Turn:
         assert res.compact is not None
         await self.write("balance", question, res.compact)
 
-    async def on_transactions(self, r: RouterOutput, question: str) -> None:
+    async def on_obligations(self, r: IntentResult, question: str) -> None:
+        res = await self.call_tool_retry(
+            "get_obligations", {}, compact=lambda o: compact_obligations(o.payload or {})
+        )
+        if not res.outcome.ok:
+            self.tool_failure(res.outcome)
+            return
+        assert res.compact is not None
+        await self.write("obligations", question, res.compact)
+
+    async def on_transactions(self, r: IntentResult, question: str) -> None:
+        p = r.params
         jars = await self.ensure_jars()
         if not jars.outcome.ok:
             self.tool_failure(jars.outcome)
             return
         args: dict[str, Any] = {}
-        want = r.jar_text or (
+        want = p.jar_text or (
             question if self.llm_down else None
         )  # suy giảm: dò tên hũ trong cả câu
         if want:
             match = resolve_jar(want, self._jar_rows)
             if match.status == "ok":
                 args["jar"] = match.code
-            elif r.jar_text:
-                await self.ask_which_jar("hũ cần tra giao dịch", r.jar_text, match, question)
+            elif p.jar_text:
+                await self.ask_which_jar("hũ cần tra giao dịch", p.jar_text, match, question)
                 return
-        limit = r.limit if r.limit and r.limit > 0 else self.s.transactions_default_limit
+        limit = p.limit if p.limit and p.limit > 0 else self.s.transactions_default_limit
         args["limit"] = min(limit, self.s.transactions_max_limit)
-        if r.days_back and r.days_back > 0 and self.app_date:
+        if p.days_back and p.days_back > 0 and self.app_date:
             args["to_date"] = self.app_date.isoformat()
-            args["from_date"] = (self.app_date - timedelta(days=r.days_back)).isoformat()
+            args["from_date"] = (self.app_date - timedelta(days=p.days_back)).isoformat()
         names = {j["code"]: j["name"] for j in self._jar_rows}
-        res = await self.call_tool(
+        res = await self.call_tool_retry(
             "query_transactions",
             args,
             compact=lambda o: compact_transactions(o.payload or {}, names, args["limit"]),
@@ -510,24 +804,22 @@ class Turn:
         assert res.compact is not None
         await self.write("transactions", question, res.compact)
 
-    async def on_forecast(self, r: RouterOutput, question: str) -> None:
+    async def on_forecast(self, r: IntentResult, question: str) -> None:
         """Dự báo MỘT hũ: ánh xạ tên hũ bằng dữ liệu của tool, gọi `forecast___get_forecast`, phát khối `forecast_timeline` (số của tool)
         rồi để model nhỏ viết 1 đến 2 câu từ bản gọn."""
         jars = await self.ensure_jars()
         if not jars.outcome.ok:
             self.tool_failure(jars.outcome)
             return
-        want = r.jar_text or (
+        p = r.params
+        want = p.jar_text or (
             question if self.llm_down else None
         )  # suy giảm: dò tên hũ trong cả câu
         match = resolve_jar(want, self._jar_rows) if want else JarMatch("empty")
         if match.status != "ok":
-            if not want and r.needs_clarification and r.reply:
-                await self.emit_fixed_text(r.reply)
-            else:
-                await self.ask_which_jar("hũ cần xem dự báo", r.jar_text or "", match, question)
+            await self.ask_which_jar("hũ cần xem dự báo", p.jar_text or "", match, question)
             return
-        res = await self.call_tool(
+        res = await self.call_tool_retry(
             "get_forecast",
             {"jar": match.code},
             target="forecast",
@@ -538,22 +830,107 @@ class Turn:
             self.tool_failure(res.outcome)
             return
         assert res.compact is not None
+        self.note_basis(_forecast_basis(res.outcome.payload))
         await self.write("forecast", question, res.compact)
 
-    async def on_move(self, r: RouterOutput, question: str) -> None:
-        missing = not (r.from_jar_text and r.to_jar_text and r.amount_vnd and r.amount_vnd > 0)
-        if r.needs_clarification or missing:
-            await self.ask_move_details(r, question)
+    # --- what-if và kiểm tra trước khi quẹt -------------------------------------------------
+    async def on_what_if(self, r: IntentResult, question: str) -> None:
+        self.whatif = await run_what_if(self, r, question, self.history)
+        if self.whatif.spec is not None or self.whatif.handled:
             return
+        # Không dựng được kịch bản (model hỏng và kiểu kịch bản không có đường dựng bằng mã): món mua thì vẫn cho thẻ kiểm tra tất định
+        # (cùng số với POST /affordability), không thì nói thật là chưa dựng được.
+        if r.params.amount_vnd and r.params.scenario_kind in (None, "one_time_purchase", "bnpl_purchase"):
+            await self.on_affordability(r, question)
+            return
+        t, m = notices.SCENARIO_UNBUILDABLE
+        self.emit_notice(kind="error", code=ErrorCode.SCENARIO_INVALID.value, title=t, message=m)
+
+    async def on_affordability(self, r: IntentResult, question: str) -> None:
+        """F3 trong chat: `affordability_check` -> khối `affordability_card` NGAY -> model nhỏ viết 2 câu trong thời hạn (lỗi/quá hạn: bỏ lời)."""
+        p = r.params
+        args: dict[str, Any] = {"amount_vnd": p.amount_vnd}
+        if p.funding:
+            args["funding_source"] = p.funding
+        if p.label:
+            args["label"] = p.label[:60]
+        if p.jar_text:
+            jars = await self.ensure_jars()
+            if jars.outcome.ok and (m := resolve_jar(p.jar_text, self._jar_rows)).status == "ok":
+                args["jar"] = m.code
+        res = await self.call_tool_retry(
+            "affordability_check",
+            args,
+            target="forecast",
+            compact=lambda o: compact_affordability(o.payload or {}),
+            block=affordability_block,
+        )
+        if not res.outcome.ok:
+            self.tool_failure(res.outcome)
+            return
+        assert res.compact is not None
+        data = (res.outcome.payload or {}).get("data") or {}
+        self.note_basis(data.get("basis"))
+        await self.write_buffered(
+            "affordability",
+            question,
+            res.compact,
+            timeout=self.s.affordability_text_timeout_seconds,
+            max_tokens=self.s.affordability_text_max_tokens,
+        )
+
+    # --- khai báo hồ sơ ---------------------------------------------------------------------
+    async def on_profile_update(self, r: IntentResult, question: str) -> None:
+        """`update_profile` KHÔNG token -> khối `confirm_action` (chưa lưu gì cho tới khi người dùng bấm Xác nhận)."""
+        p = r.params
+        args: dict[str, Any] = {}
+        if p.salary_vnd:
+            args["monthly_salary_vnd"] = p.salary_vnd
+        if p.payday_day:
+            args["payday_day"] = p.payday_day
+        if p.obligation_name:
+            obl: dict[str, Any] = {"op": "upsert", "name": p.obligation_name, "amount_vnd": p.amount_vnd, "cycle": "monthly"}
+            if p.due_day:
+                obl["due_day"] = p.due_day
+            existing = await self.call_tool_retry("get_obligations", {}, compact=lambda o: compact_obligations(o.payload or {}))
+            match = _match_obligation(p.obligation_name, existing.outcome.payload) if existing.outcome.ok else None
+            if match is not None:
+                obl["obligation_id"] = match["id"]  # sửa khoản đã có, không tạo trùng
+            elif p.obligation_kind is not None:
+                obl["kind"] = p.obligation_kind
+            else:
+                await self.emit_clarify(_kind_question(), r)
+                return
+            args["obligation"] = obl
+        res = await self.call_tool_retry(
+            "update_profile", args, compact=lambda o: compact_confirm_action((o.payload or {})["data"]), block=confirm_action_block
+        )
+        o = res.outcome
+        if o.kind is ToolKind.NEEDS_CONFIRMATION and res.compact is not None:
+            await self.write("confirm_action", question, res.compact)
+        elif o.kind is ToolKind.OK:
+            log.error(json.dumps({"event": "write_ok_without_token", "tool": o.name}))
+            self.emit_notice(
+                kind="error",
+                code=ErrorCode.INTERNAL_ERROR.value,
+                title=notices.DEFAULT_ERROR_TITLE,
+                message=notices.GENERIC_ERROR_MESSAGE,
+            )
+        else:
+            self.tool_failure(o)
+
+    # --- chuyển hũ --------------------------------------------------------------------------
+    async def on_move(self, r: IntentResult, question: str) -> None:
+        p = r.params
         jars = await self.ensure_jars()
         if not jars.outcome.ok:
             self.tool_failure(jars.outcome)
             return
-        src = resolve_jar(r.from_jar_text, self._jar_rows)
-        dst = resolve_jar(r.to_jar_text, self._jar_rows)
+        src = resolve_jar(p.from_jar_text, self._jar_rows)
+        dst = resolve_jar(p.to_jar_text, self._jar_rows)
         for label, text, match in (
-            ("hũ nguồn", r.from_jar_text, src),
-            ("hũ đích", r.to_jar_text, dst),
+            ("hũ nguồn", p.from_jar_text, src),
+            ("hũ đích", p.to_jar_text, dst),
         ):
             if match.status != "ok":
                 await self.ask_which_jar(label, text or "", match, question)
@@ -563,10 +940,10 @@ class Turn:
                 "hai hũ khác nhau (hũ nguồn và hũ đích đang trùng)", "", JarMatch("none"), question
             )
             return
-        assert r.amount_vnd is not None
-        res = await self.call_tool(
+        assert p.amount_vnd is not None
+        res = await self.call_tool_retry(
             "move_between_jars",
-            {"from_jar": src.code, "to_jar": dst.code, "amount_vnd": r.amount_vnd},
+            {"from_jar": src.code, "to_jar": dst.code, "amount_vnd": p.amount_vnd},
             compact=lambda o: compact_confirm((o.payload or {})["data"]),
             block=confirm_block,
         )
@@ -587,23 +964,56 @@ class Turn:
                 self.emit_jars_block()
             self.tool_failure(o)
 
-    async def on_out_of_scope(self, r: RouterOutput, question: str) -> None:
+    # --- ngoài phạm vi và xã giao -----------------------------------------------------------
+    async def on_out_of_scope(self, r: IntentResult, question: str) -> None:
+        """`notice` (giới hạn) + `suggestions` (việc làm được). Không có câu do model viết: lời từ chối là chuỗi sản phẩm, không thể lọt mã chứng khoán."""
         title, message = notices.OUT_OF_SCOPE
         self.emit_notice(kind="out_of_scope", code=None, title=title, message=message)
-        if r.reply:
-            await self.emit_fixed_text(r.reply)
-        else:
-            await self.write("out_of_scope", question, {})
+        self.emit_block(
+            B.build_suggestions(
+                context="out_of_scope",
+                title=notices.SUGGESTIONS_TITLE,
+                can_do=list(notices.CAN_DO),
+                cannot_do=list(notices.CANNOT_DO),
+                items=list(notices.SUGGESTION_ITEMS),
+                trace_id=self.trace_id,
+                source_tool="agent",
+                as_of=self.d.now(),
+                app_date=self.block_app_date(),
+            )
+        )
 
-    async def on_chitchat(self, r: RouterOutput, question: str) -> None:
+    async def on_chitchat(self, r: IntentResult, question: str) -> None:
+        """Lời của router chỉ được phát khi mọi số trong đó có căn cứ (câu hỏi, lịch sử có dòng "Ứng dụng") và qua Guardrail."""
         if r.reply:
-            await self.emit_fixed_text(r.reply)
-        else:
-            await self.write("chitchat", question, {})
+            ok = NumericGrounding.check(
+                {"reply": r.reply}, Allowed.from_payloads([], [question, self.history])
+            ).ok
+            gr = await self.check_output(r.reply) if ok else None
+            if ok and not (gr is not None and gr.blocked):
+                await self.emit_fixed_text(r.reply)
+                return
+        await self.write("chitchat", question, {})
 
     # --- hỏi lại ----------------------------------------------------------------------------
-    async def ask_move_details(self, r: RouterOutput, question: str) -> None:
-        await self.emit_fixed_text(r.reply or notices.ASK_MOVE_DETAILS)
+    async def emit_clarify(self, req: ClarifyRequest, r: IntentResult) -> None:
+        """Khối `clarify` đúng một câu hỏi kèm chip; kết thúc lượt (lượt sau người dùng trả lời, router ghép với câu trước)."""
+        self.emit_block(
+            B.build_clarify(
+                question=req.question,
+                slot=req.slot,
+                chips=[
+                    {"id": f"c{i + 1}", "label": c.label, "value": c.value or c.label}
+                    for i, c in enumerate(req.chips)
+                ],
+                trace_id=self.trace_id,
+                source_tool="agent",
+                as_of=self.d.now(),
+                app_date=self.block_app_date(),
+                pending_intent=r.intent if r.intent in _PENDING_INTENTS else None,
+                allow_free_text=True,
+            )
+        )
 
     async def ask_which_jar(self, label: str, typed: str, match: JarMatch, question: str) -> None:
         """Không ánh xạ được tên hũ: hiện số dư các hũ thật của người dùng và hỏi lại."""
@@ -615,6 +1025,43 @@ class Turn:
             "co_the_la": [names[c] for c in match.candidates if c in names],
         }
         await self.write("clarify", question, facts)
+
+
+def _forecast_basis(payload: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """`ForecastBasis` từ kết quả `get_forecast` (cùng trường với khối what-if)."""
+    d = (payload or {}).get("data")
+    if not d:
+        return None
+    return {
+        "confidence_band": d["confidence_band"],
+        "is_initial_estimate": d["is_initial_estimate"],
+        "history_days": d["history_days"],
+        "coverage": d["coverage"],
+        "stale": d["stale"],
+    }
+
+
+def _match_obligation(name: str, payload: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+    """Khoản nghĩa vụ ĐÃ KHAI cùng tên (so khớp không dấu); tránh tạo khoản trùng khi người dùng nói lại số tiền."""
+    want = normalize(name)
+    for o in ((payload or {}).get("data") or {}).get("obligations", []):
+        if o.get("source") == "bnpl_auto" or o.get("status") not in (None, "active"):
+            continue
+        have = normalize(o["name"])
+        if want and (want == have or want in have or have in want):
+            return o
+    return None
+
+
+def _kind_question() -> ClarifyRequest:
+    from yofina_agent.schemas import ClarifyChipIn
+
+    c = notices.CLARIFY["obligation_kind"]
+    return ClarifyRequest(
+        slot="other",
+        question=c["question"],
+        chips=[ClarifyChipIn(label=x["label"], value=x["value"]) for x in c["chips"]],
+    )
 
 
 async def stream_turn(turn: Turn) -> AsyncIterator[BaseEvent]:

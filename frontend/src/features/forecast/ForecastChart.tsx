@@ -35,7 +35,7 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
   const chart = (
     <ComposedChart
       data={m.rows}
-      margin={{ top: 28, right: 18, bottom: 0, left: 0 }}
+      margin={{ top: 28 + Math.max(0, ...m.eventLevels) * 13, right: 18, bottom: 0, left: 0 }}
       {...(fixedSize ? { width: fixedSize.width, height: fixedSize.height } : {})}
       onMouseMove={pick}
       onClick={pick}
@@ -68,19 +68,27 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
       )}
 
       <Area type="monotone" dataKey="band" stroke="none" fill="var(--accent-blue)" fillOpacity={0.18} isAnimationActive={false} activeDot={false} name="Dải 80%" />
+      {m.hasCompare && (
+        // Dải chênh lệch giữa TRƯỚC và SAU (màu thương hiệu): thấy ngay kịch bản kéo số dư xuống bao nhiêu.
+        <Area type="monotone" dataKey="gap" stroke="none" fill="var(--brand-primary)" fillOpacity={0.22} isAnimationActive={false} activeDot={false} name="Chênh lệch" />
+      )}
       <Line
         type="monotone"
         dataKey="p50"
         stroke="var(--accent-blue)"
         strokeWidth={2.5}
+        strokeDasharray={m.hasCompare ? '6 4' : undefined}
         dot={false}
         activeDot={false}
         isAnimationActive={false}
-        name="Số dư giữa"
+        name={m.hasCompare ? 'Trước' : 'Số dư giữa'}
       />
+      {m.hasCompare && (
+        <Line type="monotone" dataKey="after" stroke="var(--brand-primary)" strokeWidth={2.5} dot={false} activeDot={false} isAnimationActive={false} name="Sau" />
+      )}
       <ReferenceLine y={0} stroke="var(--text-secondary)" strokeOpacity={0.6} />
 
-      {m.events.map((e) => (
+      {m.events.map((e, i) => (
         <ReferenceLine
           key={`${e.date}-${e.label}`}
           x={e.x}
@@ -90,6 +98,8 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
           label={{
             value: `${e.label} ${formatDayMonth(e.date)}`,
             position: 'top',
+            // Mốc gần nhau xếp lên các tầng khác nhau để nhãn không chồng lên nhau.
+            offset: 4 + (m.eventLevels[i] ?? 0) * 13,
             fontSize: 10.5,
             fontWeight: 700,
             fill: e.kind === 'salary' ? 'var(--status-ok-fg)' : 'var(--status-warn-fg)',
@@ -107,6 +117,18 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
           stroke="var(--bg-surface)"
           strokeWidth={2}
           label={{ value: `Cạn ${formatDayMonth(m.runout.date)}`, position: 'bottom', fontSize: 11, fontWeight: 700, fill: 'var(--status-bad-fg)', dy: 4, style: HALO }}
+        />
+      )}
+
+      {m.afterRunout && (
+        <ReferenceDot
+          x={m.afterRunout.x}
+          y={0}
+          r={5.5}
+          fill="var(--brand-primary)"
+          stroke="var(--bg-surface)"
+          strokeWidth={2}
+          label={{ value: `Sau: cạn ${formatDayMonth(m.afterRunout.date)}`, position: 'bottom', fontSize: 11, fontWeight: 700, fill: 'var(--text-brand)', dy: 18, style: HALO }}
         />
       )}
 

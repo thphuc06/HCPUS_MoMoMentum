@@ -31,12 +31,15 @@ from yofina_core.wallet import (
     CONFIRM_SALARY,
     DECLARABLE_OBLIGATION_KINDS,
     MOVE_BETWEEN_JARS,
+    NUDGE_KINDS,
+    NUDGE_OPS,
     OBLIGATION_CYCLES,
     OTHER_INCOME_JAR_CODE,
     RECORD_TRANSACTION,
     RULE_SCOPES,
     SALARY_DECISIONS,
     SAVE_JARS,
+    SCHEDULE_NUDGE,
     SYSTEM_JAR_CODES,
     UNCLASSIFIED_JAR_CODE,
     UPDATE_PROFILE,
@@ -514,6 +517,37 @@ def normalize_confirm_salary(params: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+# --- schedule_nudge (phase 3) ---------------------------------------------------------------------------
+def normalize_schedule_nudge(params: Mapping[str, Any], ctx: NormContext | None) -> dict[str, Any]:
+    """`op` mặc định `create`. `create`: bắt buộc `kind` và `fire_on` (ngày mô phỏng, SAU hôm nay khi có ngữ cảnh), tùy chọn
+    `jar_code`, `note` (tối đa 120 ký tự), `scenario_id`. `cancel`: chỉ `nudge_id`. Idempotent như mọi bộ chuẩn hóa."""
+    op_raw = _clean(params.get("op"))
+    op = _choice("op", op_raw, NUDGE_OPS) if op_raw is not None else "create"
+    if op == "cancel":
+        if _clean(params.get("nudge_id")) is None:
+            raise ParamsError("Hủy lời nhắc cần nudge_id")
+        return {"op": "cancel", "nudge_id": _uuid("nudge_id", params["nudge_id"])}
+    if _clean(params.get("kind")) is None or _clean(params.get("fire_on")) is None:
+        raise ParamsError("Thiếu tham số: kind, fire_on")
+    out: dict[str, Any] = {
+        "op": "create",
+        "kind": _choice("kind", params["kind"], NUDGE_KINDS),
+    }
+    fire_on = _iso_date("fire_on", params["fire_on"])
+    if ctx is not None and fire_on <= ctx.today:
+        raise ParamsError("fire_on phải sau hôm nay (ngày mô phỏng)")
+    out["fire_on"] = fire_on.isoformat()
+    jar = _clean(params.get("jar_code"))
+    if jar is not None:
+        out["jar_code"] = _jar_code("jar_code", jar)
+    note = _text("note", params.get("note"), max_len=120)
+    if note is not None:
+        out["note"] = note
+    if _clean(params.get("scenario_id")) is not None:
+        out["scenario_id"] = _uuid("scenario_id", params["scenario_id"])
+    return out
+
+
 def normalize_params(
     tool: str, params: Mapping[str, Any], ctx: NormContext | None = None
 ) -> dict[str, Any]:
@@ -530,4 +564,6 @@ def normalize_params(
         return normalize_save_jars(params, ctx)
     if tool == CONFIRM_SALARY:
         return normalize_confirm_salary(params)
+    if tool == SCHEDULE_NUDGE:
+        return normalize_schedule_nudge(params, ctx)
     raise ParamsError(f"Tool không hỗ trợ xác nhận: {tool!r}")

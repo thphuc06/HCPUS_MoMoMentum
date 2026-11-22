@@ -556,7 +556,7 @@ class WalletReads:
             )
         today = self._app_date(view.clock_offset_days or 0, now)
         if jar.get("kind") == "system":
-            raise YofinaError(ErrorCode.FORECAST_UNAVAILABLE, "Hũ hệ thống không có dự báo.")
+            raise YofinaError(ErrorCode.FORECAST_NOT_APPLICABLE, "Hũ hệ thống không có dự báo.")
         summaries = self.repo.forecast_summaries(user_id, jar_code)
         if not summaries:
             return None

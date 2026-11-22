@@ -173,6 +173,8 @@ def _dispatch(
         return 200, service.salary_events_response(sub, status=_query(event).get("status"))
     if route == "GET /jar-templates":
         return 200, service.jar_templates_response()
+    if route.startswith("GET /traces/"):
+        return 200, service.trace_response(sub, _path_param(event, "trace_id", "/traces/"))
     if route.startswith("GET /forecasts/"):
         jar = _path_param(event, "jar_code", "/forecasts/")
         return 200, service.forecast_response(sub, jar, trace_id=trace_id)
@@ -230,6 +232,9 @@ def _dispatch(
             name_hint=_name_hint(event),
         )
         return 200, block_to_wire(receipt)
+
+    if route == "POST /feedback":
+        return 200, service.feedback_response(sub, _body(event))
 
     if route == "GET /conversations":
         return 200, service.conversations_response(sub, limit=_query(event).get("limit"))

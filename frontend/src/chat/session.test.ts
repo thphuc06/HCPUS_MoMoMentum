@@ -412,3 +412,96 @@ describe('ChatSession: phát lại trạng thái đề nghị từ server', () =
     expect(session.getHistory().filter((m) => m.role === 'system')).toHaveLength(1)
   })
 })
+
+describe('ChatSession: phase 3 (Hoàn tác, chọn phương án, hỏi lại, thử lại)', () => {
+  it('replaceBlock với fresh ghi thời điểm vừa thực hiện (doneAt) để đếm ngược Hoàn tác; không fresh thì không có', async () => {
+    const confirm = validBlock('confirm.move')
+    const receipt = validBlock('receipt.move')
+    const { session } = makeSession([() => sseResponse([runStarted(), blockSnapshot(String(confirm.id), confirm), runFinished()])])
+    await session.send('chuyển')
+    const before = Date.now()
+    session.replaceBlock(String(confirm.id), receipt, String(receipt.id), { fresh: true })
+    const item = session.getSnapshot().items[1] as Extract<ChatItem, { kind: 'block' }>
+    expect(item.doneAt).toBeGreaterThanOrEqual(before)
+    expect(item.ui).toBeUndefined()
+    // biên nhận của thao tác ngược: đánh dấu undone, không fresh
+    session.replaceBlock(String(receipt.id), validBlock('receipt.move'), 'receipt:undo', { undone: true })
+    const undone = session.getSnapshot().items[1] as Extract<ChatItem, { kind: 'block' }>
+    expect(undone).toMatchObject({ id: 'receipt:undo', ui: 'undone', resolved: true })
+    expect(undone.doneAt).toBeUndefined()
+  })
+
+  it('dựng lại từ server (hydrate) không có doneAt: biên nhận cũ không còn Hoàn tác', () => {
+    const { session } = makeSession([])
+    const confirm = validBlock('confirm.move') as { id: string }
+    session.hydrate([
+      {
+        trace_id: 't1',
+        created_at: '2026-12-10T03:00:00Z',
+        user_text: 'chuyển',
+        assistant_text: 'xong',
+        blocks: [confirm],
+        resolutions: [{ block_id: confirm.id, status: 'done', receipt: validBlock('receipt.move') }],
+      },
+    ])
+    expect((session.getSnapshot().items.find((i) => i.kind === 'block') as Extract<ChatItem, { kind: 'block' }>).doneAt).toBeUndefined()
+  })
+
+  it('revealBlock đưa id vào snapshot.revealed (một lần), reset() xóa', () => {
+    const { session } = makeSession([])
+    expect(session.getSnapshot().revealed.size).toBe(0)
+    session.revealBlock('confirm:t:abc')
+    session.revealBlock('confirm:t:abc')
+    expect([...session.getSnapshot().revealed]).toEqual(['confirm:t:abc'])
+    session.reset('99999999-2222-4333-8444-555555555555')
+    expect(session.getSnapshot().revealed.size).toBe(0)
+  })
+
+  it('askAgain gửi lại đúng câu cuối của người dùng (đề nghị hết hạn: hỏi lại để có đề nghị mới)', async () => {
+    const { session, calls } = makeSession([
+      () => sseResponse([runStarted(), ...textMessage('m1', 'đề nghị cũ'), runFinished()]),
+      () => sseResponse([runStarted(), ...textMessage('m1', 'đề nghị mới'), runFinished()]),
+    ])
+    await session.send('nếu mua tai nghe 1,2 triệu thì sao')
+    await session.askAgain()
+    expect(calls).toHaveLength(2)
+    const users = JSON.parse(String(calls[1]!.init.body)).messages.filter((m: { role: string }) => m.role === 'user')
+    expect(users.map((m: { content: string }) => m.content)).toEqual(['nếu mua tai nghe 1,2 triệu thì sao', 'nếu mua tai nghe 1,2 triệu thì sao'])
+  })
+
+  it('retry() sau một khối notice (suy giảm có retryable) bỏ khối đó và chạy lại lượt', async () => {
+    const degraded = validBlock('notice.error_retry')
+    const { session, calls } = makeSession([
+      () => sseResponse([runStarted(), blockSnapshot(String(degraded.id), degraded), ...textMessage('m1', 'tạm thời chưa giải thích được'), runFinished()]),
+      () => sseResponse([runStarted(), ...textMessage('m1', 'giờ đã có lời giải thích'), runFinished()]),
+    ])
+    await session.send('nếu mua tai nghe thì sao')
+    expect(session.getSnapshot().items.some((i) => i.kind === 'block')).toBe(true)
+    await session.retry()
+    expect(calls).toHaveLength(2)
+    expect(session.getSnapshot().items.some((i) => i.kind === 'block')).toBe(false)
+    expect(session.getSnapshot().items.some((i) => i.kind === 'assistant' && i.text === 'giờ đã có lời giải thích')).toBe(true)
+  })
+
+  it('stop() giữa lượt gọi abortRun: lượt kết thúc, không thông báo lỗi', async () => {
+    // fetch giả tôn trọng AbortSignal như fetch thật: luồng không bao giờ kết thúc, chỉ dừng khi bị hủy
+    const calls: Call[] = []
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} })
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) {
+          init?.signal?.addEventListener('abort', () => c.error(new DOMException('aborted', 'AbortError')))
+        },
+      })
+      return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    }) as unknown as typeof fetch
+    const session = new ChatSession({ agentUrl: URL, conversationId: CONVERSATION, getAccessToken: async () => 'tok', fetchImpl })
+    const p = session.send('chạy lâu')
+    await vi.waitFor(() => expect(session.getSnapshot().running).toBe(true))
+    await new Promise((r) => setTimeout(r, 30))
+    session.stop()
+    await p
+    expect(session.getSnapshot().running).toBe(false)
+    expect(session.getSnapshot().items.some((i) => i.kind === 'notice')).toBe(false)
+  })
+})

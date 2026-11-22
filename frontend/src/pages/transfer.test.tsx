@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { restFixture } from '@/test/fixtures'
+import { restFixture, validBlock } from '@/test/fixtures'
 import { backend, bodyOf, callsTo, json, mountApp, type Call } from '@/test/mountApp'
 import { transferParams } from '@/features/transfer/params'
 
@@ -90,11 +90,11 @@ describe('T2 số tiền và nguồn tiền', () => {
     expect(screen.getByRole('button', { name: '200.000' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('"Xem lại" chỉ bật khi có số tiền và đã chọn nguồn tiền', async () => {
+  it('"Kiểm tra trước khi chuyển" chỉ bật khi có số tiền và đã chọn nguồn tiền', async () => {
     mountApp(backend(), '/transfer')
     const user = userEvent.setup()
     await pickPayee(user)
-    const next = await screen.findByRole('button', { name: 'Xem lại' })
+    const next = await screen.findByRole('button', { name: 'Kiểm tra trước khi chuyển' })
     expect(next).toBeDisabled()
     await typeAmount(user, ['1', '000'])
     expect(next).toBeDisabled() // chưa có nguồn
@@ -142,8 +142,114 @@ async function toReview(user: ReturnType<typeof userEvent.setup>, source: RegExp
   await typeAmount(user, digits)
   await chooseSource(user, source)
   if (note) await user.type(screen.getByPlaceholderText('Lời nhắn (tùy chọn)'), note)
-  await user.click(screen.getByRole('button', { name: 'Xem lại' }))
+  await user.click(screen.getByRole('button', { name: 'Kiểm tra trước khi chuyển' }))
+  // T3: thẻ kiểm tra của server; đi tiếp sang T4 bằng "Tiếp tục" (xanh) hoặc "Vẫn chuyển" (vàng, đỏ).
+  await user.click(await screen.findByRole('button', { name: /^(Tiếp tục|Vẫn chuyển)/ }))
 }
+
+async function toCheck(user: ReturnType<typeof userEvent.setup>, source: RegExp, digits = ['2', '5', '0', '000']) {
+  await pickPayee(user)
+  await typeAmount(user, digits)
+  await chooseSource(user, source)
+  await user.click(screen.getByRole('button', { name: 'Kiểm tra trước khi chuyển' }))
+  await screen.findByTestId('afford-headline')
+}
+
+describe('T3 kiểm tra trước khi chuyển (POST /affordability)', () => {
+  it('gọi /affordability với số tiền, nguồn và hũ người dùng chọn; vẽ thẻ XANH: chữ "Đủ", từng hũ, nút "Tiếp tục" sang T4', async () => {
+    const { calls, router } = mountApp(backend(), '/transfer')
+    const user = userEvent.setup()
+    await toCheck(user, /Hũ Hóa đơn/)
+    const req = bodyOf(callsTo(calls, 'POST', '/affordability')[0]!)
+    expect(req).toEqual({ amount_vnd: 250000, funding_source: 'jar', jar: 'hoa_don', label: 'Trần Quang Huy' })
+    expect(screen.getByTestId('check-amount')).toHaveTextContent('250.000 ₫')
+    const card = document.querySelector('[data-block="affordability_card"]')!
+    expect(card).toHaveAttribute('data-verdict', 'ok')
+    expect(within(card as HTMLElement).getAllByText('Đủ').length).toBeGreaterThan(0)
+    expect(card.querySelectorAll('ul[aria-label="Kiểm tra từng hũ"] [data-jar]')).toHaveLength(3)
+    expect(screen.queryByRole('button', { name: /Vì sao/ })).toBeNull() // màn hình không có bản ghi lượt agent để giải thích
+    // chưa ghi gì
+    expect(callsTo(calls, 'POST', '/actions')).toHaveLength(0)
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/transfer/review'))
+  })
+
+  it('thẻ ĐỎ/VÀNG: chữ "Hụt", "Vẫn chuyển 250.000 ₫", "Đổi nguồn", "Trả bằng Trả sau (mô phỏng)"; chi phí của món TÁCH khỏi tổng phải trả ngày đến hạn', async () => {
+    const short = validBlock('affordability_card.transfer_an_uong_short')
+    const { router } = mountApp(backend({ 'POST /affordability': short }), '/transfer')
+    const user = userEvent.setup()
+    await toCheck(user, /Hũ Ăn uống/)
+    const card = document.querySelector('[data-block="affordability_card"]') as HTMLElement
+    expect(card).toHaveAttribute('data-verdict', 'short')
+    expect(within(card).getAllByText('Hụt').length).toBeGreaterThan(0)
+    expect(screen.getByTestId('item-cost')).toHaveTextContent('250.000 ₫')
+    expect(screen.getByTestId('total-due')).toHaveTextContent('1.250.000 ₫')
+    expect(screen.getByRole('button', { name: /^Vẫn chuyển 250\.000/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Đổi nguồn' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Trả bằng Trả sau (mô phỏng)' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/transfer/review'))
+    // nguồn đã đổi sang Trả sau: T4 nêu "Trả sau"
+    expect(await screen.findByTestId('review-source')).toHaveTextContent('Trả sau (mô phỏng)')
+  })
+
+  it('"Vẫn chuyển" giữ nguồn và sang T4; "Đổi nguồn" bỏ nguồn đã chọn và về T2 để chọn lại', async () => {
+    const short = validBlock('affordability_card.transfer_an_uong_short')
+    const a = mountApp(backend({ 'POST /affordability': short }), '/transfer')
+    const user = userEvent.setup()
+    await toCheck(user, /Hũ Ăn uống/)
+    await user.click(screen.getByRole('button', { name: 'Đổi nguồn' }))
+    await waitFor(() => expect(a.router.state.location.pathname).toBe('/transfer/amount'))
+    expect(await screen.findByTestId('source-label')).toHaveTextContent('Chọn nguồn tiền')
+    expect(screen.getByTestId('amount-display')).toHaveTextContent('250.000') // giữ số tiền đã nhập
+  })
+
+  it('nguồn Trả sau: gửi funding_source credit (không gửi jar) và vẽ phần Trả sau là chính', async () => {
+    const credit = validBlock('affordability_card.credit_only')
+    const { calls } = mountApp(backend({ 'POST /affordability': credit }), '/transfer')
+    const user = userEvent.setup()
+    await toCheck(user, /Trả sau \(mô phỏng\)/)
+    const req = bodyOf(callsTo(calls, 'POST', '/affordability')[0]!)
+    expect(req).toEqual({ amount_vnd: 250000, funding_source: 'credit', label: 'Trần Quang Huy' })
+    expect(screen.getByTestId('afford-credit')).toBeInTheDocument()
+    expect(screen.getByTestId('total-due')).toHaveTextContent('1.250.000 ₫')
+    expect(screen.queryByRole('button', { name: 'Trả bằng Trả sau (mô phỏng)' })).toBeNull() // đang chọn rồi
+  })
+
+  it('lỗi ở bước kiểm tra không chặn: báo bằng tiếng Việt, cho Thử lại hoặc bỏ qua để xem lại', async () => {
+    let n = 0
+    const { router } = mountApp(
+      backend({ 'POST /affordability': () => (++n === 1 ? json(503, { error: { code: 'DATABASE_UNAVAILABLE', message: 'x' } }) : validBlock('affordability_card.transfer_250k')) }),
+      '/transfer',
+    )
+    const user = userEvent.setup()
+    await pickPayee(user)
+    await typeAmount(user, ['2', '5', '0', '000'])
+    await chooseSource(user, /Hũ Hóa đơn/)
+    await user.click(screen.getByRole('button', { name: 'Kiểm tra trước khi chuyển' }))
+    const err = await screen.findByTestId('check-error')
+    expect(err).toHaveTextContent('Hệ thống đang khởi động')
+    await user.click(within(err).getByRole('button', { name: 'Thử lại' }))
+    expect(await screen.findByTestId('afford-headline')).toBeInTheDocument()
+    expect(n).toBe(2)
+    void router
+  })
+
+  it('bỏ qua kiểm tra khi lỗi: sang T4', async () => {
+    const { router } = mountApp(backend({ 'POST /affordability': json(404, { error: { code: 'PARAMS_INVALID', message: 'x' } }) }), '/transfer')
+    const user = userEvent.setup()
+    await pickPayee(user)
+    await typeAmount(user, ['2', '5', '0', '000'])
+    await chooseSource(user, /Hũ Hóa đơn/)
+    await user.click(screen.getByRole('button', { name: 'Kiểm tra trước khi chuyển' }))
+    await user.click(await screen.findByRole('button', { name: 'Bỏ qua kiểm tra, xem lại' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/transfer/review'))
+  })
+
+  it('vào thẳng T3 khi chưa chọn nguồn thì về T2; chưa chọn người nhận thì về T1', async () => {
+    const a = mountApp(backend(), '/transfer/check')
+    await waitFor(() => expect(a.router.state.location.pathname).toBe('/transfer'))
+  })
+})
 
 describe('T4 xem lại, xác nhận và T5 biên nhận', () => {
   it('trả từ hũ: /confirmations với tham số đúng thứ người dùng chọn → /actions kèm token → biên nhận của server; dữ liệu được làm mới', async () => {

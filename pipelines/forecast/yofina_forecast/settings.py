@@ -45,6 +45,16 @@ class ForecastSettings:
     idempotency_lease_seconds: int
     #: số người dùng tối đa batch đêm liệt kê
     nightly_max_users: int
+    #: số đường Monte Carlo của `run_scenario` (baseline và kịch bản dùng CÙNG dãy số ngẫu nhiên)
+    scenario_n_paths: int = 5000
+    #: giữ từng này kịch bản mới nhất của mỗi người dùng (dữ liệu dẫn xuất, dọn bằng `app_prune_scenarios`)
+    scenario_keep: int = 50
+    #: kiểm tra trước khi quẹt: hụt khi số dư P50 sau khi chi xuống dưới ngưỡng này (VND) ở bất kỳ ngày nào trước kỳ lương
+    affordability_short_p50_floor_vnd: int = 0
+    #: sát khi không hụt nhưng số dư P10 (kịch bản xấu) sau khi chi xuống dưới ngưỡng này (VND) trước kỳ lương
+    affordability_tight_p10_floor_vnd: int = 0
+    #: giữ bảng tra (biểu phí) trong bộ nhớ bao lâu (giây)
+    reference_cache_seconds: int = 300
 
     @property
     def tz(self) -> ZoneInfo:
@@ -77,4 +87,9 @@ class ForecastSettings:
             idempotency_ttl_seconds=cfg.get_int("forecast_idempotency_ttl_seconds"),
             idempotency_lease_seconds=cfg.get_int("forecast_idempotency_lease_seconds"),
             nightly_max_users=cfg.get_int("forecast_nightly_max_users"),
+            scenario_n_paths=cfg.get_int("forecast_scenario_n_paths"),
+            scenario_keep=cfg.get_int("forecast_scenario_keep"),
+            affordability_short_p50_floor_vnd=cfg.get_int("affordability_short_p50_floor_vnd"),
+            affordability_tight_p10_floor_vnd=cfg.get_int("affordability_tight_p10_floor_vnd"),
+            reference_cache_seconds=cfg.get_int("reference_cache_seconds"),
         )

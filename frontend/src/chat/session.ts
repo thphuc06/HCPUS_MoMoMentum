@@ -16,14 +16,17 @@ export const SESSION_HEADER = 'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id'
  * chỉ ở phiên đang mở), `expired` (server báo quá hạn đề nghị), `done` (server báo đã thực hiện nhưng không
  * dựng được biên nhận: hiện "đã thực hiện", không nút).
  */
-export type BlockUi = 'cancelled' | 'expired' | 'done'
+export type BlockUi = 'cancelled' | 'expired' | 'done' | 'undone'
 
 export type ChatItem =
   | { kind: 'user'; id: string; text: string }
   | { kind: 'assistant'; id: string; text: string; done: boolean }
   | { kind: 'tool'; id: string; name: string; status: 'running' | 'done' }
-  /** `resolved`: khối này là kết quả của một đề nghị đã thực hiện (biên nhận thay chỗ `confirm`). */
-  | { kind: 'block'; id: string; raw: unknown; ui?: BlockUi; resolved?: boolean }
+  /**
+   * `resolved`: khối này là kết quả của một đề nghị đã thực hiện (biên nhận thay chỗ `confirm`). `doneAt`: thời điểm (đồng hồ
+   * máy) đề nghị vừa được thực hiện trong phiên này, để đếm ngược Hoàn tác; không có khi dựng lại từ server sau khi tải trang.
+   */
+  | { kind: 'block'; id: string; raw: unknown; ui?: BlockUi; resolved?: boolean; doneAt?: number }
   | { kind: 'notice'; id: string; title: string; message: string; code?: string; retry: boolean }
 
 export type HistoryMessage = { id: string; role: 'user' | 'assistant' | 'system'; content: string }
@@ -32,6 +35,8 @@ export type ChatSnapshot = {
   conversationId: string
   items: readonly ChatItem[]
   running: boolean
+  /** Id các khối xác nhận đã được "Chọn" từ một phương án (khối tham chiếu bởi `options.action` chỉ hiện sau khi chọn). */
+  revealed: ReadonlySet<string>
 }
 
 export type ChatDeps = {
@@ -87,6 +92,7 @@ export class ChatSession {
   private items: ChatItem[] = []
   private history: HistoryMessage[] = []
   private running = false
+  private revealed: ReadonlySet<string> = new Set()
   private conversationId: string
   private listeners = new Set<() => void>()
   private snapshot: ChatSnapshot
@@ -109,7 +115,7 @@ export class ChatSession {
   getSnapshot = (): ChatSnapshot => this.snapshot
 
   private buildSnapshot(): ChatSnapshot {
-    return { conversationId: this.conversationId, items: this.items, running: this.running }
+    return { conversationId: this.conversationId, items: this.items, running: this.running, revealed: this.revealed }
   }
   private emit(): void {
     this.snapshot = this.buildSnapshot()
@@ -138,13 +144,28 @@ export class ChatSession {
    * Thay khối `confirm` có `id` bằng kết quả của nó (biên nhận) ở đúng vị trí; đánh dấu `resolved` để phần chữ
    * của lượt hiện là "trước khi xác nhận". Chưa có thì thêm cuối.
    */
-  replaceBlock(id: string, raw: unknown, newId?: string): void {
+  replaceBlock(id: string, raw: unknown, newId?: string, opts?: { fresh?: boolean; undone?: boolean }): void {
     const i = this.items.findIndex((p) => p.kind === 'block' && p.id === id)
-    const item: ChatItem = { kind: 'block', id: newId ?? id, raw, resolved: true }
+    const item: ChatItem = { kind: 'block', id: newId ?? id, raw, resolved: true, ...(opts?.fresh ? { doneAt: Date.now() } : {}), ...(opts?.undone ? { ui: 'undone' as const } : {}) }
     if (i === -1) return this.setItems([...this.items, item])
     const next = this.items.slice()
     next[i] = item
     this.setItems(next)
+  }
+
+  /** "Chọn" một phương án: hiện khối xác nhận mà phương án tham chiếu (khối đã có sẵn trong lượt nhưng đang ẩn). */
+  revealBlock(id: string): void {
+    if (this.revealed.has(id)) return
+    this.revealed = new Set([...this.revealed, id])
+    this.emit()
+  }
+
+  /** Hỏi lại đúng câu cuối của người dùng (đề nghị hết hạn: hỏi lại để có đề nghị mới). */
+  async askAgain(): Promise<void> {
+    if (this.running) return
+    let last: string | undefined
+    for (const it of this.items) if (it.kind === 'user') last = it.text
+    if (last) await this.send(last)
   }
 
   markBlock(id: string, ui: 'cancelled'): void {
@@ -223,6 +244,7 @@ export class ChatSession {
     this.conversationId = conversationId
     this.history = []
     this.items = []
+    this.revealed = new Set()
     this.running = false
     this.emit()
   }
@@ -375,7 +397,8 @@ export class ChatSession {
       case 'RUN_ERROR': {
         turn.errored = true
         this.finishOpenItems()
-        this.notice(chatErrorForCode(str(e.code), str(e.message)))
+        // Người dùng bấm Dừng: @ag-ui/client báo RUN_ERROR (code "abort") nhưng đó không phải lỗi, nên không hiện thông báo.
+        if (!this.aborted) this.notice(chatErrorForCode(str(e.code), str(e.message)))
         break
       }
       case 'TEXT_MESSAGE_START': {
