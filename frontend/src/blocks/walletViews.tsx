@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ForecastBlock } from '@/features/forecast/ForecastBlock'
 import { useProactiveActions } from '@/features/overview/useProactiveActions'
 import { useChatLauncher } from '@/chat/launcher'
-import { formatCountdown, formatDateTime, formatVnd } from '@/lib/format'
+import { formatCountdown, formatSimMoment, formatVnd } from '@/lib/format'
 import type { ConfirmActionBlock, ForecastTimelineBlock, ProactiveCardBlock, ReceiptActionBlock } from '@/contracts/blocks'
 import { useConfirmFlow } from './useConfirmFlow'
 import { useNow } from './useNow'
@@ -158,7 +158,7 @@ export function ReceiptActionView({ block }: BlockViewProps<ReceiptActionBlock>)
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="text-section font-bold text-ink">{d.summary}</h3>
-          <p className="text-small text-ink-2">{formatDateTime(d.occurred_at)} · Ví mô phỏng</p>
+          <p className="text-small text-ink-2">{formatSimMoment(d.app_date, d.occurred_at)} · Ví mô phỏng</p>
         </div>
         <AiChip />
       </header>

@@ -4,8 +4,8 @@ import { JarIcon } from '@/components/JarIcon'
 import { StatusChip } from '@/components/StatusChip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CONFIDENCE_LABEL, jarStatusChip } from '@/lib/jar'
-import { formatDateTime, formatRatioPercent, formatVnd, formatVndShort } from '@/lib/format'
-import { formatDayMonth } from '@/lib/dates'
+import { formatSimMoment, formatRatioPercent, formatVnd, formatVndShort } from '@/lib/format'
+import { diffDays, formatDayMonth } from '@/lib/dates'
 import type { ForecastTimelineData } from '@/contracts/blocks'
 import { buildChartModel, rowAt } from './model'
 
@@ -18,7 +18,9 @@ export function forecastSummary(d: ForecastTimelineData): string {
   const payday = formatDayMonth(d.payday.date)
   if (d.runout_date) {
     if (d.runout_date < d.payday.date) {
-      return `Hũ ${name} dự kiến cạn ngày ${formatDayMonth(d.runout_date)}, còn ${d.payday.days_until} ngày nữa mới tới kỳ lương ${payday}.`
+      // Hai con số khác nhau, nói rõ để khỏi lẫn: khoảng trống từ ngày cạn tới lương (hiệu hai ngày server trả) và số ngày từ hôm nay.
+      const gap = diffDays(d.runout_date, d.payday.date)
+      return `Hũ ${name} dự kiến cạn ngày ${formatDayMonth(d.runout_date)}, ${gap} ngày trước kỳ lương ${payday} (hôm nay còn ${d.payday.days_until} ngày tới lương).`
     }
     return `Hũ ${name} dự kiến cạn ngày ${formatDayMonth(d.runout_date)}, sau kỳ lương ${payday}.`
   }
@@ -177,7 +179,7 @@ export function ForecastBlock({
       </dl>
 
       <footer className="mt-3 flex items-center justify-between gap-3 text-note text-ink-2">
-        <span>Cập nhật {formatDateTime(data.computed_at)} · Ví mô phỏng</span>
+        <span>Cập nhật {formatSimMoment(data.origin_date, data.computed_at)} · Ví mô phỏng</span>
         {onAskWhy && (
           <button type="button" onClick={onAskWhy} className="min-h-11 px-2 text-small font-semibold text-brand-text">
             Vì sao

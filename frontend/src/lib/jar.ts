@@ -12,6 +12,23 @@ export function jarLevel(jar: { balance_vnd: number; goal_vnd?: number }, peersM
   return Math.min(1, Math.max(0.08, jar.balance_vnd / ref))
 }
 
+/**
+ * Mức vạch "dự báo" trên hũ 0..1 chỉ để vẽ: số dư P50 thấp nhất tới kỳ lương (`forecast_floor_vnd`, server tính, có thể âm
+ * nên vẽ như cạn) so với cùng mức tham chiếu với `jarLevel`. Server chưa trả (hũ chưa có dự báo) thì chỉ vẽ vạch cạn cho
+ * hũ báo hụt có ngày cạn; còn lại không vẽ vạch (không bịa).
+ */
+export function jarForecastLevel(
+  jar: { balance_vnd: number; goal_vnd?: number; forecast_floor_vnd?: number; status?: string; runout_date?: string },
+  peersMax: number,
+): number | null {
+  if (jar.forecast_floor_vnd !== undefined) {
+    const ref = jar.goal_vnd && jar.goal_vnd > 0 ? jar.goal_vnd : peersMax
+    if (jar.forecast_floor_vnd <= 0 || ref <= 0) return 0
+    return Math.min(1, jar.forecast_floor_vnd / ref)
+  }
+  return jar.status === 'short' && jar.runout_date ? 0 : null
+}
+
 /** Chip trạng thái từ `status` của server (đủ/sát/hụt): luôn có biểu tượng + chữ (StatusChip). */
 export function jarStatusChip(status: JarStatus, runoutDate?: string): { kind: ChipKind; label: string } {
   if (status === 'ok') return { kind: 'ok', label: 'Đủ tới kỳ lương' }

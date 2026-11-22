@@ -16,7 +16,7 @@ import { useProactiveActions } from '@/features/overview/useProactiveActions'
 import { useJarLookup } from '@/features/common/useJarLookup'
 import { formatDayMonth } from '@/lib/dates'
 import { formatRatioPercent, formatVnd, greetingNow } from '@/lib/format'
-import { jarLevel } from '@/lib/jar'
+import { jarForecastLevel, jarLevel } from '@/lib/jar'
 import { isCardHidden, nudgeKey } from '@/lib/nudgePrefs'
 import { displayName } from '@/lib/user'
 
@@ -204,7 +204,7 @@ export function OverviewPage() {
               {data.jars.map((j) => (
                 <li key={j.code} className="shrink-0">
                   <Link to={`/jars/${j.code}`} className="block text-left" aria-label={`Mở hũ ${j.name}`}>
-                    <JarCard jar={j} level={jarLevel(j, max)} />
+                    <JarCard jar={j} level={jarLevel(j, max)} forecastLevel={jarForecastLevel(j, max)} />
                   </Link>
                 </li>
               ))}

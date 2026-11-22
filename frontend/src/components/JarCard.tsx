@@ -6,10 +6,9 @@ import { formatPercent, formatVnd } from '@/lib/format'
 import type { JarFull } from '@/api/schemas'
 
 // Figma JarCard (7:130): đầu thẻ (icon + tên + dòng phụ), hũ thủy tinh có vạch "dự báo", số dư, chip trạng thái.
-// Dòng phụ là tỷ lệ chia lương (có trong API). Vạch dự báo chỉ vẽ khi dự báo cho biết hũ cạn (mức 0); các hũ khác
-// chưa có số dự báo ở Tổng quan nên không vẽ vạch.
-export function JarCard({ jar, level, className }: { jar: JarFull; level: number; className?: string }) {
-  const forecastLevel = jar.status === 'short' && jar.runout_date ? 0 : null
+// Dòng phụ là tỷ lệ chia lương (có trong API). Vạch dự báo vẽ theo `forecastLevel` (từ `forecast_floor_vnd` của server, xem
+// jarForecastLevel); hũ chưa có dự báo thì không vẽ vạch.
+export function JarCard({ jar, level, forecastLevel = null, className }: { jar: JarFull; level: number; forecastLevel?: number | null; className?: string }) {
   return (
     <article
       data-jar={jar.code}

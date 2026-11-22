@@ -7,6 +7,8 @@ import { ErrorState } from '@/components/StateViews'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useOverview } from '@/api/OverviewProvider'
 import { useWriteFlow } from '@/api/useWrite'
+import { usePreview } from '@/api/useConfirmPreview'
+import { PreviewPanel } from '@/components/PreviewPanel'
 import { BlockRenderer } from '@/blocks/registry'
 import { formatVnd } from '@/lib/format'
 
@@ -29,6 +31,9 @@ export function MovePage() {
   const sources = [...jars, ...(other ? [other] : [])]
   const fromJar = sources.find((j) => j.code === from)
   const valid = Number(amount) > 0 && from !== '' && to !== '' && from !== to
+  // Xem trước do server tính (số dư hai hũ trước và sau); lỗi như không đủ số dư hiện ngay, trước khi bấm chuyển.
+  const preview = usePreview('move_between_jars', valid && !write.receipt ? { from_jar: from, to_jar: to, amount_vnd: Number(amount) } : null, 400)
+  const previewBlocked = preview.status === 'error' && !preview.error.retryable
 
   // Mở từ "Gán vào hũ": điền sẵn toàn bộ số đang ở hũ nguồn (người dùng sửa được).
   useEffect(() => {
@@ -90,12 +95,13 @@ export function MovePage() {
                   Số tiền lớn hơn số đang có ở hũ nguồn. Hệ thống sẽ từ chối nếu không đủ.
                 </p>
               )}
+              <PreviewPanel state={preview} />
               {write.error && (
                 <p role="alert" className="rounded-2xl bg-bad-bg px-3 py-2 text-small font-semibold text-bad-fg">
                   {write.error.message}
                 </p>
               )}
-              <Button type="submit" className="w-full" disabled={!valid || write.working || write.phase === 'blocked'} aria-busy={write.working}>
+              <Button type="submit" className="w-full" disabled={!valid || previewBlocked || write.working || write.phase === 'blocked'} aria-busy={write.working}>
                 {write.working ? 'Đang chuyển…' : 'Chuyển tiền giữa hũ'}
               </Button>
               <p className="text-note text-ink-2">Bấm chuyển thì hệ thống mới ghi và cập nhật số dư hai hũ; chưa bấm thì chưa có gì thay đổi.</p>

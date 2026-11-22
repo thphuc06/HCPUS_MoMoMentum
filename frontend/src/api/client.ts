@@ -25,6 +25,11 @@ import {
   type TransactionQuery,
 } from './schemas'
 
+/** Thời gian chờ mỗi lời gọi: dài hơn trần 30 giây của HTTP API nên lỗi hết giờ ở server luôn tới trước. */
+export const REQUEST_TIMEOUT_MS = 40_000
+/** `POST /demo/reset` mất 2,6 đến 8 giây (sinh lại dữ liệu và tính dự báo đồng bộ): cho dư địa rộng hơn. */
+export const RESET_TIMEOUT_MS = 60_000
+
 export type ApiClientDeps = {
   baseUrl: string
   /** Trả access token còn hạn; `force` ép làm mới (dùng khi gặp 401). */
@@ -70,7 +75,7 @@ async function readBody(res: Response): Promise<unknown> {
 export function createApiClient(deps: ApiClientDeps): ApiClient {
   const doFetch = deps.fetchImpl ?? ((...a: Parameters<typeof fetch>) => fetch(...a))
 
-  async function once(method: string, path: string, body: unknown, force: boolean): Promise<Response> {
+  async function once(method: string, path: string, body: unknown, force: boolean, timeoutMs: number): Promise<Response> {
     const token = await deps.getAccessToken({ force })
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
@@ -78,22 +83,27 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
       traceparent: newTraceparent().header,
     }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
     try {
       return await doFetch(`${deps.baseUrl}${path}`, {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
+        signal: ctrl.signal,
       })
     } catch {
-      throw new ApiError('NETWORK', 0)
+      throw new ApiError(ctrl.signal.aborted ? 'TIMEOUT' : 'NETWORK', 0)
+    } finally {
+      clearTimeout(timer)
     }
   }
 
-  async function call<T>(method: string, path: string, schema: ZodType<T>, body?: unknown): Promise<T> {
+  async function call<T>(method: string, path: string, schema: ZodType<T>, body?: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
     let res: Response
     try {
-      res = await once(method, path, body, false)
-      if (res.status === 401) res = await once(method, path, body, true)
+      res = await once(method, path, body, false, timeoutMs)
+      if (res.status === 401) res = await once(method, path, body, true, timeoutMs)
     } catch (e) {
       if (e instanceof AuthError) throw new ApiError('SESSION_EXPIRED', 401)
       throw e
@@ -131,6 +141,6 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     createConfirmation: (req) => call('POST', '/confirmations', ConfirmationResponse, req),
     cancelConfirmation: (req) => call('POST', '/confirmations/cancel', CancelConfirmationResponse, req),
     applyAction: (req) => call('POST', '/actions', ActionResponse, req),
-    resetDemo: () => call('POST', '/demo/reset', ResetResponse),
+    resetDemo: () => call('POST', '/demo/reset', ResetResponse, undefined, RESET_TIMEOUT_MS),
   }
 }

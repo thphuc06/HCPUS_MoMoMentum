@@ -3,7 +3,7 @@ import { AiChip } from '@/components/StatusChip'
 import { JarIcon } from '@/components/JarIcon'
 import { Notice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
-import { formatCountdown, formatDateTime, formatVnd } from '@/lib/format'
+import { formatCountdown, formatSimMoment, formatVnd } from '@/lib/format'
 import type { ConfirmBlock, JarSummaryBlock, NoticeBlock, ReceiptBlock } from '@/contracts/blocks'
 import { useConfirmFlow } from './useConfirmFlow'
 import type { BlockUi } from '@/chat/session'
@@ -62,7 +62,7 @@ export function ReceiptView({ block }: BlockViewProps<ReceiptBlock>) {
         <div className="min-w-0 flex-1">
           <h3 className="text-section font-bold text-ink">Đã chuyển {formatVnd(d.amount_vnd)}</h3>
           <p className="text-small text-ink-2">
-            Từ hũ {d.from_jar.name} sang hũ {d.to_jar.name} · {formatDateTime(d.occurred_at)}
+            Từ hũ {d.from_jar.name} sang hũ {d.to_jar.name} · {formatSimMoment(d.app_date, d.occurred_at)}
           </p>
         </div>
         <AiChip />

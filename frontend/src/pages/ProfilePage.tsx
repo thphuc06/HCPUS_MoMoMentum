@@ -239,7 +239,7 @@ export function ProfilePage() {
           </AlertDialogDescription>
           <div className="mt-5 flex flex-col gap-3">
             <Button type="button" onClick={() => void reset()} disabled={busy} aria-busy={busy}>
-              {busy ? 'Đang đặt lại…' : 'Đặt lại'}
+              {busy ? 'Đang đặt lại, mất vài giây…' : 'Đặt lại'}
             </Button>
             <AlertDialogClose render={<Button type="button" variant="outline" disabled={busy} />}>Hủy</AlertDialogClose>
           </div>

@@ -6,6 +6,8 @@ import { ScreenHeader } from '@/components/ScreenHeader'
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/StateViews'
 import { useApiResource } from '@/api/resource'
 import { useWriteFlow } from '@/api/useWrite'
+import { usePreview } from '@/api/useConfirmPreview'
+import { PreviewPanel } from '@/components/PreviewPanel'
 import type { SalaryEvent } from '@/api/schemas'
 import { formatAppDate, formatVnd } from '@/lib/format'
 
@@ -18,6 +20,8 @@ function SalaryCard({ ev }: { ev: SalaryEvent }) {
   const write = useWriteFlow()
   const [update, setUpdate] = useState(false)
   const receipt = write.receipt?.type === 'receipt_action' ? write.receipt.data : null
+  // Phần chia vào từng hũ do server tính (làm tròn xuống, dồn phần dư vào hũ tỷ lệ lớn nhất); không tính ở giao diện.
+  const preview = usePreview('confirm_salary', receipt ? null : { salary_event_id: ev.id, decision: 'split' })
 
   const decide = (decision: 'split' | 'keep_as_other') => {
     const params: Record<string, unknown> = { salary_event_id: ev.id, decision }
@@ -69,6 +73,7 @@ function SalaryCard({ ev }: { ev: SalaryEvent }) {
               </span>
             </label>
           )}
+          {preview.status !== 'idle' && <PreviewPanel state={preview} className="mt-3 !bg-surface-2 !shadow-none" />}
           {write.error && (
             <p role="alert" className="mt-3 rounded-2xl bg-bad-bg px-3 py-2 text-small font-semibold text-bad-fg">
               {write.error.message}

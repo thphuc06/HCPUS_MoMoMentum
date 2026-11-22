@@ -47,7 +47,7 @@ export function useWriteFlow() {
         const res = await api.applyAction({ tool: issued.tool, params: issued.params, confirm_token: issued.confirm_token })
         setReceipt(res)
         setPhase('done')
-        refresh()
+        refresh(res.source.as_of)
         return res
       } catch (e) {
         const err = e instanceof ApiError ? e : new ApiError('INTERNAL_ERROR', 0)

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  ActionChange,
   ConfidenceBand,
   ForecastTimelineBlock,
   IsoDate,
@@ -144,6 +145,8 @@ export const JarFull = z.object({
   runout_date: IsoDate.optional(),
   p_shortfall: Ratio.optional(),
   confidence_band: ConfidenceBand.optional(),
+  /** Số dư dự báo P50 thấp nhất từ ngày mai tới trước kỳ lương (có dấu, có thể âm); vắng khi hũ chưa có dự báo. */
+  forecast_floor_vnd: VndSigned.optional(),
 })
 export type JarFull = z.infer<typeof JarFull>
 
@@ -223,6 +226,8 @@ export const TxType = z.object({
   tx_type: TxTypeKey,
   label: z.string().min(1).max(60),
   direction: z.enum(['out', 'in']),
+  /** Đúng với loại "chuyển tiền cho người khác": màn chuyển tiền tìm loại này theo cờ, không theo mã gõ cứng. */
+  is_person_transfer: z.boolean().optional(),
   default_jar: JarCode.optional(),
   system_role: z.enum(['other_income', 'unclassified']).optional(),
 })
@@ -310,6 +315,17 @@ export const ConfirmationRequest = z.object({
 })
 export type ConfirmationRequest = z.infer<typeof ConfirmationRequest>
 
+/**
+ * Bản xem trước do SERVER tính (không ghi gì): số dư trước và sau, phí và hạn mức của Trả sau, phần chia lương. Màn "Xem
+ * lại" chỉ vẽ, không tự tính. Cùng hình dạng `changes`/`warnings` của khối `confirm_action`.
+ */
+export const ConfirmPreview = z.object({
+  summary: z.string().min(1).max(120),
+  changes: z.array(ActionChange).min(1).max(20),
+  warnings: z.array(z.string().min(1).max(140)).max(5).optional(),
+})
+export type ConfirmPreview = z.infer<typeof ConfirmPreview>
+
 export const ConfirmationResponse = z.object({
   confirm_token: z.string().min(3).max(1024),
   expires_at: IsoDateTime,
@@ -317,6 +333,8 @@ export const ConfirmationResponse = z.object({
   tool: ToolName,
   params: z.record(z.string(), z.unknown()),
   params_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  // Chỉ để hiển thị: sai hình dạng thì bỏ xem trước chứ không chặn việc ghi.
+  preview: ConfirmPreview.optional().catch(undefined),
 })
 export type ConfirmationResponse = z.infer<typeof ConfirmationResponse>
 

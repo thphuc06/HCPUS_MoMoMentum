@@ -3,6 +3,7 @@ import {
   formatAppDate,
   formatCountdown,
   formatDateTime,
+  formatSimMoment,
   formatPercent,
   formatRatioPercent,
   formatSignedVnd,
@@ -48,6 +49,11 @@ describe('ngày giờ', () => {
   it('thời điểm thật hiện theo giờ Việt Nam (UTC+7)', () => {
     expect(formatDateTime('2026-11-21T02:14:00Z')).toBe('21/11 09:14')
     expect(formatDateTime('2026-11-21T17:30:00Z')).toBe('22/11 00:30')
+  })
+  it('ngày mô phỏng kèm giờ thật: không để "22/11" cạnh "ngày mô phỏng 21/11"', () => {
+    // 02:14 UTC = 09:14 giờ Việt Nam; ngày lấy từ ngày mô phỏng chứ không phải từ thời điểm thật
+    expect(formatSimMoment('2026-11-21', '2026-11-22T02:14:00Z')).toBe('21/11/2026 · 09:14')
+    expect(formatSimMoment('2026-11-21', 'khong-phai-gio')).toBe('21/11/2026')
   })
   it('đếm ngược mm:ss, không âm', () => {
     expect(formatCountdown(299_000)).toBe('04:59')

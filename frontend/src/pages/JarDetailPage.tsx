@@ -9,6 +9,7 @@ import { ScreenHeader } from '@/components/ScreenHeader'
 import { ErrorState, EmptyState } from '@/components/StateViews'
 import { TxRow } from '@/components/TxRow'
 import { useApiResource } from '@/api/resource'
+import { FORECAST_FOLLOW_UP_MS, useForecastFollowUp } from '@/api/ApiProvider'
 import { useOverview } from '@/api/OverviewProvider'
 import { useChatLauncher } from '@/chat/launcher'
 import { ForecastBlock } from '@/features/forecast/ForecastBlock'
@@ -28,7 +29,19 @@ export function JarDetailPage() {
   const ov = useOverview()
   const detail = useApiResource((api) => api.getJar(code), [code])
   const isSystem = detail.data?.jar.kind === 'system'
-  const forecast = useApiResource((api) => api.getForecast(code), [code], detail.status !== 'loading' && !!detail.data && !isSystem)
+  const forecastPending = useForecastFollowUp()
+  // Sau khi ghi giao dịch, dự báo mới có sau 3 đến 4 giây: đọc lại cho tới khi `computed_at` theo kịp (tối đa 60 giây).
+  // Server cũng có thể trả `stale: true` (chưa tính lại được): thử lại vài lần.
+  const forecast = useApiResource(
+    (api) => api.getForecast(code),
+    [code],
+    detail.status !== 'loading' && !!detail.data && !isSystem,
+    (d) => {
+      if (forecastPending(d.data.computed_at)) return { delayMs: 3_000, maxMs: FORECAST_FOLLOW_UP_MS }
+      if (d.data.stale) return { delayMs: 4_000, maxMs: 20_000 }
+      return null
+    },
+  )
 
   const jar = detail.data?.jar
   const f = forecast.data?.data
@@ -90,7 +103,14 @@ export function JarDetailPage() {
             </div>
           )}
           {!isSystem && forecast.data && (
-            <ForecastBlock data={forecast.data.data} onAskWhy={() => launcher.open(`Vì sao dự báo hũ ${jar.name} ra như vậy?`)} />
+            <>
+              {forecastPending(forecast.data.data.computed_at) && (
+                <p role="status" data-testid="forecast-recomputing" className="rounded-2xl bg-tint px-3 py-2 text-small font-medium text-brand-text">
+                  Đang tính lại dự báo theo giao dịch mới, vài giây nữa là xong.
+                </p>
+              )}
+              <ForecastBlock data={forecast.data.data} onAskWhy={() => launcher.open(`Vì sao dự báo hũ ${jar.name} ra như vậy?`)} />
+            </>
           )}
           {isSystem && (
             <Notice kind="out_of_scope" title="Hũ hệ thống không có dự báo" message="Dự báo 30 ngày chỉ tính cho các hũ chi tiêu của bạn." />

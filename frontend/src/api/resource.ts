@@ -3,6 +3,9 @@ import { useApi, useDataVersion } from './ApiProvider'
 import type { ApiClient } from './client'
 import { ApiError } from './errors'
 
+/** Hỏi lại định kỳ: sau `delayMs` gọi lại, tối đa `maxMs` kể từ lúc bắt đầu chờ (`null` = không cần hỏi lại nữa). */
+export type PollPlan = { delayMs: number; maxMs: number } | null
+
 export type Resource<T> =
   | { status: 'loading'; data: null; error: null; refreshing: false; reload: () => Promise<void> }
   | { status: 'ready'; data: T; error: null; refreshing: boolean; reload: () => Promise<void> }
@@ -16,8 +19,15 @@ type State<T> = { status: 'loading' | 'ready' | 'error'; data: T | null; error: 
  *  - có thao tác ghi thành công (số phiên bản dữ liệu đổi): giữ số cũ trong lúc tải (`refreshing`), lỗi thì hiện lỗi
  *    nhưng không xóa số cũ. `enabled = false` thì không gọi gì.
  * Kết quả cũ về muộn bị bỏ (chống đua).
+ * `poll` (tùy chọn): sau mỗi lần tải xong, hỏi xem có cần tải lại sau một lúc không (ví dụ dự báo chưa kịp theo lần ghi,
+ * hoặc `stale`). Có giới hạn thời gian cho mỗi đợt chờ; đợt chờ tính lại từ đầu khi `deps` đổi hoặc sau một lần ghi.
  */
-export function useApiResource<T>(fetcher: (api: ApiClient) => Promise<T>, deps: readonly unknown[], enabled = true): Resource<T> {
+export function useApiResource<T>(
+  fetcher: (api: ApiClient) => Promise<T>,
+  deps: readonly unknown[],
+  enabled = true,
+  poll?: (data: T) => PollPlan,
+): Resource<T> {
   const api = useApi()
   const version = useDataVersion()
   const [state, setState] = useState<State<T>>({ status: 'loading', data: null, error: null, refreshing: false })
@@ -26,6 +36,9 @@ export function useApiResource<T>(fetcher: (api: ApiClient) => Promise<T>, deps:
   fetcherRef.current = fetcher
   const depsKey = JSON.stringify(deps)
   const lastDepsKey = useRef(depsKey)
+  const pollRef = useRef(poll)
+  pollRef.current = poll
+  const pollSince = useRef<number | null>(null)
 
   const run = useCallback(
     async (keepData: boolean) => {
@@ -49,8 +62,24 @@ export function useApiResource<T>(fetcher: (api: ApiClient) => Promise<T>, deps:
     if (!enabled) return
     const depsChanged = lastDepsKey.current !== depsKey
     lastDepsKey.current = depsKey
+    pollSince.current = null
     void run(!depsChanged)
   }, [run, version, depsKey, enabled])
+
+  // Hỏi lại định kỳ khi nơi dùng cho biết dữ liệu chưa theo kịp (xem `poll`).
+  useEffect(() => {
+    if (!enabled || state.status !== 'ready' || state.refreshing || state.data === null || !pollRef.current) return
+    const plan = pollRef.current(state.data)
+    if (!plan) {
+      pollSince.current = null
+      return
+    }
+    const now = Date.now()
+    pollSince.current ??= now
+    if (now - pollSince.current + plan.delayMs > plan.maxMs) return
+    const timer = setTimeout(() => void run(true), plan.delayMs)
+    return () => clearTimeout(timer)
+  }, [state, enabled, run])
 
   const reload = useCallback(() => run(true), [run])
   return { ...state, reload } as Resource<T>

@@ -3,7 +3,7 @@ import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BlockRenderer } from '@/blocks/registry'
 import { useTransferFlow } from '@/features/transfer/TransferFlow'
-import { formatDateTime, formatVnd } from '@/lib/format'
+import { formatSimMoment, formatVnd } from '@/lib/format'
 
 // Figma T5 biên nhận (19:1217): toàn bộ số liệu lấy từ biên nhận `receipt_action` của server (số dư sau, phí và tổng
 // phải trả gồm phí nằm trong `details`), giao diện không tự tính lại.
@@ -37,7 +37,7 @@ export function TransferReceiptPage() {
         </span>
         <h1 className="mt-4 text-title font-bold text-ink">{d.summary}</h1>
         <p className="mt-1 text-small text-ink-2">
-          {formatDateTime(d.occurred_at)} · Ví mô phỏng
+          {formatSimMoment(d.app_date, d.occurred_at)} · Ví mô phỏng
         </p>
       </div>
 

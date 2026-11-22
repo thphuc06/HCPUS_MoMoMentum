@@ -58,6 +58,18 @@ export function formatDateTime(iso: string): string {
   return `${p.day}/${p.month} ${p.hour}:${p.minute}`
 }
 
+const timeFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+
+/**
+ * Ngày mô phỏng + giờ thật của một sự việc: "21/11/2026 · 09:14". Ví demo chạy theo ngày mô phỏng (ADR-0003) nên ngày kèm giờ
+ * phải là ngày mô phỏng; chỉ phần giờ lấy từ thời điểm thật (RFC 3339), để người xem không thấy "22/11" cạnh "ngày mô phỏng 21/11".
+ */
+export function formatSimMoment(appDate: string, iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return formatAppDate(appDate)
+  return `${formatAppDate(appDate)} · ${timeFmt.format(d)}`
+}
+
 /** Đếm ngược mm:ss từ số mili giây còn lại (không âm). */
 export function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000))

@@ -210,15 +210,16 @@ describe('Lương về (xác nhận một chạm)', () => {
     expect(box).not.toBeChecked() // mặc định không tự đổi lương
     await user.click(box)
     await user.click(screen.getByRole('button', { name: 'Chia vào các hũ' }))
-    await waitFor(() => expect(callsTo(calls, 'POST', '/confirmations')).toHaveLength(1))
-    expect(bodyOf(callsTo(calls, 'POST', '/confirmations')[0]!).params).toEqual({ salary_event_id: SALARY_EVENT, decision: 'split', update_declared_salary: true })
+    await waitFor(() => expect(callsTo(calls, 'POST', '/actions')).toHaveLength(1))
+    // lời gọi đầu là xem trước (không kèm cờ cập nhật lương); lời gọi xin token để ghi là lời gọi cuối
+    expect(bodyOf(callsTo(calls, 'POST', '/confirmations').at(-1)!).params).toEqual({ salary_event_id: SALARY_EVENT, decision: 'split', update_declared_salary: true })
   })
 
   it('giữ ở Tiền vào khác; không có lương chờ thì trạng thái rỗng; lỗi thì Thử lại', async () => {
     const { calls } = mountApp(backend({ 'POST /actions': () => receiptAction() }), '/salary')
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Giữ ở Tiền vào khác' }))
-    await waitFor(() => expect(callsTo(calls, 'POST', '/confirmations')).toHaveLength(1))
-    expect(bodyOf(callsTo(calls, 'POST', '/confirmations')[0]!).params).toEqual({ salary_event_id: SALARY_EVENT, decision: 'keep_as_other' })
+    await waitFor(() => expect(callsTo(calls, 'POST', '/actions')).toHaveLength(1))
+    expect(bodyOf(callsTo(calls, 'POST', '/confirmations').at(-1)!).params).toEqual({ salary_event_id: SALARY_EVENT, decision: 'keep_as_other' })
   })
 
   it('rỗng và lỗi', async () => {
@@ -250,7 +251,7 @@ describe('Chuyển giữa hũ và gán Tiền vào khác', () => {
     await waitFor(() => expect(screen.getByLabelText('Sang hũ')).toHaveValue('an_uong'))
     await user.selectOptions(screen.getByLabelText('Từ hũ'), 'di_lai')
     await user.type(screen.getByLabelText('Số tiền'), '9000000')
-    expect(screen.getByRole('status')).toHaveTextContent('lớn hơn số đang có ở hũ nguồn')
+    expect(screen.getByText(/lớn hơn số đang có ở hũ nguồn/)).toBeInTheDocument()
   })
 
   it('lỗi không đủ số dư từ server: hiện thông báo, khóa nút', async () => {
@@ -259,7 +260,7 @@ describe('Chuyển giữa hũ và gán Tiền vào khác', () => {
     await waitFor(() => expect(screen.getByLabelText('Sang hũ')).toHaveValue('an_uong'))
     await user.selectOptions(screen.getByLabelText('Từ hũ'), 'di_lai')
     await user.type(screen.getByLabelText('Số tiền'), '100000')
-    await user.click(screen.getByRole('button', { name: 'Chuyển tiền giữa hũ' }))
+    // lỗi hiện sớm ở bản xem trước do server tính, trước khi bấm chuyển
     expect(await screen.findByRole('alert')).toHaveTextContent('không đủ số dư')
     expect(screen.getByRole('button', { name: 'Chuyển tiền giữa hũ' })).toBeDisabled()
   })

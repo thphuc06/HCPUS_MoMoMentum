@@ -34,7 +34,7 @@ export const ErrorCode = z.enum(ERROR_CODES)
 export type ErrorCode = z.infer<typeof ErrorCode>
 
 /** Mã do phía client tự đặt khi chưa có phản hồi hợp lệ từ server. */
-export type ClientErrorCode = 'NETWORK' | 'INVALID_RESPONSE' | 'SESSION_EXPIRED'
+export type ClientErrorCode = 'NETWORK' | 'TIMEOUT' | 'INVALID_RESPONSE' | 'SESSION_EXPIRED'
 export type ApiErrorCode = ErrorCode | ClientErrorCode
 
 /** Ánh xạ HTTP status của hợp đồng (x-http-status). */
@@ -94,6 +94,7 @@ export const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   DUPLICATE_TRANSACTION: 'Giao dịch này đã được ghi rồi, không ghi thêm. Bạn kiểm tra ở Hoạt động nhé.',
   FORECAST_UNAVAILABLE: 'Chưa có dự báo cho hũ này và chưa tính được ngay. Thử lại sau ít phút.',
   NETWORK: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
+  TIMEOUT: 'Máy chủ phản hồi quá lâu. Nếu bạn vừa ghi một giao dịch, kiểm tra ở Hoạt động trước khi thử lại.',
   INVALID_RESPONSE: 'Máy chủ trả dữ liệu không đọc được. Thử lại sau ít phút.',
   SESSION_EXPIRED: 'Phiên đăng nhập đã hết hạn. Bạn đăng nhập lại nhé.',
 }
@@ -111,7 +112,7 @@ export class ApiError extends Error {
     this.code = code
     this.status = status
     this.traceId = traceId
-    this.retryable = code === 'DATABASE_UNAVAILABLE' || code === 'FORECAST_UNAVAILABLE' || code === 'NETWORK' || code === 'RATE_LIMITED' || code === 'INTERNAL_ERROR'
+    this.retryable = code === 'DATABASE_UNAVAILABLE' || code === 'FORECAST_UNAVAILABLE' || code === 'NETWORK' || code === 'TIMEOUT' || code === 'RATE_LIMITED' || code === 'INTERNAL_ERROR'
   }
 }
 

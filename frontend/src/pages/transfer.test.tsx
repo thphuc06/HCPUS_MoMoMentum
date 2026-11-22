@@ -3,12 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { restFixture } from '@/test/fixtures'
 import { backend, bodyOf, callsTo, json, mountApp, type Call } from '@/test/mountApp'
-import { transferParams, TRANSFER_TX_TYPE } from '@/features/transfer/params'
+import { transferParams } from '@/features/transfer/params'
 
 // Luồng chuyển tiền T1 → T2 → T4 → T5 với REST giả: chọn người nhận, bàn phím số, nguồn tiền (hũ hoặc Trả sau mô phỏng),
 // xem lại, xác nhận qua /confirmations → /actions, biên nhận do server trả.
 
 type Json = Record<string, any>
+const TRANSFER_TX_TYPE = 'transfer_person' // mã do server đặt; giao diện tìm theo is_person_transfer, test dùng mã này làm dữ liệu
 const HUY = '6f1e2d3c-4b5a-4968-8777-665544332211'
 
 beforeEach(() => localStorage.clear())
@@ -155,8 +156,9 @@ describe('T4 xem lại, xác nhận và T5 biên nhận', () => {
     expect(screen.getByTestId('review-source')).toHaveTextContent('Hiện còn 450.000 ₫')
     expect(screen.getByText('Tiền điện nước chia đôi')).toBeInTheDocument()
     expect(screen.queryByTestId('credit-fee-note')).toBeNull()
-    // chưa bấm xác nhận thì chưa ghi gì
-    expect(callsTo(calls, 'POST', '/confirmations')).toHaveLength(0)
+    // xem trước do server tính (POST /confirmations không ghi gì); chưa bấm xác nhận thì chưa ghi gì
+    await waitFor(() => expect(screen.getByTestId('preview')).toHaveTextContent('180.000 ₫'))
+    expect(callsTo(calls, 'POST', '/actions')).toHaveLength(0)
 
     await user.click(screen.getByRole('button', { name: /Xác nhận chuyển 250.000/ }))
     expect(await screen.findByTestId('transfer-receipt')).toBeInTheDocument()
@@ -183,6 +185,25 @@ describe('T4 xem lại, xác nhận và T5 biên nhận', () => {
   it('trả bằng Trả sau: gửi funding credit (không có hũ nếu không chọn), nêu biểu phí có nguồn, KHÔNG tự cộng tổng', async () => {
     const { calls } = mountApp(
       backend({
+        'POST /confirmations': (init) => {
+          const b = JSON.parse(String(init.body))
+          return {
+            confirm_token: 'aaa.bbb',
+            expires_at: '2026-12-10T03:02:00Z',
+            ttl_seconds: 120,
+            tool: b.tool,
+            params: b.params,
+            params_hash: 'a'.repeat(64),
+            preview: {
+              summary: 'Mua 300.000 ₫ bằng Trả sau (mô phỏng)',
+              changes: [
+                { label: 'Phải trả ngày 05/12', before: 'chưa có', after: '333.000 ₫' },
+                { label: 'Hạn mức còn lại', before: '4.700.000 ₫', after: '4.400.000 ₫' },
+              ],
+              warnings: ['Phí dịch vụ 33.000 ₫ đã tính vào số phải trả'],
+            },
+          }
+        },
         'POST /actions': () =>
           receipt((d) => {
             d.summary = 'Đã ghi chi 300.000 ₫ bằng Trả sau (mô phỏng)'
@@ -195,11 +216,12 @@ describe('T4 xem lại, xác nhận và T5 biên nhận', () => {
     const user = userEvent.setup()
     await toReview(user, /Trả sau \(mô phỏng\)/, ['3', '0', '0', '0', '0', '0'])
     const note = await screen.findByTestId('credit-fee-note')
-    expect(note).toHaveTextContent('Phí 33.000 ₫')
+    await waitFor(() => expect(note).toHaveTextContent('Phí 33.000 ₫')) // biểu phí tải từ GET /credit-line
     expect(note).toHaveTextContent('Nguồn: Biểu phí công khai')
-    expect(note).toHaveTextContent('hiện trên biên nhận')
-    // 300.000 + 33.000: giao diện không tự cộng
-    expect(document.body.textContent).not.toContain('333.000')
+    // 300.000 + 33.000: giao diện không tự cộng, tổng gồm phí là dòng xem trước do server tính
+    await waitFor(() => expect(screen.getByTestId('preview')).toHaveTextContent('Phải trả ngày 05/12'))
+    expect(screen.getByTestId('preview')).toHaveTextContent('333.000 ₫')
+    expect(note.textContent).not.toContain('333.000')
 
     await user.click(screen.getByRole('button', { name: /Xác nhận chuyển 300\.000/ }))
     expect(await screen.findByTestId('transfer-receipt')).toBeInTheDocument()
@@ -214,17 +236,17 @@ describe('T4 xem lại, xác nhận và T5 biên nhận', () => {
     ['INSUFFICIENT_FUNDS', 422, 'Hũ nguồn không đủ số dư'],
     ['CREDIT_LIMIT_EXCEEDED', 422, 'Vượt hạn mức Trả sau'],
     ['DUPLICATE_TRANSACTION', 409, 'Giao dịch này đã được ghi rồi'],
-  ])('lỗi %s từ server: hiện tiếng Việt và khóa nút xác nhận (bấm lại vô ích)', async (code, status, text) => {
-    mountApp(backend({ 'POST /confirmations': json(status, { error: { code, message: 'x' } }) }), '/transfer')
+  ])('lỗi %s từ server: hiện sớm ở bản xem trước bằng tiếng Việt và khóa nút xác nhận (bấm lại vô ích)', async (code, status, text) => {
+    const { calls } = mountApp(backend({ 'POST /confirmations': json(status, { error: { code, message: 'x' } }) }), '/transfer')
     const user = userEvent.setup()
     await toReview(user, /Hũ Hóa đơn/)
-    await user.click(await screen.findByRole('button', { name: /Xác nhận chuyển/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent(text)
     expect(screen.getByRole('button', { name: /Xác nhận chuyển/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Làm lại từ đầu' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Quay lại sửa' })).toBeEnabled()
+    expect(callsTo(calls, 'POST', '/actions')).toHaveLength(0)
   })
 
-  it('lỗi tạm thời (Aurora đang thức dậy): cho bấm lại, chỉ ghi một lần khi thành công', async () => {
+  it('lỗi tạm thời (Aurora đang thức dậy) ngay ở bản xem trước: vẫn cho bấm xác nhận, chỉ ghi một lần khi thành công', async () => {
     let n = 0
     const { calls } = mountApp(
       backend({
@@ -239,15 +261,15 @@ describe('T4 xem lại, xác nhận và T5 biên nhận', () => {
     )
     const user = userEvent.setup()
     await toReview(user, /Hũ Hóa đơn/)
-    await user.click(await screen.findByRole('button', { name: /Xác nhận chuyển/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Hệ thống đang khởi động')
     const retry = screen.getByRole('button', { name: /Xác nhận chuyển/ })
     expect(retry).toBeEnabled()
     await user.click(retry)
     expect(await screen.findByTestId('transfer-receipt')).toBeInTheDocument()
     expect(callsTo(calls, 'POST', '/actions')).toHaveLength(1)
-    // cùng một mã chống ghi trùng cho cả hai lần thử
+    // cùng một mã chống ghi trùng cho mọi lần gọi (xem trước lẫn ghi)
     const refs = callsTo(calls, 'POST', '/confirmations').map((c: Call) => bodyOf(c).params.client_ref)
+    expect(refs.length).toBeGreaterThanOrEqual(2)
     expect(new Set(refs).size).toBe(1)
   })
 
@@ -275,11 +297,13 @@ describe('transferParams (thuần hàm)', () => {
     })
   })
 
-  it('có loại transfer_person (chiều chi) thì gửi; Trả sau chỉ gửi hũ khi người dùng chọn', () => {
-    const txTypes = [{ tx_type: TRANSFER_TX_TYPE, label: 'Chuyển', direction: 'out' as const }]
+  it('có loại is_person_transfer (chiều chi) thì gửi, không gõ cứng mã; Trả sau chỉ gửi hũ khi người dùng chọn', () => {
+    const txTypes = [{ tx_type: TRANSFER_TX_TYPE, label: 'Chuyển', direction: 'out' as const, is_person_transfer: true }]
     expect(transferParams({ ...base, txTypes, source: { kind: 'credit' } })).toMatchObject({ funding: 'credit', tx_type: TRANSFER_TX_TYPE })
     expect(transferParams({ ...base, txTypes, source: { kind: 'credit' } })).not.toHaveProperty('jar')
     expect(transferParams({ ...base, txTypes, source: { kind: 'credit' }, creditJar: 'giai_tri', note: 'a' })).toMatchObject({ jar: 'giai_tri', note: 'a' })
+    // không đánh dấu is_person_transfer thì không gửi tx_type, dù mã trùng tên
+    expect(transferParams({ ...base, txTypes: [{ ...txTypes[0]!, is_person_transfer: undefined }], source: { kind: 'credit' } })).not.toHaveProperty('tx_type')
     // loại cùng tên nhưng chiều "in" thì không dùng
     expect(transferParams({ ...base, txTypes: [{ ...txTypes[0]!, direction: 'in' as const }], source: { kind: 'credit' } })).not.toHaveProperty('tx_type')
   })

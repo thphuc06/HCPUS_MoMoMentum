@@ -59,7 +59,7 @@ describe('ForecastBlock: nội dung hiển thị', () => {
     expect(screen.queryByText(/Chưa đủ cơ sở để nêu xác suất/)).toBeNull()
     expect(screen.getByTestId('coverage')).toHaveTextContent('62%')
     expect(screen.getByTestId('forecast-meta')).toHaveTextContent('47 ngày')
-    expect(screen.getByText(/Cập nhật \d{2}\/\d{2} \d{2}:\d{2} · Ví mô phỏng/)).toBeInTheDocument()
+    expect(screen.getByText(/Cập nhật \d{2}\/\d{2}\/\d{4} · \d{2}:\d{2} · Ví mô phỏng/)).toBeInTheDocument()
     expect(screen.queryByText('Ước lượng ban đầu')).toBeNull()
     expect(screen.queryByText('Số liệu cũ')).toBeNull()
   })
@@ -125,6 +125,9 @@ describe('ForecastBlock: nội dung hiển thị', () => {
 describe('forecastSummary', () => {
   it('ngày cạn sau kỳ lương, không cạn, hụt không có ngày cạn', () => {
     const d = data('forecast_timeline.short')
+    // cạn trước lương: nói khoảng trống (ngày cạn -> lương) và số ngày từ hôm nay, hai con số khác nhau
+    const before = forecastSummary({ ...d, runout_date: '2026-11-23', payday: { date: '2026-12-05', days_until: 14 } })
+    expect(before).toContain('cạn ngày 23/11, 12 ngày trước kỳ lương 05/12 (hôm nay còn 14 ngày tới lương)')
     expect(forecastSummary({ ...d, runout_date: '2026-12-20' })).toContain('sau kỳ lương 05/12')
     expect(forecastSummary({ ...d, runout_date: undefined, status: 'ok' })).toContain('dự kiến đủ tới kỳ lương')
     expect(forecastSummary({ ...d, runout_date: undefined, status: 'short' })).toContain('có khả năng hụt')

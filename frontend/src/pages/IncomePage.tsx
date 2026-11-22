@@ -11,6 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useApiResource } from '@/api/resource'
 import { useOverview } from '@/api/OverviewProvider'
 import { useWriteFlow } from '@/api/useWrite'
+import { usePreview } from '@/api/useConfirmPreview'
+import { PreviewPanel } from '@/components/PreviewPanel'
 import { newUuid } from '@/lib/ids'
 import { formatVnd } from '@/lib/format'
 import { cn } from '@/lib/cn'
@@ -30,12 +32,15 @@ export function IncomePage() {
   const valid = Number(amount) > 0 && txType !== ''
   const other = ov.data?.balance.other_income_vnd ?? 0
 
+  const params: Record<string, unknown> = { kind: 'income', amount_vnd: Number(amount), tx_type: txType, client_ref: clientRef }
+  if (from.trim()) params.counterparty = from.trim()
+  if (note.trim()) params.note = note.trim()
+  const preview = usePreview('record_transaction', valid && !write.receipt ? params : null, 400)
+  const previewBlocked = preview.status === 'error' && !preview.error.retryable
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!valid) return
-    const params: Record<string, unknown> = { kind: 'income', amount_vnd: Number(amount), tx_type: txType, client_ref: clientRef }
-    if (from.trim()) params.counterparty = from.trim()
-    if (note.trim()) params.note = note.trim()
     await write.submit('record_transaction', params)
   }
 
@@ -124,12 +129,13 @@ export function IncomePage() {
               <Input value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
             </label>
 
+            <PreviewPanel state={preview} />
             {write.error && (
               <p role="alert" className="rounded-2xl bg-bad-bg px-3 py-2 text-small font-semibold text-bad-fg">
                 {write.error.message}
               </p>
             )}
-            <Button type="submit" className="w-full" disabled={!valid || write.working || write.phase === 'blocked'} aria-busy={write.working}>
+            <Button type="submit" className="w-full" disabled={!valid || previewBlocked || write.working || write.phase === 'blocked'} aria-busy={write.working}>
               {write.working ? 'Đang ghi…' : 'Ghi nhận tiền vào'}
             </Button>
             <p className="text-note text-ink-2">Tiền vào được ghi vào hũ Tiền vào khác. Riêng lương sẽ chờ bạn xác nhận một chạm để chia vào các hũ.</p>

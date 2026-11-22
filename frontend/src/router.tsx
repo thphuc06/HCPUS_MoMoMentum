@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import { Navigate, Outlet, createHashRouter, type RouteObject } from 'react-router'
+import { Skeleton } from '@/components/ui/skeleton'
 import { RequireAuth } from '@/auth/RequireAuth'
 import { AppShell } from '@/layout/AppShell'
 import { PhoneFrame } from '@/layout/PhoneFrame'
@@ -15,9 +16,24 @@ const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, n
   lazy: async () => ({ Component: (await load())[name] }),
 })
 
+// Vào thẳng một màn tải theo route (chunk riêng, ví dụ mở lại #/jars/an_uong): chờ chunk về thì hiện khung chờ, khỏi trắng
+// màn và khỏi cảnh báo thiếu HydrateFallback của React Router.
+function InitialLoading() {
+  return (
+    <PhoneFrame>
+      <div role="status" aria-busy="true" aria-label="Đang tải" data-state="loading" className="space-y-3 px-4 pt-[max(24px,env(safe-area-inset-top))]">
+        <Skeleton className="h-14 w-full rounded-card" />
+        <Skeleton className="h-[220px] w-full rounded-card" />
+        <Skeleton className="h-[120px] w-full rounded-card" />
+      </div>
+    </PhoneFrame>
+  )
+}
+
 export function appRoutes(): RouteObject[] {
   return [
     {
+      HydrateFallback: InitialLoading,
       element: (
         <PhoneFrame>
           <Outlet />

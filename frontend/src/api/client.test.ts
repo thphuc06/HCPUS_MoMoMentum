@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createApiClient } from './client'
+import { createApiClient, REQUEST_TIMEOUT_MS, RESET_TIMEOUT_MS } from './client'
 import { ApiError, ERROR_CODES, ERROR_MESSAGES, HTTP_STATUS, apiErrorFromResponse } from './errors'
 import { validBlock } from '@/test/fixtures'
 import { jarsFromFixture } from '@/test/helpers'
@@ -115,6 +115,51 @@ describe('lớp REST', () => {
     const err = await api.getJars().catch((e) => e)
     expect(err.code).toBe('DATABASE_UNAVAILABLE')
     expect(err.retryable).toBe(true)
+  })
+})
+
+describe('hết giờ chờ', () => {
+  // fetch treo mãi (chỉ kết thúc khi bị hủy bằng AbortSignal): GET hết giờ ở 40 giây, đặt lại demo được chờ tới 60 giây.
+  const hanging = (calls: Array<number>) =>
+    vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(Date.now())
+      return new Promise<Response>((_res, rej) => init?.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError'))))
+    }) as unknown as typeof fetch
+
+  it('GET treo quá 40 giây thì báo TIMEOUT (có thể thử lại); POST /demo/reset được chờ lâu hơn (60 giây)', async () => {
+    vi.useFakeTimers()
+    try {
+      const calls: number[] = []
+      const api = createApiClient({ baseUrl: BASE, getAccessToken: async () => 'tok', fetchImpl: hanging(calls) })
+      const get = api.getJars().catch((e) => e)
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - 1)
+      let settled = false
+      void get.then(() => (settled = true))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(2)
+      const err = await get
+      expect(err).toBeInstanceOf(ApiError)
+      expect(err.code).toBe('TIMEOUT')
+      expect(err.retryable).toBe(true)
+      expect(err.message).toMatch(/Hoạt động/) // nhắc kiểm tra trước khi ghi lại
+
+      const reset = api.resetDemo().catch((e) => e)
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 5_000) // quá 40 giây mà reset vẫn đang chờ
+      let resetSettled = false
+      void reset.then(() => (resetSettled = true))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(resetSettled).toBe(false)
+      await vi.advanceTimersByTimeAsync(RESET_TIMEOUT_MS)
+      expect((await reset).code).toBe('TIMEOUT')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('lỗi mạng thường vẫn là NETWORK', async () => {
+    const { api } = setup([new TypeError('Failed to fetch')])
+    expect((await api.getJars().catch((e) => e)).code).toBe('NETWORK')
   })
 })
 

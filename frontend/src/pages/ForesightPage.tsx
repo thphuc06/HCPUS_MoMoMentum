@@ -8,7 +8,7 @@ import { useOverview } from '@/api/OverviewProvider'
 import type { JarFull } from '@/api/schemas'
 import { CONFIDENCE_LABEL } from '@/lib/jar'
 import { formatDayMonth } from '@/lib/dates'
-import { formatDateTime, formatRatioPercent, formatVnd } from '@/lib/format'
+import { formatSimMoment, formatRatioPercent, formatVnd } from '@/lib/format'
 
 const SEVERITY: Record<string, number> = { short: 0, tight: 1, ok: 2 }
 
@@ -70,7 +70,7 @@ export function ForesightPage() {
                 </div>
                 <div>
                   <dt className="text-ink-2">Cập nhật</dt>
-                  <dd className="font-semibold text-ink">{formatDateTime(f.computed_at)}</dd>
+                  <dd className="font-semibold text-ink">{formatSimMoment(f.run_app_date, f.computed_at)}</dd>
                 </div>
               </dl>
               {f.is_initial_estimate && <p className="mt-2 font-semibold text-warn-fg">Ước lượng ban đầu: mới có ít ngày dữ liệu.</p>}

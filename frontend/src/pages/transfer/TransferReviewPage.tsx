@@ -5,14 +5,17 @@ import { ScreenHeader } from '@/components/ScreenHeader'
 import { useApiResource } from '@/api/resource'
 import { useOverview } from '@/api/OverviewProvider'
 import { useWriteFlow } from '@/api/useWrite'
+import { usePreview } from '@/api/useConfirmPreview'
+import { PreviewPanel } from '@/components/PreviewPanel'
 import { amountOf, useTransferFlow } from '@/features/transfer/TransferFlow'
 import { transferParams } from '@/features/transfer/params'
 import { formatAppDate, formatVnd } from '@/lib/format'
 import { Avatar } from './TransferPayeePage'
 
-// Figma T4 xem lại và xác nhận (19:1158). Nhãn nút là "Xác nhận" thường (không giả lập Face ID). Số dư sau và tổng
-// phải trả gồm phí KHÔNG tính ở đây: server trả trong biên nhận. Với Trả sau chỉ trích dòng biểu phí có nguồn từ
-// GET /credit-line để người dùng biết trước có phí.
+// Figma T4 xem lại và xác nhận (19:1158). Nhãn nút là "Xác nhận" thường (không giả lập Face ID). Số dư sau, phí và tổng
+// phải trả gồm phí KHÔNG tính ở đây: server tính trong `preview` của POST /confirmations (không ghi gì) và hiện trong
+// PreviewPanel; lỗi nghiệp vụ (không đủ số dư, vượt hạn mức) cũng hiện sớm ở đó. Với Trả sau còn trích dòng biểu phí có
+// nguồn từ GET /credit-line.
 export function TransferReviewPage() {
   const navigate = useNavigate()
   const { state, patch, reset } = useTransferFlow()
@@ -21,6 +24,20 @@ export function TransferReviewPage() {
   const credit = useApiResource((api) => api.getCreditLine(), [])
   const write = useWriteFlow()
   const amount = amountOf(state)
+  const params =
+    state.payee && state.source && amount > 0 && txTypes.status !== 'loading'
+      ? transferParams({
+          amountVnd: amount,
+          source: state.source,
+          payeeId: state.payee.id,
+          note: state.note,
+          clientRef: state.clientRef,
+          txTypes: txTypes.data?.tx_types ?? [],
+          creditJar: state.creditJar || undefined,
+        })
+      : null
+  const preview = usePreview('record_transaction', write.phase === 'done' ? null : params)
+  const previewBlocked = preview.status === 'error' && !preview.error.retryable
 
   if (!state.payee) return <Navigate to="/transfer" replace />
   if (!state.source || amount <= 0) return <Navigate to="/transfer/amount" replace />
@@ -31,15 +48,7 @@ export function TransferReviewPage() {
   const isCredit = state.source.kind === 'credit'
 
   const confirm = async () => {
-    const params = transferParams({
-      amountVnd: amount,
-      source: state.source!,
-      payeeId: state.payee!.id,
-      note: state.note,
-      clientRef: state.clientRef,
-      txTypes: txTypes.data?.tx_types ?? [],
-      creditJar: state.creditJar || undefined,
-    })
+    if (!params) return
     const res = await write.submit('record_transaction', params)
     if (res) {
       patch({ receipt: res })
@@ -101,9 +110,13 @@ export function TransferReviewPage() {
                 </li>
               ))}
             </ul>
-            <p className="mt-1 text-ink-2">Tổng phải trả gồm phí do hệ thống tính và hiện trên biên nhận; nghĩa vụ này đến hạn ngày {line?.due_day ?? '5'} hằng tháng.</p>
+            {preview.status !== 'ready' && (
+              <p className="mt-1 text-ink-2">Tổng phải trả gồm phí do hệ thống tính; nghĩa vụ này đến hạn ngày {line?.due_day ?? '5'} hằng tháng.</p>
+            )}
           </div>
         )}
+
+        <PreviewPanel state={preview} className="mt-3" />
 
         <div className="mt-3 flex items-start gap-2 rounded-card bg-tint p-3.5 text-small text-ink">
           <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-text" aria-hidden />
@@ -120,7 +133,7 @@ export function TransferReviewPage() {
       </div>
 
       <div className="mt-6 flex flex-col items-center gap-2 px-4 pb-6">
-        <Button type="button" className="w-full" onClick={() => void confirm()} disabled={write.phase === 'working' || write.phase === 'blocked' || write.phase === 'done'} aria-busy={write.working}>
+        <Button type="button" className="w-full" onClick={() => void confirm()} disabled={!params || previewBlocked || write.phase === 'working' || write.phase === 'blocked' || write.phase === 'done'} aria-busy={write.working}>
           {write.working ? 'Đang xác nhận…' : `Xác nhận chuyển ${formatVnd(amount)}`}
         </Button>
         <Button

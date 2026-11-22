@@ -62,7 +62,7 @@ export function useConfirmFlow({ block, blockId }: { block: ConfirmBlock | Confi
       actions.replaceBlock(blockId, receipt, receipt.id)
       actions.addSystemNote(receiptNote(receipt), receipt.id)
       setPhase('done')
-      refresh() // làm mới mọi dữ liệu đang hiện (tổng quan, hũ, dự báo, giao dịch...)
+      refresh(receipt.source.as_of) // làm mới mọi dữ liệu đang hiện (tổng quan, hũ, dự báo, giao dịch...)
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError('INTERNAL_ERROR', 0)
       // Xin token mà bị TOKEN_EXPIRED: là ĐỀ NGHỊ quá hạn (không phải token), bấm lại vô ích: hiện như hết hạn, hỏi lại Yofina.

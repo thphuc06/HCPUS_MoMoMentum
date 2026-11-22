@@ -76,7 +76,7 @@ const wrap = (r: Reply): Response => (r instanceof Response ? r : json(200, r))
 
 /**
  * Backend giả theo bảng "METHOD /path" -> thân phản hồi (đối tượng = 200, Response = nguyên văn, hàm = tính theo yêu cầu).
- * Không có trong bảng thì GET trả fixture mặc định; POST /confirmations trả token mờ lặp lại tool + params;
+ * Không có trong bảng thì GET trả fixture mặc định; POST /confirmations trả token mờ lặp lại tool + params kèm `preview` (xem trước do "server" tính);
  * POST /actions trả biên nhận `receipt_action` của fixture. Có thể ghi đè từng cái.
  */
 export function backend(routes: Routes = {}): Handler {
@@ -88,7 +88,15 @@ export function backend(routes: Routes = {}): Handler {
     if (hit) return wrap(typeof hit === 'function' ? await hit(init, u) : hit)
     if (key === 'POST /confirmations') {
       const b = JSON.parse(String(init.body)) as { tool: string; params: unknown }
-      return json(200, { confirm_token: 'aaa.bbb', expires_at: '2026-12-10T03:02:00Z', ttl_seconds: 120, tool: b.tool, params: b.params, params_hash: 'a'.repeat(64) })
+      return json(200, {
+        confirm_token: 'aaa.bbb',
+        expires_at: '2026-12-10T03:02:00Z',
+        ttl_seconds: 120,
+        tool: b.tool,
+        params: b.params,
+        params_hash: 'a'.repeat(64),
+        preview: { summary: 'Xem trước thao tác', changes: [{ label: 'Số dư Ăn uống', before: '380.000 ₫', after: '180.000 ₫' }] },
+      })
     }
     if (key === 'POST /actions') return json(200, restFixture('ActionResponse.receipt_action'))
     return restDefault(url)
