@@ -7,6 +7,7 @@ Mỗi số tiền kèm chuỗi đã định dạng (`*_text`) để model chép 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import date
 from typing import Any
 
 from yofina_agent.textutil import extract_amounts
@@ -81,6 +82,65 @@ def compact_confirm(data: Mapping[str, Any]) -> dict[str, Any]:
         "expires_at": data["expires_at"],
         "note": "Chưa có khoản tiền nào được chuyển; người dùng phải bấm Xác nhận trên thẻ.",
     }
+
+
+_STATUS_VI = {"ok": "đủ", "tight": "sát", "short": "hụt"}
+_BAND_VI = {"high": "Cao", "medium": "Vừa", "low": "Thấp"}
+FORECAST_EVENTS_SHOWN = 3
+
+
+def _dm(value: str) -> str:
+    d = date.fromisoformat(value)
+    return f"{d.day:02d}/{d.month:02d}"
+
+
+def compact_forecast(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """`forecast___get_forecast` -> bản gọn cho model viết 1 đến 2 câu: trạng thái, ngày cạn, kỳ lương, độ tin cậy.
+
+    Ngày dạng `dd/mm` và số tiền kèm chuỗi `*_text` để model chép nguyên văn; không có đường P10/P90 theo ngày (đã nằm trong khối UI).
+    """
+    d = payload["data"]
+    origin = date.fromisoformat(d["origin_date"])
+    payday = d["payday"]
+    start = to_vnd(d["start_balance_vnd"])
+    before_payday = [x["p50_vnd"] for x in d["days"] if x["date"] < payday["date"]]
+    out: dict[str, Any] = {
+        "app_date": payload["app_date"],
+        "jar": d["jar"]["name"],
+        "status": _STATUS_VI[d["status"]],
+        "balance_now_vnd": start,
+        "balance_now_text": format_vnd(start),
+        "payday": {"date_text": _dm(payday["date"]), "days_until": payday["days_until"]},
+        "confidence": _BAND_VI[d["confidence_band"]],
+        "is_initial_estimate": bool(d["is_initial_estimate"]),
+        "stale": bool(d["stale"]),
+    }
+    if d.get("runout_date"):
+        runout = date.fromisoformat(d["runout_date"])
+        out["runout"] = {
+            "date_text": _dm(d["runout_date"]),
+            "days_from_today": (runout - origin).days,
+            "days_before_payday": (date.fromisoformat(payday["date"]) - runout).days,
+        }
+    else:
+        out["runout"] = None  # không cạn trong kỳ dự báo
+    if d.get("p_shortfall") is not None:
+        out["p_shortfall_percent"] = round(float(d["p_shortfall"]) * 100)
+    if before_payday:
+        low = to_vnd(min(before_payday))
+        out["lowest_balance_before_payday_vnd"] = low
+        out["lowest_balance_before_payday_text"] = format_vnd(low)
+    out["upcoming"] = [
+        {
+            "label": e["label"],
+            "kind": "nghĩa vụ" if e["kind"] == "obligation" else "lương về",
+            "date_text": _dm(e["date"]),
+            "amount_vnd": to_vnd(e["amount_vnd"]),
+            "amount_text": format_vnd(e["amount_vnd"]),
+        }
+        for e in d["events"][:FORECAST_EVENTS_SHOWN]
+    ]
+    return out
 
 
 def allowed_amounts(compact: Mapping[str, Any]) -> set[int]:

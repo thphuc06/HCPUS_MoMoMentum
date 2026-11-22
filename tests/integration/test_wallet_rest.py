@@ -730,6 +730,7 @@ def test_su_kien_that_su_len_yofina_bus(api, event_sink, schema_validator):
     )
     assert status == 200, rec2
     got = event_sink(3)
+    assert len(got) == 3, [(e["detail-type"], e["detail"].get("event_id")) for e in got]
     by_type = {}
     for e in got:
         by_type.setdefault(e["detail-type"], []).append(e)
@@ -796,9 +797,16 @@ def test_gui_trung_mot_su_kien_cung_event_id_khi_gui_lai_cung_mot_lan_ghi():
 
 
 def test_lich_su_chi_tieu_theo_ngay_cua_minh_du_day_cho_du_bao(api):
-    """Lịch sử chi của hũ Ăn uống (50 dòng mới nhất) trải trên nhiều ngày: đủ dày để mô hình dự báo dùng được."""
-    page = get(api, "minh", "/transactions?kind=expense&jar=an_uong&limit=50")
-    assert len({t["app_date"] for t in page["transactions"]}) >= 20
+    """Lịch sử chi của hũ Ăn uống trải trên nhiều ngày (đọc hết các trang): đủ dày để mô hình dự báo dùng được."""
+    days: set[str] = set()
+    path = "/transactions?kind=expense&jar=an_uong&limit=50"
+    for _ in range(6):
+        page = get(api, "minh", path)
+        days |= {t["app_date"] for t in page["transactions"]}
+        if "next_cursor" not in page:
+            break
+        path = f"/transactions?kind=expense&jar=an_uong&limit=50&cursor={page['next_cursor']}"
+    assert len(days) >= 28
 
 
 # --- gợi ý do server tính cho giao diện ---------------------------------------------------------------------------

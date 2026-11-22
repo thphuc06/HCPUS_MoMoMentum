@@ -29,12 +29,23 @@ from dataclasses import dataclass
 from datetime import date
 
 import numpy as np
-from scipy.signal import lfilter
 from scipy.special import betaincinv, ndtr
 
 from yofina_ml.calibration import SeriesCalibration
 from yofina_ml.daycal import DayFeatures
 from yofina_ml.marginals import HurdleMarginal, Marginal
+
+
+def _ar1(x: np.ndarray, gain: float, rho: float) -> np.ndarray:
+    """Bộ lọc AR(1) theo trục cuối: y[t] = gain * x[t] + rho * y[t-1]. Cùng phép tính (và cùng thứ tự phép cộng nhân) với
+    `scipy.signal.lfilter([gain], [1, -rho], x, axis=1)` nên cho kết quả y hệt, nhưng khỏi nhập `scipy.signal` (khoảng
+    một giây khởi động nguội trên Lambda arm64 chỉ để dùng một bộ lọc một cực)."""
+    y = np.empty_like(x)
+    y[:, 0] = gain * x[:, 0]
+    for t in range(1, x.shape[1]):
+        y[:, t] = gain * x[:, t] + rho * y[:, t - 1]
+    return y
+
 
 _MASK = (1 << 63) - 1
 
@@ -108,7 +119,7 @@ def draw_paths(spec: SimSpec, rho: float, n_paths: int, ss: np.random.SeedSequen
             s = np.sqrt(1.0 - rho * rho)
             x = e.copy()
             x[:, 0] = e[:, 0] / s
-            z = lfilter([s], [1.0, -rho], x, axis=1)
+            z = _ar1(x, s, rho)
         else:
             z = e
         spend = spec.marginal.ppf(ndtr(z), spec.feats)

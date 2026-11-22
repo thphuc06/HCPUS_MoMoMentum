@@ -16,6 +16,7 @@ from yofina_core.config import Config
 from yofina_core.confirm import ConfirmService
 from yofina_core.db import DataApi
 from yofina_ledger.events import EventPublisher
+from yofina_ledger.forecast_client import ForecastClient
 from yofina_ledger.gateway_api import handle_gateway
 from yofina_ledger.repo import LedgerRepo
 from yofina_ledger.rest_api import handle_http
@@ -36,6 +37,15 @@ def get_service() -> LedgerService:
             ConfirmService.from_config(),
             settings,
             events=EventPublisher(settings.event_bus_name, region=Config().region()),
+            forecast=(
+                ForecastClient(
+                    settings.forecast_function_name,
+                    region=Config().region(),
+                    sync_timeout_seconds=settings.forecast_sync_timeout_seconds,
+                )
+                if settings.forecast_function_name
+                else None
+            ),
         )
     return _SERVICE
 

@@ -42,6 +42,10 @@ class LedgerSettings:
     reference_cache_seconds: int = 300
     #: tên EventBridge bus; rỗng thì không phát sự kiện (chỉ log)
     event_bus_name: str = ""
+    #: tên Lambda `yofina-forecast-batch` (đặt lại demo và đọc dự báo cũ gọi nó); rỗng thì ledger không tự tính dự báo
+    forecast_function_name: str = ""
+    #: thời gian tối đa chờ một lần tính dự báo đồng bộ (giây); nhỏ hơn timeout của Lambda và của API
+    forecast_sync_timeout_seconds: float = 22.0
 
     @property
     def tz(self) -> ZoneInfo:
@@ -69,4 +73,8 @@ class LedgerSettings:
             proactive_obligation_days=cfg.get_int("proactive_obligation_days"),
             reference_cache_seconds=cfg.get_int("reference_cache_seconds"),
             event_bus_name=cfg.get("event_bus_name", default=""),
+            forecast_function_name=cfg.get("forecast_function_name", default=""),
+            forecast_sync_timeout_seconds=float(
+                cfg.get("forecast_sync_timeout_seconds", default="22")
+            ),
         )

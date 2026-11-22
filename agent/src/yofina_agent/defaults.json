@@ -15,6 +15,7 @@
   "transactions_default_limit": 8,
   "transactions_max_limit": 20,
   "gateway_tool_prefix": "ledger___",
+  "forecast_tool_prefix": "forecast___",
   "turn_blocks_tool": "",
   "turn_blocks_timeout_seconds": 3,
   "log_level": "INFO"

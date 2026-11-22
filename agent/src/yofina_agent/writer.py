@@ -36,6 +36,14 @@ TASKS: dict[str, str] = {
         "Tóm tắt ngắn các giao dịch gần đây theo câu hỏi. Nếu danh sách rỗng thì nói chưa có giao dịch phù hợp. "
         "Nếu has_more là true thì nói là còn nhiều giao dịch nữa."
     ),
+    "forecast": (
+        "Trả lời câu hỏi về dự báo của MỘT hũ bằng 1 đến 2 câu; biểu đồ chi tiết đã hiện cho người dùng rồi nên không liệt kê "
+        "từng ngày. Nếu `runout` có giá trị thì nêu ngày cạn (date_text) và còn bao nhiêu ngày nữa tới kỳ lương "
+        "(runout.days_before_payday, kỳ lương payday.date_text); nếu `runout` là null thì nói hũ đủ tới kỳ lương. Nếu có "
+        "p_shortfall_percent thì nêu xác suất hụt; nếu không thì nêu nhóm tin cậy (confidence). Nếu is_initial_estimate là true "
+        "thì nói rõ đây là ước lượng ban đầu; nếu stale là true thì nhắc số liệu có thể đã cũ. Chép nguyên văn các chuỗi *_text "
+        "và date_text; không tự tính ngày hay số tiền."
+    ),
     "confirm_move": (
         "Một đề nghị chuyển tiền đã được chuẩn bị và hiện thành thẻ xác nhận cho người dùng (thẻ đã có số dư trước và "
         "sau). Viết đúng 1 đến 2 câu: nêu số tiền, hũ nguồn, hũ đích, nói rõ chưa có khoản tiền nào được chuyển và "
@@ -47,10 +55,10 @@ TASKS: dict[str, str] = {
     ),
     "out_of_scope": (
         "Nói ngắn gọn rằng bạn chưa hỗ trợ việc người dùng hỏi (không đưa lời khuyên đầu tư), rồi nhắc những việc "
-        "bạn làm được: xem số dư, tra giao dịch, chuyển tiền giữa các hũ."
+        "bạn làm được: xem số dư, tra giao dịch, xem dự báo một hũ, chuyển tiền giữa các hũ."
     ),
     "chitchat": (
-        "Trả lời xã giao ngắn gọn, rồi nhắc rằng bạn giúp được việc xem số dư, giao dịch và chuyển tiền giữa các hũ."
+        "Trả lời xã giao ngắn gọn, rồi nhắc rằng bạn giúp được việc xem số dư, giao dịch, dự báo một hũ và chuyển tiền giữa các hũ."
     ),
 }
 

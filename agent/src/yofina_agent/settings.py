@@ -25,6 +25,7 @@ def _defaults() -> dict[str, Any]:
 class AgentSettings:
     gateway_url: str | None
     gateway_tool_prefix: str
+    forecast_tool_prefix: str
     run_timeout_seconds: float
     max_model_calls_per_turn: int
     max_tool_calls_per_turn: int
@@ -58,6 +59,7 @@ class AgentSettings:
         return cls(
             gateway_url=cfg.get("gateway_url", default=None) or None,
             gateway_tool_prefix=get("gateway_tool_prefix"),
+            forecast_tool_prefix=get("forecast_tool_prefix"),
             run_timeout_seconds=get("run_timeout_seconds", float),
             max_model_calls_per_turn=get("max_model_calls_per_turn", int),
             max_tool_calls_per_turn=get("max_tool_calls_per_turn", int),
@@ -77,6 +79,7 @@ class AgentSettings:
             log_level=get("log_level"),
         )
 
-    def tool(self, short_name: str) -> str:
-        """Tên tool trên Gateway: `<target>___<tool>` (ví dụ `ledger___get_jar_balances`)."""
-        return f"{self.gateway_tool_prefix}{short_name}"
+    def tool(self, short_name: str, *, target: str = "ledger") -> str:
+        """Tên tool trên Gateway: `<target>___<tool>` (ví dụ `ledger___get_jar_balances`, `forecast___get_forecast`)."""
+        prefix = self.forecast_tool_prefix if target == "forecast" else self.gateway_tool_prefix
+        return f"{prefix}{short_name}"

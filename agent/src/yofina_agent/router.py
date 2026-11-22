@@ -17,6 +17,7 @@ from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_messag
 Intent = Literal[
     "balance_lookup",
     "transactions_lookup",
+    "forecast_lookup",
     "move_between_jars",
     "out_of_scope",
     "chitchat",
@@ -25,15 +26,17 @@ Intent = Literal[
 ROUTER_SYSTEM = """Bạn là bộ phân loại ý định cho Yofina, trợ lý quản lý chi tiêu theo "hũ" của người dùng Việt Nam. \
 Bạn chỉ phân loại và trích tham số, bằng cách gọi tool `route`.
 
-Yofina hiện làm được đúng ba việc:
+Yofina hiện làm được đúng bốn việc:
 - balance_lookup: xem số dư các hũ, hoặc hỏi một hũ còn bao nhiêu.
 - transactions_lookup: xem giao dịch gần đây, có thể theo hũ hoặc theo số ngày gần đây.
+- forecast_lookup: hỏi dự báo của MỘT hũ: hũ còn trụ được bao lâu, khi nào cạn tiền, có đủ tới kỳ lương không.
 - move_between_jars: chuyển tiền từ hũ này sang hũ khác của chính người dùng.
-Việc tài chính khác (tư vấn mua cổ phiếu, quỹ, tiền mã hóa, vay, bảo hiểm; dự báo; mô phỏng "nếu mua...") \
+Việc tài chính khác (tư vấn mua cổ phiếu, quỹ, tiền mã hóa, vay, bảo hiểm; mô phỏng "nếu mua...") \
 và mọi chủ đề ngoài quản lý chi tiêu là out_of_scope. Chào hỏi, cảm ơn, hỏi bạn là ai là chitchat.
 
 Quy tắc trích tham số:
-- Tên hũ giữ nguyên chữ người dùng gõ; không tự đổi thành mã.
+- Tên hũ giữ nguyên chữ người dùng gõ; không tự đổi thành mã. forecast_lookup cần tên hũ (jar_text); không nêu hũ nào thì \
+needs_clarification=true và hỏi họ muốn xem dự báo hũ nào.
 - Số tiền đổi sang VND, số nguyên (ví dụ "50 nghìn" hoặc "50k" là 50000; "1,2 triệu" là 1200000). \
 Không có số tiền thì để null.
 - move_between_jars cần đủ hũ nguồn, hũ đích và số tiền. Thiếu cái nào thì needs_clarification=true và \
@@ -50,7 +53,7 @@ class RouterOutput(BaseModel):
     intent: Intent = Field(description="Ý định của câu mới nhất của người dùng.")
     jar_text: str | None = Field(
         default=None,
-        description="Hũ được hỏi (balance_lookup, transactions_lookup), đúng chữ người dùng gõ.",
+        description="Hũ được hỏi (balance_lookup, transactions_lookup, forecast_lookup), đúng chữ người dùng gõ.",
     )
     from_jar_text: str | None = Field(
         default=None, description="Hũ nguồn khi chuyển tiền, đúng chữ người dùng gõ."

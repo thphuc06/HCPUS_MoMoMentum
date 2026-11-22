@@ -57,10 +57,20 @@ def test_ten_mo_ho_thi_bao_mo_ho():
     assert m.status == "ambiguous" and set(m.candidates) == {"du_lich", "lich_hoc"}
 
 
-def test_bo_phan_loai_du_phong_chi_nhan_ra_ba_y_dinh_co_tool():
+def test_bo_phan_loai_du_phong_chi_nhan_ra_cac_y_dinh_co_tool():
     r = classify_by_rules("số dư các hũ của mình")
     assert r.intent == "balance_lookup"
     assert classify_by_rules("cho mình xem giao dịch gần đây").intent == "transactions_lookup"
+    # dự báo một hũ: từ khóa chung (cạn, trụ được, bao lâu, dự báo), không theo câu mẫu nào; "còn bao nhiêu" vẫn là số dư
+    for text in (
+        "hũ ăn uống còn trụ được bao lâu",
+        "khi nào hũ giải trí cạn",
+        "dự báo hũ đi lại giúp mình",
+        "bao giờ hết tiền hũ hóa đơn",
+        "hũ du lịch có đủ tới kỳ lương không",
+    ):
+        assert classify_by_rules(text).intent == "forecast_lookup", text
+    assert classify_by_rules("hũ ăn uống còn bao nhiêu").intent == "balance_lookup"
     m = classify_by_rules("chuyển 100 nghìn từ Giải trí sang Ăn uống")
     assert (m.intent, m.amount_vnd, m.from_jar_text, m.to_jar_text) == (
         "move_between_jars",
@@ -86,6 +96,7 @@ def test_schema_router_phang_va_day_du():
     assert schema["properties"]["intent"]["enum"] == [
         "balance_lookup",
         "transactions_lookup",
+        "forecast_lookup",
         "move_between_jars",
         "out_of_scope",
         "chitchat",

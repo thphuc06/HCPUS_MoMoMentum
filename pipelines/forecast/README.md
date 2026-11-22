@@ -1,0 +1,65 @@
+# pipelines/forecast/
+
+**Lõi pipeline dự báo** (phase 2, luồng C) và ba Lambda vỏ mỏng dùng chung MỘT zip. Phần tiếp theo mô tả mã; cách nhịp đêm và nhịp sự kiện chạy ở [../nightly/](../nightly/README.md) và [../event/](../event/README.md); tool Gateway ở [../../gateway/tools/forecast/](../../gateway/tools/forecast/README.md). Hợp đồng ML: [../../ml/README.md](../../ml/README.md#giao-diện).
+
+## Bố cục
+
+| Tệp | Việc |
+|---|---|
+| `yofina_forecast/settings.py` | `ForecastSettings.from_config()`: mọi ngưỡng và tên tài nguyên từ biến môi trường `YOFINA_FORECAST_*` do CDK đặt; thiếu thì `ConfigError`, không mặc định trong mã |
+| `yofina_forecast/inputs.py` | **Hàm thuần** `build_inputs(ctx, settings, user_id, n_paths) -> Built`: dựng `ForecastInputs` đúng hợp đồng (lịch sử chi theo hũ, số dư, lương chia bằng `split_amount` vào đúng ngày lương, nghĩa vụ mở rộng chu kỳ, `payday_day`, độ phủ, hạt theo người dùng, cấu hình từ `calibrated_config()`), rồi `contract.check_inputs` |
+| `yofina_forecast/repo.py` | Truy cập Aurora qua `yofina_core.db.DataApi` (role `yofina_app`): đọc bằng hàm `app_*`, ghi MỘT transaction cho cả lần chạy |
+| `yofina_forecast/runner.py` | `Pipeline.run_user(user_id, trigger, ...)`: chọn đường nhanh hay đầy đủ, `contract.check_result` trước khi ghi, ghi, phát `forecast.updated` |
+| `yofina_forecast/consumer.py`, `idempotency.py`, `events.py` | Đường sự kiện: luật sự kiện -> việc, gộp theo người dùng, idempotency DynamoDB, đọc phong bì EventBridge, phát `forecast.updated` |
+| `yofina_forecast/batch.py` | Các `op` của Lambda batch: `list_users`, `run_user`, `run_users`, `summarize` |
+| `yofina_forecast/tool.py` | Tool `forecast___get_forecast` (dùng `WalletReads.forecast_block_or_none` của ledger: cùng mã dựng khối với REST) |
+| `yofina_forecast/bootstrap.py`, `handler_batch.py`, `handler_event.py`, `handler_tool.py` | Vỏ Lambda: dựng thành phần một lần mỗi môi trường thực thi |
+| `requirements.txt` | numpy, scipy (cùng `pydantic`, `tzdata` của `yofina_core`) |
+
+## Dòng chảy của một lần chạy (`Pipeline.run_user`)
+
+1. **Đọc** một lệnh gọi Data API: `app_get_forecast_context(user, now, tz, 330)` (migration 0009) trả bảng `(section, jar_code, payload)`: một dòng `meta` (ngày mô phỏng, `history_start`, hồ sơ, dữ kiện độ phủ), mỗi hũ một dòng (số dư, tỷ lệ chia, chuỗi chi theo ngày đã lấp ngày 0 do `app_get_daily_spend`), mỗi nghĩa vụ đang hoạt động một dòng. Mỗi dòng dưới 64 KB (giới hạn của Data API; đã trúng một lần ở thiết kế đầu và đổi thành nhiều dòng). Ngày mô phỏng tính trong hàm DB (cùng công thức `app_get_overview`).
+2. **Dựng đầu vào** (`inputs.py`, thuần hàm): hũ hệ thống bị loại; nghĩa vụ không gán hũ rơi về hũ `obligation` đầu tiên (không có thì bỏ và ghi `unassigned_obligations`); tỷ lệ chia không đủ 100 thì không mô phỏng lương (ghi `salary_split_invalid`); `history_start` là ngày sớm nhất của sổ cái, không lùi quá 330 ngày; hạt gốc `user_seed(user_id)` (băm 31 bit) nên cùng dữ liệu cho cùng dự báo. Cấu hình lấy `calibrated_config()` làm gốc (cờ `probability_enabled` theo kết quả backtest) rồi AND với công tắc `forecast_probability_enabled` (đặt `false` thì không bao giờ hiện xác suất).
+3. **Tính**: đầy đủ (`forecast_user`, `n_paths_full`) hoặc nhanh (`update_forecast`, `n_paths_fast`, chỉ `trigger = event` kèm danh sách hũ và đủ điều kiện, xem [../event/README.md](../event/README.md)). Kết quả đi qua `contract.check_result` (sai hợp đồng thì KHÔNG ghi).
+4. **Ghi** một transaction: `forecast_runs` (kèm `params` gồm `jar_state` để đường nhanh dùng lại, và `params.pipeline` với `mode`, `trigger`, `fast_fallback`, `unassigned_obligations`...), `forecast_jar_summaries`, `forecasts` (batch tối đa 400 bộ tham số), rồi `app_prune_forecast_runs` (giữ 6 lần mới nhất, không bao giờ xóa lần mới nhất của một hũ). `computed_at` lấy từ đồng hồ của Lambda (cùng đồng hồ với các phép so độ tươi), không phải `now()` của DB.
+5. **Phát** `forecast.updated` (`source yofina.forecast`, `event_id = run_id`) SAU commit; lỗi phát chỉ ghi log và metric `ForecastEventPublishFailed`.
+
+`trigger = read` bị bỏ qua nếu vừa có lần chạy trẻ hơn `forecast_recompute_guard_seconds` (20 giây), để nhiều lượt đọc cũ cùng lúc không gây bão tính lại. Lỗi của một người dùng không làm hỏng người khác (batch đêm bắt từng mục).
+
+## Đọc dự báo (ledger)
+
+`GET /forecasts/{jar_code}`, `GET /overview` và `GET /jars/{jar_code}` đọc bảng dự báo (`forecast_floor_vnd`, ngày cạn, trạng thái, thẻ chủ động). **Độ tươi** (`forecast_freshness_seconds`, 3.600 giây; hoặc ngày mô phỏng đã sang ngày khác): `GET /forecasts/{jar}` TÍNH LẠI ĐỒNG BỘ (gọi `yofina-forecast-batch`, `trigger = read`) trước khi trả, và trả bản cũ với `stale: true` nếu không tính được; `GET /overview` chỉ KÍCH HOẠT tính nền (`InvocationType=Event`) và trả `forecast.stale: true` lần này. Lý do: Chi tiết hũ là màn xem MỘT hũ nên chờ một, hai giây để thấy số mới là chấp nhận được, còn Tổng quan phải nhanh (mục tiêu p95 dưới 300 ms phía Lambda). Ledger gọi Lambda khác thay vì nhúng engine vào zip của nó: engine kéo numpy và scipy (150 MB giải nén, nhập thư viện cả giây khi nguội) vào MỌI lần khởi động nguội của ledger (zip 3 MB phục vụ mọi route), nên gọi `Invoke` khi thật sự cần rẻ hơn. `POST /demo/reset` tính đồng bộ cùng cách và trả `forecast_ready: true`.
+
+## Số đo (Lambda arm64, Aurora thật)
+
+Đo ngày 2026-11-22 trên `yofina-forecast-batch` cho persona `minh` (7 hũ, 47 ngày lịch sử, 10.000 đường), qua `scripts` đo trong phiên làm việc (log `REPORT` và `forecast_run` của Lambda):
+
+| Memory | Khởi động nguội (Init) | Lần chạy đầu (nguội) | Lần chạy ấm (Duration) | Trong đó tính | Ghi |
+|---|---|---|---|---|---|
+| 1.024 MB | 3,5 s (bản đầu) | 2,1 s | 1,48 s | 1,12 s | |
+| **1.769 MB (chọn)** | **1,9 s** (sau tối ưu) | 1,5 s (tổng wall khoảng 4,0 s) | **khoảng 1,0 s** | khoảng 0,66 s | 1 vCPU; ghi lên Aurora khoảng 0,3 s, đọc khoảng 20 ms ấm (lần đầu 0,4 s vì kết nối Data API lạnh) |
+| 3.008 MB | 3,4 s (bản đầu) | 1,7 s | 0,97 s | 0,66 s | không nhanh hơn 1.769 MB (numpy chạy đơn luồng), nên không đáng tiền |
+
+- **Khởi động nguội** giảm từ 3,7 s xuống 1,9 s sau khi bỏ `scipy.signal` (chỉ để dùng `lfilter` cho bộ lọc AR(1) một cực): thay bằng vòng lặp numpy 30 bước cho kết quả **y hệt từng bit** (kiểm bằng `np.array_equal`; thay ở `ml/yofina_ml/montecarlo.py`). Còn lại là `scipy.special` và pydantic.
+- **Batch đêm** (6 tài khoản, Lambda ấm, song song 3): khoảng 4 giây cả execution.
+- **Đường sự kiện**: giao dịch 200.000 ₫ -> `GET /forecasts/an_uong` có lần tính mới sau khoảng 3 giây (đo 3,1 và 3,4 giây; mục tiêu dưới 60 giây).
+- **Zip**: 45,7 MB nén, 155,7 MB giải nén (giới hạn Lambda 250 MB), `build_lambda.py --slim` bỏ thư mục `tests` của scipy (KHÔNG bỏ của numpy: numpy tự nhập `numpy._core.tests` lúc khởi động, đã gặp `ImportModuleError`).
+- **`GET /overview` sau khi có dự báo** (tiêu chí 10): 40 lần gọi liên tiếp, phía Lambda (log `rest_request`, `ms` trong handler, n = 27 dòng tới được CloudWatch) p50 16 ms, p95 17 ms (mục tiêu dưới 300 ms); phía máy gọi p50 140 ms, p95 168 ms (gồm Cognito authorizer, API Gateway và mạng). Đo lại: `uv run pytest tests/integration/test_forecast_pipeline.py -m integration -k overview -s` hoặc `uv run scripts/measure_wallet.py`.
+- **Độ trễ khi dự báo cũ**: `GET /overview` trả ngay (kích hoạt nền); `GET /forecasts/{jar}` tính lại đồng bộ (khoảng 1 đến 2 giây ấm, tối đa khoảng 5 giây khi Lambda nguội).
+
+## Kiểm
+
+- Unit (không cần AWS): `uv run pytest tests/unit/pipeline` (dựng đầu vào, mở rộng nghĩa vụ, chọn đường nhanh hay đầy đủ và các lý do rơi về, idempotency, consumer, batch, tool, sự kiện phát đi theo schema).
+- PostgreSQL thật cục bộ (SQL thật của migration 0009, RLS thật, engine thật, sổ cái thật; cả ledger gọi pipeline): `uv run --python 3.12 --no-project --with pgserver --with "psycopg[binary]" --with pydantic --with pytest --with jsonschema --with pyyaml --with referencing --with numpy --with scipy pytest tests/local_pg -p no:cacheprovider` (59 ca; đã gồm `test_forecast_pipeline.py`).
+- Môi trường thật: `uv run pytest tests/integration/test_forecast_pipeline.py tests/integration/test_forecast_chat.py -m integration` (cảnh 1 sau đặt lại, giao dịch 200.000 ₫ trong 60 giây, chạy tay `yofina-nightly`, gửi trùng một `event_id`, Trả sau thành mốc, tool qua Gateway cùng số với REST, p95 `GET /overview`, chat qua Runtime).
+
+## Đóng gói và deploy
+
+```bash
+uv run scripts/build_lambda.py pipelines/forecast --arch arm64 --name forecast --slim \
+  --extra ml/yofina_ml:yofina_ml --extra gateway/tools/ledger/yofina_ledger:yofina_ledger
+uv run scripts/cdk.py deploy YofinaTools --require-approval never
+uv run scripts/migrate.py        # migration 0009 trước lần deploy đầu
+```
+
+Zip ở `build/lambda/forecast-arm64.zip` (ba Lambda dùng chung: `yofina-forecast-batch`, `yofina-on-transaction`, `yofina-forecast`, khác nhau ở `handler`, timeout và quyền IAM). Cập nhật nhanh khi thử: `aws lambda update-function-code --function-name yofina-forecast-batch --zip-file fileb://build/lambda/forecast-arm64.zip --region ap-southeast-1` (lần `cdk deploy` kế tiếp đồng bộ lại).

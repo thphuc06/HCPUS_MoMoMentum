@@ -14,8 +14,8 @@ Hạ tầng dạng code bằng AWS CDK (TypeScript). Region `ap-southeast-1`, đ
 | `YofinaData` | VPC chỉ subnet isolated, Aurora PostgreSQL 17.x Serverless v2 (Data API, 0,5 đến 2 ACU), secret master `yofina-db-master`, secret role `yofina-db-app`, Lambda `yofina-migrator` | termination protection + deletion protection cluster |
 | `YofinaIdentity` | Cognito `yofina-users` (tắt tự đăng ký, đăng nhập email), app client `yofina-web` (SRP, không secret), nhóm `ops` | termination protection |
 | `YofinaFrontend` | Amplify Hosting `yofina-web`, branch `main`, deploy thủ công bằng zip, rewrite SPA | |
-| `YofinaTools` | Lambda `yofina-ledger` (một mã, hai đường vào: Gateway và HTTP API), HTTP API `yofina-api` (JWT authorizer Cognito, CORS cho Amplify và localhost, 18 route: `/jars`, `/jars/{jar_code}`, `/overview`, `/profile`, `/transactions`, `/tx-types`, `/payees`, `/obligations`, `/credit-line`, `/salary-events`, `/jar-templates`, `/forecasts/{jar_code}`, `/confirmations`, `/confirmations/cancel`, `/actions`, `/demo/reset`, `/conversations`, `/conversations/{conversation_id}`), EventBridge bus `yofina-bus` và alarm `yofina-ledger-event-publish-failed` | cần zip ở `build/lambda/ledger-arm64.zip` (xem dưới); đọc giá trị của stack khác từ SSM lúc deploy |
-| `YofinaAgent` | Gateway MCP `yofina-gateway` (JWT authorizer, interceptor `yofina-gw-interceptor`, policy engine Cedar một policy mỗi tool, target `ledger` với schema từ `contracts/tools/ledger.json`) và AgentCore Runtime `yofina_agent` (CodeZip ARM64, V2, AG-UI) cùng vai IAM của Gateway và Runtime | L1 (`Cfn*` của `aws-cdk-lib/aws-bedrockagentcore`; chưa dùng L2). Cần khóa zip ở SSM `/yofina/agent/zip-key` (`scripts/agent_deploy.py` ghi); đọc `YofinaTools`, `YofinaIdentity`, `YofinaFoundation` qua SSM |
+| `YofinaTools` | **Pipeline dự báo (phase 2, luồng C)**: Lambda `yofina-forecast-batch`, `yofina-on-transaction`, `yofina-forecast` (một zip), bảng DynamoDB `yofina-idempotency`, SQS `yofina-forecast-events` + DLQ, rule trên `yofina-bus`, Step Functions `yofina-nightly`, EventBridge Scheduler `yofina-nightly-0200`, ba alarm -> SNS. Cộng: Lambda `yofina-ledger` (một mã, hai đường vào: Gateway và HTTP API), HTTP API `yofina-api` (JWT authorizer Cognito, CORS cho Amplify và localhost, 18 route: `/jars`, `/jars/{jar_code}`, `/overview`, `/profile`, `/transactions`, `/tx-types`, `/payees`, `/obligations`, `/credit-line`, `/salary-events`, `/jar-templates`, `/forecasts/{jar_code}`, `/confirmations`, `/confirmations/cancel`, `/actions`, `/demo/reset`, `/conversations`, `/conversations/{conversation_id}`), EventBridge bus `yofina-bus` và alarm `yofina-ledger-event-publish-failed` | cần zip ở `build/lambda/ledger-arm64.zip` (xem dưới); đọc giá trị của stack khác từ SSM lúc deploy |
+| `YofinaAgent` | Gateway MCP `yofina-gateway` (JWT authorizer, interceptor `yofina-gw-interceptor`, policy engine Cedar một policy mỗi tool, target `ledger` với schema từ `contracts/tools/ledger.json` và target `forecast` (Lambda `yofina-forecast`, schema từ `contracts/tools/forecast.json`, policy `get_forecast.cedar`)) và AgentCore Runtime `yofina_agent` (CodeZip ARM64, V2, AG-UI) cùng vai IAM của Gateway và Runtime | L1 (`Cfn*` của `aws-cdk-lib/aws-bedrockagentcore`; chưa dùng L2). Cần khóa zip ở SSM `/yofina/agent/zip-key` (`scripts/agent_deploy.py` ghi); đọc `YofinaTools`, `YofinaIdentity`, `YofinaFoundation` qua SSM |
 
 Stack của các phase sau thêm vào `bin/yofina.ts`. Mỗi stack ghi giá trị luồng khác cần vào SSM `/yofina/...` (xem bên dưới), nên stack sau đọc SSM hoặc nhận prop, không dùng `Fn::ImportValue` cứng.
 
@@ -56,6 +56,24 @@ Cấu hình riêng của `YofinaTools` (`loadToolsConfig` trong `lib/tools-stack
 | `apiThrottleRate` / `apiThrottleBurst` | 20 / 40 | Giới hạn mặc định của API |
 | `extraCorsOrigins` | `http://localhost:5173` | Origin CORS ngoài Amplify (phân cách bằng dấu phẩy) |
 
+Cấu hình pipeline dự báo (`loadForecastConfig` trong `lib/forecast-pipeline.ts`, đổi bằng `-c`; truyền vào Lambda dưới dạng `YOFINA_FORECAST_*`, đọc ở `pipelines/forecast/yofina_forecast/settings.py`):
+
+| Context | Mặc định | Ý nghĩa |
+|---|---|---|
+| `forecastZip` | `../build/lambda/forecast-arm64.zip` | Zip dùng chung của ba Lambda (đóng bằng `build_lambda.py pipelines/forecast ... --slim`) |
+| `forecastMemoryMb` | 1769 | Chọn theo số đo thật: 1.024 MB chậm hơn 50%, 3.008 MB không nhanh hơn ([pipelines/forecast/README.md](../pipelines/forecast/README.md#số-đo-lambda-arm64-aurora-thật)) |
+| `forecastBatchTimeoutSeconds` / `forecastEventTimeoutSeconds` / `forecastToolTimeoutSeconds` | 120 / 90 / 60 | Timeout ba Lambda (visibility timeout SQS bằng 6 lần timeout consumer) |
+| `forecastHorizonDays`, `forecastHistoryWindowDays` | 30, 330 | Số ngày dự báo; số ngày lịch sử tối đa đọc |
+| `forecastNPathsFull` / `forecastNPathsFast` | 10000 / 5000 | Số đường Monte Carlo của chạy đầy đủ (đêm, đặt lại, đọc cũ) và chỉnh nhanh (sự kiện) |
+| `forecastColdStartMinDays`, `forecastAciGamma`, `forecastCoverageTarget` | 21, 0.01, 0.8 | Ngưỡng ước lượng ban đầu; tốc độ ACI; độ phủ khoảng danh định |
+| `forecastShortThreshold` / `forecastTightThreshold` | 0.5 / 0.2 | Ngưỡng xác suất hụt cho hụt / sát |
+| `forecastBandHighMinDays`, `forecastBandHighMinCoverage`, `forecastBandMediumMinDays` | 60, 0.7, 21 | Ngưỡng nhóm tin cậy Cao / Vừa |
+| `forecastProbabilityEnabled` | true | Công tắc xác suất: `false` thì chỉ hiện nhóm Cao/Vừa/Thấp bất kể kết quả hiệu chỉnh |
+| `forecastKeepRuns`, `forecastFastMaxAgeSeconds`, `forecastRecomputeGuardSeconds` | 6, 86400, 20 | Số lần chạy giữ lại; tuổi tối đa của lần chạy trước để dùng đường nhanh; khoảng bảo vệ chống bão tính lại |
+| `forecastIdempotencyTtlSeconds`, `forecastIdempotencyLeaseSeconds` | 259200, 120 | TTL của bản ghi `event_id`; thời hạn khóa thuê của một sự kiện đang xử lý |
+| `forecastNightlyConcurrency`, `forecastNightlyHour`, `forecastNightlyMinute`, `forecastNightlyMaxUsers` | 3, 2, 0, 200 | Số người dùng chạy song song trong Map; giờ chạy (múi giờ `appTimezone`); số người dùng tối đa |
+| `forecastEventMaxConcurrency`, `forecastEventBatchSize`, `forecastEventMaxReceiveCount` | 5, 10, 3 | Số consumer song song; cỡ lô SQS; số lần giao trước khi vào DLQ |
+
 Cấu hình riêng của `YofinaAgent` (`loadAgentConfig` trong `lib/agent-stack.ts`, đổi bằng `-c`):
 
 | Context | Mặc định | Ý nghĩa |
@@ -81,7 +99,7 @@ uv run scripts/cdk.py synth --strict
 uv run scripts/cdk.py diff
 uv run scripts/cdk.py deploy YofinaFoundation --require-approval never
 uv run scripts/cdk.py deploy YofinaData YofinaIdentity YofinaFrontend --concurrency 3 --require-approval never
-uv run scripts/cdk.py deploy YofinaTools --require-approval never   # sau khi đóng zip Lambda ledger (mục "Đóng gói")
+uv run scripts/cdk.py deploy YofinaTools --require-approval never   # sau khi đóng zip Lambda ledger và forecast (mục "Đóng gói")
 uv run scripts/agent_deploy.py                                       # build agent + upload + deploy YofinaAgent (Gateway, Cedar, Runtime) + chờ READY
 uv run scripts/cdk.py deploy YofinaAgent --require-approval never   # chỉ Gateway/Cedar/interceptor khi mã agent không đổi (nhanh, không đụng Runtime)
 npm run typecheck --prefix infra-cdk              # kiểm kiểu
@@ -141,6 +159,7 @@ URL Amplify: `/yofina/frontend/amplify-url`. Trang đang host lúc này là tran
 ```bash
 uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas   # build/lambda/ledger-arm64/ và .zip
 uv run scripts/build_lambda.py agent --arch arm64 --no-core
+uv run scripts/build_lambda.py pipelines/forecast --arch arm64 --name forecast --slim   --extra ml/yofina_ml:yofina_ml --extra gateway/tools/ledger/yofina_ledger:yofina_ledger   # numpy + scipy: 46 MB nén, 156 MB giải nén
 ```
 
 Dùng `uv pip install --python-platform aarch64-manylinux2014 --only-binary=:all:` để cài wheel Linux ngay trên Windows, kèm `libs/yofina_core` nếu có. Trong CDK dùng `lambda.Code.fromAsset('<đường dẫn>.zip')`. Chi tiết và giới hạn ở docstring của script.
@@ -158,8 +177,10 @@ Dùng `uv pip install --python-platform aarch64-manylinux2014 --only-binary=:all
 | `auth/user-pool-id`, `auth/client-id`, `auth/discovery-url` | Cognito |
 | `frontend/amplify-app-id`, `frontend/amplify-branch`, `frontend/amplify-url` | Amplify |
 | `api/url` | URL HTTP API `yofina-api` (không có `/` cuối); `print_env.py` ghi thành `VITE_API_BASE_URL` / `YOFINA_API_URL` |
-| `ledger/function-name`, `ledger/function-arn` | Lambda `yofina-ledger` (cho target Gateway của luồng C) |
-| `events/bus-name`, `events/bus-arn` | EventBridge bus `yofina-bus` (sự kiện của ledger; consumer ở đợt sau; test tích hợp dựng rule tạm trên bus này rồi dọn) |
+| `ledger/function-name`, `ledger/function-arn` | Lambda `yofina-ledger` |
+| `forecast/function-name`, `forecast/function-arn` | Lambda `yofina-forecast` (target `forecast` của Gateway) |
+| `forecast/batch-function-name`, `forecast/nightly-arn`, `forecast/events-queue-url`, `forecast/idempotency-table` | Lambda batch (ledger gọi để đặt lại và đọc cũ), state machine `yofina-nightly`, hàng đợi sự kiện, bảng idempotency |
+| `events/bus-name`, `events/bus-arn` | EventBridge bus `yofina-bus` (sự kiện của ledger; consumer là `yofina-on-transaction` qua SQS; test tích hợp dựng rule tạm trên bus này rồi dọn) |
 | `gateway_url`, `gateway/id`, `gateway/arn` | Gateway `yofina-gateway` (URL MCP; `print_env.py python` ghi thành `YOFINA_GATEWAY_URL`) |
 | `agent/runtime-arn`, `agent/runtime-id`, `agent/runtime-url` | Runtime `yofina_agent`; URL invoke đầy đủ (`.../invocations?qualifier=DEFAULT`) ghi thành `VITE_AGENT_RUNTIME_URL`; ARN chứa account ID nên `print_env.py frontend` không ghi nó (Vite nhúng mọi `VITE_*` vào bundle) |
 | `agent/zip-key` | Khóa S3 của zip agent hiện hành (`builds/agent-<hash>.zip`); `scripts/agent_deploy.py` ghi (ngoài CDK) |

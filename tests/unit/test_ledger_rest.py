@@ -248,7 +248,7 @@ def test_reset_sinh_lai_persona_dat_dong_ho_ve_ngay_neo(schema_ok, groups):
     assert len(reset["jars"]) == 7 and body["jars_count"] == 7
     assert body["transactions_count"] == len(reset["transactions"]) > 100
     assert (
-        body["obligations_count"] == len(reset["obligations"]) == 6
+        body["obligations_count"] == len(reset["obligations"]) == 7
         and body["forecast_ready"] is False
     )
     # số dư dựng từ sổ cái (bản thật làm bằng SQL; bản giả cộng các dòng trả bằng hũ)

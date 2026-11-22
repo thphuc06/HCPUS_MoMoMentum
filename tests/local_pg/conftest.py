@@ -4,7 +4,7 @@ thật (repo thật, SQL thật, RLS thật) với đồng hồ cố định, kh
 Chạy (Python 3.12, tách khỏi `.venv` của dự án):
 
     uv run --python 3.12 --no-project --with pgserver --with "psycopg[binary]" --with pydantic --with pytest \
-        --with jsonschema --with pyyaml --with referencing --with numpy \
+        --with jsonschema --with pyyaml --with referencing --with numpy --with scipy \
         pytest tests/local_pg -p no:cacheprovider
 
 Đặt `PYTHONPATH` tới libs/yofina_core/src, gateway/tools/ledger và data (pytest.ini của thư mục này lo).
@@ -28,8 +28,11 @@ for extra in (
     "libs/yofina_core/src",
     "gateway/tools/ledger",
     "data",
+    "pipelines/forecast",
+    "ml",
     "tests/local_pg",
     "tests/unit",
+    "tests/unit/pipeline",
 ):
     p = str(REPO / extra)
     if p not in sys.path:

@@ -1,6 +1,6 @@
 # agent/
 
-Agent Strands chạy trên AgentCore Runtime (giao thức AG-UI qua SSE). Phase 1 (luồng D) đã cài: router, đường nhanh một tool, khối UI, xác nhận chuyển hũ bằng khối `confirm`, đường suy giảm, đóng zip ARM64. Harness đầy đủ L0–L5 (Orchestrator, specialist, Verifier, Composer) là việc của phase 3.
+Agent Strands chạy trên AgentCore Runtime (giao thức AG-UI qua SSE). Phase 1 (luồng D) đã cài: router, đường nhanh một tool, khối UI, xác nhận chuyển hũ bằng khối `confirm`, đường suy giảm, đóng zip ARM64. Phase 2 (luồng C) thêm ý định `forecast_lookup` (hỏi dự báo một hũ) với tool `forecast___get_forecast` và khối `forecast_timeline`. Harness đầy đủ L0–L5 (Orchestrator, specialist, Verifier, Composer) là việc của phase 3.
 
 - Proposal: §9, §10.1–§10.6, §12. Tool agent gọi nằm ở [../gateway/tools/](../gateway/tools/README.md); agent không chứa logic số.
 - Mẫu và bẫy đã chạy thật: [spike Strands](../docs/research/spike-strands-agui-local.md), [spike Runtime](../docs/research/spike-agentcore-runtime-cors.md). Quyết định xác nhận: [ADR-0002](../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md).
@@ -16,6 +16,7 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
         └ lỗi/chạm trần ──> fallback.py (luật tối thiểu; suy giảm có kiểm soát)
       balance_lookup      get_jar_balances ──ACTIVITY_SNAPSHOT(jar_summary)──> TOOL_CALL_RESULT(bản gọn) ──> writer.py (1 câu)
       transactions_lookup get_jar_balances (ánh xạ tên hũ) + query_transactions ──> writer.py
+      forecast_lookup     get_jar_balances (ánh xạ tên hũ) + forecast___get_forecast ──ACTIVITY_SNAPSHOT(forecast_timeline)──> writer.py (1 đến 2 câu)
       move_between_jars   get_jar_balances (ánh xạ tên hũ) + move_between_jars KHÔNG token
                           ──NEEDS_CONFIRMATION──> ACTIVITY_SNAPSHOT(confirm) ──> writer.py (nhắc bấm Xác nhận)
       out_of_scope        khối notice + câu nói rõ giới hạn
@@ -28,16 +29,20 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
 | `src/yofina_agent/app.py` | ASGI: `POST /invocations`, `GET /ping` (`Healthy`); làm nóng bằng `forwardedProps.warmup` (không gọi model/tool) |
 | `identity.py` | Bóc `sub` từ JWT đã được Runtime xác minh; không nhận `user_id` từ payload; giữ token để chuyển cho Gateway |
 | `turn.py` | Một lượt: thứ tự event, ánh xạ ý định, đường suy giảm, giới hạn (thời gian, số lượt gọi model, số tool call) |
-| `router.py`, `fallback.py` | Router LLM; bộ phân loại luật dự phòng |
+| `router.py`, `fallback.py` | Router LLM (năm ý định: số dư, giao dịch, dự báo một hũ, chuyển hũ, ngoài phạm vi/xã giao); bộ phân loại luật dự phòng (từ khóa chung: cạn, trụ được, bao lâu, dự báo; không theo câu mẫu nào) |
 | `jars.py` | Ánh xạ "giải trí" -> `giai_tri` bằng danh sách hũ của chính người dùng (từ tool), không bảng gắn cứng |
 | `tools.py` | `GatewayTools` (Strands `MCPClient`, header `Authorization` nguyên vẹn), phân loại kết quả/lỗi (Cedar -32002), dựng khối bằng `yofina_core.blocks` |
-| `compact.py`, `writer.py` | Bản gọn model được thấy; model nhỏ viết 1 đến 2 câu; kiểm số tiền model viết có căn cứ không |
+| `compact.py`, `writer.py` | Bản gọn model được thấy (`compact_forecast`: trạng thái, ngày cạn `dd/mm`, số ngày tới kỳ lương, nhóm tin cậy hoặc xác suất, ước lượng ban đầu, cũ hay không, ba mốc sắp tới, mỗi số tiền kèm `*_text`); model nhỏ viết 1 đến 2 câu; kiểm số tiền model viết có căn cứ không |
 | `metered_model.py` | `Model` của Strands đi qua cùng lớp đếm/giới hạn/dự phòng của `yofina_core.llm` |
 | `store.py` | Cổng lưu `turn_blocks` (xem "Việc cho bước ghép") |
 | `notices.py`, `defaults.json`, `settings.py` | Chuỗi nội dung `notice` theo mã lỗi; mặc định và đọc cấu hình |
 | `main.py` | Entrypoint của Runtime (uvicorn :8080) |
 
 `yofina_core.llm` (libs): mọi lời gọi Bedrock đi qua `LlmGateway`: chuỗi dự phòng theo vai (bắt `ThrottlingException` và `AccessDeniedException`), giới hạn tốc độ mỗi model (cửa sổ 60 giây), trần ngày đếm nguyên tử ở DynamoDB `yofina-usage` (chạm trần: `ModelBudgetExceeded`, không rơi sang model dự phòng), trần mỗi lượt hội thoại, log token. Cấu hình ở `libs/yofina_core/src/yofina_core/llm_defaults.json`.
+
+## Ý định `forecast_lookup` (phase 2)
+
+"Hũ ăn uống còn trụ được bao lâu", "khi nào hũ giải trí cạn": router (model nhỏ, JSON ép tool) trả `forecast_lookup` kèm `jar_text`; `turn.on_forecast` ánh xạ tên hũ bằng danh sách hũ của chính người dùng (`get_jar_balances`, không bảng gắn cứng), gọi `forecast___get_forecast {jar}` qua Gateway (target `forecast`, tên tool lấy tiền tố từ `forecast_tool_prefix`), bọc `data` của tool thành khối `forecast_timeline` bằng `yofina_core.blocks.build_forecast_timeline_from_data` (số của tool, không tính lại: cùng số với `GET /forecasts/{jar}`) rồi để model nhỏ viết 1 đến 2 câu từ bản gọn; số tiền trong câu phải có trong bản gọn (bộ kiểm số sẵn có `check_grounding`; ngày `dd/mm` và số ngày do bản gọn cho sẵn). Không nêu hũ nào thì hỏi lại (hiện thẻ số dư thật); hũ không có thì hỏi lại kèm danh sách hũ. Router lỗi hoặc chạm trần thì bộ phân loại dự phòng vẫn nhận ra ý định bằng từ khóa chung, tên hũ vẫn ánh xạ bằng dữ liệu tool, và người dùng vẫn nhận khối `forecast_timeline` thật kèm khối `notice` suy giảm. Lỗi của tool (`FORECAST_UNAVAILABLE`, `PROFILE_INCOMPLETE`...) thành khối `notice` với tiêu đề theo mã. Một lượt tốn tối đa 2 lượt gọi model (router và viết câu) và 2 tool call.
 
 ## Hợp đồng đầu ra
 

@@ -8,6 +8,8 @@
     uv run scripts/build_lambda.py agent --arch arm64 --name agent --no-core
     uv run scripts/build_lambda.py <thư mục nguồn> --arch x86_64 --requirements <file>
     uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas
+    uv run scripts/build_lambda.py pipelines/forecast --arch arm64 --name forecast --slim \
+        --extra ml/yofina_ml:yofina_ml --extra gateway/tools/ledger/yofina_ledger:yofina_ledger
 
 `--extra NGUỒN[:ĐÍCH]` (lặp được) chép thêm một thư mục (đường dẫn tính từ gốc repo) vào bản build, ví dụ
 dữ liệu persona seed để Lambda ledger đặt lại tài khoản demo; ĐÍCH mặc định là tên thư mục nguồn.
@@ -124,6 +126,11 @@ def main() -> int:
     ap.add_argument("--no-core", action="store_true", help="không kèm libs/yofina_core")
     ap.add_argument("--keep-boto", action="store_true")
     ap.add_argument(
+        "--slim",
+        action="store_true",
+        help="gỡ thư mục tests (trừ numpy) và tệp .pyi khỏi thư viện bên thứ ba (scipy: giảm hàng chục MB)",
+    )
+    ap.add_argument(
         "--extra",
         action="append",
         default=[],
@@ -183,6 +190,15 @@ def main() -> int:
             stem = child.name.lower().replace("-", "_")
             if stem.startswith(BOTO_PREFIXES) and child.name != "bin":
                 shutil.rmtree(child) if child.is_dir() else child.unlink()
+
+    if args.slim:
+        # numpy tự nhập `numpy._core.tests` lúc khởi động (đã gặp ImportModuleError) nên KHÔNG đụng vào numpy.
+        for d in list(pkg.rglob("tests")):
+            top = d.relative_to(pkg).parts[0]
+            if d.is_dir() and d.parent != pkg and top not in {"numpy", "numpy.libs"}:
+                shutil.rmtree(d, ignore_errors=True)
+        for stub in pkg.rglob("*.pyi"):
+            stub.unlink(missing_ok=True)
 
     # mã nguồn của hàm và gói yofina_core
     for item in src.iterdir():

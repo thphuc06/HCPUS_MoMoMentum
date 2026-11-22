@@ -42,7 +42,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["libs/yofina_core/tests", "tests/unit"]
 addopts = "-ra"
-pythonpath = ["gateway/tools/ledger", "data"]
+pythonpath = ["gateway/tools/ledger", "data", "pipelines/forecast"]
 markers = ["integration: gọi môi trường AWS đã deploy (chạy: pytest tests/integration -m integration)"]
 
 [tool.ruff]
@@ -61,4 +61,4 @@ ignore = [
 "**/tests/**" = ["B011"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["yofina_core", "yofina_ledger", "yofina_ml", "personas"]
+known-first-party = ["yofina_core", "yofina_ledger", "yofina_ml", "yofina_forecast", "personas"]

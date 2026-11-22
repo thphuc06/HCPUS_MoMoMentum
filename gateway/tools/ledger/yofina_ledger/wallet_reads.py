@@ -147,6 +147,10 @@ class WalletReads:
                 next_pay["salary_event_id"] = str(event["id"])
 
         meta = self._forecast_meta(list(forecasts.values()), today, now)
+        fc = getattr(self, "forecast", None)
+        if fc is not None and profile.get("onboarded") and (meta is None or meta["stale"]):
+            # Tổng quan không chờ tính lại (giữ p95 thấp): kích hoạt nền, lần đọc sau sẽ thấy số mới; lần này trả `stale: true`.
+            fc.request(user_id, "read")
         card: ProactiveCardBlock | None = None
         if profile.get("onboarded"):
             card = choose_proactive_card(
@@ -195,7 +199,7 @@ class WalletReads:
     def _forecast_meta(
         self, summaries: list[dict[str, Any]], today: date, now: datetime
     ) -> dict[str, Any] | None:
-        """Chất lượng lần chạy dự báo mới nhất (theo `computed_at`). Tổng quan không tự tính lại dự báo."""
+        """Chất lượng lần chạy dự báo mới nhất (theo `computed_at`). Tổng quan không chờ tính lại dự báo (chỉ kích hoạt nền)."""
         if not summaries:
             return None
         latest = max(summaries, key=lambda s: (str(s["computed_at"]), str(s["run_id"])))
@@ -532,11 +536,12 @@ class WalletReads:
         }
 
     # --- dự báo (chỉ đọc bảng; việc tính là của pipeline) --------------------------------------------------
-    def forecast_block(
+    def forecast_block_or_none(
         self, user_id: str, jar_code: str, *, trace_id: str, source_tool: str
-    ) -> ForecastTimelineBlock:
+    ) -> ForecastTimelineBlock | None:
         """Khối `forecast_timeline` của một hũ từ lần chạy dự báo MỚI NHẤT có chứa hũ; mốc nghĩa vụ và lương ghép lúc
-        đọc. Chưa có lần chạy nào thì FORECAST_UNAVAILABLE (503): việc tính dự báo nằm ngoài ledger."""
+        đọc. None khi hũ chưa có dự báo nào (người gọi quyết định tính ngay hay báo chưa sẵn sàng). Hũ không có, hũ hệ
+        thống, hồ sơ chưa khai vẫn là lỗi."""
         if not JAR_CODE_RE.fullmatch(str(jar_code)):
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Mã hũ không hợp lệ.")
         now = self.now()
@@ -554,16 +559,11 @@ class WalletReads:
             raise YofinaError(ErrorCode.FORECAST_UNAVAILABLE, "Hũ hệ thống không có dự báo.")
         summaries = self.repo.forecast_summaries(user_id, jar_code)
         if not summaries:
-            raise YofinaError(
-                ErrorCode.FORECAST_UNAVAILABLE,
-                "Chưa có dự báo cho hũ này. Dự báo được tính mỗi đêm và khi có giao dịch, thử lại sau ít phút.",
-            )
+            return None
         summary = summaries[0]
         series = self.repo.forecast_series(user_id, jar_code)
         if not series:
-            raise YofinaError(
-                ErrorCode.FORECAST_UNAVAILABLE, "Dự báo của hũ này chưa có dữ liệu theo ngày."
-            )
+            return None
         obligations = self.repo.list_obligations(user_id, status="active", limit=100)
         user_jars = [j for j in view.jars if j.get("kind") != "system"]
         default_pay_jar = next(
@@ -611,8 +611,39 @@ class WalletReads:
             app_date=today,
         )
 
-    def forecast_response(self, user_id: str, jar_code: str, *, trace_id: str) -> dict[str, Any]:
-        block = self.forecast_block(
-            user_id, jar_code, trace_id=trace_id, source_tool="rest:GET /forecasts/{jar_code}"
+    def forecast_block(
+        self, user_id: str, jar_code: str, *, trace_id: str, source_tool: str
+    ) -> ForecastTimelineBlock:
+        """Như `forecast_block_or_none` nhưng chưa có dự báo thì FORECAST_UNAVAILABLE (503)."""
+        block = self.forecast_block_or_none(
+            user_id, jar_code, trace_id=trace_id, source_tool=source_tool
         )
+        if block is None:
+            raise YofinaError(
+                ErrorCode.FORECAST_UNAVAILABLE,
+                "Chưa có dự báo cho hũ này. Dự báo được tính mỗi đêm và khi có giao dịch, thử lại sau ít phút.",
+            )
+        return block
+
+    def forecast_response(self, user_id: str, jar_code: str, *, trace_id: str) -> dict[str, Any]:
+        """`GET /forecasts/{jar_code}`. Chưa có dự báo hoặc quá hạn độ tươi thì TÍNH LẠI ĐỒNG BỘ trước khi trả (gọi Lambda
+        `yofina-forecast-batch`); không tính được mà còn bản cũ thì trả bản cũ với `stale: true`.
+
+        Chọn đồng bộ cho endpoint này (khác `GET /overview` chỉ kích hoạt nền) vì đây là màn xem MỘT hũ: chờ thêm một, hai giây
+        để thấy số mới là chấp nhận được, còn Tổng quan phải nhanh (p95 dưới 300 ms)."""
+        source = "rest:GET /forecasts/{jar_code}"
+        block = self.forecast_block_or_none(
+            user_id, jar_code, trace_id=trace_id, source_tool=source
+        )
+        fc = getattr(self, "forecast", None)
+        if fc is not None and (block is None or block.data.stale) and fc.compute(user_id, "read"):
+            fresh = self.forecast_block_or_none(
+                user_id, jar_code, trace_id=trace_id, source_tool=source
+            )
+            block = fresh or block
+        if block is None:
+            raise YofinaError(
+                ErrorCode.FORECAST_UNAVAILABLE,
+                "Chưa có dự báo cho hũ này. Dự báo được tính mỗi đêm và khi có giao dịch, thử lại sau ít phút.",
+            )
         return block_to_wire(block)

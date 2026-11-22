@@ -67,6 +67,24 @@ Thay đổi trên tài nguyên có sẵn: `yofina-ledger` thêm quyền `events:
 
 Bước ghép backend (2026-11-22) thêm vào `yofina-api` hai route `GET /conversations` và `GET /conversations/{conversation_id}` (đọc lại các lượt hội thoại đã lưu) và vào `yofina-ledger` tool `save_turn`; bảng Aurora mới `conversation_turns` (migration `0003_conversation_turns`).
 
+**Phase 2, luồng C (2026-11-22)** thêm vào stack `YofinaTools` (pipeline dự báo; không có thứ nào tính tiền khi nhàn rỗi):
+
+| Tên | Loại | Tính tiền khi nhàn rỗi | Ghi chú |
+|---|---|---|---|
+| `yofina-forecast-batch` | Lambda (Python 3.13, arm64, ngoài VPC, 1.769 MB, timeout 120 s) + IAM role + log group `/aws/lambda/yofina-forecast-batch` (14 ngày) | Không | Batch đêm, đặt lại demo (ledger gọi đồng bộ), tính lại khi đọc cũ (ledger gọi nền). Zip numpy + scipy 46 MB nén, 156 MB giải nén, dùng chung cho ba Lambda (đóng bằng `scripts/build_lambda.py pipelines/forecast ... --slim`). IAM tối thiểu: Data API trên cluster, `GetSecretValue` CHỈ trên secret `yofina-db-app`, `events:PutEvents` trên `yofina-bus` |
+| `yofina-on-transaction` | Lambda (cùng cấu hình, timeout 90 s) + IAM role + log group | Không | Consumer SQS của sự kiện ledger (chỉnh nhanh hoặc chạy đầy đủ), idempotent theo `event_id`. IAM như trên, cộng `PutItem/GetItem/UpdateItem/DeleteItem` trên `yofina-idempotency` |
+| `yofina-forecast` | Lambda (cùng cấu hình, timeout 60 s) + IAM role + log group | Không | Target `forecast` của Gateway (tool `forecast___get_forecast`) |
+| `yofina-idempotency` | DynamoDB (on-demand) | Không | Khóa `event_id` (S), TTL `ttl` (3 ngày). Đặt ở `YofinaTools` thay vì `YofinaFoundation` (stack có termination protection, tránh đụng vào Budgets); `DESTROY` khi gỡ stack |
+| `yofina-forecast-events` | SQS standard (visibility 540 s, giữ 4 ngày, `enforceSSL`) | Không | Nhận 4 loại sự kiện của ledger từ rule `yofina-forecast-ledger-events` trên `yofina-bus`; event source mapping vào `yofina-on-transaction` (lô 10, không chờ gom, đồng thời tối đa 5, partial batch response) |
+| `yofina-forecast-events-dlq` | SQS (giữ 14 ngày) | Không | Sau 3 lần giao không thành |
+| `yofina-forecast-ledger-events` | EventBridge rule trên `yofina-bus` | Không | `source yofina.ledger`, `detail-type` ∈ `transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`; đích là hàng đợi trên |
+| `yofina-nightly` | Step Functions Standard (+ log group `/aws/vendedlogs/states/yofina-nightly`, mức ERROR) + IAM role | Không (theo số chuyển trạng thái) | ListUsers -> Map (song song 3) -> RunUser (retry `DatabaseUnavailable`, catch từng người) -> Summarize (có lỗi thì execution thất bại) |
+| `yofina-nightly-0200` | EventBridge Scheduler schedule + role `yofina-nightly-scheduler` | Không | `cron(0 2 * * ? *)`, múi giờ `Asia/Ho_Chi_Minh`, bắt đầu `yofina-nightly` (retry 2 lần) |
+| `yofina-nightly-failed`, `yofina-nightly-timed-out`, `yofina-forecast-events-dlq-not-empty` | CloudWatch alarm (3 metric) | Không đáng kể (khoảng 0,10 USD/tháng mỗi alarm) | Gửi SNS `yofina-alerts` |
+| `/yofina/forecast/function-name`, `function-arn`, `batch-function-name`, `nightly-arn`, `events-queue-url`, `idempotency-table` | SSM Parameter | Không | Giá trị cho `YofinaAgent`, script và test |
+
+Thay đổi trên tài nguyên có sẵn (phase 2, luồng C): `yofina-ledger` thêm 2 biến môi trường (`YOFINA_FORECAST_FUNCTION_NAME`, `YOFINA_FORECAST_SYNC_TIMEOUT_SECONDS`) và quyền `lambda:InvokeFunction` CHỈ trên `yofina-forecast-batch`; Aurora chạy migration `0009_forecast_pipeline`; `YofinaAgent` thêm target `forecast` (Lambda `yofina-forecast`, schema từ `contracts/tools/forecast.json`) và policy Cedar `forecast_get_forecast_own_user`, vai `yofina-gateway` được `lambda:InvokeFunction` thêm trên `yofina-forecast`, Runtime `yofina_agent` lên version mới (ý định `forecast_lookup`). Test tích hợp tạo rồi xóa: tài khoản Cognito tạm, rule và hàng đợi SQS tạm tiền tố `yofina-test-`, thực thi Step Functions tên `test-*`; không để lại tài nguyên nào.
+
 ### Stack `YofinaAgent` (phase 1, bước ghép, luồng C và D)
 
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |

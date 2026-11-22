@@ -12,6 +12,8 @@ Luồng (mã điều khiển, không để LLM quyết định thứ tự):
       -> ý định:
            balance_lookup      get_jar_balances  -> khối jar_summary -> câu trả lời ngắn
            transactions_lookup get_jar_balances (ánh xạ tên hũ) + query_transactions -> câu trả lời ngắn
+           forecast_lookup     get_jar_balances (ánh xạ tên hũ) + forecast___get_forecast -> khối forecast_timeline
+                               -> câu trả lời ngắn (số trong câu phải có trong kết quả tool)
            move_between_jars   get_jar_balances (ánh xạ tên hũ) + move_between_jars KHÔNG token
                                -> NEEDS_CONFIRMATION -> khối confirm -> câu nhắc xác nhận
            out_of_scope        khối notice + câu nói rõ giới hạn
@@ -36,7 +38,12 @@ from ag_ui.core import BaseEvent, RunAgentInput
 
 from yofina_agent import events as ev
 from yofina_agent import notices
-from yofina_agent.compact import compact_confirm, compact_jars, compact_transactions
+from yofina_agent.compact import (
+    compact_confirm,
+    compact_forecast,
+    compact_jars,
+    compact_transactions,
+)
 from yofina_agent.fallback import classify_by_rules
 from yofina_agent.identity import Identity
 from yofina_agent.jars import JarMatch, resolve_jar
@@ -49,6 +56,7 @@ from yofina_agent.tools import (
     ToolKind,
     ToolOutcome,
     confirm_block,
+    forecast_block,
     jar_summary_block,
 )
 from yofina_agent.writer import check_grounding, write_stream
@@ -77,7 +85,7 @@ class TurnDeps:
 class CallResult:
     outcome: ToolOutcome
     compact: dict[str, Any] | None
-    block: B.JarSummaryBlock | B.ConfirmBlock | None
+    block: B.JarSummaryBlock | B.ConfirmBlock | B.ForecastTimelineBlock | None
 
 
 def _jar_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -117,7 +125,10 @@ class Turn:
     def emit(self, event: BaseEvent) -> None:
         self.queue.put_nowait(event)
 
-    def emit_block(self, block: B.JarSummaryBlock | B.ConfirmBlock | B.NoticeBlock) -> None:
+    def emit_block(
+        self,
+        block: B.JarSummaryBlock | B.ConfirmBlock | B.NoticeBlock | B.ForecastTimelineBlock,
+    ) -> None:
         wire = B.block_to_wire(block)
         self.blocks[wire["id"]] = wire
         self.emit(ev.block_snapshot(wire))
@@ -223,12 +234,13 @@ class Turn:
         *,
         compact: Callable[[ToolOutcome], dict[str, Any]] | None = None,
         block: Callable[[ToolOutcome, str], Any] | None = None,
+        target: str = "ledger",
     ) -> CallResult:
         """TOOL_CALL_START/ARGS/END -> gọi Gateway -> [ACTIVITY_SNAPSHOT khối] -> TOOL_CALL_RESULT bản gọn.
 
         Khối UI phát **trước** `TOOL_CALL_RESULT`; model chỉ thấy bản gọn.
         """
-        name = self.s.tool(short_name)
+        name = self.s.tool(short_name, target=target)
         tcid = ev.new_id("tc-")
         self.emit(ev.tool_call_start(tcid, name))
         if args:
@@ -415,6 +427,7 @@ class Turn:
         handler = {
             "balance_lookup": self.on_balance,
             "transactions_lookup": self.on_transactions,
+            "forecast_lookup": self.on_forecast,
             "move_between_jars": self.on_move,
             "out_of_scope": self.on_out_of_scope,
             "chitchat": self.on_chitchat,
@@ -496,6 +509,36 @@ class Turn:
             return
         assert res.compact is not None
         await self.write("transactions", question, res.compact)
+
+    async def on_forecast(self, r: RouterOutput, question: str) -> None:
+        """Dự báo MỘT hũ: ánh xạ tên hũ bằng dữ liệu của tool, gọi `forecast___get_forecast`, phát khối `forecast_timeline` (số của tool)
+        rồi để model nhỏ viết 1 đến 2 câu từ bản gọn."""
+        jars = await self.ensure_jars()
+        if not jars.outcome.ok:
+            self.tool_failure(jars.outcome)
+            return
+        want = r.jar_text or (
+            question if self.llm_down else None
+        )  # suy giảm: dò tên hũ trong cả câu
+        match = resolve_jar(want, self._jar_rows) if want else JarMatch("empty")
+        if match.status != "ok":
+            if not want and r.needs_clarification and r.reply:
+                await self.emit_fixed_text(r.reply)
+            else:
+                await self.ask_which_jar("hũ cần xem dự báo", r.jar_text or "", match, question)
+            return
+        res = await self.call_tool(
+            "get_forecast",
+            {"jar": match.code},
+            target="forecast",
+            compact=lambda o: compact_forecast(o.payload or {}),
+            block=forecast_block,
+        )
+        if not res.outcome.ok:
+            self.tool_failure(res.outcome)
+            return
+        assert res.compact is not None
+        await self.write("forecast", question, res.compact)
 
     async def on_move(self, r: RouterOutput, question: str) -> None:
         missing = not (r.from_jar_text and r.to_jar_text and r.amount_vnd and r.amount_vnd > 0)

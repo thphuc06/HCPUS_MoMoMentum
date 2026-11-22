@@ -7,7 +7,7 @@ U = "sub-minh"
 
 def test_reset_minh_va_tong_quan(env):
     r = env.reset(U)
-    assert r["jars_count"] == 7 and r["obligations_count"] == 6
+    assert r["jars_count"] == 7 and r["obligations_count"] == 7
     ov = env.svc.overview_response(U)
     assert ov["balance"] == {
         "total_vnd": 7_900_000,

@@ -43,6 +43,7 @@ from yofina_core.money import format_vnd, to_vnd
 from yofina_core.wallet import ACTION_TOOLS, BNPL_PRODUCT_CODE
 from yofina_ledger import events
 from yofina_ledger.events import EventPublisher
+from yofina_ledger.forecast_client import ForecastClient
 from yofina_ledger.refdata import ReferenceData
 from yofina_ledger.repo import ConfirmClaim, LedgerRepo, MoveResult
 from yofina_ledger.settings import LedgerSettings
@@ -192,6 +193,7 @@ class LedgerService(WalletReads, WalletWrites):
         clock: Callable[[], datetime] = utc_now,
         ref: ReferenceData | None = None,
         events: EventPublisher | None = None,
+        forecast: ForecastClient | None = None,
     ) -> None:
         self.repo = repo
         self.confirm = confirm
@@ -199,6 +201,7 @@ class LedgerService(WalletReads, WalletWrites):
         self._clock = clock
         self.ref = ref or ReferenceData(repo, settings.reference_cache_seconds)  # type: ignore[arg-type]
         self.events = events
+        self.forecast = forecast
 
     # --- tiện ích -------------------------------------------------------------------
     def now(self) -> datetime:
@@ -790,8 +793,8 @@ class LedgerService(WalletReads, WalletWrites):
         """Xóa dữ liệu của CHÍNH người gọi, sinh lại persona tất định, đặt đồng hồ về ngày neo.
 
         Nạp đủ ví: hũ cộng hai hũ hệ thống (`app_ensure_system_jars`), người nhận, nghĩa vụ (kể cả khoản Trả sau với phí lấy
-        từ bảng `fee_schedules`), hạn mức, sổ cái có `tx_type`, sự kiện lương; số dư hũ được dựng lại từ sổ cái. Sau đó phát
-        `profile.updated` để pipeline dự báo tính lại (luồng C)."""
+        từ bảng `fee_schedules`), hạn mức, sổ cái có `tx_type`, sự kiện lương; số dư hũ được dựng lại từ sổ cái. Sau đó TÍNH
+        DỰ BÁO ĐỒNG BỘ (gọi `yofina-forecast-batch`) để mở app là có số (`forecast_ready`), rồi phát `profile.updated`."""
         import personas  # dữ liệu seed (data/personas), đóng gói cùng Lambda
 
         s = self.settings
@@ -822,6 +825,9 @@ class LedgerService(WalletReads, WalletWrites):
             trace_id=trace_id,
             details={"persona": persona, "clock_offset_days": mat.clock_offset_days},
         )
+        forecast_ready = (
+            self.forecast.compute(user_id, "reset") if self.forecast is not None else False
+        )
         self._publish(
             user_id,
             trace_id,
@@ -842,7 +848,7 @@ class LedgerService(WalletReads, WalletWrites):
             "jars_count": counts.jars,
             "transactions_count": counts.transactions,
             "obligations_count": counts.obligations,
-            "forecast_ready": False,
+            "forecast_ready": forecast_ready,
         }
 
 

@@ -9,11 +9,12 @@ agent (Runtime) --Bearer access token--> Gateway `yofina-gateway` (MCP, JWT auth
    3. policy engine (Cedar)   một policy mỗi tool, ENFORCE (policies/)
    4. kiểm schema             tool schema lấy từ contracts/tools/ledger.json
    5. target `ledger`         Lambda yofina-ledger (tools/ledger/); tên tool qua Gateway: ledger___<tool>
+      target `forecast`       Lambda yofina-forecast (tools/forecast/); tool `forecast___get_forecast` (phase 2)
 ```
 
 - `interceptor/`: [README](interceptor/README.md) — ghi đè `user_id` từ JWT cho mọi `tools/call`, đóng cửa khi thiếu danh tính.
-- `policies/`: [README](policies/README.md) — Cedar lớp phụ, một policy mỗi tool (khớp `user_id`; tool ghi thêm hạn mức số tiền và dạng `confirm_token`); không phải cơ chế xác nhận (ADR-0002).
-- `tools/`: một thư mục con cho mỗi nhóm tool, xem [tools/README.md](tools/README.md). Hiện có `ledger` (10 tool: năm đọc `get_jar_balances`, `query_transactions`, `get_cashflow_summary`, `get_obligations`, `get_unclassified`; bốn ghi có xác nhận `update_profile`, `record_transaction`, `move_between_jars`, `assign_jar`; và `save_turn`). `save_jars` và `confirm_salary` chỉ có ở REST, không lộ cho agent.
+- `policies/`: [README](policies/README.md) — Cedar lớp phụ, một policy mỗi tool của cả hai target (khớp `user_id`; tool ghi thêm hạn mức số tiền và dạng `confirm_token`); không phải cơ chế xác nhận (ADR-0002).
+- `tools/`: một thư mục con cho mỗi nhóm tool, xem [tools/README.md](tools/README.md). Hiện có `ledger` (10 tool: năm đọc `get_jar_balances`, `query_transactions`, `get_cashflow_summary`, `get_obligations`, `get_unclassified`; bốn ghi có xác nhận `update_profile`, `record_transaction`, `move_between_jars`, `assign_jar`; và `save_turn`). `save_jars` và `confirm_salary` chỉ có ở REST, không lộ cho agent. Target `forecast` (phase 2, luồng C) có một tool đọc `get_forecast` ([tools/forecast/](tools/forecast/README.md)); interceptor và Cedar áp cho MỌI target.
 
 ## Cấu hình, deploy, ngoài CDK
 

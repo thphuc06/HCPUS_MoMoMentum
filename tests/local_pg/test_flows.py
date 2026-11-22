@@ -881,7 +881,7 @@ def test_lich_su_chi_tieu_theo_ngay_du_day_va_co_nhip(env):
         {"uid": MINH, "a": "2026-10-05", "b": "2026-11-20"},
     )
     an = [r for r in rows if r["jar_code"] == "an_uong"]
-    assert len(an) >= 28 and sum(int(r["spent_vnd"]) for r in an) == 5_020_000
+    assert len(an) >= 28 and sum(int(r["spent_vnd"]) for r in an) == 4_720_000  # 5.020.000 trừ 300.000 tiền cơm văn phòng đã trả 23/10
     # nhịp cuối tuần: tính theo ngày LỊCH (kể cả ngày không chi), 5/10 đến 20/11 có 14 ngày cuối tuần và 33 ngày thường
     wk = sum(int(r["spent_vnd"]) for r in an if r["day"].weekday() >= 5) / 14
     wd = sum(int(r["spent_vnd"]) for r in an if r["day"].weekday() < 5) / 33

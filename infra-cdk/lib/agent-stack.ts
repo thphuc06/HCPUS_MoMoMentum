@@ -92,6 +92,7 @@ export class AgentStack extends Stack {
     const param = (name: string) => ssm.StringParameter.valueForStringParameter(this, `/${p}/${name}`);
 
     const ledgerArn = param('ledger/function-arn');
+    const forecastArn = param('forecast/function-arn');
     const clientId = param('auth/client-id');
     const discoveryUrl = param('auth/discovery-url');
     const artifactBucket = param('s3/artifact-bucket');
@@ -140,7 +141,7 @@ export class AgentStack extends Stack {
       new iam.PolicyStatement({
         sid: 'InvokeTargetAndInterceptor',
         actions: ['lambda:InvokeFunction'],
-        resources: [ledgerArn, interceptor.functionArn],
+        resources: [ledgerArn, forecastArn, interceptor.functionArn],
       }),
     );
     gatewayRole.addToPolicy(
@@ -158,7 +159,7 @@ export class AgentStack extends Stack {
     // --- Gateway --------------------------------------------------------------------------
     const gateway = new agentcore.CfnGateway(this, 'Gateway', {
       name: `${p}-gateway`,
-      description: 'Cong tool MCP cua Yofina: target ledger, interceptor user_id, Cedar',
+      description: 'Cong tool MCP cua Yofina: target ledger va forecast, interceptor user_id, Cedar',
       protocolType: 'MCP',
       authorizerType: 'CUSTOM_JWT',
       authorizerConfiguration: {
@@ -211,6 +212,40 @@ export class AgentStack extends Stack {
         validationMode: 'FAIL_ON_ANY_FINDINGS',
       });
       policy.node.addDependency(target);
+    }
+
+    // --- target forecast: tool `forecast___get_forecast` (Lambda yofina-forecast), cùng interceptor và Cedar -------------
+    const forecastDefs = JSON.parse(
+      fs.readFileSync(path.join(REPO, 'contracts', 'tools', 'forecast.json'), 'utf-8'),
+    ) as Array<{ name: string }>;
+    const forecastTarget = new agentcore.CfnGatewayTarget(this, 'ForecastTarget', {
+      gatewayIdentifier: gateway.attrGatewayIdentifier,
+      name: 'forecast',
+      description: 'Lambda yofina-forecast: du bao 30 ngay cua mot hu (tinh lai truoc khi tra neu cu)',
+      targetConfiguration: {
+        mcp: { lambda: { lambdaArn: forecastArn, toolSchema: { inlinePayload: forecastDefs as any } } },
+      },
+      credentialProviderConfigurations: [{ credentialProviderType: 'GATEWAY_IAM_ROLE' }],
+    });
+    forecastTarget.node.addDependency(target); // tuần tự: một lần chỉ đổi một target của Gateway
+    for (const tool of forecastDefs) {
+      const file = path.join(policyDir, `${tool.name}.cedar`);
+      if (!fs.existsSync(file)) throw new Error(`Thiếu luật Cedar cho tool ${tool.name}: ${file}`);
+      const policy = new agentcore.CfnPolicy(this, `Policy-forecast-${tool.name}`, {
+        policyEngineId: engine.attrPolicyEngineId,
+        name: `forecast_${tool.name}_own_user`,
+        description: `Cedar cho forecast___${tool.name}`,
+        definition: {
+          cedar: {
+            statement: renderCedar(file, gateway.attrGatewayArn, {
+              move: tools.moveMaxAmountVnd,
+              transaction: tools.transactionMaxAmountVnd,
+            }),
+          },
+        },
+        validationMode: 'FAIL_ON_ANY_FINDINGS',
+      });
+      policy.node.addDependency(forecastTarget);
     }
 
     // --- vai trò của Runtime (quyền tối thiểu) --------------------------------------------

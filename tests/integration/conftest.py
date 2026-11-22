@@ -295,16 +295,48 @@ def event_sink(sess):
         )
         events.put_targets(Rule=rule, EventBusName=bus, Targets=[{"Id": "q", "Arn": qarn}])
 
-        def drain(expected: int, timeout: float = 60.0) -> list[dict]:
-            import time
+        import time
 
+        def _receive(wait: int = 5) -> list[dict]:
+            out: list[dict] = []
+            resp = sqs.receive_message(QueueUrl=qurl, MaxNumberOfMessages=10, WaitTimeSeconds=wait)
+            for m in resp.get("Messages", []):
+                out.append(json.loads(m["Body"]))
+                sqs.delete_message(QueueUrl=qurl, ReceiptHandle=m["ReceiptHandle"])
+            return out
+
+        # Nguyên nhân ca test từng không ổn định: rule EventBridge vừa tạo cần một lúc (từ vài giây tới cỡ một phút) mới có hiệu lực,
+        # và có hiệu lực KHÔNG đồng loạt (các máy chủ nhận cập nhật lệch nhau): sự kiện phát trước đó bị mất vĩnh viễn, nên chờ thêm sau
+        # khi phát cũng không cứu được; một sự kiện thăm dò lọt qua cũng chưa chứng tỏ các sự kiện sau đó đều lọt qua. Vì vậy gửi
+        # từng đợt thăm dò (`sink.probe`, mỗi cái một lần gọi PutEvents riêng, không khớp rule thật nào) và chỉ trả quyền cho test
+        # khi HAI đợt liên tiếp đều lọt đủ.
+        probes_per_round, rounds_needed = 6, 2
+        deadline = time.time() + 180.0
+        ok_rounds = 0
+        while ok_rounds < rounds_needed:
+            assert time.time() < deadline, "rule tạm không có hiệu lực ổn định sau 180 giây"
+            for i in range(probes_per_round):
+                events.put_events(
+                    Entries=[
+                        {
+                            "EventBusName": bus,
+                            "Source": "yofina.ledger",
+                            "DetailType": "sink.probe",
+                            "Detail": json.dumps({"probe": suffix, "n": i}),
+                        }
+                    ]
+                )
+            seen, round_end = 0, time.time() + 10.0
+            while seen < probes_per_round and time.time() < round_end:
+                seen += sum(1 for e in _receive(2) if e.get("detail-type") == "sink.probe")
+            ok_rounds = ok_rounds + 1 if seen == probes_per_round else 0
+        _receive(1)  # dọn các thăm dò còn sót để drain() không đếm nhầm
+
+        def drain(expected: int, timeout: float = 60.0) -> list[dict]:
             got: list[dict] = []
             end = time.time() + timeout
             while len(got) < expected and time.time() < end:
-                resp = sqs.receive_message(QueueUrl=qurl, MaxNumberOfMessages=10, WaitTimeSeconds=5)
-                for m in resp.get("Messages", []):
-                    got.append(json.loads(m["Body"]))
-                    sqs.delete_message(QueueUrl=qurl, ReceiptHandle=m["ReceiptHandle"])
+                got.extend(e for e in _receive() if e.get("detail-type") != "sink.probe")
             return got
 
         yield drain

@@ -42,7 +42,7 @@ def gw_balances(reply):
 
 
 def test_tools_list_dung_ten_co_tien_to_target(gw):
-    assert set(gw("minh").tool_names()) == EXPECTED_TOOLS
+    assert set(gw("minh").tool_names()) == EXPECTED_TOOLS | {"forecast___get_forecast"}
 
 
 def test_minh_doc_hu_qua_gateway_khop_rest(gw, api):

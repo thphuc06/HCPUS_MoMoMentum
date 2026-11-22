@@ -83,7 +83,7 @@ Báo cáo đo thật, phương pháp và giới hạn: [docs/research/backtest-p
 | `forecast.py` | Thân của `forecast_user` và `update_forecast` (api.py chỉ gọi vào đây) |
 | `models.py`, `marginals.py` | `ForecastModel`: `hurdle_calendar` (mặc định), `seasonal_naive` (baseline, chọn bằng `config.extra["model"]`), `cold_start_rules`; mỗi mô hình fit thành một phân phối biên theo ngày (`ppf`, `state()` JSON) |
 | `aci.py` | ACI tự viết theo mức phân vị, một alpha cho mỗi nhóm horizon 1-7 / 8-14 / 15+, kẹp alpha; dựng lại dòng thời gian bằng backtest rolling-origin nội bộ trên lịch sử của hũ |
-| `montecarlo.py` | Monte Carlo số dư: copula Gaussian AR(1) cho hũ dày, hurdle trực tiếp (xác suất có chi lấy từ Beta posterior) cho hũ thưa, hệ số mức chung, lịch lương và nghĩa vụ tất định; hạt giống tất định theo (seed, ngày gốc, mã hũ) và tách dòng ngẫu nhiên (common random numbers) |
+| `montecarlo.py` | (không còn nhập `scipy.signal`: bộ lọc AR(1) là vòng lặp numpy cho kết quả y hệt từng bit, giảm khởi động nguội trên Lambda khoảng 1,8 giây) Monte Carlo số dư: copula Gaussian AR(1) cho hũ dày, hurdle trực tiếp (xác suất có chi lấy từ Beta posterior) cho hũ thưa, hệ số mức chung, lịch lương và nghĩa vụ tất định; hạt giống tất định theo (seed, ngày gốc, mã hũ) và tách dòng ngẫu nhiên (common random numbers) |
 | `quality.py` | Độ phủ dữ liệu, nhãn tin cậy, trạng thái đủ/sát/hụt |
 | `calibration/` | Tham số hiệu chỉnh do backtest sinh (`default.py`, KHÔNG sửa tay) và cách ghi đè |
 | `params.py` | Hằng số thuật toán (`MLParams`), ghi đè bằng `config.extra["ml"]` |

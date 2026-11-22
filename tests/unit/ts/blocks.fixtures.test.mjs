@@ -16,14 +16,15 @@ function fixtures(dir) {
     .map((f) => ({ file: `${dir}/${f}`, prefix: f.split('.')[0], json: JSON.parse(readFileSync(resolve(FIXTURES, dir, f), 'utf8')) }))
 }
 
-test('blockSchemas có đủ tám khối theo thứ tự của block.schema.json; BLOCK_TYPES (registry frontend) là phần đã đăng ký', () => {
+test('blockSchemas có đủ tám khối theo thứ tự của block.schema.json; BLOCK_TYPES (registry frontend) nay cũng đủ tám', () => {
   const all = [
     'jar_summary', 'confirm', 'receipt', 'notice',
     'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action',
   ]
   assert.deepEqual([...ALL_BLOCK_TYPES], all)
   assert.deepEqual(Object.keys(blockSchemas), all)
-  assert.deepEqual([...BLOCK_TYPES], ['jar_summary', 'confirm', 'receipt', 'notice'])
+  // Frontend đã đăng ký cả tám khối (REGISTERED_BY_FRONTEND trong scripts/gen_contracts.mjs): BLOCK_TYPES bằng ALL_BLOCK_TYPES.
+  assert.deepEqual([...BLOCK_TYPES], all)
   for (const t of BLOCK_TYPES) assert.ok(t in blockSchemas)
 })
 

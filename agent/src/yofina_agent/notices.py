@@ -31,13 +31,13 @@ DEGRADED: dict[str, tuple[str, str]] = {
     "NOT_UNDERSTOOD": (
         "Chưa xử lý được yêu cầu",
         "Bộ hiểu câu hỏi bằng AI đang tạm nghỉ nên mình chưa hiểu được yêu cầu này. "
-        "Bạn thử hỏi số dư, giao dịch hoặc chuyển tiền giữa các hũ nhé.",
+        "Bạn thử hỏi số dư, giao dịch, dự báo một hũ hoặc chuyển tiền giữa các hũ nhé.",
     ),
 }
 
 OUT_OF_SCOPE: tuple[str, str] = (
     "Ngoài phạm vi hiện tại",
-    "Yofina hiện giúp bạn xem số dư các hũ, tra giao dịch và chuyển tiền giữa các hũ. "
+    "Yofina hiện giúp bạn xem số dư các hũ, tra giao dịch, xem dự báo một hũ và chuyển tiền giữa các hũ. "
     "Việc này nằm ngoài phạm vi đó.",
 )
 
@@ -51,6 +51,8 @@ ERROR_TITLES: dict[str, str] = {
     ErrorCode.UNAUTHENTICATED: "Cần đăng nhập lại",
     ErrorCode.DATABASE_UNAVAILABLE: "Dữ liệu tạm thời chưa dùng được",
     ErrorCode.RATE_LIMITED: "Đang có quá nhiều yêu cầu",
+    ErrorCode.FORECAST_UNAVAILABLE: "Chưa có dự báo",
+    ErrorCode.PROFILE_INCOMPLETE: "Chưa khai lương",
 }
 DEFAULT_ERROR_TITLE = "Không thực hiện được"
 

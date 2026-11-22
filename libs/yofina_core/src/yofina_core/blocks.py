@@ -802,16 +802,39 @@ def build_forecast_timeline(
             for e in events
         ],
     )
+    return build_forecast_timeline_from_data(
+        data=data,
+        trace_id=trace_id,
+        source_tool=source_tool,
+        as_of=as_of,
+        app_date=app_date,
+        block_id=block_id,
+    )
+
+
+def build_forecast_timeline_from_data(
+    *,
+    data: Mapping[str, Any] | ForecastTimelineData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> ForecastTimelineBlock:
+    """Bọc `data` ĐÃ DỰNG (kết quả tool `forecast___get_forecast`, đúng `ForecastTimelineData`) thành khối `forecast_timeline`.
+
+    Dùng ở agent: số trong khối là số của tool (không tính lại, không do LLM viết); `fallback_text` do code sinh từ chính `data`."""
+    d = data if isinstance(data, ForecastTimelineData) else ForecastTimelineData.model_validate(data)
     return ForecastTimelineBlock(
         v=SCHEMA_VERSION,
-        id=block_id or f"forecast_timeline:{trace_id}:{data.jar.code}",
+        id=block_id or f"forecast_timeline:{trace_id}:{d.jar.code}",
         type="forecast_timeline",
         trace_id=trace_id,
         fallback_text=_forecast_sentence(
-            data.jar.name, data.status, data.runout_date, payday, stale, data.is_initial_estimate
+            d.jar.name, d.status, d.runout_date, d.payday.date, d.stale, d.is_initial_estimate
         ),
         source=_source(source_tool, as_of, app_date),
-        data=data,
+        data=d,
     )
 
 

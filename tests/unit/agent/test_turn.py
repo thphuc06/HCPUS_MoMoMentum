@@ -586,3 +586,117 @@ def test_loi_khi_luu_khoi_khong_lam_hong_luot(monkeypatch):
 
 def test_hang_so_ma_loi_khop_errorcode():
     assert ErrorCode.MODEL_BUDGET_EXCEEDED.value == "MODEL_BUDGET_EXCEEDED"
+
+
+# --- dự báo một hũ (phase 2, luồng C) --------------------------------------------------------------------
+FORECAST_TOOL = "forecast___get_forecast"
+
+
+def forecast_calls(tools):
+    return [(n, a) for n, a in tools.calls if n == "get_forecast"]
+
+
+def test_hoi_du_bao_mot_hu_goi_tool_forecast_phat_khoi_timeline_va_nho_writer(monkeypatch):
+    from yofina_agent.compact import allowed_amounts
+
+    llm = make_llm([route_response(intent="forecast_lookup", jar_text="ăn uống")])
+    events, tools, writer = run_turn(
+        "hũ ăn uống còn trụ được bao lâu", llm=llm, monkeypatch=monkeypatch
+    )
+    check_agui_order(events)
+    assert [c[0] for c in tools.calls] == ["get_jar_balances", "get_forecast"]
+    assert forecast_calls(tools) == [
+        ("get_forecast", {"jar": "an_uong"})
+    ]  # mã hũ ánh xạ từ dữ liệu tool
+    assert tool_names(events) == [JAR_TOOL, FORECAST_TOOL]  # tool dự báo thuộc target `forecast`
+    assert block_types(events) == ["forecast_timeline"]
+    block = blocks_of(events)[0]
+    want = fixture("get_forecast.ok.json")["data"]
+    assert block["data"] == want  # số trong khối là số của tool, nguyên vẹn
+    assert block["id"].startswith("forecast_timeline:") and block["id"].endswith(":an_uong")
+    assert block["source"]["tool"] == FORECAST_TOOL
+    call = writer.calls[0]
+    assert call["task"] == "forecast"
+    c = call["compact"]
+    assert c["jar"] == "Ăn uống" and c["status"] == "hụt"
+    assert c["runout"] == {"date_text": "29/11", "days_from_today": 8, "days_before_payday": 6}
+    assert (
+        c["payday"] == {"date_text": "05/12", "days_until": 14} and c["p_shortfall_percent"] == 71
+    )
+    assert (
+        c["upcoming"][0]["label"] == "Tiền điện" and c["upcoming"][0]["amount_text"] == "375.000 ₫"
+    )
+    # mọi số tiền model được phép nhắc đều có trong kết quả tool
+    assert allowed_amounts(c) >= {380_000, 375_000, 2_700_000}
+    assert result_of(events)["intent"] == "forecast_lookup" and result_of(events)["tool_calls"] == 2
+
+
+def test_du_bao_khong_nhom_hu_nao_thi_hoi_lai_khong_goi_tool_forecast(monkeypatch):
+    llm = make_llm(
+        [
+            route_response(
+                intent="forecast_lookup",
+                needs_clarification=True,
+                reply="Bạn muốn xem dự báo hũ nào?",
+            )
+        ]
+    )
+    events, tools, _ = run_turn("dự báo giúp mình", llm=llm, monkeypatch=monkeypatch)
+    check_agui_order(events)
+    assert forecast_calls(tools) == []
+    assert [e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"] == [
+        "Bạn muốn xem dự báo hũ nào?"
+    ]
+
+
+def test_du_bao_hu_khong_co_thi_hien_so_du_that_va_hoi_lai(monkeypatch):
+    llm = make_llm([route_response(intent="forecast_lookup", jar_text="quỹ nhà")])
+    events, tools, writer = run_turn(
+        "quỹ nhà còn trụ được bao lâu", llm=llm, monkeypatch=monkeypatch
+    )
+    assert forecast_calls(tools) == []
+    assert block_types(events) == ["jar_summary"] and writer.calls[0]["task"] == "clarify"
+
+
+def test_du_bao_loi_tool_hien_notice_dung_ma(monkeypatch):
+    unavailable = fixture("get_forecast.error_unavailable.json")
+    tools = FakeTools({"get_forecast": lambda a: classify_result("x", mcp_ok(unavailable))})
+    llm = make_llm([route_response(intent="forecast_lookup", jar_text="ăn uống")])
+    events, _, writer = run_turn(
+        "ăn uống khi nào cạn", llm=llm, tools=tools, monkeypatch=monkeypatch
+    )
+    check_agui_order(events)
+    n = next(b for b in blocks_of(events) if b["type"] == "notice")["data"]
+    assert (n["kind"], n["code"]) == ("error", "FORECAST_UNAVAILABLE") and n[
+        "title"
+    ] == "Chưa có dự báo"
+    assert writer.calls == []
+
+
+def test_du_bao_khi_model_loi_van_tra_khoi_timeline_bang_bo_phan_loai_du_phong(monkeypatch):
+    usage = FakeUsage(caps_hit={"m-small-a", "m-small-b"})
+    llm = make_llm([], usage)
+    events, tools, writer = run_turn(
+        "hũ ăn uống còn trụ được bao lâu", llm=llm, monkeypatch=monkeypatch
+    )
+    check_agui_order(events)
+    assert block_types(events) == [
+        "forecast_timeline",
+        "notice",
+    ]  # số thật từ tool + thông báo suy giảm
+    assert forecast_calls(tools) == [("get_forecast", {"jar": "an_uong"})]
+    assert writer.calls == [] and llm[1].calls == []
+    assert (
+        result_of(events)["intent"] == "forecast_lookup" and result_of(events)["degraded"] is True
+    )
+
+
+def test_ket_qua_du_bao_sai_hop_dong_thi_khong_phat_khoi(monkeypatch):
+    bad = fixture("get_forecast.ok.json")
+    bad["data"]["status"] = "khong-hop-le"
+    tools = FakeTools({"get_forecast": lambda a: classify_result("x", mcp_ok(bad))})
+    llm = make_llm([route_response(intent="forecast_lookup", jar_text="ăn uống")])
+    events, _, _ = run_turn("ăn uống khi nào cạn", llm=llm, tools=tools, monkeypatch=monkeypatch)
+    check_agui_order(events)
+    assert "forecast_timeline" not in block_types(events)
+    assert next(b for b in blocks_of(events) if b["type"] == "notice")["data"]["kind"] == "error"

@@ -360,3 +360,19 @@ def confirm_block(outcome: ToolOutcome, trace_id: str) -> B.ConfirmBlock:
     if block.data.preview != d.preview:
         raise ContractMismatch("bản xem trước của tool không khớp tính toán lại")
     return block
+
+
+def forecast_block(outcome: ToolOutcome, trace_id: str) -> B.ForecastTimelineBlock:
+    """Khối `forecast_timeline` từ kết quả `forecast___get_forecast`: `data` của tool ĐÃ là `ForecastTimelineData`, nên chỉ kiểm
+    hợp đồng rồi bọc (số trong khối là số của tool, không tính lại, không do model viết)."""
+    payload = outcome.payload or {}
+    try:
+        return B.build_forecast_timeline_from_data(
+            data=payload["data"],
+            trace_id=trace_id,
+            source_tool=outcome.name,
+            as_of=_parse_instant(payload["as_of"]),
+            app_date=date.fromisoformat(payload["app_date"]),
+        )
+    except (KeyError, ValueError, ValidationError) as exc:
+        raise ContractMismatch(f"get_forecast sai hợp đồng: {exc}") from exc

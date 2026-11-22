@@ -17,6 +17,9 @@ from conftest import REPO
 CONTRACT_TOOLS = json.loads(
     (REPO / "contracts" / "tools" / "ledger.json").read_text(encoding="utf-8")
 )
+FORECAST_TOOLS = json.loads(
+    (REPO / "contracts" / "tools" / "forecast.json").read_text(encoding="utf-8")
+)
 
 
 @pytest.fixture(scope="module")
@@ -59,11 +62,24 @@ def test_policy_engine_o_che_do_enforce(gateway, control):
     assert control.get_policy_engine(policyEngineId=engine_id)["status"] == "ACTIVE"
 
 
+def list_all(fn, key, **kw):
+    """Gộp mọi trang của một lệnh liệt kê (mỗi trang tối đa 10 mục)."""
+    items, token = [], None
+    while True:
+        resp = fn(**kw, **({"nextToken": token} if token else {}))
+        items += resp[key]
+        token = resp.get("nextToken")
+        if not token:
+            return items
+
+
 def test_moi_tool_co_mot_policy_active(gateway, control):
     engine_id = gateway["policyEngineConfiguration"]["arn"].rsplit("/", 1)[-1]
-    policies = control.list_policies(policyEngineId=engine_id)["policies"]
+    policies = list_all(control.list_policies, "policies", policyEngineId=engine_id)
     names = {p["name"] for p in policies}
-    assert names == {f"ledger_{t['name']}_own_user" for t in CONTRACT_TOOLS}
+    assert names == {f"ledger_{t['name']}_own_user" for t in CONTRACT_TOOLS} | {
+        f"forecast_{t['name']}_own_user" for t in FORECAST_TOOLS
+    }
     for p in policies:
         got = control.get_policy(policyEngineId=engine_id, policyId=p["policyId"])
         assert got["status"] == "ACTIVE", (p["name"], got.get("statusReasons"))
@@ -72,11 +88,26 @@ def test_moi_tool_co_mot_policy_active(gateway, control):
         assert "context.input.user_id == principal.id" in cedar
 
 
+def test_target_forecast_dung_lambda_va_schema_theo_hop_dong(gateway, control, sess):
+    gid = gateway["gatewayId"]
+    targets = list_all(control.list_gateway_targets, "items", gatewayIdentifier=gid)
+    fc = next(t for t in targets if t["name"] == "forecast")
+    target = control.get_gateway_target(gatewayIdentifier=gid, targetId=fc["targetId"])
+    assert target["status"] == "READY"
+    cfg = target["targetConfiguration"]["mcp"]["lambda"]
+    assert cfg["lambdaArn"] == ssm_param("forecast/function-arn", sess=sess)
+    deployed = {t["name"]: t for t in cfg["toolSchema"]["inlinePayload"]}
+    assert set(deployed) == {t["name"] for t in FORECAST_TOOLS} == {"get_forecast"}
+    got = deployed["get_forecast"]["inputSchema"]
+    assert set(got["properties"]) == {"user_id", "jar"} and got["required"] == ["jar"]
+
+
 def test_target_ledger_dung_lambda_va_schema_theo_hop_dong(gateway, control, sess):
     gid = gateway["gatewayId"]
-    targets = control.list_gateway_targets(gatewayIdentifier=gid)["items"]
-    assert [t["name"] for t in targets] == ["ledger"]
-    target = control.get_gateway_target(gatewayIdentifier=gid, targetId=targets[0]["targetId"])
+    targets = list_all(control.list_gateway_targets, "items", gatewayIdentifier=gid)
+    assert sorted(t["name"] for t in targets) == ["forecast", "ledger"]
+    ledger = next(t for t in targets if t["name"] == "ledger")
+    target = control.get_gateway_target(gatewayIdentifier=gid, targetId=ledger["targetId"])
     assert target["status"] == "READY"
     cfg = target["targetConfiguration"]["mcp"]["lambda"]
     assert cfg["lambdaArn"] == ssm_param("ledger/function-arn", sess=sess)

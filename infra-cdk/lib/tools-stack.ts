@@ -14,6 +14,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { YofinaConfig } from '../config/config';
+import { ForecastPipeline, ForecastPipelineConfig } from './forecast-pipeline';
 import { publishParams } from './ssm-outputs';
 
 /**
@@ -114,6 +115,7 @@ export function loadToolsConfig(app: App): ToolsConfig {
 export interface ToolsProps extends StackProps {
   readonly cfg: YofinaConfig;
   readonly tools: ToolsConfig;
+  readonly forecast: ForecastPipelineConfig;
 }
 
 /**
@@ -128,6 +130,7 @@ export class ToolsStack extends Stack {
   public readonly ledger: lambda.Function;
   public readonly api: apigwv2.HttpApi;
   public readonly bus: events.EventBus;
+  public readonly forecast: ForecastPipeline;
 
   constructor(scope: Construct, id: string, props: ToolsProps) {
     super(scope, id, props);
@@ -151,6 +154,23 @@ export class ToolsStack extends Stack {
 
     // --- EventBridge bus: sự kiện của ledger (transaction.recorded, salary.confirmed, ...). Consumer ở đợt sau. -----
     this.bus = new events.EventBus(this, 'Bus', { eventBusName: `${p}-bus` });
+
+    // --- Pipeline dự báo (Lambda batch, consumer sự kiện, tool; SQS, Step Functions, Scheduler): dựng TRƯỚC ledger vì ledger gọi
+    // Lambda batch (đặt lại demo tính đồng bộ, đọc cũ kích hoạt tính lại). Không nhúng engine vào zip ledger: xem forecast_client.py.
+    const alertTopic = sns.Topic.fromTopicArn(this, 'AlertTopic', param('sns/alert-topic-arn'));
+    this.forecast = new ForecastPipeline(this, 'Forecast', {
+      cfg,
+      forecast: props.forecast,
+      bus: this.bus,
+      alertTopic,
+      appTimezone: tools.appTimezone,
+      freshnessSeconds: tools.forecastFreshnessSeconds,
+      clusterArn,
+      appSecretArn,
+      dbName: param('db/name'),
+      dbResumeMaxWaitSeconds: tools.dbResumeMaxWaitSeconds,
+      region: cfg.region,
+    });
 
     // --- Lambda ledger ---------------------------------------------------------------------
     this.ledger = new lambda.Function(this, 'Ledger', {
@@ -190,6 +210,8 @@ export class ToolsStack extends Stack {
         YOFINA_PROACTIVE_OBLIGATION_DAYS: String(tools.proactiveObligationDays),
         YOFINA_REFERENCE_CACHE_SECONDS: String(tools.referenceCacheSeconds),
         YOFINA_EVENT_BUS_NAME: this.bus.eventBusName,
+        YOFINA_FORECAST_FUNCTION_NAME: this.forecast.batch.functionName,
+        YOFINA_FORECAST_SYNC_TIMEOUT_SECONDS: String(Math.max(tools.ledgerTimeoutSeconds - 8, 5)),
         YOFINA_APP_TIMEZONE: tools.appTimezone,
         YOFINA_DEMO_ANCHOR_DATE: tools.demoAnchorDate,
       },
@@ -225,6 +247,8 @@ export class ToolsStack extends Stack {
       }),
     );
 
+    // Ledger chỉ được gọi Lambda batch dự báo (đặt lại demo đồng bộ; đọc cũ kích hoạt nền), không quyền nào khác lên pipeline.
+    this.forecast.batch.grantInvoke(this.ledger);
     this.ledger.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'PublishLedgerEvents',
@@ -256,8 +280,8 @@ export class ToolsStack extends Stack {
       },
     });
     const integration = new HttpLambdaIntegration('LedgerIntegration', this.ledger);
-    // Mọi route do Lambda ledger phục vụ (contracts/rest/openapi.yaml). `GET /forecasts/{jar_code}` đọc bảng dự báo
-    // ở đợt này nên cũng đi vào ledger; luồng C có thể chuyển sang Lambda `forecast` (x-lambda trong OpenAPI) khi cài.
+    // Mọi route do Lambda ledger phục vụ (contracts/rest/openapi.yaml). `GET /forecasts/{jar_code}` đọc bảng dự báo và, khi cũ
+    // hoặc chưa có, gọi Lambda `yofina-forecast-batch` để tính lại (ledger giữ route này để dùng chung mã dựng khối với tool).
     const routes: Array<[string, apigwv2.HttpMethod]> = [
       ['/jars', apigwv2.HttpMethod.GET],
       ['/jars/{jar_code}', apigwv2.HttpMethod.GET],
@@ -290,7 +314,6 @@ export class ToolsStack extends Stack {
     }
 
     // Cảnh báo khi phát sự kiện lỗi: metric EventPublishFailed do Lambda ghi bằng EMF (không cần quyền PutMetricData).
-    const alertTopic = sns.Topic.fromTopicArn(this, 'AlertTopic', param('sns/alert-topic-arn'));
     const publishFailed = new cloudwatch.Metric({
       namespace: 'Yofina/Ledger',
       metricName: 'EventPublishFailed',
@@ -314,6 +337,12 @@ export class ToolsStack extends Stack {
       'api/url': apiUrl,
       'ledger/function-name': this.ledger.functionName,
       'ledger/function-arn': this.ledger.functionArn,
+      'forecast/function-name': this.forecast.tool.functionName,
+      'forecast/function-arn': this.forecast.tool.functionArn,
+      'forecast/batch-function-name': this.forecast.batch.functionName,
+      'forecast/nightly-arn': this.forecast.nightly.stateMachineArn,
+      'forecast/events-queue-url': this.forecast.queue.queueUrl,
+      'forecast/idempotency-table': this.forecast.idempotencyTable.tableName,
     });
     new CfnOutput(this, 'ApiUrl', { value: apiUrl });
   }

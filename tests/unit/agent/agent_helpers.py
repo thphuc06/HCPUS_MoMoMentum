@@ -60,13 +60,16 @@ class FakeTools:
             "move_between_jars": lambda args: classify_result(
                 "x", mcp_ok(fixture("move_between_jars.needs_confirmation.json"))
             ),
+            "get_forecast": lambda args: classify_result(
+                "x", mcp_ok(fixture("get_forecast.ok.json"))
+            ),
         }
         self.results = {**base, **(results or {})}
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.closed = False
 
     async def call(self, name: str, arguments: dict[str, Any]) -> ToolOutcome:
-        short = name.removeprefix(PREFIX)
+        short = name.split("___", 1)[-1]  # `ledger___x` hoặc `forecast___x`
         self.calls.append((short, dict(arguments)))
         res = self.results[short]
         outcome = res(arguments) if callable(res) else res
