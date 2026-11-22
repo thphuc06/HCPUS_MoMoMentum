@@ -12,7 +12,7 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 |---|---|
 | [1. Nền và lát dọc](docs/plan/phases/phase-1-nen-va-lat-doc.md) | **Xong 22/11**, trừ hai việc chờ chủ dự án (mục C). Kết quả ở cuối file phase |
 | [2. Ví mô phỏng và dự báo](docs/plan/phases/phase-2-vi-va-du-bao.md) | **Xong 22/11**: 8 tiêu chí đạt, tiêu chí 5 lệch câu chữ (độ phủ luôn 100% trên ví khép kín), tiêu chí 6 đạt có điều kiện. Kết quả, bằng chứng và việc chuyển sang phase sau ở cuối file phase |
-| [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | **Đang làm**: bước 0 hợp đồng xong và đã commit, migration `0010` đã chạy trên Aurora; tiếp theo ba luồng A (engine), B (harness), C (frontend) |
+| [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | **Đang làm**: bước 0 xong và đã commit, migration `0010` đã chạy trên Aurora. Ngày 22/11 (chiều): mã ba luồng đã viết trong working tree, **chưa commit**, chưa deploy. A (engine): `scenario.py`, `afford.py`, `credit.py`, `planner` (rules/engine/facts), `knowledge/fees.py`, `audit/trace.py`, `repo_phase3.py`. B (harness): `clarify`, `guardrail`, `verifier`, `whatif`, `trace` trong `agent/`, `infra-cdk/lib/guardrail.ts`. C (frontend): `phase3Views`, `UndoBar`, `features/affordability`, `features/explain`, `TransferCheckPage`, `SuggestionChips`. Test Python đơn vị liên quan: 353 xanh. Chưa kiểm: test frontend, `evals/`, tích hợp AWS, tiêu chí hoàn thành |
 | [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | Chưa bắt đầu |
 | [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) | Chưa bắt đầu |
 | [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) | Chưa bắt đầu |
@@ -29,13 +29,15 @@ Người điều phối giao subagent (Sonnet 5.5, effort high) code từng phas
 
 ## Việc kế tiếp
 
-### A. Phase 3, các luồng A, B, C (việc của người nhận bàn giao)
+### A. Phase 3, các luồng A, B, C: ĐANG DỞ (ba luồng bị dừng giữa chừng 22/11 tối)
 
-Bước 0 xong: hợp đồng ở `contracts/` (mục "Phase 3" của [contracts/README.md](contracts/README.md)), quyết định và "Cho ba luồng sau" ở cuối [file phase 3](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) (gồm phần "Người điều phối chốt": số tiêu chí 1 và 3 theo engine, ba tool `audit`/`planner`/`knowledge` chạy chung Lambda `yofina-ledger`). Migration `0010_what_if_audit` đã chạy trên Aurora. Chưa deploy gì của phase 3.
+Bước 0 xong và đã commit (`e28b9e3`); migration `0010_what_if_audit` đã chạy trên Aurora. Hợp đồng ở `contracts/` (mục "Phase 3" của [contracts/README.md](contracts/README.md)); quyết định, "Cho ba luồng sau" và "Người điều phối chốt" ở cuối [file phase 3](docs/plan/phases/phase-3-what-if-va-kiem-tra.md).
 
-Mở ba luồng song song bằng subagent (mỗi luồng sở hữu thư mục riêng theo file phase), một luồng deploy tại một thời điểm. **Cảnh báo**: `contracts/tools/forecast.json` đã liệt kê `run_scenario` và `affordability_check`; đừng deploy `YofinaAgent` trước khi Lambda `forecast` cài xong hai tool này.
+**Trạng thái cây làm việc**: ba subagent (A backend, B agent, C frontend) đã viết khoảng 120 file **chưa commit, chưa kiểm** (frontend/src ~50, agent/src ~17, tests/unit ~15, gateway/tools ~13, pipelines/forecast ~10, gateway/policies ~6, infra-cdk/lib ~4 gồm `guardrail.ts` mới, `evals/`). Cả ba bị dừng khi đang làm, chưa có báo cáo cuối. **Chưa deploy gì**: `YofinaTools` và `YofinaAgent` vẫn là bản phase 2 (kiểm 22/11: `UPDATE_COMPLETE`). Không deploy `YofinaAgent` trước khi Lambda `forecast` cài xong `run_scenario` và `affordability_check` (`contracts/tools/forecast.json` đã liệt kê hai tool này).
 
-Việc phase 2 chuyển sang (đã có trong hợp đồng phase 3: `OFFER_EXPIRED`, 404 `FORECAST_NOT_APPLICABLE` cho hũ hệ thống) cùng các lỗi nhỏ còn lại: preview cho sửa hồ sơ, `save_jars`, nghĩa vụ; câu riêng cho hũ 0 ₫; "gần như chắc chắn" thay "100%"; nhãn bước công cụ của lời gọi dự báo; nhãn mốc biểu đồ chồng nhau; tên cho trình đọc màn hình.
+**Việc tiếp**: (1) `git status`, chạy `uv run pytest`, `npm run typecheck`/`lint`/test từng file trong `frontend/` để xem phần dở đang ở đâu; (2) hoặc giao lại ba luồng (mỗi luồng đọc phần đã có rồi làm nốt), một luồng deploy tại một thời điểm; (3) sau đó bước ghép: nối `guardrail.ts` vào stack, deploy `YofinaTools` rồi `YofinaAgent`, `scripts/agent_deploy.py`, deploy Amplify, chạy `evals/run.py`, đi cảnh 2 trên trình duyệt; (4) đóng phase.
+
+Việc phase 2 chuyển sang (đã nằm trong hợp đồng phase 3: `OFFER_EXPIRED`, 404 `FORECAST_NOT_APPLICABLE`) cùng lỗi nhỏ còn lại: preview cho sửa hồ sơ, `save_jars`, nghĩa vụ; câu riêng cho hũ 0 ₫; "gần như chắc chắn" thay "100%"; nhãn bước công cụ của lời gọi dự báo; nhãn mốc biểu đồ chồng nhau; tên cho trình đọc màn hình.
 
 ### B. Lưu ý khi kiểm
 
