@@ -7,12 +7,19 @@
     uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64
     uv run scripts/build_lambda.py agent --arch arm64 --name agent --no-core
     uv run scripts/build_lambda.py <thư mục nguồn> --arch x86_64 --requirements <file>
+    uv run scripts/build_lambda.py gateway/tools/ingest --arch arm64 --name ingest \
+        --extra pipelines/ingest/yofina_ingest:yofina_ingest --extra gateway/tools/ledger/yofina_ledger:yofina_ledger \
+        --extra db/seed:seed
     uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas
     uv run scripts/build_lambda.py pipelines/forecast --arch arm64 --name forecast --slim \
         --extra ml/yofina_ml:yofina_ml --extra gateway/tools/ledger/yofina_ledger:yofina_ledger
 
 `--extra NGUỒN[:ĐÍCH]` (lặp được) chép thêm một thư mục (đường dẫn tính từ gốc repo) vào bản build, ví dụ
 dữ liệu persona seed để Lambda ledger đặt lại tài khoản demo; ĐÍCH mặc định là tên thư mục nguồn.
+
+Zip `ingest` (F6, hai Lambda `yofina-ingest-api` và `yofina-ingest`, handler `handler_api.handler` và `handler_worker.handler`): thư
+mục nguồn chỉ có hai điểm vào; gói `yofina_ingest` (pipelines/ingest) và `yofina_ledger` (chỉ để dùng `forecast_client`) đi kèm bằng
+`--extra`; `db/seed` đi kèm thành `seed/` để chế độ eval của worker (`eval_extract`) đọc hũ và bảng loại giao dịch của sản phẩm.
 
 Kết quả (mặc định dưới build/, đã nằm trong .gitignore):
     build/lambda/<name>-<arch>/        thư mục đã giải nén (dùng cho lambda.Code.fromAsset(<thư mục>))

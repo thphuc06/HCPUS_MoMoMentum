@@ -358,8 +358,8 @@ export const ProactiveCardBlock = z.object({
 })
 export type ProactiveCardBlock = z.infer<typeof ProactiveCardBlock>
 
-/** Tool ghi dùng khối này (tên ngắn, không có tiền tố target). `schedule_nudge` (target planner, phase 3) đi qua cùng luồng token. */
-export const ConfirmActionTool = z.enum(["record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary", "schedule_nudge"])
+/** Tool ghi dùng khối này (tên ngắn, không có tiền tố target). `schedule_nudge` (target planner, phase 3) đi qua cùng luồng token. confirm_rows (phase 5) là tool của target ingest: chốt các dòng của một lần nạp vào sổ cái. */
+export const ConfirmActionTool = z.enum(["record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary", "schedule_nudge", "confirm_rows"])
 export type ConfirmActionTool = z.infer<typeof ConfirmActionTool>
 
 /** Một dòng 'trước -> sau' để hiển thị, do code định dạng sẵn (ví dụ nhãn 'Số dư Ăn uống', trước '380.000 ₫', sau '180.000 ₫'). Giao diện chỉ vẽ, không tính lại. */
@@ -420,6 +420,36 @@ export const JarBalanceAfter = z.object({
 })
 export type JarBalanceAfter = z.infer<typeof JarBalanceAfter>
 
+export const CoverageJar = z.object({
+  code: JarCode,
+  name: z.string().min(1).max(40),
+})
+export type CoverageJar = z.infer<typeof CoverageJar>
+
+export const CoverageChangeData = z.object({
+  job_id: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")),
+  before: Ratio.optional(),
+  after: Ratio.optional(),
+  rows_added: z.int().min(0),
+  external_spend_added_vnd: Vnd,
+  external_income_added_vnd: Vnd.optional(),
+  jars_affected: z.array(CoverageJar).max(20),
+  forecast_refresh: z.enum(["queued", "done", "skipped"]),
+})
+export type CoverageChangeData = z.infer<typeof CoverageChangeData>
+
+/** Độ phủ dữ liệu trước và sau khi chốt MỘT lần nạp (confirm_rows). Số do code tính bằng đúng công thức của dự báo (quality.data_coverage trên các thành phần của app_get_data_coverage, migration 0050), nên khớp dải độ phủ của dự báo. Đi kèm biên nhận của confirm_rows (trường `coverage_change` của `receipt_action.data`, cả ở POST /ingest/actions lẫn tool ingest___confirm_rows) và trong phản hồi GET /ingest/jobs/{job_id} khi job đã xong. Id khối `coverage_change:{job_id}`. */
+export const CoverageChangeBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("coverage_change"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: CoverageChangeData,
+})
+export type CoverageChangeBlock = z.infer<typeof CoverageChangeBlock>
+
 export const ReceiptActionData = z.object({
   tool: ConfirmActionTool,
   reference_id: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")).optional(),
@@ -430,10 +460,11 @@ export const ReceiptActionData = z.object({
   jars_after: z.array(JarBalanceAfter).max(20),
   details: z.array(ReceiptDetail).max(20),
   follow_up: ReceiptFollowUp.optional(),
+  coverage_change: CoverageChangeBlock.optional(),
 })
 export type ReceiptActionData = z.infer<typeof ReceiptActionData>
 
-/** Biên nhận của thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge; với schedule_nudge `reference_id` là id của nhắc, cũng là thứ Hoàn tác dùng để hủy). Trả bởi POST /actions (cùng với `receipt` của chuyển hũ) và dựng lại từ kết quả tool. Id khối `receipt:{tool}:{reference_id}`, hoặc `receipt:{tool}:{trace_id}` khi thao tác không có reference_id (kèm tool vì assign_jar và record_transaction dùng chung id giao dịch). */
+/** Biên nhận của thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge, confirm_rows; với schedule_nudge `reference_id` là id của nhắc, cũng là thứ Hoàn tác dùng để hủy). Trả bởi POST /actions (cùng với `receipt` của chuyển hũ) và, với confirm_rows, bởi POST /ingest/actions và dựng lại từ kết quả tool. Id khối `receipt:{tool}:{reference_id}`, hoặc `receipt:{tool}:{trace_id}` khi thao tác không có reference_id (kèm tool vì assign_jar và record_transaction dùng chung id giao dịch). */
 export const ReceiptActionBlock = z.object({
   v: SchemaVersion,
   id: BlockId,
@@ -701,8 +732,74 @@ export const ClarifyBlock = z.object({
 })
 export type ClarifyBlock = z.infer<typeof ClarifyBlock>
 
-/** Hợp của các khối đã biết (mười bốn), phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema. */
-export const Block = z.discriminatedUnion('type', [JarSummaryBlock, ConfirmBlock, ReceiptBlock, NoticeBlock, ForecastTimelineBlock, ProactiveCardBlock, ConfirmActionBlock, ReceiptActionBlock, AffordabilityCardBlock, ObligationImpactBlock, OptionsBlock, ExplainBlock, ClarifyBlock, SuggestionsBlock])
+/** Một hũ người dùng (không phải hũ hệ thống) để hiển thị hoặc chọn. */
+export const IngestJar = z.object({
+  code: JarCode,
+  name: z.string().min(1).max(40),
+  color_key: z.string().regex(new RegExp("^[a-z][a-z0-9_-]{0,31}$")),
+  icon_key: z.string().regex(new RegExp("^[a-z][a-z0-9_-]{0,31}$")),
+})
+export type IngestJar = z.infer<typeof IngestJar>
+
+/** awaiting_upload (đã cấp URL), queued, processing, review (chờ duyệt), done (đã chốt), failed (lỗi hoặc không đọc được), rejected (không phải tài liệu tài chính, loại không hỗ trợ, trùng tệp). */
+export const IngestJobStatus = z.enum(["awaiting_upload", "queued", "processing", "review", "done", "failed", "rejected"])
+export type IngestJobStatus = z.infer<typeof IngestJobStatus>
+
+/** auto_added (tin cậy cao, chọn sẵn, chưa ghi), pending (chờ người dùng), approved (đã ghi vào sổ cái), rejected (người dùng bỏ), duplicate (trùng một giao dịch đã có, không ghi). */
+export const IngestRowStatus = z.enum(["auto_added", "pending", "approved", "rejected", "duplicate"])
+export type IngestRowStatus = z.infer<typeof IngestRowStatus>
+
+export const IngestRow = z.object({
+  row_id: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")),
+  seq: z.int().min(1).max(10000),
+  kind: z.enum(["expense", "income"]),
+  app_date: IsoDate,
+  amount_vnd: VndPositive,
+  counterparty: z.string().min(1).max(120).optional(),
+  description: z.string().min(1).max(200).optional(),
+  extract_confidence: Ratio,
+  suggested_jar: IngestJar.optional(),
+  jar_confidence: Ratio.optional(),
+  jar_source: z.enum(["type_map", "rule", "model", "user"]).optional(),
+  review_status: IngestRowStatus,
+  duplicate_of: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")).optional(),
+})
+export type IngestRow = z.infer<typeof IngestRow>
+
+export const IngestCounts = z.object({
+  auto_added: z.int().min(0),
+  pending: z.int().min(0),
+  approved: z.int().min(0),
+  rejected: z.int().min(0),
+  duplicate: z.int().min(0),
+})
+export type IngestCounts = z.infer<typeof IngestCounts>
+
+export const IngestReviewData = z.object({
+  job_id: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")),
+  status: IngestJobStatus,
+  source_kind: z.enum(["image", "csv"]),
+  rows: z.array(IngestRow).max(200),
+  rows_total: z.int().min(0),
+  counts: IngestCounts,
+  jars: z.array(IngestJar).max(20),
+})
+export type IngestReviewData = z.infer<typeof IngestReviewData>
+
+/** Bảng duyệt các dòng trích được từ MỘT lần nạp ảnh hoặc CSV (F6): chi tiêu và thu nhập NGOÀI ví. Dòng được duyệt vào sổ cái với funding_source external (không đổi số dư hũ). Dòng auto_added (tin cậy cao) được CHỌN SẴN nhưng chưa ghi; chỉ confirm_rows (có token, ADR-0002) ghi sổ cái. Văn bản đã che PII trước khi lưu. Đổi hũ một chạm: POST /ingest/rows/{row_id}/jar với một mã trong `jars` (không ghi sổ cái). Id khối `ingest_review:{job_id}`; cùng id thì khối sau thay khối trước. */
+export const IngestReviewBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("ingest_review"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: IngestReviewData,
+})
+export type IngestReviewBlock = z.infer<typeof IngestReviewBlock>
+
+/** Hợp của các khối đã biết (mười sáu), phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema. */
+export const Block = z.discriminatedUnion('type', [JarSummaryBlock, ConfirmBlock, ReceiptBlock, NoticeBlock, ForecastTimelineBlock, ProactiveCardBlock, ConfirmActionBlock, ReceiptActionBlock, AffordabilityCardBlock, ObligationImpactBlock, OptionsBlock, ExplainBlock, ClarifyBlock, SuggestionsBlock, IngestReviewBlock, CoverageChangeBlock])
 export type Block = z.infer<typeof Block>
 
 /** type -> schema của MỌI khối, thứ tự như contracts/blocks/block.schema.json. */
@@ -721,11 +818,13 @@ export const blockSchemas = {
   explain: ExplainBlock,
   clarify: ClarifyBlock,
   suggestions: SuggestionsBlock,
+  ingest_review: IngestReviewBlock,
+  coverage_change: CoverageChangeBlock,
 } as const
 
 export type AnyBlockType = keyof typeof blockSchemas
-export const ALL_BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions"] as const
+export const ALL_BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions", "ingest_review", "coverage_change"] as const
 
 /** Khối mà registry frontend đã đăng ký (xem scripts/gen_contracts.mjs, REGISTERED_BY_FRONTEND). */
-export const BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions"] as const
+export const BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions", "ingest_review", "coverage_change"] as const
 export type BlockType = (typeof BLOCK_TYPES)[number]

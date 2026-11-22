@@ -114,9 +114,13 @@ def gateway(client: FakeClient, usage: FakeUsage | None = None, **kw: Any) -> Ll
 
 
 # --- cấu hình -------------------------------------------------------------------------------
-def test_mac_dinh_dong_goi_co_ba_vai_va_tran():
+def test_mac_dinh_dong_goi_co_cac_vai_va_tran():
     s = load_settings(Config({}), env={})
-    assert set(s.roles) == {"planner", "small", "embedding"}
+    assert set(s.roles) == {"planner", "ingest", "ingest_columns", "small", "embedding"}
+    # vai nạp dữ liệu (F6): đọc ảnh bằng Sonnet 4.6 rồi Kimi K3; ánh xạ cột/phân loại CSV bằng model nhỏ; mỗi vai có trần riêng
+    assert next(m.id for m in s.roles["ingest"]).endswith("claude-sonnet-4-6")
+    assert s.roles["ingest"][1].temperature is False
+    assert s.roles["ingest"][0].daily_cap == 300 and s.roles["ingest_columns"][0].daily_cap == 600
     assert next(m.id for m in s.roles["planner"]).endswith("claude-sonnet-4-6")
     assert s.roles["planner"][0].daily_cap == 400
     assert s.roles["small"][0].daily_cap == 2000

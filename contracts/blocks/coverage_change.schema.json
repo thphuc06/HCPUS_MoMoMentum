@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/coverage_change.schema.json",
+  "title": "CoverageChangeBlock",
+  "description": "Độ phủ dữ liệu trước và sau khi chốt MỘT lần nạp (confirm_rows). Số do code tính bằng đúng công thức của dự báo (quality.data_coverage trên các thành phần của app_get_data_coverage, migration 0050), nên khớp dải độ phủ của dự báo. Đi kèm biên nhận của confirm_rows (trường `coverage_change` của `receipt_action.data`, cả ở POST /ingest/actions lẫn tool ingest___confirm_rows) và trong phản hồi GET /ingest/jobs/{job_id} khi job đã xong. Id khối `coverage_change:{job_id}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "coverage_change" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/CoverageChangeData" }
+  },
+  "$defs": {
+    "CoverageJar": {
+      "type": "object",
+      "required": ["code", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 }
+      }
+    },
+    "CoverageChangeData": {
+      "type": "object",
+      "required": ["job_id", "rows_added", "external_spend_added_vnd", "jars_affected", "forecast_refresh"],
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "before": {
+          "description": "Độ phủ trước khi chốt (0..1). Vắng khi chưa tính được (chưa có thu nhập trong cửa sổ).",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "after": {
+          "description": "Độ phủ sau khi chốt (0..1). Vắng khi chưa tính được.",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "rows_added": { "description": "Số dòng vừa vào sổ cái.", "type": "integer", "minimum": 0 },
+        "external_spend_added_vnd": {
+          "description": "Tổng chi ngoài ví vừa thêm.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "external_income_added_vnd": {
+          "description": "Tổng thu nhập ngoài ví vừa thêm (vắng khi bằng 0).",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "jars_affected": {
+          "description": "Hũ có thêm chi ngoài ví (số dư KHÔNG đổi; lịch sử chi và dự báo đổi).",
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/CoverageJar" }
+        },
+        "forecast_refresh": {
+          "description": "Dự báo sau khi chốt: done (đã tính lại xong), queued (đã gửi yêu cầu tính lại), skipped (không có dòng nào được thêm).",
+          "type": "string",
+          "enum": ["queued", "done", "skipped"]
+        }
+      }
+    }
+  }
+}

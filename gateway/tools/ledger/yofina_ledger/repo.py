@@ -149,6 +149,9 @@ RESOLUTIONS_PER_CONVERSATION = 300  # trần của app_get_confirm_resolutions
 # --- đặt lại dữ liệu demo: xóa đúng thứ tự khóa ngoại rồi nạp lại -----------------------------------------------
 # forecast_runs kéo theo forecast_jar_summaries và forecasts (ON DELETE CASCADE); salary_events và category_rules trước
 # transactions; transactions trước obligations và payees (khóa ngoại); jars cuối cùng.
+# Phase 5 (migration 0050): ingest_rows rồi ingest_jobs TRƯỚC transactions (dòng nạp trỏ tới giao dịch đã ghi, không khóa
+# ngoại cứng), nên đặt lại xóa sạch cả dòng external lẫn lịch sử nạp. consents cũng xóa: đặt lại đưa tài khoản demo về
+# trạng thái chưa từng nạp, nên lần nạp kế tiếp hỏi đồng ý lại (bằng chứng đã đồng ý vẫn nằm ở audit_events, bảng chỉ thêm).
 RESET_DELETES = (
     "DELETE FROM scenarios WHERE user_id = :uid",
     "DELETE FROM nudges WHERE user_id = :uid",
@@ -156,6 +159,9 @@ RESET_DELETES = (
     "DELETE FROM forecast_runs WHERE user_id = :uid",
     "DELETE FROM salary_events WHERE user_id = :uid",
     "DELETE FROM category_rules WHERE user_id = :uid",
+    "DELETE FROM ingest_rows WHERE user_id = :uid",
+    "DELETE FROM ingest_jobs WHERE user_id = :uid",
+    "DELETE FROM consents WHERE user_id = :uid",
     "DELETE FROM transactions WHERE user_id = :uid",
     "DELETE FROM obligations WHERE user_id = :uid",
     "DELETE FROM payees WHERE user_id = :uid",

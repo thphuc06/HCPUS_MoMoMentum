@@ -676,7 +676,7 @@ def test_de_nghi_het_han_bi_server_tu_choi(env):
             conversation_id="conv-1",
             confirm_block_id=wire["id"],
         )
-    assert e.value.code == ErrorCode.TOKEN_EXPIRED
+    assert e.value.code == ErrorCode.OFFER_EXPIRED
     # token cấp bằng đường khác cũng không thực hiện được đề nghị đã hết hạn
     issued = env.svc.issue_confirmation(
         MINH, tool="record_transaction", params=prep.norm, client_params_hash=None, trace_id="a" * 8
@@ -693,7 +693,7 @@ def test_de_nghi_het_han_bi_server_tu_choi(env):
             conversation_id="conv-1",
             confirm_block_id=wire["id"],
         )
-    assert e.value.code == ErrorCode.TOKEN_EXPIRED
+    assert e.value.code == ErrorCode.OFFER_EXPIRED
     assert balances(env, MINH)["di_lai"] == 640_000
 
 

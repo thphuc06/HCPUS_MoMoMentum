@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { CheckCircle2 } from 'lucide-react'
+import { Camera, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MoneyInput } from '@/components/MoneyInput'
@@ -58,6 +58,10 @@ export function IncomePage() {
     <>
       <ScreenHeader title="Tiền vào" backTo="/" />
       <div className="space-y-4 px-4 pb-10">
+        <Link to="/ingest" className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-tint px-5 text-small font-bold text-brand-text">
+          <Camera className="size-4" aria-hidden />
+          Nạp ảnh / sao kê ngoài ví
+        </Link>
         {receipt ? (
           <section className="rounded-card bg-surface p-5 shadow-card" data-testid="income-receipt">
             <div className="flex items-start gap-3">

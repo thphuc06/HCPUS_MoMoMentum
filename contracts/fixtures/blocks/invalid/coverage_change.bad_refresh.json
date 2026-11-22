@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "id": "coverage_change:5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Độ phủ dữ liệu từ 62% lên 81% sau khi thêm 3 dòng ngoài ví.",
+  "source": {
+    "tool": "rest:POST /actions",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "coverage_change",
+  "data": {
+    "job_id": "5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+    "before": 0.62,
+    "after": 0.81,
+    "rows_added": 3,
+    "external_spend_added_vnd": 205000,
+    "external_income_added_vnd": 2000000,
+    "jars_affected": [
+      {
+        "code": "an_uong",
+        "name": "Ăn uống"
+      },
+      {
+        "code": "giai_tri",
+        "name": "Giải trí"
+      }
+    ],
+    "forecast_refresh": "running"
+  }
+}

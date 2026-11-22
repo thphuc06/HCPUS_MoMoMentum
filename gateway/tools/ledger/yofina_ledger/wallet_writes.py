@@ -1200,7 +1200,9 @@ class WalletWrites:
                     app_date=res.app_date,
                     kind=f["kind"],
                     tx_type="jar_assign",
-                    funding_source="jar" if f["moves_money"] else "credit",
+                    # nguồn trả thật của dòng (jar, credit, hoặc external của phase 5); bản cũ suy từ moves_money
+                    funding_source=f.get("funding_source")
+                    or ("jar" if f["moves_money"] else "credit"),
                     amount_vnd=f["amount_vnd"],
                     jar_codes=codes,
                     deltas=res.deltas,

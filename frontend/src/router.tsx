@@ -76,6 +76,7 @@ export function appRoutes(): RouteObject[] {
             { path: 'obligations/new', ...page(() => import('@/pages/ObligationEditPage'), 'ObligationEditPage') },
             { path: 'obligations/:id', ...page(() => import('@/pages/ObligationEditPage'), 'ObligationEditPage') },
             { path: 'income', ...page(() => import('@/pages/IncomePage'), 'IncomePage') },
+            { path: 'ingest', ...page(() => import('@/pages/IngestPage'), 'IngestPage') },
             { path: 'move', ...page(() => import('@/pages/MovePage'), 'MovePage') },
             { path: 'salary', ...page(() => import('@/pages/SalaryPage'), 'SalaryPage') },
             { path: 'profile', element: <ProfilePage /> },

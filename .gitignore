@@ -85,3 +85,6 @@ evals/results/
 
 # Spike outputs that can be regenerated
 *.pkl
+
+# Ảnh/CSV thật tải từ internet cho eval F6 (không commit; tải lại bằng scripts/eval_ingest.py --fetch)
+evals/ingest/real/

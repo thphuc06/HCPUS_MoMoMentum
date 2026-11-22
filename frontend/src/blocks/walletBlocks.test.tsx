@@ -16,13 +16,14 @@ import { receiptNote } from './useConfirmFlow'
 
 type Json = Record<string, any>
 
-describe('registry: đủ tám khối của hợp đồng', () => {
-  it('bốn khối phase 2 và sáu khối phase 3 đã đăng ký, có schema; BLOCK_TYPES khớp ALL_BLOCK_TYPES', () => {
-    for (const t of ['forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action', 'affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions'] as const) {
+describe('registry: đủ mười sáu khối của hợp đồng', () => {
+  it('bốn khối phase 2, sáu khối phase 3 và hai khối phase 5 đã đăng ký, có schema; BLOCK_TYPES khớp ALL_BLOCK_TYPES', () => {
+    for (const t of ['forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action', 'affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions', 'ingest_review', 'coverage_change'] as const) {
       expect(REGISTERED_TYPES).toContain(t)
       expect(blockSchemas[t]).toBeDefined()
     }
-    expect(BLOCK_TYPES).toHaveLength(14)
+    expect(ALL_BLOCK_TYPES).toHaveLength(16)
+    expect(BLOCK_TYPES).toHaveLength(16)
     expect([...BLOCK_TYPES].sort()).toEqual([...ALL_BLOCK_TYPES].sort())
   })
 })

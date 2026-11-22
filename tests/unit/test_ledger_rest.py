@@ -204,6 +204,15 @@ def test_than_yeu_cau_sai_la_400(body):
     assert status == 400 and resp["error"]["code"] == "PARAMS_INVALID"
 
 
+@pytest.mark.parametrize("route", ["/confirmations", "/actions"])
+def test_ledger_khong_nhan_confirm_rows(route):
+    """confirm_rows (phase 5) chỉ đi qua /ingest/confirmations và /ingest/actions của Lambda ingest."""
+    svc, _, _ = make_service()
+    body = {"tool": "confirm_rows", "params": {"job_id": "11111111-1111-4111-8111-111111111111"}}
+    status, resp, _ = req(svc, "POST", route, sub=MINH, body=body)
+    assert status == 400 and resp["error"]["code"] == "PARAMS_INVALID"
+
+
 def test_json_hong_la_400():
     svc, _, _ = make_service()
     ev = http_event("POST", "/actions", sub=MINH)

@@ -22,7 +22,12 @@ USER_JAR_KINDS = ("spending", "saving", "obligation")  # hũ người dùng tạ
 
 # --- giao dịch ---------------------------------------------------------------------------------
 TRANSACTION_KINDS = ("expense", "income", "transfer")
-FUNDING_SOURCES = ("jar", "credit")  # credit: mua bằng hạn mức trả sau, không đổi số dư hũ
+#: jar: trừ hoặc cộng số dư hũ. credit: mua bằng hạn mức trả sau, không đổi số dư hũ. external (phase 5, migration 0050): chi
+#: hoặc thu NGOÀI ví, nạp từ ảnh hay CSV, không bao giờ đổi số dư hũ (jar_code chỉ để tính hành vi chi của hũ).
+FUNDING_SOURCES = ("jar", "credit", "external")
+EXTERNAL_FUNDING = "external"
+#: nguồn trả mà `record_transaction` nhận (external chỉ vào sổ cái qua `confirm_rows` của luồng nạp)
+RECORDABLE_FUNDING_SOURCES = ("jar", "credit")
 CLASSIFIED_BY = ("user", "type_map", "rule", "embedding", "llm", "seed")
 TX_TYPE_SALARY = "salary"
 TX_TYPE_SALARY_SPLIT = "salary_split"
@@ -59,8 +64,12 @@ CONFIRM_SALARY = "confirm_salary"
 SCHEDULE_NUDGE = (
     "schedule_nudge"  # phase 3: nhắc (target planner); ghi bảng nudges, đi qua cùng luồng token
 )
+#: phase 5 (F6): chốt các dòng của một lần nạp vào sổ cái (funding external). Target Gateway là `ingest`, không phải `ledger`;
+#: REST phục vụ ở `POST /ingest/confirmations` và `POST /ingest/actions` (Lambda `ingest`), KHÔNG ở /confirmations và /actions.
+CONFIRM_ROWS = "confirm_rows"
 
-#: Mọi `tool` mà /confirmations và /actions nhận, theo thứ tự trong OpenAPI.
+#: Mọi `tool` mà `POST /confirmations` và `POST /actions` của Lambda `ledger` nhận, theo thứ tự trong OpenAPI (không có
+#: `confirm_rows`: tool đó chỉ đi qua hai endpoint `/ingest/*` ở dưới).
 ACTION_TOOLS = (
     MOVE_BETWEEN_JARS,
     RECORD_TRANSACTION,
@@ -70,12 +79,16 @@ ACTION_TOOLS = (
     CONFIRM_SALARY,
     SCHEDULE_NUDGE,
 )
+#: `tool` mà `POST /ingest/confirmations` và `POST /ingest/actions` (Lambda `ingest`) nhận: chỉ `confirm_rows`. Cùng schema
+#: yêu cầu và biên nhận với ledger, cùng khóa HMAC và bảng `jti`; tool khác gửi vào đó bị 422 PARAMS_INVALID.
+INGEST_ACTION_TOOLS = (CONFIRM_ROWS,)
 #: Tool ghi mà agent gọi qua Gateway (target `ledger`); phần còn lại chỉ có ở REST (màn hình).
 AGENT_WRITE_TOOLS = (UPDATE_PROFILE, RECORD_TRANSACTION, MOVE_BETWEEN_JARS, ASSIGN_JAR)
 #: Tool ghi mà agent gọi qua Gateway ở target `planner` (phase 3). Cùng luồng token; REST `/actions` cũng nhận.
 PLANNER_WRITE_TOOLS = (SCHEDULE_NUDGE,)
-#: Tool ghi dùng khối `confirm_action` / `receipt_action` (move_between_jars giữ `confirm` / `receipt` của phase 1).
-GENERIC_ACTION_TOOLS = tuple(t for t in ACTION_TOOLS if t != MOVE_BETWEEN_JARS)
+#: Tool ghi dùng khối `confirm_action` / `receipt_action` (move_between_jars giữ `confirm` / `receipt` của phase 1), gồm
+#: cả tool của `ingest`.
+GENERIC_ACTION_TOOLS = tuple(t for t in ACTION_TOOLS + INGEST_ACTION_TOOLS if t != MOVE_BETWEEN_JARS)
 
 #: Tool đọc của target `ledger` và target `forecast` (đúng thứ tự trong contracts/tools/*.json).
 LEDGER_TOOLS = (

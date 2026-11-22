@@ -81,6 +81,22 @@ export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
     checkAffordability: vi.fn(async () => validBlock('affordability_card.transfer_250k') as unknown as AffordabilityResponse),
     getTrace: vi.fn(async () => fx<TraceResponse>('TraceResponse.what_if')),
     submitFeedback: vi.fn(async (req) => ({ ...fx<FeedbackResponse>('FeedbackResponse.default'), decision: req.decision })),
+    createIngestUpload: vi.fn(async () => {
+      throw new Error('createIngestUpload chưa được giả')
+    }),
+    listIngestJobs: vi.fn(async () => ({ jobs: [] })),
+    getIngestJob: vi.fn(async () => {
+      throw new Error('getIngestJob chưa được giả')
+    }),
+    setIngestRowJar: vi.fn(async () => {
+      throw new Error('setIngestRowJar chưa được giả')
+    }),
+    createIngestConfirmation: vi.fn(async () => {
+      throw new Error('createIngestConfirmation chưa được giả')
+    }),
+    applyIngestAction: vi.fn(async () => {
+      throw new Error('applyIngestAction chưa được giả')
+    }),
     ...over,
   }
 }

@@ -39,9 +39,12 @@ import {
   TransactionsResponse,
   TxType,
   TxTypesResponse,
+  INGEST_TOOL_NAMES,
   TOOL_NAMES,
 } from './schemas'
 import { createApiClient } from './client'
+import { IngestJobListResponse, IngestJobResponse, IngestJobSummary, IngestRowJarRequest, IngestRowJarResponse, IngestUploadRequest, IngestUploadResponse } from './ingestSchemas'
+import { IngestReviewBlock, CoverageChangeBlock } from '@/contracts/blocks'
 import { jarsFromFixture } from '@/test/helpers'
 import { restFixtureEntries, restInvalidEntries } from '@/test/fixtures'
 
@@ -83,6 +86,12 @@ describe('khớp openapi.yaml', () => {
       ['/affordability', 'post', 'checkAffordability'],
       ['/traces/{trace_id}', 'get', 'getTrace'],
       ['/feedback', 'post', 'submitFeedback'],
+      ['/ingest/uploads', 'post', 'createIngestUpload'],
+      ['/ingest/jobs', 'get', 'listIngestJobs'],
+      ['/ingest/jobs/{job_id}', 'get', 'getIngestJob'],
+      ['/ingest/rows/{row_id}/jar', 'post', 'setIngestRowJar'],
+      ['/ingest/confirmations', 'post', 'createIngestConfirmation'],
+      ['/ingest/actions', 'post', 'applyIngestAction'],
     ]
     for (const [path, method, op] of expected) expect(spec.paths[path]?.[method]?.operationId, `${method} ${path}`).toBe(op)
   })
@@ -92,8 +101,14 @@ describe('khớp openapi.yaml', () => {
     expect(HTTP_STATUS).toEqual(schemas.ErrorCode!['x-http-status'])
   })
 
-  it('ToolName: đủ sáu tool ghi của hợp đồng', () => {
+  it('ToolName: đủ bảy tool ghi của ledger; confirm_rows (phase 5) chỉ ở IngestToolName', () => {
     expect([...TOOL_NAMES].sort()).toEqual([...(schemas.ToolName!.enum ?? [])].sort())
+    expect(TOOL_NAMES).not.toContain('confirm_rows')
+    expect([...INGEST_TOOL_NAMES]).toEqual(schemas.IngestToolName!.enum)
+  })
+
+  it('hợp đồng không có PATCH nào (CORS của HTTP API chung chỉ cho GET, POST, OPTIONS)', () => {
+    for (const [path, item] of Object.entries(spec.paths)) expect(Object.keys(item), path).not.toContain('patch')
   })
 
   // Trường bắt buộc của hợp đồng phải có trong Zod; trường Zod bắt buộc phải nằm trong `required` của hợp đồng (frontend
@@ -120,6 +135,13 @@ describe('khớp openapi.yaml', () => {
     ['AffordabilityRequest', AffordabilityRequest, schemas.AffordabilityRequest!.required!],
     ['FeedbackRequest', FeedbackRequest, schemas.FeedbackRequest!.required!],
     ['FeedbackResponse', FeedbackResponse, schemas.FeedbackResponse!.required!],
+    ['IngestUploadRequest', IngestUploadRequest, schemas.IngestUploadRequest!.required!],
+    ['IngestUploadResponse', IngestUploadResponse, schemas.IngestUploadResponse!.required!],
+    ['IngestJobResponse', IngestJobResponse, schemas.IngestJobResponse!.required!],
+    ['IngestJobSummary', IngestJobSummary, schemas.IngestJobSummary!.required!],
+    ['IngestJobListResponse', IngestJobListResponse, schemas.IngestJobListResponse!.required!],
+    ['IngestRowJarRequest', IngestRowJarRequest, schemas.IngestRowJarRequest!.required!],
+    ['IngestRowJarResponse', IngestRowJarResponse, schemas.IngestRowJarResponse!.required!],
     ['Transaction', Transaction, ledgerResults.$defs.Transaction!.required!],
     ['Obligation', Obligation, ledgerResults.$defs.Obligation!.required!],
     ['CreditLine', CreditLine, ledgerResults.$defs.CreditLine!.required!],
@@ -171,12 +193,20 @@ describe('fixture REST của hợp đồng', () => {
     SalaryEventsResponse,
     ConfirmationRequest,
     ActionRequest,
+    IngestConfirmationRequest: ConfirmationRequest,
+    IngestActionRequest: ActionRequest,
     ActionResponse,
     AffordabilityRequest,
     AffordabilityResponse,
     TraceResponse,
     FeedbackRequest,
     FeedbackResponse,
+    IngestUploadRequest,
+    IngestUploadResponse,
+    IngestJobResponse,
+    IngestJobListResponse,
+    IngestRowJarRequest,
+    IngestRowJarResponse,
   }
 
   for (const [file, body] of restFixtureEntries()) {
@@ -202,6 +232,41 @@ describe('fixture REST của hợp đồng', () => {
       expect(byName[file.split('.')[0]!]!.safeParse(body).success).toBe(false)
     })
   }
+
+  it('IngestJobResponse review/done: khối review và coverage_change đi kèm parse được bằng schema khối', () => {
+    const entries = Object.fromEntries(restFixtureEntries())
+    for (const name of ['IngestJobResponse.review', 'IngestJobResponse.done']) {
+      const j = IngestJobResponse.parse(entries[name])
+      expect(IngestReviewBlock.safeParse(j.review).success, name).toBe(true)
+    }
+    expect(CoverageChangeBlock.safeParse(IngestJobResponse.parse(entries['IngestJobResponse.done']).coverage_change).success).toBe(true)
+  })
+
+  it('confirm_rows đi qua /ingest/confirmations và /ingest/actions; tool khác vẫn qua /confirmations và /actions', async () => {
+    const entries = Object.fromEntries(restFixtureEntries())
+    const urls: string[] = []
+    const api = createApiClient({
+      baseUrl: 'https://api.example.invalid',
+      getAccessToken: async () => 't',
+      fetchImpl: (async (url: string) => {
+        urls.push(new URL(url).pathname)
+        return new Response('{}', { status: 400 })
+      }) as unknown as typeof fetch,
+    })
+    const rows = entries['IngestActionRequest.confirm_rows'] as { params: Record<string, unknown> }
+    await api.createConfirmation({ tool: 'confirm_rows', params: rows.params }).catch(() => {})
+    await api.applyAction({ tool: 'confirm_rows', params: rows.params, confirm_token: 'a.b' }).catch(() => {})
+    await api.createConfirmation({ tool: 'assign_jar', params: {} }).catch(() => {})
+    await api.applyAction({ tool: 'assign_jar', params: {}, confirm_token: 'a.b' }).catch(() => {})
+    expect(urls).toEqual(['/ingest/confirmations', '/ingest/actions', '/confirmations', '/actions'])
+  })
+
+  it('IngestJobListResponse: parse được dạng rỗng và dạng có phần tử không kèm review', () => {
+    expect(IngestJobListResponse.safeParse({ jobs: [] }).success).toBe(true)
+    const entries = Object.fromEntries(restFixtureEntries())
+    const { review: _r, coverage_change: _c, ...summary } = entries['IngestJobResponse.review'] as Record<string, unknown>
+    expect(IngestJobListResponse.safeParse({ jobs: [summary] }).success).toBe(true)
+  })
 
   it('POST /actions: nhận cả khối receipt lẫn receipt_action', async () => {
     const entries = Object.fromEntries(restFixtureEntries())

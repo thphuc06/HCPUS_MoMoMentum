@@ -1,0 +1,21 @@
+{
+  "tool": "confirm_rows",
+  "params": {
+    "job_id": "5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+    "rows": [
+      {
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000001"
+      },
+      {
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000002",
+        "jar": "giai_tri"
+      },
+      {
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000005"
+      }
+    ],
+    "reject_row_ids": [
+      "9a1b2c3d-4e5f-4a6b-8c7d-000000000003"
+    ]
+  }
+}

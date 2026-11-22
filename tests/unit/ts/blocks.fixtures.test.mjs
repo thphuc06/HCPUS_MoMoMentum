@@ -16,17 +16,21 @@ function fixtures(dir) {
     .map((f) => ({ file: `${dir}/${f}`, prefix: f.split('.')[0], json: JSON.parse(readFileSync(resolve(FIXTURES, dir, f), 'utf8')) }))
 }
 
-test('blockSchemas có đủ mười bốn khối theo thứ tự của block.schema.json; BLOCK_TYPES (registry frontend) gồm cả mười bốn khối đã có view', () => {
-  const all = [
+test('blockSchemas có đủ mười sáu khối theo thứ tự của block.schema.json; BLOCK_TYPES (registry frontend) gồm cả mười sáu khối đã có view', () => {
+  const phase2 = [
     'jar_summary', 'confirm', 'receipt', 'notice',
     'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action',
-    'affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions',
   ]
+  const phase3 = ['affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions']
+  // phase 5 (F6): hai khối nạp dữ liệu, thứ tự như block.schema.json
+  const phase5 = ['ingest_review', 'coverage_change']
+  const all = [...phase2, ...phase3, ...phase5]
   assert.deepEqual([...ALL_BLOCK_TYPES], all)
   assert.deepEqual(Object.keys(blockSchemas), all)
   assert.deepEqual([...BLOCK_TYPES], all)
   for (const t of BLOCK_TYPES) assert.ok(t in blockSchemas)
 })
+
 test('fixture hợp lệ: qua schema riêng và qua hợp, dữ liệu không bị đổi', () => {
   const list = fixtures('valid')
   assert.ok(list.length >= 30)

@@ -5,6 +5,7 @@
   "description": "Ha tang AWS CDK cua Yofina Foresight",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
     "synth": "cdk synth --strict",
     "diff": "cdk diff",
     "deploy": "cdk deploy"

@@ -207,7 +207,7 @@ def test_tap_gia_tri_trong_mo_ta_khop_hang_so_hop_dong():
     props = BY_NAME["record_transaction"]["inputSchema"]["properties"]
     for v in ("expense", "income"):
         assert v in props["kind"]["description"]
-    for v in wallet.FUNDING_SOURCES:
+    for v in wallet.RECORDABLE_FUNDING_SOURCES:
         assert v in props["funding"]["description"]
     ob = BY_NAME["update_profile"]["inputSchema"]["properties"]["obligation"]["properties"]
     for v in wallet.DECLARABLE_OBLIGATION_KINDS:

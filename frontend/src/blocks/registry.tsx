@@ -6,6 +6,7 @@ import type { BlockUi } from '@/chat/session'
 import { ConfirmView, JarSummaryView, NoticeView, ReceiptView, type BlockViewProps } from './views'
 import { AffordabilityCardView, ClarifyView, ExplainView, ObligationImpactView, OptionsView, SuggestionsView } from './phase3Views'
 import { ConfirmActionView, ForecastTimelineView, ProactiveCardView, ReceiptActionView } from './walletViews'
+import { CoverageChangeView, IngestReviewView } from './ingestViews'
 
 // Registry `type -> { schema Zod, Component }`. Thêm một loại khối: schema ở contracts/ (sinh Zod), một dòng ở đây.
 // Parse TỪNG khối riêng; type lạ hoặc sai schema hiện fallback_text; error boundary bọc từng khối.
@@ -41,6 +42,8 @@ export const registry: Record<BlockType, Entry> = {
   explain: defineBlock(blockSchemas.explain, ExplainView),
   clarify: defineBlock(blockSchemas.clarify, ClarifyView),
   suggestions: defineBlock(blockSchemas.suggestions, SuggestionsView),
+  coverage_change: defineBlock(blockSchemas.coverage_change, CoverageChangeView),
+  ingest_review: defineBlock(blockSchemas.ingest_review, IngestReviewView),
 }
 
 export const REGISTERED_TYPES = BLOCK_TYPES

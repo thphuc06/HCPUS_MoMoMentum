@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/tools/ingest.results.schema.json",
+  "title": "IngestToolResults",
+  "description": "Kết quả JSON của Lambda `ingest` cho từng tool của target `ingest` (phase 5, F6). Cùng hình dạng với ledger: `{status: OK | NEEDS_CONFIRMATION | ERROR, ...}`; OK và NEEDS_CONFIRMATION mang `as_of`, `app_date`, `data`. `get_job_status` trả `data.review` là ĐÚNG `data` của khối ingest_review; `confirm_rows` trả `ConfirmActionData` (NEEDS_CONFIRMATION) hoặc `ReceiptActionData` có `coverage_change` (OK), nên agent chỉ việc bọc bằng build_*. Schema gốc không ràng buộc gì.",
+  "$defs": {
+    "UploadLimit": {
+      "type": "object",
+      "required": ["source_kind", "max_bytes", "mime_types"],
+      "additionalProperties": false,
+      "properties": {
+        "source_kind": { "type": "string", "enum": ["image", "csv"] },
+        "max_bytes": { "type": "integer", "minimum": 1 },
+        "mime_types": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 3, "maxLength": 100 }
+        }
+      }
+    },
+    "StartJobOk": {
+      "description": "Không tạo job, không ghi gì: tệp chỉ tải lên từ màn hình. `upload_path` là đường dẫn màn Nạp dữ liệu của frontend.",
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": {
+          "type": "object",
+          "required": ["upload_path", "limits", "consent_required"],
+          "additionalProperties": false,
+          "properties": {
+            "upload_path": { "type": "string", "minLength": 1, "maxLength": 40, "pattern": "^/[a-z0-9/_-]*$" },
+            "limits": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 2,
+              "items": { "$ref": "#/$defs/UploadLimit" }
+            },
+            "consent_required": {
+              "description": "Đúng khi người dùng chưa đồng ý (hoặc đã rút) cho nguồn này: màn hình hỏi đồng ý trước khi tải lên.",
+              "type": "boolean"
+            },
+            "latest_job_id": { "$ref": "ledger.results.schema.json#/$defs/Uuid" },
+            "latest_job_status": { "$ref": "../blocks/ingest_review.schema.json#/$defs/IngestJobStatus" }
+          }
+        }
+      }
+    },
+    "StartJobResult": {
+      "oneOf": [{ "$ref": "#/$defs/StartJobOk" }, { "$ref": "ledger.results.schema.json#/$defs/ToolError" }]
+    },
+    "JobStatusData": {
+      "type": "object",
+      "required": ["job_id", "status", "source_kind", "progress", "rows_total"],
+      "additionalProperties": false,
+      "properties": {
+        "job_id": { "$ref": "ledger.results.schema.json#/$defs/Uuid" },
+        "status": { "$ref": "../blocks/ingest_review.schema.json#/$defs/IngestJobStatus" },
+        "source_kind": { "type": "string", "enum": ["image", "csv"] },
+        "progress": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "rows_total": { "type": "integer", "minimum": 0 },
+        "error_code": {
+          "description": "Có khi status là failed hoặc rejected (ví dụ INGEST_NOT_FINANCIAL).",
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "review": {
+          "description": "Có khi status là review hoặc done: đúng `data` của khối ingest_review.",
+          "$ref": "../blocks/ingest_review.schema.json#/$defs/IngestReviewData"
+        },
+        "coverage_change": {
+          "description": "Có khi status là done: đúng `data` của khối coverage_change của lần chốt.",
+          "$ref": "../blocks/coverage_change.schema.json#/$defs/CoverageChangeData"
+        }
+      }
+    },
+    "GetJobStatusOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "#/$defs/JobStatusData" }
+      }
+    },
+    "GetJobStatusResult": {
+      "oneOf": [{ "$ref": "#/$defs/GetJobStatusOk" }, { "$ref": "ledger.results.schema.json#/$defs/ToolError" }]
+    },
+    "ConfirmRowsResult": {
+      "description": "Như các tool ghi của ledger: không token thì NEEDS_CONFIRMATION với ConfirmActionData (tool confirm_rows, không ghi gì); token hợp lệ thì OK với ReceiptActionData (tool confirm_rows, có coverage_change).",
+      "oneOf": [
+        { "$ref": "ledger.results.schema.json#/$defs/ActionNeedsConfirmation" },
+        { "$ref": "ledger.results.schema.json#/$defs/ActionOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    }
+  }
+}

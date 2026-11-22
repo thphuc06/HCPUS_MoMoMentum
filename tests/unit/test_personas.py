@@ -45,8 +45,8 @@ FIGMA_SPLIT = {
 }
 
 
-def test_co_ba_persona():
-    assert available_personas() == ["khoa", "lan", "minh"]
+def test_co_bon_persona():
+    assert available_personas() == ["khoa", "lan", "minh", "vy"]
 
 
 def test_minh_khop_bang_so_figma():
@@ -67,7 +67,7 @@ def test_minh_khop_bang_so_figma():
     assert 100 <= len(d.transactions) <= 200  # lịch sử đủ dày cho dự báo
 
 
-@pytest.mark.parametrize("name", ["minh", "lan", "khoa"])
+@pytest.mark.parametrize("name", ["minh", "lan", "khoa", "vy"])
 def test_tat_dinh_cung_seed_cung_ket_qua(name):
     assert generate(name, anchor=ANCHOR) == generate(name, anchor=ANCHOR)
 
@@ -79,7 +79,7 @@ def test_seed_khac_cho_ket_qua_khac_nhung_van_khop_so_du():
     assert {j.code: j.balance_vnd for j in b.jars} == FIGMA_BALANCES
 
 
-@pytest.mark.parametrize("name", ["minh", "lan", "khoa"])
+@pytest.mark.parametrize("name", ["minh", "lan", "khoa", "vy"])
 def test_so_cai_nhat_quan_so_du_bang_tong_dong_tra_bang_hu_va_khong_bao_gio_am(name):
     d = generate(name, anchor=ANCHOR)
     by_jar: dict[str, list] = defaultdict(list)
@@ -286,13 +286,14 @@ def test_ten_persona_la_bi_tu_choi():
 # --- ánh xạ tài khoản -> persona --------------------------------------------------------------
 def test_anh_xa_tai_khoan_demo_dung_bang_cau_hinh():
     acc = load_accounts()
+    # giamkhao3 là persona vy (có thu nhập ngoài ví, cho cảnh nạp dữ liệu F6); giamkhao1 và 2 giữ nguyên minh (cảnh 1)
     assert acc["demo_accounts"] == {
         "minh": "minh",
         "lan": "lan",
         "khoa": "khoa",
         "giamkhao1": "minh",
         "giamkhao2": "minh",
-        "giamkhao3": "minh",
+        "giamkhao3": "vy",
     }
     assert set(acc["demo_accounts"].values()) <= set(available_personas())
 

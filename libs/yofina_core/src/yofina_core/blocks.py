@@ -23,6 +23,8 @@ Quy tắc `id` (ổn định trong một lượt, cùng id thì khối sau thay 
 - explain: `explain:{subject_trace_id}`
 - clarify: `clarify:{trace_id}`
 - suggestions: `suggestions:{trace_id}:{context}`
+- ingest_review: `ingest_review:{job_id}`; coverage_change: `coverage_change:{job_id}` (dựng bằng
+  `yofina_core.ingest.build_ingest_review` và `build_coverage_change`)
 """
 
 from __future__ import annotations
@@ -343,10 +345,86 @@ class ProactiveCardBlock(_BlockBase):
     data: ProactiveCardData
 
 
+# --- coverage_change (phase 5, F6) ---------------------------------------------------------
+class CoverageJar(_Strict):
+    code: JarCode
+    name: JarName
+
+
+class CoverageChangeData(_Strict):
+    job_id: Uuid
+    before: Ratio | None = None
+    after: Ratio | None = None
+    rows_added: Annotated[int, Field(ge=0)]
+    external_spend_added_vnd: Vnd
+    external_income_added_vnd: Vnd | None = None
+    jars_affected: Annotated[list[CoverageJar], Field(max_length=20)]
+    forecast_refresh: Literal["queued", "done", "skipped"]
+
+
+class CoverageChangeBlock(_BlockBase):
+    type: Literal["coverage_change"]
+    data: CoverageChangeData
+
+
+# --- ingest_review (phase 5, F6) -----------------------------------------------------------
+IngestJobStatus = Literal[
+    "awaiting_upload", "queued", "processing", "review", "done", "failed", "rejected"
+]
+IngestRowStatus = Literal["auto_added", "pending", "approved", "rejected", "duplicate"]
+
+
+class IngestJar(_Strict):
+    code: JarCode
+    name: JarName
+    color_key: KeyName
+    icon_key: KeyName
+
+
+class IngestRow(_Strict):
+    row_id: Uuid
+    seq: Annotated[int, Field(ge=1, le=10000)]
+    kind: Literal["expense", "income"]
+    app_date: IsoDate
+    amount_vnd: VndPositive
+    counterparty: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    description: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+    extract_confidence: Ratio
+    suggested_jar: IngestJar | None = None
+    jar_confidence: Ratio | None = None
+    jar_source: Literal["type_map", "rule", "model", "user"] | None = None
+    review_status: IngestRowStatus
+    duplicate_of: Uuid | None = None
+
+
+class IngestCounts(_Strict):
+    auto_added: Annotated[int, Field(ge=0)]
+    pending: Annotated[int, Field(ge=0)]
+    approved: Annotated[int, Field(ge=0)]
+    rejected: Annotated[int, Field(ge=0)]
+    duplicate: Annotated[int, Field(ge=0)]
+
+
+class IngestReviewData(_Strict):
+    job_id: Uuid
+    status: IngestJobStatus
+    source_kind: Literal["image", "csv"]
+    rows: Annotated[list[IngestRow], Field(max_length=200)]
+    rows_total: Annotated[int, Field(ge=0)]
+    counts: IngestCounts
+    jars: Annotated[list[IngestJar], Field(max_length=20)]
+
+
+class IngestReviewBlock(_BlockBase):
+    type: Literal["ingest_review"]
+    data: IngestReviewData
+
+
 # --- confirm_action ------------------------------------------------------------------------
 ConfirmActionTool = Literal[
     "record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary",
     "schedule_nudge",
+    "confirm_rows",
 ]  # fmt: skip
 
 
@@ -406,6 +484,8 @@ class ReceiptActionData(_Strict):
     jars_after: Annotated[list[JarBalanceAfter], Field(max_length=20)]
     details: Annotated[list[ReceiptDetail], Field(max_length=20)]
     follow_up: ReceiptFollowUp | None = None
+    #: chỉ có với confirm_rows (phase 5): khối coverage_change của lần chốt
+    coverage_change: CoverageChangeBlock | None = None
 
 
 class ReceiptActionBlock(_BlockBase):
@@ -676,7 +756,9 @@ Block = Annotated[
     | OptionsBlock
     | ExplainBlock
     | ClarifyBlock
-    | SuggestionsBlock,
+    | SuggestionsBlock
+    | IngestReviewBlock
+    | CoverageChangeBlock,
     Field(discriminator="type"),
 ]
 BLOCK_ADAPTER: TypeAdapter[Any] = TypeAdapter(Block)
@@ -697,6 +779,8 @@ BLOCK_MODELS: dict[str, type[_BlockBase]] = {
     "explain": ExplainBlock,
     "clarify": ClarifyBlock,
     "suggestions": SuggestionsBlock,
+    "ingest_review": IngestReviewBlock,
+    "coverage_change": CoverageChangeBlock,
 }
 
 
@@ -1022,6 +1106,7 @@ def build_receipt_action(
     details: Iterable[Mapping[str, str]] = (),
     follow_up: Mapping[str, Any] | None = None,
     block_id: str | None = None,
+    coverage_change: CoverageChangeBlock | None = None,
 ) -> ReceiptActionBlock:
     """Biên nhận của tool ghi KHÔNG phải chuyển hũ. `jars_after`: mỗi hũ có code, name, balance_vnd (số dư sau,
     có thể âm với hũ Chưa phân loại). `details`: các dòng `{label, value}` đã định dạng. Ném `ValueError` nếu
@@ -1051,6 +1136,7 @@ def build_receipt_action(
             ],
             details=[ReceiptDetail(**d) for d in details],
             follow_up=ReceiptFollowUp(**follow_up) if follow_up else None,
+            coverage_change=coverage_change,
         ),
     )
 

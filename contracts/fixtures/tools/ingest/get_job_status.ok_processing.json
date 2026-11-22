@@ -1,0 +1,12 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "job_id": "5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+    "status": "processing",
+    "source_kind": "image",
+    "progress": 40,
+    "rows_total": 0
+  }
+}

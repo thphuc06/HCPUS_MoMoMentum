@@ -24,6 +24,11 @@ Cách dựng sổ cái (đúng cách ví thật ghi, nên các hàm dự báo đ
    Trả sau là dòng chi `funding_source credit` (không đổi số dư hũ) cộng một nghĩa vụ `bnpl` tự sinh.
 7. Số dư chạy của mọi hũ trừ "Chưa phân loại" không bao giờ âm (kiểm bằng mô phỏng; spec sai thì `PersonaError`).
 
+8. Thu nhập ngoài ví (tùy chọn, F6): spec khai `external_income_monthly_vnd` thì mỗi tháng trong lịch sử có một dòng `income`
+   `funding_source external` (không hũ, không đổi số dư hũ nào) vào ngày `external_income.day`: tiền về tài khoản ngân hàng khác
+   của người dùng. Nó chỉ vào mẫu số của độ phủ dữ liệu (xem README "Độ phủ dữ liệu"); spec không khai thì bộ sinh cho đúng
+   kết quả như trước (ba persona cũ không đổi một byte, `tests/unit/persona_digest.py` khóa điều này).
+
 Kết quả chỉ dùng "số ngày trước ngày neo" và giờ địa phương; việc ghép với đồng hồ mô phỏng (ngày neo, offset, UTC) và dựng id
 làm ở `materialize`, theo ADR-0003.
 """
@@ -121,7 +126,7 @@ class TxSeed:
     days_ago: int
     local_time: time
     kind: str  # income | expense | transfer
-    jar_code: str
+    jar_code: str | None  # None chỉ với thu nhập ngoài ví (funding_source external)
     amount_vnd: int  # có dấu: âm là ra khỏi hũ
     merchant: str | None
     note: str | None
@@ -164,6 +169,8 @@ class PersonaData:
     system_balances: Mapping[str, int] = field(default_factory=dict)
     #: có nạp sự kiện lương `confirmed` của các kỳ lương trong lịch sử không (spec `seed_salary_events`, mặc định không)
     seed_salary_events: bool = False
+    #: thu nhập hằng tháng về tài khoản ngân hàng khác (spec `external_income_monthly_vnd`); None là không khai (ba persona cũ)
+    external_income_monthly_vnd: int | None = None
 
 
 # --- đọc spec và bảng tài khoản ---------------------------------------------------------------
@@ -571,6 +578,10 @@ def generate(
             )
         )
 
+    # --- thu nhập ngoài ví (tùy chọn): về tài khoản ngân hàng khác, không đổi số dư hũ nào ------------------------------
+    external_income = _external_income_lines(spec, start, anchor)
+    txs.extend(external_income)
+
     # --- hũ hệ thống ------------------------------------------------------------------------------------------
     system = spec.get("system_jars", {})
     balances = {OTHER_INCOME_JAR_CODE: 0, UNCLASSIFIED_JAR_CODE: 0}
@@ -636,7 +647,40 @@ def generate(
         bnpl_principal_vnd=bnpl_total,
         system_balances=balances,
         seed_salary_events=bool(spec.get("seed_salary_events", False)),
+        external_income_monthly_vnd=(
+            int(spec["external_income_monthly_vnd"])
+            if spec.get("external_income_monthly_vnd")
+            else None
+        ),
     )
+
+
+def _external_income_lines(spec: Mapping[str, Any], start: date, anchor: date) -> list[TxSeed]:
+    """Dòng thu nhập ngoài ví mỗi tháng trong [start, anchor): `external_income_monthly_vnd` vào ngày `external_income.day`
+    (mặc định 15; ngày lớn hơn số ngày của tháng thì lấy ngày cuối tháng). Spec không khai số tiền thì không có dòng nào."""
+    amount = int(spec.get("external_income_monthly_vnd") or 0)
+    if amount < 0:
+        raise PersonaError("external_income_monthly_vnd phải dương")
+    if not amount:
+        return []
+    cfg = spec.get("external_income", {})
+    day = int(cfg.get("day", 15))
+    if not 1 <= day <= 31:
+        raise PersonaError("external_income.day phải từ 1 đến 31")
+    tx_type = cfg.get("tx_type", "income_other")
+    merchant = cfg.get("merchant")
+    if merchant is not None and not 1 <= len(merchant) <= 120:
+        raise PersonaError("external_income.merchant dài 1 đến 120 ký tự")
+    out: list[TxSeed] = []
+    for d in _paydays(start, anchor, day):  # cùng quy tắc ngày-trong-tháng của ngày lương
+        ago = (anchor - d).days
+        out.append(
+            TxSeed(
+                f"extin:{ago}", ago, time(int(cfg.get("hour", 10)), 30), "income", None, amount,
+                merchant, cfg.get("note"), tx_type, funding_source="external", classified_by="seed",
+            )
+        )  # fmt: skip
+    return out
 
 
 def _check_payee(line: Mapping[str, Any], names: set[str]) -> None:
@@ -650,7 +694,7 @@ class MaterializedTx:
     occurred_at: datetime
     app_date: date
     kind: str
-    jar_code: str
+    jar_code: str | None
     amount_vnd: int
     merchant: str | None
     note: str | None

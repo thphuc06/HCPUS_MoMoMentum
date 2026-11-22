@@ -17,6 +17,8 @@ Hạ tầng dạng code bằng AWS CDK (TypeScript). Region `ap-southeast-1`, đ
 | `YofinaTools` | **Pipeline dự báo (phase 2, luồng C)**: Lambda `yofina-forecast-batch`, `yofina-on-transaction`, `yofina-forecast` (một zip), bảng DynamoDB `yofina-idempotency`, SQS `yofina-forecast-events` + DLQ, rule trên `yofina-bus`, Step Functions `yofina-nightly`, EventBridge Scheduler `yofina-nightly-0200`, ba alarm -> SNS. Cộng: Lambda `yofina-ledger` (một mã, hai đường vào: Gateway và HTTP API), HTTP API `yofina-api` (JWT authorizer Cognito, CORS cho Amplify và localhost, 18 route: `/jars`, `/jars/{jar_code}`, `/overview`, `/profile`, `/transactions`, `/tx-types`, `/payees`, `/obligations`, `/credit-line`, `/salary-events`, `/jar-templates`, `/forecasts/{jar_code}`, `/confirmations`, `/confirmations/cancel`, `/actions`, `/demo/reset`, `/conversations`, `/conversations/{conversation_id}`), EventBridge bus `yofina-bus` và alarm `yofina-ledger-event-publish-failed` | cần zip ở `build/lambda/ledger-arm64.zip` (xem dưới); đọc giá trị của stack khác từ SSM lúc deploy |
 | `YofinaAgent` | Gateway MCP `yofina-gateway` (JWT authorizer, interceptor `yofina-gw-interceptor`, policy engine Cedar một policy mỗi tool, target `ledger` với schema từ `contracts/tools/ledger.json` và target `forecast` (Lambda `yofina-forecast`, schema từ `contracts/tools/forecast.json`, policy `get_forecast.cedar`)) và AgentCore Runtime `yofina_agent` (CodeZip ARM64, V2, AG-UI) cùng vai IAM của Gateway và Runtime | L1 (`Cfn*` của `aws-cdk-lib/aws-bedrockagentcore`; chưa dùng L2). Cần khóa zip ở SSM `/yofina/agent/zip-key` (`scripts/agent_deploy.py` ghi); đọc `YofinaTools`, `YofinaIdentity`, `YofinaFoundation` qua SSM |
 
+| `YofinaIngest` | **F6 nạp dữ liệu từ ảnh và CSV (phase 5)**: bucket `yofina-ingest-<account>-<region>`, SQS `yofina-ingest-jobs` + DLQ, alarm `yofina-ingest-jobs-dlq-not-empty`, Lambda `yofina-ingest-api` và `yofina-ingest` (worker), JWT authorizer `yofina-cognito-ingest` và 6 route `/ingest/*` gắn vào HTTP API `yofina-api` có sẵn | **chưa deploy**. Cần zip `build/lambda/ingest-arm64.zip`; đọc mọi giá trị stack khác từ SSM; không sửa `YofinaTools`. Chi tiết ở mục "Stack YofinaIngest" dưới |
+
 Stack của các phase sau thêm vào `bin/yofina.ts`. Mỗi stack ghi giá trị luồng khác cần vào SSM `/yofina/...` (xem bên dưới), nên stack sau đọc SSM hoặc nhận prop, không dùng `Fn::ImportValue` cứng.
 
 ## Cấu hình
@@ -85,6 +87,101 @@ Cấu hình riêng của `YofinaAgent` (`loadAgentConfig` trong `lib/agent-stack
 | `agentPlatformVersion` | `V2` | Platform của Runtime |
 | `interceptorTimeoutSeconds` | `5` | Timeout Lambda interceptor |
 
+Cấu hình riêng của `YofinaIngest` (`loadIngestConfig` trong `lib/ingest-stack.ts`, đổi bằng `-c`). TTL token, offer TTL, chờ Aurora, đồng hồ mô phỏng và hạn mức KHÔNG có khóa riêng: lấy từ cấu hình của `YofinaTools` (cùng context) để ingest và ledger không lệch nhau.
+
+| Context | Mặc định | Ý nghĩa |
+|---|---|---|
+| `ingestZip` | `../build/lambda/ingest-arm64.zip` | Zip chung của hai Lambda (lệnh đóng ở mục "Stack YofinaIngest"). Thiếu zip thì stack này báo lỗi lúc synth (stack khác vẫn synth được) |
+| `ingestApiMemoryMb` / `ingestApiTimeoutSeconds` | 512 / 30 | `yofina-ingest-api` (timeout integration HTTP API tối đa 30 s) |
+| `ingestWorkerMemoryMb` / `ingestWorkerTimeoutSeconds` | 1024 / 120 | Worker: Converse với ảnh 20–40 s, Aurora dậy 15–20 s. Visibility timeout của hàng đợi = 6 lần giá trị này |
+| `ingestWorkerMaxConcurrency` | 2 | `maxConcurrency` của SQS event source (tối thiểu 2 theo AWS); chặn số worker song song để không vượt rpm của Claude |
+| `ingestWorkerReservedConcurrency` | 0 (không đặt) | Tài khoản đang có quota 10 lần chạy đồng thời, Lambda bắt giữ tối thiểu 10 unreserved, nên đặt reserved concurrency bất kỳ sẽ làm deploy lỗi. Nâng quota rồi mới đặt (ví dụ 2) |
+| `ingestMaxReceiveCount` | 3 | Số lần giao trước khi vào DLQ |
+| `ingestObjectExpirationDays` / `ingestAbortMultipartDays` | 30 / 1 | Vòng đời bucket |
+| `ingestUploadPrefix` | `u/` | Tiền tố khóa tệp người dùng; chỉ tiền tố này kích hoạt worker và nằm trong quyền S3 |
+| `ingestLlmRoles` | `ingest,ingest_columns` | Vai trong `llm_defaults.json` được cấp quyền Bedrock cho WORKER (đọc lúc synth): `ingest` (đọc ảnh: Sonnet 4.6, dự phòng Kimi K3) và `ingest_columns` (ánh xạ cột và gắn nhãn CSV: Nova 2 Lite, dự phòng Haiku 4.5). Vai chưa có thì bỏ qua kèm cảnh báo `yofina:ingest:llm-role-missing:<vai>`; không vai nào có thì stack báo lỗi |
+| `forecastHistoryWindowDays` | 330 | CÙNG context với pipeline dự báo (`YOFINA_FORECAST_HISTORY_WINDOW_DAYS`): cửa sổ tính độ phủ dữ liệu của ingest, để `coverage_change` khớp dải độ phủ của dự báo |
+| `ingestLlmDefaults` | `../libs/yofina_core/src/yofina_core/llm_defaults.json` | File cấu hình model đọc lúc synth (test trỏ sang file giả) |
+
+### Stack YofinaIngest
+
+- **API id**: `/yofina/api/url` đọc bằng `valueForStringParameter` (tham số CFN kiểu `AWS::SSM::Parameter::Value<String>`, là `Ref` nên dùng được trong `Fn::Split`), rồi `Fn::Select(0, Split('.', Select(2, Split('/', url))))`.
+- **Authorizer** (giữ authorizer riêng, có chủ ý): authorizer `yofina-cognito` của YofinaTools không có id ở SSM, và custom resource `GetAuthorizers` chỉ lấy được theo chỉ số mảng (không lọc theo tên), còn sửa YofinaTools để ghi id ra SSM thì nhánh này không được deploy. Stack này tạo authorizer RIÊNG `yofina-cognito-ingest` trên cùng API, cùng issuer (`https://cognito-idp.<region>.amazonaws.com/<user pool>`) và audience (app client), identity source `$request.header.Authorization`, nên token nào qua được route ledger thì qua được route ingest. Stack tự chứa: xóa stack thì authorizer và route mất theo; API và route của ledger không bị ảnh hưởng.
+- **Route** (đều JWT, integration `AWS_PROXY` payload 2.0 tới `yofina-ingest-api`; nguồn là `INGEST_ROUTES` trong `lib/ingest-stack.ts`, khớp `contracts/rest/openapi.yaml` của luồng backend):
+
+  | Route | Việc |
+  |---|---|
+  | `POST /ingest/uploads` | xin presigned POST, ghi consent, tạo job |
+  | `GET /ingest/jobs` | job gần đây |
+  | `GET /ingest/jobs/{job_id}` | tiến độ và dòng đề xuất của một job |
+  | `POST /ingest/rows/{row_id}/jar` | đổi hũ đề xuất của một dòng |
+  | `POST /ingest/confirmations` | cấp token xác nhận cho tool `confirm_rows` |
+  | `POST /ingest/actions` | chốt dòng bằng token (`confirm_rows`) |
+
+  Quyền gọi Lambda: `apigateway.amazonaws.com`, `sourceArn` `arn:aws:execute-api:<region>:<account>:<apiId>/*/*/ingest/*`. Stage `$default` của API có auto-deploy nên route có hiệu lực ngay.
+- **Xác nhận `confirm_rows`**: Lambda `yofina-ledger` đã deploy không biết `confirm_rows`, và nhánh này không deploy YofinaTools, nên `yofina-ingest-api` tự cấp và kiểm token bằng CÙNG `yofina_core.confirm` (cùng secret HMAC `secrets/confirm-hmac-arn`, cùng bảng jti `dynamodb/confirm-jti-table`, cùng TTL lấy từ cấu hình YofinaTools): đúng cơ chế ADR-0002, chỉ khác route (`/ingest/confirmations`, `/ingest/actions` thay cho route của ledger).
+- **CORS**: CORS preflight của `yofina-api` đặt ở YofinaTools là `GET, POST, OPTIONS`. Vì vậy mọi route ingest chỉ dùng GET hoặc POST (đổi hũ là `POST /ingest/rows/{row_id}/jar`, không PATCH); test chặn route có method khác. Stack này không sửa CORS của API.
+- **Bucket**: chặn public, `enforceSSL`, SSE-S3, không versioning, `BucketOwnerEnforced`, xóa object sau 30 ngày, hủy multipart dở sau 1 ngày, CORS chỉ `POST` cho URL Amplify (SSM `frontend/amplify-url`, đọc lúc deploy, không gõ cứng) + `extraCorsOrigins` (mặc định `http://localhost:5173`; header `content-type`, lộ `ETag`, `Location`). RETAIN như bucket artifact (dữ liệu người dùng; vòng đời đã dọn object). ObjectCreated `u/` -> SQS; queue policy cho `s3.amazonaws.com` có `aws:SourceArn` (bucket) và `aws:SourceAccount`.
+- **Upload**: backend ký presigned POST (`generate_presigned_post`) với khóa `u/{user_id}/{job_id}` (không có tên tệp gốc) và điều kiện `["content-length-range", 1, <trần>]` cùng `{"Content-Type": ...}` (hoặc `starts-with`); S3 kiểm các điều kiện này khi nhận form. Role API chỉ có `s3:PutObject` với điều kiện `s3:authType = POST`, nên quyền này không dùng được cho PUT trực tiếp hay presigned PUT.
+- **Hàng đợi và worker**: SQS `yofina-ingest-jobs` (SSE-SQS, visibility = 6 × timeout worker = 720 s, `maxReceiveCount` 3) -> DLQ `yofina-ingest-jobs-dlq` (14 ngày) -> alarm `yofina-ingest-jobs-dlq-not-empty` gửi SNS `yofina-alerts`. Event source: `batchSize` 1, `reportBatchItemFailures`, `maxConcurrency` 2 (trần chạy song song của worker, vì Claude chỉ khoảng 8–10 request/phút; reserved concurrency mặc định không đặt, xem bảng context).
+- **Bedrock** (chỉ worker; API không gọi model): mỗi model `global.*` của các vai trong `ingestLlmRoles` được cấp theo mẫu 3 phần của tài liệu global cross-Region inference: (1) `inference-profile/global.<model>` ở region gọi, điều kiện `aws:RequestedRegion` = region; (2) `arn:aws:bedrock:<region>::foundation-model/<model>`, điều kiện region + `bedrock:InferenceProfileArn` = profile đó; (3) `arn:aws:bedrock:::foundation-model/<model>` (không region), điều kiện `aws:RequestedRegion` = `unspecified` + `bedrock:InferenceProfileArn`. Model không có tiền tố `global.` được cấp `foundation-model` ở region gọi. Converse dùng quyền `bedrock:InvokeModel`. Với `llm_defaults.json` hiện tại: Sonnet 4.6, Kimi K3 (vai `ingest`), Nova 2 Lite, Haiku 4.5 (vai `ingest_columns`); test kiểm vai embedding và model ngoài hai vai KHÔNG được cấp.
+- **IAM theo từng Lambda** (mỗi Lambda một role, không `*`): cả hai có Data API trên cluster và `GetSecretValue` CHỈ trên secret `yofina-db-app` (không master). API thêm: khóa HMAC, `dynamodb:PutItem` trên bảng jti, `s3:PutObject` trên `u/*` CHỈ khi `s3:authType = POST`, `lambda:InvokeFunction` CHỈ trên `yofina-forecast-batch` (tính lại dự báo sau khi chốt). Worker thêm: Bedrock, `dynamodb:UpdateItem` trên `yofina-usage`, `s3:GetObject` và `s3:DeleteObject` trên `u/*` (xóa tệp gốc ngay sau khi đọc). Không có `events:PutEvents`: ingest không phát sự kiện lên `yofina-bus` (sau khi chốt, API gọi thẳng tính lại dự báo đầy đủ).
+
+Đóng zip (một zip cho cả hai Lambda; `--extra` lặp được, đường dẫn tính từ gốc repo, `NGUỒN:ĐÍCH` chép thư mục vào gốc zip; `yofina_core` tự kèm):
+
+```bash
+uv run scripts/build_lambda.py gateway/tools/ingest --arch arm64 --name ingest --extra pipelines/ingest/yofina_ingest:yofina_ingest --extra gateway/tools/ledger/yofina_ledger:yofina_ledger --extra db/seed:seed
+# -> build/lambda/ingest-arm64.zip; handler: handler_api.handler (REST), handler_worker.handler (SQS)
+```
+
+Synth riêng: `uv run scripts/cdk.py synth YofinaIngest`. Nếu app đầy đủ dừng vì thiếu luật Cedar của `YofinaAgent` (nhánh phase 3 chưa ghép), synth riêng stack này bằng một entry chỉ dựng `IngestStack` (`--app "npx tsx bin/<entry>.ts"`). App dựng mọi stack, nên synth cần cả zip ledger, forecast và các luật Cedar của YofinaAgent; thiếu chúng thì app dừng trước khi tới stack này. Stack ingest thiếu zip của chính nó thì KHÔNG ném lỗi lúc dựng mà gắn lỗi (annotation) vào `YofinaIngest`: CLI từ chối synth/deploy stack này, stack khác vẫn synth được.
+
+Tài liệu AWS đã đối chiếu:
+- Presigned POST, điều kiện `content-length-range`, `Content-Type`: [Creating a POST policy](https://docs.aws.amazon.com/AmazonS3/latest/developerguide/sigv4-HTTPPOSTConstructPolicy.html), [Browser-based uploads using POST](https://docs.aws.amazon.com/AmazonS3/latest/developerguide/sigv4-UsingHTTPPOST.html); khóa `s3:authType` (giá trị `REST-HEADER`, `REST-QUERY-STRING`, `POST`): [SigV4 authentication-specific policy keys](https://docs.aws.amazon.com/AmazonS3/latest/developerguide/bucket-policy-s3-sigv4-conditions.html).
+- S3 -> SQS và queue policy: [Granting permissions to publish event notification messages to a destination](https://docs.aws.amazon.com/AmazonS3/latest/userguide/grant-destinations-permissions-to-s3.html), [Walkthrough: configuring a bucket for notifications](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ways-to-add-notification-config-to-bucket.html).
+- Lambda SQS event source (visibility ≥ 6 × timeout, `maxConcurrency` tối thiểu 2, `ReportBatchItemFailures`): [Creating and configuring an SQS event source mapping](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html), [Handling errors for an SQS event source](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html).
+- Bedrock global cross-Region inference (policy 3 phần, `aws:RequestedRegion = unspecified`): [Global cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html).
+
+Biến môi trường (cả hai Lambda, cùng giá trị):
+
+| Biến | Nguồn |
+|---|---|
+| `YOFINA_REGION`, `YOFINA_LOG_LEVEL`, `YOFINA_SSM_PREFIX` (`/yofina`) | cấu hình app |
+| `YOFINA_DB_CLUSTER_ARN`, `YOFINA_DB_NAME` | SSM `db/cluster-arn`, `db/name` |
+| `YOFINA_DB_SECRET_ARN` và `YOFINA_DB_APP_SECRET_ARN` (cùng secret `yofina_app`; `yofina_core.db` đọc tên thứ hai) | SSM `db/app-secret-arn` |
+| `YOFINA_DB_RESUME_MAX_WAIT_SECONDS` | `dbResumeMaxWaitSeconds` (YofinaTools) |
+| `YOFINA_INGEST_BUCKET` | bucket của stack |
+| `YOFINA_CONFIRM_HMAC_SECRET_ARN`, `YOFINA_CONFIRM_JTI_TABLE` | SSM `secrets/confirm-hmac-arn`, `dynamodb/confirm-jti-table` |
+| `YOFINA_CONFIRM_TOKEN_TTL_SECONDS`, `YOFINA_CONFIRM_TOKEN_MAX_TTL_SECONDS` | `confirmTokenTtlSeconds` (cả hai, như ledger) |
+| `YOFINA_CONFIRM_OFFER_TTL_SECONDS` | `confirmOfferTtlSeconds` |
+| `YOFINA_FORECAST_BATCH_FUNCTION` và `YOFINA_FORECAST_FUNCTION_NAME` (tên ledger đọc), `YOFINA_FORECAST_SYNC_TIMEOUT_SECONDS` (timeout - 8) | SSM `forecast/batch-function-name` |
+| `YOFINA_EVENT_BUS_NAME` | SSM `events/bus-name` |
+| `YOFINA_APP_TIMEZONE`, `YOFINA_DEMO_ANCHOR_DATE` | `appTimezone`, `demoAnchorDate` |
+| `YOFINA_LLM_USAGE_TABLE` và `YOFINA_USAGE_TABLE` (tên `yofina_core.llm` đọc) | SSM `dynamodb/usage-table` |
+| `YOFINA_MOVE_MAX_AMOUNT_VND`, `YOFINA_TRANSACTIONS_DEFAULT_LIMIT`, `YOFINA_TRANSACTIONS_MAX_LIMIT`, `YOFINA_TRANSACTION_MAX_AMOUNT_VND`, `YOFINA_SALARY_DEVIATION_ASK_PERCENT`, `YOFINA_DEFAULT_CREDIT_LIMIT_VND`, `YOFINA_DEFAULT_DISPLAY_NAME`, `YOFINA_FORECAST_FRESHNESS_SECONDS`, `YOFINA_PROACTIVE_OBLIGATION_DAYS`, `YOFINA_REFERENCE_CACHE_SECONDS` | cùng giá trị với `yofina-ledger` (khi mã ingest dùng `LedgerSettings` để chốt dòng) |
+
+Khóa `ingest_*` của `IngestSettings` (`yofina_core.ingest`) không đặt trong env: dùng mặc định trong mã hoặc ghi đè ở SSM `/yofina/ingest_*`.
+
+IAM (mỗi Lambda một role do CDK sinh, cộng `AWSLambdaBasicExecutionRole`):
+
+| Quyền | `yofina-ingest-api` | `yofina-ingest` (worker) |
+|---|---|---|
+| `rds-data:ExecuteStatement, BatchExecuteStatement, BeginTransaction, CommitTransaction, RollbackTransaction` trên cluster ARN | có | có |
+| `secretsmanager:GetSecretValue` | secret `yofina_app` + khóa HMAC | chỉ secret `yofina_app` |
+| `bedrock:InvokeModel` (Converse dùng quyền này), mẫu 3 phần của global cross-Region inference cho model của `ingestLlmRoles` (xem mục Bedrock ở trên) | có | có |
+| `dynamodb:UpdateItem` trên `yofina-usage` (đếm lượt model) | có | có |
+| `ssm:GetParameter, GetParametersByPath` trên `/yofina/llm`, `/yofina/llm/*`, `/yofina/ingest_*`, `/yofina/db_*`, `/yofina/confirm_*`, `/yofina/forecast_*`, `/yofina/dynamodb/usage-table` (khóa tùy chọn vắng phải trả `ParameterNotFound`, không phải `AccessDenied`) | có | có |
+| `lambda:InvokeFunction` trên `yofina-forecast-batch` (ARN dựng bằng `formatArn`) | có | có |
+| `events:PutEvents` trên `yofina-bus` | có | có |
+| `s3:GetObject` (gồm HeadObject) trên `bucket/u/*` | | có |
+| `s3:DeleteObject` trên `bucket/u/*` (xóa tệp gốc sau khi đọc, hủy job, đặt lại demo) | có | có |
+| `s3:PutObject` trên `bucket/u/*`, điều kiện `s3:authType = POST` (presigned POST được S3 kiểm bằng quyền của role ký) | có | |
+| `s3:ListBucket` với điều kiện `s3:prefix` `u/`, `u/*` | có | |
+| `dynamodb:PutItem` trên `yofina-confirm-jti` | có | |
+| SQS `ReceiveMessage/DeleteMessage/ChangeMessageVisibility/GetQueueAttributes` (event source tự cấp) | | có |
+
+Chạy test của infra: `npm test --prefix infra-cdk` (node:test + `aws-cdk-lib/assertions`, zip rỗng và `llm_defaults.json` giả trong thư mục tạm, không gọi AWS). Test khóa: đúng 6 route, chỉ GET/POST, bucket chặn public + lifecycle 30 ngày, DLQ + alarm, IAM theo tiền tố, mẫu Bedrock 3 phần, không tài nguyên tính tiền theo giờ, tag `project`.
+
 Hạn mức trong luật Cedar lấy từ `moveMaxAmountVnd` và `transactionMaxAmountVnd` của `YofinaTools` (một giá trị cho cả Lambda và Cedar). Target `ledger` lấy schema từ `contracts/tools/ledger.json` (10 tool) và mỗi tool cần một file `gateway/policies/<tool>.cedar` (thiếu thì synth báo lỗi). Đổi schema tool là cập nhật tại chỗ target (không thay thế).
 
 Account lấy từ credential hiện tại (`CDK_DEFAULT_ACCOUNT`, `scripts/cdk.py` đặt sẵn).
@@ -100,6 +197,7 @@ uv run scripts/cdk.py diff
 uv run scripts/cdk.py deploy YofinaFoundation --require-approval never
 uv run scripts/cdk.py deploy YofinaData YofinaIdentity YofinaFrontend --concurrency 3 --require-approval never
 uv run scripts/cdk.py deploy YofinaTools --require-approval never   # sau khi đóng zip Lambda ledger và forecast (mục "Đóng gói")
+uv run scripts/cdk.py deploy YofinaIngest --require-approval never  # F6 (chưa deploy): sau khi đóng zip ingest; diff trước
 uv run scripts/agent_deploy.py                                       # build agent + upload + deploy YofinaAgent (Gateway, Cedar, Runtime) + chờ READY
 uv run scripts/cdk.py deploy YofinaAgent --require-approval never   # chỉ Gateway/Cedar/interceptor khi mã agent không đổi (nhanh, không đụng Runtime)
 npm run typecheck --prefix infra-cdk              # kiểm kiểu
@@ -184,4 +282,5 @@ Dùng `uv pip install --python-platform aarch64-manylinux2014 --only-binary=:all
 | `gateway_url`, `gateway/id`, `gateway/arn` | Gateway `yofina-gateway` (URL MCP; `print_env.py python` ghi thành `YOFINA_GATEWAY_URL`) |
 | `agent/runtime-arn`, `agent/runtime-id`, `agent/runtime-url` | Runtime `yofina_agent`; URL invoke đầy đủ (`.../invocations?qualifier=DEFAULT`) ghi thành `VITE_AGENT_RUNTIME_URL`; ARN chứa account ID nên `print_env.py frontend` không ghi nó (Vite nhúng mọi `VITE_*` vào bundle) |
 | `agent/zip-key` | Khóa S3 của zip agent hiện hành (`builds/agent-<hash>.zip`); `scripts/agent_deploy.py` ghi (ngoài CDK) |
+| `ingest/bucket-name`, `ingest/api-function-name`, `ingest/worker-function-name`, `ingest/queue-url` | `YofinaIngest` (chưa deploy): bucket tệp tải lên, hai Lambda, hàng đợi job |
 | `alert-email` | Email cảnh báo (SecureString, chỉ `scripts/cdk.py` đọc) |

@@ -32,6 +32,8 @@ const BLOCKING: ReadonlySet<string> = new Set<ErrorCode>([
   'PAYEE_NOT_FOUND',
   'OBLIGATION_NOT_FOUND',
   'SALARY_EVENT_NOT_FOUND',
+  'INGEST_JOB_NOT_FOUND',
+  'INGEST_JOB_NOT_READY',
 ])
 
 /**

@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/ingest_review.schema.json",
+  "title": "IngestReviewBlock",
+  "description": "Bảng duyệt các dòng trích được từ MỘT lần nạp ảnh hoặc CSV (F6): chi tiêu và thu nhập NGOÀI ví. Dòng được duyệt vào sổ cái với funding_source external (không đổi số dư hũ). Dòng auto_added (tin cậy cao) được CHỌN SẴN nhưng chưa ghi; chỉ confirm_rows (có token, ADR-0002) ghi sổ cái. Văn bản đã che PII trước khi lưu. Đổi hũ một chạm: POST /ingest/rows/{row_id}/jar với một mã trong `jars` (không ghi sổ cái). Id khối `ingest_review:{job_id}`; cùng id thì khối sau thay khối trước.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "ingest_review" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/IngestReviewData" }
+  },
+  "$defs": {
+    "IngestJar": {
+      "description": "Một hũ người dùng (không phải hũ hệ thống) để hiển thị hoặc chọn.",
+      "type": "object",
+      "required": ["code", "name", "color_key", "icon_key"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "color_key": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
+        "icon_key": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" }
+      }
+    },
+    "IngestJobStatus": {
+      "description": "awaiting_upload (đã cấp URL), queued, processing, review (chờ duyệt), done (đã chốt), failed (lỗi hoặc không đọc được), rejected (không phải tài liệu tài chính, loại không hỗ trợ, trùng tệp).",
+      "type": "string",
+      "enum": ["awaiting_upload", "queued", "processing", "review", "done", "failed", "rejected"]
+    },
+    "IngestRowStatus": {
+      "description": "auto_added (tin cậy cao, chọn sẵn, chưa ghi), pending (chờ người dùng), approved (đã ghi vào sổ cái), rejected (người dùng bỏ), duplicate (trùng một giao dịch đã có, không ghi).",
+      "type": "string",
+      "enum": ["auto_added", "pending", "approved", "rejected", "duplicate"]
+    },
+    "IngestRow": {
+      "type": "object",
+      "required": ["row_id", "seq", "kind", "app_date", "amount_vnd", "extract_confidence", "review_status"],
+      "additionalProperties": false,
+      "properties": {
+        "row_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "seq": { "description": "Thứ tự dòng trong tệp, từ 1.", "type": "integer", "minimum": 1, "maximum": 10000 },
+        "kind": {
+          "description": "expense (chi ngoài ví) hoặc income (thu nhập ngoài ví).",
+          "type": "string",
+          "enum": ["expense", "income"]
+        },
+        "app_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "amount_vnd": {
+          "description": "Số tiền dương; hướng nằm ở kind.",
+          "$ref": "envelope.schema.json#/$defs/VndPositive"
+        },
+        "counterparty": {
+          "description": "Đối tác đã che PII (số tài khoản, số điện thoại, tên người khác).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "description": "Nội dung đã che PII.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "extract_confidence": {
+          "description": "Độ tin cậy của bước trích (0..1).",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "suggested_jar": {
+          "description": "Hũ đề xuất cho dòng chi. Vắng khi chưa xếp được hũ, và luôn vắng với dòng thu nhập.",
+          "$ref": "#/$defs/IngestJar"
+        },
+        "jar_confidence": {
+          "description": "Độ tin cậy của đề xuất hũ (0..1); có khi có suggested_jar.",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "jar_source": {
+          "description": "Nguồn của đề xuất hũ: type_map (bảng tra loại giao dịch), rule (luật học từ lần sửa), model (phân loại bằng model), user (người dùng đã chọn).",
+          "type": "string",
+          "enum": ["type_map", "rule", "model", "user"]
+        },
+        "review_status": { "$ref": "#/$defs/IngestRowStatus" },
+        "duplicate_of": {
+          "description": "Có khi review_status là duplicate: id giao dịch đã có trong sổ cái (trong ví hoặc đã nạp).",
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        }
+      }
+    },
+    "IngestCounts": {
+      "type": "object",
+      "required": ["auto_added", "pending", "approved", "rejected", "duplicate"],
+      "additionalProperties": false,
+      "properties": {
+        "auto_added": { "type": "integer", "minimum": 0 },
+        "pending": { "type": "integer", "minimum": 0 },
+        "approved": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 },
+        "duplicate": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "IngestReviewData": {
+      "type": "object",
+      "required": ["job_id", "status", "source_kind", "rows", "rows_total", "counts", "jars"],
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "status": { "$ref": "#/$defs/IngestJobStatus" },
+        "source_kind": { "type": "string", "enum": ["image", "csv"] },
+        "rows": {
+          "description": "Các dòng theo seq. Tối đa 200; rows_total lớn hơn số dòng ở đây thì phần còn lại xem ở màn Nạp dữ liệu.",
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/IngestRow" }
+        },
+        "rows_total": { "description": "Tổng số dòng của lần nạp.", "type": "integer", "minimum": 0 },
+        "counts": { "$ref": "#/$defs/IngestCounts" },
+        "jars": {
+          "description": "Các hũ chọn được khi đổi hũ một chạm (hũ người dùng, theo thứ tự hiển thị).",
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/IngestJar" }
+        }
+      }
+    }
+  }
+}

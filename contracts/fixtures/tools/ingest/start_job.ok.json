@@ -1,0 +1,30 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "upload_path": "/ingest",
+    "limits": [
+      {
+        "source_kind": "image",
+        "max_bytes": 3750000,
+        "mime_types": [
+          "image/png",
+          "image/jpeg",
+          "image/webp"
+        ]
+      },
+      {
+        "source_kind": "csv",
+        "max_bytes": 2000000,
+        "mime_types": [
+          "text/csv",
+          "application/vnd.ms-excel"
+        ]
+      }
+    ],
+    "consent_required": false,
+    "latest_job_id": "5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+    "latest_job_status": "review"
+  }
+}

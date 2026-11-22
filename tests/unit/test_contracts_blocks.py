@@ -31,6 +31,9 @@ BLOCK_TYPES = [
     "explain",
     "clarify",
     "suggestions",
+    # phase 5 (F6)
+    "ingest_review",
+    "coverage_change",
 ]
 BLOCK_SCHEMA_FILES = {t: CONTRACTS / "blocks" / f"{t}.schema.json" for t in BLOCK_TYPES}
 

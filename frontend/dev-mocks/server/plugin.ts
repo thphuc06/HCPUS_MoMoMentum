@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import { APP_DATE, forecastBlockFor, handleWallet, jarsOf, paramsHash } from './wallet.ts'
+import { MOCK_S3_PREFIX, handleIngest, receiveUpload } from './ingest.ts'
 
 export const MOCK_ENV: Record<string, string> = {
   VITE_AWS_REGION: 'ap-southeast-1',
@@ -205,7 +206,8 @@ function rest(req: IncomingMessage, res: ServerResponse, url: string, query: URL
   return (async () => {
     if (!String(req.headers.authorization ?? '').startsWith('Bearer ')) return err(res, 401, 'UNAUTHENTICATED', 'Thiếu token.')
     const method = req.method ?? 'GET'
-    const reply = handleWallet({ method, path: url, query, body: method === 'POST' ? await body(req) : {}, email: emailOf(req), trace: traceOf(req) })
+    const ctx = { method, path: url, query, body: method === 'POST' ? await body(req) : {}, email: emailOf(req), trace: traceOf(req) }
+    const reply = url.startsWith('/ingest/') ? handleIngest(ctx) : handleWallet(ctx)
     if (reply) return json(res, reply.status, reply.body)
     return err(res, 404, 'PARAMS_INVALID', 'Không có đường dẫn này.')
   })()
@@ -224,6 +226,16 @@ export function mockPlugin(): Plugin {
           return void rest(req, res, p0, q0).catch(() => err(res, 500, 'INTERNAL_ERROR', 'Lỗi giả.'))
         }
         if (url.startsWith('/mock-agent/invocations')) return void agent(req, res).catch(() => res.end())
+        // Thay S3 cho presigned POST của màn Nạp dữ liệu: bỏ thân multipart, chỉ đánh dấu job đã nhận tệp.
+        if (url.startsWith(MOCK_S3_PREFIX) && req.method === 'POST') {
+          req.resume()
+          req.on('end', () => {
+            const r = receiveUpload(url.slice(MOCK_S3_PREFIX.length).split('?')[0]!)
+            res.writeHead(r.status, r.status === 204 ? {} : { 'content-type': 'application/xml' })
+            res.end(r.status === 204 ? undefined : String(r.body))
+          })
+          return
+        }
         next()
       })
     },
