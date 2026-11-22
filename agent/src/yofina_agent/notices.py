@@ -124,6 +124,10 @@ GUARDRAIL_OUTPUT_BLOCKED: tuple[str, str] = (
     "Chỉ hiện số liệu",
     "Phần lời giải thích không đạt kiểm tra an toàn nên mình chỉ hiện số liệu.",
 )
+#: Tên hũ người dùng gõ không khớp hũ nào (hoặc khớp nhiều hũ): đúng một câu hỏi, chip là các hũ có thật.
+UNKNOWN_JAR_QUESTION = "Mình chưa thấy hũ “{name}” trong ví của bạn. Bạn muốn dùng hũ nào?"
+UNKNOWN_JAR_QUESTION_NO_NAME = "Mình chưa xác định được hũ bạn nói. Bạn muốn dùng hũ nào?"
+
 SCENARIO_UNBUILDABLE: tuple[str, str] = (
     "Chưa dựng được kịch bản",
     "Mình chưa hiểu đủ để dựng kịch bản này. Bạn nói rõ món gì, bao nhiêu tiền và trả bằng cách nào nhé.",

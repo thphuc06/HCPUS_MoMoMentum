@@ -26,11 +26,13 @@ def _canned(slot: str, variant: str | None = None) -> ClarifyRequest:
 
 
 def missing_slot(r: IntentResult) -> str | None:
-    """Ô bắt buộc còn thiếu theo ý định (None nếu đủ): `amount`, `funding_source`, `jar`, `pay_jar` (hũ nguồn của khoản mua), `other`."""
+    """Ô bắt buộc còn thiếu theo ý định (None nếu đủ): `amount`, `funding_source`, `jar`, `pay_jar` (hũ nguồn của khoản mua hoặc khoản chi cần kiểm tra), `other`."""
     p = r.params
     if r.intent == "what_if":
         if p.scenario_kind not in _NO_AMOUNT_KINDS and p.amount_vnd is None:
             return "amount"
+        if p.scenario_kind == "jar_transfer" and not (p.from_jar_text and p.to_jar_text):
+            return "jar"  # chuyển hũ phải biết hũ nguồn và hũ đích (không đoán)
         if p.scenario_kind in _PURCHASE_KINDS and p.scenario_kind != "bnpl_purchase":
             if p.funding is None and not p.jar_text:
                 return "funding_source"
@@ -38,7 +40,10 @@ def missing_slot(r: IntentResult) -> str | None:
                 return "pay_jar"  # mua bằng tiền hũ thì phải biết hũ nguồn (hợp đồng: không đoán)
         return None
     if r.intent == "affordability":
-        return "amount" if p.amount_vnd is None else None
+        if p.amount_vnd is None:
+            return "amount"
+        # Không có hũ nguồn (và không phải Trả sau) thì thẻ kiểm tra không có "hũ trả" để kết luận: hỏi lại, không đoán "Đủ".
+        return "pay_jar" if p.funding != "credit" and not p.jar_text else None
     if r.intent == "move":
         if p.amount_vnd is None:
             return "amount"

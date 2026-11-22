@@ -343,7 +343,9 @@ def test_thieu_so_tien_thi_hoi_dung_mot_cau_roi_chay_tiep_o_luot_sau(monkeypatch
 def test_mua_bang_tien_hu_ma_chua_biet_hu_nao_thi_hoi_hu_nguon(monkeypatch):
     llm = make_llm([route_response(intent="what_if", amount_vnd=500_000, funding="jar", scenario_kind="one_time_purchase")])
     events, tools, _ = run_turn("nếu mua giày 500 nghìn bằng tiền hũ thì sao", llm=llm, monkeypatch=monkeypatch)
-    assert tools.calls == [] and blocks_of(events)[0]["data"]["slot"] == "jar"
+    data = blocks_of(events)[0]["data"]
+    assert call_names(tools) == ["get_jar_balances"] and data["slot"] == "jar"  # chỉ đọc hũ để dựng chip hũ thật
+    assert data["chips"] and "Ăn uống" in [c["label"] for c in data["chips"]]
 
 
 def test_router_hoi_lai_dung_o_thieu_thi_dung_cau_cua_router(monkeypatch):
@@ -356,12 +358,12 @@ def test_router_hoi_lai_dung_o_thieu_thi_dung_cau_cua_router(monkeypatch):
 
 # --- F3: kiểm tra trước khi quẹt trong chat ---------------------------------------------------
 def test_kiem_tra_truoc_khi_chi_phat_the_ngay_roi_hai_cau_cua_model_nho(monkeypatch):
-    llm = make_llm([route_response(intent="affordability", amount_vnd=250_000, label="Người nhận demo")])
+    llm = make_llm([route_response(intent="affordability", amount_vnd=250_000, label="Người nhận demo", jar_text="ăn uống")])
     writer = FakeWriter("Bạn có thể chuyển 250.000 ₫ nhưng hũ Ăn uống sẽ hụt. Hãy cân nhắc.")
-    events, tools, _ = run_turn("chuyển 250k cho người nhận demo có ổn không", llm=llm, monkeypatch=monkeypatch, writer=writer)
+    events, tools, _ = run_turn("chuyển 250k từ ăn uống cho người nhận demo có ổn không", llm=llm, monkeypatch=monkeypatch, writer=writer)
     check_agui_order(events)
-    assert call_names(tools) == ["affordability_check"]
-    assert tools.calls[0][1] == {"amount_vnd": 250_000, "label": "Người nhận demo"}
+    assert call_names(tools) == ["get_jar_balances", "affordability_check"]
+    assert tools.calls[1][1] == {"amount_vnd": 250_000, "label": "Người nhận demo", "jar": "an_uong"}
     assert block_types(events) == ["affordability_card"]
     assert types(events).index("ACTIVITY_SNAPSHOT") < types(events).index("TEXT_MESSAGE_START")
     assert text_of(events).startswith("Bạn có thể chuyển 250.000")
@@ -377,7 +379,7 @@ def test_kiem_tra_truoc_khi_chi_loi_viet_qua_han_thi_bo_phan_loi(monkeypatch):
 
             return gen()
 
-    llm = make_llm([route_response(intent="affordability", amount_vnd=250_000)])
+    llm = make_llm([route_response(intent="affordability", amount_vnd=250_000, jar_text="ăn uống")])
     events, _, _ = run_turn(
         "250k này có ổn không",
         llm=llm,
@@ -390,7 +392,7 @@ def test_kiem_tra_truoc_khi_chi_loi_viet_qua_han_thi_bo_phan_loi(monkeypatch):
 
 
 def test_kiem_tra_truoc_khi_chi_so_la_trong_loi_thi_bo_phan_loi(monkeypatch):
-    llm = make_llm([route_response(intent="affordability", amount_vnd=250_000)])
+    llm = make_llm([route_response(intent="affordability", amount_vnd=250_000, jar_text="ăn uống")])
     events, _, _ = run_turn("250k có ổn không", llm=llm, monkeypatch=monkeypatch, writer=FakeWriter("Bạn sẽ còn 999.000 ₫."))
     assert block_types(events) == ["affordability_card"] and text_of(events) == ""
 
@@ -398,8 +400,9 @@ def test_kiem_tra_truoc_khi_chi_so_la_trong_loi_thi_bo_phan_loi(monkeypatch):
 def test_kiem_tra_truoc_khi_chi_model_het_tran_van_co_the(monkeypatch):
     llm = make_llm([], FakeUsage(caps_hit={"m-small-a", "m-small-b"}))
     events, tools, _ = run_turn("chuyển 250k cho bạn có ổn không", llm=llm, monkeypatch=monkeypatch)
-    assert call_names(tools) == ["affordability_check"] and block_types(events) == ["affordability_card", "notice"]
-    assert result_of(events)["degraded"] is True
+    # model hết trần: bộ phân loại dự phòng không biết hũ nào, nên hỏi lại kèm chip hũ thật (không đoán "Đủ"); không gọi affordability_check
+    assert call_names(tools) == ["get_jar_balances"] and block_types(events) == ["clarify", "notice"]
+    assert blocks_of(events)[0]["data"]["chips"] and result_of(events)["degraded"] is True
 
 
 def test_kiem_tra_thieu_so_tien_thi_hoi_lai(monkeypatch):

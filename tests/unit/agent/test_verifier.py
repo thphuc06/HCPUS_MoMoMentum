@@ -146,7 +146,11 @@ def intent(kind: str, **params) -> IntentResult:
         (intent("what_if", scenario_kind="goal_delay"), None),
         (intent("what_if", scenario_kind="income_change", amount_vnd=12_000_000), None),
         (intent("affordability"), "amount"),
-        (intent("affordability", amount_vnd=250_000), None),
+        (intent("affordability", amount_vnd=250_000), "pay_jar"),  # F3: không hũ nguồn thì hỏi, không đoán "Đủ"
+        (intent("affordability", amount_vnd=250_000, jar_text="hóa đơn"), None),
+        (intent("affordability", amount_vnd=250_000, funding="credit"), None),
+        (intent("what_if", amount_vnd=250_000, scenario_kind="jar_transfer", to_jar_text="ăn uống"), "jar"),
+        (intent("what_if", amount_vnd=250_000, scenario_kind="jar_transfer", from_jar_text="giải trí", to_jar_text="ăn uống"), None),
         (intent("move", from_jar_text="a", to_jar_text="b"), "amount"),
         (intent("move", amount_vnd=1), "jar"),
         (intent("profile_update"), "other"),

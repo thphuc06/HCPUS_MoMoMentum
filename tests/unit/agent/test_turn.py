@@ -188,6 +188,52 @@ def test_chuyen_hu_khong_ro_ten_hu_thi_hien_so_du_that_va_hoi_lai(monkeypatch):
     assert "Ăn uống" in writer.calls[0]["compact"]["cac_hu_hien_co"]
 
 
+def _clarify_of(events):
+    (clarify,) = [b for b in blocks_of(events) if b["type"] == "clarify"]
+    return clarify["data"]
+
+
+def test_chuyen_tien_khong_noi_hu_nguon_thi_hoi_dung_mot_cau_kem_chip_hu_that(monkeypatch):
+    """F3: trước đây ra thẻ "Đủ" và options rỗng; giờ hỏi lại, không gọi affordability_check."""
+    llm = make_llm([route_response(intent="affordability", amount_vnd=250000)])
+    events, tools, writer = run_turn("chuyển 250k cho người nhận demo", llm=llm, monkeypatch=monkeypatch)
+    check_agui_order(events)
+    assert "affordability_check" not in [c[0] for c in tools.calls]
+    data = _clarify_of(events)
+    assert data["slot"] == "jar" and data["question"].count("?") == 1
+    real = {"Ăn uống", "Giải trí"}  # hũ của persona minh trong fixture get_jar_balances
+    names = [c["label"] for c in data["chips"]]
+    assert names and 1 <= len(names) <= 6 and real <= set(names)
+    assert all(c["value"].startswith("Hũ ") for c in data["chips"])
+    assert [e for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"] == []
+
+
+def test_ten_hu_la_khi_kiem_tra_chi_tieu_thi_hoi_lai_kem_chip_hu_that(monkeypatch):
+    llm = make_llm([route_response(intent="affordability", amount_vnd=250000, jar_text="quỹ nhà")])
+    events, tools, _ = run_turn("chi 250k từ quỹ nhà", llm=llm, monkeypatch=monkeypatch)
+    assert "affordability_check" not in [c[0] for c in tools.calls]
+    data = _clarify_of(events)
+    assert data["slot"] == "jar" and "quỹ nhà" in data["question"] and data["question"].count("?") == 1
+    assert "Ăn uống" in [c["label"] for c in data["chips"]]
+
+
+def test_what_if_chuyen_hu_thieu_hu_nguon_thi_hoi_lai_khong_chay_kich_ban(monkeypatch):
+    llm = make_llm(
+        [route_response(intent="what_if", scenario_kind="jar_transfer", amount_vnd=300000, to_jar_text="ăn uống")]
+    )
+    events, tools, _ = run_turn("nếu chuyển 300k sang ăn uống thì sao", llm=llm, monkeypatch=monkeypatch)
+    assert "run_scenario" not in [c[0] for c in tools.calls]
+    data = _clarify_of(events)
+    assert data["slot"] == "jar" and data["chips"] and data["question"].count("?") == 1
+
+
+def test_hu_nguon_hop_le_thi_van_chay_kiem_tra_binh_thuong(monkeypatch):
+    llm = make_llm([route_response(intent="affordability", amount_vnd=250000, jar_text="ăn uống")])
+    events, tools, _ = run_turn("chi 250k từ ăn uống", llm=llm, monkeypatch=monkeypatch)
+    assert "affordability_check" in [c[0] for c in tools.calls]
+    assert [b for b in blocks_of(events) if b["type"] == "clarify"] == []
+
+
 def test_chuyen_cung_mot_hu_thi_hoi_lai(monkeypatch):
     llm = make_llm(
         [

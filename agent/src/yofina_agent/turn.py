@@ -54,7 +54,7 @@ from yofina_agent.guardrail import Guardrail, GuardrailResult
 from yofina_agent.identity import Identity
 from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.router import route
-from yofina_agent.schemas import ClarifyRequest, IntentParams, IntentResult, Verdict
+from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, IntentParams, IntentResult, Verdict
 from yofina_agent.settings import AgentSettings
 from yofina_agent.store import (
     TurnBlockStore,
@@ -677,7 +677,7 @@ class Turn:
             "out_of_scope": self.on_out_of_scope,
             "chitchat": self.on_chitchat,
         }[routed.intent]
-        if req := resolve_clarify(routed):
+        if req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed):
             await self.emit_clarify(req, routed)
             return
         await handler(routed, question)
@@ -996,15 +996,45 @@ class Turn:
         await self.write("chitchat", question, {})
 
     # --- hỏi lại ----------------------------------------------------------------------------
+    async def jar_chips(self) -> list[ClarifyChipIn]:
+        """Chip là các hũ CÓ THẬT của người dùng (không có dữ liệu hũ thì không chip, không bịa)."""
+        jars = await self.ensure_jars()
+        if not jars.outcome.ok:
+            return []
+        rows = [j for j in self._jar_rows if j.get("name")]
+        return [ClarifyChipIn(label=str(j["name"])[:40], value=f"Hũ {j['name']}"[:80]) for j in rows[:6]]
+
+    async def unknown_jar_clarify(self, r: IntentResult) -> ClarifyRequest | None:
+        """Tên hũ người dùng gõ mà không khớp hũ nào (hoặc khớp nhiều hũ): hỏi lại đúng một câu kèm chip hũ thật,
+        thay vì lặng lẽ bỏ tên đó và đoán (F3). `move` và `lookup` đã có đường hỏi lại riêng (`ask_which_jar`)."""
+        if r.intent not in ("affordability", "what_if"):
+            return None
+        p = r.params
+        typed = [t for t in (p.jar_text, p.from_jar_text, p.to_jar_text) if t]
+        if not typed:
+            return None
+        jars = await self.ensure_jars()
+        if not jars.outcome.ok:
+            return None  # lỗi đọc hũ: để tool lỗi báo đúng chỗ của nó
+        bad = next((t for t in typed if resolve_jar(t, self._jar_rows).status != "ok"), None)
+        if bad is None:
+            return None
+        name = bad.replace("?", " ").strip()[:40]
+        question = notices.UNKNOWN_JAR_QUESTION.format(name=name) if name else notices.UNKNOWN_JAR_QUESTION_NO_NAME
+        return ClarifyRequest(slot="jar", question=question, chips=await self.jar_chips())
+
     async def emit_clarify(self, req: ClarifyRequest, r: IntentResult) -> None:
         """Khối `clarify` đúng một câu hỏi kèm chip; kết thúc lượt (lượt sau người dùng trả lời, router ghép với câu trước)."""
+        chips = list(req.chips)
+        if req.slot == "jar" and not chips:
+            chips = await self.jar_chips()  # hỏi hũ nào thì chip là các hũ thật
         self.emit_block(
             B.build_clarify(
                 question=req.question,
                 slot=req.slot,
                 chips=[
                     {"id": f"c{i + 1}", "label": c.label, "value": c.value or c.label}
-                    for i, c in enumerate(req.chips)
+                    for i, c in enumerate(chips)
                 ],
                 trace_id=self.trace_id,
                 source_tool="agent",
