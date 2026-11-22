@@ -29,7 +29,9 @@ BLOCK_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 OPTION_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 REASON_MAX = 200
-
+FEEDBACK_BODY_FIELDS = frozenset(
+    {"trace_id", "block_id", "option_id", "decision", "scenario_id", "reason"}
+)
 TRACE_TOOL = "audit___get_trace"
 
 
@@ -151,6 +153,11 @@ class Phase3Reads:
         block_id = body.get("block_id")
         scenario_id = body.get("scenario_id")
         reason = body.get("reason")
+        extra = sorted(set(body) - FEEDBACK_BODY_FIELDS)
+        if extra:  # hợp đồng FeedbackRequest không có trường lạ (đặc biệt không có user_id: danh tính chỉ đến từ JWT)
+            raise YofinaError(
+                ErrorCode.PARAMS_INVALID, "Trường không hợp lệ: " + ", ".join(extra)[:80]
+            )
         if not isinstance(trace_id, str) or not TRACE_ID_RE.fullmatch(trace_id):
             raise YofinaError(ErrorCode.PARAMS_INVALID, "trace_id không hợp lệ.")
         if not isinstance(option_id, str) or not OPTION_ID_RE.fullmatch(option_id):

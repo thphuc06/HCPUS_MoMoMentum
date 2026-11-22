@@ -39,6 +39,7 @@ log = logging.getLogger("yofina.forecast.tool")
 
 TOOL_PREFIX = "forecast___"
 SOURCE_TOOL = "forecast___get_forecast"
+AFFORDABILITY_BODY_FIELDS = frozenset({"amount_vnd", "funding_source", "jar", "label", "date"})
 
 
 @dataclass(frozen=True)
@@ -189,6 +190,11 @@ def handle_http(event: Mapping[str, Any], afford: AffordabilityEngine) -> dict[s
         if route != "POST /affordability":
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Đường dẫn không tồn tại.")
         body = _body(event)
+        extra = sorted(set(body) - AFFORDABILITY_BODY_FIELDS)
+        if extra:  # hợp đồng AffordabilityRequest không có trường lạ; danh tính chỉ đến từ JWT
+            raise YofinaError(
+                ErrorCode.PARAMS_INVALID, "Trường không hợp lệ: " + ", ".join(extra)[:80]
+            )
         result = afford.check(
             sub,
             amount_vnd=body.get("amount_vnd"),
