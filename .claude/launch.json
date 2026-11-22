@@ -6,6 +6,13 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "preview", "--", "--port", "5173", "--strictPort"],
       "port": 5173
+    },
+    {
+      "name": "yofina-frontend-preview-node",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["frontend/node_modules/vite/bin/vite.js", "preview", "frontend", "--port", "5173", "--strictPort"],
+      "port": 5173,
+      "autoPort": false
     }
   ]
 }

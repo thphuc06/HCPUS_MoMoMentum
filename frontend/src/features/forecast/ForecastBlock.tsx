@@ -25,6 +25,8 @@ export function forecastSummary(d: ForecastTimelineData): string {
     return `Hũ ${name} dự kiến cạn ngày ${formatDayMonth(d.runout_date)}, sau kỳ lương ${payday}.`
   }
   if (d.status === 'short') return `Hũ ${name} có khả năng hụt trước kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
+  if (d.status === 'tight')
+    return `Hũ ${name} sát: dự kiến còn rất ít tiền trước kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
   return `Hũ ${name} dự kiến đủ tới kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
 }
 

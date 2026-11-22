@@ -100,7 +100,14 @@ def choose_proactive_card(
                 if runout
                 else f"Hũ {name} dự kiến hụt trước kỳ lương"
             )
-            reason = f"Còn {balance}, còn {days} ngày tới kỳ lương {_dm(payday)}."  # type: ignore[arg-type]
+            if runout:
+                # Khoảng từ ngày cạn tới lương (cùng số với khối forecast_timeline trong chat), không phải từ hôm nay.
+                gap = (payday - runout).days  # type: ignore[operator]
+                reason = (
+                    f"Còn {balance}, cạn xong còn {gap} ngày nữa mới tới kỳ lương {_dm(payday)}."  # type: ignore[arg-type]
+                )
+            else:
+                reason = f"Còn {balance}, còn {days} ngày tới kỳ lương {_dm(payday)}."  # type: ignore[arg-type]
             if f.get("show_probability") and f.get("p_shortfall") is not None:
                 reason += f" Xác suất hụt khoảng {round(float(f['p_shortfall']) * 100)}%."
         else:

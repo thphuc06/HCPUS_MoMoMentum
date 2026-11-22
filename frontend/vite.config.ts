@@ -27,6 +27,8 @@ export default defineConfig(async ({ mode }) => {
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}'],
       css: false,
+      // Test tương tác (userEvent + jsdom) sát trần 5 s mặc định khi máy bận; 15 s để khỏi đỏ giả.
+      testTimeout: 15_000,
     },
   }
 })

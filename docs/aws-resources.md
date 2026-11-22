@@ -85,6 +85,8 @@ Bước ghép backend (2026-11-22) thêm vào `yofina-api` hai route `GET /conve
 
 Thay đổi trên tài nguyên có sẵn (phase 2, luồng C): `yofina-ledger` thêm 2 biến môi trường (`YOFINA_FORECAST_FUNCTION_NAME`, `YOFINA_FORECAST_SYNC_TIMEOUT_SECONDS`) và quyền `lambda:InvokeFunction` CHỈ trên `yofina-forecast-batch`; Aurora chạy migration `0009_forecast_pipeline`; `YofinaAgent` thêm target `forecast` (Lambda `yofina-forecast`, schema từ `contracts/tools/forecast.json`) và policy Cedar `forecast_get_forecast_own_user`, vai `yofina-gateway` được `lambda:InvokeFunction` thêm trên `yofina-forecast`, Runtime `yofina_agent` lên version mới (ý định `forecast_lookup`). Test tích hợp tạo rồi xóa: tài khoản Cognito tạm, rule và hàng đợi SQS tạm tiền tố `yofina-test-`, thực thi Step Functions tên `test-*`; không để lại tài nguyên nào.
 
+**Đóng phase 2 (2026-11-22)**: không tạo tài nguyên mới. Deploy lại `YofinaTools` (chỉ đổi code 4 Lambda: `yofina-ledger`, `yofina-forecast-batch`, `yofina-on-transaction`, `yofina-forecast`) và một lần deploy Amplify. Tạo rồi xóa một user Cognito tạm trong `yofina-users` để thử onboarding (kèm mọi dòng DB của nó).
+
 ### Stack `YofinaAgent` (phase 1, bước ghép, luồng C và D)
 
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |

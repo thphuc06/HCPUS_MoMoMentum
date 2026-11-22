@@ -94,7 +94,55 @@ Sở hữu: `frontend/`.
 
 ## Kết quả thực hiện
 
-(Điền khi đóng phase.)
+Đóng ngày 2026-11-22 (chiều). Ví mô phỏng và dự báo chạy thật: Tổng quan, hũ, chi tiết hũ có biểu đồ 30 ngày, chuyển tiền, Trả sau (mô phỏng), nghĩa vụ, tiền vào, onboarding; dự báo tính mỗi đêm (`yofina-nightly`), tính lại theo sự kiện (SQS) và khi đặt lại demo; chat trả khối `forecast_timeline` qua Gateway. Cảnh 1 của demo chạy trên app thật.
+
+Người điều phối tự kiểm trên trình duyệt: bản build chạy ở `localhost:5173` nối backend thật, khung 390x844, tài khoản `minh`, `khoa`, `lan` và một tài khoản trắng tạm. Test cùng ngày: 1156 unit, 126 integration (11 phút), 364 test frontend (xem lưu ý về chạy song song ở dưới).
+
+### Tiêu chí hoàn thành
+
+| # | Tiêu chí | Kết quả | Bằng chứng |
+|---|---|---|---|
+| 1 | Đặt lại `minh`: thẻ chủ động và Chi tiết hũ Ăn uống báo cạn 23/11, lương 5/12; số dư bảy hũ khớp Figma | **Đạt** | Bấm "Đặt lại dữ liệu" (7 hũ, 166 giao dịch, ngày mô phỏng 21/11/2026). Thẻ chủ động: "Hũ Ăn uống dự kiến cạn ngày 23/11 · Còn 380.000 ₫, cạn xong còn 12 ngày nữa mới tới kỳ lương 05/12. Xác suất hụt khoảng 100%." Chi tiết hũ: cạn 23/11, lương 05/12, nhóm Vừa, 47 ngày. Bảy hũ 380.000 / 640.000 / 450.000 / 760.000 / 1.800.000 / 2.700.000 / 1.000.000 ₫ (tổng 7.730.000 ₫) khớp Figma. Khác Figma: tổng ví 7.900.000 ₫ thay vì 8.260.000 ₫ vì "Đã chi, chưa xếp hũ" là −180.000 ₫ (quyết định hợp đồng số 2, giữ) |
+| 2 | Giao dịch 200.000 ₫ từ Ăn uống: số dư đổi ngay, trong 1 phút ngày cạn cập nhật | **Đạt** | Trên app: chuyển 200.000 ₫ cho người nhận, trả từ hũ Ăn uống, qua màn xem lại có preview của server (380.000 → 180.000 ₫) rồi xác nhận. Biên nhận và Chi tiết hũ hiện 180.000 ₫ ngay; dự báo được tính lại trong 14 giây ("Cập nhật" đổi từ 15:05 sang 15:07). Ngày cạn vẫn 23/11 vì hũ trả nghĩa vụ "Tiền cơm văn phòng" 300.000 ₫ đúng ngày đó, nên cạn sớm hơn là không thể. Integration test `test_giao_dich_200k_cap_nhat_du_bao_hu_an_uong_trong_60_giay` kiểm dự báo mới có `start_balance_vnd` 180.000 ₫ trong 60 giây, ngày cạn không muộn hơn 23/11, và chỉ hũ liên quan được tính lại |
+| 3 | Chạy tay `yofina-nightly`: thành công cho cả sáu tài khoản, `forecast_runs` có bản ghi mới | **Đạt** | Execution `test-de2c809cae83` (lần chạy integration của phiên này) SUCCEEDED trong 4,5 giây, output `{"total": 6, "ok": 6, "skipped": 0, "failed": 0}`; test `test_nightly_chay_tay_thanh_cong_cho_ca_sau_tai_khoan` kiểm thêm `forecast_runs` có dòng `trigger = 'nightly'` mới cho từng người |
+| 4 | Backtest: hurdle có pinball thấp hơn seasonal naive trên cả hai bộ sinh; độ phủ tổng 30 ngày đạt 0,75–0,85 hoặc chuyển sang nhóm | **Đạt** | Chạy lại `uv run scripts/ml_backtest.py --all`, số khớp [backtest-phase-2.md](../../research/backtest-phase-2.md): pinball sản phẩm / seasonal naive 0,62 (họ hurdle-lognormal) và 0,60 (họ phiên mua); độ phủ P10–P90 số dư ngày 30 trên seed giữ ra ngoài: hũ dày 0,80, hũ thưa 0,80 (gộp hai họ). Tham số hiệu chỉnh sinh lại giống hệt bản đã commit |
+| 5 | `khoa` (18 ngày): nhãn "ước lượng ban đầu" và độ phủ thấp | **Lệch câu chữ, chấp nhận** | Chi tiết hũ và Tổng quan có "Ước lượng ban đầu · Mới có 18 ngày dữ liệu", nhóm tin cậy Thấp, "Chưa đủ cơ sở để nêu xác suất". **Độ phủ dữ liệu luôn 100%** vì ví mô phỏng khép kín (mọi khoản chi đều nằm trong sổ cái), nên không có "độ phủ thấp". Tín hiệu tin cậy thấp đi qua nhóm Thấp và nhãn ước lượng ban đầu. Độ phủ dưới 100% chỉ xuất hiện khi có dữ liệu ngoài ví (phase 5, nạp ảnh và tệp) |
+| 6 | Mua 300.000 ₫ bằng Trả sau: nghĩa vụ 333.000 ₫ đến hạn ngày 5, hiện thành mốc trên biểu đồ | **Đạt, có điều kiện** | Trên app với `minh`: preview và biên nhận "Phải trả ngày 05/12: 1.000.000 → 1.300.000 ₫, trong đó phí dịch vụ 33.000 ₫; hạn mức 4.033.000 → 3.733.000 ₫". `minh` đã có nghĩa vụ Trả sau tháng này (phí đã tính) nên số cộng dồn vào nghĩa vụ có sẵn, đúng quyết định hợp đồng số 5. Mốc "Trả sau (mô phỏng) 05/12 −1.300.000 ₫" hiện trên biểu đồ hũ Nghĩa vụ. Ca tài khoản chưa có nghĩa vụ (sinh đúng 333.000 ₫) do integration test `test_wallet_rest` kiểm. **Chấp nhận**: tài khoản không có hũ loại `obligation` (như `lan`) thì nghĩa vụ Trả sau có trong danh sách nghĩa vụ nhưng không thành mốc trên biểu đồ hũ nào |
+| 7 | Onboarding tài khoản trắng chỉ với lương và ngày nhận, vào được Tổng quan | **Đạt** | Tạo user Cognito tạm (chủ dự án cho phép), đăng nhập trên localhost: Tổng quan chuyển sang `/onboarding`; nhập lương 8.000.000 ₫ và ngày 20, bỏ qua bước chia hũ và chi phí cố định, vào Tổng quan với 7 hũ mặc định (0 ₫) và nhãn ước lượng ban đầu. Đã xóa user Cognito và mọi dòng DB của nó (DELETE `users`, cascade; còn 0 dòng). Integration test `test_onboarding_tai_khoan_trang_chi_voi_luong_va_ngay_nhan` cũng đạt |
+| 8 | Chat "hũ ăn uống còn trụ được bao lâu" trả `forecast_timeline` cùng số với Chi tiết hũ | **Đạt** | Trên app: khối "Dự báo hũ Ăn uống · Cạn ngày 23/11", 12 ngày trước kỳ lương 05/12, khả năng hụt 100%, nhóm Vừa, độ phủ 100%, 47 ngày, cập nhật 15:08: trùng từng số với màn Chi tiết hũ đọc ngay sau đó. Câu trả lời của model: "cạn vào ngày 23/11, còn 12 ngày nữa đến ngày lương 05/12, xác suất hụt là 100%". Tải lại trang: hội thoại và khối phát lại đủ |
+| 9 | Gửi trùng một sự kiện giao dịch: không tính hai lần | **Đạt** | Integration test (gửi lại cùng `event_id` hai lần, chờ 25 giây, số dư và `forecast_runs` không đổi; `POST /actions` trùng `client_ref` trả 409 `DUPLICATE_TRANSACTION`) |
+| 10 | Luồng 3 truy vấn đọc cho Tổng quan: p95 dưới 300 ms đo từ Lambda | **Đạt** | `uv run scripts/measure_wallet.py`: `GET /overview` phía Lambda (trường `ms` của log `rest_request`) n=60, p50 17 ms, p95 18 ms, max 75 ms; phía máy gọi qua Internet p95 206 ms. Luồng ghi hai bước p95 609 ms (máy gọi), `POST /actions` phía Lambda p95 291 ms |
+
+### Không hardcode, không giả lập
+
+Mọi số trên màn hình đi từ Aurora qua REST hoặc tool; `npm run check:bundle` sạch (không mock, fixture, số persona hay bí mật trong bundle, 458 KB gzip). Câu chat do agent trên Runtime sinh ở lượt đó; số trong khối do tool `forecast___get_forecast` trả.
+
+### Sửa khi đóng phase
+
+- Thẻ chủ động ghi "còn 14 ngày tới kỳ lương" (tính từ hôm nay) trong khi kịch bản và chat ghi 12 ngày (từ ngày cạn tới lương). Sửa ở server (`proactive.py`): có ngày cạn thì ghi "cạn xong còn N ngày nữa mới tới kỳ lương". Đã deploy `YofinaTools`.
+- Preview lương lệch ghi "+1.11%": đổi sang dấu phẩy thập phân (`wallet_writes.py`).
+- Chi tiết hũ ở trạng thái "Sát" vẫn ghi "dự kiến đủ tới kỳ lương" (thấy trên `khoa`): câu tóm tắt của `ForecastBlock` thêm nhánh `tight`. Đã deploy Amplify.
+- `cognito.live.test.ts` vỡ khi chưa có `frontend/.env.local` (Vitest vẫn chạy thân `describe` khi skip): chỉ tạo client khi bật.
+- Test frontend: `testTimeout` 15 giây, chờ Recharts tải lười 15 giây.
+
+### Lệch so với kế hoạch
+
+- Tiêu chí 5: không có "độ phủ thấp" trên ví khép kín (xem bảng).
+- Tiêu chí 6: số 333.000 ₫ chỉ đúng khi tài khoản chưa có nghĩa vụ Trả sau tháng đó; tài khoản không có hũ Nghĩa vụ thì không có mốc trên biểu đồ.
+- Tổng ví `minh` 7.900.000 ₫ khác Figma 8.260.000 ₫ (quyết định hợp đồng số 2).
+- Kiểm cảnh 1 trên bản build chạy ở localhost nối backend thật, không phải trên URL Amplify (người điều phối không gõ mật khẩu vào trang đã host). URL Amplify đã phục vụ đúng bundle mới (`index-BGUqVOtg.js`).
+- Không dùng Docker: StatsForecast chỉ chạy trên máy trong báo cáo backtest.
+
+### Chuyển sang phase sau
+
+- `OFFER_EXPIRED` chưa tách khỏi `TOKEN_EXPIRED`.
+- `GET /forecasts/{hũ hệ thống}` trả 503 `FORECAST_UNAVAILABLE` thay vì 404 (test tích hợp đang khóa hành vi này; đổi thì sửa hợp đồng và test cùng lúc).
+- Chưa có preview cho sửa hồ sơ, `save_jars`, nghĩa vụ.
+- Tài khoản mới 0 ₫ hiện thẻ "Hũ Ăn uống dự kiến cạn ngày 23/11 · Còn 0 ₫": nên có câu riêng cho hũ chưa có tiền.
+- "Xác suất hụt khoảng 100%" khi nghĩa vụ lớn hơn số dư: đúng số nhưng nên ghi "gần như chắc chắn" thay vì 100%.
+- Bước công cụ trong chat ghi "Đã đọc số dư các hũ" cho lời gọi dự báo; nhãn mốc trên biểu đồ chồng nhau ở mép trên; nút chat ở thanh dưới và các ô chọn nguồn tiền thiếu tên cho trình đọc màn hình.
+- Chạy cả bộ test frontend song song trên máy chậm vẫn có ca chờ quá giờ (mã HEAD cũng vậy); chạy từng file đều xanh.
+- Chat trên URL Amplify từ Chrome máy tính và Safari iPhone: vẫn chờ chủ dự án.
 
 ### Quyết định hợp đồng phase 2
 

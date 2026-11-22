@@ -208,7 +208,10 @@ class WalletWrites:
                 if info["expected_vnd"]:
                     dev = info["deviation_percent"]
                     changes.append(
-                        _change("So với lương đã khai", f"{dev:+.2f}%".replace(".00%", "%"))
+                        _change(
+                            "So với lương đã khai",
+                            f"{dev:+.2f}%".replace(".00%", "%").replace(".", ","),
+                        )
                     )
                 if info["ask_update_salary"]:
                     warnings.append(

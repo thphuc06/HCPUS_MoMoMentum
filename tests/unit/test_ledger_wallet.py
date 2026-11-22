@@ -83,7 +83,8 @@ def test_hu_hut_co_ngay_can_som_nhat_va_xac_suat_chi_hien_khi_duoc_phep():
     )
     assert c.data.title == "Hũ Ăn uống dự kiến cạn ngày 23/11"
     assert (
-        c.data.reason == "Còn 380.000 ₫, còn 14 ngày tới kỳ lương 05/12. Xác suất hụt khoảng 71%."
+        c.data.reason
+        == "Còn 380.000 ₫, cạn xong còn 12 ngày nữa mới tới kỳ lương 05/12. Xác suất hụt khoảng 71%."
     )
     assert [a.kind for a in c.data.actions] == ["open_forecast", "ask_why", "snooze", "mute_kind"]
     assert c.data.actions[1].prompt == "Vì sao hũ Ăn uống sắp cạn?"

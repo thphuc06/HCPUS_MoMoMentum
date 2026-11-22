@@ -11,11 +11,11 @@ const SIZE = { width: 360, height: 240 }
 async function mount(d: ForecastTimelineData) {
   const r = render(<ForecastBlock data={d} chartSize={SIZE} />)
   // Recharts tải lười (chunk riêng): chờ biểu đồ hiện.
-  await waitFor(() => expect(r.container.querySelector('svg.recharts-surface')).not.toBeNull(), { timeout: 4000 })
+  await waitFor(() => expect(r.container.querySelector('svg.recharts-surface')).not.toBeNull(), { timeout: 15_000 })
   return r
 }
 
-describe('ForecastBlock: biểu đồ', () => {
+describe('ForecastBlock: biểu đồ', { timeout: 20_000 }, () => {
   it('dựng dải P10–P90, đường P50, mốc nghĩa vụ và lương, điểm cạn đúng số', async () => {
     const d = data('forecast_timeline.short')
     const { container } = await mount(d)
@@ -131,5 +131,9 @@ describe('forecastSummary', () => {
     expect(forecastSummary({ ...d, runout_date: '2026-12-20' })).toContain('sau kỳ lương 05/12')
     expect(forecastSummary({ ...d, runout_date: undefined, status: 'ok' })).toContain('dự kiến đủ tới kỳ lương')
     expect(forecastSummary({ ...d, runout_date: undefined, status: 'short' })).toContain('có khả năng hụt')
+    // Huy hiệu "Sát" thì câu tóm tắt không được nói "đủ" (lệch thấy trên tài khoản khoa).
+    const tight = forecastSummary({ ...d, runout_date: undefined, status: 'tight' })
+    expect(tight).toContain('còn rất ít tiền trước kỳ lương')
+    expect(tight).not.toContain('đủ tới')
   })
 })

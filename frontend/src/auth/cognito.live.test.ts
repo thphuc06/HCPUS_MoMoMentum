@@ -20,7 +20,10 @@ function claims(jwt: string): Record<string, unknown> {
 }
 
 describe.skipIf(!enabled)('Cognito SRP thật (CognitoAuthClient)', () => {
-  const client = new CognitoAuthClient({ userPoolId: userPoolId!, clientId: clientId! })
+  // Vitest vẫn chạy thân describe khi skip, nên chỉ tạo client khi bật (không có .env.local thì pool id rỗng).
+  const client = (enabled
+    ? new CognitoAuthClient({ userPoolId: userPoolId!, clientId: clientId! })
+    : undefined) as CognitoAuthClient
 
   it('đăng nhập đúng: access token của đúng client, sống khoảng 60 phút', async () => {
     const s = await client.signIn(email!, password!)
