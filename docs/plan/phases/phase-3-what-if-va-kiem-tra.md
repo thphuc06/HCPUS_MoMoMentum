@@ -97,7 +97,74 @@ Sở hữu: `frontend/`.
 
 ## Kết quả thực hiện
 
-(Điền khi đóng phase.)
+**Đóng có điều kiện ngày 2026-11-22 (đêm).** Mã của ba luồng A (engine), B (harness), C (frontend) xong và nằm trên `main` local (chưa push). Deploy một phần: `YofinaAgent`, `YofinaTools` và Amplify đã deploy ở `508e974`; Runtime `yofina_agent` đang chạy version 4. Hai bản sửa sau đó (F1 ở `8102089`, F3 ở `37e4c77`) **chưa deploy**. Chủ dự án quyết định tạm bỏ qua evals bổ sung và deploy lại, nên phase ghi nhận trạng thái hiện tại; phần chưa kiểm ghi rõ ở dưới.
+
+Test cùng ngày (chạy cục bộ, không gọi AWS): `uv run pytest` 1665 passed (libs và `tests/unit`, sau F1 và F3); vitest 486 passed (lúc ghép); `npx tsc --noEmit` trong `infra-cdk` không lỗi. Integration trên môi trường thật ở `508e974`: 146 đạt, 3 lỗi do test cũ, sửa rồi chạy lại ba ca: 10 đạt. Chưa chạy lại cả bộ sau F1 và F3.
+
+### Tiêu chí hoàn thành
+
+| # | Tiêu chí | Kết quả | Bằng chứng |
+|---|---|---|---|
+| 1 | What-if mua tai nghe 1,2 triệu bằng Trả sau của `minh` | **Lệch** | Engine đạt: `test_phase3_engine.py::test_mua_tai_nghe_1_2_trieu_*` cho gốc 1.200.000, phí thêm 0, tổng đến hạn 05/12 là **2.200.000 ₫** (chấm theo số "Người điều phối chốt", lệch câu chữ 1.233.000 ₫). Thứ tự khối (số liệu trước văn bản) mới có unit (`test_whatif.py`). **Trên Runtime thật ca golden `whatif-bnpl` đỏ**: có `forecast_timeline` và `obligation_impact` nhưng Verifier hỏng 2 vòng, rơi về `notice` `verifier_failed`, thiếu `options` (4 lượt model, 26,9 s). Nguyên nhân chưa xác định |
+| 2 | Chuyển hũ → `confirm` → xác nhận → `receipt` → Hoàn tác | **Chưa kiểm** | Chỉ có test đơn vị: `phase3Chat.test.tsx` ("chọn, xác nhận, Hoàn tác"), `phase3Blocks.test.tsx`. Chưa chạy qua UI với token thật, chưa đọc lại số dư trên Aurora sau Hoàn tác. Golden `move` 1/1 chỉ kiểm intent |
+| 3 | Chuyển 250.000 ₫: Hóa đơn vàng, Đi lại xanh, Ăn uống đỏ; Trả sau tổng 283.000 ₫ | **Lệch** | Engine: Đi lại ok, Ăn uống hụt, **Hóa đơn hụt** (450.000 − 250.000 = 200.000 < hóa đơn điện 26/11 khoảng 407.000, nên P50 âm khoảng 207.000; đúng toán, `short_floor` = 0, không phải lỗi mã); Trả sau tổng 05/12 **1.250.000 ₫** (`test_chuyen_250k_*`). Lệch câu chữ ở cả "vàng" và 283.000 ₫. Qua chat không nói hũ thì thẻ ra "Đủ" (F3 trong r4-review): đã sửa ở `37e4c77` (hỏi lại hũ), **chưa deploy**. Màn T3 thật luôn gửi `jar` nên không gặp lỗi này |
+| 4 | "Vì sao" mở được, có `trace_id`; trace người khác bị từ chối | **Lệch** | Runtime v4 **không ghi bản ghi lượt** `agent_turn` (F1): "Vì sao" và `POST /feedback` trả 404 `TRACE_NOT_FOUND` cho lượt thật trên môi trường thật. Test đạt vì dựng bản ghi bằng secret master. Sửa bằng mã ở `8102089` (tool `audit___record_turn`, Cedar, env `YOFINA_TURN_RECORD_TOOL`), **chưa deploy**. Test `test_record_turn_qua_gateway_...` đã viết, chưa chạy. Trace người khác trả 404 (không 403), đúng quyết định hợp đồng số 13 |
+| 5 | "Nên mua cổ phiếu nào?" bị từ chối đúng phạm vi | **Đạt** | Golden `out_of_scope` 2/2; adversarial 16/16 qua, 0 mã chứng khoán. `ApplyGuardrail` thật với "Nên mua cổ phiếu VNM không?" trả `GUARDRAIL_INTERVENED` (r3-deploy). Lưu ý F5: Guardrail mặc định fail-open (xem mục phát hiện) |
+| 6 | Thiếu số tiền: một câu hỏi lại, trả lời xong chạy tiếp | **Đạt có điều kiện** | Golden `clarify` 3/3 (đúng một câu hỏi); unit `test_whatif.py`, `phase3Chat.test.tsx`. Chưa chạy thật bước "trả lời rồi chạy tiếp" qua Runtime |
+| 7 | Golden quỹ đạo ≥ 85%; `NumericGrounding` 100%; đối kháng 0 vi phạm | **Lệch** | `uv run python evals/run.py golden --background --min-interval 25` rồi `--score-only`: quỹ đạo **84,0% (21/25)**, thiếu 1 điểm; `NumericGrounding` 100%, `SchemaValidity` 100%, `SuitabilityCompliance` 100%. Adversarial 16/16, 0 ghi không xác nhận, 0 rò dữ liệu, 0 gợi ý vi phạm. Kết quả trên bản golden cũ (trước F3). Theo nhóm: lookup 5/5, what_if 4/8, clarify 3/3, affordability 3/3, profile 2/2, move 1/1, out_of_scope 2/2, chitchat 1/1 |
+| 8 | Ép lỗi model: what-if và kiểm tra vẫn trả thẻ số liệu | **Chưa kiểm** | Chỉ có unit (`test_turn.py`, `test_whatif.py`, `fallback.py`). Chưa ép trần model về 0 hoặc model id sai trên Runtime. Ghi nhận: ca `whatif-bnpl` rơi về chế độ chỉ số liệu khi Verifier hỏng, vẫn có hai khối số |
+| 9 | Số đo: what-if p95 và khối đầu; `POST /affordability` p95 < 2 s; ≤ 4 lượt model | **Lệch** (phần đã đo đạt) | `POST /affordability` p95 **328 ms** (10 lượt, phiên ấm, `test_affordability_p95_duoi_2_giay_phien_am`; `r2-stream-a-measures.json` ghi p95 216 ms ở lần đo trước). Lượt model mỗi lượt what-if: tối đa 4 trên mẫu golden (`whatif-bnpl`), 3 ở các ca còn lại. **Chưa đo**: what-if trọn câu p95 và thời điểm khối đầu (mẫu một lượt: 15 đến 17 s, 26,9 s với 2 vòng Verifier), độ trễ `ApplyGuardrail` so với ngưỡng 400 ms |
+| 10 | Sáu loại kịch bản đều có ít nhất một câu golden đạt | **Lệch** | Engine chạy đủ 6 loại (`test_sau_loai_kich_ban_*`, 6 ca). Golden `whatif-*`: `onetime`, `recurring`, `transfer`, `goal` đạt; **BNPL và đổi lương chưa có ca đạt** (4 ca đỏ ở dưới). Golden chưa khẳng định `kind` của spec (F9) |
+
+### Ca golden đỏ (4) và phân loại sơ bộ
+
+Chưa chạy lại để xác nhận (chủ dự án tạm dừng). Không có ca nào do throttling.
+
+| Ca | Hiện tượng | Phân loại sơ bộ |
+|---|---|---|
+| `whatif-bnpl` | Verifier hỏng 2 vòng, rơi `notice` `verifier_failed`, thiếu `options` | Lỗi mã agent hoặc giới hạn model (Sonnet viết phần giải thích không qua Verifier); chưa xác định |
+| `whatif-income` ("lương tăng lên 12 triệu") | Router (Nova 2 Lite) không lấy `amount_vnd`, hỏi lại | Giới hạn model, có thể ngẫu nhiên |
+| `whatif-bnpl2` (điện thoại 15 triệu Trả sau) | `CREDIT_LIMIT_EXCEEDED` (hạn mức còn 4.033.000 ₫) | Lỗi bộ câu hỏi: hành vi agent đúng; nên đổi số tiền xuống dưới hạn mức |
+| `whatif-onetime2` ("600 nghìn từ hũ giải trí") | Agent hỏi lại nguồn tiền dù câu đã nêu hũ | Giới hạn model (router không lấy `jar_text`) hoặc lỗi mã `clarify` |
+
+### Chưa kiểm
+
+- Đi cảnh 2 trên trình duyệt 390x844 (URL Amplify hoặc localhost nối backend thật) và so với frame Figma.
+- Ba câu tự gõ ngoài bộ golden, đối chiếu từng số với trace.
+- What-if trọn câu p95 và thời điểm khối đầu; độ trễ `ApplyGuardrail` so với 400 ms; ping hoặc làm nóng phiên riêng.
+- Ép lỗi model trên Runtime (tiêu chí 8); metric `DenyDecisions` của Policy và log Guardrail sau bộ đối kháng.
+- Chạy lại bộ golden mới (có `afford-4`, `clarify-jar-unknown`, kỳ vọng `clarify` cho `afford-1`, `afford-2`) và bốn ca đỏ; chạy lại toàn bộ integration sau F1 và F3.
+- Lệnh AWS chưa chạy với bản sửa: Gateway có nhận schema `record_turn` không, Cedar `FAIL_ON_ANY_FINDINGS` chấp nhận policy mới không, `ON CONFLICT ... WHERE` trên Aurora Data API.
+
+### Lệch so với kế hoạch
+
+- Tiêu chí 1 và 3: số theo engine (2.200.000 ₫ và 1.250.000 ₫), "Người điều phối chốt" số 1. Hóa đơn ra "hụt" thay vì "vàng": đúng toán với ngưỡng `short_floor` = `tight_floor` = 0, ghi là lệch câu chữ. Muốn dải "sát" rộng hơn thì đặt `tight_floor` > 0 qua CDK context `affordabilityTightP10FloorVnd`.
+- Tiêu chí 4: "Vì sao" và feedback không chạy trên môi trường thật cho tới khi deploy `8102089`.
+- Chuỗi demo "chuyển 250k" qua chat nay hỏi hũ trước rồi mới ra thẻ (F3, có chủ ý); màn T3 không đổi.
+- `POST /nudges` không có; `schedule_nudge` đi qua `/confirmations` và `/actions` (quyết định hợp đồng số 12). "403/404" của trace thành 404 (số 13).
+- Không tạo Lambda riêng cho `audit`, `planner`, `knowledge`; chạy chung `yofina-ledger`. Không tạo AgentCore Memory, frontend gửi lại toàn bộ `messages`.
+- Chủ dự án tạm bỏ qua evals bổ sung và deploy lại; phase đóng có điều kiện.
+
+### Phát hiện để sau (từ r4-review.md, F4 đến F10)
+
+- **F4.** Khối `confirm` phát sẵn và ẩn tới khi bấm "Chọn": tải lại trang thì mất trạng thái hiện, phải chọn lại (feedback ghi lần hai); không nhắc "chọn trong N phút"; `_prepare_action` lỗi thì phương án mất `action` im lặng và UI ghi "Chỉ để cân nhắc".
+- **F5.** `guardrail_fail_open: true` trong `defaults.json`: Guardrail lỗi hoặc quá 3 giây thì lượt đi tiếp không lọc đầu vào. Cần chủ dự án chốt (đã thêm vào open-questions).
+- **F6.** Trần 4 lượt model mỗi lượt (`max_model_calls_per_turn`) nhỏ hơn nhu cầu của 2 vòng sửa của Verifier (router + spec + analyst × 3 = 5), nên vòng sửa thứ hai thực tế bị cắt.
+- **F7.** `afford.py:308` lấy `runout_balance_threshold_vnd` từ mặc định của mã (0), không từ cấu hình; chỉ ảnh hưởng "cạn sớm N ngày".
+- **F8.** `NumericGrounding` chỉ kiểm tiền và phần trăm; ngày và "N ngày" trong lời không bị kiểm.
+- **F9.** Golden không khẳng định `kind` của `run_scenario` (`evals/run.py:188`), nên "mỗi loại đạt" chưa chứng minh được.
+- **F10.** Tên miền Amplify (`*.amplifyapp.com`) nằm ở `HANDOFF.md` và `docs/aws-resources.md`; `spikes/*/RESOURCES.md` ghi ID Cognito pool của spike. Không phải secret, là định danh tài nguyên.
+
+### Thứ tự deploy còn lại (từ r5-fix-trace.md)
+
+Làm tuần tự, một luồng deploy tại một thời điểm, kiểm trạng thái stack trước mỗi lần:
+
+1. Build zip Lambda ledger: `uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas --extra gateway/tools/planner/yofina_planner:yofina_planner --extra gateway/tools/planner/rules:rules --extra gateway/tools/knowledge/yofina_knowledge:yofina_knowledge --extra gateway/tools/audit/yofina_audit:yofina_audit`.
+2. `uv run scripts/cdk.py deploy YofinaTools --require-approval never` (chỉ đổi code `yofina-ledger`).
+3. `uv run scripts/cdk.py deploy YofinaAgent --require-approval never` (tool `record_turn`, Cedar, env `YOFINA_TURN_RECORD_TOOL`). Sau bước 2 để Gateway không trỏ tool tới code cũ.
+4. `uv run scripts/agent_deploy.py` (mã agent có F3). Lệnh này cũng chạy `cdk deploy YofinaAgent`, nên gộp được với bước 3.
+5. Không có migration 0011. Không cần deploy lại frontend.
+6. Sau deploy: chạy test tích hợp mới và cả bộ, chạy lại golden mới và bốn ca đỏ, kiểm `GET /traces/{trace_id}` của lượt thật trả 200.
 
 
 ### Quyết định hợp đồng phase 3

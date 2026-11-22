@@ -2,7 +2,7 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: 2026-11-22 (đêm). Phase 3 dừng giữa chừng: bước 0 xong trên `main`, ba luồng A/B/C dở dang ở nhánh `wip/phase3-streams`.
+Cập nhật lần cuối: 2026-11-22 (đêm). Phase 3 đóng có điều kiện: mã xong và đã merge vào `main` local (HEAD `37e4c77`, chưa push), deploy một phần (F1 và F3 chưa deploy).
 
 ## Đang ở đâu trong kế hoạch
 
@@ -12,14 +12,14 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 |---|---|
 | [1. Nền và lát dọc](docs/plan/phases/phase-1-nen-va-lat-doc.md) | **Xong 22/11**, trừ hai việc chờ chủ dự án (mục C). Kết quả ở cuối file phase |
 | [2. Ví mô phỏng và dự báo](docs/plan/phases/phase-2-vi-va-du-bao.md) | **Xong 22/11**: 8 tiêu chí đạt, tiêu chí 5 lệch câu chữ (độ phủ luôn 100% trên ví khép kín), tiêu chí 6 đạt có điều kiện. Kết quả, bằng chứng và việc chuyển sang phase sau ở cuối file phase |
-| [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | **Đang làm, dừng giữa chừng**: bước 0 (hợp đồng) xong, commit `e28b9e3` trên `main`, migration `0010` đã chạy trên Aurora. Ba luồng A, B, C viết dở ở nhánh `wip/phase3-streams` (`5f8177c`): chưa xong, chưa deploy, chưa kiểm trên AWS. Xem "Việc kế tiếp" mục A |
-| [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | Chưa bắt đầu |
+| [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | **Đóng có điều kiện 22/11**: mã xong, deploy một phần (Runtime v4; F1 `8102089` và F3 `37e4c77` chưa deploy). Evals: golden 84% (dưới 85%), grounding 100%, adversarial 16/16. Chưa kiểm: trình duyệt 390x844, Figma, p95 what-if, ép lỗi model. Xem "Việc kế tiếp" mục A |
+| [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | Chưa bắt đầu (bước 0 hợp đồng là việc kế tiếp, mục B) |
 | [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) | Chưa bắt đầu |
 | [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) | Chưa bắt đầu |
 
 ## Đang chạy trên AWS (`ap-southeast-1`)
 
-Sáu stack (phase 2 thêm vào `YofinaTools` và `YofinaAgent`: Lambda `yofina-forecast-batch`, `yofina-on-transaction`, `yofina-forecast`, SQS `yofina-forecast-events`, Step Functions `yofina-nightly` chạy 02:00, target Gateway `forecast`; migration tới 0009): `YofinaFoundation`, `YofinaData`, `YofinaIdentity`, `YofinaTools`, `YofinaAgent`, `YofinaFrontend`. Danh sách đầy đủ: [docs/aws-resources.md](docs/aws-resources.md). App: `https://main.dcrwn4u7vqklo.amplifyapp.com`. Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. Aurora `yofina-db` từ 22/11 để min 0 ACU, tự ngủ sau 10 phút rảnh (gần như không tốn tiền compute lúc ngủ; lần gọi đầu sau khi ngủ chậm khoảng 15–20 giây). **Trước buổi demo/chấm điểm** đưa về 0,5 ACU: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`.
+Sáu stack (phase 2 thêm vào `YofinaTools` và `YofinaAgent`: Lambda `yofina-forecast-batch`, `yofina-on-transaction`, `yofina-forecast`, SQS `yofina-forecast-events`, Step Functions `yofina-nightly` chạy 02:00, target Gateway `forecast`; migration tới 0009): `YofinaFoundation`, `YofinaData`, `YofinaIdentity`, `YofinaTools`, `YofinaAgent`, `YofinaFrontend`. Danh sách đầy đủ: [docs/aws-resources.md](docs/aws-resources.md). App: `https://main.dcrwn4u7vqklo.amplifyapp.com`. Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. Aurora `yofina-db` từ 22/11 để min 0 ACU, tự ngủ sau 10 phút rảnh (gần như không tốn tiền compute lúc ngủ; lần gọi đầu sau khi ngủ chậm khoảng 15–20 giây). Phase 3 đã deploy ở `508e974`: Guardrail `yofina-guardrail`, target Gateway `planner`/`knowledge`/`audit` (trỏ `yofina-ledger`), Runtime `yofina_agent` version 4, Amplify job 6; migration tới 0010. Tool `audit___record_turn` (F1) chưa có trên Gateway. **Trước buổi demo/chấm điểm** đưa về 0,5 ACU: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`.
 
 Lệnh hay dùng (chi tiết ở `scripts/README.md`, `infra-cdk/README.md`, `agent/README.md`): `uv run pytest`; `uv run pytest tests/integration -m integration` (126 test, gọi môi trường thật, khoảng 10 phút); `uv run scripts/cdk.py deploy <Stack> --require-approval never`; `uv run scripts/agent_deploy.py`; `uv run scripts/migrate.py`; `uv run scripts/seed_demo.py`; `uv run scripts/print_env.py frontend --write` rồi `npm run build` trong `frontend/` và `uv run scripts/deploy_frontend.py frontend/dist`.
 
@@ -29,41 +29,27 @@ Người điều phối giao subagent (Sonnet 5.5, effort high) code từng phas
 
 ## Việc kế tiếp
 
-### A. Phase 3: làm nốt ba luồng, ghép, kiểm, đóng phase (việc của người nhận bàn giao)
+### A. Phase 3: việc còn dở (phase đóng có điều kiện)
 
-#### A.1 Đã xong và nằm trên `main`
+Mã của ba luồng xong và nằm trên `main` local (chưa push). Đã deploy ở `508e974`: `YofinaTools`, `YofinaAgent` (Guardrail, target `planner`/`knowledge`/`audit`), Runtime `yofina_agent` version 4, Amplify job 6. **Chưa deploy**: F1 (`8102089`, tool `audit___record_turn`) và F3 (`37e4c77`, hỏi lại khi thiếu hũ nguồn). Hệ quả: trên môi trường thật "Vì sao" và `POST /feedback` trả 404 cho lượt chat thật. Chủ dự án quyết định (22/11) tạm bỏ qua evals bổ sung và deploy lại. Kết quả từng tiêu chí và số đo: mục "Kết quả thực hiện" ở [file phase 3](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) (10 tiêu chí: 5 đạt; 6 đạt có điều kiện; 2 và 8 chưa kiểm; 1, 3, 4, 7, 9, 10 lệch).
 
-- Bước 0 (hợp đồng), commit `e28b9e3`: `contracts/scenario/`, sáu khối mới, tool `knowledge`/`planner`/`audit` và hai tool mới của `forecast`, REST `POST /affordability`, `GET /traces/{trace_id}`, `POST /feedback`, `schedule_nudge` qua `/confirmations` + `/actions`, sáu mã lỗi mới, migration `0010_what_if_audit`, `agent/src/yofina_agent/schemas.py`, `gateway/tools/planner/rules/*.yaml`. Quyết định ở cuối [file phase 3](docs/plan/phases/phase-3-what-if-va-kiem-tra.md): "Quyết định hợp đồng phase 3", "Cho ba luồng sau", "Người điều phối chốt" (số tiêu chí 1 và 3 theo engine: tổng hạn 05/12 của `minh` là 2.200.000 ₫ và 1.250.000 ₫; `audit`/`planner`/`knowledge` chạy chung Lambda `yofina-ledger`; không tạo AgentCore Memory, frontend vẫn gửi lại toàn bộ `messages`).
-- Migration `0010` đã chạy trên Aurora (`scenarios`, `nudges`, `feedback` đọc được bằng role `yofina_app`).
+Thứ tự làm:
 
-#### A.2 Dở dang ở nhánh `wip/phase3-streams` (commit `5f8177c`, đã push)
+1. **Deploy F1 và F3** (một luồng deploy tại một thời điểm; kiểm trạng thái stack trước): build zip ledger bằng lệnh `build_lambda.py` kèm `--extra` ba gói (lệnh đầy đủ ở file phase 3, mục "Thứ tự deploy còn lại"); `cdk deploy YofinaTools`; `cdk deploy YofinaAgent`; `uv run scripts/agent_deploy.py`. Không migration, không deploy lại frontend. **Không deploy `YofinaAgent` trước `YofinaTools`.**
+2. **Chạy lại integration** (cả bộ, khoảng 12 phút, tuần tự) gồm `test_record_turn_qua_gateway_roi_get_traces_200_feedback_200_nguoi_khac_404` (đã viết, chưa chạy). Rồi chạy lại **bốn ca golden đỏ** (`whatif-bnpl`, `whatif-income`, `whatif-bnpl2`, `whatif-onetime2`; đổi số tiền `whatif-bnpl2` xuống dưới hạn mức 4.033.000 ₫): `uv run python evals/run.py golden --only whatif-bnpl,whatif-income,whatif-bnpl2,whatif-onetime2 --redo --min-interval 25`. Xác định vì sao Verifier hỏng ở `whatif-bnpl`. Mục tiêu: quỹ đạo golden ≥ 85%, BNPL và đổi lương có ca đạt.
+3. **Đi cảnh 2 trên trình duyệt** 390x844 (URL Amplify hoặc bản build ở localhost:5173 nối backend thật), so Figma (cần đăng nhập Figma MCP), tự gõ ba câu ngoài bộ golden và đối chiếu số với trace; kiểm "Vì sao" trả 200 sau một lượt thật; thử Hoàn tác (tiêu chí 2).
+4. **Đo p95** what-if và độ trễ `ApplyGuardrail` (ngưỡng 400 ms): đưa Aurora lên 0,5 ACU (`uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`), đo 10 lượt mỗi loại ở phiên ấm, ghi vào file phase 3, rồi **trả về 0** (`-c dbMinAcu=0`). Ép lỗi model trên Runtime (tiêu chí 8).
+5. Phát hiện để sau (F4 đến F10) ở file phase 3; quyết định mở F5 (guardrail fail-open) và ngưỡng sát/hụt ở [open-questions.md](docs/requirements/open-questions.md).
 
-Ba subagent Sonnet bị dừng giữa chừng (giới hạn API, rồi chủ dự án dừng), không có báo cáo cuối. Nhánh chứa toàn bộ phần đã viết, **chưa ai duyệt**.
+Việc phase 2 chuyển sang, chưa chắc đã làm: preview cho sửa hồ sơ, `save_jars`, nghĩa vụ; câu riêng cho hũ 0 ₫ ở tài khoản mới; "gần như chắc chắn" thay "100%"; nhãn bước công cụ của lời gọi dự báo; nhãn mốc biểu đồ chồng nhau; tên cho trình đọc màn hình.
 
-Trạng thái đo lúc dừng (22/11 đêm, trên cây có phần dở):
+**Git**: `main` local đi trước `origin/main`; push `origin main` bị chính sách chặn ở phiên người điều phối, **chủ dự án tự push** (hoặc mở PR từ `origin/r1-merge-phase3`, nhánh này giữ commit merge và sửa test, tồn tại trên origin). Nhánh `wip/phase3-streams` đã merge vào `main`, có thể xóa (local và `origin`). `evals/results/` không vào git (chứa dữ liệu persona; đã có trong `.gitignore`).
 
-- `uv run pytest`: **1636 passed, 1 failed**. Ca đỏ `tests/unit/test_contracts_zod.py::test_zod_qua_cac_fixture_dung_chung`: `tests/unit/ts/blocks.fixtures.test.mjs` còn kỳ vọng danh sách khối đăng ký cũ (8 khối), trong khi luồng C đã thêm sáu khối mới vào `REGISTERED_BY_FRONTEND` (14 khối). Sửa danh sách kỳ vọng.
-- Frontend: `npm run typecheck`, `npm run lint` sạch. Test cả bộ 482 passed, 4 failed vì chờ quá giờ; chạy riêng ba file đỏ (`phase3Chat.test.tsx` 12, `walletBlocks.test.tsx` 13, `ForecastBlock.test.tsx` 14) đều xanh. Chưa chạy `npm run build`, `check:bundle`.
-- `infra-cdk`: `npx tsc --noEmit` sạch. **Chưa `cdk diff`, chưa deploy.**
-- AWS: **chưa deploy gì của phase 3**. `YofinaTools`, `YofinaAgent` vẫn là bản phase 2 (`UPDATE_COMPLETE`); Runtime chạy mã phase 2.
+### B. Phase 4, bước 0 (hợp đồng)
 
-| Luồng | Đã có trên nhánh | Còn thiếu hoặc chưa kiểm |
-|---|---|---|
-| **A — Engine** (backend) | `pipelines/forecast/yofina_forecast/{scenario,afford,credit,common}.py` (run_scenario, affordability_check), `handler_tool.py`; `gateway/tools/{planner/yofina_planner,knowledge/yofina_knowledge,audit/yofina_audit}/`; ledger `phase3.py`, `repo_phase3.py` và sửa `gateway_api`, `rest_api`, `service`, `wallet_reads`, `wallet_writes` (OFFER_EXPIRED, 404 hũ hệ thống, reset xóa bảng mới); `yofina_core/params.py` (schedule_nudge); 6 file Cedar mới; `infra-cdk` (`tools-stack.ts` route `/affordability`, `/traces`, `/feedback`; `agent-stack.ts` vòng `extraTargets` cho `planner`/`knowledge`/`audit` trỏ ledger; lệnh build zip ledger kèm `--extra` ba gói mới); unit test `tests/unit/pipeline/test_{scenario,afford}.py`, `test_ledger_phase3.py`, `test_planner_engine.py` | Lúc dừng đang sửa `agent-stack.ts` (vòng target): soát lại. **Chưa có integration test phase 3** trong `tests/integration/` (tiêu chí 3, 4 phần backend, 9 affordability p95, sáu loại kịch bản qua Gateway). Chưa sửa test tích hợp cũ đang khóa 503 cho hũ hệ thống (`test_forecast_pipeline.py`, `test_wallet_rest.py`) và `test_gateway_config.py` (forecast nay 3 tool). Chưa cập nhật `docs/aws-resources.md`. Chưa build zip, chưa deploy |
-| **B — Harness** (agent) | `agent/src/yofina_agent/{guardrail,clarify,verifier,whatif,trace}.py` mới; `turn.py` nối L0 che PII, router `IntentResult` (Guardrail song song), clarify, what_if (L2, run_scenario, Analyst, Verifier, Composer), affordability (F3), ngoài phạm vi; `yofina_core/pii.py`; `infra-cdk/lib/guardrail.ts` (**chưa nối vào stack nào**); `evals/golden/phase3.jsonl` (25 dòng), `evals/adversarial/phase3.jsonl` (16 dòng), `evals/run.py`; unit test `tests/unit/agent/test_{whatif,verifier,pii,evals}.py` | Lúc dừng đang soạn bộ đánh giá: soát đủ yêu cầu (≥ 20 golden phủ 6 loại kịch bản FR5 kèm quỹ đạo tool, ≥ 15 đối kháng). Chưa chạy agent với model thật, chưa chạy evals trên Runtime. Kiểm đường ping làm nóng phiên đã có chưa. Chưa đặt cấu hình Guardrail (SSM/env) và quyền IAM `bedrock:ApplyGuardrail` cho Runtime |
-| **C — Frontend** | sáu view mới (`blocks/phase3Views.tsx`), `AffordCard`, `ObligationImpactBody`, `ExplainPanel`/`ExplainBody` (GET /traces), `SuggestionChips`, `UndoBar`/`useUndo` (Hoàn tác đếm ngược), `TransferCheckPage` (T3a–c, POST /affordability), sửa chat (`ChatSheet`, `MessageList`, `session`, `actions`, `errors` có OFFER_EXPIRED), `ForecastBlock`/`ForecastChart` (`compare`), `REGISTERED_BY_FRONTEND` 14 khối; test `phase3Blocks.test.tsx`, `phase3Chat.test.tsx` | Lúc dừng sắp chạy bộ kiểm cuối: chạy `build`, `check:bundle`. Chưa nối ping làm nóng với B. Chưa chạy trên backend thật. Chưa so với Figma (Figma MCP cần đăng nhập) |
+Bắt đầu từ [file phase 4](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md): đọc "Bước 0 — Hợp đồng", đọc mục "Kết quả thực hiện" của phase 3 để biết chỗ đã lệch. Có thể làm song song với mục A, nhưng không deploy phase 4 trước khi F1 và F3 lên môi trường thật.
 
-#### A.3 Thứ tự làm tiếp
-
-1. Lấy nhánh WIP về: `git merge --no-ff wip/phase3-streams` lên `main` (hoặc làm trên nhánh rồi merge), chạy lại các kiểm ở A.2, sửa test Zod.
-2. Làm nốt từng luồng bằng subagent **Sonnet** (chủ dự án yêu cầu luồng phụ chỉ dùng Sonnet). Mỗi luồng đọc phần đã có trên nhánh trước khi viết thêm, giữ ranh giới thư mục: A sở hữu backend, `infra-cdk` (trừ `guardrail.ts`), `tests/integration/`, `docs/aws-resources.md`; B sở hữu `agent/`, `evals/`, `tests/unit/agent/`, `infra-cdk/lib/guardrail.ts`, `libs/yofina_core/src/yofina_core/pii.py`; C sở hữu `frontend/`. Chỉ một luồng deploy tại một thời điểm.
-3. Ghép và deploy theo thứ tự: build zip ledger (kèm `--extra` ba gói) và zip forecast; `cdk diff` rồi `deploy YofinaTools`; nối `guardrail.ts` vào stack, `cdk deploy YofinaAgent` (target, Cedar, Guardrail; lệnh này giữ nguyên mã Runtime); `scripts/agent_deploy.py` (mã agent mới); `print_env.py frontend --write`, `npm run build`, `deploy_frontend.py`. **Không deploy `YofinaAgent` trước khi Lambda forecast có `run_scenario` và `affordability_check`.** Commit sau mỗi luồng đã kiểm, cập nhật HANDOFF ngắn.
-4. Kiểm trên môi trường thật: integration test cũ (126) và mới; `evals/run.py` hai bộ (chạy nền, giãn nhịp); đi cảnh 2 trên trình duyệt (bản build ở localhost:5173 nối backend thật, khung 390x844); tự gõ ba câu ngoài bộ golden và đối chiếu từng số với trace; soát 10 tiêu chí của file phase 3 kèm bằng chứng.
-5. Đóng phase: "Kết quả thực hiện" trong file phase 3, ai-log, ghi đè HANDOFF (trỏ phase 4), open-questions, aws-resources, commit, push; xóa nhánh `wip/phase3-streams` khi đã merge.
-
-Việc phase 2 chuyển sang, chưa chắc đã làm (ngoài `OFFER_EXPIRED` và 404 hũ hệ thống đã nằm trong luồng A): preview cho sửa hồ sơ, `save_jars`, nghĩa vụ; câu riêng cho hũ 0 ₫ ở tài khoản mới; "gần như chắc chắn" thay "100%"; nhãn bước công cụ của lời gọi dự báo; nhãn mốc biểu đồ chồng nhau; tên cho trình đọc màn hình. Kiểm luồng C đã làm phần nào.
-
-### B. Lưu ý khi kiểm
+### C. Lưu ý khi kiểm
 
 - Aurora tự ngủ sau 10 phút rảnh (đồng đội đổi 22/11): lần gọi đầu chậm khoảng 17 giây hoặc trả `DATABASE_UNAVAILABLE`, gọi lại là được. Trước khi đo p95 (tiêu chí 9) hoặc demo, đưa về 0,5 ACU: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`, đo xong trả về.
 - Có thể có người khác (đồng đội, danh tính root, máy khác) deploy cùng lúc: xem trạng thái stack trước mỗi deploy.
@@ -74,7 +60,7 @@ Việc phase 2 chuyển sang, chưa chắc đã làm (ngoài `OFFER_EXPIRED` và
 - `uv run scripts/ml_backtest.py --all` ghi đè `ml/yofina_ml/calibration/default.py` bằng định dạng khác (cùng giá trị): `git restore` file đó nếu không đổi tham số.
 - `infra-cdk/` cần `npm ci` và hai zip trong `build/lambda/` (`build_lambda.py`, xem `infra-cdk/README.md`) trước khi `cdk deploy YofinaTools`.
 
-### C. Chờ chủ dự án
+### D. Chờ chủ dự án
 
 Thử chat trên URL Amplify bằng Chrome máy tính và Safari iPhone (chưa ai kiểm từ trình duyệt thật; người điều phối chỉ kiểm bản build ở localhost); bấm link xác nhận trong mail SNS; xem Cost Explorer.
 

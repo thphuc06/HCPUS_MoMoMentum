@@ -113,6 +113,8 @@ Thay đổi trên tài nguyên có sẵn: code Lambda `yofina-ledger` (thêm `yo
 | `/yofina/guardrail/id`, `/yofina/guardrail/version` | SSM Parameter | 3 | Không | Agent đọc id và version lúc khởi động |
 | Phase 3 (YofinaAgent, 2026-11-22) | Target Gateway `forecast`, `planner`, `knowledge`, `audit` + policy Cedar mỗi tool; statement IAM `ApplyGuardrail` (guardrail và guardrail-profile) và hai tham số SSM guardrail thêm vào `yofina-agent-runtime` | 3 | Không | Runtime `yofina_agent` lên version 4 (mã agent phase 3, `scripts/agent_deploy.py`); frontend đã deploy lại lên Amplify (job 6) |
 
+**Chưa deploy (kiểm 2026-11-22 đêm)**: tool `audit___record_turn` (F1, commit `8102089`: contract, Cedar `audit_record_turn_own_user`, env `YOFINA_TURN_RECORD_TOOL` của Runtime, code `yofina_audit/record.py` trong zip `yofina-ledger`) và mã agent F3 (commit `37e4c77`). Gateway target `audit` trên môi trường thật chỉ có `get_trace`, Runtime `yofina_agent` vẫn version 4. Thứ tự deploy: `YofinaTools`, `YofinaAgent`, `scripts/agent_deploy.py` (xem file phase 3).
+
 ## Không do CDK tạo
 
 | Tên | Loại | Cách tạo | Phase | Tính tiền khi nhàn rỗi | Ghi chú |

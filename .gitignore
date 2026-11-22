@@ -80,5 +80,8 @@ desktop.ini
 # --- Claude Code local state ---
 .claude/settings.local.json
 
+# Kết quả evals trên Runtime thật (chứa dữ liệu persona)
+evals/results/
+
 # Spike outputs that can be regenerated
 *.pkl
