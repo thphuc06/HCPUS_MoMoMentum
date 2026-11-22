@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "notice:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:low_data",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Mới có 18 ngày dữ liệu nên đây chỉ là ước lượng ban đầu. Khai thêm chi tiêu để chính xác hơn.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "notice",
+  "data": {
+    "kind": "low_data",
+    "title": "Dữ liệu còn ít",
+    "message": "Mới có 18 ngày dữ liệu nên đây chỉ là ước lượng ban đầu. Khai thêm chi tiêu để chính xác hơn.",
+    "degraded_reason": "short_history"
+  }
+}

@@ -1,0 +1,18 @@
+# Luật 2: dự phòng trước đầu tư.
+id: emergency_before_investing
+version: 1
+title: Dự phòng trước đầu tư
+description: >-
+  Chỉ coi việc đầu tư là phù hợp khi quỹ dự phòng (số dư các hũ có vai trò dự phòng, loại saving) đủ cho số tháng chi tiêu
+  thiết yếu tối thiểu. Chi tiêu thiết yếu theo tháng lấy trung bình từ sổ cái (nghĩa vụ thiết yếu và chi hũ thiết yếu).
+evaluator: emergency_fund_before_investing
+severity: block
+applies_when:
+  categories: [investment]
+thresholds:
+  min_emergency_months:
+    value: 3
+    unit: months
+    note: Số tháng chi tiêu thiết yếu tối thiểu cần có ở quỹ dự phòng. Tài liệu tài chính cá nhân thường nhắc 3 đến 6 tháng; chọn mức thấp của khoảng cho người dùng trẻ.
+    source: Mức tham khảo phổ biến trong tài chính cá nhân (3 đến 6 tháng chi tiêu thiết yếu); giá trị mô phỏng, chưa hiệu chỉnh cho Việt Nam.
+message: Bạn chưa đủ quỹ dự phòng cho vài tháng chi tiêu thiết yếu. Nên xây quỹ dự phòng trước khi đầu tư.

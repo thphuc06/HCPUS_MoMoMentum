@@ -1,0 +1,22 @@
+[
+  {
+    "name": "get_trace",
+    "description": "Đọc bản ghi một lượt trả lời của CHÍNH người dùng để giải thích 'vì sao': dữ liệu đã dùng, luật đã kiểm, nhóm tin cậy kèm lý do, khối đã phát. Trace của người khác hoặc không có thì trả TRACE_NOT_FOUND. Chỉ đọc.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "trace_id": {
+          "type": "string",
+          "description": "Mã trace của câu trả lời cần giải thích (lấy từ khối đã phát)."
+        }
+      },
+      "required": [
+        "trace_id"
+      ]
+    }
+  }
+]

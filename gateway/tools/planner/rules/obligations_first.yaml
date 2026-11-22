@@ -1,0 +1,18 @@
+# Luật 1: nghĩa vụ trước. Một khoản chi tùy ý không được làm các nghĩa vụ thiết yếu đến hạn trước kỳ lương kế bị hụt.
+id: obligations_first
+version: 1
+title: Nghĩa vụ trước
+description: >-
+  Khoản chi hoặc phương án không thiết yếu không được để hũ trả nghĩa vụ thiết yếu (tiền trọ, hóa đơn, khoản vay, Trả sau
+  đến hạn) bị hụt trước kỳ lương kế tiếp. Engine đọc số dư dự báo P50 của hũ trả nghĩa vụ sau khi áp đề xuất.
+evaluator: essential_obligations_covered
+severity: block
+applies_when:
+  essential: false
+thresholds:
+  cover_ratio:
+    value: 1.0
+    unit: ratio
+    note: Phải đủ 100% tổng nghĩa vụ thiết yếu đến hạn trước kỳ lương kế (số dư P50 của hũ trả sau khi áp đề xuất chia cho tổng nghĩa vụ đó).
+    source: Lựa chọn thiết kế của dự án mô phỏng; chưa có chuẩn bên ngoài.
+message: Khoản này làm thiếu tiền cho nghĩa vụ thiết yếu sắp đến hạn. Nghĩa vụ cần được ưu tiên trước.

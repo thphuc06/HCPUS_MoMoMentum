@@ -1,0 +1,5 @@
+{
+  "kind": "one_time_purchase",
+  "amount_vnd": 500000,
+  "funding_source": "jar"
+}

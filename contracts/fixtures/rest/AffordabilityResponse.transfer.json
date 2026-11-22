@@ -1,0 +1,150 @@
+{
+  "v": 1,
+  "id": "affordability_card:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Có thể chuyển 250.000 ₫ từ hũ Đi lại; hũ Ăn uống sẽ hụt nếu dùng.",
+  "source": {
+    "tool": "forecast___affordability_check",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "affordability_card",
+  "data": {
+    "verdict": "ok",
+    "headline": "Có thể chuyển 250.000 ₫ từ hũ Đi lại; hũ Ăn uống sẽ hụt nếu dùng.",
+    "amount_vnd": 250000,
+    "label": "Người nhận demo",
+    "pay_date": "2026-11-21",
+    "funding_source": "jar",
+    "jar_checks": [
+      {
+        "jar": {
+          "code": "hoa_don",
+          "name": "Hóa đơn",
+          "color_key": "brown",
+          "icon_key": "receipt"
+        },
+        "status": "tight",
+        "balance_before_vnd": 450000,
+        "balance_after_vnd": 200000
+      },
+      {
+        "jar": {
+          "code": "di_lai",
+          "name": "Đi lại",
+          "color_key": "sky",
+          "icon_key": "bus"
+        },
+        "status": "ok",
+        "balance_before_vnd": 640000,
+        "balance_after_vnd": 390000
+      },
+      {
+        "jar": {
+          "code": "an_uong",
+          "name": "Ăn uống",
+          "color_key": "violet",
+          "icon_key": "utensils"
+        },
+        "status": "short",
+        "balance_before_vnd": 380000,
+        "balance_after_vnd": 130000,
+        "runout_date_before": "2026-11-23",
+        "runout_date_after": "2026-11-22",
+        "days_earlier": 1,
+        "shortfall_vnd": 480000
+      }
+    ],
+    "credit": {
+      "status": "short",
+      "headline": "Đến hạn 05/12 bạn cần 1.250.000 ₫; hũ Nghĩa vụ hụt 250.000 ₫.",
+      "cost": {
+        "product_label": "Trả sau (mô phỏng)",
+        "principal_vnd": 250000,
+        "fee_added_vnd": 0,
+        "item_cost_vnd": 250000,
+        "due_date": "2026-12-05",
+        "existing_due_vnd": 1000000,
+        "total_due_vnd": 1250000,
+        "limit_vnd": 5000000,
+        "available_before_vnd": 4033000,
+        "available_after_vnd": 3783000
+      },
+      "at_due": [
+        {
+          "jar": {
+            "code": "nghia_vu",
+            "name": "Nghĩa vụ",
+            "color_key": "slate",
+            "icon_key": "wallet"
+          },
+          "status": "short",
+          "balance_before_due_vnd": 1000000,
+          "due_vnd": 1250000,
+          "shortfall_vnd": 250000
+        }
+      ],
+      "shortfall_vnd": 250000,
+      "ratio": {
+        "obligations_vnd": 4250000,
+        "income_vnd": 9000000,
+        "ratio": 0.4722,
+        "threshold": 0.36,
+        "exceeds": true
+      },
+      "cautions": [
+        {
+          "rule_id": "obligation_to_income",
+          "text": "Nghĩa vụ hàng tháng sẽ vượt mức nên giữ so với thu nhập. Không khuyến khích thêm khoản này."
+        }
+      ],
+      "basis": {
+        "computed_at": "2026-11-21T19:00:03Z",
+        "stale": false,
+        "confidence_band": "medium",
+        "is_initial_estimate": false,
+        "history_days": 47,
+        "coverage": 1.0
+      }
+    },
+    "options": [
+      {
+        "option_id": "switch_di_lai",
+        "kind": "switch_jar",
+        "label": "Trả từ hũ Đi lại",
+        "summary": "Hũ Đi lại còn đủ sau khi trả, hũ Ăn uống giữ nguyên.",
+        "status": "ok",
+        "recommended": true,
+        "metrics": [
+          {
+            "label": "Hũ Đi lại",
+            "before": "640.000 ₫",
+            "after": "390.000 ₫"
+          }
+        ]
+      },
+      {
+        "option_id": "defer_payday",
+        "kind": "defer",
+        "label": "Hoãn tới sau kỳ lương",
+        "summary": "Chuyển sau ngày 05/12, khi lương về và các hũ được nạp lại.",
+        "status": "ok"
+      },
+      {
+        "option_id": "use_credit",
+        "kind": "use_credit",
+        "label": "Trả bằng Trả sau (mô phỏng)",
+        "summary": "Tổng phải trả ngày 05/12 là 1.250.000 ₫, gồm nghĩa vụ Trả sau đã có.",
+        "status": "short"
+      }
+    ],
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 1.0
+    }
+  }
+}

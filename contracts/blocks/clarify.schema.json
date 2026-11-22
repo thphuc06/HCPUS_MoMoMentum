@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/clarify.schema.json",
+  "title": "ClarifyBlock",
+  "description": "Hỏi lại đúng MỘT câu khi thiếu thông tin (số tiền, cách trả, hũ, ngày) kèm chip trả lời (H5). Kết thúc lượt; không gọi tool số liệu. Chip bấm thì gửi `value` (hoặc `label`) như tin nhắn kế tiếp. Id khối `clarify:{trace_id}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "clarify" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ClarifyData" }
+  },
+  "$defs": {
+    "ClarifyChip": {
+      "type": "object",
+      "required": ["id", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "label": {
+          "description": "Chữ trên chip.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "value": {
+          "description": "Nội dung gửi lên làm tin nhắn kế tiếp nếu khác `label`. Vắng thì gửi `label`.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      }
+    },
+    "ClarifyData": {
+      "type": "object",
+      "required": ["question", "slot", "chips"],
+      "additionalProperties": false,
+      "properties": {
+        "question": {
+          "description": "ĐÚNG MỘT câu hỏi (một dấu hỏi), do router hỏi khi thiếu thông tin. Kết thúc lượt; câu trả lời là lượt mới và agent chạy tiếp.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "slot": {
+          "description": "Thông tin đang thiếu.",
+          "type": "string",
+          "enum": ["amount", "funding_source", "jar", "date", "scenario_kind", "other"]
+        },
+        "chips": {
+          "description": "Chip trả lời nhanh. Rỗng khi cần nhập tự do (ví dụ số tiền).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/ClarifyChip" },
+          "maxItems": 6
+        },
+        "pending_intent": {
+          "description": "Ý định đang chờ đủ tham số, để frontend và agent ghép câu trả lời với câu hỏi.",
+          "type": "string",
+          "enum": ["what_if", "affordability", "move", "profile_update"]
+        },
+        "allow_free_text": {
+          "description": "Đúng khi người dùng được gõ câu trả lời thay vì chọn chip (mặc định đúng ở giao diện).",
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

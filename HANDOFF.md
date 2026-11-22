@@ -2,7 +2,7 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: 2026-11-22 (chiều), sau khi đóng phase 2.
+Cập nhật lần cuối: 2026-11-22 (tối), phase 3 xong bước 0 (hợp đồng).
 
 ## Đang ở đâu trong kế hoạch
 
@@ -12,7 +12,7 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 |---|---|
 | [1. Nền và lát dọc](docs/plan/phases/phase-1-nen-va-lat-doc.md) | **Xong 22/11**, trừ hai việc chờ chủ dự án (mục C). Kết quả ở cuối file phase |
 | [2. Ví mô phỏng và dự báo](docs/plan/phases/phase-2-vi-va-du-bao.md) | **Xong 22/11**: 8 tiêu chí đạt, tiêu chí 5 lệch câu chữ (độ phủ luôn 100% trên ví khép kín), tiêu chí 6 đạt có điều kiện. Kết quả, bằng chứng và việc chuyển sang phase sau ở cuối file phase |
-| [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | **Việc kế tiếp**, chưa bắt đầu |
+| [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | **Đang làm**: bước 0 hợp đồng xong và đã commit, migration `0010` đã chạy trên Aurora; tiếp theo ba luồng A (engine), B (harness), C (frontend) |
 | [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | Chưa bắt đầu |
 | [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) | Chưa bắt đầu |
 | [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) | Chưa bắt đầu |
@@ -29,11 +29,13 @@ Người điều phối giao subagent (Sonnet 5.5, effort high) code từng phas
 
 ## Việc kế tiếp
 
-### A. Phase 3, bước 0 — Hợp đồng (việc của người nhận bàn giao)
+### A. Phase 3, các luồng A, B, C (việc của người nhận bàn giao)
 
-Đọc [file phase 3](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) (mục "Bước 0 — Hợp đồng") và mục "Kết quả thực hiện" của [phase 1](docs/plan/phases/phase-1-nen-va-lat-doc.md) và [phase 2](docs/plan/phases/phase-2-vi-va-du-bao.md) (đặc biệt "Chuyển sang phase sau"). Bước 0 do một subagent làm trước, rồi mới chia các luồng song song (A engine, B harness, C frontend), một luồng deploy tại một thời điểm.
+Bước 0 xong: hợp đồng ở `contracts/` (mục "Phase 3" của [contracts/README.md](contracts/README.md)), quyết định và "Cho ba luồng sau" ở cuối [file phase 3](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) (gồm phần "Người điều phối chốt": số tiêu chí 1 và 3 theo engine, ba tool `audit`/`planner`/`knowledge` chạy chung Lambda `yofina-ledger`). Migration `0010_what_if_audit` đã chạy trên Aurora. Chưa deploy gì của phase 3.
 
-Việc phase 2 chuyển sang, cân nhắc gộp vào bước 0 hoặc luồng tương ứng: tách `OFFER_EXPIRED` khỏi `TOKEN_EXPIRED`; `GET /forecasts/{hũ hệ thống}` trả 503 thay vì 404 (đổi thì sửa hợp đồng và test cùng lúc); preview cho sửa hồ sơ, `save_jars`, nghĩa vụ; câu riêng cho hũ 0 ₫ ở tài khoản mới (đang hiện "dự kiến cạn"); "Xác suất hụt khoảng 100%" nên ghi "gần như chắc chắn"; nhãn bước công cụ "Đã đọc số dư các hũ" cho lời gọi dự báo; nhãn mốc biểu đồ chồng nhau; nút chat và ô chọn nguồn tiền thiếu tên cho trình đọc màn hình.
+Mở ba luồng song song bằng subagent (mỗi luồng sở hữu thư mục riêng theo file phase), một luồng deploy tại một thời điểm. **Cảnh báo**: `contracts/tools/forecast.json` đã liệt kê `run_scenario` và `affordability_check`; đừng deploy `YofinaAgent` trước khi Lambda `forecast` cài xong hai tool này.
+
+Việc phase 2 chuyển sang (đã có trong hợp đồng phase 3: `OFFER_EXPIRED`, 404 `FORECAST_NOT_APPLICABLE` cho hũ hệ thống) cùng các lỗi nhỏ còn lại: preview cho sửa hồ sơ, `save_jars`, nghĩa vụ; câu riêng cho hũ 0 ₫; "gần như chắc chắn" thay "100%"; nhãn bước công cụ của lời gọi dự báo; nhãn mốc biểu đồ chồng nhau; tên cho trình đọc màn hình.
 
 ### B. Lưu ý khi kiểm
 

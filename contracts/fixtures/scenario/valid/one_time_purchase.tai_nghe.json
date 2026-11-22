@@ -1,0 +1,8 @@
+{
+  "kind": "one_time_purchase",
+  "amount_vnd": 500000,
+  "funding_source": "jar",
+  "jar_code": "giai_tri",
+  "date": "2026-11-22",
+  "label": "tai nghe"
+}

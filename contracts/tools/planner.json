@@ -1,0 +1,108 @@
+[
+  {
+    "name": "check_suitability",
+    "description": "Kiểm một đề xuất với bộ luật phù hợp (nghĩa vụ trước, dự phòng trước đầu tư, không vượt khẩu vị rủi ro, không khuyên vay để tiêu, ngưỡng nghĩa vụ trên thu nhập). Tất định, không dùng model; ngưỡng đọc từ dữ liệu luật. Trả `ok`, danh sách vi phạm (mã luật, mức block hoặc warn) và danh sách luật đã kiểm. Phương án có vi phạm mức block KHÔNG được đưa cho người dùng. Chỉ đọc.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "proposal": {
+          "type": "object",
+          "description": "Đề xuất cần kiểm.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Loại việc đề xuất: một trong sáu loại kịch bản (one_time_purchase, bnpl_purchase, income_change, recurring_expense, jar_transfer, goal_delay) hoặc loại phương án (defer, switch_jar, split, pay_now, use_credit, proceed, reduce_amount, move_between_jars, remind_later, skip)."
+            },
+            "amount_vnd": {
+              "type": "integer",
+              "description": "Số tiền VND của đề xuất (số nguyên dương), nếu có."
+            },
+            "funding_source": {
+              "type": "string",
+              "description": "Nguồn trả: jar hoặc credit."
+            },
+            "jar_code": {
+              "type": "string",
+              "description": "Mã hũ liên quan (nguồn trả hoặc hũ nhận)."
+            },
+            "is_essential": {
+              "type": "boolean",
+              "description": "Đúng nếu khoản này thiết yếu (ăn ở, thuốc men, học phí, nghĩa vụ đến hạn); sai nếu là chi tiêu tùy ý."
+            },
+            "category": {
+              "type": "string",
+              "description": "Nhóm: spending (chi tiêu), saving (tiết kiệm), investment (đầu tư), debt_payment (trả nợ)."
+            },
+            "risk_level": {
+              "type": "string",
+              "description": "Mức rủi ro của khoản đầu tư: low, medium hoặc high. Chỉ có nghĩa khi category là investment."
+            },
+            "origin": {
+              "type": "string",
+              "description": "recommendation nếu là phương án HỆ THỐNG đề xuất cho người dùng; user_request nếu người dùng tự đưa ra. Luật 'không khuyên vay để tiêu' chỉ áp cho recommendation."
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        "scenario_id": {
+          "type": "string",
+          "description": "Id kịch bản đã chạy bằng run_scenario (UUID), nếu đề xuất dựa trên nó; để luật dùng kết quả đã tính thay vì tính lại."
+        }
+      },
+      "required": [
+        "proposal"
+      ]
+    }
+  },
+  {
+    "name": "schedule_nudge",
+    "description": "Đặt (op create) hoặc hủy (op cancel) một lời nhắc cho người dùng vào một ngày mô phỏng. Tool GHI: khi KHÔNG có confirm_token thì KHÔNG ghi gì và trả NEEDS_CONFIRMATION kèm bản xem trước; khi có token hợp lệ (do hệ thống cấp sau khi người dùng bấm xác nhận) thì ghi. KHÔNG tự tạo hay điền confirm_token, KHÔNG bịa kết quả. Hủy dùng cho nút Hoàn tác của lời nhắc vừa đặt.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "op": {
+          "type": "string",
+          "description": "create (mặc định) hoặc cancel."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Loại nhắc (bắt buộc khi create), đúng một trong: runout_warning, obligation_due, salary_pending, review_needed, low_data, purchase_review (nhắc xem lại một khoản định mua)."
+        },
+        "fire_on": {
+          "type": "string",
+          "description": "Ngày YYYY-MM-DD (ngày mô phỏng) sẽ nhắc; bắt buộc khi create, sau hôm nay mô phỏng."
+        },
+        "jar_code": {
+          "type": "string",
+          "description": "Mã hũ liên quan, nếu có."
+        },
+        "note": {
+          "type": "string",
+          "description": "Ghi chú ngắn của người dùng, tối đa 120 ký tự (ví dụ 'xem lại tai nghe'). Đã che PII."
+        },
+        "scenario_id": {
+          "type": "string",
+          "description": "Id kịch bản (UUID) mà lời nhắc xuất phát từ, nếu có."
+        },
+        "nudge_id": {
+          "type": "string",
+          "description": "Id lời nhắc cần hủy (UUID); bắt buộc khi op là cancel."
+        },
+        "confirm_token": {
+          "type": "string",
+          "description": "Token xác nhận dùng một lần do hệ thống cấp SAU KHI người dùng bấm xác nhận trên màn hình. TUYỆT ĐỐI không tự tạo hay đoán; để trống khi chưa có."
+        }
+      }
+    }
+  }
+]

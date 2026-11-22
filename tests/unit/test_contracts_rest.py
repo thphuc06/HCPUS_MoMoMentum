@@ -49,6 +49,10 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
         ("GET", "/salary-events"),
         ("GET", "/jar-templates"),
         ("GET", "/forecasts/{jar_code}"),
+        # phase 3: kiểm tra trước khi quẹt (không LLM), bảng "Vì sao", phản hồi phương án
+        ("POST", "/affordability"),
+        ("GET", "/traces/{trace_id}"),
+        ("POST", "/feedback"),
     }
     assert SPEC["security"] == [{"bearerAuth": []}]
     scheme = SPEC["components"]["securitySchemes"]["bearerAuth"]
@@ -56,14 +60,19 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
 
 
 def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
-    """Mọi thao tác ghi đi qua token xác nhận: ngoài hai endpoint đó chỉ có huỷ đề nghị (không ghi sổ cái) và demo/reset."""
+    """Mọi thao tác ghi đi qua token xác nhận: ngoài hai endpoint đó chỉ có huỷ đề nghị (không ghi sổ cái), demo/reset,
+    `POST /affordability` (POST chỉ để có thân yêu cầu, không ghi gì) và `POST /feedback` (một dòng phản hồi, không đụng
+    tiền). Lời nhắc (`schedule_nudge`) KHÔNG có endpoint riêng: đi qua /confirmations và /actions."""
     writes = {op for op in operations() if op[0] != "GET"}
     assert writes == {
         ("POST", "/confirmations"),
         ("POST", "/confirmations/cancel"),
         ("POST", "/actions"),
         ("POST", "/demo/reset"),
+        ("POST", "/affordability"),
+        ("POST", "/feedback"),
     }
+    assert not any("nudge" in path for _, path in operations())
 
 
 def test_moi_operation_co_id_duy_nhat_va_x_lambda_hop_le():
@@ -71,17 +80,22 @@ def test_moi_operation_co_id_duy_nhat_va_x_lambda_hop_le():
     for path, item in SPEC["paths"].items():
         for method, op in item.items():
             ids.append(op["operationId"])
-            assert op.get("x-lambda", "ledger") in {"ledger", "forecast"}, (method, path)
+            assert op.get("x-lambda", "ledger") in {"ledger", "forecast", "audit"}, (method, path)
             assert op["tags"], (method, path)
     assert len(ids) == len(set(ids))
     assert SPEC["paths"]["/forecasts/{jar_code}"]["get"]["x-lambda"] == "forecast"
-    others = {
-        p
-        for p, item in SPEC["paths"].items()
-        for op in item.values()
-        if op.get("x-lambda", "ledger") == "forecast"
-    }
-    assert others == {"/forecasts/{jar_code}"}
+
+    def served_by(lam):
+        return {
+            p
+            for p, item in SPEC["paths"].items()
+            for op in item.values()
+            if op.get("x-lambda", "ledger") == lam
+        }
+
+    assert served_by("forecast") == {"/forecasts/{jar_code}", "/affordability"}
+    assert served_by("audit") == set()  # phase 3: audit chạy chung Lambda ledger
+    assert {"/traces/{trace_id}", "/feedback"} <= served_by("ledger")
 
 
 def test_moi_endpoint_doc_co_loi_401_va_503():

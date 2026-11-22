@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/tools/planner.results.schema.json",
+  "title": "PlannerToolResults",
+  "description": "Kết quả JSON mà Lambda `planner` trả cho Gateway: `check_suitability` (đọc, tất định) và `schedule_nudge` (GHI, qua luồng token như các tool ghi khác). `SuitabilityVerdict` cũng là kiểu Pydantic `yofina_core.suitability.SuitabilityVerdict`. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "$defs": {
+    "Violation": {
+      "description": "Một vi phạm luật suitability.",
+      "type": "object",
+      "required": ["rule_id", "severity", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "severity": {
+          "description": "block: phương án KHÔNG được đưa cho người dùng; warn: được đưa kèm cảnh báo ('không khuyến khích').",
+          "type": "string",
+          "enum": ["block", "warn"]
+        },
+        "message": {
+          "description": "Câu tiếng Việt do luật cung cấp (từ file luật), không do LLM viết.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "SuitabilityVerdict": {
+      "description": "Kết luận của `check_suitability`. Bất biến: ok đúng khi không có violation mức block; mọi violation.rule_id có trong checked với outcome warn hoặc fail.",
+      "type": "object",
+      "required": ["ok", "violations", "checked", "rules_version"],
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "description": "Đúng khi KHÔNG có vi phạm mức block (warn vẫn ok).",
+          "type": "boolean"
+        },
+        "violations": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "$ref": "#/$defs/Violation" }
+        },
+        "checked": {
+          "description": "Mọi luật đã xét và kết quả (đi vào `rules_checked` của khối explain).",
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "../blocks/explain.schema.json#/$defs/RuleCheck" }
+        },
+        "rules_version": {
+          "description": "Phiên bản bộ luật (trường `version` của file luật) để truy vết.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      }
+    },
+    "CheckSuitabilityOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "#/$defs/SuitabilityVerdict" }
+      }
+    },
+    "CheckSuitabilityResult": {
+      "description": "Mã lỗi có thể gặp: JAR_NOT_FOUND, PROFILE_INCOMPLETE, PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/CheckSuitabilityOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
+    "ScheduleNudgeResult": {
+      "description": "Tool ghi: NEEDS_CONFIRMATION (không token; `data` = ConfirmActionData với tool schedule_nudge), OK (đã ghi; `data` = ReceiptActionData, `reference_id` là id của nhắc, cũng là thứ Hoàn tác dùng để hủy) hoặc lỗi. Mã lỗi có thể gặp: NUDGE_NOT_FOUND (hủy), JAR_NOT_FOUND, PARAMS_INVALID, các mã token (TOKEN_INVALID, TOKEN_EXPIRED, TOKEN_REUSED, PARAMS_MISMATCH).",
+      "oneOf": [
+        { "$ref": "ledger.results.schema.json#/$defs/ActionNeedsConfirmation" },
+        { "$ref": "ledger.results.schema.json#/$defs/ActionOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    }
+  }
+}

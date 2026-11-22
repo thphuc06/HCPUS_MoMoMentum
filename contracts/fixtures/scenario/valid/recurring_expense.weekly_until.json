@@ -1,0 +1,8 @@
+{
+  "kind": "recurring_expense",
+  "amount_vnd": 50000,
+  "cycle": "weekly",
+  "date": "2026-11-25",
+  "end_date": "2026-12-25",
+  "jar_code": "di_lai"
+}

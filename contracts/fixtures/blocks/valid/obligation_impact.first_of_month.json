@@ -1,0 +1,57 @@
+{
+  "v": 1,
+  "id": "obligation_impact:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:2026-12-05",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Đến hạn 05/12 bạn cần 333.000 ₫; hũ Nghĩa vụ đủ.",
+  "source": {
+    "tool": "forecast___run_scenario",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "obligation_impact",
+  "data": {
+    "status": "ok",
+    "headline": "Đến hạn 05/12 bạn cần 333.000 ₫; hũ Nghĩa vụ đủ.",
+    "cost": {
+      "product_label": "Trả sau (mô phỏng)",
+      "principal_vnd": 300000,
+      "fee_added_vnd": 33000,
+      "item_cost_vnd": 333000,
+      "due_date": "2026-12-05",
+      "existing_due_vnd": 0,
+      "total_due_vnd": 333000,
+      "fee": {
+        "fee_type": "monthly_service_fee",
+        "amount_vnd": 33000,
+        "source_name": "Biểu phí công khai của sản phẩm trả sau, dùng làm ví dụ cho sản phẩm mô phỏng",
+        "effective_from": "2026-03-31"
+      },
+      "limit_vnd": 5000000,
+      "available_before_vnd": 5000000,
+      "available_after_vnd": 4700000
+    },
+    "at_due": [
+      {
+        "jar": {
+          "code": "nghia_vu",
+          "name": "Nghĩa vụ",
+          "color_key": "slate",
+          "icon_key": "wallet"
+        },
+        "status": "ok",
+        "balance_before_due_vnd": 1000000,
+        "due_vnd": 333000,
+        "shortfall_vnd": 0
+      }
+    ],
+    "shortfall_vnd": 0,
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 1.0
+    }
+  }
+}

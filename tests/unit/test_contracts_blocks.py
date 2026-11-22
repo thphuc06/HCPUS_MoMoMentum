@@ -24,6 +24,13 @@ BLOCK_TYPES = [
     "proactive_card",
     "confirm_action",
     "receipt_action",
+    # phase 3
+    "affordability_card",
+    "obligation_impact",
+    "options",
+    "explain",
+    "clarify",
+    "suggestions",
 ]
 BLOCK_SCHEMA_FILES = {t: CONTRACTS / "blocks" / f"{t}.schema.json" for t in BLOCK_TYPES}
 
@@ -49,7 +56,7 @@ def test_schema_hop_le_theo_metaschema_2020_12(path):
     assert schema["$id"].startswith(BASE + "/")
 
 
-def test_union_dung_tam_khoi_theo_thu_tu():
+def test_union_dung_muoi_bon_khoi_theo_thu_tu():
     union = load_json(CONTRACTS / "blocks" / "block.schema.json")
     refs = [m["$ref"] for m in union["oneOf"]]
     assert refs == [f"{t}.schema.json" for t in BLOCK_TYPES]
@@ -207,7 +214,10 @@ FORECAST_FIXTURES = [
 def test_forecast_timeline_nhat_quan(path):
     obj = load_json(path)
     d = obj["data"]
-    assert obj["id"] == f"forecast_timeline:{obj['trace_id']}:{d['jar']['code']}"
+    suffix = (
+        ":what_if" if "compare" in d else ""
+    )  # khối trước-sau có hậu tố để không đè khối baseline
+    assert obj["id"] == f"forecast_timeline:{obj['trace_id']}:{d['jar']['code']}{suffix}"
     days = d["days"]
     assert [x["date"] for x in days] == sorted(x["date"] for x in days)  # tăng dần
     assert len({x["date"] for x in days}) == len(days)  # không trùng ngày
@@ -224,6 +234,23 @@ def test_forecast_timeline_nhat_quan(path):
     ev = [e["date"] for e in d["events"]]
     assert ev == sorted(ev)
     assert all(days[0]["date"] <= e <= days[-1]["date"] for e in ev)
+    if "compare" in d:
+        cmp = d["compare"]
+        after = cmp["after"]
+        assert [x["date"] for x in after["days"]] == [
+            x["date"] for x in days
+        ]  # cùng ngày với baseline
+        assert all(x["p10_vnd"] <= x["p50_vnd"] <= x["p90_vnd"] for x in after["days"])
+        assert cmp["common_random_numbers"] is True and cmp["n_paths"] >= 1
+        assert after["min_balance_p50_vnd"] == min(x["p50_vnd"] for x in after["days"])
+        base_min = min(x["p50_vnd"] for x in days)
+        assert cmp["delta"]["min_balance_delta_vnd"] == after["min_balance_p50_vnd"] - base_min
+        if "runout_date" in after:
+            assert after["status"] in ("short", "tight")
+        if "p_shortfall" in after:  # xác suất sau chỉ có khi trước cũng có
+            assert "p_shortfall" in d
+        aev = [e["date"] for e in after.get("events", [])]
+        assert aev == sorted(aev) and all(days[0]["date"] <= e <= days[-1]["date"] for e in aev)
 
 
 def test_xac_suat_hut_la_ty_le_0_den_1_khong_phai_phan_tram(registry):

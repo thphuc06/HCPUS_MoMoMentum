@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/explain.schema.json",
+  "title": "ExplainBlock",
+  "description": "Bảng 'Vì sao' (H4): dữ liệu đã dùng, luật đã kiểm, nhóm tin cậy Cao/Vừa/Thấp kèm lý do, mã trace. Dựng từ bản ghi lượt trong `audit_events` (code, không do LLM viết); `GET /traces/{trace_id}` trả khối này. Id khối `explain:{subject_trace_id}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "explain" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ExplainData" }
+  },
+  "$defs": {
+    "DataUsed": {
+      "type": "object",
+      "required": ["label", "tool"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Dữ liệu đã dùng (ví dụ 'Số dư hũ Ăn uống').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "value": {
+          "description": "Giá trị đã định dạng sẵn (ví dụ '380.000 ₫').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "tool": {
+          "description": "Tool đã cho dữ liệu này.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "as_of": { "$ref": "envelope.schema.json#/$defs/IsoDateTime" }
+      }
+    },
+    "RuleCheck": {
+      "description": "Một luật đã kiểm và kết quả.",
+      "type": "object",
+      "required": ["rule_id", "label", "outcome"],
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": {
+          "description": "Id luật (khớp `gateway/tools/planner/rules/*.yaml`, hoặc kiểm của Verifier như `numeric_grounding`).",
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "outcome": {
+          "description": "pass: đạt; warn: cảnh báo; fail: vi phạm (phương án bị loại hoặc kèm 'không khuyến khích'); skipped: không áp dụng.",
+          "type": "string",
+          "enum": ["pass", "warn", "fail", "skipped"]
+        },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "ExplainConfidence": {
+      "description": "Nhóm tin cậy Cao, Vừa, Thấp kèm lý do.",
+      "type": "object",
+      "required": ["band", "reasons"],
+      "additionalProperties": false,
+      "properties": {
+        "band": { "$ref": "forecast_timeline.schema.json#/$defs/ConfidenceBand" },
+        "reasons": {
+          "description": "Lý do do CODE dựng từ độ phủ dữ liệu, số ngày lịch sử, độ phủ khoảng dự báo đã đo; không phải phần trăm do AI nói.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 140 },
+          "minItems": 1,
+          "maxItems": 4
+        }
+      }
+    },
+    "ExplainData": {
+      "type": "object",
+      "required": ["subject_trace_id", "data_used", "rules_checked", "confidence"],
+      "additionalProperties": false,
+      "properties": {
+        "subject_trace_id": {
+          "description": "`trace_id` của câu trả lời được giải thích (khác `trace_id` của khối này nếu mở lại từ `GET /traces/{trace_id}`).",
+          "$ref": "envelope.schema.json#/$defs/TraceId"
+        },
+        "headline": {
+          "description": "Tiêu đề ngắn của bảng (ví dụ 'Vì sao có gợi ý này').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "data_used": {
+          "description": "Dữ liệu đã dùng.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/DataUsed" },
+          "minItems": 1,
+          "maxItems": 20
+        },
+        "rules_checked": {
+          "description": "Luật đã kiểm.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/RuleCheck" },
+          "maxItems": 20
+        },
+        "confidence": { "$ref": "#/$defs/ExplainConfidence" },
+        "ai_generated": {
+          "description": "Đúng khi có đoạn văn do model viết trong câu trả lời (giao diện gắn nhãn AI).",
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

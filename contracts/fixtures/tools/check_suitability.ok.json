@@ -1,0 +1,37 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "ok": true,
+    "violations": [],
+    "checked": [
+      {
+        "rule_id": "obligations_first",
+        "label": "Nghĩa vụ trước",
+        "outcome": "pass"
+      },
+      {
+        "rule_id": "emergency_before_investing",
+        "label": "Dự phòng trước đầu tư",
+        "outcome": "skipped"
+      },
+      {
+        "rule_id": "risk_within_tolerance",
+        "label": "Không vượt khẩu vị rủi ro",
+        "outcome": "skipped"
+      },
+      {
+        "rule_id": "no_borrow_to_spend",
+        "label": "Không khuyên vay để tiêu",
+        "outcome": "pass"
+      },
+      {
+        "rule_id": "obligation_to_income",
+        "label": "Nghĩa vụ trên thu nhập",
+        "outcome": "pass"
+      }
+    ],
+    "rules_version": "1"
+  }
+}

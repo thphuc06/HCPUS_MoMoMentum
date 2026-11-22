@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "id": "notice:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:out_of_scope",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Mình không khuyên mã chứng khoán hay quỹ cụ thể. Mình giúp được việc quản lý chi tiêu và dự báo các hũ.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "notice",
+  "data": {
+    "kind": "out_of_scope",
+    "title": "Mình chưa tư vấn được việc này",
+    "message": "Mình không khuyên mã chứng khoán hay quỹ cụ thể. Mình giúp được việc quản lý chi tiêu và dự báo các hũ.",
+    "suggestions": [
+      {
+        "id": "runout",
+        "label": "Hũ nào sắp cạn?",
+        "prompt": "Hũ nào của mình sắp cạn tiền?"
+      },
+      {
+        "id": "balances",
+        "label": "Xem số dư các hũ",
+        "prompt": "Số dư các hũ của mình"
+      },
+      {
+        "id": "runout",
+        "label": "Hũ nào sắp cạn?",
+        "prompt": "Hũ nào của mình sắp cạn tiền?"
+      },
+      {
+        "id": "balances",
+        "label": "Xem số dư các hũ",
+        "prompt": "Số dư các hũ của mình"
+      },
+      {
+        "id": "runout",
+        "label": "Hũ nào sắp cạn?",
+        "prompt": "Hũ nào của mình sắp cạn tiền?"
+      }
+    ]
+  }
+}

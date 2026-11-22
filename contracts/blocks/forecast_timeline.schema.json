@@ -86,11 +86,7 @@
     },
     "ForecastTimelineData": {
       "type": "object",
-      "required": [
-        "jar", "status", "origin_date", "start_balance_vnd", "horizon_days", "payday",
-        "confidence_band", "history_days", "is_initial_estimate", "model", "computed_at", "stale",
-        "days", "events"
-      ],
+      "required": ["jar", "status", "origin_date", "start_balance_vnd", "horizon_days", "payday", "confidence_band", "history_days", "is_initial_estimate", "model", "computed_at", "stale", "days", "events"],
       "additionalProperties": false,
       "properties": {
         "jar": { "$ref": "#/$defs/ForecastJar" },
@@ -152,6 +148,135 @@
           "type": "array",
           "maxItems": 60,
           "items": { "$ref": "#/$defs/ForecastEvent" }
+        },
+        "compare": {
+          "description": "Chỉ có khi khối là kết quả what-if (tool `forecast___run_scenario`). Trường cấp trên là TRƯỚC, `compare.after` là SAU. Id khối what-if có hậu tố `:what_if` để không đè khối baseline của cùng hũ trong một lượt.",
+          "$ref": "#/$defs/ForecastCompare"
+        }
+      }
+    },
+    "ForecastBasis": {
+      "description": "Cơ sở của một con số tính từ dự báo: độ tươi, nhóm tin cậy, độ dài lịch sử. Dùng chung cho `affordability_card`, `obligation_impact` và kết quả tool kịch bản, để mọi thẻ số liệu đều nói được 'dựa trên dữ liệu nào'.",
+      "type": "object",
+      "required": ["computed_at", "stale", "confidence_band", "is_initial_estimate", "history_days"],
+      "additionalProperties": false,
+      "properties": {
+        "computed_at": {
+          "description": "Thời điểm thật (UTC) tính dự báo mà kết quả dựa vào.",
+          "$ref": "envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "stale": {
+          "description": "Đúng khi dự báo nền đã quá hạn độ tươi và không tính lại được lúc đọc.",
+          "type": "boolean"
+        },
+        "confidence_band": { "$ref": "forecast_timeline.schema.json#/$defs/ConfidenceBand" },
+        "is_initial_estimate": {
+          "description": "Đúng khi lịch sử quá ngắn (ước lượng ban đầu).",
+          "type": "boolean"
+        },
+        "history_days": {
+          "description": "Số ngày lịch sử đã dùng.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage": {
+          "description": "Độ phủ dữ liệu (0..1). Vắng nếu chưa tính được.",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        }
+      }
+    },
+    "ForecastScenarioPath": {
+      "description": "Đường dự báo của hũ SAU khi áp kịch bản.",
+      "type": "object",
+      "required": ["status", "days"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "$ref": "forecast_timeline.schema.json#/$defs/JarStatus" },
+        "runout_date": {
+          "description": "Ngày cạn dự kiến sau khi áp kịch bản. Vắng nếu không cạn trong horizon.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "p_shortfall": {
+          "description": "Xác suất hụt trước kỳ lương sau khi áp kịch bản (0..1). Chỉ có khi baseline cũng có p_shortfall (cùng điều kiện hiển thị).",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "p_shortfall_se": {
+          "description": "Sai số chuẩn Monte Carlo của p_shortfall sau kịch bản.",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "min_balance_p50_vnd": {
+          "description": "Số dư P50 thấp nhất trong khoảng dự báo sau kịch bản (âm là hụt).",
+          "$ref": "envelope.schema.json#/$defs/VndSigned"
+        },
+        "days": {
+          "description": "Phân vị số dư theo ngày SAU kịch bản, cùng các ngày (cùng thứ tự, cùng độ dài) với `days` của baseline.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/ForecastDay" },
+          "minItems": 1,
+          "maxItems": 90
+        },
+        "events": {
+          "description": "Mốc phát sinh thêm do kịch bản (ví dụ nghĩa vụ Trả sau đến hạn), theo ngày tăng dần. Mốc của baseline không lặp lại ở đây.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/ForecastEvent" },
+          "maxItems": 60
+        }
+      }
+    },
+    "ForecastCompare": {
+      "description": "Biến thể trước và sau của `forecast_timeline`. Các trường cấp trên (`status`, `days`, `events`, `runout_date`, `p_shortfall`...) là TRƯỚC (baseline, đúng như khối không có `compare`), nên frontend cũ không biết `compare` vẫn vẽ đúng baseline. Frontend mới vẽ thêm đường SAU và dải chênh lệch.",
+      "type": "object",
+      "required": ["label", "kind", "after", "delta", "n_paths", "common_random_numbers"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Mô tả kịch bản do code dựng từ spec (ví dụ 'Mua tai nghe 1,2 triệu bằng Trả sau (mô phỏng)'), không do LLM viết.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "kind": {
+          "description": "Loại kịch bản (khớp `ScenarioSpec.kind`).",
+          "type": "string",
+          "enum": ["one_time_purchase", "bnpl_purchase", "income_change", "recurring_expense", "jar_transfer", "goal_delay"]
+        },
+        "scenario_id": {
+          "description": "Id bản ghi `scenarios` của lần chạy này (để 'Vì sao' và phản hồi tham chiếu).",
+          "$ref": "envelope.schema.json#/$defs/Uuid"
+        },
+        "after": { "$ref": "#/$defs/ForecastScenarioPath" },
+        "delta": {
+          "description": "Chênh lệch tóm tắt sau trừ trước, do engine tính (cùng dãy số ngẫu nhiên cho hai bên nên chênh lệch không nhiễu).",
+          "type": "object",
+          "required": ["min_balance_delta_vnd"],
+          "additionalProperties": false,
+          "properties": {
+            "min_balance_delta_vnd": {
+              "description": "Số dư P50 thấp nhất sau kịch bản trừ baseline (âm là tệ đi).",
+              "$ref": "envelope.schema.json#/$defs/VndSigned"
+            },
+            "runout_shift_days": {
+              "description": "Ngày cạn sau trừ ngày cạn trước, đơn vị ngày; âm là cạn sớm hơn. Vắng khi một trong hai bên không cạn.",
+              "type": "integer",
+              "minimum": -400,
+              "maximum": 400
+            },
+            "p_shortfall_delta": {
+              "description": "p_shortfall sau trừ trước (-1..1). Vắng khi không có xác suất.",
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            }
+          }
+        },
+        "n_paths": {
+          "description": "Số đường Monte Carlo.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "common_random_numbers": {
+          "description": "Đúng khi baseline và kịch bản dùng cùng dãy số ngẫu nhiên (bắt buộc đúng với kịch bản chạy bằng Monte Carlo).",
+          "type": "boolean"
         }
       }
     }

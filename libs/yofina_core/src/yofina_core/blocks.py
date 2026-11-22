@@ -16,6 +16,13 @@ Quy tắc `id` (ổn định trong một lượt, cùng id thì khối sau thay 
 - receipt_action: `receipt:{tool}:{reference_id}` hoặc `receipt:{tool}:{trace_id}`
 - forecast_timeline: `forecast_timeline:{trace_id}:{jar_code}`
 - proactive_card: `proactive_card:{trace_id}:{kind}`
+- forecast_timeline trước-sau (có `compare`): `forecast_timeline:{trace_id}:{jar_code}:what_if`
+- affordability_card: `affordability_card:{trace_id}`
+- obligation_impact: `obligation_impact:{trace_id}:{due_date}`
+- options: `options:{trace_id}`
+- explain: `explain:{subject_trace_id}`
+- clarify: `clarify:{trace_id}`
+- suggestions: `suggestions:{trace_id}:{context}`
 """
 
 from __future__ import annotations
@@ -27,7 +34,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from yofina_core.confirm import (
     MOVE_BETWEEN_JARS,
@@ -57,6 +64,9 @@ IsoDateTime = Annotated[
 ]
 JarName = Annotated[str, Field(min_length=1, max_length=40)]
 KeyName = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")]
+SlugKey = Annotated[
+    str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
+]  # id trong khối phase 3 (không có dấu gạch ngang)
 Summary = Annotated[str, Field(min_length=1, max_length=120)]
 ToolName = Literal["move_between_jars"]
 
@@ -165,11 +175,31 @@ class ReceiptBlock(_BlockBase):
 NoticeKind = Literal["out_of_scope", "degraded", "low_data", "error"]
 
 
+DegradedReason = Literal[
+    "model_budget", "model_error", "tool_error", "tool_timeout", "verifier_failed",
+    "low_coverage", "short_history",
+]  # fmt: skip
+
+
+class SuggestionItem(_Strict):
+    id: SlugKey
+    label: Annotated[str, Field(min_length=1, max_length=40)]
+    prompt: Annotated[str, Field(min_length=1, max_length=200)]
+
+
 class NoticeData(_Strict):
     kind: NoticeKind
     title: Annotated[str, Field(min_length=1, max_length=80)]
     message: Annotated[str, Field(min_length=1, max_length=280)]
     code: Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]*$")] | None = None
+    # Phase 3 (tùy chọn, tương thích ngược)
+    retryable: bool | None = None
+    degraded_reason: DegradedReason | None = None
+    missing: (
+        Annotated[list[Annotated[str, Field(min_length=1, max_length=80)]], Field(max_length=5)]
+        | None
+    ) = None
+    suggestions: Annotated[list[SuggestionItem], Field(max_length=4)] | None = None
 
 
 class NoticeBlock(_BlockBase):
@@ -214,6 +244,47 @@ class ForecastEvent(_Strict):
     amount_max_vnd: VndPositive | None = None
 
 
+ScenarioKindName = Literal[
+    "one_time_purchase", "bnpl_purchase", "income_change", "recurring_expense", "jar_transfer",
+    "goal_delay",
+]  # fmt: skip
+
+
+class ForecastBasis(_Strict):
+    computed_at: IsoDateTime
+    stale: bool
+    confidence_band: ConfidenceBand
+    is_initial_estimate: bool
+    history_days: Annotated[int, Field(ge=0)]
+    coverage: Ratio | None = None
+
+
+class ForecastScenarioPath(_Strict):
+    status: JarStatus
+    runout_date: IsoDate | None = None
+    p_shortfall: Ratio | None = None
+    p_shortfall_se: Ratio | None = None
+    min_balance_p50_vnd: VndSigned | None = None
+    days: Annotated[list[ForecastDay], Field(min_length=1, max_length=90)]
+    events: Annotated[list[ForecastEvent], Field(max_length=60)] | None = None
+
+
+class ForecastCompareDelta(_Strict):
+    min_balance_delta_vnd: VndSigned
+    runout_shift_days: Annotated[int, Field(ge=-400, le=400)] | None = None
+    p_shortfall_delta: Annotated[float, Field(ge=-1, le=1)] | None = None
+
+
+class ForecastCompare(_Strict):
+    label: Annotated[str, Field(min_length=1, max_length=80)]
+    kind: ScenarioKindName
+    scenario_id: Uuid | None = None
+    after: ForecastScenarioPath
+    delta: ForecastCompareDelta
+    n_paths: Annotated[int, Field(ge=1)]
+    common_random_numbers: bool
+
+
 class ForecastTimelineData(_Strict):
     jar: ForecastJar
     status: JarStatus
@@ -233,6 +304,7 @@ class ForecastTimelineData(_Strict):
     stale: bool
     days: Annotated[list[ForecastDay], Field(min_length=1, max_length=90)]
     events: Annotated[list[ForecastEvent], Field(max_length=60)]
+    compare: ForecastCompare | None = None
 
 
 class ForecastTimelineBlock(_BlockBase):
@@ -273,8 +345,9 @@ class ProactiveCardBlock(_BlockBase):
 
 # --- confirm_action ------------------------------------------------------------------------
 ConfirmActionTool = Literal[
-    "record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary"
-]
+    "record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary",
+    "schedule_nudge",
+]  # fmt: skip
 
 
 class ActionChange(_Strict):
@@ -340,6 +413,255 @@ class ReceiptActionBlock(_BlockBase):
     data: ReceiptActionData
 
 
+# --- phase 3: tác động nghĩa vụ, phương án, kiểm tra trước khi quẹt, giải thích, hỏi lại, gợi ý ------
+RuleId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,63}$", max_length=64)]
+OptionKind = Literal[
+    "defer", "switch_jar", "split", "pay_now", "use_credit", "proceed", "reduce_amount",
+    "move_between_jars", "remind_later", "skip",
+]  # fmt: skip
+ActionToolName = Literal[
+    "move_between_jars", "record_transaction", "assign_jar", "update_profile", "save_jars",
+    "confirm_salary", "schedule_nudge",
+]  # fmt: skip
+
+
+class FeeApplied(_Strict):
+    fee_type: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")]
+    amount_vnd: Vnd
+    source_name: Annotated[str, Field(min_length=1, max_length=200)]
+    effective_from: IsoDate
+
+
+class Caution(_Strict):
+    rule_id: RuleId
+    text: Annotated[str, Field(min_length=1, max_length=140)]
+
+
+class CreditCost(_Strict):
+    product_label: Annotated[str, Field(min_length=1, max_length=60)]
+    principal_vnd: VndPositive
+    fee_added_vnd: Vnd
+    item_cost_vnd: VndPositive
+    due_date: IsoDate
+    existing_due_vnd: Vnd
+    total_due_vnd: VndPositive
+    fee: FeeApplied | None = None
+    late_penalty_vnd: Vnd | None = None
+    limit_vnd: Vnd | None = None
+    available_before_vnd: Vnd | None = None
+    available_after_vnd: Vnd | None = None
+
+    @model_validator(mode="after")
+    def _invariants(self) -> CreditCost:
+        """Bất biến của hợp đồng: tách chi phí của món này khỏi tổng phải trả ngày đến hạn."""
+        if self.item_cost_vnd != self.principal_vnd + self.fee_added_vnd:
+            raise ValueError("item_cost_vnd phải bằng principal_vnd + fee_added_vnd")
+        if self.total_due_vnd != self.existing_due_vnd + self.item_cost_vnd:
+            raise ValueError("total_due_vnd phải bằng existing_due_vnd + item_cost_vnd")
+        return self
+
+
+class ObligationRatio(_Strict):
+    obligations_vnd: Vnd
+    income_vnd: Vnd
+    ratio: Annotated[float, Field(ge=0)]
+    threshold: Ratio
+    exceeds: bool
+
+
+class JarAtDue(_Strict):
+    jar: ForecastJar
+    status: JarStatus
+    balance_before_due_vnd: VndSigned
+    due_vnd: Vnd
+    shortfall_vnd: Vnd
+
+
+class ObligationImpactData(_Strict):
+    status: JarStatus
+    headline: Annotated[str, Field(min_length=1, max_length=160)]
+    cost: CreditCost
+    at_due: Annotated[list[JarAtDue], Field(min_length=1, max_length=8)]
+    shortfall_vnd: Vnd
+    ratio: ObligationRatio | None = None
+    cautions: Annotated[list[Caution], Field(max_length=3)] | None = None
+    basis: ForecastBasis
+
+
+class ObligationImpactBlock(_BlockBase):
+    type: Literal["obligation_impact"]
+    data: ObligationImpactData
+
+
+class OptionAction(_Strict):
+    kind: Literal["confirm", "confirm_action"]
+    tool: ActionToolName
+    block_id: Annotated[
+        str, Field(pattern=r"^confirm:[A-Za-z0-9_-]+:[0-9a-f]{12}$", max_length=128)
+    ]
+
+    @model_validator(mode="after")
+    def _kind_matches_tool(self) -> OptionAction:
+        """`confirm` chỉ cho chuyển hũ; mọi tool ghi khác dùng `confirm_action` (như hai cặp khối phase 2)."""
+        if (self.kind == "confirm") != (self.tool == MOVE_BETWEEN_JARS):
+            raise ValueError("kind confirm đi với move_between_jars; confirm_action với tool khác")
+        return self
+
+
+class OptionItem(_Strict):
+    option_id: SlugKey
+    kind: OptionKind
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+    summary: Annotated[str, Field(min_length=1, max_length=200)]
+    status: JarStatus
+    recommended: bool | None = None
+    metrics: Annotated[list[ActionChange], Field(max_length=4)] | None = None
+    checked_rules: Annotated[list[RuleId], Field(max_length=8)] | None = None
+    action: OptionAction | None = None
+
+
+class OptionsData(_Strict):
+    title: Annotated[str, Field(min_length=1, max_length=80)] | None = None
+    scenario_id: Uuid | None = None
+    options: Annotated[list[OptionItem], Field(min_length=2, max_length=3)]
+
+    @model_validator(mode="after")
+    def _ids_unique_one_recommended(self) -> OptionsData:
+        ids = [o.option_id for o in self.options]
+        if len(set(ids)) != len(ids):
+            raise ValueError("option_id phải duy nhất trong khối")
+        if sum(1 for o in self.options if o.recommended) > 1:
+            raise ValueError("tối đa một phương án recommended")
+        return self
+
+
+class OptionsBlock(_BlockBase):
+    type: Literal["options"]
+    data: OptionsData
+
+
+class JarCheck(_Strict):
+    jar: ForecastJar
+    status: JarStatus
+    balance_before_vnd: VndSigned
+    balance_after_vnd: VndSigned
+    runout_date_before: IsoDate | None = None
+    runout_date_after: IsoDate | None = None
+    days_earlier: Annotated[int, Field(ge=0, le=400)] | None = None
+    shortfall_vnd: Vnd | None = None
+    p_shortfall_after: Ratio | None = None
+
+
+class AffordabilityCardData(_Strict):
+    verdict: JarStatus
+    headline: Annotated[str, Field(min_length=1, max_length=160)]
+    amount_vnd: VndPositive
+    label: Annotated[str, Field(min_length=1, max_length=60)] | None = None
+    pay_date: IsoDate | None = None
+    funding_source: Literal["jar", "credit"]
+    selected_jar_code: JarCode | None = None
+    jar_checks: Annotated[list[JarCheck], Field(max_length=8)]
+    credit: ObligationImpactData | None = None
+    cautions: Annotated[list[Caution], Field(max_length=3)] | None = None
+    options: Annotated[list[OptionItem], Field(max_length=4)]
+    basis: ForecastBasis
+
+
+class AffordabilityCardBlock(_BlockBase):
+    type: Literal["affordability_card"]
+    data: AffordabilityCardData
+
+
+class DataUsed(_Strict):
+    label: Annotated[str, Field(min_length=1, max_length=80)]
+    value: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    tool: Annotated[str, Field(min_length=1, max_length=80)]
+    as_of: IsoDateTime | None = None
+
+
+RuleOutcomeName = Literal["pass", "warn", "fail", "skipped"]
+
+
+class RuleCheck(_Strict):
+    rule_id: RuleId
+    label: Annotated[str, Field(min_length=1, max_length=80)]
+    outcome: RuleOutcomeName
+    detail: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+
+
+class ExplainConfidence(_Strict):
+    band: ConfidenceBand
+    reasons: Annotated[
+        list[Annotated[str, Field(min_length=1, max_length=140)]],
+        Field(min_length=1, max_length=4),
+    ]
+
+
+class ExplainData(_Strict):
+    subject_trace_id: TraceId
+    headline: Annotated[str, Field(min_length=1, max_length=80)] | None = None
+    data_used: Annotated[list[DataUsed], Field(min_length=1, max_length=20)]
+    rules_checked: Annotated[list[RuleCheck], Field(max_length=20)]
+    confidence: ExplainConfidence
+    ai_generated: bool | None = None
+
+
+class ExplainBlock(_BlockBase):
+    type: Literal["explain"]
+    data: ExplainData
+
+
+ClarifySlot = Literal["amount", "funding_source", "jar", "date", "scenario_kind", "other"]
+
+
+class ClarifyChip(_Strict):
+    id: SlugKey
+    label: Annotated[str, Field(min_length=1, max_length=40)]
+    value: Annotated[str, Field(min_length=1, max_length=80)] | None = None
+
+
+class ClarifyData(_Strict):
+    question: Annotated[str, Field(min_length=1, max_length=200)]
+    slot: ClarifySlot
+    chips: Annotated[list[ClarifyChip], Field(max_length=6)]
+    pending_intent: Literal["what_if", "affordability", "move", "profile_update"] | None = None
+    allow_free_text: bool | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_question(self) -> ClarifyData:
+        """Đúng một câu hỏi: không quá một dấu hỏi (hợp đồng của khối `clarify`)."""
+        if self.question.count("?") > 1:
+            raise ValueError("khối clarify chỉ hỏi đúng một câu")
+        return self
+
+
+class ClarifyBlock(_BlockBase):
+    type: Literal["clarify"]
+    data: ClarifyData
+
+
+SuggestionContext = Literal["welcome", "after_answer", "out_of_scope", "degraded"]
+
+
+class SuggestionsData(_Strict):
+    context: SuggestionContext
+    title: Annotated[str, Field(min_length=1, max_length=80)] | None = None
+    can_do: (
+        Annotated[list[Annotated[str, Field(min_length=1, max_length=80)]], Field(max_length=6)]
+        | None
+    ) = None
+    cannot_do: (
+        Annotated[list[Annotated[str, Field(min_length=1, max_length=80)]], Field(max_length=6)]
+        | None
+    ) = None
+    items: Annotated[list[SuggestionItem], Field(min_length=1, max_length=6)]
+
+
+class SuggestionsBlock(_BlockBase):
+    type: Literal["suggestions"]
+    data: SuggestionsData
+
+
 Block = Annotated[
     JarSummaryBlock
     | ConfirmBlock
@@ -348,7 +670,13 @@ Block = Annotated[
     | ForecastTimelineBlock
     | ProactiveCardBlock
     | ConfirmActionBlock
-    | ReceiptActionBlock,
+    | ReceiptActionBlock
+    | AffordabilityCardBlock
+    | ObligationImpactBlock
+    | OptionsBlock
+    | ExplainBlock
+    | ClarifyBlock
+    | SuggestionsBlock,
     Field(discriminator="type"),
 ]
 BLOCK_ADAPTER: TypeAdapter[Any] = TypeAdapter(Block)
@@ -363,6 +691,12 @@ BLOCK_MODELS: dict[str, type[_BlockBase]] = {
     "proactive_card": ProactiveCardBlock,
     "confirm_action": ConfirmActionBlock,
     "receipt_action": ReceiptActionBlock,
+    "affordability_card": AffordabilityCardBlock,
+    "obligation_impact": ObligationImpactBlock,
+    "options": OptionsBlock,
+    "explain": ExplainBlock,
+    "clarify": ClarifyBlock,
+    "suggestions": SuggestionsBlock,
 }
 
 
@@ -567,8 +901,15 @@ def build_notice(
     app_date: date,
     code: str | None = None,
     block_id: str | None = None,
+    retryable: bool | None = None,
+    degraded_reason: str | None = None,
+    missing: Iterable[str] | None = None,
+    suggestions: Iterable[Mapping[str, Any]] | None = None,
 ) -> NoticeBlock:
-    """Thông báo trạng thái. `message` do code/cấu hình cung cấp, không chứa số liệu tài chính."""
+    """Thông báo trạng thái. `message` do code/cấu hình cung cấp, không chứa số liệu tài chính.
+
+    Phase 3 (tùy chọn): `retryable` (nút "Thử lại"), `degraded_reason`, `missing` (phần còn thiếu khi trả một
+    phần), `suggestions` (gợi ý việc làm được, mỗi phần tử có id, label, prompt)."""
     return NoticeBlock(
         v=SCHEMA_VERSION,
         id=block_id or f"notice:{trace_id}:{code or kind}",
@@ -576,7 +917,18 @@ def build_notice(
         trace_id=trace_id,
         fallback_text=message,
         source=_source(source_tool, as_of, app_date),
-        data=NoticeData(kind=kind, title=title, message=message, code=code),
+        data=NoticeData(
+            kind=kind,
+            title=title,
+            message=message,
+            code=code,
+            retryable=retryable,
+            degraded_reason=degraded_reason,  # type: ignore[arg-type]
+            missing=list(missing) if missing is not None else None,
+            suggestions=[SuggestionItem(**x) for x in suggestions]
+            if suggestions is not None
+            else None,
+        ),
     )
 
 
@@ -824,15 +1176,34 @@ def build_forecast_timeline_from_data(
     """Bọc `data` ĐÃ DỰNG (kết quả tool `forecast___get_forecast`, đúng `ForecastTimelineData`) thành khối `forecast_timeline`.
 
     Dùng ở agent: số trong khối là số của tool (không tính lại, không do LLM viết); `fallback_text` do code sinh từ chính `data`."""
-    d = data if isinstance(data, ForecastTimelineData) else ForecastTimelineData.model_validate(data)
+    d = (
+        data
+        if isinstance(data, ForecastTimelineData)
+        else ForecastTimelineData.model_validate(data)
+    )
+    if d.compare is not None:
+        # Khối what-if: trường cấp trên là TRƯỚC, `compare.after` là SAU; câu thay thế nói về SAU.
+        cmp = d.compare
+        text = _clip(
+            f"Nếu {cmp.label}: "
+            + _forecast_sentence(
+                d.jar.name, cmp.after.status, cmp.after.runout_date, d.payday.date, d.stale,
+                d.is_initial_estimate,
+            ),
+            280,
+        )  # fmt: skip
+        default_id = f"forecast_timeline:{trace_id}:{d.jar.code}:what_if"
+    else:
+        text = _forecast_sentence(
+            d.jar.name, d.status, d.runout_date, d.payday.date, d.stale, d.is_initial_estimate
+        )
+        default_id = f"forecast_timeline:{trace_id}:{d.jar.code}"
     return ForecastTimelineBlock(
         v=SCHEMA_VERSION,
-        id=block_id or f"forecast_timeline:{trace_id}:{d.jar.code}",
+        id=block_id or default_id,
         type="forecast_timeline",
         trace_id=trace_id,
-        fallback_text=_forecast_sentence(
-            d.jar.name, d.status, d.runout_date, d.payday.date, d.stale, d.is_initial_estimate
-        ),
+        fallback_text=text,
         source=_source(source_tool, as_of, app_date),
         data=d,
     )
@@ -868,5 +1239,170 @@ def build_proactive_card(
             reason=reason,
             jar_code=jar_code,
             actions=[ProactiveAction(**a) for a in actions],
+        ),
+    )
+
+
+# --- dựng khối phase 3 ---------------------------------------------------------------------
+_BAND_TEXT = {"high": "Cao", "medium": "Vừa", "low": "Thấp"}
+
+
+def _data_model(model: type[Any], data: Any) -> Any:
+    return data if isinstance(data, model) else model.model_validate(data)
+
+
+def build_affordability_card(
+    *,
+    data: Mapping[str, Any] | AffordabilityCardData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> AffordabilityCardBlock:
+    """Bọc `data` ĐÃ DỰNG (kết quả `forecast___affordability_check` hoặc `POST /affordability`, đúng
+    `AffordabilityCardData`) thành khối. `fallback_text` là `headline` do engine dựng (có chữ đủ/sát/hụt)."""
+    d = _data_model(AffordabilityCardData, data)
+    return AffordabilityCardBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"affordability_card:{trace_id}",
+        type="affordability_card",
+        trace_id=trace_id,
+        fallback_text=_clip(d.headline, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+def build_obligation_impact(
+    *,
+    data: Mapping[str, Any] | ObligationImpactData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> ObligationImpactBlock:
+    """Bọc `ObligationImpactData` (từ `run_scenario`) thành khối. Id theo ngày đến hạn."""
+    d = _data_model(ObligationImpactData, data)
+    return ObligationImpactBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"obligation_impact:{trace_id}:{d.cost.due_date}",
+        type="obligation_impact",
+        trace_id=trace_id,
+        fallback_text=_clip(d.headline, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+def build_options(
+    *,
+    data: Mapping[str, Any] | OptionsData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> OptionsBlock:
+    """Khối phương án. `fallback_text` liệt kê nhãn các phương án (không có số do LLM viết)."""
+    d = _data_model(OptionsData, data)
+    labels = "; ".join(o.label for o in d.options)
+    return OptionsBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"options:{trace_id}",
+        type="options",
+        trace_id=trace_id,
+        fallback_text=_clip(f"Có {len(d.options)} phương án: {labels}.", 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+def build_explain(
+    *,
+    data: Mapping[str, Any] | ExplainData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> ExplainBlock:
+    """Khối "Vì sao" dựng từ bản ghi lượt. `trace_id` là của yêu cầu hiện tại; `subject_trace_id` trong `data` là
+    của câu trả lời được giải thích."""
+    d = _data_model(ExplainData, data)
+    used = ", ".join(x.label for x in d.data_used[:3])
+    text = f"Dữ liệu đã dùng: {used}. Độ tin cậy: {_BAND_TEXT[d.confidence.band]}."
+    return ExplainBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"explain:{d.subject_trace_id}",
+        type="explain",
+        trace_id=trace_id,
+        fallback_text=_clip(text, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+def build_clarify(
+    *,
+    question: str,
+    slot: str,
+    chips: Iterable[Mapping[str, Any]],
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    pending_intent: str | None = None,
+    allow_free_text: bool | None = None,
+    block_id: str | None = None,
+) -> ClarifyBlock:
+    """Khối hỏi lại: đúng một câu hỏi kèm chip trả lời."""
+    return ClarifyBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"clarify:{trace_id}",
+        type="clarify",
+        trace_id=trace_id,
+        fallback_text=_clip(question, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=ClarifyData(
+            question=question,
+            slot=slot,  # type: ignore[arg-type]
+            chips=[ClarifyChip(**c) for c in chips],
+            pending_intent=pending_intent,  # type: ignore[arg-type]
+            allow_free_text=allow_free_text,
+        ),
+    )
+
+
+def build_suggestions(
+    *,
+    context: str,
+    items: Iterable[Mapping[str, Any]],
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    title: str | None = None,
+    can_do: Iterable[str] | None = None,
+    cannot_do: Iterable[str] | None = None,
+    block_id: str | None = None,
+) -> SuggestionsBlock:
+    """Khối gợi ý bấm được. Nội dung do cấu hình hoặc code cung cấp."""
+    rows = [SuggestionItem(**i) for i in items]
+    text = title or "Gợi ý: " + ", ".join(r.label for r in rows) + "."
+    return SuggestionsBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"suggestions:{trace_id}:{context}",
+        type="suggestions",
+        trace_id=trace_id,
+        fallback_text=_clip(text, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=SuggestionsData(
+            context=context,  # type: ignore[arg-type]
+            title=title,
+            can_do=list(can_do) if can_do is not None else None,
+            cannot_do=list(cannot_do) if cannot_do is not None else None,
+            items=rows,
         ),
     )

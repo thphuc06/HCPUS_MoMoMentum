@@ -1,0 +1,7 @@
+{
+  "kind": "jar_transfer",
+  "amount_vnd": 200000,
+  "from_jar": "a",
+  "to_jar": "b",
+  "user_id": "someone"
+}

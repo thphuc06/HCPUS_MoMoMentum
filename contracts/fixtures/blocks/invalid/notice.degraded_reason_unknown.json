@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "id": "notice:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:FORECAST_UNAVAILABLE",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Mình chưa lấy được dự báo lúc này. Bạn thử lại nhé.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "notice",
+  "data": {
+    "kind": "error",
+    "title": "Có lỗi khi lấy số liệu",
+    "message": "Mình chưa lấy được dự báo lúc này. Bạn thử lại nhé.",
+    "code": "FORECAST_UNAVAILABLE",
+    "retryable": true,
+    "degraded_reason": "cosmic_rays"
+  }
+}

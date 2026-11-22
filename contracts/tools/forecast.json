@@ -18,5 +18,114 @@
         "jar"
       ]
     }
+  },
+  {
+    "name": "run_scenario",
+    "description": "Chạy một kịch bản 'nếu thì' lên dự báo đã tính: so SAU với TRƯỚC trên cùng dãy số ngẫu nhiên (5.000 đường Monte Carlo). Trả chênh lệch ngày cạn, xác suất hụt (chỉ khi đủ tin cậy), số dư thấp nhất, hũ nào đổi trạng thái đủ/sát/hụt, với kịch bản Trả sau còn có tác động nghĩa vụ (chi phí của món này, tổng phải trả ngày đến hạn, hũ hụt khi đến hạn) và độ tin cậy. Chỉ ĐỌC và tính: KHÔNG đổi số dư, KHÔNG cần xác nhận (kết quả được lưu như dữ liệu dẫn xuất để giải thích). `scenario` phải đủ trường theo loại; thiếu số tiền hoặc cách trả thì KHÔNG gọi tool, hãy hỏi lại người dùng. Mọi con số trong câu trả lời phải lấy từ kết quả tool, không tự tính.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "scenario": {
+          "type": "object",
+          "description": "Kịch bản. Chỉ điền trường thuộc loại đã chọn; trường lạ bị từ chối.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Loại kịch bản, đúng một trong: one_time_purchase (mua một lần bằng tiền hũ), bnpl_purchase (mua bằng Trả sau (mô phỏng)), income_change (đổi lương), recurring_expense (thêm khoản chi định kỳ), jar_transfer (chuyển tiền giữa hai hũ), goal_delay (lùi mục tiêu của hũ tiết kiệm)."
+            },
+            "amount_vnd": {
+              "type": "integer",
+              "description": "Số tiền VND, số nguyên dương, KHÔNG có dấu chấm phẩy. Bắt buộc với one_time_purchase, bnpl_purchase, recurring_expense, jar_transfer. Không bịa: thiếu thì hỏi lại người dùng."
+            },
+            "new_monthly_salary_vnd": {
+              "type": "integer",
+              "description": "Lương tháng mới (không phải mức chênh), số nguyên dương. Bắt buộc với income_change."
+            },
+            "funding_source": {
+              "type": "string",
+              "description": "Nguồn trả: jar (tiền hũ) hoặc credit (Trả sau (mô phỏng)). one_time_purchase luôn là jar; bnpl_purchase luôn là credit."
+            },
+            "jar_code": {
+              "type": "string",
+              "description": "Mã hũ (lấy từ ledger___get_jar_balances). Bắt buộc với one_time_purchase (hũ trả), recurring_expense (hũ trả) và goal_delay (hũ có mục tiêu); tùy chọn với bnpl_purchase (hũ để tính chi tiêu)."
+            },
+            "from_jar": {
+              "type": "string",
+              "description": "Hũ nguồn của jar_transfer (mã hũ)."
+            },
+            "to_jar": {
+              "type": "string",
+              "description": "Hũ đích của jar_transfer (mã hũ), khác from_jar."
+            },
+            "date": {
+              "type": "string",
+              "description": "Ngày YYYY-MM-DD. Ngày mua, ngày chuyển, ngày lương mới có hiệu lực; với recurring_expense là ngày của lần đầu và BẮT BUỘC. Vắng thì hôm nay mô phỏng."
+            },
+            "end_date": {
+              "type": "string",
+              "description": "Ngày YYYY-MM-DD cuối còn tính của recurring_expense, không trước date. Vắng thì không kết thúc."
+            },
+            "cycle": {
+              "type": "string",
+              "description": "Chu kỳ của recurring_expense: weekly, monthly hoặc yearly. Bắt buộc với recurring_expense."
+            },
+            "delay_months": {
+              "type": "integer",
+              "description": "Số tháng lùi hạn của goal_delay, từ 1 đến 60. Bắt buộc với goal_delay."
+            },
+            "label": {
+              "type": "string",
+              "description": "Tên ngắn của món theo lời người dùng, tối đa 80 ký tự (ví dụ 'tai nghe'). Chỉ để hiển thị."
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      },
+      "required": [
+        "scenario"
+      ]
+    }
+  },
+  {
+    "name": "affordability_check",
+    "description": "Kiểm tra TRƯỚC KHI chi: một khoản có đủ tiền không, tất định, không dùng model. Nguồn hũ: đủ, sát (cạn sớm N ngày) hay hụt (M đồng trước kỳ lương), kiểm từng hũ có thể trả. Nguồn Trả sau (mô phỏng): chi phí của món này, tổng phải trả ngày đến hạn, hũ nào hụt khi đến hạn, có vượt ngưỡng nghĩa vụ trên thu nhập không (kèm cảnh báo 'không khuyến khích'). Kèm các phương án tất định (hoãn, đổi hũ, chia nhỏ, trả ngay). Chỉ đọc và tính: không ghi gì, không cần xác nhận. Dùng cho 'chuyển 250 nghìn có sao không', 'có đủ tiền mua X không'.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "amount_vnd": {
+          "type": "integer",
+          "description": "Số tiền VND của khoản sắp chi, số nguyên dương. Bắt buộc. Không bịa: thiếu thì hỏi lại người dùng."
+        },
+        "funding_source": {
+          "type": "string",
+          "description": "Nguồn trả cần xét: jar hoặc credit. Vắng thì xét cả hai (kiểm từng hũ và cả Trả sau)."
+        },
+        "jar": {
+          "type": "string",
+          "description": "Mã hũ nguồn người dùng đã chọn (khi funding_source là jar). Vắng thì kiểm mọi hũ chi tiêu."
+        },
+        "label": {
+          "type": "string",
+          "description": "Tên người nhận hoặc món, tối đa 60 ký tự (để hiển thị)."
+        },
+        "date": {
+          "type": "string",
+          "description": "Ngày chi YYYY-MM-DD (ngày mô phỏng). Vắng thì hôm nay mô phỏng."
+        }
+      },
+      "required": [
+        "amount_vnd"
+      ]
+    }
   }
 ]

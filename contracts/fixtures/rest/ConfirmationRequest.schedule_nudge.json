@@ -1,0 +1,10 @@
+{
+  "tool": "schedule_nudge",
+  "params": {
+    "op": "create",
+    "kind": "purchase_review",
+    "fire_on": "2026-11-26",
+    "jar_code": "giai_tri",
+    "note": "xem lại tai nghe"
+  }
+}

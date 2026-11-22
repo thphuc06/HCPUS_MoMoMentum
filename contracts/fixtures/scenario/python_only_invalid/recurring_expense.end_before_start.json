@@ -1,0 +1,8 @@
+{
+  "kind": "recurring_expense",
+  "amount_vnd": 99000,
+  "cycle": "monthly",
+  "date": "2026-12-10",
+  "end_date": "2026-12-01",
+  "jar_code": "giai_tri"
+}

@@ -56,6 +56,9 @@ ASSIGN_JAR = "assign_jar"
 UPDATE_PROFILE = "update_profile"
 SAVE_JARS = "save_jars"
 CONFIRM_SALARY = "confirm_salary"
+SCHEDULE_NUDGE = (
+    "schedule_nudge"  # phase 3: nhắc (target planner); ghi bảng nudges, đi qua cùng luồng token
+)
 
 #: Mọi `tool` mà /confirmations và /actions nhận, theo thứ tự trong OpenAPI.
 ACTION_TOOLS = (
@@ -65,9 +68,12 @@ ACTION_TOOLS = (
     UPDATE_PROFILE,
     SAVE_JARS,
     CONFIRM_SALARY,
+    SCHEDULE_NUDGE,
 )
 #: Tool ghi mà agent gọi qua Gateway (target `ledger`); phần còn lại chỉ có ở REST (màn hình).
 AGENT_WRITE_TOOLS = (UPDATE_PROFILE, RECORD_TRANSACTION, MOVE_BETWEEN_JARS, ASSIGN_JAR)
+#: Tool ghi mà agent gọi qua Gateway ở target `planner` (phase 3). Cùng luồng token; REST `/actions` cũng nhận.
+PLANNER_WRITE_TOOLS = (SCHEDULE_NUDGE,)
 #: Tool ghi dùng khối `confirm_action` / `receipt_action` (move_between_jars giữ `confirm` / `receipt` của phase 1).
 GENERIC_ACTION_TOOLS = tuple(t for t in ACTION_TOOLS if t != MOVE_BETWEEN_JARS)
 
@@ -84,7 +90,56 @@ LEDGER_TOOLS = (
     "assign_jar",
     "save_turn",
 )
-FORECAST_TOOLS = ("get_forecast",)
+FORECAST_TOOLS = ("get_forecast", "run_scenario", "affordability_check")
+KNOWLEDGE_TOOLS = ("get_fee_schedule",)
+PLANNER_TOOLS = ("check_suitability", "schedule_nudge")
+AUDIT_TOOLS = ("get_trace",)
+
+# --- phase 3: kịch bản, nhắc, phản hồi, ý định ---------------------------------------------------
+#: Sáu loại kịch bản của FR5 (khớp `kind` trong contracts/scenario/scenario_spec.schema.json).
+SCENARIO_KINDS = (
+    "one_time_purchase",
+    "bnpl_purchase",
+    "income_change",
+    "recurring_expense",
+    "jar_transfer",
+    "goal_delay",
+)
+#: Loại nhắc (khớp CHECK của `nudges.kind` ở migration 0010 và `ScheduleNudge` params).
+NUDGE_KINDS = (
+    "runout_warning",
+    "obligation_due",
+    "salary_pending",
+    "review_needed",
+    "low_data",
+    "purchase_review",
+)
+NUDGE_STATUSES = ("scheduled", "sent", "cancelled", "dismissed")
+NUDGE_OPS = ("create", "cancel")
+FEEDBACK_DECISIONS = ("accepted", "rejected")
+#: Ý định của router (L1).
+INTENTS = (
+    "lookup",
+    "what_if",
+    "affordability",
+    "profile_update",
+    "move",
+    "out_of_scope",
+    "chitchat",
+)
+#: Loại phương án của khối `options` và `affordability_card`.
+OPTION_KINDS = (
+    "defer",
+    "switch_jar",
+    "split",
+    "pay_now",
+    "use_credit",
+    "proceed",
+    "reduce_amount",
+    "move_between_jars",
+    "remind_later",
+    "skip",
+)
 
 
 # --- quy tắc chia lương (dùng chung ledger.confirm_salary và lịch lương của dự báo, để hai nơi không lệch) -----------

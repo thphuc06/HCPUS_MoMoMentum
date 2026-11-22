@@ -1,0 +1,5 @@
+{
+  "kind": "bnpl_purchase",
+  "amount_vnd": 0,
+  "funding_source": "credit"
+}

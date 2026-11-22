@@ -1,0 +1,23 @@
+[
+  {
+    "name": "get_fee_schedule",
+    "description": "Đọc biểu phí CÓ CẤU TRÚC của sản phẩm Trả sau (mô phỏng): loại phí, số tiền, chu kỳ tính, điều kiện, tên nguồn, đường dẫn nguồn và ngày hiệu lực. Số để tính phí đọc từ đây, không lấy từ văn bản tự do. Chỉ đọc.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "fee_type": {
+          "type": "string",
+          "description": "Loại phí cần xem (ví dụ monthly_service_fee). Vắng thì trả mọi phí đang hiệu lực của sản phẩm."
+        },
+        "product": {
+          "type": "string",
+          "description": "Mã sản phẩm (mặc định bnpl_sim, Trả sau (mô phỏng))."
+        }
+      }
+    }
+  }
+]

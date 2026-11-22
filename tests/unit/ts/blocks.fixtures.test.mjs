@@ -16,21 +16,25 @@ function fixtures(dir) {
     .map((f) => ({ file: `${dir}/${f}`, prefix: f.split('.')[0], json: JSON.parse(readFileSync(resolve(FIXTURES, dir, f), 'utf8')) }))
 }
 
-test('blockSchemas có đủ tám khối theo thứ tự của block.schema.json; BLOCK_TYPES (registry frontend) nay cũng đủ tám', () => {
-  const all = [
+test('blockSchemas có đủ mười bốn khối theo thứ tự của block.schema.json; BLOCK_TYPES (registry frontend) gồm tám khối đã có view', () => {
+  const registered = [
     'jar_summary', 'confirm', 'receipt', 'notice',
     'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action',
   ]
+  // Phase 3 thêm sáu khối vào hợp đồng; luồng frontend của phase 3 thêm chúng vào REGISTERED_BY_FRONTEND cùng lúc với view.
+  const all = [
+    ...registered,
+    'affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions',
+  ]
   assert.deepEqual([...ALL_BLOCK_TYPES], all)
   assert.deepEqual(Object.keys(blockSchemas), all)
-  // Frontend đã đăng ký cả tám khối (REGISTERED_BY_FRONTEND trong scripts/gen_contracts.mjs): BLOCK_TYPES bằng ALL_BLOCK_TYPES.
-  assert.deepEqual([...BLOCK_TYPES], all)
+  assert.deepEqual([...BLOCK_TYPES], registered)
   for (const t of BLOCK_TYPES) assert.ok(t in blockSchemas)
 })
 
 test('fixture hợp lệ: qua schema riêng và qua hợp, dữ liệu không bị đổi', () => {
   const list = fixtures('valid')
-  assert.ok(list.length >= 14)
+  assert.ok(list.length >= 30)
   for (const { file, prefix, json } of list) {
     const own = blockSchemas[prefix].safeParse(json)
     assert.ok(own.success, `${file}: ${own.error}`)
@@ -42,7 +46,7 @@ test('fixture hợp lệ: qua schema riêng và qua hợp, dữ liệu không b�
 
 test('fixture không hợp lệ: bị từ chối', () => {
   const list = fixtures('invalid')
-  assert.ok(list.length >= 25)
+  assert.ok(list.length >= 45)
   for (const { file, prefix, json } of list) {
     const schema = prefix === 'block' ? Block : blockSchemas[prefix]
     assert.ok(!schema.safeParse(json).success, `${file}: lẽ ra phải bị từ chối`)
@@ -61,7 +65,7 @@ test('type lạ: union từ chối nhưng phong bì vẫn qua để hiện fallb
 
 test('phía đọc dễ tính: trường thừa bị bỏ chứ không làm hỏng khối (JSON Schema và Pydantic thì từ chối)', () => {
   const list = fixtures('schema_only_invalid')
-  assert.ok(list.length >= 2)
+  assert.ok(list.length >= 5)
   for (const { file, prefix, json } of list) {
     const r = blockSchemas[prefix].safeParse(json)
     assert.ok(r.success, `${file}: ${r.error}`)

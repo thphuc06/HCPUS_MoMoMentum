@@ -1,0 +1,17 @@
+# Luật 5: ngưỡng nghĩa vụ trên thu nhập.
+id: obligation_to_income
+version: 1
+title: Nghĩa vụ trên thu nhập
+description: >-
+  Tổng nghĩa vụ trong kỳ (tiền trọ, hóa đơn, khoản vay, Trả sau đến hạn) sau khi thêm đề xuất không nên vượt một tỷ lệ của thu nhập
+  đã khai. Vượt ngưỡng thì thẻ hiện đỏ kèm cảnh báo "không khuyến khích"; phương án hệ thống đề xuất vượt ngưỡng bị loại.
+evaluator: obligation_income_ratio
+severity: warn
+recommendation_severity: block
+thresholds:
+  max_ratio:
+    value: 0.36
+    unit: ratio
+    note: Tỷ lệ tối đa của tổng nghĩa vụ trên thu nhập kỳ.
+    source: Tham khảo quy tắc 28/36 (nợ trên thu nhập khoảng 36%) thường được nhắc trong tài chính cá nhân; giá trị mô phỏng, chưa hiệu chỉnh cho Việt Nam.
+message: Nghĩa vụ hàng tháng sẽ vượt mức nên giữ so với thu nhập. Không khuyến khích thêm khoản này.

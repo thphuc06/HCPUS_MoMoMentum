@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/affordability_card.schema.json",
+  "title": "AffordabilityCardBlock",
+  "description": "Thẻ kiểm tra trước khi quẹt (F3): đủ, sát hay hụt, nguồn là hũ hoặc Trả sau, tổng chi phí thật, các phương án tất định. Tất định, không qua LLM: `POST /affordability` (màn chuyển tiền) và tool `forecast___affordability_check` (chat) trả CÙNG khối này nên hai nơi cùng số. Ba trạng thái luôn có chữ (`headline`, `status`), không chỉ màu. Id khối `affordability_card:{trace_id}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "affordability_card" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/AffordabilityCardData" }
+  },
+  "$defs": {
+    "JarCheck": {
+      "description": "Kết quả kiểm một hũ làm nguồn trả.",
+      "type": "object",
+      "required": ["jar", "status", "balance_before_vnd", "balance_after_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "jar": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastJar" },
+        "status": {
+          "description": "Đủ, sát, hụt của hũ này NẾU trả khoản này từ hũ đó. Luôn kèm chữ ở giao diện.",
+          "$ref": "forecast_timeline.schema.json#/$defs/JarStatus"
+        },
+        "balance_before_vnd": { "$ref": "envelope.schema.json#/$defs/VndSigned" },
+        "balance_after_vnd": {
+          "description": "Số dư ngay sau khi trả (âm là không đủ).",
+          "$ref": "envelope.schema.json#/$defs/VndSigned"
+        },
+        "runout_date_before": {
+          "description": "Ngày cạn dự kiến trước khi trả. Vắng nếu không cạn.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "runout_date_after": {
+          "description": "Ngày cạn dự kiến sau khi trả. Vắng nếu không cạn.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "days_earlier": {
+          "description": "Cạn sớm hơn N ngày so với trước khi trả (chỉ có khi cả hai ngày cạn có mặt hoặc hũ chuyển từ không cạn sang cạn).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 400
+        },
+        "shortfall_vnd": {
+          "description": "Hụt M đồng trước kỳ lương (số dư P50 thấp nhất âm bao nhiêu). Có khi status là short.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "p_shortfall_after": {
+          "description": "Xác suất hụt trước kỳ lương sau khi trả (0..1). Chỉ có khi dự báo nền đạt điều kiện hiển thị xác suất.",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        }
+      }
+    },
+    "AffordabilityCardData": {
+      "type": "object",
+      "required": ["verdict", "headline", "amount_vnd", "funding_source", "jar_checks", "basis", "options"],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": {
+          "description": "Kết luận đủ, sát, hụt cho nguồn trả `funding_source`: với `jar` là trạng thái của `selected_jar_code` (không chọn hũ thì là trạng thái tốt nhất trong jar_checks); với `credit` là `credit.status`.",
+          "$ref": "forecast_timeline.schema.json#/$defs/JarStatus"
+        },
+        "headline": {
+          "description": "Một câu do code dựng, luôn có chữ trạng thái (ví dụ 'Hũ Ăn uống sẽ hụt 120.000 ₫ trước kỳ lương').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "amount_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" },
+        "label": {
+          "description": "Tên người nhận hoặc món (để hiển thị).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "pay_date": {
+          "description": "Ngày chi (ngày mô phỏng).",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "funding_source": {
+          "description": "Nguồn trả mà `verdict` nói tới.",
+          "type": "string",
+          "enum": ["jar", "credit"]
+        },
+        "selected_jar_code": {
+          "description": "Hũ nguồn người dùng đã chọn (khi funding_source là jar).",
+          "$ref": "envelope.schema.json#/$defs/JarCode"
+        },
+        "jar_checks": {
+          "description": "Kiểm từng hũ có thể trả (T3b: Hóa đơn vàng, Đi lại xanh, Ăn uống đỏ). Có thể rỗng khi chỉ xét Trả sau.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/JarCheck" },
+          "maxItems": 8
+        },
+        "credit": {
+          "description": "Phương án qua Trả sau (mô phỏng): chi phí của món này, tổng phải trả ngày đến hạn, hũ hụt khi đến hạn, tỷ lệ nghĩa vụ trên thu nhập. Vắng khi người dùng không có hạn mức.",
+          "$ref": "obligation_impact.schema.json#/$defs/ObligationImpactData"
+        },
+        "cautions": {
+          "description": "Cảnh báo từ luật suitability áp cho nguồn đang xét.",
+          "type": "array",
+          "items": { "$ref": "obligation_impact.schema.json#/$defs/Caution" },
+          "maxItems": 3
+        },
+        "options": {
+          "description": "Phương án TẤT ĐỊNH engine sinh sẵn (hoãn, đổi hũ, chia nhỏ, trả ngay...); không do LLM viết.",
+          "type": "array",
+          "items": { "$ref": "options.schema.json#/$defs/OptionItem" },
+          "maxItems": 4
+        },
+        "basis": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastBasis" }
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "status": "NEEDS_CONFIRMATION",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "tool": "schedule_nudge",
+    "params": {
+      "op": "create",
+      "kind": "purchase_review",
+      "fire_on": "2026-11-26",
+      "jar_code": "giai_tri",
+      "note": "xem lại tai nghe"
+    },
+    "params_hash": "723c6bcb43ea45a1d9482951d3850636297c3bdc034211d5dcb8a0ca3c310372",
+    "summary": "Nhắc bạn ngày 26/11 xem lại tai nghe",
+    "changes": [
+      {
+        "label": "Lời nhắc",
+        "after": "26/11: xem lại tai nghe"
+      }
+    ],
+    "warnings": [
+      "Bạn có thể hủy lời nhắc bất cứ lúc nào."
+    ],
+    "expires_at": "2026-12-10T03:10:00Z"
+  }
+}

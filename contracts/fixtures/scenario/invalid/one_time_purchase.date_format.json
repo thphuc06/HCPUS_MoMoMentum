@@ -1,0 +1,7 @@
+{
+  "kind": "one_time_purchase",
+  "amount_vnd": 500000,
+  "funding_source": "jar",
+  "jar_code": "giai_tri",
+  "date": "22/11/2026"
+}

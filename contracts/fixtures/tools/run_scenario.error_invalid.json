@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "SCENARIO_INVALID",
+  "message": "Ngày mua đã qua. Bạn chọn một ngày từ hôm nay trở đi nhé."
+}

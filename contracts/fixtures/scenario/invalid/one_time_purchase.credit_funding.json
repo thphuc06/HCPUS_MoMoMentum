@@ -1,0 +1,6 @@
+{
+  "kind": "one_time_purchase",
+  "amount_vnd": 500000,
+  "funding_source": "credit",
+  "jar_code": "giai_tri"
+}

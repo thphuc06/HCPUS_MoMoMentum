@@ -1,0 +1,48 @@
+{
+  "v": 1,
+  "id": "clarify:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Bạn định mua cái điện thoại với giá khoảng bao nhiêu?",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "clarify",
+  "data": {
+    "question": "Bạn định mua cái điện thoại với giá khoảng bao nhiêu?",
+    "slot": "amount",
+    "chips": [
+      {
+        "id": "c0",
+        "label": "Chip 0"
+      },
+      {
+        "id": "c1",
+        "label": "Chip 1"
+      },
+      {
+        "id": "c2",
+        "label": "Chip 2"
+      },
+      {
+        "id": "c3",
+        "label": "Chip 3"
+      },
+      {
+        "id": "c4",
+        "label": "Chip 4"
+      },
+      {
+        "id": "c5",
+        "label": "Chip 5"
+      },
+      {
+        "id": "c6",
+        "label": "Chip 6"
+      }
+    ],
+    "pending_intent": "what_if",
+    "allow_free_text": true
+  }
+}

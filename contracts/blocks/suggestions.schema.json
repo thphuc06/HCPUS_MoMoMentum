@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/suggestions.schema.json",
+  "title": "SuggestionsBlock",
+  "description": "Gợi ý bấm được: mở đầu chat (H1, kèm 'mình làm được / chưa làm'), sau câu trả lời, kèm từ chối ngoài phạm vi (H7). Nội dung từ cấu hình hoặc code. Id khối `suggestions:{trace_id}:{context}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "suggestions" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/SuggestionsData" }
+  },
+  "$defs": {
+    "SuggestionItem": {
+      "description": "Một gợi ý bấm được.",
+      "type": "object",
+      "required": ["id", "label", "prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "label": {
+          "description": "Chữ trên chip.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "prompt": {
+          "description": "Câu gửi vào chat khi bấm. Do cấu hình hoặc code dựng, không do LLM viết tự do.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "SuggestionsData": {
+      "type": "object",
+      "required": ["context", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "description": "Chỗ xuất hiện: welcome (mở đầu H1), after_answer (sau câu trả lời), out_of_scope (kèm từ chối), degraded (kèm suy giảm).",
+          "type": "string",
+          "enum": ["welcome", "after_answer", "out_of_scope", "degraded"]
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "can_do": {
+          "description": "Điều trợ lý làm được (H1 'mình làm được'). Từ cấu hình.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "maxItems": 6
+        },
+        "cannot_do": {
+          "description": "Điều trợ lý chưa làm (H1 'chưa làm'). Từ cấu hình.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "maxItems": 6
+        },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SuggestionItem" },
+          "minItems": 1,
+          "maxItems": 6
+        }
+      }
+    }
+  }
+}

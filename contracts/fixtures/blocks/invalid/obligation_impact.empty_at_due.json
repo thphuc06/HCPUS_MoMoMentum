@@ -1,0 +1,51 @@
+{
+  "v": 1,
+  "id": "obligation_impact:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:2026-12-05",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Đến hạn 05/12 bạn cần 2.200.000 ₫; hũ Nghĩa vụ hụt 1.150.000 ₫.",
+  "source": {
+    "tool": "forecast___run_scenario",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "obligation_impact",
+  "data": {
+    "status": "short",
+    "headline": "Đến hạn 05/12 bạn cần 2.200.000 ₫; hũ Nghĩa vụ hụt 1.150.000 ₫.",
+    "cost": {
+      "product_label": "Trả sau (mô phỏng)",
+      "principal_vnd": 1200000,
+      "fee_added_vnd": 0,
+      "item_cost_vnd": 1200000,
+      "due_date": "2026-12-05",
+      "existing_due_vnd": 1000000,
+      "total_due_vnd": 2200000,
+      "limit_vnd": 5000000,
+      "available_before_vnd": 4033000,
+      "available_after_vnd": 2833000
+    },
+    "at_due": [],
+    "shortfall_vnd": 1150000,
+    "ratio": {
+      "obligations_vnd": 5200000,
+      "income_vnd": 9000000,
+      "ratio": 0.5778,
+      "threshold": 0.36,
+      "exceeds": true
+    },
+    "cautions": [
+      {
+        "rule_id": "obligation_to_income",
+        "text": "Nghĩa vụ hàng tháng sẽ vượt mức nên giữ so với thu nhập. Không khuyến khích thêm khoản này."
+      }
+    ],
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 1.0
+    }
+  }
+}

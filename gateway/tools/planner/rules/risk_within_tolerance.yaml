@@ -1,0 +1,33 @@
+# Luật 3: không vượt khẩu vị rủi ro đã khai (users.risk_tolerance).
+id: risk_within_tolerance
+version: 1
+title: Không vượt khẩu vị rủi ro
+description: >-
+  Mức rủi ro của đề xuất đầu tư không được cao hơn mức tối đa tương ứng với khẩu vị rủi ro người dùng đã khai
+  (`low`, `medium`, `high`). Chưa khai thì dùng mức giả định ở `unknown_tolerance_assumes`.
+evaluator: risk_within_tolerance
+severity: block
+applies_when:
+  categories: [investment]
+thresholds:
+  max_risk_for_low:
+    value: low
+    unit: level
+    note: Mức rủi ro tối đa cho người khai khẩu vị thấp.
+    source: Lựa chọn thiết kế của dự án mô phỏng.
+  max_risk_for_medium:
+    value: medium
+    unit: level
+    note: Mức rủi ro tối đa cho người khai khẩu vị vừa.
+    source: Lựa chọn thiết kế của dự án mô phỏng.
+  max_risk_for_high:
+    value: high
+    unit: level
+    note: Mức rủi ro tối đa cho người khai khẩu vị cao.
+    source: Lựa chọn thiết kế của dự án mô phỏng.
+  unknown_tolerance_assumes:
+    value: low
+    unit: level
+    note: Chưa khai khẩu vị thì coi như thấp (thận trọng).
+    source: Lựa chọn thiết kế của dự án mô phỏng.
+message: Mức rủi ro này cao hơn khẩu vị rủi ro bạn đã khai.

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/blocks/notice.schema.json",
   "title": "NoticeBlock",
-  "description": "Thông báo trạng thái: ngoài phạm vi, chế độ rút gọn khi hệ thống chạm giới hạn, dữ liệu ít, lỗi. Không chứa số liệu tài chính.",
+  "description": "Thông báo trạng thái: ngoài phạm vi, chế độ rút gọn khi hệ thống chạm giới hạn, dữ liệu ít, lỗi (kèm 'Thử lại'). Không chứa số liệu tài chính. Phase 3 thêm các trường TÙY CHỌN `retryable`, `degraded_reason`, `missing`, `suggestions` (không tăng `v`).",
   "type": "object",
   "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
   "additionalProperties": false,
@@ -32,6 +32,27 @@
           "description": "Mã lỗi máy đọc được (yofina_core.errors.ErrorCode), nếu có.",
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "retryable": {
+          "description": "Đúng thì giao diện hiện nút 'Thử lại' (gửi lại tin nhắn cuối của người dùng). Dùng cho kind error và degraded do lỗi tạm thời (H8a).",
+          "type": "boolean"
+        },
+        "degraded_reason": {
+          "description": "Vì sao rút gọn hoặc dữ liệu ít (máy đọc được; giao diện chọn câu chữ). Có với kind degraded và low_data.",
+          "type": "string",
+          "enum": ["model_budget", "model_error", "tool_error", "tool_timeout", "verifier_failed", "low_coverage", "short_history"]
+        },
+        "missing": {
+          "description": "Phần còn thiếu khi trả một phần kết quả (ví dụ 'lời giải thích'), để nói rõ phần thiếu.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "maxItems": 5
+        },
+        "suggestions": {
+          "description": "Gợi ý việc làm được, đi kèm thông báo (ví dụ khi ngoài phạm vi: H7).",
+          "type": "array",
+          "items": { "$ref": "suggestions.schema.json#/$defs/SuggestionItem" },
+          "maxItems": 4
         }
       }
     }

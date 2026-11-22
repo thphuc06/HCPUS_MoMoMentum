@@ -1,0 +1,7 @@
+{
+  "kind": "bnpl_purchase",
+  "amount_vnd": 1200000,
+  "funding_source": "credit",
+  "jar_code": "giai_tri",
+  "label": "tai nghe"
+}

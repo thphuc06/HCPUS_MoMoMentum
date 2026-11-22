@@ -291,7 +291,7 @@ export type TransactionQuery = {
 
 // ---------------------------------------------------------------- ghi: xác nhận và hành động
 
-export const TOOL_NAMES = ['move_between_jars', 'record_transaction', 'assign_jar', 'update_profile', 'save_jars', 'confirm_salary'] as const
+export const TOOL_NAMES = ['move_between_jars', 'record_transaction', 'assign_jar', 'update_profile', 'save_jars', 'confirm_salary', 'schedule_nudge'] as const
 export const ToolName = z.enum(TOOL_NAMES)
 export type ToolName = z.infer<typeof ToolName>
 

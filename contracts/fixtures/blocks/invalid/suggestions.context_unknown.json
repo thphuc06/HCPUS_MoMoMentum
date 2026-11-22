@@ -1,0 +1,37 @@
+{
+  "v": 1,
+  "id": "suggestions:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:welcome",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Mình giúp được gì cho bạn",
+  "source": {
+    "tool": "config",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "suggestions",
+  "data": {
+    "context": "random",
+    "title": "Mình giúp được gì cho bạn",
+    "can_do": [
+      "Xem số dư và dự báo từng hũ",
+      "Thử kịch bản 'nếu mua...'",
+      "Kiểm tra trước khi chuyển tiền"
+    ],
+    "cannot_do": [
+      "Khuyên mã chứng khoán hay quỹ cụ thể",
+      "Nạp sao kê ngân hàng thật"
+    ],
+    "items": [
+      {
+        "id": "runout",
+        "label": "Hũ nào sắp cạn?",
+        "prompt": "Hũ nào của mình sắp cạn tiền?"
+      },
+      {
+        "id": "what_if",
+        "label": "Thử kịch bản mua sắm",
+        "prompt": "Nếu mua tai nghe 1,2 triệu thì sao?"
+      }
+    ]
+  }
+}

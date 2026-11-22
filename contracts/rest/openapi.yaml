@@ -27,8 +27,15 @@ info:
     được bỏ; và màn hình tự dựng bản xem lại từ `params` đã nhập. Các endpoint `GET` còn lại
     không ghi gì. Bảng `tool` -> việc trên màn hình nằm ở mô tả của `POST /actions`.
 
-    **Lambda phục vụ**: trường `x-lambda` của thao tác (`ledger` hoặc `forecast`) cho CDK nối route
-    vào đúng Lambda; không có thì mặc định là `ledger`. Chỉ `GET /forecasts/{jar_code}` do `forecast`.
+    **Lambda phục vụ**: trường `x-lambda` của thao tác (`ledger`, `forecast` hoặc `audit`) cho CDK nối route
+    vào đúng Lambda; không có thì mặc định là `ledger`. `GET /forecasts/{jar_code}` và `POST /affordability` do `forecast`;
+    `GET /traces/{trace_id}` và `POST /feedback` do `ledger` (phase 3: mã tool `audit`, `planner`, `knowledge` chạy chung Lambda `yofina-ledger`).
+
+    **Phase 3**: thêm `POST /affordability` (kiểm tra trước khi quẹt, tất định, KHÔNG qua LLM), `GET /traces/{trace_id}`
+    (bảng "Vì sao", chỉ của chính người dùng) và `POST /feedback` (chấp nhận hoặc từ chối một phương án). `POST /affordability`
+    chỉ dùng POST để có thân yêu cầu, không ghi gì. `POST /feedback` ghi một dòng phản hồi không đụng tiền nên KHÔNG đi qua
+    token xác nhận (lý do ở "Quyết định hợp đồng phase 3"). Lời nhắc (`schedule_nudge`) là thao tác ghi thật nên vẫn đi qua
+    `POST /confirmations` rồi `POST /actions`, không có endpoint ghi riêng.
 
     Mã lỗi (`ErrorCode`) dùng chung với kết quả tool và `notice.data.code`; ánh xạ HTTP status ở
     `x-http-status`. Schema khối UI và tham số được tham chiếu tới `../blocks/*.schema.json` và
@@ -50,6 +57,10 @@ tags:
     description: Dự báo 30 ngày theo hũ (F1). Chỉ đọc.
   - name: conversations
     description: Đọc lại các lượt hội thoại đã lưu (không cần LLM).
+  - name: affordability
+    description: Kiểm tra trước khi quẹt (F3). Tất định, không qua LLM, không ghi.
+  - name: audit
+    description: Bảng "Vì sao" (trace của chính người dùng) và phản hồi về phương án.
   - name: demo
     description: Chỉ cho tài khoản demo.
 paths:
@@ -84,8 +95,9 @@ paths:
         hóa lại tham số, kiểm tra nghiệp vụ (hũ tồn tại, đủ số dư, hạn mức) rồi ký token
         HMAC trên (sub, tool, params_hash, hạn, jti). Token **mờ** với client: không phân tích nó.
         Nếu gửi `conversation_id` và `confirm_block_id` mà đề nghị đã được thực hiện hoặc đã bị hủy thì trả 409
-        `ALREADY_APPLIED` và không cấp token; đề nghị đã quá `expires_at` của khối `confirm` đã lưu thì trả 403
-        `TOKEN_EXPIRED` ("đề nghị đã hết hạn, hãy hỏi lại"): server ép hạn của đề nghị, không chỉ giao diện.
+        `ALREADY_APPLIED` và không cấp token; đề nghị đã quá `expires_at` của khối `confirm` đã lưu thì trả 410
+        `OFFER_EXPIRED` ("đề nghị đã hết hạn, hãy hỏi lại"; phase 2 trả 403 `TOKEN_EXPIRED` cho trường hợp này): server ép hạn
+        của đề nghị, không chỉ giao diện. `TOKEN_EXPIRED` (403) chỉ còn nghĩa là TOKEN quá 2 phút.
       parameters:
         - $ref: '#/components/parameters/Traceparent'
       requestBody:
@@ -109,6 +121,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
         '422':
           $ref: '#/components/responses/Unprocessable'
         '429':
@@ -178,6 +192,7 @@ paths:
         | `update_profile` | Khai và sửa lương, ngày nhận, mức rủi ro, tên; thêm, sửa, xóa MỘT nghĩa vụ mỗi lần. Onboarding tài khoản trắng: lần gọi đầu có lương và ngày nhận (bắt buộc cả hai) tạo hồ sơ, hai hũ hệ thống và hũ mặc định từ `GET /jar-templates` | có |
         | `save_jars` | Tạo, sửa hũ, tỷ lệ chia lương, mục tiêu và hạn (thay cả danh sách hũ của người dùng, tổng tỷ lệ bằng 100) | không (chỉ màn hình) |
         | `confirm_salary` | Xác nhận một chạm lương về: chia vào hũ theo luật, hoặc giữ ở Tiền vào khác; tùy chọn cập nhật lương đã khai | không (chỉ màn hình) |
+        | `schedule_nudge` | Đặt (`op` create) hoặc hủy (`op` cancel, nút Hoàn tác) một lời nhắc vào một ngày mô phỏng; ghi bảng `nudges`. Agent gọi qua target `planner` | có |
 
         **Một đề nghị chỉ được thực hiện một lần.** Khi client gửi `conversation_id` và
         `confirm_block_id` (id của khối `confirm` đang được thực hiện), server lưu khối `receipt`
@@ -211,6 +226,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
         '422':
           $ref: '#/components/responses/Unprocessable'
         '428':
@@ -642,7 +659,8 @@ paths:
         Trả đúng khối `forecast_timeline`, cùng một khối và cùng số với tool `forecast___get_forecast` trong chat.
         Số liệu đọc từ bảng `forecasts` (lần chạy mới nhất có chứa hũ). Quá hạn độ tươi (cấu hình) hoặc ngày mô
         phỏng đã sang ngày khác so với `origin_date` thì tính lại trước khi trả; không tính lại được thì trả
-        bản cũ với `stale` true; chưa có bản nào và không tính được thì 503 `FORECAST_UNAVAILABLE`.
+        bản cũ với `stale` true; chưa có bản nào và không tính được thì 503 `FORECAST_UNAVAILABLE`. Hũ HỆ THỐNG (Tiền vào khác,
+        Chưa phân loại) không có dự báo: 404 `FORECAST_NOT_APPLICABLE` (phase 2 trả 503; từ phase 3 503 chỉ còn nghĩa là lỗi tạm thời).
 
         Hiển thị: `p_shortfall` có thì hiện kèm `confidence_band`; vắng thì chỉ hiện `confidence_band` (Cao, Vừa,
         Thấp); `is_initial_estimate` thì ghi "ước lượng ban đầu".
@@ -662,6 +680,114 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /affordability:
+    post:
+      tags: [affordability]
+      operationId: checkAffordability
+      summary: Kiểm tra trước khi quẹt (thẻ đủ, sát, hụt)
+      x-lambda: forecast
+      description: |
+        Dùng cho màn chuyển tiền (T3a, T3b, T3c), KHÔNG qua LLM và không ghi gì. Chạy đúng engine của tool
+        `forecast___affordability_check` nên trả CÙNG khối `affordability_card` và cùng số với chat. Nguồn là hũ: đủ, sát (cạn
+        sớm N ngày) hay hụt (M đồng trước kỳ lương), kiểm từng hũ chi tiêu khi không chỉ định `jar`. Nguồn Trả sau (mô phỏng):
+        chi phí của món này (`credit.cost.item_cost_vnd`, gồm phần phí phát sinh thêm) TÁCH khỏi tổng phải trả ngày đến hạn
+        (`credit.cost.total_due_vnd`, cộng dồn nghĩa vụ đã có), hũ nào hụt khi đến hạn, tỷ lệ nghĩa vụ trên thu nhập so với
+        ngưỡng của luật. Kèm phương án tất định (hoãn, đổi hũ, chia nhỏ, trả ngay). Không có `funding_source` thì xét cả hai
+        nguồn. Ngưỡng đủ, sát, hụt nằm trong cấu hình. Mục tiêu độ trễ: p95 dưới 2 giây.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AffordabilityRequest'
+      responses:
+        '200':
+          description: Khối `affordability_card`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffordabilityResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /traces/{trace_id}:
+    get:
+      tags: [audit]
+      operationId: getTrace
+      summary: Bản ghi một lượt trả lời cho bảng "Vì sao"
+      x-lambda: ledger
+      description: |
+        Dữ liệu cho bảng "Vì sao" (H4): khối `explain` (dữ liệu đã dùng, luật đã kiểm, nhóm tin cậy Cao/Vừa/Thấp kèm lý do) cộng
+        chi tiết kỹ thuật (ý định, khối đã phát, token, thời lượng từng bước). Chỉ của CHÍNH người dùng: trace của người khác
+        và trace không tồn tại đều trả 404 `TRACE_NOT_FOUND` như nhau (không lộ sự tồn tại; RLS lọc theo `sub`). Không cần model.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/TraceIdPath'
+      responses:
+        '200':
+          description: Bản ghi lượt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /feedback:
+    post:
+      tags: [audit]
+      operationId: submitFeedback
+      summary: Ghi người dùng chấp nhận hoặc từ chối một phương án
+      x-lambda: ledger
+      description: |
+        Ghi một dòng vào bảng `feedback` (không đụng tiền, không đổi số dư), nên KHÔNG đi qua token xác nhận. Idempotent theo
+        (`trace_id`, `block_id`, `option_id`): gửi lại thì cập nhật quyết định và lý do (người dùng đổi ý), trả 200. `trace_id` và
+        `scenario_id` phải thuộc người gọi, nếu không 404 `TRACE_NOT_FOUND`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '200':
+          description: Đã ghi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         '503':
           $ref: '#/components/responses/Unavailable'
         '500':
@@ -715,6 +841,13 @@ components:
       description: Mã hũ (khóa của hũ trong một người dùng).
       schema:
         $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+    TraceIdPath:
+      name: trace_id
+      in: path
+      required: true
+      description: Mã trace của câu trả lời cần giải thích (từ `trace_id` của khối).
+      schema:
+        $ref: '../blocks/envelope.schema.json#/$defs/TraceId'
   schemas:
     ErrorCode:
       type: string
@@ -745,6 +878,12 @@ components:
         - CREDIT_LIMIT_EXCEEDED
         - DUPLICATE_TRANSACTION
         - FORECAST_UNAVAILABLE
+        - OFFER_EXPIRED
+        - TRACE_NOT_FOUND
+        - NUDGE_NOT_FOUND
+        - FEE_SCHEDULE_NOT_FOUND
+        - FORECAST_NOT_APPLICABLE
+        - SCENARIO_INVALID
       x-http-status:
         UNAUTHENTICATED: 401
         FORBIDDEN: 403
@@ -771,6 +910,12 @@ components:
         CREDIT_LIMIT_EXCEEDED: 422
         DUPLICATE_TRANSACTION: 409
         FORECAST_UNAVAILABLE: 503
+        OFFER_EXPIRED: 410
+        TRACE_NOT_FOUND: 404
+        NUDGE_NOT_FOUND: 404
+        FEE_SCHEDULE_NOT_FOUND: 404
+        FORECAST_NOT_APPLICABLE: 404
+        SCENARIO_INVALID: 422
       x-meaning:
         UNAUTHENTICATED: Thiếu hoặc sai access token.
         FORBIDDEN: Không được phép (token xác nhận không thuộc người dùng này, v.v.).
@@ -780,7 +925,7 @@ components:
         AMOUNT_LIMIT_EXCEEDED: Vượt hạn mức số tiền một lần (cấu hình, cùng giá trị với luật Cedar).
         NEEDS_CONFIRMATION: Thao tác ghi cần xác nhận; chưa ghi gì.
         TOKEN_INVALID: Token sai định dạng, chữ ký sai, cho tool khác hoặc cho người dùng khác.
-        TOKEN_EXPIRED: Token đã hết hạn.
+        TOKEN_EXPIRED: Token đã hết hạn (quá 2 phút kể từ lúc cấp).
         TOKEN_REUSED: Token đã được dùng (replay).
         PARAMS_MISMATCH: Tham số khác với tham số đã được xác nhận (hash không khớp), hoặc `confirm_block_id` không thuộc thao tác này.
         ALREADY_APPLIED: Đề nghị (`confirm_block_id`) này đã được thực hiện rồi; không ghi thêm gì, kể cả khi có token mới hợp lệ.
@@ -797,6 +942,12 @@ components:
         CREDIT_LIMIT_EXCEEDED: Vượt hạn mức Trả sau (mô phỏng) còn lại.
         DUPLICATE_TRANSACTION: Giao dịch trùng khóa khử trùng (cùng ngày, số tiền, đối tác, mã tham chiếu) với giao dịch đã có.
         FORECAST_UNAVAILABLE: Chưa có dự báo cho hũ này và chưa tính được ngay; thử lại sau ít phút.
+        OFFER_EXPIRED: Đề nghị (khối confirm hoặc confirm_action) đã quá `expires_at`; hãy hỏi lại. Khác TOKEN_EXPIRED (token quá 2 phút).
+        TRACE_NOT_FOUND: Không có trace này với người dùng (không tồn tại hoặc của người khác; không phân biệt).
+        NUDGE_NOT_FOUND: Mã lời nhắc không tồn tại với người dùng này (hủy lời nhắc đã hủy hoặc đã gửi).
+        FEE_SCHEDULE_NOT_FOUND: Không có biểu phí cho loại phí hoặc sản phẩm này.
+        FORECAST_NOT_APPLICABLE: Hũ hệ thống (Tiền vào khác, Chưa phân loại) không có dự báo.
+        SCENARIO_INVALID: Kịch bản đúng dạng nhưng vô lý (ngày đã qua, hũ sai loại, vượt khoảng dự báo).
     ErrorResponse:
       type: object
       required: [error]
@@ -1604,7 +1755,7 @@ components:
       description: |
         Tên tool ghi (ngắn, không có tiền tố target). Mỗi giá trị có schema `params` riêng, xem `allOf` của
         `ConfirmationRequest` và `ActionRequest` và bảng ở mô tả của `POST /actions`.
-      enum: [move_between_jars, record_transaction, assign_jar, update_profile, save_jars, confirm_salary]
+      enum: [move_between_jars, record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge]
     ParamsByTool:
       description: |
         Ràng buộc `params` theo `tool` (dùng chung cho `ConfirmationRequest` và `ActionRequest`). `params` chưa chuẩn hóa
@@ -1658,6 +1809,14 @@ components:
             properties:
               params:
                 $ref: '#/components/schemas/ConfirmSalaryParams'
+        - if:
+            properties:
+              tool:
+                const: schedule_nudge
+          then:
+            properties:
+              params:
+                $ref: '#/components/schemas/ScheduleNudgeParams'
     ConfirmationRequest:
       allOf:
         - $ref: '#/components/schemas/ParamsByTool'
@@ -1780,6 +1939,113 @@ components:
         forecast_ready:
           description: Đúng nếu đã tính xong dự báo đồng bộ trước khi trả lời (phase 2), để mở app là có số.
           type: boolean
+    ScheduleNudgeParams:
+      description: |
+        Tham số của `schedule_nudge` (target planner của agent, và REST). `op` mặc định `create`. create: bắt buộc `kind` và
+        `fire_on` (ngày mô phỏng, sau hôm nay), tùy chọn `jar_code`, `note`, `scenario_id`. cancel (nút Hoàn tác): bắt buộc `nudge_id`
+        (`reference_id` của biên nhận lúc đặt), không có trường khác. Chuẩn hóa: bỏ khóa null, `op` điền `create`, chuỗi cắt
+        khoảng trắng, mã hũ chữ thường, uuid chữ thường; idempotent.
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        op:
+          type: string
+          enum: [create, cancel]
+        kind:
+          type: string
+          enum: [runout_warning, obligation_due, salary_pending, review_needed, low_data, purchase_review]
+        fire_on:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        jar_code:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        note:
+          type: string
+          minLength: 1
+          maxLength: 120
+        scenario_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        nudge_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+      if:
+        required: [op]
+        properties:
+          op:
+            const: cancel
+      then:
+        required: [nudge_id]
+        not:
+          anyOf:
+            - required: [kind]
+            - required: [fire_on]
+      else:
+        required: [kind, fire_on]
+        not:
+          required: [nudge_id]
+    AffordabilityRequest:
+      description: |
+        Yêu cầu kiểm tra trước khi quẹt. `funding_source` vắng thì xét cả hai nguồn. `jar` chỉ có nghĩa khi nguồn là hũ. `date` vắng
+        thì hôm nay mô phỏng. Không có `user_id`.
+      type: object
+      required: [amount_vnd]
+      additionalProperties: false
+      properties:
+        amount_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        funding_source:
+          type: string
+          enum: [jar, credit]
+        jar:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        label:
+          type: string
+          minLength: 1
+          maxLength: 60
+        date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+    AffordabilityResponse:
+      description: Khối `affordability_card` (cả phong bì), cùng khối với tool `forecast___affordability_check`.
+      $ref: '../blocks/affordability_card.schema.json'
+    TraceResponse:
+      description: >-
+        Bản ghi lượt cho bảng "Vì sao", gồm khối `explain` đã dựng và chi tiết kỹ thuật. Cùng `data` của tool `audit___get_trace`.
+      $ref: '../tools/audit.results.schema.json#/$defs/TraceData'
+    FeedbackRequest:
+      type: object
+      required: [trace_id, option_id, decision]
+      additionalProperties: false
+      properties:
+        trace_id:
+          $ref: '../blocks/envelope.schema.json#/$defs/TraceId'
+        block_id:
+          description: Id khối `options` hoặc `affordability_card` chứa phương án.
+          $ref: '../blocks/envelope.schema.json#/$defs/BlockId'
+        option_id:
+          description: '`option_id` của phương án trong khối.'
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,31}$'
+        decision:
+          type: string
+          enum: [accepted, rejected]
+        scenario_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        reason:
+          description: Lý do ngắn người dùng nêu (tùy chọn, không chứa PII).
+          type: string
+          minLength: 1
+          maxLength: 200
+    FeedbackResponse:
+      type: object
+      required: [feedback_id, decision, recorded_at]
+      additionalProperties: false
+      properties:
+        feedback_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        decision:
+          type: string
+          enum: [accepted, rejected]
+        recorded_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
   responses:
     BadRequest:
       description: PARAMS_INVALID (tham số sai định dạng hoặc vô lý).
@@ -1800,7 +2066,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: JAR_NOT_FOUND, TRANSACTION_NOT_FOUND, OBLIGATION_NOT_FOUND, PAYEE_NOT_FOUND hoặc SALARY_EVENT_NOT_FOUND.
+      description: JAR_NOT_FOUND, TRANSACTION_NOT_FOUND, OBLIGATION_NOT_FOUND, PAYEE_NOT_FOUND, SALARY_EVENT_NOT_FOUND, TRACE_NOT_FOUND, NUDGE_NOT_FOUND, FEE_SCHEDULE_NOT_FOUND hoặc FORECAST_NOT_APPLICABLE.
       content:
         application/json:
           schema:
@@ -1812,7 +2078,13 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Unprocessable:
-      description: INSUFFICIENT_FUNDS, AMOUNT_LIMIT_EXCEEDED, CREDIT_LIMIT_EXCEEDED, JAR_PROTECTED hoặc PROFILE_INCOMPLETE.
+      description: INSUFFICIENT_FUNDS, AMOUNT_LIMIT_EXCEEDED, CREDIT_LIMIT_EXCEEDED, JAR_PROTECTED, PROFILE_INCOMPLETE hoặc SCENARIO_INVALID.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: OFFER_EXPIRED. Đề nghị đã quá hạn; hãy hỏi lại để có đề nghị mới.
       content:
         application/json:
           schema:

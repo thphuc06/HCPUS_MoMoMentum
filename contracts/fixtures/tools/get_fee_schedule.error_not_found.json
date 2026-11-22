@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "FEE_SCHEDULE_NOT_FOUND",
+  "message": "Không có biểu phí cho loại phí này."
+}

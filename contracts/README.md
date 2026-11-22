@@ -1,6 +1,6 @@
 # contracts/
 
-Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, REST, sự kiện và ML. Mọi bên đọc từ đây; muốn đổi hợp đồng thì sửa ở đây trước, rồi sinh lại và chạy test. Kế hoạch: [phase 1 mục "Bước 0"](../docs/plan/phases/phase-1-nen-va-lat-doc.md), [phase 2 mục "Bước 0"](../docs/plan/phases/phase-2-vi-va-du-bao.md); quyết định liên quan: [ADR-0002](../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md) (xác nhận trước khi ghi), [ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md) (đồng hồ mô phỏng); các lựa chọn thiết kế của phase 2 (hũ hệ thống, nguồn trả, tổng số dư...) ở mục "Quyết định hợp đồng phase 2" cuối [file phase 2](../docs/plan/phases/phase-2-vi-va-du-bao.md).
+Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, REST, sự kiện và ML. Mọi bên đọc từ đây; muốn đổi hợp đồng thì sửa ở đây trước, rồi sinh lại và chạy test. Kế hoạch: [phase 1 mục "Bước 0"](../docs/plan/phases/phase-1-nen-va-lat-doc.md), [phase 2 mục "Bước 0"](../docs/plan/phases/phase-2-vi-va-du-bao.md), [phase 3 mục "Bước 0"](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md); quyết định liên quan: [ADR-0002](../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md) (xác nhận trước khi ghi), [ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md) (đồng hồ mô phỏng); các lựa chọn thiết kế của phase 2 (hũ hệ thống, nguồn trả, tổng số dư...) ở mục "Quyết định hợp đồng phase 2" cuối [file phase 2](../docs/plan/phases/phase-2-vi-va-du-bao.md); của phase 3 (what-if, kiểm tra trước khi quẹt, luật suitability) ở "Quyết định hợp đồng phase 3" cuối [file phase 3](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md).
 
 | Thư mục / file | Nội dung | Ai dùng |
 |---|---|---|
@@ -9,16 +9,19 @@ Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, RE
 | `blocks/forecast_timeline.schema.json` | Dự báo 30 ngày của một hũ, dùng chung màn Chi tiết hũ và chat | luồng C (dựng), D (vẽ), agent |
 | `blocks/proactive_card.schema.json` | Thẻ chủ động (một việc) trên Tổng quan | luồng A (dựng), D (vẽ) |
 | `blocks/{confirm_action,receipt_action}.schema.json` | Xác nhận và biên nhận của MỌI tool ghi khác chuyển hũ | luồng A, agent (dựng), D (vẽ) |
-| `blocks/block.schema.json` | Hợp của tám khối, phân biệt theo `type` | kiểm tra |
+| `blocks/{affordability_card,obligation_impact,options,explain,clarify,suggestions}.schema.json` | Sáu khối phase 3 (xem mục "Phase 3"); `notice` và `forecast_timeline` được mở rộng tương thích ngược | luồng A (dựng số), agent, C (vẽ) |
+| `blocks/block.schema.json` | Hợp của mười bốn khối, phân biệt theo `type` | kiểm tra |
 | `tools/ledger.json` | Mười tool của target `ledger` (chín tool của overview và `save_turn`) đúng định dạng `inlinePayload` của AgentCore Gateway (Lambda target) | luồng A (cài), agent |
-| `tools/forecast.json` | Tool `get_forecast` của target `forecast` | luồng C (cài), agent |
-| `tools/{ledger,forecast}.results.schema.json` | Kết quả JSON Lambda trả về cho từng tool; `ledger.results` còn chứa các $defs dùng chung với REST (`Transaction`, `Obligation`, `CreditLine`, `Payee`, `SalaryEvent`) | luồng A, C (trả), agent (đọc) |
-| `rest/openapi.yaml` | OpenAPI 3.1: 17 endpoint (xem mục "REST") | luồng A, C (cài), D (gọi) |
+| `tools/forecast.json` | Ba tool của target `forecast`: `get_forecast` (phase 2), `run_scenario`, `affordability_check` (phase 3) | luồng C phase 2, A phase 3 (cài), agent |
+| `tools/{knowledge,planner,audit}.json` | Target mới của phase 3: `get_fee_schedule`; `check_suitability`, `schedule_nudge` (tool GHI qua token); `get_trace` | luồng A (cài), agent |
+| `scenario/scenario_spec.schema.json` | `ScenarioSpec`: sáu loại kịch bản what-if (FR5), nguồn chung cho `run_scenario`, bảng `scenarios`, `yofina_core.scenario` | agent (dựng), luồng A (kiểm, chạy) |
+| `tools/{ledger,forecast,knowledge,planner,audit}.results.schema.json` | Kết quả JSON Lambda trả về cho từng tool; `ledger.results` còn chứa các $defs dùng chung với REST (`Transaction`, `Obligation`, `CreditLine`, `Payee`, `SalaryEvent`) | luồng A, C (trả), agent (đọc) |
+| `rest/openapi.yaml` | OpenAPI 3.1: 21 endpoint (xem mục "REST" và "Phase 3") | luồng A, C (cài), D (gọi) |
 | `events/*.schema.json` | `detail` của sự kiện trên EventBridge bus `yofina-bus`: `transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`, `forecast.updated` | luồng A (phát), C (nghe) |
 | `ml/forecast_io.schema.json` | Dạng JSON của đầu vào và đầu ra `yofina_ml.forecast_user` | luồng B, C |
-| `fixtures/` | Ví dụ JSON dùng chung cho test Python và TypeScript (`blocks/`, `tools/`, `rest/`, `events/`, `ml/`) | test |
+| `fixtures/` | Ví dụ JSON dùng chung cho test Python và TypeScript (`blocks/`, `tools/`, `rest/`, `events/`, `ml/`, `scenario/`) | test |
 
-Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã tương ứng: Pydantic ở [libs/yofina_core](../libs/yofina_core/README.md) (`blocks.py`, `wallet.py`, `errors.py`, `clock.py`), Zod ở `frontend/src/contracts/blocks.ts` (file sinh ra, không sửa tay), kiểu ML ở [ml/yofina_ml](../ml/README.md).
+Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã tương ứng: Pydantic ở [libs/yofina_core](../libs/yofina_core/README.md) (`blocks.py`, `wallet.py`, `errors.py`, `clock.py`, `scenario.py`, `suitability.py`), Zod ở `frontend/src/contracts/blocks.ts` (file sinh ra, không sửa tay), kiểu ML ở [ml/yofina_ml](../ml/README.md).
 
 ## Quy ước
 
@@ -43,7 +46,7 @@ Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã 
 - **`receipt`**: `transaction_id` (UUID; với chuyển hũ là `transfer_id` chung của hai dòng sổ cái), `occurred_at`, `app_date`, số dư sau của hai hũ.
 - **`notice`**: `kind` ∈ `out_of_scope` | `degraded` | `low_data` | `error`; không chứa số liệu tài chính.
 - **Thêm một loại khối**: tạo `blocks/<type>.schema.json` (theo mẫu: phong bì + `data`), thêm vào `block.schema.json` và `FILES` trong `scripts/gen_contracts.mjs`, viết model Pydantic và `build_*` trong `blocks.py`, thêm fixture hợp lệ và không hợp lệ, chạy `uv run pytest` và `node scripts/gen_contracts.mjs`.
-- **`BLOCK_TYPES` của Zod chỉ gồm khối mà registry frontend đã đăng ký.** `frontend/src/contracts/blocks.ts` xuất `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` cho MỌI khối trong `block.schema.json` (tám khối), nhưng `BLOCK_TYPES` và kiểu `BlockType` chỉ liệt kê bốn khối phase 1 (hằng `REGISTERED_BY_FRONTEND` trong `scripts/gen_contracts.mjs`), vì `registry.tsx` dùng `Record<BlockType, Entry>` phải đủ khóa. Khối chưa đăng ký hiện `fallback_text` (không vỡ trang). **Luồng frontend thêm `forecast_timeline`, `proactive_card`, `confirm_action`, `receipt_action` vào `REGISTERED_BY_FRONTEND` cùng lúc với việc đăng ký view trong `registry.tsx`.**
+- **`BLOCK_TYPES` của Zod chỉ gồm khối mà registry frontend đã đăng ký.** `frontend/src/contracts/blocks.ts` xuất `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` cho MỌI khối trong `block.schema.json` (mười bốn khối sau phase 3), nhưng `BLOCK_TYPES` và kiểu `BlockType` chỉ liệt kê khối đã có view (tám khối) (hằng `REGISTERED_BY_FRONTEND` trong `scripts/gen_contracts.mjs`), vì `registry.tsx` dùng `Record<BlockType, Entry>` phải đủ khóa. Khối chưa đăng ký hiện `fallback_text` (không vỡ trang). **Luồng frontend thêm khối mới vào `REGISTERED_BY_FRONTEND` cùng lúc với việc đăng ký view trong `registry.tsx`** (phase 2 đã làm cho `forecast_timeline`, `proactive_card`, `confirm_action`, `receipt_action`; phase 3 còn `affordability_card`, `obligation_impact`, `options`, `explain`, `clarify`, `suggestions`).
 
 ### Tool `ledger` (AgentCore Gateway)
 
@@ -77,7 +80,7 @@ Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã 
 ### Tập con JSON Schema được dùng
 
 Schema chỉ dùng: `$schema`, `$id`, `$ref`, `$defs`, `type` (`object`, `string`, `integer`, `number`, `boolean`, `array`), `const`, `enum`, `properties`, `required`, `additionalProperties`, `items`, `minItems`, `maxItems`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `oneOf` (chỉ gồm `$ref`, phân biệt theo `type`), và chú thích `title`, `description`, `$comment`, `examples`, `format`. Bộ sinh Zod **báo lỗi** nếu gặp từ khóa khác.
-`pattern` dùng `[0-9]` thay `\d` (Python khớp cả chữ số Unicode). `format` (`date`, `date-time`) chỉ là chú thích; `pattern` mới là thứ được kiểm. `$id` dùng miền `contracts.yofina.invalid` (miền dành riêng, không phân giải được) và các `$ref` là đường dẫn tương đối.
+`oneOf` của `contracts/scenario/scenario_spec.schema.json` phân biệt theo `kind` (không phải `type`) và không đi qua bộ sinh Zod. `pattern` dùng `[0-9]` thay `\d` (Python khớp cả chữ số Unicode). `format` (`date`, `date-time`) chỉ là chú thích; `pattern` mới là thứ được kiểm. `$id` dùng miền `contracts.yofina.invalid` (miền dành riêng, không phân giải được) và các `$ref` là đường dẫn tương đối.
 
 ## Phase 2: ví mô phỏng và dự báo
 
@@ -178,6 +181,107 @@ Không có đường ghi tắt: không `PUT /profile`, `POST /jars`, `POST /tran
 ### Hợp đồng ML và pipeline
 
 Chữ ký `forecast_user(inputs: ForecastInputs) -> ForecastResult` và `update_forecast(inputs, previous, jar_codes)`, kiểu dữ liệu, ánh xạ sang bảng và các bất biến ở [ml/README.md mục "Giao diện"](../ml/README.md#giao-diện). Dạng JSON: `ml/forecast_io.schema.json`; bộ kiểm bất biến: `yofina_ml.contract.check_inputs` và `check_result`. Lịch sử chi tiêu do hàm DB `app_get_daily_spend` trả (chỉ chi trừ tiền hũ, không gắn nghĩa vụ).
+
+## Phase 3: what-if, kiểm tra trước khi quẹt, harness
+
+Hợp đồng mà ba luồng của phase 3 (A engine, B harness, C frontend) cùng code theo. Lý do từng lựa chọn: mục "Quyết định hợp đồng phase 3" cuối [file phase 3](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md). Migration `0010` và các tool mới **chưa chạy / chưa deploy**.
+
+### ScenarioSpec (`scenario/scenario_spec.schema.json`)
+
+Sáu loại của FR5, phân biệt theo `kind` (`oneOf` các `$defs`): `one_time_purchase` (mua một lần bằng tiền hũ), `bnpl_purchase` (mua bằng Trả sau (mô phỏng)), `income_change`, `recurring_expense`, `jar_transfer`, `goal_delay`. Mỗi loại có trường bắt buộc riêng; trường chung tùy chọn: `date` (vắng là hôm nay mô phỏng, engine điền), `label` (≤80 ký tự, chỉ để hiển thị).
+
+| `kind` | Bắt buộc | Tùy chọn |
+|---|---|---|
+| `one_time_purchase` | `amount_vnd`, `funding_source` = `jar`, `jar_code` | `date`, `label` |
+| `bnpl_purchase` | `amount_vnd`, `funding_source` = `credit` | `jar_code` (hũ tính chi tiêu), `date`, `label` |
+| `income_change` | `new_monthly_salary_vnd` (lương MỚI, không phải mức chênh) | `date` (vắng: kỳ lương kế), `label` |
+| `recurring_expense` | `amount_vnd`, `cycle` (`weekly`, `monthly`, `yearly`), `date` (lần đầu), `jar_code` | `end_date`, `label` |
+| `jar_transfer` | `amount_vnd`, `from_jar`, `to_jar` | `date`, `label` |
+| `goal_delay` | `jar_code`, `delay_months` (1 đến 60) | `label` |
+
+**Luật liên trường mà JSON Schema (tập con của repo) không diễn đạt được, nên Pydantic quyết định** (`yofina_core.scenario`, test `test_contracts_phase3.py` có ca "python_only_invalid"): `jar_transfer` có `from_jar` khác `to_jar`; `recurring_expense` có `end_date` không trước `date`; mọi `date` là ngày lịch thật. Lambda `run_scenario` luôn kiểm bằng `scenario.parse_scenario`. `scenario_hash` (sha256 của dạng JSON chuẩn, cùng `canonical_json` với `params_hash`) là khóa cho bảng `scenarios`. `contracts/scenario/` không sinh Zod (không khối nào nhúng spec; frontend chỉ thấy nhãn `compare.label` và `compare.kind`).
+
+### Khối mới và khối mở rộng
+
+Mười bốn khối trong `block.schema.json`. Sáu khối mới (`blocks/*.schema.json`; model và `build_*` ở `yofina_core.blocks`):
+
+| Khối | Việc | Id | Do ai dựng |
+|---|---|---|---|
+| `affordability_card` | Thẻ đủ/sát/hụt: `verdict`, `headline` (luôn có chữ), `jar_checks` (từng hũ), `credit` (`ObligationImpactData` nếu xét Trả sau), `options` tất định, `basis` (độ tươi, nhóm tin cậy) | `affordability_card:{trace_id}` | Engine (`affordability_check`, `POST /affordability`); agent chỉ bọc |
+| `obligation_impact` | Tác động nghĩa vụ của món Trả sau: `cost` (chi phí của món này TÁCH khỏi tổng phải trả ngày đến hạn), `at_due` (hũ nào hụt khi đến hạn), `shortfall_vnd`, `ratio` so ngưỡng luật, `cautions` | `obligation_impact:{trace_id}:{due_date}` | Engine (`run_scenario`) |
+| `options` | 2 đến 3 `OptionItem`: nhãn, `status` nếu chọn, `metrics`, `checked_rules`, `action` tùy chọn | `options:{trace_id}` | Agent (lời Analyst, trạng thái và `checked_rules` do Verifier điền) |
+| `explain` | "Vì sao": `data_used`, `rules_checked`, `confidence` (Cao/Vừa/Thấp + lý do), `subject_trace_id` | `explain:{subject_trace_id}` | Code từ bản ghi lượt (`audit___get_trace`, `GET /traces/{id}`) |
+| `clarify` | Đúng một câu hỏi (`question`, một dấu hỏi) + `slot` + chip (0 đến 6) | `clarify:{trace_id}` | Agent (router) |
+| `suggestions` | Chip gợi ý, kèm `can_do`/`cannot_do` ở mở đầu | `suggestions:{trace_id}:{context}` | Cấu hình hoặc code |
+
+- **`ForecastBasis`** (trong `forecast_timeline.schema.json`) là cơ sở của mọi con số tính từ dự báo: `computed_at`, `stale`, `confidence_band`, `is_initial_estimate`, `history_days`, `coverage`. `JarStatus` (đủ/sát/hụt) vẫn định nghĩa MỘT chỗ; khối mới `$ref` tới nó (test kiểm không định nghĩa lại). Ba trạng thái luôn có chữ (`headline`, `status` kèm nhãn ở giao diện), không chỉ màu.
+- **`forecast_timeline` trước-sau** là mở rộng tương thích ngược: thêm trường tùy chọn `compare` (không tăng `v`). Trường cấp trên (`status`, `days`, `events`, `runout_date`, `p_shortfall`) là **TRƯỚC** (baseline), `compare.after` là **SAU** (`status`, `days` cùng ngày với baseline, `runout_date?`, `p_shortfall?`, `min_balance_p50_vnd`, `events?` mốc phát sinh thêm), kèm `delta`, `n_paths`, `common_random_numbers` (luôn đúng), `scenario_id`, `label`, `kind`. Frontend cũ bỏ `compare` và vẫn vẽ đúng baseline. **Id của khối what-if có hậu tố `:what_if`** (`forecast_timeline:{trace_id}:{jar}:what_if`) để không đè khối baseline cùng hũ trong một lượt; `build_forecast_timeline_from_data` tự đặt hậu tố và viết câu thay thế "Nếu {label}: ..." nói về phần SAU.
+- **`options.action`** = `{kind, tool, block_id}`: tham chiếu **theo id** tới khối `confirm` (chuyển hũ) hoặc `confirm_action` (mọi tool ghi khác, kể cả `schedule_nudge`) mà agent đã phát trong cùng lượt. Agent gọi tool ghi KHÔNG token để lấy `NEEDS_CONFIRMATION`, dựng khối bằng `build_confirm`/`build_confirm_action`, phát, rồi tham chiếu. Bấm "Chọn" thì giao diện hiện khối đã tham chiếu (không gọi tool ghi, không tạo token); từ đó chạy luồng xác nhận phase 1 và 2. `kind` = `confirm` đi với `move_between_jars`, `confirm_action` với tool khác (Pydantic kiểm). Phương án không có `action` chỉ để cân nhắc.
+- **`notice`** (mở rộng, không tăng `v`): thêm tùy chọn `retryable` (nút "Thử lại", gửi lại tin nhắn cuối), `degraded_reason` (`model_budget`, `model_error`, `tool_error`, `tool_timeout`, `verifier_failed`, `low_coverage`, `short_history`), `missing` (phần còn thiếu khi trả một phần), `suggestions` (việc làm được, dùng cho H7). Bốn `kind` giữ nguyên (`out_of_scope`, `degraded`, `low_data`, `error`).
+
+### Chi phí của món này và tổng phải trả ngày đến hạn
+
+Phí Trả sau (mô phỏng) tính MỘT lần cho mỗi nghĩa vụ (quyết định số 5 phase 2), nên "món này tốn thêm bao nhiêu" và "ngày đến hạn phải đưa ra bao nhiêu" là hai số khác nhau. `CreditCost` (dùng ở `obligation_impact.cost`, kết quả `run_scenario`, `affordability_card.credit.cost`) tách chúng và có hai bất biến (Pydantic và test kiểm):
+
+```
+item_cost_vnd = principal_vnd + fee_added_vnd          # chi phí của món này
+total_due_vnd = existing_due_vnd + item_cost_vnd       # tổng phải trả ngày đến hạn, cộng dồn
+```
+
+`fee_added_vnd` là 0 khi nghĩa vụ ở ngày đến hạn đó đã có phí. Với `minh` (đã có nghĩa vụ Trả sau 1.000.000 ₫ hạn 05/12, phí 33.000 ₫ nằm trong đó) mua 1.200.000 ₫: `principal` 1.200.000, `fee_added` 0, `item_cost` 1.200.000, `existing_due` 1.000.000, `total_due` 2.200.000. Tài khoản chưa có nghĩa vụ mua 300.000 ₫: `fee_added` 33.000, `item_cost` 333.000, `total_due` 333.000. Hạn mức chỉ giảm theo gốc (`available_before_vnd - available_after_vnd = principal_vnd`). `late_penalty_vnd` chỉ có khi biểu phí có nguồn (không bịa phí trễ hạn). Con số này **lệch câu chữ** của tiêu chí 1 và 3 phase 3 (1.233.000 ₫, 283.000 ₫); xem mục quyết định số 10.
+
+### Tool phase 3 (target `forecast` mở rộng, ba target mới)
+
+Tên đầy đủ qua Gateway `<target>___<tool>`. `user_id` giống mọi tool: tham số tùy chọn "hệ thống tự điền", interceptor ghi đè từ JWT, Cedar `context.input.user_id == principal.id`. Schema Gateway không có `enum`: mô tả của từng tham số liệt kê giá trị hợp lệ (test khớp với `yofina_core.wallet`).
+
+| Tool | Loại | Bắt buộc | Kết quả (`tools/*.results.schema.json`) |
+|---|---|---|---|
+| `forecast___run_scenario` | ĐỌC và tính (ghi `scenarios` là dữ liệu dẫn xuất, không cần xác nhận) | `scenario` (có `kind`) | `RunScenarioResult`: `scenario_id`, `spec` đã chuẩn hóa, `effects`, `timelines` (1 đến 3, mỗi `data` có `compare`), `obligation_impact?`, `basis` |
+| `forecast___affordability_check` | ĐỌC, tất định, không model | `amount_vnd` | `AffordabilityCheckResult`: `data` là đúng `AffordabilityCardData` |
+| `knowledge___get_fee_schedule` | ĐỌC bảng `fee_schedules` (không qua RAG) | không | `GetFeeScheduleResult`: `product_label`, `fees[]` (`FeeLine`, cùng hình dạng OpenAPI) |
+| `planner___check_suitability` | ĐỌC, tất định | `proposal` (có `kind`) | `CheckSuitabilityResult`: `SuitabilityVerdict` (`ok`, `violations`, `checked`, `rules_version`) |
+| `planner___schedule_nudge` | **GHI** (qua token) | không (Lambda kiểm theo `op`) | `ScheduleNudgeResult`: `NEEDS_CONFIRMATION` (`ConfirmActionData`), `OK` (`ReceiptActionData`, `reference_id` = id nhắc) |
+| `audit___get_trace` | ĐỌC, chỉ của chính người dùng | `trace_id` | `GetTraceResult`: `TraceData` (`explain` đã dựng + `detail`) |
+
+- `run_scenario` nhận `scenario` là object phẳng gộp mọi trường của sáu loại (Gateway không có `oneOf`); mô tả nói trường nào bắt buộc theo loại, Lambda kiểm lại bằng `parse_scenario` và trả `SCENARIO_INVALID` hoặc `PARAMS_INVALID`. Thiếu số tiền hay cách trả thì agent KHÔNG gọi tool mà phát `clarify`.
+- `schedule_nudge` có `confirm_token` tùy chọn (không có thì không ghi, trả `NEEDS_CONFIRMATION`), mô tả nói "KHÔNG tự tạo token", đúng mẫu tool ghi của `ledger`. `wallet.PLANNER_WRITE_TOOLS = ("schedule_nudge",)`; `ACTION_TOOLS` (REST) có thêm `schedule_nudge` ở CUỐI.
+- `check_suitability.proposal` khớp model `yofina_core.suitability.Proposal` (`kind`, `amount_vnd`, `funding_source`, `jar_code`, `is_essential`, `category`, `risk_level`, `origin`). `origin` = `recommendation` cho phương án HỆ THỐNG đề xuất, `user_request` cho thứ người dùng tự hỏi.
+
+**`schedule_nudge` qua luồng token** (không endpoint ghi riêng): `tool` = `schedule_nudge` đi `POST /confirmations` rồi `POST /actions`, khối `confirm_action` và `receipt_action`. Chuẩn hóa `params` (luồng A cài, idempotent, như bảng ở mục phase 2): `op` mặc định `create`; `create` bắt buộc `kind` (`runout_warning`, `obligation_due`, `salary_pending`, `review_needed`, `low_data`, `purchase_review`) và `fire_on` (ngày mô phỏng, sau hôm nay), tùy chọn `jar_code`, `note` (≤120), `scenario_id`; `cancel` chỉ có `nudge_id`. Hoàn tác = `schedule_nudge` `op` `cancel` với `nudge_id` = `reference_id` của biên nhận, cũng qua token. Phase 3 chỉ LƯU và hủy lời nhắc (bảng `nudges`, `status` `scheduled`/`cancelled`); gửi nhắc theo ngày là phase 4 và 5.
+
+### REST mới
+
+| Endpoint | `x-lambda` | Việc |
+|---|---|---|
+| `POST /affordability` | `forecast` | Thân `AffordabilityRequest` (`amount_vnd` bắt buộc; `funding_source?`, `jar?`, `label?`, `date?`). Trả khối `affordability_card` (cả phong bì), CÙNG khối với tool trong chat. Không LLM, không ghi. POST chỉ để có thân yêu cầu |
+| `GET /traces/{trace_id}` | `audit` | `TraceResponse` = `TraceData`. Chỉ của chính người dùng: của người khác và không tồn tại đều 404 `TRACE_NOT_FOUND` như nhau |
+| `POST /feedback` | `audit` | `FeedbackRequest` (`trace_id`, `option_id`, `decision` `accepted`/`rejected`, `block_id?`, `scenario_id?`, `reason?`), trả `FeedbackResponse`. Idempotent theo (`trace_id`, `block_id`, `option_id`); KHÔNG qua token vì không đụng tiền |
+
+`x-lambda` nay có ba giá trị: `ledger` (mặc định), `forecast`, `audit`. `POST /confirmations` thêm phản hồi 410 `OFFER_EXPIRED`; `POST /actions` cũng có 410.
+
+### Mã lỗi mới (thêm CUỐI danh sách)
+
+`OFFER_EXPIRED` (410, đề nghị quá `expires_at`; tách khỏi `TOKEN_EXPIRED` 403 nay chỉ là token quá 2 phút), `TRACE_NOT_FOUND` (404), `NUDGE_NOT_FOUND` (404), `FEE_SCHEDULE_NOT_FOUND` (404), `FORECAST_NOT_APPLICABLE` (404, hũ hệ thống không có dự báo; thay 503 `FORECAST_UNAVAILABLE` cho riêng ca này), `SCENARIO_INVALID` (422). Hiện ledger vẫn trả `TOKEN_EXPIRED` cho đề nghị quá hạn và `GET /forecasts/{hũ hệ thống}` vẫn 503 cho tới khi luồng A đổi cả mã lẫn test tích hợp cùng lúc.
+
+### Bản ghi lượt và `GET /traces`
+
+Migration `0010` thêm cột có kiểu vào `audit_events` cho bản ghi lượt (`event_type = 'agent_turn'`, đúng một dòng mỗi `trace_id`, chỉ thêm): `conversation_id`, `intent`, `data_used`, `rules_checked`, `confidence`, `blocks_emitted`, `token_usage`, `step_timings` (jsonb có kiểu), `duration_ms`. `app_get_trace(p_user_id, p_trace_id)` đọc dòng đó; `p_user_id` PHẢI là `sub` của JWT (như mọi hàm `app_*`), không bao giờ nhận từ client. Khối `explain` do code dựng từ các cột này (`rules_checked` là danh sách `RuleCheck`, `confidence.reasons` do code viết). Chi tiết ở [db/README.md](../db/README.md#schema-phase-3-0010).
+
+### Luật suitability dạng dữ liệu
+
+`gateway/tools/planner/rules/*.yaml` (mỗi file một luật, tên file = `id`), định dạng ở `rules/rule.schema.json` và `yofina_core.suitability.SuitabilityRule`: `evaluator` (tên bộ đánh giá luồng A cài), `severity`, `recommendation_severity?`, `applies_when?`, `thresholds` (mỗi ngưỡng có `value`, `unit`, `note`, `source`), `message` (không chứa số). Năm luật: `obligations_first`, `emergency_before_investing`, `risk_within_tolerance`, `no_borrow_to_spend`, `obligation_to_income`. Ngưỡng nêu rõ là giá trị mô phỏng chưa hiệu chỉnh. Không có rule engine ở bước hợp đồng.
+
+### Kiểu của agent
+
+`agent/src/yofina_agent/schemas.py`: `IntentResult` (bảy ý định `wallet.INTENTS`), `Plan` (spec + bước tool đọc, `limits` không có mặc định), `Analysis` (2 đến 3 phương án), `Verdict` (grounding + suitability từng phương án, `action` `pass`/`retry`/`fallback`). Chỉ định nghĩa kiểu và kiểm bất biến; router phase 1 (`router.RouterOutput`) chưa dùng chúng.
+
+### Kiểm
+
+```
+uv run pytest tests/unit/test_contracts_phase3.py tests/unit/test_migration_0010.py tests/unit/agent/test_schemas.py
+```
+
+Hai test cũ đã sửa cho phase 3: `test_contracts_rest.py` (tập endpoint, `x-lambda`) và `test_contracts_phase2.py` (tool ghi có thêm `schedule_nudge`). Frontend: `frontend/src/api/errors.ts` thêm sáu mã lỗi và `api/schemas.ts` thêm `schedule_nudge` vào `TOOL_NAMES` (để `openapi.test.ts` xanh); sáu khối mới đã có Zod trong `blocks.ts` nhưng CHƯA ở `REGISTERED_BY_FRONTEND`. Luồng C thêm chúng vào danh sách đó trong `scripts/gen_contracts.mjs` rồi sinh lại, cùng lúc đăng ký view trong `registry.tsx`.
 
 ## Cách chọn công cụ sinh
 

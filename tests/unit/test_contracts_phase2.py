@@ -110,12 +110,15 @@ def test_tool_ghi():
         tool_ref == "confirm_action.schema.json#/$defs/ConfirmActionTool"
     )  # biên nhận dùng chung tập tool
     ledger = {t["name"] for t in load_json(CONTRACTS / "tools" / "ledger.json")}
+    planner = {t["name"] for t in load_json(CONTRACTS / "tools" / "planner.json")}
     assert set(wallet.AGENT_WRITE_TOOLS) <= ledger
+    assert set(wallet.PLANNER_WRITE_TOOLS) <= planner  # phase 3: schedule_nudge ở target planner
     # tool chỉ có ở màn hình thì KHÔNG được lộ cho agent qua Gateway
     assert not ({"save_jars", "confirm_salary"} & ledger)
     assert set(wallet.ACTION_TOOLS) - set(wallet.AGENT_WRITE_TOOLS) == {
         "save_jars",
         "confirm_salary",
+        "schedule_nudge",
     }
 
 
@@ -145,6 +148,9 @@ SCHEMA_FILES = [
     *sorted(CONTRACTS.glob("*/*.schema.json")),
     CONTRACTS / "tools" / "ledger.json",
     CONTRACTS / "tools" / "forecast.json",
+    CONTRACTS / "tools" / "knowledge.json",
+    CONTRACTS / "tools" / "planner.json",
+    CONTRACTS / "tools" / "audit.json",
 ]
 MONEY_REFS = ("Vnd", "VndPositive", "VndSigned")
 

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/planner/rule.schema.json",
+  "title": "SuitabilityRuleFile",
+  "description": "Định dạng một file luật suitability (`gateway/tools/planner/rules/*.yaml`). Mỗi file một luật. Logic nằm ở bộ đánh giá có tên (`evaluator`, luồng engine cài); NGƯỠNG là dữ liệu trong `thresholds`, mỗi ngưỡng có đơn vị, ghi chú và nguồn. Cùng định dạng với model Pydantic `yofina_core.suitability.SuitabilityRule` (test kiểm khớp). Không có rule engine ở bước hợp đồng.",
+  "type": "object",
+  "required": ["id", "version", "title", "description", "evaluator", "severity", "thresholds", "message"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "Id luật, trùng tên file (không có đuôi). Đi vào `rules_checked[].rule_id` và `Violation.rule_id`.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "version": { "description": "Tăng khi đổi nghĩa hoặc ngưỡng, để truy vết `rules_version`.", "type": "integer", "minimum": 1 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "evaluator": {
+      "description": "Tên bộ đánh giá trong Lambda planner.",
+      "type": "string",
+      "enum": [
+        "essential_obligations_covered",
+        "emergency_fund_before_investing",
+        "risk_within_tolerance",
+        "no_credit_for_discretionary",
+        "obligation_income_ratio"
+      ]
+    },
+    "severity": {
+      "description": "block: phương án vi phạm không được đưa cho người dùng; warn: được đưa kèm cảnh báo.",
+      "type": "string",
+      "enum": ["block", "warn"]
+    },
+    "recommendation_severity": {
+      "description": "Mức nghiêm trọng khi đề xuất do HỆ THỐNG đưa ra (origin recommendation), nếu khác `severity`.",
+      "type": "string",
+      "enum": ["block", "warn"]
+    },
+    "applies_when": {
+      "description": "Bộ lọc áp luật; trường vắng là không lọc, trường có mặt phải cùng khớp. Không có `applies_when` thì áp cho mọi đề xuất.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "categories": { "type": "array", "items": { "type": "string", "enum": ["spending", "saving", "investment", "debt_payment"] } },
+        "origins": { "type": "array", "items": { "type": "string", "enum": ["recommendation", "user_request"] } },
+        "funding_sources": { "type": "array", "items": { "type": "string", "enum": ["jar", "credit"] } },
+        "essential": { "type": "boolean" }
+      }
+    },
+    "thresholds": {
+      "description": "Ngưỡng của luật theo tên. Có thể rỗng nếu luật không có ngưỡng số.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/Threshold" }
+    },
+    "message": {
+      "description": "Câu tiếng Việt hiển thị khi vi phạm. Không chứa số liệu (số lấy từ tool).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "$defs": {
+    "Threshold": {
+      "type": "object",
+      "required": ["value", "unit", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "description": "Giá trị ngưỡng: số, chuỗi (mức) hoặc cờ.", "type": ["number", "string", "boolean"] },
+        "unit": { "type": "string", "enum": ["ratio", "months", "days", "vnd", "level", "flag"] },
+        "note": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "source": { "description": "Nguồn hoặc lý do của giá trị. Giá trị mô phỏng phải nói rõ là mô phỏng.", "type": "string", "minLength": 1, "maxLength": 300 }
+      }
+    }
+  }
+}

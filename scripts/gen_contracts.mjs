@@ -32,6 +32,7 @@ const KNOWN = new Set([
 const FILES = [
   'envelope', 'jar_summary', 'confirm', 'receipt', 'notice',
   'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action',
+  'suggestions', 'obligation_impact', 'options', 'affordability_card', 'explain', 'clarify',
 ]
 const UNION_FILE = 'block'
 
@@ -181,6 +182,8 @@ import { z } from 'zod'
 // `BlockType` và `BLOCK_TYPES` chỉ gồm các khối này để registry biên dịch được và hiện fallback_text cho khối
 // chưa đăng ký. Luồng frontend (phase 2) thêm bốn khối mới vào danh sách ĐỒNG THỜI với việc đăng ký view trong
 // registry.tsx. `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` luôn gồm MỌI khối trong block.schema.json.
+// Phase 3 thêm sáu khối (affordability_card, obligation_impact, options, explain, clarify, suggestions) vào hợp đồng nhưng
+// CHƯA vào danh sách dưới đây: luồng frontend của phase 3 thêm chúng cùng lúc với việc đăng ký view trong registry.tsx.
 const REGISTERED_BY_FRONTEND = ['jar_summary', 'confirm', 'receipt', 'notice', 'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action']
 for (const t of REGISTERED_BY_FRONTEND) {
   if (!registry.some(([name]) => name === t)) throw new Error(`REGISTERED_BY_FRONTEND có type lạ: ${t}`)

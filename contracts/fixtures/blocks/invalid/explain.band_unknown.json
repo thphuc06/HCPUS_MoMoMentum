@@ -1,0 +1,65 @@
+{
+  "v": 1,
+  "id": "explain:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Dữ liệu đã dùng: Số dư hũ Giải trí, Dự báo 30 ngày của hũ Giải trí, Kịch bản mua một lần 500.000 ₫. Độ tin cậy: Vừa.",
+  "source": {
+    "tool": "rest:GET /traces/{trace_id}",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "explain",
+  "data": {
+    "subject_trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+    "headline": "Vì sao có gợi ý này",
+    "data_used": [
+      {
+        "label": "Số dư hũ Giải trí",
+        "value": "760.000 ₫",
+        "tool": "ledger___get_jar_balances",
+        "as_of": "2026-12-10T03:00:00Z"
+      },
+      {
+        "label": "Dự báo 30 ngày của hũ Giải trí",
+        "tool": "forecast___get_forecast",
+        "as_of": "2026-11-21T19:00:03Z"
+      },
+      {
+        "label": "Kịch bản mua một lần 500.000 ₫",
+        "tool": "forecast___run_scenario"
+      }
+    ],
+    "rules_checked": [
+      {
+        "rule_id": "numeric_grounding",
+        "label": "Mọi con số có trong kết quả tool",
+        "outcome": "pass"
+      },
+      {
+        "rule_id": "obligations_first",
+        "label": "Nghĩa vụ trước",
+        "outcome": "pass"
+      },
+      {
+        "rule_id": "obligation_to_income",
+        "label": "Nghĩa vụ trên thu nhập",
+        "outcome": "warn",
+        "detail": "Tổng nghĩa vụ vượt ngưỡng tham khảo."
+      },
+      {
+        "rule_id": "emergency_before_investing",
+        "label": "Dự phòng trước đầu tư",
+        "outcome": "skipped"
+      }
+    ],
+    "confidence": {
+      "band": "very_high",
+      "reasons": [
+        "Có 47 ngày dữ liệu.",
+        "Độ phủ dữ liệu 100%.",
+        "Khoảng dự báo đã được đo trên các tuần gần nhất."
+      ]
+    },
+    "ai_generated": true
+  }
+}

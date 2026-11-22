@@ -28,6 +28,12 @@ export const ERROR_CODES = [
   'CREDIT_LIMIT_EXCEEDED',
   'DUPLICATE_TRANSACTION',
   'FORECAST_UNAVAILABLE',
+  'OFFER_EXPIRED',
+  'TRACE_NOT_FOUND',
+  'NUDGE_NOT_FOUND',
+  'FEE_SCHEDULE_NOT_FOUND',
+  'FORECAST_NOT_APPLICABLE',
+  'SCENARIO_INVALID',
 ] as const
 
 export const ErrorCode = z.enum(ERROR_CODES)
@@ -64,6 +70,12 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   CREDIT_LIMIT_EXCEEDED: 422,
   DUPLICATE_TRANSACTION: 409,
   FORECAST_UNAVAILABLE: 503,
+  OFFER_EXPIRED: 410,
+  TRACE_NOT_FOUND: 404,
+  NUDGE_NOT_FOUND: 404,
+  FEE_SCHEDULE_NOT_FOUND: 404,
+  FORECAST_NOT_APPLICABLE: 404,
+  SCENARIO_INVALID: 422,
 }
 
 /** Thông báo tiếng Việt cho từng mã lỗi (thay vì hiện mã thô hay chữ tiếng Anh của server). */
@@ -93,6 +105,12 @@ export const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   CREDIT_LIMIT_EXCEEDED: 'Vượt hạn mức Trả sau còn lại. Chọn số tiền nhỏ hơn hoặc trả từ hũ.',
   DUPLICATE_TRANSACTION: 'Giao dịch này đã được ghi rồi, không ghi thêm. Bạn kiểm tra ở Hoạt động nhé.',
   FORECAST_UNAVAILABLE: 'Chưa có dự báo cho hũ này và chưa tính được ngay. Thử lại sau ít phút.',
+  OFFER_EXPIRED: 'Đề nghị này đã hết hạn. Hỏi lại để có đề nghị mới.',
+  TRACE_NOT_FOUND: 'Không tìm thấy bản ghi của câu trả lời này.',
+  NUDGE_NOT_FOUND: 'Không tìm thấy lời nhắc này. Có thể nó đã được hủy.',
+  FEE_SCHEDULE_NOT_FOUND: 'Chưa có biểu phí cho khoản này.',
+  FORECAST_NOT_APPLICABLE: 'Hũ hệ thống không có dự báo.',
+  SCENARIO_INVALID: 'Kịch bản này chưa hợp lý (ví dụ ngày đã qua). Bạn chọn lại nhé.',
   NETWORK: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
   TIMEOUT: 'Máy chủ phản hồi quá lâu. Nếu bạn vừa ghi một giao dịch, kiểm tra ở Hoạt động trước khi thử lại.',
   INVALID_RESPONSE: 'Máy chủ trả dữ liệu không đọc được. Thử lại sau ít phút.',

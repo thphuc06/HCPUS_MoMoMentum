@@ -1,4 +1,4 @@
-"""Hợp đồng tool (target `ledger` và `forecast`): schema cho AgentCore Gateway và kết quả tool."""
+"""Hợp đồng tool (target `ledger`, `forecast`, `knowledge`, `planner`, `audit`): schema cho AgentCore Gateway và kết quả tool."""
 
 from __future__ import annotations
 
@@ -8,12 +8,21 @@ from jsonschema import Draft202012Validator
 from pydantic import TypeAdapter
 
 from yofina_core import blocks as b
-from yofina_core import wallet
+from yofina_core import scenario, suitability, wallet
 from yofina_core.errors import ErrorCode
 
 LEDGER = load_json(CONTRACTS / "tools" / "ledger.json")
 FORECAST = load_json(CONTRACTS / "tools" / "forecast.json")
-TOOLS = [(t, "ledger") for t in LEDGER] + [(t, "forecast") for t in FORECAST]
+KNOWLEDGE = load_json(CONTRACTS / "tools" / "knowledge.json")
+PLANNER = load_json(CONTRACTS / "tools" / "planner.json")
+AUDIT = load_json(CONTRACTS / "tools" / "audit.json")
+TOOLS = (
+    [(t, "ledger") for t in LEDGER]
+    + [(t, "forecast") for t in FORECAST]
+    + [(t, "knowledge") for t in KNOWLEDGE]
+    + [(t, "planner") for t in PLANNER]
+    + [(t, "audit") for t in AUDIT]
+)
 BY_NAME = {t["name"]: t for t, _ in TOOLS}
 
 # Gateway chỉ nhận một tập con của JSON Schema ở từng thuộc tính (type, description, items,
@@ -49,8 +58,15 @@ def test_cac_tool_cua_target_ledger_theo_danh_muc_overview():
     ]
 
 
+def test_cac_target_phase_3_khop_hang_so():
+    assert [t["name"] for t in FORECAST] == list(wallet.FORECAST_TOOLS)
+    assert [t["name"] for t in FORECAST] == ["get_forecast", "run_scenario", "affordability_check"]
+    assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == ["get_fee_schedule"]
+    assert [t["name"] for t in PLANNER] == list(wallet.PLANNER_TOOLS)
+    assert [t["name"] for t in AUDIT] == list(wallet.AUDIT_TOOLS) == ["get_trace"]
+
+
 def test_target_forecast_co_get_forecast():
-    assert [t["name"] for t in FORECAST] == list(wallet.FORECAST_TOOLS) == ["get_forecast"]
     schema = BY_NAME["get_forecast"]["inputSchema"]
     assert set(schema["properties"]) == {"user_id", "jar"}
     assert schema["required"] == ["jar"]
@@ -213,6 +229,10 @@ def test_tap_gia_tri_trong_mo_ta_khop_hang_so_hop_dong():
 # --- kết quả tool ---------------------------------------------------------------------------
 RESULT_FILE = {name: "ledger" for name in wallet.LEDGER_TOOLS}
 RESULT_FILE["get_forecast"] = "forecast"
+RESULT_FILE.update(
+    run_scenario="forecast", affordability_check="forecast", get_fee_schedule="knowledge",
+    check_suitability="planner", schedule_nudge="planner", get_trace="audit",
+)  # fmt: skip
 RESULT_DEF = {
     "get_jar_balances": "GetJarBalancesResult",
     "query_transactions": "QueryTransactionsResult",
@@ -225,6 +245,12 @@ RESULT_DEF = {
     "assign_jar": "AssignJarResult",
     "save_turn": "SaveTurnResult",
     "get_forecast": "GetForecastResult",
+    "run_scenario": "RunScenarioResult",
+    "affordability_check": "AffordabilityCheckResult",
+    "get_fee_schedule": "GetFeeScheduleResult",
+    "check_suitability": "CheckSuitabilityResult",
+    "schedule_nudge": "ScheduleNudgeResult",
+    "get_trace": "GetTraceResult",
 }
 
 
@@ -255,7 +281,22 @@ def test_ket_qua_tool_fixture_hop_le(registry, path):
         b.ReceiptData.model_validate(data)
     elif tool == "get_forecast":
         b.ForecastTimelineData.model_validate(data)
-    elif tool in ("update_profile", "record_transaction", "assign_jar"):
+    elif tool == "run_scenario":
+        for tl in data["timelines"]:
+            parsed = b.ForecastTimelineData.model_validate(tl)
+            assert parsed.compare is not None  # mọi khối của what-if là trước-sau
+        if "obligation_impact" in data:
+            b.ObligationImpactData.model_validate(data["obligation_impact"])
+        scenario.parse_scenario(data["spec"])
+    elif tool == "affordability_check":
+        b.AffordabilityCardData.model_validate(data)
+    elif tool == "check_suitability":
+        suitability.SuitabilityVerdict.model_validate(data)
+    elif tool == "get_trace":
+        b.parse_block(data["explain"])
+    elif tool == "get_fee_schedule":
+        assert data["fees"]
+    elif tool in ("update_profile", "record_transaction", "assign_jar", "schedule_nudge"):
         model = (
             b.ConfirmActionData if obj["status"] == "NEEDS_CONFIRMATION" else b.ReceiptActionData
         )

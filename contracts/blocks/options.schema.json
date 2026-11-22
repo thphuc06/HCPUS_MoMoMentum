@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/options.schema.json",
+  "title": "OptionsBlock",
+  "description": "Hai đến ba phương án sau khi phân tích. Mỗi phương án có `action` tùy chọn dẫn tới một khối `confirm` hoặc `confirm_action` đã phát trong cùng lượt (agent gọi tool ghi KHÔNG token để lấy NEEDS_CONFIRMATION, phát khối, rồi tham chiếu theo id). Phương án chỉ cân nhắc thì không có action. Lời mô tả do Analyst viết nhưng số phải qua NumericGrounding; trạng thái và `checked_rules` do Verifier điền. Id khối `options:{trace_id}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "options" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/OptionsData" }
+  },
+  "$defs": {
+    "OptionAction": {
+      "description": "Hành động của một phương án, dẫn tới khối xác nhận đã có. Phương án không có action (chỉ để cân nhắc) thì không có trường này.",
+      "type": "object",
+      "required": ["kind", "tool", "block_id"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Loại khối xác nhận: `confirm` cho chuyển hũ, `confirm_action` cho mọi tool ghi khác (Pydantic kiểm khớp với `tool`).",
+          "type": "string",
+          "enum": ["confirm", "confirm_action"]
+        },
+        "tool": {
+          "description": "Tool ghi sẽ được xác nhận (tên ngắn).",
+          "type": "string",
+          "enum": ["move_between_jars", "record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary", "schedule_nudge"]
+        },
+        "block_id": {
+          "description": "`id` của khối `confirm` hoặc `confirm_action` ĐÃ PHÁT trong cùng lượt (dạng `confirm:{trace_id}:{params_hash[:12]}`). Bấm chọn phương án thì giao diện hiện khối đó (không gọi tool ghi).",
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^confirm:[A-Za-z0-9_-]+:[0-9a-f]{12}$"
+        }
+      }
+    },
+    "OptionItem": {
+      "description": "Một phương án: nhãn, mô tả, trạng thái nếu chọn, vài số, và `action` tùy chọn dẫn tới khối xác nhận.",
+      "type": "object",
+      "required": ["option_id", "kind", "label", "summary", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "option_id": {
+          "description": "Id ổn định trong khối; `POST /feedback` tham chiếu theo đây.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        },
+        "kind": {
+          "description": "Loại phương án: defer (hoãn), switch_jar (đổi hũ nguồn), split (chia nhỏ), pay_now (trả ngay), use_credit (qua Trả sau), proceed (vẫn làm), reduce_amount (giảm số tiền), move_between_jars (bù từ hũ khác), remind_later (nhắc sau), skip (bỏ).",
+          "type": "string",
+          "enum": ["defer", "switch_jar", "split", "pay_now", "use_credit", "proceed", "reduce_amount", "move_between_jars", "remind_later", "skip"]
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "summary": {
+          "description": "Một hai câu mô tả, số lấy từ tool.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "status": {
+          "description": "Trạng thái đủ, sát, hụt của hũ chính NẾU người dùng chọn phương án này. Luôn kèm chữ ở giao diện.",
+          "$ref": "forecast_timeline.schema.json#/$defs/JarStatus"
+        },
+        "recommended": {
+          "description": "Đúng cho tối đa một phương án mà hệ thống đề xuất.",
+          "type": "boolean"
+        },
+        "metrics": {
+          "description": "Vài dòng trước và sau đã định dạng sẵn (ví dụ 'Ngày cạn', 'Hũ Ăn uống').",
+          "type": "array",
+          "items": { "$ref": "confirm_action.schema.json#/$defs/ActionChange" },
+          "maxItems": 4
+        },
+        "checked_rules": {
+          "description": "Id các luật suitability phương án này đã qua (Verifier chạy `planner___check_suitability` trên từng phương án).",
+          "type": "array",
+          "items": { "type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+          "maxItems": 8
+        },
+        "action": { "$ref": "#/$defs/OptionAction" }
+      }
+    },
+    "OptionsData": {
+      "type": "object",
+      "required": ["options"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "description": "Tiêu đề ngắn (ví dụ 'Bạn có thể').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "scenario_id": {
+          "description": "Kịch bản các phương án dựa trên (nếu có).",
+          "$ref": "envelope.schema.json#/$defs/Uuid"
+        },
+        "options": {
+          "description": "Hai đến ba phương án, mỗi phương án đã qua suitability.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/OptionItem" },
+          "minItems": 2,
+          "maxItems": 3
+        }
+      }
+    }
+  }
+}

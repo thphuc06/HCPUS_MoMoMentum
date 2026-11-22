@@ -1,0 +1,6 @@
+{
+  "kind": "recurring_expense",
+  "amount_vnd": 99000,
+  "cycle": "monthly",
+  "jar_code": "giai_tri"
+}

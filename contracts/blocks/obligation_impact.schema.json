@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/obligation_impact.schema.json",
+  "title": "ObligationImpactBlock",
+  "description": "Tác động nghĩa vụ của một món mua bằng Trả sau (mô phỏng). TÁCH `cost.item_cost_vnd` (món này tốn thêm bao nhiêu, gồm phần phí phát sinh thêm) khỏi `cost.total_due_vnd` (ngày đến hạn phải trả tổng bao nhiêu, cộng dồn với nghĩa vụ đã có), để giao diện nói thật khi tháng đó đã có phí. Số do engine tính (tool `forecast___run_scenario`), không do LLM viết. Id khối `obligation_impact:{trace_id}:{due_date}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "obligation_impact" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ObligationImpactData" }
+  },
+  "$defs": {
+    "FeeApplied": {
+      "description": "Dòng biểu phí đã áp cho khoản này (lấy từ `fee_schedules`, không gắn cứng).",
+      "type": "object",
+      "required": ["fee_type", "amount_vnd", "source_name", "effective_from"],
+      "additionalProperties": false,
+      "properties": {
+        "fee_type": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$" },
+        "amount_vnd": { "$ref": "envelope.schema.json#/$defs/Vnd" },
+        "source_name": {
+          "description": "Nguồn của biểu phí (từ bảng fee_schedules).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "effective_from": { "$ref": "envelope.schema.json#/$defs/IsoDate" }
+      }
+    },
+    "Caution": {
+      "description": "Cảnh báo do một luật suitability sinh ra (ví dụ 'không khuyến khích' khi nghĩa vụ vượt ngưỡng thu nhập). Do code dựng từ luật, không do LLM viết.",
+      "type": "object",
+      "required": ["rule_id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": {
+          "description": "Id luật suitability (khớp `rules/*.yaml`).",
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "text": { "type": "string", "minLength": 1, "maxLength": 140 }
+      }
+    },
+    "CreditCost": {
+      "description": "Chi phí thật của một món mua bằng Trả sau, TÁCH 'chi phí của món này' (`item_cost_vnd`) khỏi 'tổng phải trả ngày đến hạn' (`total_due_vnd`, cộng dồn với nghĩa vụ đã có). Bất biến: item_cost_vnd = principal_vnd + fee_added_vnd; total_due_vnd = existing_due_vnd + item_cost_vnd (test kiểm).",
+      "type": "object",
+      "required": ["product_label", "principal_vnd", "fee_added_vnd", "item_cost_vnd", "due_date", "existing_due_vnd", "total_due_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "product_label": {
+          "description": "Tên sản phẩm lấy từ biểu phí, ví dụ 'Trả sau (mô phỏng)'. Không gõ cứng ở giao diện.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "principal_vnd": {
+          "description": "Gốc của món này.",
+          "$ref": "envelope.schema.json#/$defs/VndPositive"
+        },
+        "fee_added_vnd": {
+          "description": "Phí PHÁT SINH THÊM do món này. Phí dịch vụ tính một lần cho mỗi nghĩa vụ (mỗi tháng có giao dịch), nên bằng 0 nếu nghĩa vụ ở ngày đến hạn này đã có phí từ trước.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "item_cost_vnd": {
+          "description": "CHI PHÍ CỦA MÓN NÀY = principal_vnd + fee_added_vnd. Đây là con số trả lời 'món này tốn thêm bao nhiêu'.",
+          "$ref": "envelope.schema.json#/$defs/VndPositive"
+        },
+        "due_date": {
+          "description": "Ngày đến hạn của nghĩa vụ chứa món này.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "existing_due_vnd": {
+          "description": "Nghĩa vụ Trả sau đã có ở ngày đến hạn này TRƯỚC món này (gốc + phí). 0 nếu chưa có.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "total_due_vnd": {
+          "description": "TỔNG PHẢI TRẢ NGÀY ĐẾN HẠN sau món này, cộng dồn = existing_due_vnd + item_cost_vnd. Đây là con số trả lời 'đến hạn phải đưa ra bao nhiêu'.",
+          "$ref": "envelope.schema.json#/$defs/VndPositive"
+        },
+        "fee": {
+          "description": "Biểu phí đã áp. Vắng khi không có phí nào áp cho khoản này.",
+          "$ref": "#/$defs/FeeApplied"
+        },
+        "late_penalty_vnd": {
+          "description": "Phạt nếu trả trễ, CHỈ khi biểu phí có nguồn cho khoản này; vắng nghĩa là chưa có nguồn (không bịa).",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "limit_vnd": {
+          "description": "Hạn mức Trả sau.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "available_before_vnd": {
+          "description": "Hạn mức còn lại trước món này.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "available_after_vnd": {
+          "description": "Hạn mức còn lại sau món này.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        }
+      }
+    },
+    "ObligationRatio": {
+      "description": "Tỷ lệ nghĩa vụ trên thu nhập so với ngưỡng của luật suitability.",
+      "type": "object",
+      "required": ["obligations_vnd", "income_vnd", "ratio", "threshold", "exceeds"],
+      "additionalProperties": false,
+      "properties": {
+        "obligations_vnd": {
+          "description": "Tổng nghĩa vụ trong kỳ sau khi thêm khoản này.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "income_vnd": {
+          "description": "Thu nhập kỳ (lương đã khai).",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "ratio": {
+          "description": "obligations_vnd chia income_vnd (có thể lớn hơn 1).",
+          "type": "number",
+          "minimum": 0
+        },
+        "threshold": {
+          "description": "Ngưỡng của luật suitability `obligation_to_income` (dữ liệu trong rules/*.yaml, không gắn cứng).",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "exceeds": {
+          "description": "Đúng khi ratio vượt threshold.",
+          "type": "boolean"
+        }
+      }
+    },
+    "JarAtDue": {
+      "description": "Một hũ trả nghĩa vụ vào ngày đến hạn: đủ hay hụt.",
+      "type": "object",
+      "required": ["jar", "status", "balance_before_due_vnd", "due_vnd", "shortfall_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "jar": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastJar" },
+        "status": { "$ref": "forecast_timeline.schema.json#/$defs/JarStatus" },
+        "balance_before_due_vnd": {
+          "description": "Số dư P50 dự kiến của hũ ngay trước ngày đến hạn (âm là đã hụt).",
+          "$ref": "envelope.schema.json#/$defs/VndSigned"
+        },
+        "due_vnd": {
+          "description": "Phần nghĩa vụ đến hạn ngày đó mà hũ này phải trả.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "shortfall_vnd": {
+          "description": "Số hụt khi đến hạn = max(0, due_vnd - số dư); 0 nếu đủ.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        }
+      }
+    },
+    "ObligationImpactData": {
+      "description": "Tác động của một món Trả sau lên nghĩa vụ: chi phí của món này, tổng phải trả ngày đến hạn, hũ nào hụt khi đến hạn, tỷ lệ nghĩa vụ trên thu nhập. Dùng trong chat (kết quả what-if) và trong `affordability_card.credit`.",
+      "type": "object",
+      "required": ["status", "headline", "cost", "at_due", "shortfall_vnd", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "description": "Đủ, sát, hụt khi đến hạn. Luôn kèm chữ ở `headline`, không chỉ màu.",
+          "$ref": "forecast_timeline.schema.json#/$defs/JarStatus"
+        },
+        "headline": {
+          "description": "Một câu do code dựng (ví dụ 'Đến hạn 05/12 bạn cần có 2.200.000 ₫; hũ Nghĩa vụ hụt 400.000 ₫').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "cost": { "$ref": "#/$defs/CreditCost" },
+        "at_due": {
+          "description": "Hũ nào trả nghĩa vụ ngày đến hạn và đủ hay hụt.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/JarAtDue" },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "shortfall_vnd": {
+          "description": "Tổng số hụt khi đến hạn (cộng shortfall_vnd của at_due); 0 nếu đủ. Đây là 'khoản hụt tháng sau'.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "ratio": { "$ref": "#/$defs/ObligationRatio" },
+        "cautions": {
+          "description": "Cảnh báo từ luật suitability (ví dụ 'không khuyến khích').",
+          "type": "array",
+          "items": { "$ref": "#/$defs/Caution" },
+          "maxItems": 3
+        },
+        "basis": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastBasis" }
+      }
+    }
+  }
+}

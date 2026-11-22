@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/scenario/scenario_spec.schema.json",
+  "title": "ScenarioSpec",
+  "description": "Một kịch bản what-if (FR5): sáu loại, phân biệt theo `kind`. Nguồn chung cho tool `forecast___run_scenario`, bảng `scenarios.spec` và model Pydantic `yofina_core.scenario`. Mỗi loại là một $defs riêng với trường bắt buộc riêng. JSON Schema ở đây KHÔNG diễn đạt được hai luật liên trường; Pydantic (`yofina_core.scenario`) kiểm chúng và là nơi quyết định: (1) `jar_transfer`: `from_jar` khác `to_jar`; (2) `recurring_expense`: `end_date` không trước `date`; ngoài ra mọi `date` phải là ngày lịch thật (schema chỉ kiểm dạng chuỗi). Tiền là số nguyên VND dương. Ngày là ngày mô phỏng; `date` vắng nghĩa là hôm nay mô phỏng của người dùng (engine điền, không điền ở đây). Mã hũ phải thuộc người dùng (engine kiểm, lỗi JAR_NOT_FOUND). LLM chỉ dịch câu hỏi sang spec này; số liệu kết quả do engine tính.",
+  "oneOf": [
+    { "$ref": "#/$defs/OneTimePurchase" },
+    { "$ref": "#/$defs/BnplPurchase" },
+    { "$ref": "#/$defs/IncomeChange" },
+    { "$ref": "#/$defs/RecurringExpense" },
+    { "$ref": "#/$defs/JarTransfer" },
+    { "$ref": "#/$defs/GoalDelay" }
+  ],
+  "$defs": {
+    "ScenarioKind": {
+      "description": "Sáu loại kịch bản của FR5: mua một lần bằng tiền hũ, mua bằng Trả sau (mô phỏng), đổi thu nhập, thêm khoản định kỳ, chuyển giữa hũ, lùi mục tiêu.",
+      "type": "string",
+      "enum": ["one_time_purchase", "bnpl_purchase", "income_change", "recurring_expense", "jar_transfer", "goal_delay"]
+    },
+    "ScenarioLabel": {
+      "description": "Tên ngắn của món hoặc việc theo lời người dùng (ví dụ 'tai nghe'), chỉ để hiển thị. Đã che PII trước khi vào đây; không dùng để tính.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "OneTimePurchase": {
+      "description": "Mua một lần, trả bằng tiền của một hũ (số dư hũ giảm ngay tại `date`).",
+      "type": "object",
+      "required": ["kind", "amount_vnd", "funding_source", "jar_code"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "one_time_purchase" },
+        "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
+        "funding_source": { "const": "jar" },
+        "jar_code": {
+          "description": "Hũ trả tiền (nguồn). Bắt buộc: không đoán hũ.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+        },
+        "date": {
+          "description": "Ngày mua. Vắng thì hôm nay mô phỏng.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "label": { "$ref": "#/$defs/ScenarioLabel" }
+      }
+    },
+    "BnplPurchase": {
+      "description": "Mua bằng Trả sau (mô phỏng): số dư hũ không đổi lúc mua, nghĩa vụ phát sinh (hoặc cộng dồn) đến hạn ngày `due_day` kế tiếp; phí theo biểu phí (tính một lần mỗi nghĩa vụ).",
+      "type": "object",
+      "required": ["kind", "amount_vnd", "funding_source"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "bnpl_purchase" },
+        "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
+        "funding_source": { "const": "credit" },
+        "jar_code": {
+          "description": "Hũ để tính chi tiêu của món này (không đổi số dư hũ lúc mua). Vắng thì engine dùng hũ chi tiêu mặc định theo cấu hình.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+        },
+        "date": {
+          "description": "Ngày mua. Vắng thì hôm nay mô phỏng.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "label": { "$ref": "#/$defs/ScenarioLabel" }
+      }
+    },
+    "IncomeChange": {
+      "description": "Đổi thu nhập: lương tháng mới có hiệu lực từ `date` (vắng thì từ kỳ lương kế tiếp).",
+      "type": "object",
+      "required": ["kind", "new_monthly_salary_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "income_change" },
+        "new_monthly_salary_vnd": {
+          "description": "Lương tháng mới (không phải mức chênh).",
+          "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
+        },
+        "date": {
+          "description": "Ngày có hiệu lực. Vắng thì kỳ lương kế tiếp.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "label": { "$ref": "#/$defs/ScenarioLabel" }
+      }
+    },
+    "RecurringExpense": {
+      "description": "Thêm một khoản chi định kỳ từ một hũ (ví dụ thuê bao, học phí trả góp). Lần đầu vào `date`, lặp theo `cycle` cho tới `end_date` (vắng thì hết khoảng dự báo).",
+      "type": "object",
+      "required": ["kind", "amount_vnd", "cycle", "date", "jar_code"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "recurring_expense" },
+        "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
+        "cycle": {
+          "description": "Chu kỳ lặp: weekly (7 ngày), monthly (cùng ngày trong tháng, kẹp ngày cuối tháng), yearly. Không có once: khoản một lần là one_time_purchase.",
+          "type": "string",
+          "enum": ["weekly", "monthly", "yearly"]
+        },
+        "date": {
+          "description": "Ngày của lần đầu tiên.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "end_date": {
+          "description": "Ngày cuối còn tính (không trước `date`, Pydantic kiểm). Vắng thì không kết thúc trong khoảng dự báo.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "jar_code": {
+          "description": "Hũ trả khoản này.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+        },
+        "label": { "$ref": "#/$defs/ScenarioLabel" }
+      }
+    },
+    "JarTransfer": {
+      "description": "Chuyển tiền giữa hai hũ tại `date`. `from_jar` và `to_jar` phải khác nhau (Pydantic kiểm).",
+      "type": "object",
+      "required": ["kind", "amount_vnd", "from_jar", "to_jar"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "jar_transfer" },
+        "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
+        "from_jar": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" },
+        "to_jar": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" },
+        "date": {
+          "description": "Ngày chuyển. Vắng thì hôm nay mô phỏng.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "label": { "$ref": "#/$defs/ScenarioLabel" }
+      }
+    },
+    "GoalDelay": {
+      "description": "Lùi mục tiêu của một hũ tiết kiệm: hạn của hũ dời ra `delay_months` tháng, phần góp mỗi kỳ lương dành cho hũ đó giảm tương ứng (engine tính từ `goal_vnd`, `goal_date` và số dư).",
+      "type": "object",
+      "required": ["kind", "jar_code", "delay_months"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "goal_delay" },
+        "jar_code": {
+          "description": "Hũ có mục tiêu (kind saving).",
+          "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+        },
+        "delay_months": {
+          "description": "Số tháng lùi hạn, 1 đến 60.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        },
+        "label": { "$ref": "#/$defs/ScenarioLabel" }
+      }
+    }
+  }
+}

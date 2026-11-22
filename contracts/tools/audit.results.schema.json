@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/tools/audit.results.schema.json",
+  "title": "AuditToolResults",
+  "description": "Kết quả JSON mà Lambda `audit` trả cho Gateway và cho `GET /traces/{trace_id}`. `data` là bản ghi lượt dựng từ `audit_events` (event_type agent_turn): khối `explain` đã dựng sẵn cộng chi tiết kỹ thuật. Trace của người khác hoặc không tồn tại đều trả TRACE_NOT_FOUND (không phân biệt). Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "$defs": {
+    "TraceBlockRef": {
+      "description": "Khối đã phát trong lượt (chỉ id và loại; nội dung ở `turn_blocks`).",
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "../blocks/envelope.schema.json#/$defs/BlockId" },
+        "type": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 40 }
+      }
+    },
+    "TraceStep": {
+      "description": "Thời lượng một bước của lượt.",
+      "type": "object",
+      "required": ["step", "ms"],
+      "additionalProperties": false,
+      "properties": {
+        "step": {
+          "description": "Tên bước: guardrail_in, router, tools, orchestrator, analyst, verifier, composer, guardrail_out... (mở).",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,39}$"
+        },
+        "ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "TokenUsage": {
+      "description": "Số token và lượt gọi model của cả lượt.",
+      "type": "object",
+      "required": ["input_tokens", "output_tokens", "model_calls"],
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "model_calls": {
+          "description": "Số lượt gọi model trong lượt (what-if không quá 4).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_read_tokens": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "TraceDetail": {
+      "description": "Chi tiết kỹ thuật của lượt.",
+      "type": "object",
+      "required": ["blocks_emitted", "token_usage", "step_timings", "duration_ms"],
+      "additionalProperties": false,
+      "properties": {
+        "intent": {
+          "description": "Ý định router đã nhận ra (yofina_core.wallet.INTENTS). Vắng với lượt không qua router.",
+          "type": "string",
+          "pattern": "^[a-z][a-z_]*$",
+          "maxLength": 32
+        },
+        "outcome": { "type": "string", "enum": ["ok", "rejected", "error"] },
+        "blocks_emitted": {
+          "type": "array",
+          "maxItems": 40,
+          "items": { "$ref": "#/$defs/TraceBlockRef" }
+        },
+        "token_usage": { "$ref": "#/$defs/TokenUsage" },
+        "step_timings": {
+          "type": "array",
+          "maxItems": 30,
+          "items": { "$ref": "#/$defs/TraceStep" }
+        },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "TraceData": {
+      "type": "object",
+      "required": ["trace_id", "created_at", "explain", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "trace_id": { "$ref": "../blocks/envelope.schema.json#/$defs/TraceId" },
+        "created_at": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "explain": {
+          "description": "Khối `explain` đã dựng (đúng khối H4 hiển thị).",
+          "$ref": "../blocks/explain.schema.json"
+        },
+        "detail": { "$ref": "#/$defs/TraceDetail" }
+      }
+    },
+    "GetTraceOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "#/$defs/TraceData" }
+      }
+    },
+    "GetTraceResult": {
+      "description": "Mã lỗi có thể gặp: TRACE_NOT_FOUND, PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/GetTraceOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    }
+  }
+}

@@ -59,6 +59,10 @@ export const Source = z.object({
 })
 export type Source = z.infer<typeof Source>
 
+/** UUID chữ thường. */
+export const Uuid = z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))
+export type Uuid = z.infer<typeof Uuid>
+
 /** Phong bì chung của mọi khối UI. Schema này chấp nhận cả `type` chưa biết (để frontend vẫn hiện fallback_text); schema từng khối chặt hơn. */
 export const BlockEnvelope = z.object({
   v: SchemaVersion,
@@ -174,15 +178,27 @@ export const ReceiptBlock = z.object({
 })
 export type ReceiptBlock = z.infer<typeof ReceiptBlock>
 
+/** Một gợi ý bấm được. */
+export const SuggestionItem = z.object({
+  id: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")),
+  label: z.string().min(1).max(40),
+  prompt: z.string().min(1).max(200),
+})
+export type SuggestionItem = z.infer<typeof SuggestionItem>
+
 export const NoticeData = z.object({
   kind: z.enum(["out_of_scope", "degraded", "low_data", "error"]),
   title: z.string().min(1).max(80),
   message: z.string().min(1).max(280),
   code: z.string().regex(new RegExp("^[A-Z][A-Z0-9_]*$")).optional(),
+  retryable: z.boolean().optional(),
+  degraded_reason: z.enum(["model_budget", "model_error", "tool_error", "tool_timeout", "verifier_failed", "low_coverage", "short_history"]).optional(),
+  missing: z.array(z.string().min(1).max(80)).max(5).optional(),
+  suggestions: z.array(SuggestionItem).max(4).optional(),
 })
 export type NoticeData = z.infer<typeof NoticeData>
 
-/** Thông báo trạng thái: ngoài phạm vi, chế độ rút gọn khi hệ thống chạm giới hạn, dữ liệu ít, lỗi. Không chứa số liệu tài chính. */
+/** Thông báo trạng thái: ngoài phạm vi, chế độ rút gọn khi hệ thống chạm giới hạn, dữ liệu ít, lỗi (kèm 'Thử lại'). Không chứa số liệu tài chính. Phase 3 thêm các trường TÙY CHỌN `retryable`, `degraded_reason`, `missing`, `suggestions` (không tăng `v`). */
 export const NoticeBlock = z.object({
   v: SchemaVersion,
   id: BlockId,
@@ -237,6 +253,34 @@ export const ForecastEvent = z.object({
 })
 export type ForecastEvent = z.infer<typeof ForecastEvent>
 
+/** Đường dự báo của hũ SAU khi áp kịch bản. */
+export const ForecastScenarioPath = z.object({
+  status: JarStatus,
+  runout_date: IsoDate.optional(),
+  p_shortfall: Ratio.optional(),
+  p_shortfall_se: Ratio.optional(),
+  min_balance_p50_vnd: VndSigned.optional(),
+  days: z.array(ForecastDay).min(1).max(90),
+  events: z.array(ForecastEvent).max(60).optional(),
+})
+export type ForecastScenarioPath = z.infer<typeof ForecastScenarioPath>
+
+/** Biến thể trước và sau của `forecast_timeline`. Các trường cấp trên (`status`, `days`, `events`, `runout_date`, `p_shortfall`...) là TRƯỚC (baseline, đúng như khối không có `compare`), nên frontend cũ không biết `compare` vẫn vẽ đúng baseline. Frontend mới vẽ thêm đường SAU và dải chênh lệch. */
+export const ForecastCompare = z.object({
+  label: z.string().min(1).max(80),
+  kind: z.enum(["one_time_purchase", "bnpl_purchase", "income_change", "recurring_expense", "jar_transfer", "goal_delay"]),
+  scenario_id: Uuid.optional(),
+  after: ForecastScenarioPath,
+  delta: z.object({
+    min_balance_delta_vnd: VndSigned,
+    runout_shift_days: z.int().min(-400).max(400).optional(),
+    p_shortfall_delta: z.number().min(-1).max(1).optional(),
+  }),
+  n_paths: z.int().min(1),
+  common_random_numbers: z.boolean(),
+})
+export type ForecastCompare = z.infer<typeof ForecastCompare>
+
 export const ForecastTimelineData = z.object({
   jar: ForecastJar,
   status: JarStatus,
@@ -256,8 +300,20 @@ export const ForecastTimelineData = z.object({
   stale: z.boolean(),
   days: z.array(ForecastDay).min(1).max(90),
   events: z.array(ForecastEvent).max(60),
+  compare: ForecastCompare.optional(),
 })
 export type ForecastTimelineData = z.infer<typeof ForecastTimelineData>
+
+/** Cơ sở của một con số tính từ dự báo: độ tươi, nhóm tin cậy, độ dài lịch sử. Dùng chung cho `affordability_card`, `obligation_impact` và kết quả tool kịch bản, để mọi thẻ số liệu đều nói được 'dựa trên dữ liệu nào'. */
+export const ForecastBasis = z.object({
+  computed_at: IsoDateTime,
+  stale: z.boolean(),
+  confidence_band: ConfidenceBand,
+  is_initial_estimate: z.boolean(),
+  history_days: z.int().min(0),
+  coverage: Ratio.optional(),
+})
+export type ForecastBasis = z.infer<typeof ForecastBasis>
 
 /** Dự báo 30 ngày của MỘT hũ: đường số dư P10/P50/P90, mốc nghĩa vụ và lương, ngày cạn, xác suất hụt hoặc nhóm tin cậy. Dùng CHUNG cho màn Chi tiết hũ (GET /forecasts/{jar_code} trả đúng khối này) và chat (tool forecast___get_forecast), nên hai nơi luôn cùng số. Số do code đọc từ bảng forecasts, không do LLM viết. */
 export const ForecastTimelineBlock = z.object({
@@ -302,8 +358,8 @@ export const ProactiveCardBlock = z.object({
 })
 export type ProactiveCardBlock = z.infer<typeof ProactiveCardBlock>
 
-/** Tool ghi dùng khối này (tên ngắn, không có tiền tố target). */
-export const ConfirmActionTool = z.enum(["record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary"])
+/** Tool ghi dùng khối này (tên ngắn, không có tiền tố target). `schedule_nudge` (target planner, phase 3) đi qua cùng luồng token. */
+export const ConfirmActionTool = z.enum(["record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary", "schedule_nudge"])
 export type ConfirmActionTool = z.infer<typeof ConfirmActionTool>
 
 /** Một dòng 'trước -> sau' để hiển thị, do code định dạng sẵn (ví dụ nhãn 'Số dư Ăn uống', trước '380.000 ₫', sau '180.000 ₫'). Giao diện chỉ vẽ, không tính lại. */
@@ -377,7 +433,7 @@ export const ReceiptActionData = z.object({
 })
 export type ReceiptActionData = z.infer<typeof ReceiptActionData>
 
-/** Biên nhận của thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary). Trả bởi POST /actions (cùng với `receipt` của chuyển hũ) và dựng lại từ kết quả tool. Id khối `receipt:{tool}:{reference_id}`, hoặc `receipt:{tool}:{trace_id}` khi thao tác không có reference_id (kèm tool vì assign_jar và record_transaction dùng chung id giao dịch). */
+/** Biên nhận của thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge; với schedule_nudge `reference_id` là id của nhắc, cũng là thứ Hoàn tác dùng để hủy). Trả bởi POST /actions (cùng với `receipt` của chuyển hũ) và dựng lại từ kết quả tool. Id khối `receipt:{tool}:{reference_id}`, hoặc `receipt:{tool}:{trace_id}` khi thao tác không có reference_id (kèm tool vì assign_jar và record_transaction dùng chung id giao dịch). */
 export const ReceiptActionBlock = z.object({
   v: SchemaVersion,
   id: BlockId,
@@ -389,8 +445,264 @@ export const ReceiptActionBlock = z.object({
 })
 export type ReceiptActionBlock = z.infer<typeof ReceiptActionBlock>
 
-/** Hợp của các khối đã biết, phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema. */
-export const Block = z.discriminatedUnion('type', [JarSummaryBlock, ConfirmBlock, ReceiptBlock, NoticeBlock, ForecastTimelineBlock, ProactiveCardBlock, ConfirmActionBlock, ReceiptActionBlock])
+export const SuggestionsData = z.object({
+  context: z.enum(["welcome", "after_answer", "out_of_scope", "degraded"]),
+  title: z.string().min(1).max(80).optional(),
+  can_do: z.array(z.string().min(1).max(80)).max(6).optional(),
+  cannot_do: z.array(z.string().min(1).max(80)).max(6).optional(),
+  items: z.array(SuggestionItem).min(1).max(6),
+})
+export type SuggestionsData = z.infer<typeof SuggestionsData>
+
+/** Gợi ý bấm được: mở đầu chat (H1, kèm 'mình làm được / chưa làm'), sau câu trả lời, kèm từ chối ngoài phạm vi (H7). Nội dung từ cấu hình hoặc code. Id khối `suggestions:{trace_id}:{context}`. */
+export const SuggestionsBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("suggestions"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: SuggestionsData,
+})
+export type SuggestionsBlock = z.infer<typeof SuggestionsBlock>
+
+/** Dòng biểu phí đã áp cho khoản này (lấy từ `fee_schedules`, không gắn cứng). */
+export const FeeApplied = z.object({
+  fee_type: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,39}$")),
+  amount_vnd: Vnd,
+  source_name: z.string().min(1).max(200),
+  effective_from: IsoDate,
+})
+export type FeeApplied = z.infer<typeof FeeApplied>
+
+/** Cảnh báo do một luật suitability sinh ra (ví dụ 'không khuyến khích' khi nghĩa vụ vượt ngưỡng thu nhập). Do code dựng từ luật, không do LLM viết. */
+export const Caution = z.object({
+  rule_id: z.string().max(64).regex(new RegExp("^[a-z][a-z0-9_]{0,63}$")),
+  text: z.string().min(1).max(140),
+})
+export type Caution = z.infer<typeof Caution>
+
+/** Chi phí thật của một món mua bằng Trả sau, TÁCH 'chi phí của món này' (`item_cost_vnd`) khỏi 'tổng phải trả ngày đến hạn' (`total_due_vnd`, cộng dồn với nghĩa vụ đã có). Bất biến: item_cost_vnd = principal_vnd + fee_added_vnd; total_due_vnd = existing_due_vnd + item_cost_vnd (test kiểm). */
+export const CreditCost = z.object({
+  product_label: z.string().min(1).max(60),
+  principal_vnd: VndPositive,
+  fee_added_vnd: Vnd,
+  item_cost_vnd: VndPositive,
+  due_date: IsoDate,
+  existing_due_vnd: Vnd,
+  total_due_vnd: VndPositive,
+  fee: FeeApplied.optional(),
+  late_penalty_vnd: Vnd.optional(),
+  limit_vnd: Vnd.optional(),
+  available_before_vnd: Vnd.optional(),
+  available_after_vnd: Vnd.optional(),
+})
+export type CreditCost = z.infer<typeof CreditCost>
+
+/** Tỷ lệ nghĩa vụ trên thu nhập so với ngưỡng của luật suitability. */
+export const ObligationRatio = z.object({
+  obligations_vnd: Vnd,
+  income_vnd: Vnd,
+  ratio: z.number().min(0),
+  threshold: Ratio,
+  exceeds: z.boolean(),
+})
+export type ObligationRatio = z.infer<typeof ObligationRatio>
+
+/** Một hũ trả nghĩa vụ vào ngày đến hạn: đủ hay hụt. */
+export const JarAtDue = z.object({
+  jar: ForecastJar,
+  status: JarStatus,
+  balance_before_due_vnd: VndSigned,
+  due_vnd: Vnd,
+  shortfall_vnd: Vnd,
+})
+export type JarAtDue = z.infer<typeof JarAtDue>
+
+/** Tác động của một món Trả sau lên nghĩa vụ: chi phí của món này, tổng phải trả ngày đến hạn, hũ nào hụt khi đến hạn, tỷ lệ nghĩa vụ trên thu nhập. Dùng trong chat (kết quả what-if) và trong `affordability_card.credit`. */
+export const ObligationImpactData = z.object({
+  status: JarStatus,
+  headline: z.string().min(1).max(160),
+  cost: CreditCost,
+  at_due: z.array(JarAtDue).min(1).max(8),
+  shortfall_vnd: Vnd,
+  ratio: ObligationRatio.optional(),
+  cautions: z.array(Caution).max(3).optional(),
+  basis: ForecastBasis,
+})
+export type ObligationImpactData = z.infer<typeof ObligationImpactData>
+
+/** Tác động nghĩa vụ của một món mua bằng Trả sau (mô phỏng). TÁCH `cost.item_cost_vnd` (món này tốn thêm bao nhiêu, gồm phần phí phát sinh thêm) khỏi `cost.total_due_vnd` (ngày đến hạn phải trả tổng bao nhiêu, cộng dồn với nghĩa vụ đã có), để giao diện nói thật khi tháng đó đã có phí. Số do engine tính (tool `forecast___run_scenario`), không do LLM viết. Id khối `obligation_impact:{trace_id}:{due_date}`. */
+export const ObligationImpactBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("obligation_impact"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: ObligationImpactData,
+})
+export type ObligationImpactBlock = z.infer<typeof ObligationImpactBlock>
+
+/** Hành động của một phương án, dẫn tới khối xác nhận đã có. Phương án không có action (chỉ để cân nhắc) thì không có trường này. */
+export const OptionAction = z.object({
+  kind: z.enum(["confirm", "confirm_action"]),
+  tool: z.enum(["move_between_jars", "record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary", "schedule_nudge"]),
+  block_id: z.string().max(128).regex(new RegExp("^confirm:[A-Za-z0-9_-]+:[0-9a-f]{12}$")),
+})
+export type OptionAction = z.infer<typeof OptionAction>
+
+/** Một phương án: nhãn, mô tả, trạng thái nếu chọn, vài số, và `action` tùy chọn dẫn tới khối xác nhận. */
+export const OptionItem = z.object({
+  option_id: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")),
+  kind: z.enum(["defer", "switch_jar", "split", "pay_now", "use_credit", "proceed", "reduce_amount", "move_between_jars", "remind_later", "skip"]),
+  label: z.string().min(1).max(60),
+  summary: z.string().min(1).max(200),
+  status: JarStatus,
+  recommended: z.boolean().optional(),
+  metrics: z.array(ActionChange).max(4).optional(),
+  checked_rules: z.array(z.string().max(64).regex(new RegExp("^[a-z][a-z0-9_]{0,63}$"))).max(8).optional(),
+  action: OptionAction.optional(),
+})
+export type OptionItem = z.infer<typeof OptionItem>
+
+export const OptionsData = z.object({
+  title: z.string().min(1).max(80).optional(),
+  scenario_id: Uuid.optional(),
+  options: z.array(OptionItem).min(2).max(3),
+})
+export type OptionsData = z.infer<typeof OptionsData>
+
+/** Hai đến ba phương án sau khi phân tích. Mỗi phương án có `action` tùy chọn dẫn tới một khối `confirm` hoặc `confirm_action` đã phát trong cùng lượt (agent gọi tool ghi KHÔNG token để lấy NEEDS_CONFIRMATION, phát khối, rồi tham chiếu theo id). Phương án chỉ cân nhắc thì không có action. Lời mô tả do Analyst viết nhưng số phải qua NumericGrounding; trạng thái và `checked_rules` do Verifier điền. Id khối `options:{trace_id}`. */
+export const OptionsBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("options"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: OptionsData,
+})
+export type OptionsBlock = z.infer<typeof OptionsBlock>
+
+/** Kết quả kiểm một hũ làm nguồn trả. */
+export const JarCheck = z.object({
+  jar: ForecastJar,
+  status: JarStatus,
+  balance_before_vnd: VndSigned,
+  balance_after_vnd: VndSigned,
+  runout_date_before: IsoDate.optional(),
+  runout_date_after: IsoDate.optional(),
+  days_earlier: z.int().min(0).max(400).optional(),
+  shortfall_vnd: Vnd.optional(),
+  p_shortfall_after: Ratio.optional(),
+})
+export type JarCheck = z.infer<typeof JarCheck>
+
+export const AffordabilityCardData = z.object({
+  verdict: JarStatus,
+  headline: z.string().min(1).max(160),
+  amount_vnd: VndPositive,
+  label: z.string().min(1).max(60).optional(),
+  pay_date: IsoDate.optional(),
+  funding_source: z.enum(["jar", "credit"]),
+  selected_jar_code: JarCode.optional(),
+  jar_checks: z.array(JarCheck).max(8),
+  credit: ObligationImpactData.optional(),
+  cautions: z.array(Caution).max(3).optional(),
+  options: z.array(OptionItem).max(4),
+  basis: ForecastBasis,
+})
+export type AffordabilityCardData = z.infer<typeof AffordabilityCardData>
+
+/** Thẻ kiểm tra trước khi quẹt (F3): đủ, sát hay hụt, nguồn là hũ hoặc Trả sau, tổng chi phí thật, các phương án tất định. Tất định, không qua LLM: `POST /affordability` (màn chuyển tiền) và tool `forecast___affordability_check` (chat) trả CÙNG khối này nên hai nơi cùng số. Ba trạng thái luôn có chữ (`headline`, `status`), không chỉ màu. Id khối `affordability_card:{trace_id}`. */
+export const AffordabilityCardBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("affordability_card"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: AffordabilityCardData,
+})
+export type AffordabilityCardBlock = z.infer<typeof AffordabilityCardBlock>
+
+export const DataUsed = z.object({
+  label: z.string().min(1).max(80),
+  value: z.string().min(1).max(120).optional(),
+  tool: z.string().min(1).max(80),
+  as_of: IsoDateTime.optional(),
+})
+export type DataUsed = z.infer<typeof DataUsed>
+
+/** Một luật đã kiểm và kết quả. */
+export const RuleCheck = z.object({
+  rule_id: z.string().max(64).regex(new RegExp("^[a-z][a-z0-9_]{0,63}$")),
+  label: z.string().min(1).max(80),
+  outcome: z.enum(["pass", "warn", "fail", "skipped"]),
+  detail: z.string().min(1).max(200).optional(),
+})
+export type RuleCheck = z.infer<typeof RuleCheck>
+
+/** Nhóm tin cậy Cao, Vừa, Thấp kèm lý do. */
+export const ExplainConfidence = z.object({
+  band: ConfidenceBand,
+  reasons: z.array(z.string().min(1).max(140)).min(1).max(4),
+})
+export type ExplainConfidence = z.infer<typeof ExplainConfidence>
+
+export const ExplainData = z.object({
+  subject_trace_id: TraceId,
+  headline: z.string().min(1).max(80).optional(),
+  data_used: z.array(DataUsed).min(1).max(20),
+  rules_checked: z.array(RuleCheck).max(20),
+  confidence: ExplainConfidence,
+  ai_generated: z.boolean().optional(),
+})
+export type ExplainData = z.infer<typeof ExplainData>
+
+/** Bảng 'Vì sao' (H4): dữ liệu đã dùng, luật đã kiểm, nhóm tin cậy Cao/Vừa/Thấp kèm lý do, mã trace. Dựng từ bản ghi lượt trong `audit_events` (code, không do LLM viết); `GET /traces/{trace_id}` trả khối này. Id khối `explain:{subject_trace_id}`. */
+export const ExplainBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("explain"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: ExplainData,
+})
+export type ExplainBlock = z.infer<typeof ExplainBlock>
+
+export const ClarifyChip = z.object({
+  id: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")),
+  label: z.string().min(1).max(40),
+  value: z.string().min(1).max(80).optional(),
+})
+export type ClarifyChip = z.infer<typeof ClarifyChip>
+
+export const ClarifyData = z.object({
+  question: z.string().min(1).max(200),
+  slot: z.enum(["amount", "funding_source", "jar", "date", "scenario_kind", "other"]),
+  chips: z.array(ClarifyChip).max(6),
+  pending_intent: z.enum(["what_if", "affordability", "move", "profile_update"]).optional(),
+  allow_free_text: z.boolean().optional(),
+})
+export type ClarifyData = z.infer<typeof ClarifyData>
+
+/** Hỏi lại đúng MỘT câu khi thiếu thông tin (số tiền, cách trả, hũ, ngày) kèm chip trả lời (H5). Kết thúc lượt; không gọi tool số liệu. Chip bấm thì gửi `value` (hoặc `label`) như tin nhắn kế tiếp. Id khối `clarify:{trace_id}`. */
+export const ClarifyBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("clarify"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: ClarifyData,
+})
+export type ClarifyBlock = z.infer<typeof ClarifyBlock>
+
+/** Hợp của các khối đã biết (mười bốn), phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema. */
+export const Block = z.discriminatedUnion('type', [JarSummaryBlock, ConfirmBlock, ReceiptBlock, NoticeBlock, ForecastTimelineBlock, ProactiveCardBlock, ConfirmActionBlock, ReceiptActionBlock, AffordabilityCardBlock, ObligationImpactBlock, OptionsBlock, ExplainBlock, ClarifyBlock, SuggestionsBlock])
 export type Block = z.infer<typeof Block>
 
 /** type -> schema của MỌI khối, thứ tự như contracts/blocks/block.schema.json. */
@@ -403,10 +715,16 @@ export const blockSchemas = {
   proactive_card: ProactiveCardBlock,
   confirm_action: ConfirmActionBlock,
   receipt_action: ReceiptActionBlock,
+  affordability_card: AffordabilityCardBlock,
+  obligation_impact: ObligationImpactBlock,
+  options: OptionsBlock,
+  explain: ExplainBlock,
+  clarify: ClarifyBlock,
+  suggestions: SuggestionsBlock,
 } as const
 
 export type AnyBlockType = keyof typeof blockSchemas
-export const ALL_BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action"] as const
+export const ALL_BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions"] as const
 
 /** Khối mà registry frontend đã đăng ký (xem scripts/gen_contracts.mjs, REGISTERED_BY_FRONTEND). */
 export const BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action"] as const

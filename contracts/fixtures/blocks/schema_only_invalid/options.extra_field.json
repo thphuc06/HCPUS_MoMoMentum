@@ -1,0 +1,65 @@
+{
+  "v": 1,
+  "id": "options:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Có 3 phương án: Bù 100.000 ₫ từ hũ Giải trí; Nhắc mình xem lại sau 5 ngày; Bỏ qua khoản này.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "options",
+  "data": {
+    "title": "Bạn có thể",
+    "scenario_id": "3c1f8a52-9d4e-4b7a-8e21-5a6f0b9c7d13",
+    "options": [
+      {
+        "option_id": "move_from_giai_tri",
+        "kind": "move_between_jars",
+        "label": "Bù 100.000 ₫ từ hũ Giải trí",
+        "summary": "Hũ Ăn uống còn trụ thêm vài ngày trước kỳ lương.",
+        "status": "tight",
+        "recommended": true,
+        "metrics": [
+          {
+            "label": "Hũ Ăn uống",
+            "before": "380.000 ₫",
+            "after": "480.000 ₫"
+          }
+        ],
+        "checked_rules": [
+          "obligations_first",
+          "obligation_to_income"
+        ],
+        "action": {
+          "kind": "confirm",
+          "tool": "move_between_jars",
+          "block_id": "confirm:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:52a35d69448e"
+        },
+        "score": 0.9
+      },
+      {
+        "option_id": "remind_review",
+        "kind": "remind_later",
+        "label": "Nhắc mình xem lại sau 5 ngày",
+        "summary": "Hoãn quyết định, kiểm lại số dư ngày 26/11.",
+        "status": "ok",
+        "checked_rules": [
+          "obligations_first"
+        ],
+        "action": {
+          "kind": "confirm_action",
+          "tool": "schedule_nudge",
+          "block_id": "confirm:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:723c6bcb43ea"
+        }
+      },
+      {
+        "option_id": "skip_purchase",
+        "kind": "skip",
+        "label": "Bỏ qua khoản này",
+        "summary": "Giữ nguyên các hũ như hiện tại.",
+        "status": "ok"
+      }
+    ]
+  }
+}

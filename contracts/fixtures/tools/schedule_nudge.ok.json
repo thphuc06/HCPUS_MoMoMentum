@@ -1,0 +1,19 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:03:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "tool": "schedule_nudge",
+    "reference_id": "7d2e5c4a-6b1f-4e93-a0d8-3f9b1c2e7a45",
+    "occurred_at": "2026-12-10T03:03:00Z",
+    "app_date": "2026-11-21",
+    "summary": "Đã đặt nhắc ngày 26/11",
+    "jars_after": [],
+    "details": [
+      {
+        "label": "Ngày nhắc",
+        "value": "26/11/2026"
+      }
+    ]
+  }
+}

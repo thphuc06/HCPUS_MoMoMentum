@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/tools/knowledge.results.schema.json",
+  "title": "KnowledgeToolResults",
+  "description": "Kết quả JSON mà Lambda `knowledge` trả cho Gateway. `get_fee_schedule` đọc bảng có cấu trúc `fee_schedules`, KHÔNG đi qua RAG: số để tính không lấy từ văn bản tự do. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "$defs": {
+    "FeeLine": {
+      "description": "Một dòng biểu phí có cấu trúc (bảng fee_schedules), đang hiệu lực tại ngày mô phỏng. Cùng hình dạng `FeeLine` của OpenAPI (`GET /credit-line`); test kiểm hai nơi khớp nhau.",
+      "type": "object",
+      "required": ["fee_type", "period", "condition_code", "source_name", "source_url", "effective_from"],
+      "additionalProperties": false,
+      "properties": {
+        "fee_type": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$" },
+        "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "rate_percent": { "type": "number", "minimum": 0 },
+        "period": { "type": "string", "enum": ["per_month", "per_transaction", "once"] },
+        "condition_code": { "type": "string", "enum": ["always", "month_has_transaction", "overdue"] },
+        "condition_note": { "type": "string", "maxLength": 200 },
+        "source_name": { "type": "string", "maxLength": 200 },
+        "source_url": { "type": "string", "pattern": "^https://" },
+        "effective_from": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" }
+      }
+    },
+    "FeeScheduleData": {
+      "type": "object",
+      "required": ["product_code", "product_label", "fees"],
+      "additionalProperties": false,
+      "properties": {
+        "product_code": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "product_label": {
+          "description": "Tên hiển thị của sản phẩm lấy từ bảng, ví dụ 'Trả sau (mô phỏng)'.",
+          "type": "string",
+          "maxLength": 60
+        },
+        "fees": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/FeeLine" }
+        }
+      }
+    },
+    "GetFeeScheduleOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "#/$defs/FeeScheduleData" }
+      }
+    },
+    "GetFeeScheduleResult": {
+      "description": "Mã lỗi có thể gặp: FEE_SCHEDULE_NOT_FOUND (loại phí hoặc sản phẩm không có), PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/GetFeeScheduleOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,22 @@
+# Luật 4: không khuyên vay để tiêu.
+id: no_borrow_to_spend
+version: 1
+title: Không khuyên vay để tiêu
+description: >-
+  Hệ thống không được ĐỀ XUẤT dùng Trả sau (tín dụng) cho khoản chi tùy ý. Người dùng tự hỏi "nếu mua bằng Trả sau thì sao" thì
+  vẫn được tính what-if, nhưng phương án do hệ thống đề xuất (origin recommendation) không được dùng nguồn tín dụng cho
+  khoản không thiết yếu.
+evaluator: no_credit_for_discretionary
+severity: warn
+recommendation_severity: block
+applies_when:
+  origins: [recommendation, user_request]
+  funding_sources: [credit]
+  essential: false
+thresholds:
+  allow_essential:
+    value: true
+    unit: flag
+    note: Khoản thiết yếu (ăn ở, thuốc men, học phí, nghĩa vụ đến hạn) được phép dùng tín dụng khi hũ không đủ.
+    source: Lựa chọn thiết kế của dự án mô phỏng.
+message: Không nên dùng tín dụng cho khoản chi tùy ý. Dùng tiền hũ hoặc hoãn lại sẽ an toàn hơn.

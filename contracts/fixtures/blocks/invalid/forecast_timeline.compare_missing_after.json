@@ -1,0 +1,93 @@
+{
+  "v": 1,
+  "id": "forecast_timeline:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:giai_tri:what_if",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Nếu Mua tai nghe 500.000 ₫ từ hũ Giải trí: Hũ Giải trí sát: dự kiến còn rất ít tiền trước kỳ lương 05/12.",
+  "source": {
+    "tool": "forecast___run_scenario",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "forecast_timeline",
+  "data": {
+    "jar": {
+      "code": "giai_tri",
+      "name": "Giải trí",
+      "color_key": "orchid",
+      "icon_key": "gamepad"
+    },
+    "status": "ok",
+    "origin_date": "2026-11-21",
+    "start_balance_vnd": 760000,
+    "horizon_days": 30,
+    "payday": {
+      "date": "2026-12-05",
+      "days_until": 14
+    },
+    "p_shortfall": 0.02,
+    "p_shortfall_se": 0.002,
+    "confidence_band": "medium",
+    "coverage": 1.0,
+    "history_days": 47,
+    "is_initial_estimate": false,
+    "model": "hurdle_calendar",
+    "computed_at": "2026-11-21T19:00:03Z",
+    "stale": false,
+    "days": [
+      {
+        "date": "2026-11-22",
+        "p10_vnd": 690000,
+        "p50_vnd": 730000,
+        "p90_vnd": 750000
+      },
+      {
+        "date": "2026-11-23",
+        "p10_vnd": 640000,
+        "p50_vnd": 700000,
+        "p90_vnd": 740000
+      },
+      {
+        "date": "2026-11-24",
+        "p10_vnd": 590000,
+        "p50_vnd": 670000,
+        "p90_vnd": 730000
+      },
+      {
+        "date": "2026-11-25",
+        "p10_vnd": 540000,
+        "p50_vnd": 640000,
+        "p90_vnd": 720000
+      },
+      {
+        "date": "2026-11-26",
+        "p10_vnd": 490000,
+        "p50_vnd": 610000,
+        "p90_vnd": 710000
+      },
+      {
+        "date": "2026-11-27",
+        "p10_vnd": 440000,
+        "p50_vnd": 580000,
+        "p90_vnd": 700000
+      },
+      {
+        "date": "2026-11-28",
+        "p10_vnd": 390000,
+        "p50_vnd": 550000,
+        "p90_vnd": 690000
+      }
+    ],
+    "events": [],
+    "compare": {
+      "label": "Mua tai nghe 500.000 ₫ từ hũ Giải trí",
+      "kind": "one_time_purchase",
+      "scenario_id": "3c1f8a52-9d4e-4b7a-8e21-5a6f0b9c7d13",
+      "delta": {
+        "min_balance_delta_vnd": -500000,
+        "p_shortfall_delta": 0.16
+      },
+      "n_paths": 5000,
+      "common_random_numbers": true
+    }
+  }
+}

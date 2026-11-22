@@ -1,0 +1,262 @@
+"""Kiểu dữ liệu của harness phase 3 (chỉ KIỂU, chưa nối vào luồng agent): ý định, kế hoạch, phân tích, phán quyết.
+
+Luồng (xem docs/plan/phases/phase-3-what-if-va-kiem-tra.md, luồng B):
+
+    L1 Router  -> `IntentResult`            (model nhỏ, ép tool)
+    L2 Orchestrator -> `Plan`               (dựng ScenarioSpec, chọn tool đọc; giới hạn do cấu hình)
+    L3 Analyst -> `Analysis`                (diễn giải, 2 đến 3 phương án; chỉ thấy bản gọn kết quả tool)
+    L4 Verifier -> `Verdict`                (NumericGrounding + check_suitability từng phương án; mã Python)
+
+Nguyên tắc: không giá trị mặc định cho thứ thuộc cấu hình (số vòng, số token, số lần thử): chúng là trường bắt buộc, do
+cấu hình điền. Khác `router.RouterOutput` của phase 1 (bốn ý định cũ), `IntentResult` là hợp đồng của phase 3; luồng B
+chuyển router sang kiểu này.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated, Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from yofina_core.blocks import ActionToolName, ClarifySlot, JarCode, OptionKind, RuleId
+from yofina_core.scenario import SCENARIO_ADAPTER, ScenarioSpec
+from yofina_core.suitability import Proposal, SuitabilityVerdict
+from yofina_core.wallet import INTENTS
+
+Intent = Literal[
+    "lookup", "what_if", "affordability", "profile_update", "move", "out_of_scope", "chitchat"
+]  # fmt: skip
+
+#: Tool ĐỌC mà Orchestrator được đặt vào kế hoạch (tên đầy đủ qua Gateway). Tool ghi KHÔNG ở đây: ghi luôn đi qua khối
+#: xác nhận và token (ADR-0002), không nằm trong kế hoạch do model dựng.
+PLAN_TOOLS = (
+    "ledger___get_jar_balances",
+    "ledger___query_transactions",
+    "ledger___get_cashflow_summary",
+    "ledger___get_obligations",
+    "forecast___get_forecast",
+    "forecast___run_scenario",
+    "forecast___affordability_check",
+    "knowledge___get_fee_schedule",
+    "planner___check_suitability",
+)
+PlanToolName = Literal[
+    "ledger___get_jar_balances",
+    "ledger___query_transactions",
+    "ledger___get_cashflow_summary",
+    "ledger___get_obligations",
+    "forecast___get_forecast",
+    "forecast___run_scenario",
+    "forecast___affordability_check",
+    "knowledge___get_fee_schedule",
+    "planner___check_suitability",
+]
+
+
+class _Model(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+# --- L1: IntentResult ------------------------------------------------------------------------
+class ClarifyChipIn(_Model):
+    label: Annotated[str, Field(min_length=1, max_length=40)]
+    value: Annotated[str, Field(min_length=1, max_length=80)] | None = None
+
+
+class ClarifyRequest(_Model):
+    """Một câu hỏi lại. Router chỉ được hỏi MỘT câu (một dấu hỏi)."""
+
+    slot: ClarifySlot
+    question: Annotated[str, Field(min_length=1, max_length=200)]
+    chips: Annotated[list[ClarifyChipIn], Field(max_length=6)] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _one_question(self) -> ClarifyRequest:
+        if self.question.count("?") > 1:
+            raise ValueError("chỉ hỏi đúng một câu")
+        return self
+
+
+class IntentParams(_Model):
+    """Tham số người dùng nói (router không đoán). Tên hũ giữ nguyên chữ họ gõ."""
+
+    jar_text: str | None = None
+    from_jar_text: str | None = None
+    to_jar_text: str | None = None
+    amount_vnd: Annotated[int, Field(ge=1)] | None = None
+    funding: Literal["jar", "credit"] | None = None
+    scenario_kind: Literal[
+        "one_time_purchase", "bnpl_purchase", "income_change", "recurring_expense",
+        "jar_transfer", "goal_delay",
+    ] | None = None  # fmt: skip
+    date_text: str | None = None
+    label: Annotated[str, Field(max_length=80)] | None = None
+    days_back: Annotated[int, Field(ge=1)] | None = None
+    limit: Annotated[int, Field(ge=1)] | None = None
+
+
+class IntentResult(_Model):
+    intent: Intent
+    params: IntentParams
+    confidence: Annotated[float, Field(ge=0, le=1)]
+    needs_clarification: bool
+    clarify: ClarifyRequest | None = None
+    reply: Annotated[str, Field(max_length=400)] | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> IntentResult:
+        if self.needs_clarification != (self.clarify is not None):
+            raise ValueError("needs_clarification đúng khi và chỉ khi có `clarify`")
+        if self.needs_clarification and self.intent in ("out_of_scope", "chitchat"):
+            raise ValueError("ngoài phạm vi và chitchat không hỏi lại")
+        return self
+
+
+# --- L2: Plan --------------------------------------------------------------------------------
+class PlanLimits(_Model):
+    """Giới hạn của lượt; KHÔNG có mặc định: giá trị đến từ cấu hình (nhóm `harness`)."""
+
+    max_rounds: Annotated[int, Field(ge=1)]
+    max_tokens: Annotated[int, Field(ge=1)]
+    max_model_calls: Annotated[int, Field(ge=1)]
+
+
+class PlanStep(_Model):
+    tool: PlanToolName
+    args: dict[str, Any]
+    parallel_group: Annotated[int, Field(ge=0)]
+
+    @model_validator(mode="after")
+    def _no_user_id(self) -> PlanStep:
+        """`user_id` do interceptor ghi đè từ JWT; kế hoạch không được mang nó (kể cả user_id của người khác)."""
+        if "user_id" in self.args or "confirm_token" in self.args:
+            raise ValueError("args không được có user_id hoặc confirm_token")
+        return self
+
+
+class Plan(_Model):
+    intent: Literal["what_if", "affordability", "lookup"]
+    scenario: dict[str, Any] | None = None
+    steps: Annotated[list[PlanStep], Field(min_length=1, max_length=8)]
+    limits: PlanLimits
+
+    @model_validator(mode="after")
+    def _scenario_is_valid(self) -> Plan:
+        """what_if cần một ScenarioSpec hợp lệ (kiểm bằng model của `yofina_core.scenario`); intent khác thì không có."""
+        if self.intent == "what_if":
+            if self.scenario is None:
+                raise ValueError("what_if cần scenario")
+            SCENARIO_ADAPTER.validate_python(self.scenario)
+        elif self.scenario is not None:
+            raise ValueError("chỉ what_if mới có scenario")
+        return self
+
+    def scenario_spec(self) -> ScenarioSpec | None:
+        """ScenarioSpec đã kiểm (None nếu không phải what_if)."""
+        return None if self.scenario is None else SCENARIO_ADAPTER.validate_python(self.scenario)
+
+
+# --- L3: Analysis ----------------------------------------------------------------------------
+class OptionActionSpec(_Model):
+    """Việc ghi mà phương án muốn dẫn tới. Agent gọi tool KHÔNG token để lấy khối xác nhận; Analyst không tạo token."""
+
+    tool: ActionToolName
+    params: dict[str, Any]
+
+
+class AnalysisOption(_Model):
+    option_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+    kind: OptionKind
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+    summary: Annotated[str, Field(min_length=1, max_length=200)]
+    proposal: Proposal
+    action: OptionActionSpec | None = None
+    jar_code: JarCode | None = None
+
+
+class Analysis(_Model):
+    narrative: Annotated[str, Field(min_length=1, max_length=800)]
+    options: Annotated[list[AnalysisOption], Field(min_length=2, max_length=3)]
+    follow_ups: Annotated[
+        list[Annotated[str, Field(min_length=1, max_length=200)]], Field(max_length=3)
+    ] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _unique_ids(self) -> Analysis:
+        ids = [o.option_id for o in self.options]
+        if len(set(ids)) != len(ids):
+            raise ValueError("option_id phải duy nhất")
+        return self
+
+
+# --- L4: Verdict -----------------------------------------------------------------------------
+class UngroundedNumber(_Model):
+    """Một con số trong văn bản không có trong kết quả tool của lượt."""
+
+    text: Annotated[str, Field(min_length=1, max_length=60)]
+    value_vnd: int | None = None
+    context: Annotated[str, Field(max_length=200)] | None = None
+
+
+class GroundingResult(_Model):
+    ok: bool
+    checked_count: Annotated[int, Field(ge=0)]
+    ungrounded: list[UngroundedNumber] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> GroundingResult:
+        if self.ok != (len(self.ungrounded) == 0):
+            raise ValueError("ok đúng khi và chỉ khi không có số nào thiếu căn cứ")
+        return self
+
+
+class OptionSuitability(_Model):
+    option_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+    verdict: SuitabilityVerdict
+
+
+class Verdict(_Model):
+    """Phán quyết của Verifier. `action` do mã quyết định theo số lần thử còn lại (cấu hình):
+    pass: phát; retry: trả `feedback` cho Analyst sửa; fallback: hết vòng, chỉ phát khối số liệu tất định và một notice."""
+
+    ok: bool
+    grounding: GroundingResult
+    suitability: list[OptionSuitability]
+    feedback: Annotated[
+        list[Annotated[str, Field(min_length=1, max_length=300)]], Field(max_length=10)
+    ] = Field(default_factory=list)
+    failed_rules: list[RuleId] = Field(default_factory=list)
+    attempt: Annotated[int, Field(ge=1)]
+    action: Literal["pass", "retry", "fallback"]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Verdict:
+        expected_ok = self.grounding.ok and all(s.verdict.ok for s in self.suitability)
+        if self.ok != expected_ok:
+            raise ValueError("ok phải bằng grounding.ok và mọi suitability.ok")
+        if (self.action == "pass") != self.ok:
+            raise ValueError("action pass đúng khi và chỉ khi ok")
+        if not self.ok and not self.feedback:
+            raise ValueError("không ok thì phải có feedback có cấu trúc cho Analyst")
+        return self
+
+
+__all__ = [
+    "INTENTS",
+    "PLAN_TOOLS",
+    "Analysis",
+    "AnalysisOption",
+    "ClarifyChipIn",
+    "ClarifyRequest",
+    "GroundingResult",
+    "Intent",
+    "IntentParams",
+    "IntentResult",
+    "OptionActionSpec",
+    "OptionSuitability",
+    "Plan",
+    "PlanLimits",
+    "PlanStep",
+    "UngroundedNumber",
+    "Verdict",
+]

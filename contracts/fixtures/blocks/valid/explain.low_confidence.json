@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "id": "explain:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Dữ liệu đã dùng: Số dư hũ Ăn uống. Độ tin cậy: Thấp.",
+  "source": {
+    "tool": "rest:GET /traces/{trace_id}",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "explain",
+  "data": {
+    "subject_trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+    "data_used": [
+      {
+        "label": "Số dư hũ Ăn uống",
+        "value": "0 ₫",
+        "tool": "ledger___get_jar_balances"
+      }
+    ],
+    "rules_checked": [],
+    "confidence": {
+      "band": "low",
+      "reasons": [
+        "Mới có 18 ngày dữ liệu: đây là ước lượng ban đầu."
+      ]
+    }
+  }
+}

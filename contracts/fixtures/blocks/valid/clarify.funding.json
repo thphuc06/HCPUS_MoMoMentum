@@ -1,0 +1,27 @@
+{
+  "v": 1,
+  "id": "clarify:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Bạn muốn trả bằng tiền hũ hay bằng Trả sau (mô phỏng)?",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "clarify",
+  "data": {
+    "question": "Bạn muốn trả bằng tiền hũ hay bằng Trả sau (mô phỏng)?",
+    "slot": "funding_source",
+    "chips": [
+      {
+        "id": "jar",
+        "label": "Tiền hũ"
+      },
+      {
+        "id": "credit",
+        "label": "Trả sau (mô phỏng)"
+      }
+    ],
+    "pending_intent": "what_if"
+  }
+}

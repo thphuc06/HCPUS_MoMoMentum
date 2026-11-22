@@ -1,0 +1,8 @@
+{
+  "tool": "schedule_nudge",
+  "params": {
+    "from_jar": "a",
+    "to_jar": "b",
+    "amount_vnd": 5
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "tool": "schedule_nudge",
+  "params": {
+    "op": "cancel",
+    "nudge_id": "7d2e5c4a-6b1f-4e93-a0d8-3f9b1c2e7a45"
+  },
+  "confirm_token": "eyJzdWIiOiJ4In0.c2ln"
+}
