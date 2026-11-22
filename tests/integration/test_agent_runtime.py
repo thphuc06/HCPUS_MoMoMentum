@@ -52,7 +52,7 @@ def test_so_du_cac_hu_khop_rest_va_duoc_luu(agent_url, tokens, api, schema_valid
     assert len(jars) == 7
     assert {j["code"]: j["balance_vnd"] for j in jars} == balances(api, "minh")
     assert run.text.strip(), "phải có câu trả lời bằng chữ do agent sinh"
-    assert run.finished["result"]["intent"] == "balance_lookup"
+    assert run.finished["result"]["intent"] == "lookup"
     assert run.finished["result"]["degraded"] is False
     # khối khớp hợp đồng JSON Schema
     schema_validator("https://contracts.yofina.invalid/blocks/jar_summary.schema.json", jar_block)

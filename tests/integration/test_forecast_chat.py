@@ -36,7 +36,7 @@ def test_chat_hu_an_uong_con_tru_duoc_bao_lau_tra_khoi_timeline_cung_so_voi_rest
 ):
     sid = new_session_id()
     run = ask(agent_url, tokens, "minh", "hũ ăn uống còn trụ được bao lâu", session_id=sid)
-    assert run.finished["result"]["intent"] == "forecast_lookup"
+    assert run.finished["result"]["intent"] == "lookup"
     assert run.finished["result"]["degraded"] is False
     [block] = run.blocks_of("forecast_timeline")
     schema_validator("https://contracts.yofina.invalid/blocks/forecast_timeline.schema.json", block)

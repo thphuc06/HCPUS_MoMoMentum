@@ -414,7 +414,7 @@ def test_kich_ban_sai_bi_tu_choi_dung_ma(tool):
     )
 
 
-def test_affordability_check_tool_cung_so_voi_rest(api, tool, schema_validator):
+def test_affordability_check_tool_cung_so_voi_rest(api, tool, gw, gateway_tools, schema_validator):
     reply = tool(
         "minh",
         "forecast___affordability_check",
@@ -434,8 +434,12 @@ def test_affordability_check_tool_cung_so_voi_rest(api, tool, schema_validator):
         d["jar_checks"] == card["data"]["jar_checks"]
         and d["credit"]["cost"] == card["data"]["credit"]["cost"]
     )
-    missing = tool("minh", "forecast___affordability_check", {})
-    assert missing["status"] == "ERROR" and missing["code"] == "PARAMS_INVALID"
+    if "forecast___affordability_check" in gateway_tools:  # Gateway kiểm schema trước Lambda: thiếu amount_vnd bị từ chối ở cổng
+        reply = gw("minh").call("forecast___affordability_check", {})
+        assert reply.is_error and "amount_vnd" in reply.text
+    else:
+        missing = tool("minh", "forecast___affordability_check", {})
+        assert missing["status"] == "ERROR" and missing["code"] == "PARAMS_INVALID"
 
 
 # --- get_fee_schedule và check_suitability --------------------------------------------------------------------------
