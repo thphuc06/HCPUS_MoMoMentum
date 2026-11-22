@@ -6,12 +6,16 @@ import { ConversationResponse, Resolution, StoredTurn } from '@/chat/repository'
 import {
   ActionRequest,
   ActionResponse,
+  AffordabilityRequest,
+  AffordabilityResponse,
   CancelConfirmationRequest,
   CancelConfirmationResponse,
   ConfirmationRequest,
   ConfirmationResponse,
   CreditLine,
   CreditLineResponse,
+  FeedbackRequest,
+  FeedbackResponse,
   FeeLine,
   ForecastMeta,
   JarDetailResponse,
@@ -31,6 +35,7 @@ import {
   SalaryEvent,
   SalaryEventsResponse,
   Transaction,
+  TraceResponse,
   TransactionsResponse,
   TxType,
   TxTypesResponse,
@@ -75,6 +80,9 @@ describe('khớp openapi.yaml', () => {
       ['/actions', 'post', 'applyAction'],
       ['/demo/reset', 'post', 'resetDemo'],
       ['/conversations/{conversation_id}', 'get', 'getConversation'],
+      ['/affordability', 'post', 'checkAffordability'],
+      ['/traces/{trace_id}', 'get', 'getTrace'],
+      ['/feedback', 'post', 'submitFeedback'],
     ]
     for (const [path, method, op] of expected) expect(spec.paths[path]?.[method]?.operationId, `${method} ${path}`).toBe(op)
   })
@@ -109,6 +117,9 @@ describe('khớp openapi.yaml', () => {
     ['ConfirmationResponse', ConfirmationResponse, schemas.ConfirmationResponse!.required!],
     ['CancelConfirmationRequest', CancelConfirmationRequest, schemas.CancelConfirmationRequest!.required!],
     ['CancelConfirmationResponse', CancelConfirmationResponse, schemas.CancelConfirmationResponse!.required!],
+    ['AffordabilityRequest', AffordabilityRequest, schemas.AffordabilityRequest!.required!],
+    ['FeedbackRequest', FeedbackRequest, schemas.FeedbackRequest!.required!],
+    ['FeedbackResponse', FeedbackResponse, schemas.FeedbackResponse!.required!],
     ['Transaction', Transaction, ledgerResults.$defs.Transaction!.required!],
     ['Obligation', Obligation, ledgerResults.$defs.Obligation!.required!],
     ['CreditLine', CreditLine, ledgerResults.$defs.CreditLine!.required!],
@@ -161,6 +172,11 @@ describe('fixture REST của hợp đồng', () => {
     ConfirmationRequest,
     ActionRequest,
     ActionResponse,
+    AffordabilityRequest,
+    AffordabilityResponse,
+    TraceResponse,
+    FeedbackRequest,
+    FeedbackResponse,
   }
 
   for (const [file, body] of restFixtureEntries()) {

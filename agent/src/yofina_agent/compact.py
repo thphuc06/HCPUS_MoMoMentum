@@ -173,3 +173,164 @@ def allowed_amounts(compact: Mapping[str, Any]) -> set[int]:
 
     walk_text(compact)
     return found
+
+
+# --- phase 3: what-if, kiểm tra trước khi quẹt ----------------------------------------------------
+def _pct(value: float | None) -> int | None:
+    return None if value is None else round(float(value) * 100)
+
+
+def _basis_compact(b: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "confidence": _BAND_VI[b["confidence_band"]],
+        "is_initial_estimate": bool(b["is_initial_estimate"]),
+        "history_days": b["history_days"],
+        "stale": bool(b["stale"]),
+    }
+
+
+def compact_impact(d: Mapping[str, Any]) -> dict[str, Any]:
+    """`ObligationImpactData` -> bản gọn: chi phí của món TÁCH khỏi tổng phải trả ngày đến hạn, hũ nào hụt."""
+    c = d["cost"]
+    out: dict[str, Any] = {
+        "status": _STATUS_VI[d["status"]],
+        "headline": d["headline"],
+        "product": c["product_label"],
+        "due_date_text": _dm(c["due_date"]),
+        "item_cost_vnd": to_vnd(c["item_cost_vnd"]),
+        "item_cost_text": format_vnd(c["item_cost_vnd"]),
+        "fee_added_vnd": to_vnd(c["fee_added_vnd"]),
+        "fee_added_text": format_vnd(c["fee_added_vnd"]),
+        "existing_due_vnd": to_vnd(c["existing_due_vnd"]),
+        "existing_due_text": format_vnd(c["existing_due_vnd"]),
+        "total_due_vnd": to_vnd(c["total_due_vnd"]),
+        "total_due_text": format_vnd(c["total_due_vnd"]),
+        "shortfall_vnd": to_vnd(d["shortfall_vnd"]),
+        "shortfall_text": format_vnd(d["shortfall_vnd"]),
+        "at_due": [
+            {
+                "jar": x["jar"]["name"],
+                "status": _STATUS_VI[x["status"]],
+                "balance_before_due_text": format_vnd(x["balance_before_due_vnd"]),
+                "due_text": format_vnd(x["due_vnd"]),
+                "shortfall_text": format_vnd(x["shortfall_vnd"]),
+            }
+            for x in d["at_due"]
+        ],
+        "basis": _basis_compact(d["basis"]),
+    }
+    if c.get("available_after_vnd") is not None:
+        out["credit_available_after_text"] = format_vnd(c["available_after_vnd"])
+    if d.get("ratio"):
+        r = d["ratio"]
+        out["obligation_to_income_percent"] = _pct(r["ratio"])
+        out["obligation_to_income_threshold_percent"] = _pct(r["threshold"])
+        out["obligation_to_income_exceeds"] = bool(r["exceeds"])
+    if d.get("cautions"):
+        out["cautions"] = [x["text"] for x in d["cautions"]]
+    return out
+
+
+def compact_scenario(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """`forecast___run_scenario` -> bản gọn cho Analyst (thứ DUY NHẤT nó thấy ngoài danh sách hũ): kịch bản, hiệu ứng từng hũ, nghĩa vụ."""
+    d = payload["data"]
+    spec = d["spec"]
+    out: dict[str, Any] = {
+        "app_date": payload["app_date"],
+        "scenario": {"kind": spec["kind"], **{k: v for k, v in spec.items() if k not in ("kind",) and v is not None}},
+        "effects": [],
+        "basis": _basis_compact(d["basis"]),
+    }
+    if spec.get("amount_vnd") is not None:
+        out["scenario"]["amount_text"] = format_vnd(spec["amount_vnd"])
+    for e in d["effects"]:
+        row: dict[str, Any] = {
+            "jar": e["jar"]["name"],
+            "jar_code": e["jar"]["code"],
+            "status_before": _STATUS_VI[e["status_before"]],
+            "status_after": _STATUS_VI[e["status_after"]],
+        }
+        if e.get("runout_date_after"):
+            row["runout_after_date_text"] = _dm(e["runout_date_after"])
+        if e.get("runout_date_before"):
+            row["runout_before_date_text"] = _dm(e["runout_date_before"])
+        if e.get("p_shortfall_before") is not None:
+            row["p_shortfall_before_percent"] = _pct(e["p_shortfall_before"])
+        if e.get("p_shortfall_after") is not None:
+            row["p_shortfall_after_percent"] = _pct(e["p_shortfall_after"])
+        if e.get("min_balance_delta_vnd") is not None:
+            row["min_balance_delta_vnd"] = to_vnd(e["min_balance_delta_vnd"])
+            row["min_balance_delta_text"] = format_vnd(e["min_balance_delta_vnd"])
+        out["effects"].append(row)
+    if d.get("obligation_impact"):
+        out["obligation_impact"] = compact_impact(d["obligation_impact"])
+    return out
+
+
+def compact_affordability(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """`forecast___affordability_check` -> bản gọn cho model nhỏ viết hai câu: câu kết luận của engine + từng hũ + Trả sau."""
+    d = payload["data"]
+    out: dict[str, Any] = {
+        "app_date": payload["app_date"],
+        "verdict": _STATUS_VI[d["verdict"]],
+        "headline": d["headline"],
+        "amount_vnd": to_vnd(d["amount_vnd"]),
+        "amount_text": format_vnd(d["amount_vnd"]),
+        "funding_source": "Trả sau (mô phỏng)" if d["funding_source"] == "credit" else "tiền trong hũ",
+        "jar_checks": [
+            {
+                "jar": c["jar"]["name"],
+                "status": _STATUS_VI[c["status"]],
+                "balance_after_text": format_vnd(c["balance_after_vnd"]),
+                **(
+                    {"runout_after_date_text": _dm(c["runout_date_after"])}
+                    if c.get("runout_date_after")
+                    else {}
+                ),
+            }
+            for c in d["jar_checks"]
+        ],
+        "basis": _basis_compact(d["basis"]),
+    }
+    if d.get("label"):
+        out["label"] = d["label"]
+    if d.get("credit"):
+        out["credit"] = compact_impact(d["credit"])
+    return out
+
+
+def compact_obligations(payload: Mapping[str, Any]) -> dict[str, Any]:
+    d = payload["data"]
+    rows = [
+        {
+            "name": o["name"],
+            "kind": o["kind"],
+            "amount_vnd": to_vnd(o["amount_vnd"]),
+            "amount_text": format_vnd(o["amount_vnd"]),
+            "due_date_text": _dm(o["due_date"]),
+        }
+        for o in d["obligations"][:8]
+    ]
+    out: dict[str, Any] = {
+        "app_date": payload["app_date"],
+        "obligations": rows,
+        "total_due_vnd": to_vnd(d["total_due_vnd"]),
+        "total_due_text": format_vnd(d["total_due_vnd"]),
+    }
+    return out
+
+
+def compact_confirm_action(data: Mapping[str, Any]) -> dict[str, Any]:
+    """`NEEDS_CONFIRMATION` của tool ghi khác chuyển hũ -> bản gọn (không có `params_hash`, model không cần và không được đụng)."""
+    out: dict[str, Any] = {
+        "status": "NEEDS_CONFIRMATION",
+        "summary": data["summary"],
+        "changes": [
+            {k: c[k] for k in ("label", "before", "after") if c.get(k)} for c in data["changes"]
+        ],
+        "expires_at": data["expires_at"],
+        "note": "Chưa lưu gì; người dùng phải bấm Xác nhận trên thẻ.",
+    }
+    if data.get("warnings"):
+        out["warnings"] = list(data["warnings"])
+    return out

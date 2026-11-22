@@ -46,6 +46,8 @@ class LedgerSettings:
     forecast_function_name: str = ""
     #: thời gian tối đa chờ một lần tính dự báo đồng bộ (giây); nhỏ hơn timeout của Lambda và của API
     forecast_sync_timeout_seconds: float = 22.0
+    #: kỳ tính tổng nghĩa vụ của luật `obligation_to_income` (số ngày tới), cùng giá trị với horizon dự báo
+    suitability_window_days: int = 30
 
     @property
     def tz(self) -> ZoneInfo:
@@ -77,4 +79,5 @@ class LedgerSettings:
             forecast_sync_timeout_seconds=float(
                 cfg.get("forecast_sync_timeout_seconds", default="22")
             ),
+            suitability_window_days=cfg.get_int("suitability_window_days"),
         )

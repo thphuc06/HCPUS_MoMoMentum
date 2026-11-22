@@ -4,6 +4,7 @@ import type { ForecastTimelineData } from '@/contracts/blocks'
 import { validBlock } from '@/test/fixtures'
 import { ForecastBlock, forecastSummary } from './ForecastBlock'
 import { buildChartModel } from './model'
+import { formatVnd } from '@/lib/format'
 
 const data = (name: string): ForecastTimelineData => structuredClone((validBlock(name) as unknown as { data: ForecastTimelineData }).data)
 const SIZE = { width: 360, height: 240 }
@@ -135,5 +136,51 @@ describe('forecastSummary', () => {
     const tight = forecastSummary({ ...d, runout_date: undefined, status: 'tight' })
     expect(tight).toContain('còn rất ít tiền trước kỳ lương')
     expect(tight).not.toContain('đủ tới')
+  })
+})
+
+describe('ForecastBlock: trước-sau (what-if)', { timeout: 20_000 }, () => {
+  it('vẽ hai đường (trước nét đứt, sau) cùng dải chênh lệch; tóm tắt nêu trước, sau và chênh lệch của engine', async () => {
+    const d = data('forecast_timeline.what_if')
+    const { container } = await mount(d)
+    expect(container.querySelectorAll('.recharts-line')).toHaveLength(2)
+    expect(container.querySelectorAll('.recharts-area')).toHaveLength(2) // dải 80% và dải chênh lệch
+    const cmp = screen.getByTestId('forecast-compare')
+    expect(screen.getByTestId('compare-label')).toHaveTextContent(`Nếu ${d.compare!.label}`)
+    const before = cmp.querySelector('[data-col="before"]')!
+    const after = cmp.querySelector('[data-col="after"]')!
+    // mỗi cột có biểu tượng + chữ trạng thái (Đủ, Sát, Hụt), không chỉ màu
+    expect(before.querySelector('[data-chip] svg')).not.toBeNull()
+    expect(within(after as HTMLElement).getByText('Sát')).toBeInTheDocument()
+    expect(within(before as HTMLElement).getByText('Đủ')).toBeInTheDocument()
+    expect(within(cmp).getByLabelText('Chênh lệch trước và sau')).toHaveTextContent('giảm 500.000 ₫')
+    expect(within(cmp).getByLabelText('Chênh lệch trước và sau')).toHaveTextContent('Khả năng hụt tăng 16 điểm phần trăm')
+    expect(cmp).toHaveTextContent('cùng dãy số ngẫu nhiên')
+    expect(screen.queryByTestId('forecast-summary')).toBeNull()
+  })
+
+  it('khối không có compare: vẽ như cũ (một đường, không có phần so sánh)', async () => {
+    const { container } = await mount(data('forecast_timeline.short'))
+    expect(container.querySelectorAll('.recharts-line')).toHaveLength(1)
+    expect(screen.queryByTestId('forecast-compare')).toBeNull()
+  })
+})
+
+describe('ForecastBlock: cách nói số của server (lỗi nhỏ phase 2)', () => {
+  it('xác suất hụt tròn 100% nói "gần như chắc chắn", không nói "100%"', async () => {
+    const d = data('forecast_timeline.short')
+    d.p_shortfall = 1
+    await mount(d)
+    expect(screen.getByTestId('p-shortfall')).toHaveTextContent('Gần như chắc chắn')
+    expect(screen.getByTestId('p-shortfall')).not.toHaveTextContent('100%')
+  })
+
+  it('hũ đang 0 ₫: nói "đang hết tiền", không nói "dự kiến cạn"; chip "Đang hết tiền"', async () => {
+    const d = data('forecast_timeline.short')
+    d.start_balance_vnd = 0
+    expect(forecastSummary(d)).toBe(`Hũ ${d.jar.name} đang hết tiền (${formatVnd(0)}). Kỳ lương kế tiếp ngày ${d.payday.date.slice(8, 10)}/${d.payday.date.slice(5, 7)}, còn ${d.payday.days_until} ngày nữa.`)
+    await mount(d)
+    expect(screen.getByTestId('forecast-summary')).not.toHaveTextContent('dự kiến cạn')
+    expect(screen.getByText('Đang hết tiền')).toBeInTheDocument()
   })
 })

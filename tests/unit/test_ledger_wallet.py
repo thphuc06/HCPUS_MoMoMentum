@@ -395,6 +395,7 @@ ENV = {
     "YOFINA_TRANSACTION_MAX_AMOUNT_VND": "50000000", "YOFINA_SALARY_DEVIATION_ASK_PERCENT": "10.5",
     "YOFINA_DEFAULT_CREDIT_LIMIT_VND": "3000000", "YOFINA_DEFAULT_DISPLAY_NAME": "Bạn", "YOFINA_FORECAST_FRESHNESS_SECONDS": "3600",
     "YOFINA_PROACTIVE_OBLIGATION_DAYS": "3", "YOFINA_REFERENCE_CACHE_SECONDS": "300", "YOFINA_EVENT_BUS_NAME": "yofina-bus",
+    "YOFINA_SUITABILITY_WINDOW_DAYS": "30",
 }  # fmt: skip
 
 
@@ -419,9 +420,17 @@ def test_cau_hinh_doc_tu_bien_moi_truong_va_thieu_thi_bao_loi():
 TOOLS = load_json(CONTRACTS / "tools" / "ledger.json")
 
 
+PHASE3_LEDGER_TOOLS = {"check_suitability", "schedule_nudge", "get_fee_schedule", "get_trace"}
+
+
 def test_moi_tool_trong_hop_dong_co_dung_tham_so_o_gateway_api():
-    assert {t["name"] for t in TOOLS} == set(_ARG_KEYS)
-    for t in TOOLS:
+    # phase 3: Lambda ledger CŨNG phục vụ ba target planner, knowledge, audit (cùng Lambda, người điều phối chốt)
+    assert {t["name"] for t in TOOLS} == set(_ARG_KEYS) - PHASE3_LEDGER_TOOLS
+    contracts = list(TOOLS)
+    for name in ("planner", "knowledge", "audit"):
+        contracts += load_json(CONTRACTS / "tools" / f"{name}.json")
+    assert {t["name"] for t in contracts} == set(_ARG_KEYS)
+    for t in contracts:
         props = set(t["inputSchema"]["properties"]) - {"user_id"}
         assert props == set(_ARG_KEYS[t["name"]]), t["name"]
 

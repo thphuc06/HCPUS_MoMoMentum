@@ -214,38 +214,49 @@ export class AgentStack extends Stack {
       policy.node.addDependency(target);
     }
 
-    // --- target forecast: tool `forecast___get_forecast` (Lambda yofina-forecast), cùng interceptor và Cedar -------------
-    const forecastDefs = JSON.parse(
-      fs.readFileSync(path.join(REPO, 'contracts', 'tools', 'forecast.json'), 'utf-8'),
-    ) as Array<{ name: string }>;
-    const forecastTarget = new agentcore.CfnGatewayTarget(this, 'ForecastTarget', {
-      gatewayIdentifier: gateway.attrGatewayIdentifier,
-      name: 'forecast',
-      description: 'Lambda yofina-forecast: du bao 30 ngay cua mot hu (tinh lai truoc khi tra neu cu)',
-      targetConfiguration: {
-        mcp: { lambda: { lambdaArn: forecastArn, toolSchema: { inlinePayload: forecastDefs as any } } },
-      },
-      credentialProviderConfigurations: [{ credentialProviderType: 'GATEWAY_IAM_ROLE' }],
-    });
-    forecastTarget.node.addDependency(target); // tuần tự: một lần chỉ đổi một target của Gateway
-    for (const tool of forecastDefs) {
-      const file = path.join(policyDir, `${tool.name}.cedar`);
-      if (!fs.existsSync(file)) throw new Error(`Thiếu luật Cedar cho tool ${tool.name}: ${file}`);
-      const policy = new agentcore.CfnPolicy(this, `Policy-forecast-${tool.name}`, {
-        policyEngineId: engine.attrPolicyEngineId,
-        name: `forecast_${tool.name}_own_user`,
-        description: `Cedar cho forecast___${tool.name}`,
-        definition: {
-          cedar: {
-            statement: renderCedar(file, gateway.attrGatewayArn, {
-              move: tools.moveMaxAmountVnd,
-              transaction: tools.transactionMaxAmountVnd,
-            }),
-          },
+    // --- target forecast (get_forecast, run_scenario, affordability_check) và ba target phase 3 (planner, knowledge, audit) ---
+    // Cùng interceptor và Cedar. `planner`, `knowledge`, `audit` cùng trỏ Lambda yofina-ledger (người điều phối chốt, không có Lambda riêng).
+    const extraTargets: Array<{ name: string; arn: string; description: string }> = [
+      { name: 'forecast', arn: forecastArn, description: 'Lambda yofina-forecast: du bao, kich ban what-if, kiem tra truoc khi quet' },
+      { name: 'planner', arn: ledgerArn, description: 'Lambda yofina-ledger: kiem tra suitability va dat/huy loi nhac (ghi co xac nhan)' },
+      { name: 'knowledge', arn: ledgerArn, description: 'Lambda yofina-ledger: bieu phi co cau truc (khong qua RAG)' },
+      { name: 'audit', arn: ledgerArn, description: 'Lambda yofina-ledger: ban ghi luot tra loi cho bang Vi sao' },
+    ];
+    let previousTarget: agentcore.CfnGatewayTarget = target;
+    for (const t of extraTargets) {
+      const defs = JSON.parse(
+        fs.readFileSync(path.join(REPO, 'contracts', 'tools', `${t.name}.json`), 'utf-8'),
+      ) as Array<{ name: string }>;
+      const cfnTarget = new agentcore.CfnGatewayTarget(this, `${t.name[0].toUpperCase()}${t.name.slice(1)}Target`, {
+        gatewayIdentifier: gateway.attrGatewayIdentifier,
+        name: t.name,
+        description: t.description,
+        targetConfiguration: {
+          mcp: { lambda: { lambdaArn: t.arn, toolSchema: { inlinePayload: defs as any } } },
         },
-        validationMode: 'FAIL_ON_ANY_FINDINGS',
+        credentialProviderConfigurations: [{ credentialProviderType: 'GATEWAY_IAM_ROLE' }],
       });
-      policy.node.addDependency(forecastTarget);
+      cfnTarget.node.addDependency(previousTarget); // tuần tự: một lần chỉ đổi một target của Gateway
+      previousTarget = cfnTarget;
+      for (const tool of defs) {
+        const file = path.join(policyDir, `${tool.name}.cedar`);
+        if (!fs.existsSync(file)) throw new Error(`Thiếu luật Cedar cho tool ${tool.name}: ${file}`);
+        const policy = new agentcore.CfnPolicy(this, `Policy-${t.name}-${tool.name}`, {
+          policyEngineId: engine.attrPolicyEngineId,
+          name: `${t.name}_${tool.name}_own_user`,
+          description: `Cedar cho ${t.name}___${tool.name}`,
+          definition: {
+            cedar: {
+              statement: renderCedar(file, gateway.attrGatewayArn, {
+                move: tools.moveMaxAmountVnd,
+                transaction: tools.transactionMaxAmountVnd,
+              }),
+            },
+          },
+          validationMode: 'FAIL_ON_ANY_FINDINGS',
+        });
+        policy.node.addDependency(cfnTarget);
+      }
     }
 
     // --- vai trò của Runtime (quyền tối thiểu) --------------------------------------------

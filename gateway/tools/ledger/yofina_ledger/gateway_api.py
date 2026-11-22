@@ -7,6 +7,10 @@
   của Lambda: `{"status": "ERROR", "code", "message"}`.
 - Mười tool (đúng thứ tự `yofina_core.wallet.LEDGER_TOOLS`): năm tool đọc, bốn tool ghi, `save_turn`. Tool ghi KHÔNG có
   `confirm_token` thì không ghi, trả `NEEDS_CONFIRMATION` kèm bản xem trước. `save_jars` và `confirm_salary` chỉ có ở REST.
+- Phase 3: Lambda này CŨNG phục vụ ba target Gateway `planner` (`check_suitability`, `schedule_nudge`), `knowledge`
+  (`get_fee_schedule`) và `audit` (`get_trace`) theo quyết định của người điều phối (không có Lambda riêng). Tên tool của các
+  target đó là duy nhất trong Gateway nên phân biệt theo tên (phần sau `___`). `schedule_nudge` là tool GHI qua token như các
+  tool ghi khác.
 """
 
 from __future__ import annotations
@@ -20,8 +24,8 @@ from typing import Any
 from yofina_core.blocks import block_to_wire, new_trace_id
 from yofina_core.confirm import MOVE_BETWEEN_JARS
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
-from yofina_core.wallet import AGENT_WRITE_TOOLS
-from yofina_ledger.service import TOOL_PREFIX, LedgerService
+from yofina_core.wallet import AGENT_WRITE_TOOLS, PLANNER_WRITE_TOOLS
+from yofina_ledger.service import PLANNER_PREFIX, TOOL_PREFIX, LedgerService
 
 log = logging.getLogger("yofina.ledger.gateway")
 
@@ -55,6 +59,20 @@ _ARG_KEYS: dict[str, tuple[str, ...]] = {
     MOVE_BETWEEN_JARS: ("from_jar", "to_jar", "amount_vnd", "confirm_token"),
     "assign_jar": ("transaction_id", "jar", "remember", "confirm_token"),
     "save_turn": ("conversation_id", "trace_id", "user_text", "assistant_text", "blocks"),
+    # --- phase 3: target planner, knowledge, audit (chạy chung Lambda này) ---
+    "check_suitability": ("proposal", "scenario_id"),
+    "schedule_nudge": (
+        "op",
+        "kind",
+        "fire_on",
+        "jar_code",
+        "note",
+        "scenario_id",
+        "nudge_id",
+        "confirm_token",
+    ),
+    "get_fee_schedule": ("fee_type", "product"),
+    "get_trace": ("trace_id",),
 }
 
 
@@ -133,8 +151,17 @@ def _run(
         return service.unclassified_result(user_id, **args)
     if tool == "save_turn":
         return service.save_turn_result(user_id, **args)
-    # tool ghi: move_between_jars, update_profile, record_transaction, assign_jar
-    assert tool == MOVE_BETWEEN_JARS or tool in AGENT_WRITE_TOOLS
+    if tool == "check_suitability":
+        return service.check_suitability_result(user_id, **args)
+    if tool == "get_fee_schedule":
+        return service.fee_schedule_result(
+            user_id, product=args.get("product"), fee_type=args.get("fee_type")
+        )
+    if tool == "get_trace":
+        return service.trace_result(user_id, args.get("trace_id"))
+    # tool ghi: move_between_jars, update_profile, record_transaction, assign_jar, schedule_nudge
+    assert tool == MOVE_BETWEEN_JARS or tool in AGENT_WRITE_TOOLS or tool in PLANNER_WRITE_TOOLS
+    prefix = PLANNER_PREFIX if tool in PLANNER_WRITE_TOOLS else TOOL_PREFIX
     token = args.pop("confirm_token", None)
     if token in (None, ""):
         return service.needs_confirmation_for(user_id, tool, args, trace_id=trace_id)
@@ -147,7 +174,7 @@ def _run(
         token,
         trace_id=trace_id,
         channel="gateway",
-        source_tool=f"{TOOL_PREFIX}{tool}",
+        source_tool=f"{prefix}{tool}",
     )
     return {
         "status": str(ToolStatus.OK),

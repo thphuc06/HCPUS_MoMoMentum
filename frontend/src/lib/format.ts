@@ -117,6 +117,16 @@ export function formatRatioPercent(r: number): string {
   return `${Math.round(r * 100)}%`
 }
 
+/**
+ * Khả năng hụt (xác suất 0..1 do server tính) thành chữ để đọc: tròn 100% không nói "100%" (mô hình không chắc tuyệt đối)
+ * mà nói "gần như chắc chắn"; gần 0 nói "dưới 1%". Chỉ đổi cách đọc số server trả, không tính lại gì.
+ */
+export function formatShortfallChance(p: number): string {
+  if (p >= 0.995) return 'Gần như chắc chắn'
+  if (p > 0 && p < 0.005) return 'Dưới 1%'
+  return formatRatioPercent(p)
+}
+
 /** Phần trăm 0..100 (ví dụ tỷ lệ chia lương): bỏ phần thập phân thừa, "31%" hoặc "12,5%". */
 export function formatPercent(p: number): string {
   return `${oneDecimalFmt.format(p)}%`

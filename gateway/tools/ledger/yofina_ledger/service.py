@@ -40,10 +40,11 @@ from yofina_core.confirm import (
 from yofina_core.confirm import params_hash as compute_params_hash
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd, to_vnd
-from yofina_core.wallet import ACTION_TOOLS, BNPL_PRODUCT_CODE
+from yofina_core.wallet import ACTION_TOOLS, BNPL_PRODUCT_CODE, PLANNER_WRITE_TOOLS
 from yofina_ledger import events
 from yofina_ledger.events import EventPublisher
 from yofina_ledger.forecast_client import ForecastClient
+from yofina_ledger.phase3 import Phase3Reads
 from yofina_ledger.refdata import ReferenceData
 from yofina_ledger.repo import ConfirmClaim, LedgerRepo, MoveResult
 from yofina_ledger.settings import LedgerSettings
@@ -53,6 +54,8 @@ from yofina_ledger.wallet_writes import WalletWrites
 log = logging.getLogger("yofina.ledger")
 
 TOOL_PREFIX = "ledger___"
+#: tiền tố tên tool đầy đủ theo target Gateway (phase 3: `planner` chạy chung Lambda ledger)
+PLANNER_PREFIX = "planner___"
 # Id khối `confirm` do code dựng: `confirm:{trace_id}:{params_hash[:12]}` (contracts/README.md).
 CONFIRM_BLOCK_ID_RE = re.compile(r"^confirm:[A-Za-z0-9_-]{1,64}:[0-9a-f]{12}$")
 CONFIRM_BLOCK_ID_MAX = 128
@@ -183,7 +186,7 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-class LedgerService(WalletReads, WalletWrites):
+class LedgerService(WalletReads, WalletWrites, Phase3Reads):
     def __init__(
         self,
         repo: LedgerRepo,
@@ -354,7 +357,7 @@ class LedgerService(WalletReads, WalletWrites):
             except ValueError:
                 gone = False
             if gone:
-                exc = YofinaError(ErrorCode.TOKEN_EXPIRED, OFFER_EXPIRED_MESSAGE)
+                exc = YofinaError(ErrorCode.OFFER_EXPIRED, OFFER_EXPIRED_MESSAGE)
                 self._audit_rejection(user_id, exc, {}, trace_id, channel, tool)
                 raise exc
 
@@ -523,8 +526,9 @@ class LedgerService(WalletReads, WalletWrites):
         """Tool ghi KHÔNG có token: chỉ xem trước (không ghi). `data` là đúng `data` của khối `confirm_action`."""
         if tool == MOVE_BETWEEN_JARS:
             return self.needs_confirmation_result(user_id, params, trace_id=trace_id)
+        prefix = PLANNER_PREFIX if tool in PLANNER_WRITE_TOOLS else TOOL_PREFIX
         _, block = self.prepare_action(
-            user_id, tool, params, trace_id=trace_id, source_tool=f"{TOOL_PREFIX}{tool}"
+            user_id, tool, params, trace_id=trace_id, source_tool=f"{prefix}{tool}"
         )
         wire = block_to_wire(block)
         return {

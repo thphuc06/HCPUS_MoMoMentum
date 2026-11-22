@@ -18,6 +18,8 @@ export const config: Config = {
   apiUrl: 'https://api.example.invalid',
   agentUrl: 'https://rt.example.invalid/invocations?qualifier=DEFAULT',
   replayEnabled: false,
+  warmupEnabled: true,
+  undoWindowSeconds: 30,
 }
 
 export type Handler = (url: string, init: RequestInit) => Response | Promise<Response>
@@ -99,9 +101,14 @@ export function backend(routes: Routes = {}): Handler {
       })
     }
     if (key === 'POST /actions') return json(200, restFixture('ActionResponse.receipt_action'))
+    if (key === 'POST /affordability') return json(200, restFixture('AffordabilityResponse.transfer'))
+    if (key === 'POST /feedback') return json(200, restFixture('FeedbackResponse.default'))
+    if (path0(key) === 'GET /traces') return json(200, restFixture('TraceResponse.what_if'))
     return restDefault(url)
   }
 }
+
+const path0 = (key: string) => key.replace(/^(\w+ \/[^/]+)\/.*$/, '$1')
 
 export const bodyOf = (c: Call) => JSON.parse(String(c.init.body))
 export const isWarmup = (c: Call) => c.url === config.agentUrl && bodyOf(c).forwardedProps?.warmup === true

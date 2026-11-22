@@ -49,13 +49,26 @@ TASKS: dict[str, str] = {
         "sau). Viết đúng 1 đến 2 câu: nêu số tiền, hũ nguồn, hũ đích, nói rõ chưa có khoản tiền nào được chuyển và "
         "nhắc họ kiểm tra rồi bấm Xác nhận trên thẻ."
     ),
+    "obligations": (
+        "Tóm tắt các khoản sắp đến hạn của người dùng bằng 1 đến 2 câu: tổng phải trả (total_due_text) và khoản đến hạn gần nhất. "
+        "Chép nguyên văn các chuỗi *_text và date_text. Nếu danh sách rỗng thì nói chưa có khoản nào sắp đến hạn."
+    ),
+    "affordability": (
+        "Viết ĐÚNG 2 câu ngắn nhận xét kết quả kiểm tra trước khi chi (thẻ đủ, sát, hụt từng hũ đã hiện cho người dùng rồi, đừng liệt kê hết). "
+        "Câu 1 nêu kết luận (verdict, headline). Câu 2 nêu điều cần chú ý nhất: hũ nào sát hoặc hụt, hoặc phần Trả sau (credit). "
+        "Chép nguyên văn các chuỗi *_text; không tự tính."
+    ),
+    "confirm_action": (
+        "Một thay đổi đã được chuẩn bị và hiện thành thẻ xác nhận cho người dùng (xem summary và changes). Viết 1 đến 2 câu: nêu thay đổi, "
+        "nói rõ CHƯA lưu gì và nhắc họ kiểm tra rồi bấm Xác nhận trên thẻ. Chép nguyên văn các chuỗi số tiền trong dữ liệu."
+    ),
     "clarify": (
         "Hỏi lại người dùng đúng một câu để làm rõ điều còn thiếu hoặc còn mơ hồ (xem trường van_de trong dữ liệu). "
         "Có thể gợi ý tên các hũ hiện có."
     ),
     "out_of_scope": (
         "Nói ngắn gọn rằng bạn chưa hỗ trợ việc người dùng hỏi (không đưa lời khuyên đầu tư), rồi nhắc những việc "
-        "bạn làm được: xem số dư, tra giao dịch, xem dự báo một hũ, chuyển tiền giữa các hũ."
+        "bạn làm được: xem số dư, dự báo hũ, thử kịch bản \"nếu mua...\", kiểm tra trước khi chi, chuyển tiền giữa các hũ."
     ),
     "chitchat": (
         "Trả lời xã giao ngắn gọn, rồi nhắc rằng bạn giúp được việc xem số dư, giao dịch, dự báo một hũ và chuyển tiền giữa các hũ."

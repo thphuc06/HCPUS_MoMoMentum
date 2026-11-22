@@ -8,7 +8,7 @@ import { useOverview } from '@/api/OverviewProvider'
 import type { JarFull } from '@/api/schemas'
 import { CONFIDENCE_LABEL } from '@/lib/jar'
 import { formatDayMonth } from '@/lib/dates'
-import { formatSimMoment, formatRatioPercent, formatVnd } from '@/lib/format'
+import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd } from '@/lib/format'
 
 const SEVERITY: Record<string, number> = { short: 0, tight: 1, ok: 2 }
 
@@ -91,7 +91,7 @@ export function ForesightPage() {
                       <span className="num block text-small text-ink-2">
                         {formatVnd(j.balance_vnd)}
                       </span>
-                      {j.p_shortfall !== undefined && <span className="num block text-small text-ink-2">Khả năng hụt {formatRatioPercent(j.p_shortfall)}</span>}
+                      {j.p_shortfall !== undefined && <span className="num block text-small text-ink-2">Khả năng hụt {formatShortfallChance(j.p_shortfall).toLowerCase()}</span>}
                     </span>
                     <JarStatusChip jar={j} />
                   </Link>

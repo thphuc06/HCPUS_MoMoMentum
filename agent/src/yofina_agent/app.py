@@ -27,11 +27,13 @@ from pydantic import ValidationError
 
 from yofina_agent import events as ev
 from yofina_agent.identity import Identity, Unauthenticated, identity_from_authorization
+from yofina_agent.guardrail import Guardrail
 from yofina_agent.settings import AgentSettings
-from yofina_agent.store import TurnBlockStore, make_store
+from yofina_agent.store import TurnBlockStore, TurnRecordStore, make_record_store, make_store
 from yofina_agent.tools import GatewayTools
 from yofina_agent.turn import Turn, TurnDeps, stream_turn
 from yofina_core.blocks import new_trace_id, trace_id_from_traceparent
+from yofina_core.config import Config, ConfigError
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import LlmGateway, get_gateway
 
@@ -50,9 +52,12 @@ class AgentRuntime:
         llm: Callable[[], LlmGateway] = get_gateway,
         store: TurnBlockStore | None = None,
         tools_factory: Callable[[Identity], GatewayTools] | None = None,
+        guardrail: Guardrail | None = None,
+        records: TurnRecordStore | None = None,
     ) -> None:
         self._settings = settings
         self._llm, self._store, self._tools_factory = llm, store, tools_factory
+        self._guardrail, self._records = guardrail, records
 
     @property
     def settings(self) -> AgentSettings:
@@ -72,7 +77,22 @@ class AgentRuntime:
                 startup_timeout=s.tool_startup_timeout_seconds,
             )
         )
-        return TurnDeps(settings=s, llm=self._llm, store=self._store, tools_factory=factory)
+        if self._records is None:
+            self._records = make_record_store(s.turn_record_tool)
+        if self._guardrail is None:
+            try:
+                region = Config().region()
+            except ConfigError:
+                region = ""  # không có Region thì Guardrail không dùng được; model cũng không gọi được nên lỗi sẽ hiện ở chỗ đó
+            self._guardrail = Guardrail(s, region=region)
+        return TurnDeps(
+            settings=s,
+            llm=self._llm,
+            store=self._store,
+            tools_factory=factory,
+            guardrail=self._guardrail,
+            records=self._records,
+        )
 
     def warm(self) -> dict[str, Any]:
         """Nạp cấu hình, tạo client Bedrock/DynamoDB, import Strands. Không gọi model hay tool."""
@@ -82,8 +102,10 @@ class AgentRuntime:
         import strands
         import strands.tools.mcp  # noqa: F401
 
-        self.deps()
-        return {"warm": True, "ms": int((time.perf_counter() - started) * 1000)}
+        deps = self.deps()
+        if deps.guardrail is not None and deps.guardrail.enabled:
+            _ = deps.guardrail.client  # tạo client bedrock-runtime trước (không gọi ApplyGuardrail)
+        return {"warm": True, "guardrail": bool(deps.guardrail and deps.guardrail.enabled), "ms": int((time.perf_counter() - started) * 1000)}
 
 
 def _error(status: int, code: ErrorCode, message: str) -> JSONResponse:

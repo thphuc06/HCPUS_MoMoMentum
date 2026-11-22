@@ -3,10 +3,10 @@ import { AlertTriangle, Info } from 'lucide-react'
 import { JarIcon } from '@/components/JarIcon'
 import { StatusChip } from '@/components/StatusChip'
 import { Skeleton } from '@/components/ui/skeleton'
-import { CONFIDENCE_LABEL, jarStatusChip } from '@/lib/jar'
-import { formatSimMoment, formatRatioPercent, formatVnd, formatVndShort } from '@/lib/format'
+import { CONFIDENCE_LABEL, jarStatusChip, statusShortChip } from '@/lib/jar'
+import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd, formatVndShort } from '@/lib/format'
 import { diffDays, formatDayMonth } from '@/lib/dates'
-import type { ForecastTimelineData } from '@/contracts/blocks'
+import type { ForecastCompare, ForecastTimelineData } from '@/contracts/blocks'
 import { buildChartModel, rowAt } from './model'
 
 // Recharts (~118 KB gzip) tải riêng, không nằm trong phần tải đầu.
@@ -16,6 +16,10 @@ const ForecastChart = lazy(() => import('./ForecastChart'))
 export function forecastSummary(d: ForecastTimelineData): string {
   const name = d.jar.name
   const payday = formatDayMonth(d.payday.date)
+  // Hũ đã hết tiền (0 ₫): không nói "dự kiến cạn" như thể còn tiền để cạn.
+  if (d.start_balance_vnd <= 0) {
+    return `Hũ ${name} đang hết tiền (${formatVnd(d.start_balance_vnd)}). Kỳ lương kế tiếp ngày ${payday}, còn ${d.payday.days_until} ngày nữa.`
+  }
   if (d.runout_date) {
     if (d.runout_date < d.payday.date) {
       // Hai con số khác nhau, nói rõ để khỏi lẫn: khoảng trống từ ngày cạn tới lương (hiệu hai ngày server trả) và số ngày từ hôm nay.
@@ -28,6 +32,72 @@ export function forecastSummary(d: ForecastTimelineData): string {
   if (d.status === 'tight')
     return `Hũ ${name} sát: dự kiến còn rất ít tiền trước kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
   return `Hũ ${name} dự kiến đủ tới kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
+}
+
+type AfterPath = ForecastCompare['after']
+
+function pathLine(path: { status: ForecastTimelineData['status']; runout_date?: string }): string {
+  if (path.runout_date) return `Dự kiến cạn ngày ${formatDayMonth(path.runout_date)}`
+  return path.status === 'ok' ? 'Đủ tới kỳ lương' : path.status === 'tight' ? 'Sát, còn rất ít tiền' : 'Có khả năng hụt'
+}
+
+/**
+ * Biến thể trước-sau (H3a): hai cột TRƯỚC và SAU với trạng thái đủ/sát/hụt (biểu tượng + chữ), ngày cạn và khả năng hụt, rồi
+ * chênh lệch do engine tính sẵn (`delta`, cùng dãy số ngẫu nhiên cho hai bên). Chỉ vẽ số server trả.
+ */
+export function CompareSummary({ data, compare }: { data: ForecastTimelineData; compare: ForecastCompare }) {
+  const after: AfterPath = compare.after
+  const cols = [
+    { key: 'before', title: 'Trước', path: data },
+    { key: 'after', title: 'Sau', path: after },
+  ] as const
+  const d = compare.delta
+  return (
+    <div data-testid="forecast-compare" className="mt-3">
+      <p className="text-body font-semibold text-ink" data-testid="compare-label">
+        Nếu {compare.label}
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {cols.map(({ key, title, path }) => {
+          const chip = statusShortChip(path.status)
+          return (
+            <div key={key} data-col={key} className="rounded-2xl bg-surface-2 p-3">
+              <p className="text-small font-semibold text-ink-2">{title}</p>
+              <StatusChip kind={chip.kind} className="mt-1">
+                {chip.label}
+              </StatusChip>
+              <p className="mt-1.5 text-small text-ink">{pathLine(path)}</p>
+              {path.p_shortfall !== undefined && <p className="num text-small text-ink-2">Khả năng hụt: {formatShortfallChance(path.p_shortfall).toLowerCase()}</p>}
+            </div>
+          )
+        })}
+      </div>
+      <ul className="mt-2 space-y-1 text-small text-ink" aria-label="Chênh lệch trước và sau">
+        <li>
+          Số dư giữa thấp nhất {d.min_balance_delta_vnd < 0 ? 'giảm' : 'tăng'} <span className="num font-semibold">{formatVnd(Math.abs(d.min_balance_delta_vnd))}</span>
+          {after.min_balance_p50_vnd !== undefined && (
+            <span className="text-ink-2">
+              {' '}
+              (còn <span className="num">{formatVnd(after.min_balance_p50_vnd)}</span>)
+            </span>
+          )}
+        </li>
+        {d.runout_shift_days !== undefined && d.runout_shift_days !== 0 && (
+          <li>
+            Ngày cạn {d.runout_shift_days < 0 ? 'sớm hơn' : 'muộn hơn'} <span className="num font-semibold">{Math.abs(d.runout_shift_days)} ngày</span>
+          </li>
+        )}
+        {d.p_shortfall_delta !== undefined && d.p_shortfall_delta !== 0 && (
+          <li>
+            Khả năng hụt {d.p_shortfall_delta > 0 ? 'tăng' : 'giảm'} <span className="num font-semibold">{Math.round(Math.abs(d.p_shortfall_delta) * 100)} điểm phần trăm</span>
+          </li>
+        )}
+      </ul>
+      {compare.common_random_numbers && (
+        <p className="mt-1 text-note text-ink-2">Hai đường dùng cùng dãy số ngẫu nhiên ({compare.n_paths.toLocaleString('vi-VN')} đường mô phỏng) nên chênh lệch không do nhiễu.</p>
+      )}
+    </div>
+  )
 }
 
 /**
@@ -50,8 +120,10 @@ export function ForecastBlock({
   const model = useMemo(() => buildChartModel(data), [data])
   const [activeX, setActiveX] = useState<number | null>(null)
   const row = rowAt(model, activeX)
-  const chip = jarStatusChip(data.status, data.runout_date)
+  const chip = jarStatusChip(data.status, data.runout_date, data.start_balance_vnd <= 0)
   const events = model.events
+  const compare = data.compare
+  const extraEvents = compare?.after.events ?? []
 
   return (
     <section data-block="forecast_timeline" data-status={data.status} className={`rounded-card bg-surface p-4 shadow-card ${className ?? ''}`}>
@@ -61,9 +133,13 @@ export function ForecastBlock({
         <StatusChip kind={chip.kind}>{chip.label}</StatusChip>
       </header>
 
-      <p className="mt-3 text-body font-medium text-ink" data-testid="forecast-summary">
-        {forecastSummary(data)}
-      </p>
+      {compare ? (
+        <CompareSummary data={data} compare={compare} />
+      ) : (
+        <p className="mt-3 text-body font-medium text-ink" data-testid="forecast-summary">
+          {forecastSummary(data)}
+        </p>
+      )}
 
       {(data.is_initial_estimate || data.stale) && (
         <div className="mt-2 flex flex-wrap gap-2">
@@ -88,8 +164,14 @@ export function ForecastBlock({
         {row ? (
           <>
             <span className="font-semibold text-ink">{formatDayMonth(row.date)}</span>
-            {' · giữa '}
+            {compare ? ' · trước ' : ' · giữa '}
             <span className="num font-semibold text-ink">{formatVndShort(row.p50)}</span>
+            {row.after !== undefined && (
+              <>
+                {' · sau '}
+                <span className="num font-semibold text-brand-text">{formatVndShort(row.after)}</span>
+              </>
+            )}
             {' · khoảng 80% khả năng từ '}
             <span className="num">{formatVndShort(row.p10)}</span>
             {' đến '}
@@ -126,14 +208,35 @@ export function ForecastBlock({
           <span className="inline-block h-2.5 w-4 rounded-sm bg-blue opacity-30" /> Dải 80%
         </li>
         <li className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-0.5 w-4 bg-blue" /> Số dư giữa
+          <span className={`inline-block h-0.5 w-4 ${compare ? 'border-t-2 border-dashed border-blue' : 'bg-blue'}`} /> {compare ? 'Trước' : 'Số dư giữa'}
         </li>
+        {compare && (
+          <li className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-0.5 w-4 bg-brand" /> Sau
+          </li>
+        )}
         {model.runout && (
           <li className="inline-flex items-center gap-1.5">
             <span className="inline-block size-2.5 rounded-sm bg-bad-bg ring-1 ring-bad-line" /> Vùng hụt
           </li>
         )}
       </ul>
+
+      {extraEvents.length > 0 && (
+        <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-small" aria-label="Mốc phát sinh thêm do kịch bản" data-testid="forecast-extra-events">
+          {extraEvents.map((e) => (
+            <li key={`${e.date}-${e.label}`} className="flex items-center justify-between gap-3" data-event={e.kind}>
+              <span className="text-ink">
+                {e.label} · {formatDayMonth(e.date)} <span className="text-ink-2">(phát sinh thêm)</span>
+              </span>
+              <span className={`num font-semibold ${e.kind === 'salary' ? 'text-ok-fg' : 'text-warn-fg'}`}>
+                {e.kind === 'salary' ? '+' : '−'}
+                {formatVnd(e.amount_vnd)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {events.length > 0 && (
         <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-small" aria-label="Mốc tiền ra và tiền vào" data-testid="forecast-events">
@@ -155,9 +258,9 @@ export function ForecastBlock({
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-line pt-3 text-small" data-testid="forecast-meta">
         {data.p_shortfall !== undefined ? (
           <div>
-            <dt className="text-ink-2">Khả năng hụt trước kỳ lương</dt>
+            <dt className="text-ink-2">Khả năng hụt trước kỳ lương{compare ? ' (trước)' : ''}</dt>
             <dd className="num font-semibold text-ink" data-testid="p-shortfall">
-              {formatRatioPercent(data.p_shortfall)}
+              {formatShortfallChance(data.p_shortfall)}
             </dd>
           </div>
         ) : null}

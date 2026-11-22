@@ -56,7 +56,7 @@ export function appRoutes(): RouteObject[] {
             { path: 'jars/:code', ...page(() => import('@/pages/JarDetailPage'), 'JarDetailPage') },
             { path: 'foresight', element: <ForesightPage /> },
             {
-              // Chuyển tiền T1 → T2 → T4 → T5; trạng thái nháp nằm trong TransferFlowProvider.
+              // Chuyển tiền T1 → T2 → T3 (kiểm tra) → T4 → T5; trạng thái nháp nằm trong TransferFlowProvider.
               path: 'transfer',
               element: (
                 <TransferFlowProvider>
@@ -66,6 +66,7 @@ export function appRoutes(): RouteObject[] {
               children: [
                 { index: true, ...page(() => import('@/pages/transfer/TransferPayeePage'), 'TransferPayeePage') },
                 { path: 'amount', ...page(() => import('@/pages/transfer/TransferAmountPage'), 'TransferAmountPage') },
+                { path: 'check', ...page(() => import('@/pages/transfer/TransferCheckPage'), 'TransferCheckPage') },
                 { path: 'review', ...page(() => import('@/pages/transfer/TransferReviewPage'), 'TransferReviewPage') },
                 { path: 'receipt', ...page(() => import('@/pages/transfer/TransferReceiptPage'), 'TransferReceiptPage') },
               ],

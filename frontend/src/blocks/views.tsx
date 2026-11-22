@@ -1,5 +1,7 @@
 import { CheckCircle2, ChevronRight, Clock } from 'lucide-react'
-import { AiChip } from '@/components/StatusChip'
+import { useOptionalChatActions } from '@/chat/actions'
+import { AiChip, StatusChip } from '@/components/StatusChip'
+import { SuggestionChips } from '@/components/SuggestionChips'
 import { JarIcon } from '@/components/JarIcon'
 import { Notice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
@@ -8,8 +10,17 @@ import type { ConfirmBlock, JarSummaryBlock, NoticeBlock, ReceiptBlock } from '@
 import { useConfirmFlow } from './useConfirmFlow'
 import type { BlockUi } from '@/chat/session'
 import { useNow } from './useNow'
+import { UndoBar } from './UndoBar'
 
-export type BlockViewProps<T> = { block: T; blockId: string; ui?: BlockUi }
+export type BlockViewProps<T> = {
+  block: T
+  blockId: string
+  ui?: BlockUi
+  /** Thời điểm (đồng hồ máy) đề nghị vừa được thực hiện trong phiên này: còn trong cửa sổ Hoàn tác thì biên nhận có nút Hoàn tác. */
+  doneAt?: number
+  /** Đã có tin nhắn mới của người dùng sau khối này (khối hỏi lại không còn bấm được). */
+  stale?: boolean
+}
 
 // ---------------------------------------------------------------- jar_summary
 
@@ -44,14 +55,38 @@ export function JarSummaryView({ block }: BlockViewProps<JarSummaryBlock>) {
 
 // ---------------------------------------------------------------- notice
 
-export function NoticeView({ block }: BlockViewProps<NoticeBlock>) {
-  const { kind, title, message, code } = block.data
-  return <Notice kind={kind} title={title} message={message} code={code} />
+/**
+ * Thông báo trạng thái (H7 ngoài phạm vi, H8a suy giảm, H8b dữ liệu ít, lỗi). Phase 3 thêm: `retryable` (nút "Thử lại" chạy lại
+ * lượt vừa rồi), `missing` (phần còn thiếu khi trả một phần), `suggestions` (việc làm được, bấm để hỏi).
+ */
+export function NoticeView({ block, stale }: BlockViewProps<NoticeBlock>) {
+  const { kind, title, message, code, retryable, missing, suggestions } = block.data
+  const actions = useOptionalChatActions()
+  return (
+    <Notice kind={kind} title={title} message={message} code={code} onRetry={retryable && actions && !stale ? actions.retryLast : undefined}>
+      {missing && missing.length > 0 && (
+        <div className="mt-2" data-testid="notice-missing">
+          <p className="text-small font-semibold text-ink">Phần chưa có:</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-small text-ink">
+            {missing.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {suggestions && suggestions.length > 0 && (
+        <div className="mt-3" data-testid="notice-suggestions">
+          <p className="text-small font-semibold text-ink">Bạn có thể hỏi mình:</p>
+          <SuggestionChips className="mt-1.5" label="Việc mình làm được" disabled={!actions} items={suggestions} onPick={(prompt) => actions?.ask(prompt)} />
+        </div>
+      )}
+    </Notice>
+  )
 }
 
 // ---------------------------------------------------------------- receipt
 
-export function ReceiptView({ block }: BlockViewProps<ReceiptBlock>) {
+export function ReceiptView({ block, blockId, ui, doneAt }: BlockViewProps<ReceiptBlock>) {
   const d = block.data
   return (
     <section data-block="receipt" className="rounded-card bg-surface p-4 shadow-card">
@@ -67,6 +102,12 @@ export function ReceiptView({ block }: BlockViewProps<ReceiptBlock>) {
         </div>
         <AiChip />
       </header>
+      {ui === 'undone' && (
+        <p role="status" data-testid="undone-note" className="mt-2 flex items-center gap-2 text-small font-semibold text-ink-2">
+          <StatusChip kind="info">Đã hoàn tác</StatusChip>
+          Đây là thao tác ngược của lần chuyển trước.
+        </p>
+      )}
       <dl className="mt-3 space-y-1.5 text-body">
         {[d.from_jar, d.to_jar].map((j) => (
           <div key={j.code} className="flex items-center justify-between">
@@ -79,6 +120,7 @@ export function ReceiptView({ block }: BlockViewProps<ReceiptBlock>) {
           <dd className="num font-semibold text-ink">{d.transaction_id.slice(0, 8).toUpperCase()}</dd>
         </div>
       </dl>
+      <UndoBar receipt={block} blockId={blockId} doneAt={doneAt} />
     </section>
   )
 }
@@ -87,6 +129,7 @@ export function ReceiptView({ block }: BlockViewProps<ReceiptBlock>) {
 
 export function ConfirmView({ block, blockId, ui }: BlockViewProps<ConfirmBlock>) {
   const d = block.data
+  const actions = useOptionalChatActions()
   const flow = useConfirmFlow({ block, blockId })
   const expiresAt = Date.parse(d.expires_at)
   const cancelled = ui === 'cancelled'
@@ -133,9 +176,16 @@ export function ConfirmView({ block, blockId, ui }: BlockViewProps<ConfirmBlock>
           Đề nghị này đã được thực hiện rồi. Bạn kiểm tra số dư ở Tổng quan nhé.
         </p>
       ) : expired ? (
-        <p className="mt-3 text-small font-semibold text-warn-fg" role="status">
-          Đề nghị này đã hết hạn nên số dư xem trước có thể đã cũ. Hỏi lại Yofina để xem số mới.
-        </p>
+        <div role="status" className="mt-3">
+          <p className="text-small font-semibold text-warn-fg">
+            Đề nghị này đã hết hạn nên số dư xem trước có thể đã cũ.
+          </p>
+          {actions && (
+            <Button type="button" variant="soft" size="sm" className="mt-2" onClick={actions.askAgain}>
+              Hỏi lại để có đề nghị mới
+            </Button>
+          )}
+        </div>
       ) : (
         <p className="mt-3 flex items-center gap-2 text-small text-ink-2">
           <Clock className="size-4 shrink-0" aria-hidden />

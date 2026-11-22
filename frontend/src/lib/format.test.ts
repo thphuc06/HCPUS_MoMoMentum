@@ -6,6 +6,7 @@ import {
   formatSimMoment,
   formatPercent,
   formatRatioPercent,
+  formatShortfallChance,
   formatSignedVnd,
   formatVnd,
   formatVndAxis,
@@ -118,5 +119,15 @@ describe('dates', () => {
     expect(diffDays('2026-12-05', '2026-11-21')).toBe(-14)
     expect(formatDayMonth('2026-11-23')).toBe('23/11')
     expect(isIsoDate('2026-13-45')).toBe(false)
+  })
+})
+
+describe('formatShortfallChance (lỗi nhỏ phase 2: "100%")', () => {
+  it('tròn 100% nói "gần như chắc chắn"; gần 0 nói "dưới 1%"; còn lại là phần trăm', () => {
+    expect(formatShortfallChance(1)).toBe('Gần như chắc chắn')
+    expect(formatShortfallChance(0.996)).toBe('Gần như chắc chắn')
+    expect(formatShortfallChance(0.71)).toBe('71%')
+    expect(formatShortfallChance(0.002)).toBe('Dưới 1%')
+    expect(formatShortfallChance(0)).toBe('0%')
   })
 })

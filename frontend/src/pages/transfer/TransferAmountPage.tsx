@@ -18,7 +18,7 @@ const QUICK = [50_000, 100_000, 200_000, 500_000]
 const MAX_DIGITS = 11 // 99.999.999.999 ₫ < trần numeric(14,0)
 
 // Figma T2 nhập số tiền + hũ nguồn (19:872). Chọn hũ nguồn hoặc Trả sau (mô phỏng); nhãn và hạn mức lấy từ GET /credit-line.
-// Bước kiểm tra đủ/sát/hụt (T3) là phase 3: ở đây đi thẳng sang xem lại.
+// Bước kế tiếp là kiểm tra đủ/sát/hụt (T3, `POST /affordability`), rồi mới xem lại (T4).
 export function TransferAmountPage() {
   const navigate = useNavigate()
   const { state, patch } = useTransferFlow()
@@ -79,6 +79,7 @@ export function TransferAmountPage() {
             type="button"
             onClick={() => setOpen((o) => !o)}
             aria-expanded={open}
+            aria-label={`Nguồn tiền: ${label}. ${sub}`}
             className="flex min-h-[68px] w-full items-center gap-3 px-4 text-left"
           >
             {sourceJar ? (
@@ -162,6 +163,7 @@ export function TransferAmountPage() {
             <select
               value={state.creditJar}
               onChange={(e) => patch({ creditJar: e.target.value })}
+              aria-label="Tính vào hũ (tùy chọn)"
               className="h-12 w-full rounded-2xl border border-line bg-surface px-4 text-body text-ink"
             >
               <option value="">Để hệ thống xếp</option>
@@ -205,8 +207,8 @@ export function TransferAmountPage() {
         <Numpad onDigit={addDigit} onDelete={() => patch({ amountDigits: state.amountDigits.slice(0, -1) })} />
       </div>
       <div className="px-4 pt-3 pb-6">
-        <Button type="button" className="w-full" disabled={!canContinue} onClick={() => navigate('/transfer/review')}>
-          Xem lại
+        <Button type="button" className="w-full" disabled={!canContinue} onClick={() => navigate('/transfer/check')}>
+          Kiểm tra trước khi chuyển
         </Button>
       </div>
     </>

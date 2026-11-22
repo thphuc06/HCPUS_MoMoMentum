@@ -246,11 +246,28 @@ class Pipeline:
         return None
 
     # --- đường nhanh ----------------------------------------------------------------------------
-    def _fast_previous(
+    def previous_state(
         self, user_id: str, inputs: ForecastInputs, targets: Sequence[str], now: datetime
+    ) -> tuple[tuple[ForecastResult, str] | None, str | None, list[Mapping[str, Any]]]:
+        """Như `_fast_previous` (dùng cho what-if: baseline và kịch bản cùng chạy `update_forecast` trên phân phối đã fit), kèm
+        các hàng tóm tắt đã đọc (để người gọi lấy `computed_at` mà không đọc lại)."""
+        summary_rows = self.repo.summaries(user_id)
+        previous, reason = self._fast_previous(user_id, inputs, targets, now, summary_rows)
+        return previous, reason, summary_rows
+
+    def _fast_previous(
+        self,
+        user_id: str,
+        inputs: ForecastInputs,
+        targets: Sequence[str],
+        now: datetime,
+        summary_rows: Sequence[Mapping[str, Any]] | None = None,
     ) -> tuple[tuple[ForecastResult, str] | None, str | None]:
         """Dựng `previous` cho `update_forecast` từ lần chạy mới nhất của từng hũ. Trả ((previous, parent_run_id) | None, lý do rơi về)."""
-        rows = {r["jar_code"]: r for r in self.repo.summaries(user_id)}
+        rows = {
+            r["jar_code"]: r
+            for r in (summary_rows if summary_rows is not None else self.repo.summaries(user_id))
+        }
         missing = [c for c in targets if c not in rows]
         if missing:
             return None, "no_previous"

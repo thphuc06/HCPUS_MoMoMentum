@@ -87,7 +87,7 @@ def test_luong_sse_hop_le_va_khong_rong(monkeypatch):
         and ev[0]["threadId"] == "thread-9"
         and ev[0]["runId"] == "run-9"
     )
-    assert ev[-1]["type"] == "RUN_FINISHED" and ev[-1]["result"]["intent"] == "balance_lookup"
+    assert ev[-1]["type"] == "RUN_FINISHED" and ev[-1]["result"]["intent"] == "lookup"
     snap = next(e for e in ev if e["type"] == "ACTIVITY_SNAPSHOT")
     assert snap["activityType"] == "yofina.block" and snap["messageId"] == snap["content"]["id"]
     assert snap["replace"] is True

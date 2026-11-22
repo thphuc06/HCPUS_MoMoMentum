@@ -37,9 +37,98 @@ DEGRADED: dict[str, tuple[str, str]] = {
 
 OUT_OF_SCOPE: tuple[str, str] = (
     "Ngoài phạm vi hiện tại",
-    "Yofina hiện giúp bạn xem số dư các hũ, tra giao dịch, xem dự báo một hũ và chuyển tiền giữa các hũ. "
-    "Việc này nằm ngoài phạm vi đó.",
+    "Yofina giúp bạn quản lý chi tiêu theo hũ: xem số dư, dự báo hũ, thử kịch bản \"nếu mua...\" và kiểm tra trước khi chi. "
+    "Mình không tư vấn đầu tư (mã cổ phiếu, quỹ, tiền mã hóa) và chưa làm được việc này.",
 )
+
+# Chip và danh sách gợi ý cho khối `suggestions` (nhãn giao diện, không phải câu trả lời).
+CAN_DO: tuple[str, ...] = (
+    "Xem số dư và dự báo từng hũ",
+    "Thử kịch bản \"nếu mua...\" (cả bằng Trả sau)",
+    "Kiểm tra trước khi chi hoặc chuyển tiền",
+    "Chuyển tiền giữa các hũ, khai lương và nghĩa vụ",
+)
+CANNOT_DO: tuple[str, ...] = (
+    "Tư vấn mua cổ phiếu, quỹ, tiền mã hóa",
+    "Tự ghi hay chuyển tiền khi bạn chưa xác nhận",
+)
+SUGGESTION_ITEMS: tuple[dict[str, str], ...] = (
+    {"id": "balances", "label": "Xem số dư các hũ", "prompt": "Số dư các hũ của mình"},
+    {"id": "forecast", "label": "Hũ nào sắp cạn?", "prompt": "Hũ nào của mình sắp cạn?"},
+    {"id": "what_if", "label": "Thử kịch bản mua sắm", "prompt": "Nếu mua tai nghe 1,2 triệu bằng Trả sau thì sao?"},
+    {"id": "check", "label": "Kiểm tra trước khi chi", "prompt": "Mình chi 500 nghìn lúc này có ổn không?"},
+)
+SUGGESTIONS_TITLE = "Mình có thể giúp bạn"
+
+# Ô còn thiếu -> câu hỏi và chip (khối `clarify`). Chỉ là nhãn của ô thiếu, không gắn với câu mẫu nào.
+CLARIFY: dict[str, dict] = {
+    "amount": {
+        "question": "Khoản này khoảng bao nhiêu tiền?",
+        "chips": [
+            {"label": "500 nghìn", "value": "500 nghìn"},
+            {"label": "1 triệu", "value": "1 triệu"},
+            {"label": "5 triệu", "value": "5 triệu"},
+        ],
+    },
+    "funding_source": {
+        "question": "Bạn định trả bằng tiền trong hũ hay bằng Trả sau (mô phỏng)?",
+        "chips": [
+            {"label": "Trừ vào hũ", "value": "Trả bằng tiền trong hũ"},
+            {"label": "Trả sau (mô phỏng)", "value": "Trả bằng Trả sau (mô phỏng)"},
+        ],
+    },
+    "jar": {
+        "question": "Bạn muốn chuyển từ hũ nào sang hũ nào?",
+        "chips": [],
+    },
+    "pay_jar": {
+        "question": "Bạn định trả bằng tiền của hũ nào?",
+        "chips": [],
+    },
+    "obligation_kind": {
+        "question": "Khoản này là tiền trọ, hóa đơn, thuê bao hay khoản vay?",
+        "chips": [
+            {"label": "Tiền trọ", "value": "Đây là tiền trọ"},
+            {"label": "Hóa đơn", "value": "Đây là hóa đơn"},
+            {"label": "Thuê bao", "value": "Đây là thuê bao"},
+            {"label": "Khoản vay", "value": "Đây là khoản vay"},
+        ],
+    },
+    "other": {
+        "question": "Bạn muốn khai hoặc sửa thông tin nào (lương, ngày nhận lương hay một khoản nghĩa vụ)?",
+        "chips": [
+            {"label": "Lương", "value": "Lương của mình là"},
+            {"label": "Tiền trọ", "value": "Tiền trọ của mình là"},
+        ],
+    },
+}
+
+LOW_DATA: tuple[str, str] = (
+    "Dữ liệu còn ít",
+    "Dự báo này dựa trên ít dữ liệu hoặc là ước lượng ban đầu nên độ tin cậy còn thấp. "
+    "Bạn nạp thêm lịch sử giao dịch để mình ước lượng chính xác hơn.",
+)
+LOW_COVERAGE: tuple[str, str] = (
+    "Độ tin cậy thấp",
+    "Khoảng dự báo của hũ này đang kém chắc chắn, hãy xem con số như một ước lượng.",
+)
+PARTIAL: tuple[str, str] = (
+    "Mới có một phần kết quả",
+    "Một số dữ liệu chưa lấy được nên mình chỉ hiện phần đã có. Bạn thử lại sau ít phút nhé.",
+)
+VERIFIER_FAILED: tuple[str, str] = (
+    "Chỉ hiện số liệu",
+    "Mình chưa kiểm chứng được phần giải thích và gợi ý, nên chỉ hiện số liệu tính trực tiếp từ dữ liệu của bạn.",
+)
+GUARDRAIL_OUTPUT_BLOCKED: tuple[str, str] = (
+    "Chỉ hiện số liệu",
+    "Phần lời giải thích không đạt kiểm tra an toàn nên mình chỉ hiện số liệu.",
+)
+SCENARIO_UNBUILDABLE: tuple[str, str] = (
+    "Chưa dựng được kịch bản",
+    "Mình chưa hiểu đủ để dựng kịch bản này. Bạn nói rõ món gì, bao nhiêu tiền và trả bằng cách nào nhé.",
+)
+PROFILE_PREPARED_HINT = "Đã chuẩn bị thay đổi hồ sơ; chưa lưu gì cho tới khi bạn bấm Xác nhận."
 
 # Tiêu đề cho lỗi của tool (nội dung lấy từ chính thông điệp tiếng Việt của tool).
 ERROR_TITLES: dict[str, str] = {
@@ -53,6 +142,7 @@ ERROR_TITLES: dict[str, str] = {
     ErrorCode.RATE_LIMITED: "Đang có quá nhiều yêu cầu",
     ErrorCode.FORECAST_UNAVAILABLE: "Chưa có dự báo",
     ErrorCode.PROFILE_INCOMPLETE: "Chưa khai lương",
+    ErrorCode.SCENARIO_INVALID: "Kịch bản chưa hợp lệ",
 }
 DEFAULT_ERROR_TITLE = "Không thực hiện được"
 

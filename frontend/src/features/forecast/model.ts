@@ -13,6 +13,11 @@ export type ChartRow = {
   p50: number
   p90: number
   band: [number, number]
+  /** Chỉ khi khối có `compare`: số dư giữa SAU kịch bản và dải chênh lệch giữa TRƯỚC và SAU (để tô). */
+  after?: number
+  after10?: number
+  after90?: number
+  gap?: [number, number]
 }
 
 export type ChartEvent = { x: number; date: string; kind: 'obligation' | 'salary'; label: string; amountVnd: number; amountMaxVnd?: number }
@@ -31,6 +36,12 @@ export type ChartModel = {
   paydayX: number | null
   /** Vùng hụt: từ ngày cạn tới ngày lương (hoặc hết khung). */
   shortfallRange: { x1: number; x2: number } | null
+  /** Có vẽ đường SAU (khối `forecast_timeline` biến thể trước-sau). */
+  hasCompare: boolean
+  /** Điểm cạn của đường SAU (khối trước-sau). */
+  afterRunout: { x: number; date: string } | null
+  /** Mức xếp lớp (0, 1, 2) của nhãn mốc theo thứ tự `events`: mốc gần nhau (trong 4 ngày) xếp lên các tầng khác nhau để nhãn không chồng. */
+  eventLevels: number[]
 }
 
 /** Mốc trục "đẹp" theo bước 1-2-5 × 10^k, phủ [lo, hi]. */
@@ -57,6 +68,32 @@ function xTickList(lastX: number): number[] {
   return out
 }
 
+/** Tầng của nhãn mốc: mốc đứng gần mốc trước (cách dưới `minGap` ngày) lên tầng kế tiếp, tối đa 3 tầng; đủ xa thì về tầng 0. */
+export function stackLevels(xs: readonly number[], minGap = 4, maxLevels = 3): number[] {
+  const out: number[] = []
+  let prevX = Number.NEGATIVE_INFINITY
+  let level = 0
+  for (const x of xs) {
+    level = x - prevX < minGap ? (level + 1) % maxLevels : 0
+    out.push(level)
+    prevX = x
+  }
+  return out
+}
+
+function runoutPoint(d: { origin: string; runout?: string }, rows: ChartRow[], pick: (r: ChartRow) => number | undefined, lastX: number): { x: number; date: string } | null {
+  if (!d.runout) return null
+  const rx = diffDays(d.origin, d.runout)
+  let x = rx
+  const cur = rows.find((r) => r.x === rx)
+  const prev = rows.find((r) => r.x === rx - 1)
+  const cv = cur ? pick(cur) : undefined
+  const pv = prev ? pick(prev) : undefined
+  // Điểm P50 cắt y = 0: nội suy giữa ngày trước và ngày cạn để chấm nằm đúng trên đường.
+  if (cv !== undefined && pv !== undefined && pv > 0 && cv <= 0) x = prev!.x + pv / (pv - cv)
+  return rx >= 0 && rx <= lastX ? { x, date: d.runout } : null
+}
+
 export function buildChartModel(d: ForecastTimelineData): ChartModel {
   const first: ChartRow = {
     x: 0,
@@ -79,30 +116,52 @@ export function buildChartModel(d: ForecastTimelineData): ChartModel {
   ]
   const lastX = rows[rows.length - 1]!.x
 
-  const lo = Math.min(0, ...rows.map((r) => r.p10))
-  const hi = Math.max(0, ...rows.map((r) => r.p90))
+  // Biến thể trước-sau: ghép đường SAU theo ngày (cùng ngày với baseline).
+  const after = d.compare?.after
+  if (after) {
+    const byDate = new Map(after.days.map((a) => [a.date, a]))
+    for (const r of rows) {
+      const a = r.x === 0 ? { p10_vnd: d.start_balance_vnd, p50_vnd: d.start_balance_vnd, p90_vnd: d.start_balance_vnd } : byDate.get(r.date)
+      if (!a) continue
+      r.after = a.p50_vnd
+      r.after10 = a.p10_vnd
+      r.after90 = a.p90_vnd
+      r.gap = [Math.min(r.p50, a.p50_vnd), Math.max(r.p50, a.p50_vnd)]
+    }
+  }
+
+  const lo = Math.min(0, ...rows.map((r) => Math.min(r.p10, r.after10 ?? r.p10)))
+  const hi = Math.max(0, ...rows.map((r) => Math.max(r.p90, r.after90 ?? r.p90)))
   const yTicks = niceTicks(lo, hi)
 
   const events: ChartEvent[] = d.events
     .map((e) => ({ x: diffDays(d.origin_date, e.date), date: e.date, kind: e.kind, label: e.label, amountVnd: e.amount_vnd, amountMaxVnd: e.amount_max_vnd }))
     .filter((e) => e.x >= 0 && e.x <= lastX)
+    .sort((a, b) => a.x - b.x)
 
-  let runout: ChartModel['runout'] = null
-  if (d.runout_date) {
-    const rx = diffDays(d.origin_date, d.runout_date)
-    let x = rx
-    const cur = rows.find((r) => r.x === rx)
-    const prev = rows.find((r) => r.x === rx - 1)
-    // Điểm P50 cắt y = 0: nội suy giữa ngày trước và ngày cạn để chấm nằm đúng trên đường.
-    if (cur && prev && prev.p50 > 0 && cur.p50 <= 0) x = prev.x + prev.p50 / (prev.p50 - cur.p50)
-    if (rx >= 0 && rx <= lastX) runout = { x, date: d.runout_date }
-  }
+  const runout = runoutPoint({ origin: d.origin_date, runout: d.runout_date }, rows, (r) => r.p50, lastX)
+  const afterRunout = after ? runoutPoint({ origin: d.origin_date, runout: after.runout_date }, rows, (r) => r.after, lastX) : null
 
   const px = diffDays(d.origin_date, d.payday.date)
   const paydayX = px >= 0 && px <= lastX ? px : null
   const shortfallRange = runout ? { x1: runout.x, x2: Math.max(runout.x, paydayX ?? lastX) } : null
 
-  return { rows, lastX, yMin: yTicks[0]!, yMax: yTicks[yTicks.length - 1]!, yTicks, xTicks: xTickList(lastX), events, runout, paydayX, shortfallRange }
+  const eventLevels = stackLevels(events.map((e) => e.x))
+  return {
+    rows,
+    lastX,
+    yMin: yTicks[0]!,
+    yMax: yTicks[yTicks.length - 1]!,
+    yTicks,
+    xTicks: xTickList(lastX),
+    events,
+    runout,
+    paydayX,
+    shortfallRange,
+    hasCompare: after !== undefined,
+    afterRunout,
+    eventLevels,
+  }
 }
 
 /** Nhãn ngày dd/mm của tọa độ x. */

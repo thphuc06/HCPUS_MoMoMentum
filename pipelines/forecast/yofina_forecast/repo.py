@@ -46,6 +46,14 @@ SQL_INSERT_DAY = (
     "VALUES (CAST(:run AS uuid), :uid, :jar, CAST(:day AS date), CAST(:s10 AS numeric), CAST(:s50 AS numeric), "
     "CAST(:s90 AS numeric), CAST(:b10 AS numeric), CAST(:b50 AS numeric), CAST(:b90 AS numeric))"
 )
+SQL_INSERT_SCENARIO = (
+    "INSERT INTO scenarios (id, user_id, trace_id, kind, spec, spec_hash, app_date, baseline_run_id, n_paths, seed, result) "
+    "VALUES (CAST(:id AS uuid), :uid, :trace_id, :kind, CAST(:spec AS jsonb), :spec_hash, CAST(:app_date AS date), "
+    "CAST(:run AS uuid), :n_paths, :seed, CAST(:result AS jsonb))"
+)
+SQL_PRUNE_SCENARIOS = (
+    "SELECT app_prune_scenarios(CAST(:uid AS text), CAST(:keep AS integer)) AS removed"
+)
 BATCH_CHUNK = 400  # Data API cho tối đa 1.000 bộ tham số mỗi lần; chừa dư
 
 
@@ -162,6 +170,43 @@ class ForecastRepo:
                 tx.batch(SQL_INSERT_DAY, days[i : i + BATCH_CHUNK])
             tx.execute(SQL_PRUNE, {"uid": user_id, "keep": keep_runs})
         return run_id
+
+
+def save_scenario(
+    repo: ForecastRepo,
+    user_id: str,
+    *,
+    scenario_id: str,
+    trace_id: str,
+    kind: str,
+    spec: Mapping[str, Any],
+    spec_hash: str,
+    app_date: date,
+    baseline_run_id: str | None,
+    n_paths: int,
+    seed: int | None,
+    result: Mapping[str, Any],
+    keep: int,
+) -> None:
+    """Ghi một kịch bản đã chạy (dữ liệu DẪN XUẤT, không phải sổ cái; bảng `scenarios`) rồi dọn bớt bản cũ, trong một transaction."""
+    with repo.db.transaction(user_id) as tx:
+        tx.execute(
+            SQL_INSERT_SCENARIO,
+            {
+                "id": scenario_id,
+                "uid": user_id,
+                "trace_id": trace_id,
+                "kind": kind,
+                "spec": json.dumps(spec, ensure_ascii=False, separators=(",", ":")),
+                "spec_hash": spec_hash,
+                "app_date": app_date,
+                "run": baseline_run_id,
+                "n_paths": n_paths,
+                "seed": seed,
+                "result": json.dumps(result, ensure_ascii=False, separators=(",", ":")),
+            },
+        )
+        tx.execute(SQL_PRUNE_SCENARIOS, {"uid": user_id, "keep": keep})
 
 
 def to_date(value: Any) -> date | None:

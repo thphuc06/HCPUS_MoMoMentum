@@ -29,10 +29,14 @@ export type ChatProviderProps = {
   agentUrl: string
   repository: ConversationRepository
   fetchImpl?: typeof fetch
+  /** Làm nóng phiên khi mở sheet (mặc định bật; cấu hình `VITE_CHAT_WARMUP=0` để tắt). */
+  warmupEnabled?: boolean
+  /** Cửa sổ Hoàn tác (ms), mặc định 30 giây. */
+  undoWindowMs?: number
   children: ReactNode
 }
 
-export function ChatProvider({ agentUrl, repository, fetchImpl, children }: ChatProviderProps) {
+export function ChatProvider({ agentUrl, repository, fetchImpl, warmupEnabled = true, undoWindowMs = 30_000, children }: ChatProviderProps) {
   const { session: auth, getAccessToken } = useAuth()
   const userKey = auth?.email ?? 'anonymous'
 
@@ -73,6 +77,7 @@ export function ChatProvider({ agentUrl, repository, fetchImpl, children }: Chat
 
   const warmed = useRef<string | null>(null)
   const warmUp = useCallback(() => {
+    if (!warmupEnabled) return
     const id = session.getSnapshot().conversationId
     if (warmed.current === id) return
     warmed.current = id
@@ -97,7 +102,7 @@ export function ChatProvider({ agentUrl, repository, fetchImpl, children }: Chat
       .catch(() => {
         // Làm nóng chỉ là tối ưu độ trễ: lỗi thì bỏ qua, lượt chat đầu sẽ chịu cold start.
       })
-  }, [session, agentUrl, fetchImpl, getAccessToken])
+  }, [session, agentUrl, fetchImpl, getAccessToken, warmupEnabled])
 
   const startNew = useCallback(() => {
     clearConversationId(userKey)
@@ -109,10 +114,15 @@ export function ChatProvider({ agentUrl, repository, fetchImpl, children }: Chat
 
   const actions = useMemo<ChatActions>(
     () => ({
-      replaceBlock: (id, raw, newId) => session.replaceBlock(id, raw, newId),
+      replaceBlock: (id, raw, newId, opts) => session.replaceBlock(id, raw, newId, opts),
       markBlock: (id, ui) => session.markBlock(id, ui),
       addSystemNote: (text, key) => session.addSystemNote(text, key),
       getConversationId: () => session.getConversationId(),
+      ask: (text) => void session.send(text),
+      retryLast: () => void session.retry(),
+      askAgain: () => void session.askAgain(),
+      revealBlock: (id) => session.revealBlock(id),
+      undoWindowMs,
       // Server là nguồn sự thật về việc một đề nghị đã thực hiện chưa: chỉ vá trạng thái, không dựng lại cả hội thoại.
       reloadConversation: async () => {
         const id = session.getConversationId()
@@ -125,7 +135,7 @@ export function ChatProvider({ agentUrl, repository, fetchImpl, children }: Chat
         }
       },
     }),
-    [session, repository],
+    [session, repository, undoWindowMs],
   )
 
   const value = useMemo<ChatContextValue>(

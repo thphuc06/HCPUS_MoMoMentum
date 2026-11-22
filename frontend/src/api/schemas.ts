@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import {
   ActionChange,
+  AffordabilityCardBlock,
+  BlockId,
+  ExplainBlock,
+  TraceId,
   ConfidenceBand,
   ForecastTimelineBlock,
   IsoDate,
@@ -378,3 +382,64 @@ export type ResetResponse = z.infer<typeof ResetResponse>
 /** Khối dự báo do GET /forecasts/{jar_code} trả (cùng khối `forecast_timeline` trong chat). */
 export const ForecastResponse = ForecastTimelineBlock
 export type ForecastResponse = z.infer<typeof ForecastResponse>
+
+// ---------------------------------------------------------------- phase 3: kiểm tra trước khi quẹt, "Vì sao", phản hồi
+
+/** POST /affordability: `funding_source` vắng thì xét cả hai nguồn; `jar` chỉ có nghĩa khi nguồn là hũ; `date` vắng là hôm nay mô phỏng. */
+export const AffordabilityRequest = z.object({
+  amount_vnd: VndPositive,
+  funding_source: z.enum(['jar', 'credit']).optional(),
+  jar: JarCode.optional(),
+  label: z.string().min(1).max(60).optional(),
+  date: IsoDate.optional(),
+})
+export type AffordabilityRequest = z.infer<typeof AffordabilityRequest>
+
+/** Trả khối `affordability_card` (cả phong bì), cùng khối và cùng số với tool `forecast___affordability_check` trong chat. */
+export const AffordabilityResponse = AffordabilityCardBlock
+export type AffordabilityResponse = z.infer<typeof AffordabilityResponse>
+
+const TraceBlockRef = z.object({ id: BlockId, type: z.string().min(1).max(40) })
+const TraceStep = z.object({ step: z.string().min(1).max(40), ms: z.int().min(0) })
+const TokenUsage = z.object({
+  input_tokens: z.int().min(0),
+  output_tokens: z.int().min(0),
+  model_calls: z.int().min(0),
+  cache_read_tokens: z.int().min(0).optional(),
+})
+export const TraceDetail = z.object({
+  intent: z.string().max(32).optional(),
+  outcome: z.enum(['ok', 'rejected', 'error']).optional(),
+  blocks_emitted: z.array(TraceBlockRef).max(40),
+  token_usage: TokenUsage,
+  step_timings: z.array(TraceStep).max(30),
+  duration_ms: z.int().min(0),
+})
+export type TraceDetail = z.infer<typeof TraceDetail>
+
+/** GET /traces/{trace_id}: khối `explain` đã dựng (đúng thứ bảng "Vì sao" hiển thị) cộng chi tiết kỹ thuật. */
+export const TraceResponse = z.object({
+  trace_id: TraceId,
+  created_at: IsoDateTime,
+  explain: ExplainBlock,
+  detail: TraceDetail,
+})
+export type TraceResponse = z.infer<typeof TraceResponse>
+
+/** POST /feedback: không qua token (không đụng tiền). Idempotent theo (trace_id, block_id, option_id). */
+export const FeedbackRequest = z.object({
+  trace_id: TraceId,
+  block_id: BlockId.optional(),
+  option_id: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
+  decision: z.enum(['accepted', 'rejected']),
+  scenario_id: Uuid.optional(),
+  reason: z.string().min(1).max(200).optional(),
+})
+export type FeedbackRequest = z.infer<typeof FeedbackRequest>
+
+export const FeedbackResponse = z.object({
+  feedback_id: Uuid,
+  decision: z.enum(['accepted', 'rejected']),
+  recorded_at: IsoDateTime,
+})
+export type FeedbackResponse = z.infer<typeof FeedbackResponse>

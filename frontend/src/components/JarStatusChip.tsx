@@ -8,7 +8,7 @@ import type { JarFull } from '@/api/schemas'
  */
 export function JarStatusChip({ jar, className }: { jar: Pick<JarFull, 'status' | 'runout_date' | 'balance_vnd'>; className?: string }) {
   if (jar.status) {
-    const c = jarStatusChip(jar.status, jar.runout_date)
+    const c = jarStatusChip(jar.status, jar.runout_date, jar.balance_vnd <= 0)
     return (
       <StatusChip kind={c.kind} className={className}>
         {c.label}

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createApiClient, REQUEST_TIMEOUT_MS, RESET_TIMEOUT_MS } from './client'
 import { ApiError, ERROR_CODES, ERROR_MESSAGES, HTTP_STATUS, apiErrorFromResponse } from './errors'
-import { validBlock } from '@/test/fixtures'
+import { restFixture, validBlock } from '@/test/fixtures'
 import { jarsFromFixture } from '@/test/helpers'
 import { AuthError } from '@/auth/types'
 
@@ -160,6 +160,51 @@ describe('hết giờ chờ', () => {
   it('lỗi mạng thường vẫn là NETWORK', async () => {
     const { api } = setup([new TypeError('Failed to fetch')])
     expect((await api.getJars().catch((e) => e)).code).toBe('NETWORK')
+  })
+})
+
+describe('REST phase 3', () => {
+  it('POST /affordability gửi thân yêu cầu và trả khối affordability_card đã kiểm schema', async () => {
+    const req = restFixture('AffordabilityRequest.transfer') as { amount_vnd: number; label: string }
+    const { api, calls } = setup([json(200, restFixture('AffordabilityResponse.transfer'))])
+    const r = await api.checkAffordability(req)
+    expect(r.type).toBe('affordability_card')
+    expect(calls[0]!.url).toBe(`${BASE}/affordability`)
+    expect(calls[0]!.init.method).toBe('POST')
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual(req)
+  })
+
+  it('GET /traces/{id}: mã trace được mã hóa trong đường dẫn; trả khối explain và chi tiết', async () => {
+    const { api, calls } = setup([json(200, restFixture('TraceResponse.what_if'))])
+    const r = await api.getTrace('8f3a21c94b7e4d0aa1c25e6f7b8c9d01')
+    expect(calls[0]!.url).toBe(`${BASE}/traces/8f3a21c94b7e4d0aa1c25e6f7b8c9d01`)
+    expect(calls[0]!.init.method).toBe('GET')
+    expect(r.explain.type).toBe('explain')
+    expect(r.detail.token_usage.model_calls).toBeGreaterThan(0)
+  })
+
+  it('GET /traces: 404 TRACE_NOT_FOUND là lỗi có thông báo tiếng Việt', async () => {
+    const { api } = setup([json(404, { error: { code: 'TRACE_NOT_FOUND', message: 'x' } })])
+    const e = await api.getTrace('abc').catch((x) => x)
+    expect(e).toBeInstanceOf(ApiError)
+    expect(e.code).toBe('TRACE_NOT_FOUND')
+    expect(e.message).toBe(ERROR_MESSAGES.TRACE_NOT_FOUND)
+  })
+
+  it('POST /feedback gửi đúng thân JSON, không có Authorization nào khác ngoài Bearer', async () => {
+    const req = restFixture('FeedbackRequest.accepted')
+    const { api, calls } = setup([json(200, restFixture('FeedbackResponse.default'))])
+    const r = await api.submitFeedback(req as never)
+    expect(r.decision).toBe('accepted')
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual(req)
+    expect(headers(calls[0]!).authorization).toBe('Bearer tok-cu')
+  })
+
+  it('410 OFFER_EXPIRED giữ mã riêng (khác TOKEN_EXPIRED)', async () => {
+    const { api } = setup([json(410, { error: { code: 'OFFER_EXPIRED', message: 'x' } })])
+    const e = await api.applyAction({ tool: 'move_between_jars', params: move }).catch((x) => x)
+    expect(e.code).toBe('OFFER_EXPIRED')
+    expect(e.status).toBe(410)
   })
 })
 

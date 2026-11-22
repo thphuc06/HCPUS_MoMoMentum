@@ -74,7 +74,7 @@ def test_so_du_thu_tu_event_va_khoi_truoc_tool_call_result(monkeypatch):
     assert tool_names(events) == [JAR_TOOL]
     r = result_of(events)
     assert (r["intent"], r["degraded"], r["model_calls"], r["tool_calls"]) == (
-        "balance_lookup",
+        "lookup",
         False,
         1,
         1,
@@ -154,17 +154,16 @@ def test_chuyen_hu_thieu_so_tien_thi_hoi_lai_khong_goi_tool(monkeypatch):
                 intent="move_between_jars",
                 from_jar_text="giải trí",
                 to_jar_text="ăn uống",
-                needs_clarification=True,
-                reply="Bạn muốn chuyển bao nhiêu?",
             )
         ]
     )
     events, tools, _ = run_turn("chuyển từ giải trí sang ăn uống", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert tools.calls == []
-    assert [e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"] == [
-        "Bạn muốn chuyển bao nhiêu?"
-    ]
+    assert tools.calls == []  # đúng một câu hỏi lại (khối clarify), không gọi tool
+    (clarify,) = blocks_of(events)
+    assert clarify["type"] == "clarify" and clarify["data"]["slot"] == "amount"
+    assert clarify["data"]["question"].count("?") == 1 and clarify["data"]["pending_intent"] == "move"
+    assert [e for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"] == []
 
 
 def test_chuyen_hu_khong_ro_ten_hu_thi_hien_so_du_that_va_hoi_lai(monkeypatch):
@@ -320,9 +319,12 @@ def test_ngoai_pham_vi_co_khoi_notice_va_cau_noi_ro_gioi_han(monkeypatch):
     events, tools, _ = run_turn("câu nào đó", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
     assert tools.calls == []
-    n = blocks_of(events)[0]
-    assert n["type"] == "notice" and n["data"]["kind"] == "out_of_scope"
-    assert any("cổ phiếu" in e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT")
+    assert block_types(events) == ["notice", "suggestions"]
+    n, sug = blocks_of(events)
+    assert n["data"]["kind"] == "out_of_scope" and sug["data"]["context"] == "out_of_scope"
+    assert sug["data"]["can_do"] and sug["data"]["cannot_do"] and sug["data"]["items"]
+    # lời từ chối là chuỗi sản phẩm, không phải lời model (nên không thể lọt mã chứng khoán)
+    assert [e for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"] == []
 
 
 def test_xa_giao_dung_cau_tra_loi_cua_router(monkeypatch):
@@ -352,7 +354,7 @@ def test_cham_tran_thi_van_tra_the_so_du_va_notice_khong_goi_model(monkeypatch):
     assert writer.calls == []  # không thử viết chữ khi model đã chạm trần
     assert llm[1].calls == []  # không có lời gọi Bedrock nào
     r = result_of(events)
-    assert r["degraded"] is True and r["model_calls"] == 0 and r["intent"] == "balance_lookup"
+    assert r["degraded"] is True and r["model_calls"] == 0 and r["intent"] == "lookup"
 
 
 def test_tran_bang_0_theo_cau_hinh_cung_di_duong_suy_giam(monkeypatch):
@@ -609,7 +611,9 @@ def test_hoi_du_bao_mot_hu_goi_tool_forecast_phat_khoi_timeline_va_nho_writer(mo
         ("get_forecast", {"jar": "an_uong"})
     ]  # mã hũ ánh xạ từ dữ liệu tool
     assert tool_names(events) == [JAR_TOOL, FORECAST_TOOL]  # tool dự báo thuộc target `forecast`
-    assert block_types(events) == ["forecast_timeline"]
+    # độ phủ của fixture (0,62) thấp hơn ngưỡng cấu hình nên có thêm notice độ tin cậy thấp
+    assert block_types(events) == ["forecast_timeline", "notice"]
+    assert blocks_of(events)[1]["data"]["degraded_reason"] == "low_coverage"
     block = blocks_of(events)[0]
     want = fixture("get_forecast.ok.json")["data"]
     assert block["data"] == want  # số trong khối là số của tool, nguyên vẹn
@@ -628,7 +632,7 @@ def test_hoi_du_bao_mot_hu_goi_tool_forecast_phat_khoi_timeline_va_nho_writer(mo
     )
     # mọi số tiền model được phép nhắc đều có trong kết quả tool
     assert allowed_amounts(c) >= {380_000, 375_000, 2_700_000}
-    assert result_of(events)["intent"] == "forecast_lookup" and result_of(events)["tool_calls"] == 2
+    assert result_of(events)["intent"] == "lookup" and result_of(events)["tool_calls"] == 2
 
 
 def test_du_bao_khong_nhom_hu_nao_thi_hoi_lai_khong_goi_tool_forecast(monkeypatch):
@@ -636,17 +640,15 @@ def test_du_bao_khong_nhom_hu_nao_thi_hoi_lai_khong_goi_tool_forecast(monkeypatc
         [
             route_response(
                 intent="forecast_lookup",
-                needs_clarification=True,
-                reply="Bạn muốn xem dự báo hũ nào?",
+                clarify={"slot": "jar", "question": "Bạn muốn xem dự báo hũ nào?", "chips": []},
             )
         ]
     )
     events, tools, _ = run_turn("dự báo giúp mình", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
     assert forecast_calls(tools) == []
-    assert [e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"] == [
-        "Bạn muốn xem dự báo hũ nào?"
-    ]
+    (clarify,) = blocks_of(events)
+    assert clarify["type"] == "clarify" and clarify["data"]["question"] == "Bạn muốn xem dự báo hũ nào?"
 
 
 def test_du_bao_hu_khong_co_thi_hien_so_du_that_va_hoi_lai(monkeypatch):
@@ -683,11 +685,12 @@ def test_du_bao_khi_model_loi_van_tra_khoi_timeline_bang_bo_phan_loai_du_phong(m
     assert block_types(events) == [
         "forecast_timeline",
         "notice",
-    ]  # số thật từ tool + thông báo suy giảm
+        "notice",
+    ]  # số thật từ tool + notice độ tin cậy thấp (độ phủ của fixture) + thông báo suy giảm
     assert forecast_calls(tools) == [("get_forecast", {"jar": "an_uong"})]
     assert writer.calls == [] and llm[1].calls == []
     assert (
-        result_of(events)["intent"] == "forecast_lookup" and result_of(events)["degraded"] is True
+        result_of(events)["intent"] == "lookup" and result_of(events)["degraded"] is True
     )
 
 

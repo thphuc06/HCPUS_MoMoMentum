@@ -4,13 +4,14 @@ import type { z } from 'zod'
 import { BLOCK_TYPES, blockSchemas, type BlockType } from '@/contracts/blocks'
 import type { BlockUi } from '@/chat/session'
 import { ConfirmView, JarSummaryView, NoticeView, ReceiptView, type BlockViewProps } from './views'
+import { AffordabilityCardView, ClarifyView, ExplainView, ObligationImpactView, OptionsView, SuggestionsView } from './phase3Views'
 import { ConfirmActionView, ForecastTimelineView, ProactiveCardView, ReceiptActionView } from './walletViews'
 
 // Registry `type -> { schema Zod, Component }`. Thêm một loại khối: schema ở contracts/ (sinh Zod), một dòng ở đây.
 // Parse TỪNG khối riêng; type lạ hoặc sai schema hiện fallback_text; error boundary bọc từng khối.
 
 type Entry = {
-  render: (raw: unknown, props: { blockId: string; ui?: BlockUi }) => ReactNode
+  render: (raw: unknown, props: { blockId: string; ui?: BlockUi; doneAt?: number; stale?: boolean }) => ReactNode
   parse: (raw: unknown) => boolean
 }
 
@@ -20,7 +21,7 @@ function defineBlock<S extends z.ZodType>(schema: S, View: ComponentType<BlockVi
     render: (raw, props) => {
       const parsed = schema.safeParse(raw)
       if (!parsed.success) return null
-      return <View block={parsed.data} blockId={props.blockId} ui={props.ui} />
+      return <View block={parsed.data} blockId={props.blockId} ui={props.ui} doneAt={props.doneAt} stale={props.stale} />
     },
   }
 }
@@ -34,6 +35,12 @@ export const registry: Record<BlockType, Entry> = {
   proactive_card: defineBlock(blockSchemas.proactive_card, ProactiveCardView),
   confirm_action: defineBlock(blockSchemas.confirm_action, ConfirmActionView),
   receipt_action: defineBlock(blockSchemas.receipt_action, ReceiptActionView),
+  affordability_card: defineBlock(blockSchemas.affordability_card, AffordabilityCardView),
+  obligation_impact: defineBlock(blockSchemas.obligation_impact, ObligationImpactView),
+  options: defineBlock(blockSchemas.options, OptionsView),
+  explain: defineBlock(blockSchemas.explain, ExplainView),
+  clarify: defineBlock(blockSchemas.clarify, ClarifyView),
+  suggestions: defineBlock(blockSchemas.suggestions, SuggestionsView),
 }
 
 export const REGISTERED_TYPES = BLOCK_TYPES
@@ -84,7 +91,7 @@ class BlockBoundary extends Component<{ raw: unknown; children: ReactNode }, { f
   }
 }
 
-export function BlockRenderer({ raw, blockId, ui }: { raw: unknown; blockId: string; ui?: BlockUi }) {
+export function BlockRenderer({ raw, blockId, ui, doneAt, stale }: { raw: unknown; blockId: string; ui?: BlockUi; doneAt?: number; stale?: boolean }) {
   const type = raw && typeof raw === 'object' ? (raw as { type?: unknown }).type : undefined
   if (!isBlockType(type)) return <FallbackBlock raw={raw} reason="unknown_type" />
   const entry = registry[type]
@@ -93,5 +100,5 @@ export function BlockRenderer({ raw, blockId, ui }: { raw: unknown; blockId: str
     console.warn('[block] sai schema', type)
     return <FallbackBlock raw={raw} reason={typeof v === 'number' && v > 1 ? 'newer_version' : 'invalid_schema'} />
   }
-  return <BlockBoundary raw={raw}>{entry.render(raw, { blockId, ui })}</BlockBoundary>
+  return <BlockBoundary raw={raw}>{entry.render(raw, { blockId, ui, doneAt, stale })}</BlockBoundary>
 }

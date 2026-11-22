@@ -4,7 +4,10 @@ import { ApiProvider } from '@/api/ApiProvider'
 import { OverviewProvider } from '@/api/OverviewProvider'
 import type { ApiClient } from '@/api/client'
 import type {
+  AffordabilityResponse,
   CreditLineResponse,
+  FeedbackResponse,
+  TraceResponse,
   ForecastResponse,
   JarDetailResponse,
   JarTemplatesResponse,
@@ -75,6 +78,9 @@ export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
     resetDemo: vi.fn(async () => {
       throw new Error('resetDemo chưa được giả')
     }),
+    checkAffordability: vi.fn(async () => validBlock('affordability_card.transfer_250k') as unknown as AffordabilityResponse),
+    getTrace: vi.fn(async () => fx<TraceResponse>('TraceResponse.what_if')),
+    submitFeedback: vi.fn(async (req) => ({ ...fx<FeedbackResponse>('FeedbackResponse.default'), decision: req.decision })),
     ...over,
   }
 }
@@ -89,6 +95,11 @@ export function fakeChatActions() {
     addSystemNote: vi.fn<ChatActions['addSystemNote']>(),
     getConversationId: vi.fn<ChatActions['getConversationId']>(() => CONVERSATION_ID),
     reloadConversation: vi.fn<ChatActions['reloadConversation']>(async () => {}),
+    ask: vi.fn<ChatActions['ask']>(),
+    retryLast: vi.fn<ChatActions['retryLast']>(),
+    askAgain: vi.fn<ChatActions['askAgain']>(),
+    revealBlock: vi.fn<ChatActions['revealBlock']>(),
+    undoWindowMs: 30_000,
   }
 }
 

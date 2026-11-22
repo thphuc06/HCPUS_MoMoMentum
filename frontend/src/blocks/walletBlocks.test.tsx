@@ -7,7 +7,7 @@ import { ApiError } from '@/api/errors'
 import { ChatLauncherContext } from '@/chat/launcher'
 import type { BlockUi } from '@/chat/session'
 import type { ActionResponse } from '@/api/schemas'
-import { BLOCK_TYPES, blockSchemas } from '@/contracts/blocks'
+import { ALL_BLOCK_TYPES, BLOCK_TYPES, blockSchemas } from '@/contracts/blocks'
 import { CONVERSATION_ID, Providers, fakeApi, fakeChatActions } from '@/test/helpers'
 import { restFixture, validBlock } from '@/test/fixtures'
 import { forecastSummary } from '@/features/forecast/ForecastBlock'
@@ -17,12 +17,13 @@ import { receiptNote } from './useConfirmFlow'
 type Json = Record<string, any>
 
 describe('registry: đủ tám khối của hợp đồng', () => {
-  it('bốn khối phase 2 đã đăng ký, có schema, và BLOCK_TYPES khớp ALL_BLOCK_TYPES', () => {
-    for (const t of ['forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action'] as const) {
+  it('bốn khối phase 2 và sáu khối phase 3 đã đăng ký, có schema; BLOCK_TYPES khớp ALL_BLOCK_TYPES', () => {
+    for (const t of ['forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action', 'affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions'] as const) {
       expect(REGISTERED_TYPES).toContain(t)
       expect(blockSchemas[t]).toBeDefined()
     }
-    expect(BLOCK_TYPES).toHaveLength(8)
+    expect(BLOCK_TYPES).toHaveLength(14)
+    expect([...BLOCK_TYPES].sort()).toEqual([...ALL_BLOCK_TYPES].sort())
   })
 })
 
@@ -151,7 +152,7 @@ describe('confirm_action: xác nhận trước khi ghi (ADR-0002)', () => {
     const ref = { conversation_id: CONVERSATION_ID, confirm_block_id: block.id }
     expect(api.createConfirmation).toHaveBeenCalledWith({ tool: block.data.tool, params: block.data.params, params_hash: block.data.params_hash, ...ref })
     expect(api.applyAction).toHaveBeenCalledWith({ tool: 'record_transaction', params: block.data.params, confirm_token: 'abc.def', ...ref })
-    expect(actions.replaceBlock).toHaveBeenCalledWith(block.id, receipt, receipt.id)
+    expect(actions.replaceBlock).toHaveBeenCalledWith(block.id, receipt, receipt.id, { fresh: true })
     expect(actions.addSystemNote).toHaveBeenCalledWith(receiptNote(receipt), receipt.id)
     // Tổng quan nạp lần đầu + lần làm mới sau khi ghi
     await waitFor(() => expect(api.getOverview).toHaveBeenCalledTimes(2))

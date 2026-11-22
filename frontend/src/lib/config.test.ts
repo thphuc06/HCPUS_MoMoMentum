@@ -55,6 +55,17 @@ describe('cấu hình từ import.meta.env', () => {
     expect(r.ok && r.config.replayEnabled).toBe(false)
   })
 
+  it('làm nóng phiên mặc định bật, VITE_CHAT_WARMUP=0 tắt; cửa sổ Hoàn tác mặc định 30 giây và bị kẹp trong 5 đến 300', () => {
+    const on = parseConfig({ ...base, VITE_AGENT_RUNTIME_URL: 'https://rt.example.invalid/i' })
+    expect(on.ok && on.config.warmupEnabled).toBe(true)
+    expect(on.ok && on.config.undoWindowSeconds).toBe(30)
+    const off = parseConfig({ ...base, VITE_AGENT_RUNTIME_URL: 'https://rt.example.invalid/i', VITE_CHAT_WARMUP: '0', VITE_UNDO_WINDOW_SECONDS: '1000' })
+    expect(off.ok && off.config.warmupEnabled).toBe(false)
+    expect(off.ok && off.config.undoWindowSeconds).toBe(300)
+    const low = parseConfig({ ...base, VITE_AGENT_RUNTIME_URL: 'https://rt.example.invalid/i', VITE_UNDO_WINDOW_SECONDS: '1' })
+    expect(low.ok && low.config.undoWindowSeconds).toBe(5)
+  })
+
   it('giá trị rỗng coi như thiếu', () => {
     const r = parseConfig({ ...base, VITE_COGNITO_CLIENT_ID: '  ', VITE_AGENT_RUNTIME_URL: 'https://rt.example.invalid/i' })
     expect(r.ok).toBe(false)
