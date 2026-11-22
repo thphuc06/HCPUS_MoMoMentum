@@ -8,6 +8,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { YofinaConfig } from '../config/config';
+import { YofinaGuardrail } from './guardrail';
 import { publishParams } from './ssm-outputs';
 import { ToolsConfig } from './tools-stack';
 
@@ -273,6 +274,7 @@ export class AgentStack extends Stack {
         modelArns.push(`arn:aws:bedrock:${this.region}::foundation-model/${m}`);
       }
     }
+    const guardrail = new YofinaGuardrail(this, 'Guardrail');
     const runtimeRole = new iam.Role(this, 'RuntimeRole', {
       roleName: `${p}-agent-runtime`,
       assumedBy: new iam.PrincipalWithConditions(new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'), {
@@ -307,7 +309,16 @@ export class AgentStack extends Stack {
           ssmArn(`${p}/dynamodb/usage-table`),
           ssmArn(`${p}/llm`),
           ssmArn(`${p}/llm/*`),
+          ssmArn(`${p}/guardrail/id`),
+          ssmArn(`${p}/guardrail/version`),
         ],
+      }),
+    );
+    runtimeRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'ApplyGuardrail',
+        actions: ['bedrock:ApplyGuardrail'],
+        resources: [guardrail.guardrailArn, guardrail.profileArn],
       }),
     );
     runtimeRole.addToPolicy(
@@ -390,6 +401,7 @@ export class AgentStack extends Stack {
       },
     });
     runtime.node.addDependency(runtimeRole);
+    runtime.node.addDependency(guardrail);
 
     const runtimeUrl = Fn.join('', [
       `https://bedrock-agentcore.${this.region}.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3A${this.region}%3A${this.account}%3Aruntime%2F`,
