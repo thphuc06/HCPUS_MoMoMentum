@@ -106,4 +106,23 @@ Sở hữu: `frontend/`.
 
 ## Kết quả thực hiện
 
-(Điền khi đóng phase.)
+### Luồng A (F6 nạp dữ liệu) — xong và deploy 23/11; các luồng B, C, D, E (phần ngoài F6) chưa làm
+
+Làm song song với phase 3 trên nhánh `feat/ingest`, merge vào `main` ở `82de21d`. Thiết kế: [contracts/README.md](../../contracts/README.md) mục "Phase 5 (F6)"; ghi chú ghép: [ingest-merge-notes.md](../ingest-merge-notes.md).
+
+- **Đã có**: migration `0050_ingest` (nguồn trả `external` không bao giờ đổi số dư hũ; bảng `ingest_jobs`, `ingest_rows`, `consents` RLS FORCE; độ phủ dữ liệu tính cả thu chi ngoài ví), stack `YofinaIngest` (bucket, SQS + DLQ, `yofina-ingest-api`, worker `yofina-ingest`), trích ảnh bằng Sonnet 4.6 (dự phòng Kimi K3), CSV bằng parser + Nova 2 Lite, che PII trước khi lưu, khử trùng chéo nguồn, gán hũ (loại giao dịch, luật, rồi model), `confirm_rows` có token qua `/ingest/confirmations` + `/ingest/actions` rồi tính lại dự báo, màn I1–I4 (Tổng quan → Tiền vào → "Nạp ảnh / sao kê ngoài ví"), persona `vy` cho `giamkhao3`.
+- **Kiểm trên môi trường thật** (`tests/integration/test_ingest_live.py`, 11/11, 23/11): nạp `data/personas/samples/vy_sao_ke_vcb.csv` tới bước duyệt, đổi hũ một dòng, chốt bằng token; độ phủ tăng (0,664 lên 0,839 theo bộ sinh); số dư hũ và tổng ví không đổi; token dùng lại bị chặn (`TOKEN_REUSED`), chốt lại job đã xong bị chặn (`ALREADY_APPLIED`); nạp lại cùng tệp bị từ chối (`INGEST_DUPLICATE_FILE`); ảnh không phải tài liệu tài chính bị từ chối (`INGEST_NOT_FINANCIAL`); đặt lại demo xóa job, đồng ý và dòng nạp.
+- **Eval trích xuất với Bedrock thật** (`scripts/eval_ingest.py`, 58 mục, 22/11, 0 lỗi chạy):
+
+| Chỉ số | Ảnh thật (25, nhãn do agent đọc, chờ chủ dự án duyệt) | Dựng (33: 28 ảnh, 5 CSV) |
+|---|---|---|
+| Số tiền đúng | 22/25 (88%) | 123/125 (98%) |
+| Ngày đúng | 16/21 (76%) | 123/125 (98%) |
+| Đủ 4 trường trên ảnh đọc được | 7/12 (58%) | 23/24 (96%) |
+| Gắn hũ đúng | 1/1 | 86/105 (82%) |
+| Tỷ lệ dòng vào hàng chờ duyệt | 22/23 (96%) | 39/123 (32%) |
+| Màn chưa thực hiện không tự thêm | 8/8 | — |
+| Tấn công an toàn / không lộ PII | — / 10/10 | 5/5 / 1/1 |
+| Báo `not_financial` đúng | 1/5 | 3/3 |
+
+- **Lệch và hạn chế**: bảng phí, menu, màn ATM được model xếp "tài liệu tài chính khác" nên không tạo dòng nhưng mã lỗi khác nhãn `not_financial` (1/5); eval chạy không DB nên "trùng lặp được đánh dấu" là 0% (khử trùng thật dựa trên DB, đã kiểm bằng local_pg và test tích hợp); ảnh thật có độ đủ trường thấp (58%) nên gần như mọi dòng ảnh thật vào hàng chờ, đúng thiết kế an toàn. Chưa có tool Gateway `ingest___*` và intent "mình vừa nạp ảnh" trong chat; chưa dùng phân loại phase 4; chưa đi màn I1–I4 trên trình duyệt với backend thật (đã kiểm bằng `dev:mock` 390x844 và bằng test tích hợp REST).
