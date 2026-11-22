@@ -45,6 +45,7 @@ export class DataStack extends Stack {
       writer: rds.ClusterInstance.serverlessV2('writer', { publiclyAccessible: false }),
       serverlessV2MinCapacity: cfg.dbMinAcu,
       serverlessV2MaxCapacity: cfg.dbMaxAcu,
+      ...(cfg.dbMinAcu === 0 ? { serverlessV2AutoPauseDuration: Duration.seconds(cfg.dbAutoPauseSeconds) } : {}),
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       credentials: rds.Credentials.fromGeneratedSecret('yofina_admin', { secretName: `${p}-db-master` }),

@@ -25,7 +25,7 @@ Không thuộc dự án, không được đụng: cluster Aurora và Cognito use
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
 |---|---|---|---|---|
 | `yofina-db` | Aurora PostgreSQL 17.11 cluster | 1 | Có (cùng với instance, xem dưới) | Serverless v2, Data API, mã hóa lưu trữ, deletion protection, backup 1 ngày, không public; DB `yofina` |
-| `yofina-db` writer instance | Aurora serverless v2 instance | 1 | **Có: 0,5 ACU liên tục, khoảng 73 USD/tháng** | min 0,5, max 2 ACU; khoản lớn nhất của dự án |
+| `yofina-db` writer instance | Aurora serverless v2 instance | 1 | Có khi thức (0,5–2 ACU); 0 khi ngủ | Từ 22/11: min 0, max 2 ACU, tự ngủ sau 600 giây rảnh (`dbAutoPauseSeconds`). Lúc chạy liên tục 0,5 ACU khoảng 73 USD/tháng. Trước demo deploy lại với `-c dbMinAcu=0.5` |
 | `yofina-vpc` | VPC + 2 subnet isolated, route table, security group, DB subnet group | 1 | Không | 0 NAT Gateway, 0 VPC endpoint, không Internet Gateway |
 | `yofina-db-master` | Secrets Manager | 1 | Có (0,40 USD/tháng) | Do RDS/CDK sinh, chỉ migrator đọc; user `yofina_admin` |
 | `yofina-db-app` | Secrets Manager | 1 | Có (0,40 USD/tháng) | Role `yofina_app` (non-owner, NOBYPASSRLS); mọi tool dùng secret này |

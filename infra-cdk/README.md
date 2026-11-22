@@ -30,7 +30,7 @@ Mặc định ở [config/config.ts](config/config.ts); đổi bằng context (`
 | `budgetScope` | `account` | `account`: cả tài khoản; `tag`: chỉ chi phí gắn tag `project=yofina` (cần bật cost allocation tag `project` ở Billing, có hiệu lực sau khoảng 24 giờ) |
 | `alertEmail` | (không) | Email nhận cảnh báo. **Không ghi vào repo**: lưu ở SSM `/yofina/alert-email` (SecureString), `scripts/cdk.py` tự đọc và truyền vào |
 | `dbEngineVersion` | `17.11` | Aurora PostgreSQL (dòng 17.x, cần 17.4 trở lên cho Data API) |
-| `dbMinAcu` / `dbMaxAcu` | `0.5` / `2` | Giữ min 0,5 ACU: Data API không chờ resume từ 0 ACU (xem spike-aurora-data-api) |
+| `dbMinAcu` / `dbMaxAcu` / `dbAutoPauseSeconds` | `0` / `2` / `600` | Mặc định cho Aurora tự ngủ để đỡ tiền lúc dev; code đã retry `DatabaseResumingException` (lần gọi đầu sau khi ngủ chậm 15–20 giây, xem spike-aurora-data-api). Buổi demo/chấm điểm: `-c dbMinAcu=0.5` |
 | `accessTokenMinutes` | 60 | Hạn access token Cognito |
 | `region` | `ap-southeast-1` | |
 

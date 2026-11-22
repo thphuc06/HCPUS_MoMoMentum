@@ -21,8 +21,11 @@ export interface YofinaConfig {
   readonly alertEmail?: string;
   /** Phiên bản Aurora PostgreSQL (dòng 17.x). */
   readonly dbEngineVersion: string;
+  /** 0 = cho Aurora tự ngủ khi rảnh (auto-pause), không tính tiền compute lúc ngủ. */
   readonly dbMinAcu: number;
   readonly dbMaxAcu: number;
+  /** Số giây rảnh trước khi Aurora tự ngủ (chỉ dùng khi dbMinAcu = 0; 300–86400). */
+  readonly dbAutoPauseSeconds: number;
   readonly dbName: string;
   /** Thời gian sống access token Cognito (phút). */
   readonly accessTokenMinutes: number;
@@ -59,8 +62,9 @@ export function loadConfig(app: App): YofinaConfig {
     budgetScope: scope,
     alertEmail: email || undefined,
     dbEngineVersion: str(app, 'dbEngineVersion', '17.11'),
-    dbMinAcu: num(app, 'dbMinAcu', 0.5),
+    dbMinAcu: num(app, 'dbMinAcu', 0),
     dbMaxAcu: num(app, 'dbMaxAcu', 2),
+    dbAutoPauseSeconds: num(app, 'dbAutoPauseSeconds', 600),
     dbName: str(app, 'dbName', 'yofina'),
     accessTokenMinutes: num(app, 'accessTokenMinutes', 60),
     logRetentionDays: num(app, 'logRetentionDays', 14),
