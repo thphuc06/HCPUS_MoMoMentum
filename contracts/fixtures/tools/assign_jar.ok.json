@@ -1,0 +1,31 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "tool": "assign_jar",
+    "reference_id": "4c8e2a70-5f1b-4d3c-8a9e-7b6d5c4e3f21",
+    "occurred_at": "2026-12-10T03:02:11Z",
+    "app_date": "2026-11-21",
+    "amount_vnd": 60000,
+    "summary": "Đã xếp khoản chi 60.000 ₫ vào hũ Ăn uống",
+    "jars_after": [
+      {
+        "code": "an_uong",
+        "name": "Ăn uống",
+        "balance_after_vnd": 320000
+      },
+      {
+        "code": "chua_phan_loai",
+        "name": "Chưa phân loại",
+        "balance_after_vnd": -120000
+      }
+    ],
+    "details": [
+      {
+        "label": "Ghi nhớ",
+        "value": "Chỉ giao dịch này"
+      }
+    ]
+  }
+}

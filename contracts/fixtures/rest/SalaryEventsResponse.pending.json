@@ -1,0 +1,14 @@
+{
+  "salary_events": [
+    {
+      "id": "7e1f3a90-2c4b-4d6e-8f01-a3b5c7d9e0f2",
+      "period_date": "2026-12-05",
+      "received_on": "2026-12-05",
+      "expected_vnd": 9000000,
+      "amount_vnd": 9500000,
+      "deviation_percent": 5.56,
+      "ask_update_salary": false,
+      "status": "pending"
+    }
+  ]
+}

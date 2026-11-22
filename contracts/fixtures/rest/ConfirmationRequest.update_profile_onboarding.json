@@ -1,0 +1,7 @@
+{
+  "tool": "update_profile",
+  "params": {
+    "monthly_salary_vnd": 9000000,
+    "payday_day": 5
+  }
+}

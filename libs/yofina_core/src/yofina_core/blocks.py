@@ -12,6 +12,10 @@ Quy tắc `id` (ổn định trong một lượt, cùng id thì khối sau thay 
 - confirm:     `confirm:{trace_id}:{params_hash[:12]}`
 - receipt:     `receipt:{transaction_id}`
 - notice:      `notice:{trace_id}:{code hoặc kind}`
+- confirm_action: `confirm:{trace_id}:{params_hash[:12]}` (cùng tiền tố `confirm:` với khối confirm)
+- receipt_action: `receipt:{tool}:{reference_id}` hoặc `receipt:{tool}:{trace_id}`
+- forecast_timeline: `forecast_timeline:{trace_id}:{jar_code}`
+- proactive_card: `proactive_card:{trace_id}:{kind}`
 """
 
 from __future__ import annotations
@@ -25,8 +29,14 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from yofina_core.confirm import MOVE_BETWEEN_JARS, normalize_params, params_hash
+from yofina_core.confirm import (
+    MOVE_BETWEEN_JARS,
+    hash_normalized_params,
+    normalize_params,
+    params_hash,
+)
 from yofina_core.money import format_vnd, to_vnd
+from yofina_core.wallet import GENERIC_ACTION_TOOLS
 
 SCHEMA_VERSION = 1
 MAX_VND = 99_999_999_999_999
@@ -167,8 +177,179 @@ class NoticeBlock(_BlockBase):
     data: NoticeData
 
 
+# --- forecast_timeline ---------------------------------------------------------------------
+VndSigned = Annotated[int, Field(ge=-MAX_VND, le=MAX_VND)]
+Ratio = Annotated[float, Field(ge=0, le=1)]
+Uuid = Annotated[
+    str, Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+]
+JarStatus = Literal["ok", "tight", "short"]
+ConfidenceBand = Literal["high", "medium", "low"]
+
+
+class ForecastJar(_Strict):
+    code: JarCode
+    name: JarName
+    color_key: KeyName
+    icon_key: KeyName
+
+
+class ForecastPayday(_Strict):
+    date: IsoDate
+    days_until: Annotated[int, Field(ge=0, le=400)]
+
+
+class ForecastDay(_Strict):
+    date: IsoDate
+    p10_vnd: VndSigned
+    p50_vnd: VndSigned
+    p90_vnd: VndSigned
+
+
+class ForecastEvent(_Strict):
+    date: IsoDate
+    kind: Literal["obligation", "salary"]
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+    amount_vnd: VndPositive
+    amount_max_vnd: VndPositive | None = None
+
+
+class ForecastTimelineData(_Strict):
+    jar: ForecastJar
+    status: JarStatus
+    origin_date: IsoDate
+    start_balance_vnd: VndSigned
+    horizon_days: Annotated[int, Field(ge=1, le=90)]
+    payday: ForecastPayday
+    runout_date: IsoDate | None = None
+    p_shortfall: Ratio | None = None
+    p_shortfall_se: Ratio | None = None
+    confidence_band: ConfidenceBand
+    coverage: Ratio | None = None
+    history_days: Annotated[int, Field(ge=0)]
+    is_initial_estimate: bool
+    model: Annotated[str, Field(min_length=1, max_length=40)]
+    computed_at: IsoDateTime
+    stale: bool
+    days: Annotated[list[ForecastDay], Field(min_length=1, max_length=90)]
+    events: Annotated[list[ForecastEvent], Field(max_length=60)]
+
+
+class ForecastTimelineBlock(_BlockBase):
+    type: Literal["forecast_timeline"]
+    data: ForecastTimelineData
+
+
+# --- proactive_card ------------------------------------------------------------------------
+ProactiveKind = Literal[
+    "runout_warning", "obligation_due", "salary_pending", "review_needed", "low_data"
+]
+ProactiveActionKind = Literal[
+    "open_forecast", "confirm_salary", "review_unclassified", "open_obligations",
+    "ask_why", "snooze", "mute_kind",
+]  # fmt: skip
+
+
+class ProactiveAction(_Strict):
+    kind: ProactiveActionKind
+    label: Annotated[str, Field(min_length=1, max_length=40)]
+    jar_code: JarCode | None = None
+    prompt: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+
+
+class ProactiveCardData(_Strict):
+    kind: ProactiveKind
+    status: JarStatus
+    title: Annotated[str, Field(min_length=1, max_length=80)]
+    reason: Annotated[str, Field(min_length=1, max_length=200)]
+    jar_code: JarCode | None = None
+    actions: Annotated[list[ProactiveAction], Field(min_length=1, max_length=4)]
+
+
+class ProactiveCardBlock(_BlockBase):
+    type: Literal["proactive_card"]
+    data: ProactiveCardData
+
+
+# --- confirm_action ------------------------------------------------------------------------
+ConfirmActionTool = Literal[
+    "record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary"
+]
+
+
+class ActionChange(_Strict):
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+    before: Annotated[str, Field(min_length=1, max_length=80)] | None = None
+    after: Annotated[str, Field(min_length=1, max_length=120)]
+
+
+class ConfirmActionData(_Strict):
+    tool: ConfirmActionTool
+    params: dict[str, Any]
+    params_hash: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    summary: Summary
+    changes: Annotated[list[ActionChange], Field(min_length=1, max_length=20)]
+    warnings: (
+        Annotated[list[Annotated[str, Field(min_length=1, max_length=140)]], Field(max_length=5)]
+        | None
+    ) = None
+    expires_at: IsoDateTime
+
+
+class ConfirmActionBlock(_BlockBase):
+    type: Literal["confirm_action"]
+    data: ConfirmActionData
+
+
+# --- receipt_action ------------------------------------------------------------------------
+class ReceiptDetail(_Strict):
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+    value: Annotated[str, Field(min_length=1, max_length=120)]
+
+
+class ReceiptFollowUp(_Strict):
+    kind: Literal["confirm_salary", "review_unclassified"]
+    label: Annotated[str, Field(min_length=1, max_length=80)]
+    salary_event_id: Uuid | None = None
+    expected_vnd: VndPositive | None = None
+    received_vnd: VndPositive | None = None
+    deviation_percent: Annotated[float, Field(ge=-100000, le=100000)] | None = None
+    ask_update_salary: bool | None = None
+
+
+class JarBalanceAfter(_Strict):
+    code: JarCode
+    name: JarName
+    balance_after_vnd: VndSigned
+
+
+class ReceiptActionData(_Strict):
+    tool: ConfirmActionTool
+    reference_id: Uuid | None = None
+    occurred_at: IsoDateTime
+    app_date: IsoDate
+    amount_vnd: VndPositive | None = None
+    summary: Summary
+    jars_after: Annotated[list[JarBalanceAfter], Field(max_length=20)]
+    details: Annotated[list[ReceiptDetail], Field(max_length=20)]
+    follow_up: ReceiptFollowUp | None = None
+
+
+class ReceiptActionBlock(_BlockBase):
+    type: Literal["receipt_action"]
+    data: ReceiptActionData
+
+
 Block = Annotated[
-    JarSummaryBlock | ConfirmBlock | ReceiptBlock | NoticeBlock, Field(discriminator="type")
+    JarSummaryBlock
+    | ConfirmBlock
+    | ReceiptBlock
+    | NoticeBlock
+    | ForecastTimelineBlock
+    | ProactiveCardBlock
+    | ConfirmActionBlock
+    | ReceiptActionBlock,
+    Field(discriminator="type"),
 ]
 BLOCK_ADAPTER: TypeAdapter[Any] = TypeAdapter(Block)
 
@@ -178,6 +359,10 @@ BLOCK_MODELS: dict[str, type[_BlockBase]] = {
     "confirm": ConfirmBlock,
     "receipt": ReceiptBlock,
     "notice": NoticeBlock,
+    "forecast_timeline": ForecastTimelineBlock,
+    "proactive_card": ProactiveCardBlock,
+    "confirm_action": ConfirmActionBlock,
+    "receipt_action": ReceiptActionBlock,
 }
 
 
@@ -392,4 +577,273 @@ def build_notice(
         fallback_text=message,
         source=_source(source_tool, as_of, app_date),
         data=NoticeData(kind=kind, title=title, message=message, code=code),
+    )
+
+
+# --- dựng khối phase 2 ---------------------------------------------------------------------
+def _clip(text: str, limit: int) -> str:
+    """Cắt chuỗi hiển thị về `limit` ký tự (thêm dấu ba chấm nếu bị cắt)."""
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _date_text(value: date | str) -> str:
+    """`date` hoặc chuỗi YYYY-MM-DD thành chuỗi ngày hợp đồng."""
+    return value.isoformat() if isinstance(value, date) else str(value)
+
+
+def _dm(value: date | str) -> str:
+    """'23/11' từ ngày YYYY-MM-DD (dùng trong câu hiển thị)."""
+    d = value if isinstance(value, date) else date.fromisoformat(str(value))
+    return f"{d.day:02d}/{d.month:02d}"
+
+
+def _instant_text(value: datetime | str) -> str:
+    """Thời điểm của hàng đọc từ Data API (datetime hoặc chuỗi `YYYY-MM-DD HH:MM:SS[.ffffff]` ở UTC,
+    không hậu tố) thành RFC 3339 `...Z`."""
+    if isinstance(value, datetime):
+        return format_instant(value)
+    text = str(value).strip().replace(" ", "T")
+    if text.endswith("Z") or "+" in text[10:] or "-" in text[10:]:
+        return format_instant(datetime.fromisoformat(text.replace("Z", "+00:00")))
+    return format_instant(datetime.fromisoformat(text).replace(tzinfo=UTC))
+
+
+def _ratio(value: Any) -> float:
+    return float(Decimal(str(value)))
+
+
+def build_confirm_action(
+    *,
+    tool: str,
+    params: Mapping[str, Any],
+    summary: str,
+    changes: Iterable[Mapping[str, Any]],
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    expires_at: datetime,
+    warnings: Iterable[str] = (),
+    block_id: str | None = None,
+) -> ConfirmActionBlock:
+    """Khối xác nhận cho tool ghi KHÔNG phải chuyển hũ.
+
+    `params` phải là bản ĐÃ chuẩn hóa theo hợp đồng (contracts/README.md, mục "Chuẩn hóa tham số"; việc
+    chuẩn hóa từng tool nằm ở tầng ledger). `params_hash` tính từ chính bản này bằng
+    `hash_normalized_params`, nên khối luôn chứa đúng thứ sẽ được ký. `changes` mỗi phần tử gồm
+    `label`, `after` và tùy chọn `before` (chuỗi đã định dạng sẵn). Ném `ValueError` nếu tool không dùng khối này.
+    """
+    if tool not in GENERIC_ACTION_TOOLS:
+        raise ValueError(f"build_confirm_action không hỗ trợ tool {tool!r}")
+    digest = hash_normalized_params(tool, params)
+    summary = _clip(summary, 120)
+    return ConfirmActionBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"confirm:{trace_id}:{digest[:12]}",
+        type="confirm_action",
+        trace_id=trace_id,
+        fallback_text=_clip(f"{summary}. Cần bạn xác nhận trên ứng dụng.", 280),
+        source=_source(source_tool, as_of, app_date),
+        data=ConfirmActionData(
+            tool=tool,  # type: ignore[arg-type]
+            params=dict(params),
+            params_hash=digest,
+            summary=summary,
+            changes=[ActionChange(**c) for c in changes],
+            warnings=list(warnings) or None,
+            expires_at=format_instant(expires_at),
+        ),
+    )
+
+
+def build_receipt_action(
+    *,
+    tool: str,
+    occurred_at: datetime,
+    app_date: date,
+    summary: str,
+    trace_id: str,
+    source_tool: str,
+    reference_id: str | None = None,
+    amount_vnd: int | Decimal | str | None = None,
+    jars_after: Iterable[Mapping[str, Any]] = (),
+    details: Iterable[Mapping[str, str]] = (),
+    follow_up: Mapping[str, Any] | None = None,
+    block_id: str | None = None,
+) -> ReceiptActionBlock:
+    """Biên nhận của tool ghi KHÔNG phải chuyển hũ. `jars_after`: mỗi hũ có code, name, balance_vnd (số dư sau,
+    có thể âm với hũ Chưa phân loại). `details`: các dòng `{label, value}` đã định dạng. Ném `ValueError` nếu
+    tool không dùng khối này."""
+    if tool not in GENERIC_ACTION_TOOLS:
+        raise ValueError(f"build_receipt_action không hỗ trợ tool {tool!r}")
+    summary = _clip(summary, 120)
+    return ReceiptActionBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"receipt:{tool}:{reference_id or trace_id}",
+        type="receipt_action",
+        trace_id=trace_id,
+        fallback_text=_clip(f"{summary}.", 280),
+        source=_source(source_tool, occurred_at, app_date),
+        data=ReceiptActionData(
+            tool=tool,  # type: ignore[arg-type]
+            reference_id=reference_id,
+            occurred_at=format_instant(occurred_at),
+            app_date=app_date.isoformat(),
+            amount_vnd=None if amount_vnd is None else to_vnd(amount_vnd),
+            summary=summary,
+            jars_after=[
+                JarBalanceAfter(
+                    code=j["code"], name=j["name"], balance_after_vnd=to_vnd(j["balance_vnd"])
+                )
+                for j in jars_after
+            ],
+            details=[ReceiptDetail(**d) for d in details],
+            follow_up=ReceiptFollowUp(**follow_up) if follow_up else None,
+        ),
+    )
+
+
+def _forecast_sentence(
+    name: str,
+    status: str,
+    runout: date | str | None,
+    payday: date | str,
+    stale: bool,
+    initial: bool,
+) -> str:
+    if status == "short" and runout:
+        gap = (date.fromisoformat(_date_text(payday)) - date.fromisoformat(_date_text(runout))).days
+        text = (
+            f"Hũ {name} dự kiến cạn ngày {_dm(runout)}, còn {gap} ngày tới kỳ lương {_dm(payday)}."
+        )
+    elif status == "short":
+        text = f"Hũ {name} dự kiến hụt trước kỳ lương {_dm(payday)}."
+    elif status == "tight":
+        text = f"Hũ {name} sát: dự kiến còn rất ít tiền trước kỳ lương {_dm(payday)}."
+    else:
+        text = f"Hũ {name} đủ tới kỳ lương {_dm(payday)}."
+    if initial:
+        text += " Đây là ước lượng ban đầu."
+    if stale:
+        text += " Số liệu đã cũ."
+    return _clip(text, 280)
+
+
+def build_forecast_timeline(
+    *,
+    jar: Mapping[str, Any],
+    summary: Mapping[str, Any],
+    days: Iterable[Mapping[str, Any]],
+    events: Iterable[Mapping[str, Any]],
+    stale: bool,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> ForecastTimelineBlock:
+    """Khối dự báo của MỘT hũ từ các hàng đọc ở DB, dùng chung cho màn hình và chat.
+
+    - `jar`: code, name, color_key, icon_key.
+    - `summary`: một hàng của `app_get_forecast_summaries` (computed_at, run_app_date, model, horizon_days,
+      history_days, data_coverage, is_initial_estimate, start_balance_vnd, payday_date, days_to_payday,
+      runout_date, p_shortfall, p_shortfall_se, status, confidence_band, show_probability).
+    - `days`: các hàng của `app_get_forecast_series` (day, balance_p10_vnd, balance_p50_vnd, balance_p90_vnd).
+    - `events`: mốc đã ghép từ nghĩa vụ và lịch lương, mỗi mốc có date, kind, label, amount_vnd, amount_max_vnd tùy chọn.
+    - `p_shortfall` chỉ được phát khi `show_probability` đúng và có giá trị (quy tắc hiển thị của hợp đồng).
+    Tiền Data API trả dạng chuỗi hoặc Decimal đều được; số âm giữ nguyên dấu.
+    """
+    show_p = bool(summary.get("show_probability")) and summary.get("p_shortfall") is not None
+    runout = summary.get("runout_date")
+    coverage = summary.get("data_coverage")
+    payday = _date_text(summary["payday_date"])
+    data = ForecastTimelineData(
+        jar=ForecastJar(
+            code=jar["code"], name=jar["name"], color_key=jar["color_key"], icon_key=jar["icon_key"]
+        ),
+        status=summary["status"],
+        origin_date=_date_text(summary["run_app_date"]),
+        start_balance_vnd=to_vnd(summary["start_balance_vnd"]),
+        horizon_days=int(summary["horizon_days"]),
+        payday=ForecastPayday(date=payday, days_until=int(summary["days_to_payday"])),
+        runout_date=_date_text(runout) if runout else None,
+        p_shortfall=_ratio(summary["p_shortfall"]) if show_p else None,
+        p_shortfall_se=(
+            _ratio(summary["p_shortfall_se"])
+            if show_p and summary.get("p_shortfall_se") is not None
+            else None
+        ),
+        confidence_band=summary["confidence_band"],
+        coverage=_ratio(coverage) if coverage is not None else None,
+        history_days=int(summary["history_days"]),
+        is_initial_estimate=bool(summary["is_initial_estimate"]),
+        model=summary["model"],
+        computed_at=_instant_text(summary["computed_at"]),
+        stale=stale,
+        days=[
+            ForecastDay(
+                date=_date_text(d["day"]),
+                p10_vnd=to_vnd(d["balance_p10_vnd"]),
+                p50_vnd=to_vnd(d["balance_p50_vnd"]),
+                p90_vnd=to_vnd(d["balance_p90_vnd"]),
+            )
+            for d in days
+        ],
+        events=[
+            ForecastEvent(
+                date=_date_text(e["date"]),
+                kind=e["kind"],
+                label=e["label"],
+                amount_vnd=to_vnd(e["amount_vnd"]),
+                amount_max_vnd=(
+                    to_vnd(e["amount_max_vnd"]) if e.get("amount_max_vnd") is not None else None
+                ),
+            )
+            for e in events
+        ],
+    )
+    return ForecastTimelineBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"forecast_timeline:{trace_id}:{data.jar.code}",
+        type="forecast_timeline",
+        trace_id=trace_id,
+        fallback_text=_forecast_sentence(
+            data.jar.name, data.status, data.runout_date, payday, stale, data.is_initial_estimate
+        ),
+        source=_source(source_tool, as_of, app_date),
+        data=data,
+    )
+
+
+def build_proactive_card(
+    *,
+    kind: str,
+    status: str,
+    title: str,
+    reason: str,
+    actions: Iterable[Mapping[str, Any]],
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    jar_code: str | None = None,
+    block_id: str | None = None,
+) -> ProactiveCardBlock:
+    """Thẻ chủ động (một việc). `title` và `reason` do code dựng từ số liệu thật, không do LLM viết;
+    `actions` đứng đầu là hành động chính (mỗi phần tử: kind, label, jar_code tùy chọn, prompt tùy chọn)."""
+    return ProactiveCardBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"proactive_card:{trace_id}:{kind}",
+        type="proactive_card",
+        trace_id=trace_id,
+        fallback_text=_clip(f"{title}. {reason}", 280),
+        source=_source(source_tool, as_of, app_date),
+        data=ProactiveCardData(
+            kind=kind,  # type: ignore[arg-type]
+            status=status,  # type: ignore[arg-type]
+            title=title,
+            reason=reason,
+            jar_code=jar_code,
+            actions=[ProactiveAction(**a) for a in actions],
+        ),
     )

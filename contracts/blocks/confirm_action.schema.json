@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/confirm_action.schema.json",
+  "title": "ConfirmActionBlock",
+  "description": "Đề nghị xác nhận một thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary). Cùng cơ chế với khối `confirm` của phase 1 (ADR-0002): `tool`, `params` và `params_hash` là đúng thứ sẽ được ký vào token một lần; `summary`, `changes`, `warnings` và `expires_at` chỉ để hiển thị. Chuyển hũ (move_between_jars) vẫn dùng khối `confirm` (xem contracts/README.md, mục 'Khối xác nhận và biên nhận'). Id khối giữ quy tắc `confirm:{trace_id}:{params_hash[:12]}`. Do code dựng từ kết quả NEEDS_CONFIRMATION của tool, không do LLM viết.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "confirm_action" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ConfirmActionData" }
+  },
+  "$defs": {
+    "ConfirmActionTool": {
+      "description": "Tool ghi dùng khối này (tên ngắn, không có tiền tố target).",
+      "type": "string",
+      "enum": ["record_transaction", "assign_jar", "update_profile", "save_jars", "confirm_salary"]
+    },
+    "ActionChange": {
+      "description": "Một dòng 'trước -> sau' để hiển thị, do code định dạng sẵn (ví dụ nhãn 'Số dư Ăn uống', trước '380.000 ₫', sau '180.000 ₫'). Giao diện chỉ vẽ, không tính lại.",
+      "type": "object",
+      "required": ["label", "after"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "before": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "after": { "type": "string", "minLength": 1, "maxLength": 120 }
+      }
+    },
+    "ConfirmActionData": {
+      "type": "object",
+      "required": ["tool", "params", "params_hash", "summary", "changes", "expires_at"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "$ref": "#/$defs/ConfirmActionTool" },
+        "params": {
+          "description": "Tham số đã chuẩn hóa của tool (xem contracts/README.md, mục 'Chuẩn hóa tham số'); không có user_id. Giao diện gửi nguyên văn lại cho POST /confirmations và POST /actions, không sửa.",
+          "type": "object"
+        },
+        "params_hash": {
+          "description": "sha256 hex thường của {\"tool\", \"params\"} chuẩn hóa; công thức ở libs/yofina_core/src/yofina_core/confirm.py (hash_normalized_params).",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "summary": {
+          "description": "Một câu tóm tắt do code dựng, ví dụ 'Ghi chi 45.000 ₫ từ Ăn uống'.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "changes": {
+          "description": "Các thay đổi sẽ xảy ra, trước và sau, theo thứ tự hiển thị.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/ActionChange" }
+        },
+        "warnings": {
+          "description": "Cảnh báo ngắn do code dựng (ví dụ 'Phát sinh nghĩa vụ 333.000 ₫ đến hạn 05/12').",
+          "type": "array",
+          "maxItems": 5,
+          "items": { "type": "string", "minLength": 1, "maxLength": 140 }
+        },
+        "expires_at": {
+          "description": "Hạn của đề nghị (như khối confirm): quá hạn thì giao diện vô hiệu nút xác nhận và hỏi lại.",
+          "$ref": "envelope.schema.json#/$defs/IsoDateTime"
+        }
+      }
+    }
+  }
+}

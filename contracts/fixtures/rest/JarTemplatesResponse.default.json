@@ -1,0 +1,22 @@
+{
+  "templates": [
+    {
+      "code": "an_uong",
+      "name": "Ăn uống",
+      "color_key": "violet",
+      "icon_key": "utensils",
+      "kind": "spending",
+      "default_split_percent": 25,
+      "is_default": true
+    },
+    {
+      "code": "du_phong",
+      "name": "Dự phòng",
+      "color_key": "blue",
+      "icon_key": "shield",
+      "kind": "saving",
+      "default_split_percent": 15,
+      "is_default": true
+    }
+  ]
+}

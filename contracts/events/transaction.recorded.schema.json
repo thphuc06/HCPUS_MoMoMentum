@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/events/transaction.recorded.schema.json",
+  "title": "TransactionRecordedEvent",
+  "description": "Phần `detail` của sự kiện `transaction.recorded` (source `yofina.ledger`): một lần ghi sổ cái đã commit (chi tiêu, tiền vào, chuyển hũ, chia lương, gán lại hũ, trả nghĩa vụ). Một lần ghi một sự kiện, phát SAU khi transaction DB commit. Consumer chính: Lambda `yofina-on-transaction` (chỉnh nhanh dự báo của các hũ trong `jar_codes`, về sau phân loại và phát hiện lệch). `event_id` bằng `transaction_id`: với một dòng sổ cái là `id` của dòng, với chuyển hũ và chia lương là `transfer_id` chung; nên gửi lại cùng một ghi thì cùng event_id.",
+  "type": "object",
+  "required": [
+    "v", "event_id", "user_id", "transaction_id", "occurred_at", "app_date", "kind", "tx_type",
+    "funding_source", "amount_vnd", "jar_codes", "effects"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "common.schema.json#/$defs/EventVersion" },
+    "event_id": { "$ref": "common.schema.json#/$defs/EventId" },
+    "user_id": { "$ref": "common.schema.json#/$defs/UserId" },
+    "trace_id": { "$ref": "../blocks/envelope.schema.json#/$defs/TraceId" },
+    "transaction_id": {
+      "description": "Id nhóm ghi: `id` của dòng sổ cái, hoặc `transfer_id` với chuyển hũ và chia lương.",
+      "$ref": "common.schema.json#/$defs/Uuid"
+    },
+    "occurred_at": {
+      "description": "Thời điểm thật (UTC) ghi.",
+      "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+    },
+    "app_date": {
+      "description": "Ngày mô phỏng của người dùng lúc ghi (ADR-0003). Consumer dùng ngày này, không dùng đồng hồ hệ thống.",
+      "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+    },
+    "kind": { "type": "string", "enum": ["expense", "income", "transfer"] },
+    "tx_type": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$" },
+    "funding_source": { "type": "string", "enum": ["jar", "credit"] },
+    "amount_vnd": {
+      "description": "Tổng số tiền của lần ghi (luôn dương): số chi, số nhận, hoặc tổng số chuyển.",
+      "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
+    },
+    "jar_codes": {
+      "description": "Hũ liên quan: hũ có số dư đổi, cộng hũ tính chi tiêu của khoản mua bằng hạn mức (số dư không đổi). Không rỗng. Consumer chạy lại dự báo cho các hũ này.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" }
+    },
+    "effects": {
+      "description": "Số dư các hũ ĐÃ đổi (delta và số dư sau). Rỗng với khoản mua bằng hạn mức (funding_source credit): số dư hũ không đổi, nghĩa vụ mới có sự kiện `obligation.changed` riêng.",
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "common.schema.json#/$defs/JarEffect" }
+    },
+    "payee_id": { "$ref": "common.schema.json#/$defs/Uuid" },
+    "obligation_id": {
+      "description": "Nghĩa vụ mà lần ghi này thanh toán, nếu có.",
+      "$ref": "common.schema.json#/$defs/Uuid"
+    },
+    "needs_classification": {
+      "description": "Đúng khi dòng chi chưa xếp được hũ (đang ở Chưa phân loại): pipeline phân loại (phase 4) xử lý tiếp.",
+      "type": "boolean"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "tool": "update_profile",
+  "params": {
+    "obligation": {
+      "op": "upsert",
+      "kind": "rent",
+      "name": "Tiền trọ",
+      "amount_vnd": 2500000,
+      "due_day": 1,
+      "cycle": "monthly",
+      "pay_jar": "hoa_don",
+      "is_essential": true
+    }
+  },
+  "confirm_token": "eyJzdWIiOiJ4In0.c2ln"
+}

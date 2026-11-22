@@ -1,0 +1,252 @@
+{
+  "run": {
+    "model": "hurdle_calendar",
+    "app_date": "2026-11-21",
+    "horizon_days": 7,
+    "history_days": 30,
+    "confidence_label": "medium",
+    "is_initial_estimate": false,
+    "params": {
+      "rho": 0.3,
+      "interval_widen": 1.15,
+      "aci_gamma": 0.01
+    },
+    "model_version": "0.1.0",
+    "data_coverage": 0.606,
+    "n_paths": 5000,
+    "seed": 42
+  },
+  "jars": [
+    {
+      "summary": {
+        "jar_code": "an_uong",
+        "start_balance_vnd": 380000,
+        "payday_date": "2026-11-28",
+        "days_to_payday": 7,
+        "status": "tight",
+        "confidence_band": "medium",
+        "show_probability": false,
+        "series_kind": "dense"
+      },
+      "days": [
+        {
+          "date": "2026-11-22",
+          "spend_p10_vnd": 20000,
+          "spend_p50_vnd": 55000,
+          "spend_p90_vnd": 120000,
+          "balance_p10_vnd": 260000,
+          "balance_p50_vnd": 1.5,
+          "balance_p90_vnd": 360000
+        },
+        {
+          "date": "2026-11-23",
+          "spend_p10_vnd": 20000,
+          "spend_p50_vnd": 55000,
+          "spend_p90_vnd": 120000,
+          "balance_p10_vnd": 140000,
+          "balance_p50_vnd": 270000,
+          "balance_p90_vnd": 340000
+        },
+        {
+          "date": "2026-11-24",
+          "spend_p10_vnd": 20000,
+          "spend_p50_vnd": 55000,
+          "spend_p90_vnd": 120000,
+          "balance_p10_vnd": 20000,
+          "balance_p50_vnd": 215000,
+          "balance_p90_vnd": 320000
+        },
+        {
+          "date": "2026-11-25",
+          "spend_p10_vnd": 20000,
+          "spend_p50_vnd": 55000,
+          "spend_p90_vnd": 120000,
+          "balance_p10_vnd": -100000,
+          "balance_p50_vnd": 160000,
+          "balance_p90_vnd": 300000
+        },
+        {
+          "date": "2026-11-26",
+          "spend_p10_vnd": 20000,
+          "spend_p50_vnd": 55000,
+          "spend_p90_vnd": 120000,
+          "balance_p10_vnd": -220000,
+          "balance_p50_vnd": 105000,
+          "balance_p90_vnd": 280000
+        },
+        {
+          "date": "2026-11-27",
+          "spend_p10_vnd": 20000,
+          "spend_p50_vnd": 55000,
+          "spend_p90_vnd": 120000,
+          "balance_p10_vnd": -340000,
+          "balance_p50_vnd": 50000,
+          "balance_p90_vnd": 260000
+        },
+        {
+          "date": "2026-11-28",
+          "spend_p10_vnd": 20000,
+          "spend_p50_vnd": 55000,
+          "spend_p90_vnd": 120000,
+          "balance_p10_vnd": 2240000,
+          "balance_p50_vnd": 2695000,
+          "balance_p90_vnd": 2940000
+        }
+      ]
+    },
+    {
+      "summary": {
+        "jar_code": "hoa_don",
+        "start_balance_vnd": 450000,
+        "payday_date": "2026-11-28",
+        "days_to_payday": 7,
+        "status": "ok",
+        "confidence_band": "medium",
+        "show_probability": false,
+        "series_kind": "dense"
+      },
+      "days": [
+        {
+          "date": "2026-11-22",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 10000,
+          "spend_p90_vnd": 25000,
+          "balance_p10_vnd": 425000,
+          "balance_p50_vnd": 440000,
+          "balance_p90_vnd": 450000
+        },
+        {
+          "date": "2026-11-23",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 10000,
+          "spend_p90_vnd": 25000,
+          "balance_p10_vnd": 400000,
+          "balance_p50_vnd": 430000,
+          "balance_p90_vnd": 450000
+        },
+        {
+          "date": "2026-11-24",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 10000,
+          "spend_p90_vnd": 25000,
+          "balance_p10_vnd": 375000,
+          "balance_p50_vnd": 420000,
+          "balance_p90_vnd": 450000
+        },
+        {
+          "date": "2026-11-25",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 10000,
+          "spend_p90_vnd": 25000,
+          "balance_p10_vnd": 350000,
+          "balance_p50_vnd": 410000,
+          "balance_p90_vnd": 450000
+        },
+        {
+          "date": "2026-11-26",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 10000,
+          "spend_p90_vnd": 25000,
+          "balance_p10_vnd": -50000,
+          "balance_p50_vnd": 25000,
+          "balance_p90_vnd": 75000
+        },
+        {
+          "date": "2026-11-27",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 10000,
+          "spend_p90_vnd": 25000,
+          "balance_p10_vnd": -75000,
+          "balance_p50_vnd": 15000,
+          "balance_p90_vnd": 75000
+        },
+        {
+          "date": "2026-11-28",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 10000,
+          "spend_p90_vnd": 25000,
+          "balance_p10_vnd": -100000,
+          "balance_p50_vnd": 5000,
+          "balance_p90_vnd": 75000
+        }
+      ]
+    },
+    {
+      "summary": {
+        "jar_code": "du_lich",
+        "start_balance_vnd": 1800000,
+        "payday_date": "2026-11-28",
+        "days_to_payday": 7,
+        "status": "ok",
+        "confidence_band": "medium",
+        "show_probability": false,
+        "series_kind": "sparse"
+      },
+      "days": [
+        {
+          "date": "2026-11-22",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 0,
+          "spend_p90_vnd": 0,
+          "balance_p10_vnd": 1800000,
+          "balance_p50_vnd": 1800000,
+          "balance_p90_vnd": 1800000
+        },
+        {
+          "date": "2026-11-23",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 0,
+          "spend_p90_vnd": 0,
+          "balance_p10_vnd": 1800000,
+          "balance_p50_vnd": 1800000,
+          "balance_p90_vnd": 1800000
+        },
+        {
+          "date": "2026-11-24",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 0,
+          "spend_p90_vnd": 0,
+          "balance_p10_vnd": 1800000,
+          "balance_p50_vnd": 1800000,
+          "balance_p90_vnd": 1800000
+        },
+        {
+          "date": "2026-11-25",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 0,
+          "spend_p90_vnd": 0,
+          "balance_p10_vnd": 1800000,
+          "balance_p50_vnd": 1800000,
+          "balance_p90_vnd": 1800000
+        },
+        {
+          "date": "2026-11-26",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 0,
+          "spend_p90_vnd": 0,
+          "balance_p10_vnd": 1800000,
+          "balance_p50_vnd": 1800000,
+          "balance_p90_vnd": 1800000
+        },
+        {
+          "date": "2026-11-27",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 0,
+          "spend_p90_vnd": 0,
+          "balance_p10_vnd": 1800000,
+          "balance_p50_vnd": 1800000,
+          "balance_p90_vnd": 1800000
+        },
+        {
+          "date": "2026-11-28",
+          "spend_p10_vnd": 0,
+          "spend_p50_vnd": 0,
+          "spend_p90_vnd": 0,
+          "balance_p10_vnd": 1800000,
+          "balance_p50_vnd": 1800000,
+          "balance_p90_vnd": 1800000
+        }
+      ]
+    }
+  ]
+}

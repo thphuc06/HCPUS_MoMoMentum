@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/events/obligation.changed.schema.json",
+  "title": "ObligationChangedEvent",
+  "description": "Phần `detail` của sự kiện `obligation.changed` (source `yofina.ledger`): lịch nghĩa vụ đổi (khai mới, sửa, hủy, đã trả, hoặc trả sau mới tự sinh khi mua bằng hạn mức). Số dư hũ có thể chưa đổi nhưng lịch tiền ra đổi, nên dự báo của hũ trả (`pay_jar`) phải tính lại. `event_id` sinh mới mỗi lần đổi (UUID v4) vì một nghĩa vụ đổi nhiều lần; idempotency nằm ở việc consumer chỉ tính lại, không cộng dồn.",
+  "type": "object",
+  "required": ["v", "event_id", "user_id", "obligation_id", "occurred_at", "app_date", "change", "kind"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "common.schema.json#/$defs/EventVersion" },
+    "event_id": { "$ref": "common.schema.json#/$defs/EventId" },
+    "user_id": { "$ref": "common.schema.json#/$defs/UserId" },
+    "trace_id": { "$ref": "../blocks/envelope.schema.json#/$defs/TraceId" },
+    "obligation_id": { "$ref": "common.schema.json#/$defs/Uuid" },
+    "occurred_at": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+    "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+    "change": { "type": "string", "enum": ["created", "updated", "cancelled", "paid"] },
+    "kind": { "type": "string", "enum": ["bnpl", "loan", "rent", "bill", "subscription"] },
+    "pay_jar": {
+      "description": "Hũ trả. Vắng nếu nghĩa vụ chưa gán hũ trả (dự báo bỏ qua cho tới khi gán).",
+      "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+    },
+    "due_date": {
+      "description": "Ngày đến hạn kế tiếp sau thay đổi.",
+      "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+    }
+  }
+}

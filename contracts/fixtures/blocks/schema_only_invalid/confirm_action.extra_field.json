@@ -1,0 +1,38 @@
+{
+  "v": 1,
+  "id": "confirm:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:cadc386a0a72",
+  "type": "confirm_action",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Ghi chi 45.000 ₫ từ hũ Ăn uống. Cần bạn xác nhận trên ứng dụng.",
+  "source": {
+    "tool": "ledger___record_transaction",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "tool": "record_transaction",
+    "params": {
+      "kind": "expense",
+      "amount_vnd": 45000,
+      "jar": "an_uong",
+      "tx_type": "food_drink",
+      "funding": "jar",
+      "counterparty": "Quán cơm"
+    },
+    "params_hash": "cadc386a0a72396220640aed568271ec3350f2388771dfd4aed65f23e71dc78f",
+    "summary": "Ghi chi 45.000 ₫ từ hũ Ăn uống",
+    "changes": [
+      {
+        "label": "Số dư hũ Ăn uống",
+        "before": "380.000 ₫",
+        "after": "335.000 ₫"
+      },
+      {
+        "label": "Người nhận",
+        "after": "Quán cơm"
+      }
+    ],
+    "expires_at": "2026-12-10T03:10:00Z",
+    "confirmed": true
+  }
+}

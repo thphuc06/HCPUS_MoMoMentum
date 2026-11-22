@@ -1,0 +1,24 @@
+{
+  "app_date": "2026-11-21",
+  "credit_line": {
+    "product_code": "bnpl_sim",
+    "product_label": "Trả sau (mô phỏng)",
+    "limit_vnd": 5000000,
+    "outstanding_vnd": 300000,
+    "available_vnd": 4700000,
+    "due_day": 5,
+    "status": "active"
+  },
+  "fees": [
+    {
+      "fee_type": "monthly_service_fee",
+      "amount_vnd": 33000,
+      "period": "per_month",
+      "condition_code": "month_has_transaction",
+      "condition_note": "Tính một lần trong tháng nếu tháng đó có ít nhất một giao dịch bằng hạn mức.",
+      "source_name": "Biểu phí công khai của sản phẩm trả sau, dùng làm ví dụ cho sản phẩm mô phỏng",
+      "source_url": "https://example.invalid/bieu-phi",
+      "effective_from": "2026-03-31"
+    }
+  ]
+}

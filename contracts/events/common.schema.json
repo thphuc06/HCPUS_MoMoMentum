@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/events/common.schema.json",
+  "title": "EventCommon",
+  "description": "Kiểu dùng chung của phần `detail` của sự kiện trên EventBridge bus `yofina-bus`. Quy ước `source`, `detail-type`, idempotency và retry nằm ở contracts/README.md, mục 'Sự kiện'. Schema gốc không ràng buộc gì; dùng các $defs.",
+  "$defs": {
+    "EventVersion": {
+      "description": "Phiên bản hợp đồng của sự kiện. Chỉ tăng khi đổi không tương thích ngược; thêm trường tùy chọn thì không tăng.",
+      "type": "integer",
+      "const": 1
+    },
+    "Uuid": {
+      "description": "UUID chữ thường (id của giao dịch, nghĩa vụ, người nhận, lần chạy dự báo).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "EventId": {
+      "description": "Khóa idempotency (UUID). Phát lại cùng một việc (retry của EventBridge, gửi trùng) mang CÙNG event_id; consumer dùng nó để xử lý đúng một lần. Cách sinh: xem từng sự kiện.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "UserId": {
+      "description": "Người dùng sở hữu việc này: claim `sub` của Cognito. Consumer chạy bằng danh tính dịch vụ và đặt app.user_id bằng giá trị này khi truy cập DB.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "JarEffect": {
+      "description": "Ảnh hưởng của một lần ghi lên số dư MỘT hũ: delta có dấu (âm là ra khỏi hũ) và số dư sau.",
+      "type": "object",
+      "required": ["jar_code", "delta_vnd", "balance_after_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "jar_code": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" },
+        "delta_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndSigned" },
+        "balance_after_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndSigned" }
+      }
+    },
+    "JarCodes": {
+      "description": "Các hũ cần xử lý lại (không trùng nhau).",
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" }
+    }
+  }
+}

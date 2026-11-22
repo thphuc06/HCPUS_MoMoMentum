@@ -1,0 +1,54 @@
+{
+  "v": 1,
+  "id": "forecast_timeline:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:an_uong",
+  "type": "forecast_timeline",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Hũ Ăn uống dự kiến cạn ngày 29/11, còn 6 ngày tới kỳ lương 05/12.",
+  "source": {
+    "tool": "forecast___get_forecast",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "jar": {
+      "code": "an_uong",
+      "name": "Ăn uống",
+      "color_key": "violet",
+      "icon_key": "utensils"
+    },
+    "status": "short",
+    "origin_date": "2026-11-21",
+    "start_balance_vnd": 380000,
+    "horizon_days": 30,
+    "payday": {
+      "date": "2026-12-05",
+      "days_until": 14
+    },
+    "runout_date": "2026-11-29",
+    "p_shortfall": 0.71,
+    "p_shortfall_se": 0.006,
+    "confidence_band": "medium",
+    "coverage": 0.62,
+    "history_days": 47,
+    "is_initial_estimate": false,
+    "model": "hurdle_calendar",
+    "computed_at": "2026-11-21T19:00:03Z",
+    "stale": false,
+    "days": [],
+    "events": [
+      {
+        "date": "2026-11-26",
+        "kind": "obligation",
+        "label": "Tiền điện",
+        "amount_vnd": 375000,
+        "amount_max_vnd": 450000
+      },
+      {
+        "date": "2026-12-05",
+        "kind": "salary",
+        "label": "Lương về",
+        "amount_vnd": 2700000
+      }
+    ]
+  }
+}

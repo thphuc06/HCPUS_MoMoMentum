@@ -1,0 +1,7 @@
+{
+  "tool": "assign_jar",
+  "params": {
+    "transaction_id": "not-a-uuid",
+    "jar": "an_uong"
+  }
+}

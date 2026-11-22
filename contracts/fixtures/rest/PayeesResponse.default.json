@@ -1,0 +1,16 @@
+{
+  "payees": [
+    {
+      "id": "6f1e2d3c-4b5a-4968-8777-665544332211",
+      "name": "Trần Quang Huy",
+      "account_hint": "xxxx 4821",
+      "is_favorite": true,
+      "last_used_at": "2026-12-01T10:00:00Z"
+    },
+    {
+      "id": "6f1e2d3c-4b5a-4968-8777-665544332212",
+      "name": "Lê Thị Mai",
+      "is_favorite": false
+    }
+  ]
+}

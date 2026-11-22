@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "FORECAST_UNAVAILABLE",
+  "message": "Chưa có dự báo cho hũ này, thử lại sau ít phút."
+}

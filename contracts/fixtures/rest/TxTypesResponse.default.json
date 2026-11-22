@@ -1,0 +1,22 @@
+{
+  "tx_types": [
+    {
+      "tx_type": "food_drink",
+      "label": "Ăn uống",
+      "direction": "out",
+      "default_jar": "an_uong"
+    },
+    {
+      "tx_type": "transfer_person",
+      "label": "Chuyển tiền cho người khác",
+      "direction": "out",
+      "system_role": "unclassified"
+    },
+    {
+      "tx_type": "salary",
+      "label": "Lương",
+      "direction": "in",
+      "system_role": "other_income"
+    }
+  ]
+}

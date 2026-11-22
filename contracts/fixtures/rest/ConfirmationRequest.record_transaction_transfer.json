@@ -1,0 +1,12 @@
+{
+  "tool": "record_transaction",
+  "params": {
+    "kind": "expense",
+    "amount_vnd": 250000,
+    "jar": "hoa_don",
+    "tx_type": "transfer_person",
+    "funding": "jar",
+    "payee_id": "6f1e2d3c-4b5a-4968-8777-665544332211",
+    "note": "Tiền điện nước chia đôi"
+  }
+}

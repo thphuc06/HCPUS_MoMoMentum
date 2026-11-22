@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "CREDIT_LIMIT_EXCEEDED",
+  "message": "Vượt hạn mức Trả sau (mô phỏng) còn lại."
+}

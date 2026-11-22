@@ -1,0 +1,80 @@
+{
+  "v": 1,
+  "id": "forecast_timeline:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:giai_tri",
+  "type": "forecast_timeline",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Hũ Giải trí đủ tới kỳ lương 05/12. Đây là ước lượng ban đầu. Số liệu đã cũ.",
+  "source": {
+    "tool": "rest:GET /forecasts/{jar_code}",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "jar": {
+      "code": "giai_tri",
+      "name": "Giải trí",
+      "color_key": "orchid",
+      "icon_key": "gamepad"
+    },
+    "status": "ok",
+    "origin_date": "2026-11-20",
+    "start_balance_vnd": 1200000,
+    "horizon_days": 7,
+    "payday": {
+      "date": "2026-12-05",
+      "days_until": 15
+    },
+    "confidence_band": "low",
+    "coverage": 0.38,
+    "history_days": 18,
+    "is_initial_estimate": true,
+    "model": "cold_start_rules",
+    "computed_at": "2026-11-20T19:00:00Z",
+    "stale": true,
+    "days": [
+      {
+        "date": "2026-11-21",
+        "p10_vnd": 1170000,
+        "p50_vnd": 1180000,
+        "p90_vnd": 1190000
+      },
+      {
+        "date": "2026-11-22",
+        "p10_vnd": 1140000,
+        "p50_vnd": 1160000,
+        "p90_vnd": 1180000
+      },
+      {
+        "date": "2026-11-23",
+        "p10_vnd": 1110000,
+        "p50_vnd": 1140000,
+        "p90_vnd": 1170000
+      },
+      {
+        "date": "2026-11-24",
+        "p10_vnd": 1080000,
+        "p50_vnd": 1120000,
+        "p90_vnd": 1160000
+      },
+      {
+        "date": "2026-11-25",
+        "p10_vnd": 1050000,
+        "p50_vnd": 1100000,
+        "p90_vnd": 1150000
+      },
+      {
+        "date": "2026-11-26",
+        "p10_vnd": 1020000,
+        "p50_vnd": 1080000,
+        "p90_vnd": 1140000
+      },
+      {
+        "date": "2026-11-27",
+        "p10_vnd": 990000,
+        "p50_vnd": 1060000,
+        "p90_vnd": 1130000
+      }
+    ],
+    "events": []
+  }
+}

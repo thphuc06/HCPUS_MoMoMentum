@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/forecast_timeline.schema.json",
+  "title": "ForecastTimelineBlock",
+  "description": "Dự báo 30 ngày của MỘT hũ: đường số dư P10/P50/P90, mốc nghĩa vụ và lương, ngày cạn, xác suất hụt hoặc nhóm tin cậy. Dùng CHUNG cho màn Chi tiết hũ (GET /forecasts/{jar_code} trả đúng khối này) và chat (tool forecast___get_forecast), nên hai nơi luôn cùng số. Số do code đọc từ bảng forecasts, không do LLM viết.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "forecast_timeline" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ForecastTimelineData" }
+  },
+  "$defs": {
+    "JarStatus": {
+      "description": "Đủ, sát, hụt (ok, tight, short). Luôn hiện kèm biểu tượng và chữ, không chỉ màu. Ngưỡng do engine dự báo quyết định theo cấu hình.",
+      "type": "string",
+      "enum": ["ok", "tight", "short"]
+    },
+    "ConfidenceBand": {
+      "description": "Nhóm tin cậy Cao, Vừa, Thấp (high, medium, low), kèm lý do do code dựng, không phải phần trăm do AI nói. Dựa trên độ phủ dữ liệu, số ngày lịch sử và độ phủ khoảng dự báo đã đo.",
+      "type": "string",
+      "enum": ["high", "medium", "low"]
+    },
+    "ForecastJar": {
+      "description": "Hũ của dự báo (đủ để vẽ biểu tượng và tên mà không gọi thêm).",
+      "type": "object",
+      "required": ["code", "name", "color_key", "icon_key"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "color_key": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
+        "icon_key": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" }
+      }
+    },
+    "ForecastPayday": {
+      "description": "Kỳ lương kế tiếp dùng làm mốc 'trước kỳ lương'.",
+      "type": "object",
+      "required": ["date", "days_until"],
+      "additionalProperties": false,
+      "properties": {
+        "date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "days_until": {
+          "description": "Số ngày từ ngày gốc của dự báo (origin_date) tới ngày lương.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 400
+        }
+      }
+    },
+    "ForecastDay": {
+      "description": "Phân vị SỐ DƯ cuối một ngày của hũ (đã tính nghĩa vụ và lương). P10 là kịch bản xấu (số dư thấp), P90 là kịch bản tốt. Âm nghĩa là hụt.",
+      "type": "object",
+      "required": ["date", "p10_vnd", "p50_vnd", "p90_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "p10_vnd": { "$ref": "envelope.schema.json#/$defs/VndSigned" },
+        "p50_vnd": { "$ref": "envelope.schema.json#/$defs/VndSigned" },
+        "p90_vnd": { "$ref": "envelope.schema.json#/$defs/VndSigned" }
+      }
+    },
+    "ForecastEvent": {
+      "description": "Mốc trên biểu đồ: một khoản nghĩa vụ đến hạn (tiền ra) hoặc lương về phần của hũ (tiền vào). Ghép lúc đọc từ obligations và lịch lương, không lưu trong bảng dự báo.",
+      "type": "object",
+      "required": ["date", "kind", "label", "amount_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "kind": { "type": "string", "enum": ["obligation", "salary"] },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "amount_vnd": {
+          "description": "Số tiền kỳ vọng, luôn dương; hướng (ra hay vào) nằm ở kind.",
+          "$ref": "envelope.schema.json#/$defs/VndPositive"
+        },
+        "amount_max_vnd": {
+          "description": "Trần của khoảng, chỉ có với nghĩa vụ khai theo khoảng (ví dụ tiền điện).",
+          "$ref": "envelope.schema.json#/$defs/VndPositive"
+        }
+      }
+    },
+    "ForecastTimelineData": {
+      "type": "object",
+      "required": [
+        "jar", "status", "origin_date", "start_balance_vnd", "horizon_days", "payday",
+        "confidence_band", "history_days", "is_initial_estimate", "model", "computed_at", "stale",
+        "days", "events"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "jar": { "$ref": "#/$defs/ForecastJar" },
+        "status": { "$ref": "#/$defs/JarStatus" },
+        "origin_date": {
+          "description": "Ngày mô phỏng làm gốc của lần chạy dự báo. Ngày đầu tiên của `days` là origin_date + 1.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "start_balance_vnd": {
+          "description": "Số dư hũ lúc chạy dự báo (điểm xuất phát của đường số dư).",
+          "$ref": "envelope.schema.json#/$defs/VndSigned"
+        },
+        "horizon_days": { "type": "integer", "minimum": 1, "maximum": 90 },
+        "payday": { "$ref": "#/$defs/ForecastPayday" },
+        "runout_date": {
+          "description": "Ngày cạn dự kiến (số dư P50 chạm 0 hoặc thấp hơn lần đầu, hoặc trung vị ngày cạn của các đường mô phỏng, theo engine). Vắng nếu không cạn trong horizon.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "p_shortfall": {
+          "description": "Xác suất hụt trước kỳ lương (0..1). CHỈ có khi độ phủ khoảng dự báo đã đạt mục tiêu đo trên backtest và không phải ước lượng ban đầu; vắng thì chỉ hiện confidence_band.",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "p_shortfall_se": {
+          "description": "Sai số chuẩn Monte Carlo của p_shortfall. Vắng khi không có p_shortfall.",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "confidence_band": { "$ref": "#/$defs/ConfidenceBand" },
+        "coverage": {
+          "description": "Độ phủ dữ liệu: phần thu nhập giải thích được bằng chi tiêu đã ghi và số dư (0..1). Vắng nếu chưa tính được.",
+          "$ref": "envelope.schema.json#/$defs/Ratio"
+        },
+        "history_days": {
+          "description": "Số ngày lịch sử đã dùng để dự báo.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "is_initial_estimate": {
+          "description": "Đúng khi lịch sử quá ngắn (dưới ngưỡng khởi đầu lạnh): dự báo theo luật và trung bình nhóm, giao diện ghi 'ước lượng ban đầu'.",
+          "type": "boolean"
+        },
+        "model": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "computed_at": {
+          "description": "Thời điểm thật (UTC) tính dự báo (độ tươi).",
+          "$ref": "envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "stale": {
+          "description": "Đúng khi đã quá hạn độ tươi (cấu hình) hoặc ngày mô phỏng đã sang ngày khác so với origin_date, và không tính lại được lúc đọc. Giao diện ghi 'số liệu cũ'.",
+          "type": "boolean"
+        },
+        "days": {
+          "description": "Chuỗi theo ngày tăng dần, tối đa 90 ngày (mặc định 30).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 90,
+          "items": { "$ref": "#/$defs/ForecastDay" }
+        },
+        "events": {
+          "description": "Mốc nghĩa vụ và lương trong khoảng của `days`, theo ngày tăng dần.",
+          "type": "array",
+          "maxItems": 60,
+          "items": { "$ref": "#/$defs/ForecastEvent" }
+        }
+      }
+    }
+  }
+}

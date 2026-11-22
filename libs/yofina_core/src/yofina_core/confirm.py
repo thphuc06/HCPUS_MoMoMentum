@@ -88,11 +88,19 @@ def canonical_json(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def params_hash(tool: str, params: Mapping[str, Any]) -> str:
-    """sha256 (hex thường, 64 ký tự) của `{"tool", "params"}` đã chuẩn hóa."""
-    normalized = normalize_params(tool, params)
+def hash_normalized_params(tool: str, normalized: Mapping[str, Any]) -> str:
+    """sha256 (hex thường, 64 ký tự) của `{"tool", "params"}` khi `params` ĐÃ được chuẩn hóa.
+
+    Đây là công thức của hợp đồng (contracts/README.md, mục "Băm tham số") và áp cho mọi tool ghi,
+    kể cả tool phase 2 mà `normalize_params` chưa cài: khối `confirm_action` dựng hash bằng hàm này.
+    """
     payload = canonical_json({"tool": tool, "params": normalized})
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def params_hash(tool: str, params: Mapping[str, Any]) -> str:
+    """sha256 (hex thường, 64 ký tự) của `{"tool", "params"}` đã chuẩn hóa."""
+    return hash_normalized_params(tool, normalize_params(tool, params))
 
 
 # =====================================================================================

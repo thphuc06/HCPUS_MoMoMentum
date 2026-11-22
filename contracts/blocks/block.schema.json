@@ -7,6 +7,10 @@
     { "$ref": "jar_summary.schema.json" },
     { "$ref": "confirm.schema.json" },
     { "$ref": "receipt.schema.json" },
-    { "$ref": "notice.schema.json" }
+    { "$ref": "notice.schema.json" },
+    { "$ref": "forecast_timeline.schema.json" },
+    { "$ref": "proactive_card.schema.json" },
+    { "$ref": "confirm_action.schema.json" },
+    { "$ref": "receipt_action.schema.json" }
   ]
 }

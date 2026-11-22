@@ -227,19 +227,27 @@ Mapping đầy đủ (chức năng, phía sau, ghi hay không) ở [proposal-sum
 
 ## Mô hình dữ liệu
 
-(§7) Aurora PostgreSQL Serverless v2, pgvector cho bước embedding của phân loại; truy cập qua Data API với role riêng và RLS (xem [Dữ liệu](#dữ-liệu)). Schema thực sẽ nằm ở `db/schema/`.
+(§7) Aurora PostgreSQL Serverless v2, pgvector cho bước embedding của phân loại; truy cập qua Data API với role riêng và RLS (xem [Dữ liệu](#dữ-liệu)). Schema thực là chuỗi [migration](../../db/README.md) (0001 tới 0006 tới phase 2). Bảng đã có (phase 1 và 2) và bảng dự kiến (phase 3 trở đi):
 
-| Bảng | Nội dung |
-|---|---|
-| `users`, `jars` | Người dùng, lương và ngày nhận đã khai, mức chấp nhận rủi ro, hũ, luật chia lương, mục tiêu và hạn |
-| `transactions` | Giao dịch chuẩn hóa: thời gian, số tiền, đối tác, hũ, nguồn, độ tin cậy phân loại |
-| `category_rules` | Luật phân loại học từ lần người dùng sửa, kèm phạm vi (một lần hay luôn luôn cho người nhận đó) |
-| `obligations` | Khoản tiền ra theo lịch: trả sau (tự sinh), khoản vay, tiền trọ, hóa đơn, thuê bao (người dùng khai); số tiền hoặc khoảng, phí, ngày đến hạn, chu kỳ, trạng thái |
-| `forecasts` | Phân vị theo hũ và ngày, tên mô hình, mã lần chạy |
-| `resilience_scores` | Điểm và 4 thành phần theo ngày |
-| `roadmaps` | Lộ trình JSON có phiên bản và lý do sinh lại |
-| `scenarios`, `nudges`, `feedback` | Kịch bản đã chạy, nhắc đã gửi, phản hồi |
-| `audit_events` | Mỗi gợi ý: trace_id, dữ liệu đã dùng, luật đã kiểm, kết quả; có thể thêm khối UI đã phát (để phát lại) **[đề xuất]** |
+| Bảng | Nội dung | Trạng thái |
+|---|---|---|
+| `users`, `jars` | Người dùng, lương và ngày nhận đã khai, mức chấp nhận rủi ro. Hũ có `kind` (spending, saving, obligation, system), `split_percent`, mục tiêu và hạn. **Hai hũ hệ thống** mỗi người: "Tiền vào khác" (`system_role other_income`) và "Chưa phân loại" (`unclassified`, số dư được âm); tổng số dư là tổng mọi hũ | 0001, 0005 |
+| `transactions` | Sổ cái: thời gian, số tiền, đối tác (`merchant`), lời nhắn (`note`), hũ, `tx_type`, nguồn trả (`funding_source` jar hoặc credit), người nhận, nghĩa vụ liên kết, khóa khử trùng, nhãn phân loại (`classified_by`, `classification_confidence`, `needs_review`) | 0001, 0005 |
+| `payees` | Người nhận của ví mô phỏng (seed theo persona) | 0005 |
+| `obligations` | Khoản tiền ra theo lịch: trả sau (tự sinh), khoản vay, tiền trọ, hóa đơn, thuê bao (người dùng khai); số tiền kỳ vọng và khoảng, phí, ngày đến hạn, chu kỳ, trạng thái, hũ trả | 0005 |
+| `credit_lines` | Hạn mức Trả sau (mô phỏng) và dư nợ gốc | 0005 |
+| `fee_schedules` | Biểu phí có cấu trúc theo sản phẩm tín dụng, kèm nguồn và ngày hiệu lực | 0005, seed |
+| `salary_events` | Lương về chờ xác nhận một chạm rồi chia vào hũ | 0005 |
+| `category_rules` | Luật phân loại học từ lần người dùng sửa, kèm phạm vi (một lần hay luôn luôn cho người nhận đó) | 0005 (phase 4 dùng) |
+| `tx_type_map`, `jar_templates` | Bảng tra: loại giao dịch sang hũ (bước 0 của phân loại), hũ mặc định cho onboarding | 0005, seed |
+| `forecast_runs`, `forecast_jar_summaries`, `forecasts` | Lần chạy dự báo (model, ngày gốc, độ phủ, nhãn tin cậy, cờ ước lượng ban đầu), tóm tắt mỗi hũ (ngày cạn, xác suất hụt, đủ/sát/hụt), phân vị chi tiêu ngày và số dư theo ngày | 0006 |
+| `conversation_turns`, `turn_blocks`, `confirm_resolutions` | Lượt hội thoại, khối UI đã phát, trạng thái đã thực hiện của khối xác nhận | 0001, 0003, 0004 |
+| `resilience_scores` | Điểm và 4 thành phần theo ngày | dự kiến |
+| `roadmaps` | Lộ trình JSON có phiên bản và lý do sinh lại | dự kiến |
+| `scenarios`, `nudges`, `feedback` | Kịch bản đã chạy, nhắc đã gửi, phản hồi | dự kiến |
+| `audit_events` | Mỗi gợi ý: trace_id, dữ liệu đã dùng, luật đã kiểm, kết quả; có thể thêm khối UI đã phát (để phát lại) | 0001 |
+
+Sự kiện của sổ cái (`transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`) và của dự báo (`forecast.updated`) đi qua EventBridge bus `yofina-bus`: hợp đồng ở [contracts/README.md](../../contracts/README.md#sự-kiện-eventbridge-bus-yofina-bus).
 
 Cổng chất lượng: khởi đầu lạnh (< 30 ngày: luật + trung bình nhóm; 30–90: thống kê; > 90: mô hình nền tảng), điểm độ phủ, khử trùng bằng khóa băm, độ tươi, thiếu dữ liệu thì hỏi lại. Số đo làm các mốc này đáng xem lại: hurdle thắng seasonal naive từ khoảng 21–30 ngày, AutoETS chỉ dùng từ 60–90 ngày. **[đã chạy thử]** ([ML §3](../research/spike-ml-forecasting.md), dữ liệu tổng hợp) Mốc chỉnh **[đề xuất]**.
 
@@ -270,7 +278,7 @@ Cổng chất lượng: khởi đầu lạnh (< 30 ngày: luật + trung bình n
 }
 ```
 
-Khối có phong bì `v`, `id`, `trace_id`, `fallback_text` và schema Zod ở frontend (theo [ADR-0001](../decisions/0001-frontend-stack.md)). Số trong khối do code dựng từ kết quả tool; số trong phần `text` do LLM viết nên vẫn cần kiểm bằng `NumericGrounding`.
+Khối có phong bì `v`, `id`, `trace_id`, `fallback_text` và schema Zod ở frontend (theo [ADR-0001](../decisions/0001-frontend-stack.md)). Hình dạng THẬT của các khối (không phải ví dụ minh họa ở trên) nằm ở [contracts/blocks/](../../contracts/blocks/): từ phase 2 có thêm `forecast_timeline` (đường P10/P50/P90 số dư, mốc nghĩa vụ và lương, ngày cạn, `p_shortfall` hoặc `confidence_band`; chưa có biến thể `scenario` trước-sau, thêm ở phase 3 như trường tùy chọn), `proactive_card`, `confirm_action` và `receipt_action`. Số trong khối do code dựng từ kết quả tool; số trong phần `text` do LLM viết nên vẫn cần kiểm bằng `NumericGrounding`.
 
 ## Pipeline F1–F7 (§10)
 

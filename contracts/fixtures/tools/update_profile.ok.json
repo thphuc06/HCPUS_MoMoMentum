@@ -1,0 +1,13 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "tool": "update_profile",
+    "occurred_at": "2026-12-10T03:03:00Z",
+    "app_date": "2026-11-21",
+    "summary": "Đã cập nhật lương lên 9.500.000 ₫",
+    "jars_after": [],
+    "details": []
+  }
+}

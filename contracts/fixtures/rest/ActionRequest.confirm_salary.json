@@ -1,0 +1,9 @@
+{
+  "tool": "confirm_salary",
+  "params": {
+    "salary_event_id": "7e1f3a90-2c4b-4d6e-8f01-a3b5c7d9e0f2",
+    "decision": "split",
+    "update_declared_salary": true
+  },
+  "confirm_token": "eyJzdWIiOiJ4In0.c2ln"
+}

@@ -1,0 +1,14 @@
+{
+  "tool": "save_jars",
+  "params": {
+    "jars": [
+      {
+        "name": "X",
+        "color_key": "gray",
+        "icon_key": "inbox",
+        "kind": "system",
+        "split_percent": 100
+      }
+    ]
+  }
+}

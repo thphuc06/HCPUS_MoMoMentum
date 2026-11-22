@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "user_id": "a1b2c3d4-0000-4000-8000-000000000001",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "occurred_at": "2026-12-10T03:02:11Z",
+  "app_date": "2026-11-21",
+  "event_id": "4c8e2a70-5f1b-4d3c-8a9e-7b6d5c4e3f21",
+  "transaction_id": "4c8e2a70-5f1b-4d3c-8a9e-7b6d5c4e3f21",
+  "kind": "expense",
+  "tx_type": "transfer_person",
+  "funding_source": "jar",
+  "amount_vnd": 60000,
+  "jar_codes": [
+    "chua_phan_loai"
+  ],
+  "effects": [
+    {
+      "jar_code": "chua_phan_loai",
+      "delta_vnd": -60000,
+      "balance_after_vnd": -240000
+    }
+  ],
+  "payee_id": "6f1e2d3c-4b5a-4968-8777-665544332211",
+  "needs_classification": true
+}

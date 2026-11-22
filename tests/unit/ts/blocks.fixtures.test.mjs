@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { BLOCK_TYPES, Block, BlockEnvelope, blockSchemas } from '../../../frontend/src/contracts/blocks.ts'
+import { ALL_BLOCK_TYPES, BLOCK_TYPES, Block, BlockEnvelope, blockSchemas } from '../../../frontend/src/contracts/blocks.ts'
 
 const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), '../../../contracts/fixtures/blocks')
 
@@ -16,14 +16,20 @@ function fixtures(dir) {
     .map((f) => ({ file: `${dir}/${f}`, prefix: f.split('.')[0], json: JSON.parse(readFileSync(resolve(FIXTURES, dir, f), 'utf8')) }))
 }
 
-test('registry có đúng bốn khối của phase 1, cùng thứ tự với block.schema.json', () => {
+test('blockSchemas có đủ tám khối theo thứ tự của block.schema.json; BLOCK_TYPES (registry frontend) là phần đã đăng ký', () => {
+  const all = [
+    'jar_summary', 'confirm', 'receipt', 'notice',
+    'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action',
+  ]
+  assert.deepEqual([...ALL_BLOCK_TYPES], all)
+  assert.deepEqual(Object.keys(blockSchemas), all)
   assert.deepEqual([...BLOCK_TYPES], ['jar_summary', 'confirm', 'receipt', 'notice'])
-  assert.deepEqual(Object.keys(blockSchemas), [...BLOCK_TYPES])
+  for (const t of BLOCK_TYPES) assert.ok(t in blockSchemas)
 })
 
 test('fixture hợp lệ: qua schema riêng và qua hợp, dữ liệu không bị đổi', () => {
   const list = fixtures('valid')
-  assert.ok(list.length >= 6)
+  assert.ok(list.length >= 14)
   for (const { file, prefix, json } of list) {
     const own = blockSchemas[prefix].safeParse(json)
     assert.ok(own.success, `${file}: ${own.error}`)
@@ -35,7 +41,7 @@ test('fixture hợp lệ: qua schema riêng và qua hợp, dữ liệu không b�
 
 test('fixture không hợp lệ: bị từ chối', () => {
   const list = fixtures('invalid')
-  assert.ok(list.length >= 10)
+  assert.ok(list.length >= 25)
   for (const { file, prefix, json } of list) {
     const schema = prefix === 'block' ? Block : blockSchemas[prefix]
     assert.ok(!schema.safeParse(json).success, `${file}: lẽ ra phải bị từ chối`)

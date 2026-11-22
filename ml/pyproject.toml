@@ -1,0 +1,18 @@
+[project]
+name = "yofina-ml"
+version = "0.1.0"
+description = "Mô hình dự báo, Monte Carlo và các kỹ thuật thống kê của Yofina Foresight (chỉ phụ thuộc numpy, scipy)."
+requires-python = ">=3.12,<3.14"
+# Chỉ numpy và scipy (master-plan mục 4). `ruptures` (PELT) thêm ở phase 4. Kiểu dữ liệu (types.py, serde.py) chỉ dùng
+# thư viện chuẩn: Lambda `yofina-forecast-batch` đóng zip numpy + scipy (không Docker, không StatsForecast).
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["yofina_ml"]

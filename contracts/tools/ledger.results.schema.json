@@ -2,134 +2,880 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/tools/ledger.results.schema.json",
   "title": "LedgerToolResults",
-  "description": "Kết quả JSON mà Lambda `ledger` trả cho Gateway (và cho đường REST nội bộ) của từng tool. Dữ liệu `data` của get_jar_balances/move_between_jars dùng lại đúng `data` của khối UI tương ứng, nên agent chỉ việc bọc bằng build_* của yofina_core.blocks. Mọi kết quả OK mang `as_of` và `app_date` để dựng `source` của khối. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "description": "Kết quả JSON mà Lambda `ledger` trả cho Gateway (và cho đường REST nội bộ) của từng tool. Dữ liệu `data` của get_jar_balances/move_between_jars dùng lại đúng `data` của khối UI tương ứng; với tool ghi phase 2 (update_profile, record_transaction, assign_jar) `data` là `ConfirmActionData` khi NEEDS_CONFIRMATION và `ReceiptActionData` khi OK, nên agent chỉ việc bọc bằng build_confirm_action / build_receipt_action. Mọi kết quả OK mang `as_of` và `app_date` để dựng `source` của khối. Các $defs dùng chung (Transaction, Obligation, CreditLine, Payee, SalaryEvent) cũng được OpenAPI tham chiếu. Schema gốc không ràng buộc gì.",
   "$defs": {
     "ToolError": {
       "description": "Lỗi nghiệp vụ hoặc kiểm token; `code` thuộc yofina_core.errors.ErrorCode. Gateway coi đây là kết quả thành công của Lambda; agent đọc `status`.",
       "type": "object",
-      "required": ["status", "code", "message"],
+      "required": [
+        "status",
+        "code",
+        "message"
+      ],
       "additionalProperties": false,
       "properties": {
-        "status": { "const": "ERROR" },
-        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
-        "message": { "type": "string", "minLength": 1, "maxLength": 280 }
+        "status": {
+          "const": "ERROR"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
+        }
       }
     },
     "GetJarBalancesOk": {
       "type": "object",
-      "required": ["status", "as_of", "app_date", "data"],
+      "required": [
+        "status",
+        "as_of",
+        "app_date",
+        "data"
+      ],
       "additionalProperties": false,
       "properties": {
-        "status": { "const": "OK" },
-        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
-        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
-        "data": { "$ref": "../blocks/jar_summary.schema.json#/$defs/JarSummaryData" }
+        "status": {
+          "const": "OK"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "data": {
+          "$ref": "../blocks/jar_summary.schema.json#/$defs/JarSummaryData"
+        }
       }
     },
     "GetJarBalancesResult": {
-      "oneOf": [{ "$ref": "#/$defs/GetJarBalancesOk" }, { "$ref": "#/$defs/ToolError" }]
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GetJarBalancesOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
     },
     "Transaction": {
-      "description": "Một dòng sổ cái. Số tiền có dấu: âm là tiền ra khỏi hũ, dương là tiền vào hũ.",
+      "description": "Một dòng sổ cái. Số tiền có dấu: âm là tiền ra khỏi hũ, dương là tiền vào hũ. Dòng funding_source credit (mua bằng Trả sau) là chi tiêu nhưng KHÔNG đổi số dư hũ.",
       "type": "object",
-      "required": ["id", "occurred_at", "app_date", "kind", "amount_vnd"],
+      "required": [
+        "id",
+        "occurred_at",
+        "app_date",
+        "kind",
+        "amount_vnd"
+      ],
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
-        "occurred_at": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
-        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
-        "kind": { "type": "string", "enum": ["expense", "income", "transfer"] },
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "occurred_at": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "expense",
+            "income",
+            "transfer"
+          ]
+        },
         "jar": {
           "description": "Mã hũ bị tác động; vắng nếu giao dịch chưa gán hũ.",
           "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
         },
-        "amount_vnd": { "type": "integer", "minimum": -99999999999999, "maximum": 99999999999999 },
-        "merchant": { "type": "string", "maxLength": 120 },
-        "note": { "type": "string", "maxLength": 200 },
-        "transfer_id": {
-          "description": "Có ở hai dòng của cùng một lần chuyển hũ.",
+        "amount_vnd": {
+          "type": "integer",
+          "minimum": -99999999999999,
+          "maximum": 99999999999999
+        },
+        "merchant": {
           "type": "string",
-          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          "maxLength": 120
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "transfer_id": {
+          "description": "Có ở các dòng của cùng một lần chuyển hũ hoặc chia lương.",
+          "$ref": "#/$defs/Uuid"
+        },
+        "tx_type": {
+          "description": "Loại giao dịch (bảng tra tx_type_map), ví dụ food_drink, salary, jar_transfer.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,39}$"
+        },
+        "funding_source": {
+          "description": "jar (trừ số dư hũ) hoặc credit (hạn mức Trả sau mô phỏng).",
+          "type": "string",
+          "enum": [
+            "jar",
+            "credit"
+          ]
+        },
+        "payee_id": {
+          "description": "Người nhận đã lưu, nếu có.",
+          "$ref": "#/$defs/Uuid"
+        },
+        "payee_name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "obligation_id": {
+          "description": "Nghĩa vụ mà dòng này thanh toán, nếu có.",
+          "$ref": "#/$defs/Uuid"
+        },
+        "needs_review": {
+          "description": "Đúng nếu cần người dùng xem lại phân loại.",
+          "type": "boolean"
         }
       }
     },
     "QueryTransactionsOk": {
       "type": "object",
-      "required": ["status", "as_of", "app_date", "data"],
+      "required": [
+        "status",
+        "as_of",
+        "app_date",
+        "data"
+      ],
       "additionalProperties": false,
       "properties": {
-        "status": { "const": "OK" },
-        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
-        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "status": {
+          "const": "OK"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
         "data": {
           "type": "object",
-          "required": ["transactions", "has_more"],
+          "required": [
+            "transactions",
+            "has_more"
+          ],
           "additionalProperties": false,
           "properties": {
             "transactions": {
               "type": "array",
               "maxItems": 50,
-              "items": { "$ref": "#/$defs/Transaction" }
+              "items": {
+                "$ref": "#/$defs/Transaction"
+              }
             },
-            "has_more": { "type": "boolean" }
+            "has_more": {
+              "type": "boolean"
+            },
+            "next_cursor": {
+              "description": "Con trỏ trang kế; vắng khi has_more là false. Mờ với client, truyền lại nguyên văn qua tham số cursor.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
           }
         }
       }
     },
     "QueryTransactionsResult": {
-      "oneOf": [{ "$ref": "#/$defs/QueryTransactionsOk" }, { "$ref": "#/$defs/ToolError" }]
+      "oneOf": [
+        {
+          "$ref": "#/$defs/QueryTransactionsOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
     },
     "MoveNeedsConfirmation": {
       "description": "Không có confirm_token: không ghi gì. `data` là đúng `data` của khối confirm; agent dựng khối bằng build_confirm và phát cho người dùng.",
       "type": "object",
-      "required": ["status", "as_of", "app_date", "data"],
+      "required": [
+        "status",
+        "as_of",
+        "app_date",
+        "data"
+      ],
       "additionalProperties": false,
       "properties": {
-        "status": { "const": "NEEDS_CONFIRMATION" },
-        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
-        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
-        "data": { "$ref": "../blocks/confirm.schema.json#/$defs/ConfirmData" }
+        "status": {
+          "const": "NEEDS_CONFIRMATION"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "data": {
+          "$ref": "../blocks/confirm.schema.json#/$defs/ConfirmData"
+        }
       }
     },
     "MoveOk": {
       "description": "Token hợp lệ, đã ghi. `data` là đúng `data` của khối receipt.",
       "type": "object",
-      "required": ["status", "as_of", "app_date", "data"],
+      "required": [
+        "status",
+        "as_of",
+        "app_date",
+        "data"
+      ],
       "additionalProperties": false,
       "properties": {
-        "status": { "const": "OK" },
-        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
-        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
-        "data": { "$ref": "../blocks/receipt.schema.json#/$defs/ReceiptData" }
+        "status": {
+          "const": "OK"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "data": {
+          "$ref": "../blocks/receipt.schema.json#/$defs/ReceiptData"
+        }
       }
     },
     "MoveBetweenJarsResult": {
       "oneOf": [
-        { "$ref": "#/$defs/MoveNeedsConfirmation" },
-        { "$ref": "#/$defs/MoveOk" },
-        { "$ref": "#/$defs/ToolError" }
+        {
+          "$ref": "#/$defs/MoveNeedsConfirmation"
+        },
+        {
+          "$ref": "#/$defs/MoveOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
       ]
     },
     "SaveTurnOk": {
       "description": "Đã lưu lượt hội thoại (ghi đè nếu cùng conversation_id và trace_id đã có). Không mang app_date vì không đọc số liệu tài chính.",
       "type": "object",
-      "required": ["status", "as_of", "data"],
+      "required": [
+        "status",
+        "as_of",
+        "data"
+      ],
       "additionalProperties": false,
       "properties": {
-        "status": { "const": "OK" },
-        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "status": {
+          "const": "OK"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
         "data": {
           "type": "object",
-          "required": ["blocks_saved"],
+          "required": [
+            "blocks_saved"
+          ],
           "additionalProperties": false,
           "properties": {
-            "blocks_saved": { "type": "integer", "minimum": 0, "maximum": 20 }
+            "blocks_saved": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20
+            }
           }
         }
       }
     },
     "SaveTurnResult": {
-      "oneOf": [{ "$ref": "#/$defs/SaveTurnOk" }, { "$ref": "#/$defs/ToolError" }]
+      "oneOf": [
+        {
+          "$ref": "#/$defs/SaveTurnOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
+    },
+    "Uuid": {
+      "description": "UUID chữ thường.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "Payee": {
+      "description": "Người nhận đã lưu của ví mô phỏng. account_hint là phần đã che (không bao giờ là số tài khoản đầy đủ).",
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "is_favorite"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "account_hint": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "is_favorite": {
+          "type": "boolean"
+        },
+        "last_used_at": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        }
+      }
+    },
+    "Obligation": {
+      "description": "Một khoản nghĩa vụ. amount_vnd là số tiền KỲ VỌNG dùng cho dự báo; khoản biến động có thêm khoảng min và max. due_date là ngày đến hạn KẾ TIẾP (ngày mô phỏng).",
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "amount_vnd",
+        "fee_vnd",
+        "due_date",
+        "cycle",
+        "status",
+        "is_essential",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "bnpl",
+            "loan",
+            "rent",
+            "bill",
+            "subscription"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "amount_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
+        },
+        "amount_min_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
+        },
+        "amount_max_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
+        },
+        "fee_vnd": {
+          "description": "Với trả sau phí đã nằm trong amount_vnd (amount = principal + fee); với khoản khác là phí cộng thêm mỗi kỳ.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+        },
+        "principal_vnd": {
+          "description": "Chỉ có với trả sau: phần gốc.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
+        },
+        "due_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "cycle": {
+          "type": "string",
+          "enum": [
+            "once",
+            "weekly",
+            "monthly",
+            "yearly"
+          ]
+        },
+        "due_day": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31
+        },
+        "status": {
+          "description": "active, paid hoặc cancelled. Quá hạn không phải một trạng thái: là active có due_date trước hôm nay mô phỏng.",
+          "type": "string",
+          "enum": [
+            "active",
+            "paid",
+            "cancelled"
+          ]
+        },
+        "pay_jar": {
+          "description": "Hũ dùng để trả.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+        },
+        "is_essential": {
+          "type": "boolean"
+        },
+        "source": {
+          "description": "declared (người dùng khai) hoặc bnpl_auto (tự sinh khi mua bằng hạn mức).",
+          "type": "string",
+          "enum": [
+            "declared",
+            "bnpl_auto"
+          ]
+        },
+        "paid_at": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        }
+      }
+    },
+    "CreditLine": {
+      "description": "Hạn mức Trả sau (mô phỏng). outstanding_vnd là tổng GỐC chưa trả (phí không tính vào dư nợ); available_vnd = limit - outstanding.",
+      "type": "object",
+      "required": [
+        "product_code",
+        "product_label",
+        "limit_vnd",
+        "outstanding_vnd",
+        "available_vnd",
+        "due_day",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "product_code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        },
+        "product_label": {
+          "description": "Tên hiển thị lấy từ biểu phí (fee_schedules.product_label), ví dụ 'Trả sau (mô phỏng)'.",
+          "type": "string",
+          "maxLength": 60
+        },
+        "limit_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+        },
+        "outstanding_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+        },
+        "available_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+        },
+        "due_day": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "suspended"
+          ]
+        }
+      }
+    },
+    "SalaryEvent": {
+      "description": "Lương về chờ xác nhận hoặc đã xử lý. period_date là kỳ lương (ngày lương gần nhất với ngày nhận). deviation_percent: dương là nhiều hơn lương đã khai.",
+      "type": "object",
+      "required": [
+        "id",
+        "period_date",
+        "received_on",
+        "amount_vnd",
+        "deviation_percent",
+        "ask_update_salary",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "period_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "received_on": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "expected_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
+        },
+        "amount_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
+        },
+        "deviation_percent": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "ask_update_salary": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "confirmed",
+            "kept_other"
+          ]
+        },
+        "confirmed_at": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        }
+      }
+    },
+    "CashflowJar": {
+      "type": "object",
+      "required": [
+        "jar",
+        "name",
+        "spent_vnd",
+        "tx_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "jar": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "spent_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+        },
+        "tx_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "GetCashflowSummaryOk": {
+      "type": "object",
+      "required": [
+        "status",
+        "as_of",
+        "app_date",
+        "data"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "OK"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "data": {
+          "type": "object",
+          "required": [
+            "from_date",
+            "to_date",
+            "salary_income_vnd",
+            "other_income_vnd",
+            "spent_vnd",
+            "by_jar",
+            "unclassified_pending_vnd"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "from_date": {
+              "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+            },
+            "to_date": {
+              "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+            },
+            "salary_income_vnd": {
+              "description": "Tiền vào loại lương (tx_type salary) trong khoảng. Đây là thu nhập.",
+              "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+            },
+            "other_income_vnd": {
+              "description": "Mọi tiền vào khác lương. KHÔNG tính là thu nhập.",
+              "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+            },
+            "spent_vnd": {
+              "description": "Tổng chi tiêu (mọi nguồn trả, kể cả Trả sau), không gồm chuyển hũ.",
+              "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+            },
+            "by_jar": {
+              "type": "array",
+              "maxItems": 40,
+              "items": {
+                "$ref": "#/$defs/CashflowJar"
+              }
+            },
+            "unclassified_pending_vnd": {
+              "description": "Số tiền đã chi nhưng đang ở hũ Chưa phân loại (giá trị tuyệt đối của số dư âm).",
+              "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+            }
+          }
+        }
+      }
+    },
+    "GetCashflowSummaryResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GetCashflowSummaryOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
+    },
+    "GetObligationsOk": {
+      "type": "object",
+      "required": [
+        "status",
+        "as_of",
+        "app_date",
+        "data"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "OK"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "data": {
+          "type": "object",
+          "required": [
+            "obligations",
+            "total_due_vnd"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "obligations": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "$ref": "#/$defs/Obligation"
+              }
+            },
+            "total_due_vnd": {
+              "description": "Tổng amount_vnd của các khoản đang hoạt động trong danh sách.",
+              "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+            },
+            "credit_line": {
+              "$ref": "#/$defs/CreditLine"
+            }
+          }
+        }
+      }
+    },
+    "GetObligationsResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GetObligationsOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
+    },
+    "JarSuggestion": {
+      "type": "object",
+      "required": [
+        "code",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      }
+    },
+    "UnclassifiedItem": {
+      "description": "Một giao dịch chưa xếp hũ hoặc cần xem lại, kèm tối đa 2 hũ gợi ý.",
+      "type": "object",
+      "required": [
+        "transaction",
+        "suggested_jars"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "transaction": {
+          "$ref": "#/$defs/Transaction"
+        },
+        "suggested_jars": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/JarSuggestion"
+          }
+        }
+      }
+    },
+    "GetUnclassifiedOk": {
+      "type": "object",
+      "required": [
+        "status",
+        "as_of",
+        "app_date",
+        "data"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "OK"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "data": {
+          "type": "object",
+          "required": [
+            "items",
+            "count",
+            "pending_total_vnd"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "$ref": "#/$defs/UnclassifiedItem"
+              }
+            },
+            "count": {
+              "description": "Tổng số giao dịch chưa phân loại hoặc cần xem lại (có thể nhiều hơn số trong items).",
+              "type": "integer",
+              "minimum": 0
+            },
+            "pending_total_vnd": {
+              "description": "Số tiền đã chi chưa phân loại.",
+              "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+            }
+          }
+        }
+      }
+    },
+    "GetUnclassifiedResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GetUnclassifiedOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
+    },
+    "ActionNeedsConfirmation": {
+      "description": "Không có confirm_token: không ghi gì. `data` là đúng `data` của khối confirm_action; agent dựng khối bằng build_confirm_action và phát cho người dùng.",
+      "type": "object",
+      "required": [
+        "status",
+        "as_of",
+        "app_date",
+        "data"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "NEEDS_CONFIRMATION"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "data": {
+          "$ref": "../blocks/confirm_action.schema.json#/$defs/ConfirmActionData"
+        }
+      }
+    },
+    "ActionOk": {
+      "description": "Token hợp lệ, đã ghi. `data` là đúng `data` của khối receipt_action.",
+      "type": "object",
+      "required": [
+        "status",
+        "as_of",
+        "app_date",
+        "data"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "OK"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "data": {
+          "$ref": "../blocks/receipt_action.schema.json#/$defs/ReceiptActionData"
+        }
+      }
+    },
+    "UpdateProfileResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ActionNeedsConfirmation"
+        },
+        {
+          "$ref": "#/$defs/ActionOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
+    },
+    "RecordTransactionResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ActionNeedsConfirmation"
+        },
+        {
+          "$ref": "#/$defs/ActionOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
+    },
+    "AssignJarResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ActionNeedsConfirmation"
+        },
+        {
+          "$ref": "#/$defs/ActionOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
     }
   }
 }

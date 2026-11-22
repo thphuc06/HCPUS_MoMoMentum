@@ -1,7 +1,7 @@
 [
   {
     "name": "get_jar_balances",
-    "description": "Lấy số dư hiện tại của từng hũ chi tiêu của người dùng (mã hũ, tên, số dư, tỷ lệ chia lương), theo thứ tự hiển thị. Không cần tham số.",
+    "description": "Lấy số dư hiện tại của từng hũ chi tiêu của người dùng (mã hũ, tên, số dư, tỷ lệ chia lương), theo thứ tự hiển thị. Không gồm hai hũ hệ thống Tiền vào khác và Chưa phân loại. Không cần tham số.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -14,7 +14,7 @@
   },
   {
     "name": "query_transactions",
-    "description": "Tra cứu giao dịch gần đây của người dùng, mới nhất trước. Có thể lọc theo hũ và khoảng ngày; trả tối đa limit dòng và cho biết còn nữa không.",
+    "description": "Tra cứu giao dịch gần đây của người dùng, mới nhất trước. Có thể lọc theo hũ, loại và khoảng ngày; trả tối đa limit dòng, cho biết còn nữa không và con trỏ để lấy trang kế.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -25,6 +25,14 @@
         "jar": {
           "type": "string",
           "description": "Mã hũ cần lọc (lấy từ kết quả get_jar_balances). Bỏ trống để lấy mọi hũ."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Lọc theo loại dòng sổ cái: expense (chi), income (tiền vào) hoặc transfer (chuyển hũ). Bỏ trống: mọi loại."
+        },
+        "tx_type": {
+          "type": "string",
+          "description": "Lọc theo loại giao dịch chi tiết (ví dụ food_drink, salary, bill_electricity). Bỏ trống: mọi loại."
         },
         "from_date": {
           "type": "string",
@@ -37,8 +45,227 @@
         "limit": {
           "type": "integer",
           "description": "Số dòng tối đa, từ 1 đến 50. Bỏ trống: mặc định theo cấu hình."
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Con trỏ trang kế lấy từ next_cursor của lần gọi trước. Không tự tạo."
         }
       }
+    }
+  },
+  {
+    "name": "get_cashflow_summary",
+    "description": "Tổng thu chi của người dùng trong một khoảng ngày: chi tiêu theo hũ, thu nhập từ lương và tiền vào khác lương (tiền vào khác không được tính là thu nhập), và số tiền đã chi nhưng chưa phân loại. Không tính các lần chuyển giữa hũ.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "from_date": {
+          "type": "string",
+          "description": "Từ ngày (gồm), YYYY-MM-DD theo ngày mô phỏng. Bỏ trống cả from_date và to_date: lấy kỳ lương hiện tại (từ ngày lương gần nhất tới hôm nay)."
+        },
+        "to_date": {
+          "type": "string",
+          "description": "Đến ngày (gồm), YYYY-MM-DD theo ngày mô phỏng."
+        }
+      }
+    }
+  },
+  {
+    "name": "get_obligations",
+    "description": "Lấy các khoản nghĩa vụ đã khai hoặc tự sinh (trả sau, khoản vay, tiền trọ, hóa đơn, thuê bao): số tiền, phí, ngày đến hạn, chu kỳ, hũ trả; kèm hạn mức Trả sau (mô phỏng) nếu có. Dùng để trả lời 'sắp tới phải trả gì'.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "status": {
+          "type": "string",
+          "description": "active (đang hoạt động, mặc định), paid, cancelled hoặc all."
+        },
+        "within_days": {
+          "type": "integer",
+          "description": "Chỉ lấy khoản đến hạn trong N ngày tới tính từ hôm nay mô phỏng. Bỏ trống: không giới hạn."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Số khoản tối đa, từ 1 đến 100. Bỏ trống: 50."
+        }
+      }
+    }
+  },
+  {
+    "name": "get_unclassified",
+    "description": "Lấy các giao dịch chưa xếp được hũ (đang ở hũ Chưa phân loại) hoặc cần xem lại, mới nhất trước, mỗi giao dịch kèm tối đa 2 hũ gợi ý, cùng tổng số tiền đã chi chưa phân loại.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Số giao dịch tối đa, từ 1 đến 50. Bỏ trống: 20."
+        }
+      }
+    }
+  },
+  {
+    "name": "update_profile",
+    "description": "Sửa thông tin người dùng đã khai: lương, ngày nhận lương, mức chấp nhận rủi ro, tên hiển thị, hoặc thêm, sửa, xóa MỘT khoản nghĩa vụ (tiền trọ, hóa đơn, thuê bao, khoản vay) mỗi lần gọi. Khi chưa có confirm_token công cụ KHÔNG ghi gì mà trả NEEDS_CONFIRMATION kèm bản xem trước để người dùng tự bấm xác nhận trên màn hình. Không bao giờ tự bịa confirm_token. Phải có ít nhất một thay đổi.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "display_name": {
+          "type": "string",
+          "description": "Tên hiển thị mới."
+        },
+        "monthly_salary_vnd": {
+          "type": "integer",
+          "description": "Lương thực nhận mỗi tháng, VND, số nguyên dương."
+        },
+        "payday_day": {
+          "type": "integer",
+          "description": "Ngày nhận lương trong tháng, từ 1 đến 31 (tháng ngắn hơn thì lấy ngày cuối tháng)."
+        },
+        "risk_tolerance": {
+          "type": "string",
+          "description": "Mức chấp nhận rủi ro: low, medium hoặc high."
+        },
+        "obligation": {
+          "type": "object",
+          "description": "Một thay đổi về khoản nghĩa vụ. Khoản trả sau không khai được (tự sinh khi mua bằng hạn mức).",
+          "properties": {
+            "op": {
+              "type": "string",
+              "description": "upsert (thêm hoặc sửa) hoặc delete (xóa, thực chất là hủy khoản)."
+            },
+            "obligation_id": {
+              "type": "string",
+              "description": "Id khoản cần sửa hoặc xóa (lấy từ get_obligations). Bỏ trống khi thêm mới."
+            },
+            "kind": {
+              "type": "string",
+              "description": "Loại: loan (khoản vay), rent (tiền trọ), bill (hóa đơn) hoặc subscription (thuê bao)."
+            },
+            "name": {
+              "type": "string",
+              "description": "Tên khoản, tối đa 80 ký tự (ví dụ 'Tiền trọ')."
+            },
+            "amount_vnd": {
+              "type": "integer",
+              "description": "Số tiền mỗi kỳ, VND. Với khoản biến động thì có thể bỏ trống và dùng amount_min_vnd, amount_max_vnd."
+            },
+            "amount_min_vnd": {
+              "type": "integer",
+              "description": "Cận dưới của khoảng số tiền (khoản biến động như tiền điện)."
+            },
+            "amount_max_vnd": {
+              "type": "integer",
+              "description": "Cận trên của khoảng số tiền."
+            },
+            "fee_vnd": {
+              "type": "integer",
+              "description": "Phí mỗi kỳ, VND. Bỏ trống: 0."
+            },
+            "due_date": {
+              "type": "string",
+              "description": "Ngày đến hạn kế tiếp, YYYY-MM-DD theo ngày mô phỏng. Bỏ trống thì suy từ due_day."
+            },
+            "due_day": {
+              "type": "integer",
+              "description": "Ngày đến hạn trong tháng (1 đến 31) cho khoản lặp hằng tháng."
+            },
+            "cycle": {
+              "type": "string",
+              "description": "once (một lần), weekly, monthly (mặc định) hoặc yearly."
+            },
+            "pay_jar": {
+              "type": "string",
+              "description": "Mã hũ dùng để trả khoản này. Bỏ trống: hũ Nghĩa vụ."
+            },
+            "is_essential": {
+              "type": "boolean",
+              "description": "Khoản thiết yếu (tiền trọ, điện nước): hệ thống không gợi ý cắt giảm."
+            }
+          }
+        },
+        "confirm_token": {
+          "type": "string",
+          "description": "Token xác nhận một lần do hệ thống cấp sau khi người dùng bấm xác nhận. Chỉ truyền khi được cung cấp; không tự tạo."
+        }
+      }
+    }
+  },
+  {
+    "name": "record_transaction",
+    "description": "Ghi một giao dịch trên ví mô phỏng: chi tiêu (trừ tiền hũ, hoặc mua bằng hạn mức Trả sau mô phỏng) hoặc tiền vào. Tiền vào luôn nằm ở hũ Tiền vào khác cho tới khi xác nhận là lương hoặc gán vào hũ. Khi chưa có confirm_token công cụ KHÔNG ghi gì mà trả NEEDS_CONFIRMATION kèm bản xem trước để người dùng tự bấm xác nhận. Không bao giờ tự bịa confirm_token.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "kind": {
+          "type": "string",
+          "description": "expense (chi tiêu) hoặc income (tiền vào)."
+        },
+        "amount_vnd": {
+          "type": "integer",
+          "description": "Số tiền, VND, số nguyên dương."
+        },
+        "jar": {
+          "type": "string",
+          "description": "Mã hũ: với chi tiêu bằng hũ là hũ bị trừ tiền; với chi tiêu bằng Trả sau là hũ để tính chi tiêu. Bỏ trống thì hệ thống suy từ tx_type, không suy được thì để ở Chưa phân loại. Bỏ qua với tiền vào."
+        },
+        "tx_type": {
+          "type": "string",
+          "description": "Loại giao dịch (ví dụ food_drink, bill_electricity, transfer_person, salary, friend_repay). Bỏ trống: other_expense hoặc income_other."
+        },
+        "funding": {
+          "type": "string",
+          "description": "jar (trừ tiền hũ, mặc định) hoặc credit (mua bằng hạn mức Trả sau mô phỏng, sinh nghĩa vụ). Chỉ dùng credit với chi tiêu."
+        },
+        "payee_id": {
+          "type": "string",
+          "description": "Id người nhận đã lưu (lấy từ danh sách người nhận). Bỏ trống nếu không chuyển cho người đã lưu."
+        },
+        "counterparty": {
+          "type": "string",
+          "description": "Tên đối tác hoặc người nhận hiển thị, tối đa 120 ký tự."
+        },
+        "note": {
+          "type": "string",
+          "description": "Lời nhắn, tối đa 200 ký tự."
+        },
+        "obligation_id": {
+          "type": "string",
+          "description": "Id nghĩa vụ mà khoản chi này thanh toán (lấy từ get_obligations). Bỏ trống nếu không phải trả nghĩa vụ."
+        },
+        "client_ref": {
+          "type": "string",
+          "description": "Mã tham chiếu của phía gọi để chống ghi trùng khi gửi lại, tối đa 64 ký tự. Không tự bịa."
+        },
+        "confirm_token": {
+          "type": "string",
+          "description": "Token xác nhận một lần do hệ thống cấp sau khi người dùng bấm xác nhận. Chỉ truyền khi được cung cấp; không tự tạo."
+        }
+      },
+      "required": [
+        "kind",
+        "amount_vnd"
+      ]
     }
   },
   {
@@ -72,6 +299,39 @@
         "from_jar",
         "to_jar",
         "amount_vnd"
+      ]
+    }
+  },
+  {
+    "name": "assign_jar",
+    "description": "Gán hoặc sửa hũ của một giao dịch (kể cả giao dịch đang ở Chưa phân loại hoặc tiền vào đang ở Tiền vào khác): số dư hai hũ đổi tương ứng, và có thể nhớ lựa chọn thành luật cho người nhận hoặc đối tác đó. Khi chưa có confirm_token công cụ KHÔNG ghi gì mà trả NEEDS_CONFIRMATION kèm bản xem trước. Không bao giờ tự bịa confirm_token.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "transaction_id": {
+          "type": "string",
+          "description": "Id giao dịch cần gán (lấy từ query_transactions hoặc get_unclassified)."
+        },
+        "jar": {
+          "type": "string",
+          "description": "Mã hũ đích (lấy từ get_jar_balances)."
+        },
+        "remember": {
+          "type": "string",
+          "description": "once (chỉ giao dịch này, mặc định) hoặc always (luôn xếp vào hũ này cho người nhận hoặc đối tác này)."
+        },
+        "confirm_token": {
+          "type": "string",
+          "description": "Token xác nhận một lần do hệ thống cấp sau khi người dùng bấm xác nhận. Chỉ truyền khi được cung cấp; không tự tạo."
+        }
+      },
+      "required": [
+        "transaction_id",
+        "jar"
       ]
     }
   },

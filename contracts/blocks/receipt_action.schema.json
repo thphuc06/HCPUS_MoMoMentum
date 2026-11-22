@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/receipt_action.schema.json",
+  "title": "ReceiptActionBlock",
+  "description": "Biên nhận của thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary). Trả bởi POST /actions (cùng với `receipt` của chuyển hũ) và dựng lại từ kết quả tool. Id khối `receipt:{tool}:{reference_id}`, hoặc `receipt:{tool}:{trace_id}` khi thao tác không có reference_id (kèm tool vì assign_jar và record_transaction dùng chung id giao dịch).",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "receipt_action" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ReceiptActionData" }
+  },
+  "$defs": {
+    "ReceiptDetail": {
+      "description": "Một dòng chi tiết do code định dạng sẵn (ví dụ nhãn 'Nghĩa vụ mới', giá trị '333.000 ₫ đến hạn 05/12').",
+      "type": "object",
+      "required": ["label", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "value": { "type": "string", "minLength": 1, "maxLength": 120 }
+      }
+    },
+    "ReceiptFollowUp": {
+      "description": "Việc kế tiếp mà thao tác này mở ra. confirm_salary: tiền vào được nhận diện là lương, cần người dùng xác nhận một chạm để chia vào hũ (kèm cờ ask_update_salary khi lệch nhiều so với lương đã khai). review_unclassified: khoản chi vừa ghi chưa xếp được hũ.",
+      "type": "object",
+      "required": ["kind", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["confirm_salary", "review_unclassified"] },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "salary_event_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "expected_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" },
+        "received_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" },
+        "deviation_percent": {
+          "description": "Lệch so với lương đã khai, tính theo phần trăm (dương: nhiều hơn).",
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "ask_update_salary": {
+          "description": "Đúng khi lệch quá ngưỡng cấu hình: giao diện hỏi 'Cập nhật lương đã khai?'.",
+          "type": "boolean"
+        }
+      }
+    },
+    "ReceiptActionData": {
+      "type": "object",
+      "required": ["tool", "occurred_at", "app_date", "summary", "jars_after", "details"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "$ref": "confirm_action.schema.json#/$defs/ConfirmActionTool" },
+        "reference_id": {
+          "description": "Id tham chiếu của thao tác (UUID): transaction_id với record_transaction và assign_jar, transfer_id của lần chia với confirm_salary. Vắng với update_profile và save_jars.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "occurred_at": {
+          "description": "Thời điểm thật (UTC) thao tác được ghi.",
+          "$ref": "envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "app_date": {
+          "description": "Ngày mô phỏng của người dùng lúc ghi (ADR-0003).",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "amount_vnd": {
+          "description": "Số tiền của thao tác nếu có (luôn dương).",
+          "$ref": "envelope.schema.json#/$defs/VndPositive"
+        },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "jars_after": {
+          "description": "Các hũ có số dư đổi, kèm số dư sau (có thể rỗng). Hũ Chưa phân loại có thể âm nên số dư ở đây dùng kiểu có dấu.",
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/JarBalanceAfter" }
+        },
+        "details": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/ReceiptDetail" }
+        },
+        "follow_up": { "$ref": "#/$defs/ReceiptFollowUp" }
+      }
+    },
+    "JarBalanceAfter": {
+      "description": "Một hũ và số dư sau thao tác (có dấu, khác JarAfter của biên nhận chuyển hũ vốn không âm).",
+      "type": "object",
+      "required": ["code", "name", "balance_after_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "balance_after_vnd": { "$ref": "envelope.schema.json#/$defs/VndSigned" }
+      }
+    }
+  }
+}

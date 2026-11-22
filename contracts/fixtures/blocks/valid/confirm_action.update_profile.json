@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "id": "confirm:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:649bc24676a9",
+  "type": "confirm_action",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Cập nhật lương lên 9.500.000 ₫. Cần bạn xác nhận trên ứng dụng.",
+  "source": {
+    "tool": "ledger___update_profile",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "tool": "update_profile",
+    "params": {
+      "monthly_salary_vnd": 9500000,
+      "payday_day": 5
+    },
+    "params_hash": "649bc24676a9ef8559bd8ae22bc1adec68dfbd9fd8141bcaeb85cf270dc95f7c",
+    "summary": "Cập nhật lương lên 9.500.000 ₫",
+    "changes": [
+      {
+        "label": "Lương mỗi tháng",
+        "before": "9.000.000 ₫",
+        "after": "9.500.000 ₫"
+      }
+    ],
+    "warnings": [
+      "Dự báo sẽ được tính lại với lương mới."
+    ],
+    "expires_at": "2026-12-10T03:10:00Z"
+  }
+}

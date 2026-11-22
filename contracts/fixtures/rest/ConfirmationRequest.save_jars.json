@@ -1,0 +1,24 @@
+{
+  "tool": "save_jars",
+  "params": {
+    "jars": [
+      {
+        "code": "an_uong",
+        "name": "Ăn uống",
+        "color_key": "violet",
+        "icon_key": "utensils",
+        "kind": "spending",
+        "split_percent": 60
+      },
+      {
+        "name": "Du lịch",
+        "color_key": "teal",
+        "icon_key": "plane",
+        "kind": "saving",
+        "split_percent": 40,
+        "goal_vnd": 6000000,
+        "goal_date": "2027-04-01"
+      }
+    ]
+  }
+}

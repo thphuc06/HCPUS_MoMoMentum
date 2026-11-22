@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "PARAMS_INVALID",
+  "message": "Cần ít nhất một thay đổi (lương, ngày nhận, mức rủi ro, tên hoặc một khoản nghĩa vụ)."
+}

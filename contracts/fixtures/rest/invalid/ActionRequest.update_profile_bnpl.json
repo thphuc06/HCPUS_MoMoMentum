@@ -1,0 +1,11 @@
+{
+  "tool": "update_profile",
+  "params": {
+    "obligation": {
+      "op": "upsert",
+      "kind": "bnpl",
+      "name": "x",
+      "amount_vnd": 1
+    }
+  }
+}

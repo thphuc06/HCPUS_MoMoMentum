@@ -1,0 +1,33 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "from_date": "2026-11-05",
+    "to_date": "2026-11-21",
+    "salary_income_vnd": 9000000,
+    "other_income_vnd": 350000,
+    "spent_vnd": 1840000,
+    "by_jar": [
+      {
+        "jar": "an_uong",
+        "name": "Ăn uống",
+        "spent_vnd": 1120000,
+        "tx_count": 21
+      },
+      {
+        "jar": "di_lai",
+        "name": "Đi lại",
+        "spent_vnd": 310000,
+        "tx_count": 5
+      },
+      {
+        "jar": "hoa_don",
+        "name": "Hóa đơn",
+        "spent_vnd": 410000,
+        "tx_count": 3
+      }
+    ],
+    "unclassified_pending_vnd": 180000
+  }
+}

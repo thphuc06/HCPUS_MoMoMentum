@@ -1,0 +1,24 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "tool": "record_transaction",
+    "reference_id": "0a1b2c3d-1111-4222-8333-444455556666",
+    "occurred_at": "2026-12-10T03:02:11Z",
+    "app_date": "2026-11-21",
+    "amount_vnd": 300000,
+    "summary": "Đã mua 300.000 ₫ bằng Trả sau (mô phỏng)",
+    "jars_after": [],
+    "details": [
+      {
+        "label": "Nghĩa vụ mới",
+        "value": "333.000 ₫ đến hạn 05/12"
+      },
+      {
+        "label": "Hạn mức còn lại",
+        "value": "4.700.000 ₫"
+      }
+    ]
+  }
+}

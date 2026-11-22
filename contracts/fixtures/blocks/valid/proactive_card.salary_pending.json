@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "id": "proactive_card:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:salary_pending",
+  "type": "proactive_card",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Lương vừa về, xác nhận để chia vào hũ. Nhận 9.000.000 ₫, đúng với lương đã khai.",
+  "source": {
+    "tool": "rest:GET /overview",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "kind": "salary_pending",
+    "status": "ok",
+    "title": "Lương vừa về, xác nhận để chia vào hũ",
+    "reason": "Nhận 9.000.000 ₫, đúng với lương đã khai.",
+    "actions": [
+      {
+        "kind": "confirm_salary",
+        "label": "Xác nhận chia lương"
+      },
+      {
+        "kind": "snooze",
+        "label": "Để sau"
+      }
+    ]
+  }
+}

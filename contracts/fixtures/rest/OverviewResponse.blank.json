@@ -1,0 +1,23 @@
+{
+  "app_date": "2026-11-21",
+  "as_of": "2026-12-10T03:00:00Z",
+  "profile": {
+    "display_name": "giamkhao9",
+    "onboarded": false
+  },
+  "balance": {
+    "total_vnd": 0,
+    "jars_total_vnd": 0,
+    "other_income_vnd": 0,
+    "unclassified_vnd": 0
+  },
+  "jars": [],
+  "system_jars": [],
+  "next_payday": null,
+  "forecast": null,
+  "proactive_card": null,
+  "credit_line": null,
+  "obligations_due": [],
+  "recent_transactions": [],
+  "needs_review_count": 0
+}

@@ -1,0 +1,9 @@
+{
+  "tool": "assign_jar",
+  "params": {
+    "transaction_id": "4c8e2a70-5f1b-4d3c-8a9e-7b6d5c4e3f21",
+    "jar": "an_uong",
+    "remember": "always"
+  },
+  "confirm_token": "eyJzdWIiOiJ4In0.c2ln"
+}

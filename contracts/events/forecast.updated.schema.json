@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/events/forecast.updated.schema.json",
+  "title": "ForecastUpdatedEvent",
+  "description": "Phần `detail` của sự kiện `forecast.updated` (source `yofina.forecast`): một lần chạy dự báo đã ghi xong vào forecast_runs, forecasts, forecast_jar_summaries. Phase 2 chưa có consumer bắt buộc; dành cho cổng nhắc và phát hiện lệch (phase 4, 5) và đo độ trễ. `event_id` bằng `run_id`. Không lặp lại số liệu dự báo (consumer đọc bảng).",
+  "type": "object",
+  "required": [
+    "v", "event_id", "user_id", "run_id", "computed_at", "app_date", "trigger", "jar_codes",
+    "is_initial_estimate", "confidence_label"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "common.schema.json#/$defs/EventVersion" },
+    "event_id": { "$ref": "common.schema.json#/$defs/EventId" },
+    "user_id": { "$ref": "common.schema.json#/$defs/UserId" },
+    "trace_id": { "$ref": "../blocks/envelope.schema.json#/$defs/TraceId" },
+    "run_id": { "$ref": "common.schema.json#/$defs/Uuid" },
+    "computed_at": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+    "app_date": {
+      "description": "Ngày mô phỏng làm gốc của lần chạy.",
+      "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+    },
+    "trigger": { "type": "string", "enum": ["nightly", "event", "manual", "reset", "read"] },
+    "parent_event_id": {
+      "description": "Với trigger event: event_id của sự kiện ledger gây ra lần chạy.",
+      "$ref": "common.schema.json#/$defs/EventId"
+    },
+    "jar_codes": {
+      "description": "Hũ có kết quả trong lần chạy này.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" }
+    },
+    "is_initial_estimate": { "type": "boolean" },
+    "confidence_label": { "$ref": "../blocks/forecast_timeline.schema.json#/$defs/ConfidenceBand" }
+  }
+}

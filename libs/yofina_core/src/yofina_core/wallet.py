@@ -1,0 +1,124 @@
+"""Hằng số của ví mô phỏng (phase 2): định danh và tập giá trị, cộng đúng MỘT quy tắc dùng chung là `split_amount`.
+
+Các tập giá trị ở đây khớp `enum` trong `contracts/` và `CHECK` trong `db/migrations/0005_wallet.sql`,
+0006_forecast.sql; `tests/unit/test_contracts_phase2.py` so khớp ba nơi (lệch là test đỏ). Mã hũ hệ thống là
+mã cố định theo hợp đồng (người dùng không đổi được); tên hiển thị và khóa màu do `app_ensure_system_jars` đặt.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from decimal import ROUND_FLOOR, Decimal
+
+# --- hũ ----------------------------------------------------------------------------------------
+OTHER_INCOME_JAR_CODE = "tien_vao_khac"  # "Tiền vào khác": tính vào tổng số dư, không phải thu nhập
+UNCLASSIFIED_JAR_CODE = (
+    "chua_phan_loai"  # "Chưa phân loại": tiền đã chi chưa xếp hũ, số dư có thể âm
+)
+SYSTEM_ROLES = ("other_income", "unclassified")
+SYSTEM_JAR_CODES = {"other_income": OTHER_INCOME_JAR_CODE, "unclassified": UNCLASSIFIED_JAR_CODE}
+JAR_KINDS = ("spending", "saving", "obligation", "system")
+USER_JAR_KINDS = ("spending", "saving", "obligation")  # hũ người dùng tạo được (không có system)
+
+# --- giao dịch ---------------------------------------------------------------------------------
+TRANSACTION_KINDS = ("expense", "income", "transfer")
+FUNDING_SOURCES = ("jar", "credit")  # credit: mua bằng hạn mức trả sau, không đổi số dư hũ
+CLASSIFIED_BY = ("user", "type_map", "rule", "embedding", "llm", "seed")
+TX_TYPE_SALARY = "salary"
+TX_TYPE_SALARY_SPLIT = "salary_split"
+TX_TYPE_JAR_TRANSFER = "jar_transfer"
+TX_TYPE_OBLIGATION_PAYMENT = "obligation_payment"
+TX_TYPE_BNPL_PURCHASE = "bnpl_purchase"
+
+# --- nghĩa vụ, hạn mức, lương ------------------------------------------------------------------
+OBLIGATION_KINDS = ("bnpl", "loan", "rent", "bill", "subscription")
+DECLARABLE_OBLIGATION_KINDS = ("loan", "rent", "bill", "subscription")  # bnpl chỉ tự sinh
+OBLIGATION_CYCLES = ("once", "weekly", "monthly", "yearly")
+OBLIGATION_STATUSES = ("active", "paid", "cancelled")
+OBLIGATION_SOURCES = ("declared", "bnpl_auto")
+BNPL_PRODUCT_CODE = "bnpl_sim"
+BNPL_MONTHLY_FEE_TYPE = "monthly_service_fee"
+SALARY_EVENT_STATUSES = ("pending", "confirmed", "kept_other")
+SALARY_DECISIONS = ("split", "keep_as_other")
+RULE_SCOPES = ("once", "always")
+
+# --- dự báo ------------------------------------------------------------------------------------
+JAR_STATUSES = ("ok", "tight", "short")  # đủ, sát, hụt
+CONFIDENCE_BANDS = ("high", "medium", "low")  # Cao, Vừa, Thấp
+FORECAST_TRIGGERS = ("nightly", "event", "manual", "reset", "read")
+FORECAST_SERIES_KINDS = ("dense", "sparse", "cold_start")
+FORECAST_EVENT_KINDS = ("obligation", "salary")
+
+# --- thao tác ghi qua POST /confirmations và POST /actions --------------------------------------
+MOVE_BETWEEN_JARS = "move_between_jars"
+RECORD_TRANSACTION = "record_transaction"
+ASSIGN_JAR = "assign_jar"
+UPDATE_PROFILE = "update_profile"
+SAVE_JARS = "save_jars"
+CONFIRM_SALARY = "confirm_salary"
+
+#: Mọi `tool` mà /confirmations và /actions nhận, theo thứ tự trong OpenAPI.
+ACTION_TOOLS = (
+    MOVE_BETWEEN_JARS,
+    RECORD_TRANSACTION,
+    ASSIGN_JAR,
+    UPDATE_PROFILE,
+    SAVE_JARS,
+    CONFIRM_SALARY,
+)
+#: Tool ghi mà agent gọi qua Gateway (target `ledger`); phần còn lại chỉ có ở REST (màn hình).
+AGENT_WRITE_TOOLS = (UPDATE_PROFILE, RECORD_TRANSACTION, MOVE_BETWEEN_JARS, ASSIGN_JAR)
+#: Tool ghi dùng khối `confirm_action` / `receipt_action` (move_between_jars giữ `confirm` / `receipt` của phase 1).
+GENERIC_ACTION_TOOLS = tuple(t for t in ACTION_TOOLS if t != MOVE_BETWEEN_JARS)
+
+#: Tool đọc của target `ledger` và target `forecast` (đúng thứ tự trong contracts/tools/*.json).
+LEDGER_TOOLS = (
+    "get_jar_balances",
+    "query_transactions",
+    "get_cashflow_summary",
+    "get_obligations",
+    "get_unclassified",
+    "update_profile",
+    "record_transaction",
+    "move_between_jars",
+    "assign_jar",
+    "save_turn",
+)
+FORECAST_TOOLS = ("get_forecast",)
+
+
+# --- quy tắc chia lương (dùng chung ledger.confirm_salary và lịch lương của dự báo, để hai nơi không lệch) -----------
+def split_amount(
+    amount_vnd: int, shares: Sequence[tuple[str, int | float | str | Decimal]]
+) -> dict[str, int]:
+    """Chia `amount_vnd` cho các hũ theo tỷ lệ phần trăm.
+
+    Mỗi hũ nhận `floor(amount * percent / 100)` (VND nguyên); phần dư do làm tròn xuống (nhỏ hơn số hũ) cộng cho hũ có
+    tỷ lệ LỚN NHẤT, hòa thì hũ đứng trước trong `shares`. Tổng tỷ lệ phải bằng đúng 100 (so bằng Decimal để không lệch
+    số thực), tổng các phần luôn bằng `amount_vnd`. Hũ tỷ lệ 0 nhận 0 và vẫn có mặt trong kết quả.
+
+    >>> split_amount(1_000_000, [("a", 33), ("b", 33), ("c", 34)])
+    {'a': 330000, 'b': 330000, 'c': 340000}
+    >>> split_amount(100, [("a", "33.33"), ("b", "33.33"), ("c", "33.34")])
+    {'a': 33, 'b': 33, 'c': 34}
+    """
+    if amount_vnd < 0:
+        raise ValueError("amount_vnd không được âm")
+    if not shares:
+        raise ValueError("cần ít nhất một hũ để chia")
+    percents = [Decimal(str(p)) for _, p in shares]
+    if any(p < 0 for p in percents) or sum(percents) != Decimal(100):
+        raise ValueError("tổng tỷ lệ chia phải bằng đúng 100 và không có tỷ lệ âm")
+    parts = [
+        int((Decimal(amount_vnd) * p / Decimal(100)).to_integral_value(rounding=ROUND_FLOOR))
+        for p in percents
+    ]
+    remainder = amount_vnd - sum(parts)
+    biggest = max(range(len(percents)), key=lambda i: (percents[i], -i))
+    parts[biggest] += remainder
+    out: dict[str, int] = {}
+    for (code, _), part in zip(shares, parts, strict=True):
+        if code in out:
+            raise ValueError(f"mã hũ trùng: {code}")
+        out[code] = part
+    return out

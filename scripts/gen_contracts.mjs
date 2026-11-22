@@ -29,7 +29,10 @@ const KNOWN = new Set([
 ])
 
 // --- nạp schema ------------------------------------------------------------------------------
-const FILES = ['envelope', 'jar_summary', 'confirm', 'receipt', 'notice']
+const FILES = [
+  'envelope', 'jar_summary', 'confirm', 'receipt', 'notice',
+  'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action',
+]
 const UNION_FILE = 'block'
 
 function load(name) {
@@ -174,14 +177,28 @@ const header = `// GENERATED FILE. DO NOT EDIT.
 import { z } from 'zod'
 `
 
+// Khối mà registry của frontend (frontend/src/blocks/registry.tsx, `Record<BlockType, Entry>`) hiện vẽ được.
+// `BlockType` và `BLOCK_TYPES` chỉ gồm các khối này để registry biên dịch được và hiện fallback_text cho khối
+// chưa đăng ký. Luồng frontend (phase 2) thêm bốn khối mới vào danh sách ĐỒNG THỜI với việc đăng ký view trong
+// registry.tsx. `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` luôn gồm MỌI khối trong block.schema.json.
+const REGISTERED_BY_FRONTEND = ['jar_summary', 'confirm', 'receipt', 'notice']
+for (const t of REGISTERED_BY_FRONTEND) {
+  if (!registry.some(([name]) => name === t)) throw new Error(`REGISTERED_BY_FRONTEND có type lạ: ${t}`)
+}
+const registered = registry.filter(([t]) => REGISTERED_BY_FRONTEND.includes(t))
+
 const footer = `
-/** type -> schema, thứ tự như contracts/blocks/block.schema.json. */
+/** type -> schema của MỌI khối, thứ tự như contracts/blocks/block.schema.json. */
 export const blockSchemas = {
 ${registry.map(([t, id]) => `  ${t}: ${id},`).join('\n')}
 } as const
 
-export type BlockType = keyof typeof blockSchemas
-export const BLOCK_TYPES = [${registry.map(([t]) => q(t)).join(', ')}] as const
+export type AnyBlockType = keyof typeof blockSchemas
+export const ALL_BLOCK_TYPES = [${registry.map(([t]) => q(t)).join(', ')}] as const
+
+/** Khối mà registry frontend đã đăng ký (xem scripts/gen_contracts.mjs, REGISTERED_BY_FRONTEND). */
+export const BLOCK_TYPES = [${registered.map(([t]) => q(t)).join(', ')}] as const
+export type BlockType = (typeof BLOCK_TYPES)[number]
 `
 
 const text = `${header}\n${out.join('\n')}${footer}`

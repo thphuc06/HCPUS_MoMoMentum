@@ -1,0 +1,60 @@
+{
+  "app_date": "2026-11-21",
+  "horizon_days": 7,
+  "next_payday": "2026-11-28",
+  "payday_dates": [
+    "2026-11-28"
+  ],
+  "jars": [
+    {
+      "code": "an_uong",
+      "kind": "spending",
+      "balance_vnd": 380000,
+      "split_percent": 30,
+      "history_start": "2026-11-09",
+      "daily_spend_vnd": [
+        0,
+        120000,
+        110000,
+        100000,
+        90000,
+        80000,
+        0,
+        60000,
+        50000,
+        40000,
+        120000,
+        110000
+      ],
+      "inflows": [
+        {
+          "date": "2026-11-28",
+          "kind": "salary",
+          "label": "Lương về",
+          "amount_vnd": 2700000
+        }
+      ],
+      "outflows": []
+    }
+  ],
+  "config": {
+    "n_paths": 5000,
+    "seed": 7,
+    "cold_start_min_days": 21,
+    "aci_gamma": 0.01,
+    "coverage_target": 0.8,
+    "short_threshold": 0.5,
+    "tight_threshold": 0.2,
+    "probability_enabled": false,
+    "band_high_min_days": 60,
+    "band_high_min_coverage": 0.7,
+    "band_medium_min_days": 21,
+    "extra": {}
+  },
+  "coverage": {
+    "income_vnd": 0,
+    "spend_vnd": 480000,
+    "balance_start_vnd": 860000,
+    "balance_end_vnd": 380000
+  }
+}

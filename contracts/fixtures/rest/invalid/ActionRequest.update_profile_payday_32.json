@@ -1,0 +1,6 @@
+{
+  "tool": "update_profile",
+  "params": {
+    "payday_day": 32
+  }
+}

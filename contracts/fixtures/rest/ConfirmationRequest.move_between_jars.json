@@ -1,0 +1,8 @@
+{
+  "tool": "move_between_jars",
+  "params": {
+    "from_jar": "giai_tri",
+    "to_jar": "an_uong",
+    "amount_vnd": 100000
+  }
+}

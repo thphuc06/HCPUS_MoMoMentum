@@ -59,6 +59,18 @@
       "minimum": 0,
       "maximum": 99999999999999
     },
+    "VndSigned": {
+      "description": "Số tiền VND có dấu, số nguyên. Dùng cho đại lượng có thể âm: phân vị số dư dự báo (âm là hụt), số dư hũ Chưa phân loại.",
+      "type": "integer",
+      "minimum": -99999999999999,
+      "maximum": 99999999999999
+    },
+    "Ratio": {
+      "description": "Tỷ lệ từ 0 đến 1 (xác suất, độ phủ dữ liệu). Không phải tiền, không phải phần trăm 0..100.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
     "VndPositive": {
       "description": "Số tiền VND dương, số nguyên.",
       "type": "integer",

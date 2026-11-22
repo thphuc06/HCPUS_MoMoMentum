@@ -8,6 +8,7 @@ from conftest import CONTRACTS, OPENAPI_URI, load_json
 from jsonschema import Draft202012Validator
 from openapi_spec_validator import validate
 
+from yofina_core import wallet
 from yofina_core.errors import HTTP_STATUS, ErrorCode
 
 SPEC_PATH = CONTRACTS / "rest" / "openapi.yaml"
@@ -22,19 +23,67 @@ def test_openapi_31_hop_le_ke_ca_tham_chieu_ngoai():
     validate(SPEC, base_uri=SPEC_PATH.as_uri())
 
 
-def test_cac_endpoint_cua_phase_1_va_bearer_jwt():
-    ops = {(m.upper(), p) for p, item in SPEC["paths"].items() for m in item if m != "parameters"}
-    assert ops == {
+def operations():
+    return {(m.upper(), p) for p, item in SPEC["paths"].items() for m in item if m != "parameters"}
+
+
+def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
+    assert operations() == {
+        # phase 1
         ("GET", "/jars"),
         ("POST", "/confirmations"),
         ("POST", "/actions"),
         ("POST", "/demo/reset"),
         ("GET", "/conversations"),
         ("GET", "/conversations/{conversation_id}"),
+        # phase 2: màn hình không cần LLM (chỉ đọc) + dự báo
+        ("GET", "/overview"),
+        ("GET", "/profile"),
+        ("GET", "/jars/{jar_code}"),
+        ("GET", "/transactions"),
+        ("GET", "/tx-types"),
+        ("GET", "/payees"),
+        ("GET", "/obligations"),
+        ("GET", "/credit-line"),
+        ("GET", "/salary-events"),
+        ("GET", "/jar-templates"),
+        ("GET", "/forecasts/{jar_code}"),
     }
     assert SPEC["security"] == [{"bearerAuth": []}]
     scheme = SPEC["components"]["securitySchemes"]["bearerAuth"]
     assert (scheme["type"], scheme["scheme"], scheme["bearerFormat"]) == ("http", "bearer", "JWT")
+
+
+def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
+    """Mọi thao tác ghi đi qua token xác nhận: ngoài hai endpoint đó chỉ có demo/reset là POST."""
+    writes = {op for op in operations() if op[0] != "GET"}
+    assert writes == {("POST", "/confirmations"), ("POST", "/actions"), ("POST", "/demo/reset")}
+
+
+def test_moi_operation_co_id_duy_nhat_va_x_lambda_hop_le():
+    ids = []
+    for path, item in SPEC["paths"].items():
+        for method, op in item.items():
+            ids.append(op["operationId"])
+            assert op.get("x-lambda", "ledger") in {"ledger", "forecast"}, (method, path)
+            assert op["tags"], (method, path)
+    assert len(ids) == len(set(ids))
+    assert SPEC["paths"]["/forecasts/{jar_code}"]["get"]["x-lambda"] == "forecast"
+    others = {
+        p
+        for p, item in SPEC["paths"].items()
+        for op in item.values()
+        if op.get("x-lambda", "ledger") == "forecast"
+    }
+    assert others == {"/forecasts/{jar_code}"}
+
+
+def test_moi_endpoint_doc_co_loi_401_va_503():
+    for path, item in SPEC["paths"].items():
+        for method, op in item.items():
+            if method == "get":
+                assert "401" in op["responses"], path
+                assert "503" in op["responses"], path
 
 
 def test_ma_loi_khop_yofina_core_errors():
@@ -62,10 +111,14 @@ def test_moi_ma_http_loi_trong_operation_co_trong_bang_anh_xa():
                     assert int(code) in statuses, (method, path, code)
 
 
-def test_actions_tra_receipt_va_khong_nhan_user_id():
+def test_actions_tra_receipt_hoac_receipt_action_va_khong_nhan_user_id():
     op = SPEC["paths"]["/actions"]["post"]
     ok = op["responses"]["200"]["content"]["application/json"]["schema"]
-    assert ok == {"$ref": "../blocks/receipt.schema.json"}
+    assert ok == {"$ref": "#/components/schemas/ActionResponse"}
+    assert SPEC["components"]["schemas"]["ActionResponse"]["oneOf"] == [
+        {"$ref": "../blocks/receipt.schema.json"},
+        {"$ref": "../blocks/receipt_action.schema.json"},
+    ]
     assert "428" in op["responses"]  # thiếu token -> NEEDS_CONFIRMATION
     body = SPEC["components"]["schemas"]["ActionRequest"]
     assert "user_id" not in body["properties"]
@@ -221,3 +274,151 @@ def test_receipt_fixture_la_thanh_cong_hop_le_cua_actions(registry):
         {"$ref": "https://contracts.yofina.invalid/blocks/receipt.schema.json"}, registry=registry
     )
     assert v.is_valid(receipt)
+
+
+# =====================================================================================
+# Phase 2: fixture REST, mọi thao tác ghi theo tool, bất biến của Tổng quan
+# =====================================================================================
+REST_FIXTURES = sorted((CONTRACTS / "fixtures" / "rest").glob("*.json"))
+REST_INVALID = sorted((CONTRACTS / "fixtures" / "rest" / "invalid").glob("*.json"))
+
+
+def schema_of(path) -> str:
+    return path.name.split(".")[0]
+
+
+@pytest.mark.parametrize("path", REST_FIXTURES, ids=lambda p: p.name)
+def test_fixture_rest_hop_le_qua_schema_cua_openapi(registry, path):
+    schema = schema_of(path)
+    assert schema in SPEC["components"]["schemas"], f"{schema} không có trong components.schemas"
+    errs = list(schema_validator(registry, schema).iter_errors(load_json(path)))
+    assert errs == []
+
+
+@pytest.mark.parametrize("path", REST_INVALID, ids=lambda p: p.name)
+def test_fixture_rest_sai_bi_tu_choi(registry, path):
+    schema = schema_of(path)
+    assert schema in SPEC["components"]["schemas"]
+    assert not schema_validator(registry, schema).is_valid(load_json(path))
+
+
+def test_tool_name_khop_hang_so_va_moi_tool_co_rang_buoc_params():
+    assert SPEC["components"]["schemas"]["ToolName"]["enum"] == list(wallet.ACTION_TOOLS)
+    by_tool = SPEC["components"]["schemas"]["ParamsByTool"]["allOf"]
+    mapped = [clause["if"]["properties"]["tool"]["const"] for clause in by_tool]
+    assert mapped == list(wallet.ACTION_TOOLS)  # đủ và đúng thứ tự, không thiếu tool nào
+
+
+def test_moi_tool_ghi_co_it_nhat_mot_ActionRequest_va_ConfirmationRequest_mau():
+    have_action = {load_json(p)["tool"] for p in REST_FIXTURES if schema_of(p) == "ActionRequest"}
+    have_conf = {
+        load_json(p)["tool"] for p in REST_FIXTURES if schema_of(p) == "ConfirmationRequest"
+    }
+    assert have_action == have_conf == set(wallet.ACTION_TOOLS)
+
+
+def test_action_request_va_confirmation_request_khong_nhan_user_id_o_bat_ky_tool_nao():
+    for name in ("ActionRequest", "ConfirmationRequest"):
+        props = SPEC["components"]["schemas"][name]["properties"]
+        assert "user_id" not in props
+        assert SPEC["components"]["schemas"][name]["additionalProperties"] is False
+
+
+def test_params_tool_nay_khong_hop_le_voi_tool_kia(registry):
+    v = schema_validator(registry, "ActionRequest")
+    move = {"from_jar": "a", "to_jar": "b", "amount_vnd": 5}
+    assert v.is_valid({"tool": "move_between_jars", "params": move})
+    for tool in wallet.ACTION_TOOLS:
+        if tool != "move_between_jars":
+            assert not v.is_valid({"tool": tool, "params": move}), tool
+
+
+def test_onboarding_chi_can_luong_va_ngay_nhan(registry):
+    v = schema_validator(registry, "ActionRequest")
+    assert v.is_valid(
+        {"tool": "update_profile", "params": {"monthly_salary_vnd": 9000000, "payday_day": 5}}
+    )
+    # schema chỉ đòi có ít nhất một trường; "lần đầu phải có cả hai" do server kiểm (mô tả của UpdateProfileParams)
+    assert (
+        "monthly_salary_vnd" in SPEC["components"]["schemas"]["UpdateProfileParams"]["description"]
+    )
+    assert SPEC["components"]["schemas"]["UpdateProfileParams"]["minProperties"] == 1
+
+
+def test_overview_nhat_quan_tong_so_du_gom_hai_hu_he_thong():
+    ov = load_json(CONTRACTS / "fixtures/rest/OverviewResponse.minh.json")
+    bal = ov["balance"]
+    assert bal["jars_total_vnd"] == sum(j["balance_vnd"] for j in ov["jars"])
+    assert (
+        bal["total_vnd"]
+        == bal["jars_total_vnd"] + bal["other_income_vnd"] + bal["unclassified_vnd"]
+    )
+    assert bal["total_vnd"] == sum(j["balance_vnd"] for j in [*ov["jars"], *ov["system_jars"]])
+    assert round(sum(j["split_percent"] for j in ov["jars"]), 2) == 100  # tổng tỷ lệ chia lương
+    assert all(j["kind"] != "system" for j in ov["jars"])
+    roles = {j["system_role"]: j for j in ov["system_jars"]}
+    assert set(roles) == {"other_income", "unclassified"}
+    assert roles["other_income"]["code"] == wallet.OTHER_INCOME_JAR_CODE
+    assert roles["unclassified"]["code"] == wallet.UNCLASSIFIED_JAR_CODE
+    assert roles["other_income"]["balance_vnd"] == bal["other_income_vnd"]
+    assert ov["proactive_card"]["type"] == "proactive_card"
+
+
+def test_overview_tai_khoan_trang_khong_co_gi_de_tinh():
+    ov = load_json(CONTRACTS / "fixtures/rest/OverviewResponse.blank.json")
+    assert ov["profile"]["onboarded"] is False
+    assert ov["jars"] == [] and ov["next_payday"] is None and ov["forecast"] is None
+    assert ov["proactive_card"] is None and ov["balance"]["total_vnd"] == 0
+
+
+def test_get_jars_cua_phase_1_khong_doi_hinh_dang():
+    # GET /jars và tool get_jar_balances không gồm hũ hệ thống: JarBalance không có kind
+    props = load_json(CONTRACTS / "blocks/jar_summary.schema.json")["$defs"]["JarBalance"][
+        "properties"
+    ]
+    assert set(props) == {"code", "name", "color_key", "icon_key", "balance_vnd", "split_percent"}
+
+
+def test_forecasts_tra_dung_khoi_forecast_timeline():
+    op = SPEC["paths"]["/forecasts/{jar_code}"]["get"]
+    assert op["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "../blocks/forecast_timeline.schema.json"
+    }
+    assert {"404", "422", "503"} <= set(
+        op["responses"]
+    )  # JAR_NOT_FOUND, PROFILE_INCOMPLETE, FORECAST_UNAVAILABLE
+
+
+def test_ma_loi_phase_2_co_trong_openapi_voi_dung_http_status():
+    schema = SPEC["components"]["schemas"]["ErrorCode"]
+    expected = {
+        "PROFILE_INCOMPLETE": 422, "TRANSACTION_NOT_FOUND": 404, "OBLIGATION_NOT_FOUND": 404,
+        "PAYEE_NOT_FOUND": 404, "SALARY_EVENT_NOT_FOUND": 404, "JAR_PROTECTED": 422,
+        "CREDIT_LIMIT_EXCEEDED": 422, "DUPLICATE_TRANSACTION": 409, "FORECAST_UNAVAILABLE": 503,
+    }  # fmt: skip
+    for code, status in expected.items():
+        assert code in schema["enum"] and schema["x-http-status"][code] == status
+        assert HTTP_STATUS[ErrorCode(code)] == status
+
+
+def test_confirm_resolution_done_nhan_ca_receipt_lan_receipt_action(registry):
+    v = schema_validator(registry, "ConfirmResolution")
+    for name in ("receipt.move.json", "receipt_action.record_transaction.json"):
+        receipt = load_json(CONTRACTS / "fixtures/blocks/valid" / name)
+        done = {
+            "block_id": "confirm:t:" + HASH[:12], "status": "done",
+            "resolved_at": "2026-12-10T03:00:00Z", "receipt": receipt,
+        }  # fmt: skip
+        assert v.is_valid(done), name
+    assert not v.is_valid(
+        {**done, "receipt": load_json(CONTRACTS / "fixtures/blocks/valid/notice.degraded.json")}
+    )
+
+
+def test_reset_response_nhan_truong_phase_2_tuy_chon(registry):
+    body = {**VALID["ResetResponse"], "obligations_count": 2, "forecast_ready": True}
+    v = schema_validator(registry, "ResetResponse")
+    assert v.is_valid(body) and v.is_valid(VALID["ResetResponse"])  # trường mới là tùy chọn
+    assert SPEC["components"]["schemas"]["ResetResponse"]["required"] == [
+        "reset_at", "app_date", "clock_offset_days", "jars_count", "transactions_count",
+    ]  # fmt: skip

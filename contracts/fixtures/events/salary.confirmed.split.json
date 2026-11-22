@@ -1,0 +1,64 @@
+{
+  "v": 1,
+  "user_id": "a1b2c3d4-0000-4000-8000-000000000001",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "occurred_at": "2026-12-10T03:02:11Z",
+  "app_date": "2026-11-21",
+  "event_id": "7e1f3a90-2c4b-4d6e-8f01-a3b5c7d9e0f2",
+  "salary_event_id": "7e1f3a90-2c4b-4d6e-8f01-a3b5c7d9e0f2",
+  "period_date": "2026-12-05",
+  "decision": "split",
+  "amount_vnd": 9000000,
+  "salary_updated": false,
+  "jar_codes": [
+    "an_uong",
+    "di_lai",
+    "hoa_don",
+    "giai_tri",
+    "du_lich",
+    "du_phong",
+    "nghia_vu"
+  ],
+  "effects": [
+    {
+      "jar_code": "an_uong",
+      "delta_vnd": 2700000,
+      "balance_after_vnd": 3080000
+    },
+    {
+      "jar_code": "di_lai",
+      "delta_vnd": 630000,
+      "balance_after_vnd": 1270000
+    },
+    {
+      "jar_code": "hoa_don",
+      "delta_vnd": 2790000,
+      "balance_after_vnd": 3240000
+    },
+    {
+      "jar_code": "giai_tri",
+      "delta_vnd": 630000,
+      "balance_after_vnd": 1390000
+    },
+    {
+      "jar_code": "du_lich",
+      "delta_vnd": 900000,
+      "balance_after_vnd": 2700000
+    },
+    {
+      "jar_code": "du_phong",
+      "delta_vnd": 900000,
+      "balance_after_vnd": 3600000
+    },
+    {
+      "jar_code": "nghia_vu",
+      "delta_vnd": 450000,
+      "balance_after_vnd": 1450000
+    },
+    {
+      "jar_code": "tien_vao_khac",
+      "delta_vnd": -9000000,
+      "balance_after_vnd": 350000
+    }
+  ]
+}

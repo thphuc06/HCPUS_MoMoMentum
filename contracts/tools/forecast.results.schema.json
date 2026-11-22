@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/tools/forecast.results.schema.json",
+  "title": "ForecastToolResults",
+  "description": "Kết quả JSON mà Lambda `forecast` trả cho Gateway (và cho đường REST GET /forecasts/{jar_code}) của từng tool. `data` của get_forecast là đúng `data` của khối forecast_timeline, nên agent bọc bằng build_forecast_timeline và màn Chi tiết hũ hiện cùng số với chat. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "$defs": {
+    "GetForecastOk": {
+      "description": "Dự báo mới nhất của hũ (đã tính lại nếu quá hạn độ tươi). `stale` trong data đúng khi quá hạn mà không tính lại được.",
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "../blocks/forecast_timeline.schema.json#/$defs/ForecastTimelineData" }
+      }
+    },
+    "GetForecastResult": {
+      "description": "Mã lỗi có thể gặp: JAR_NOT_FOUND, PROFILE_INCOMPLETE (chưa khai lương và ngày nhận), FORECAST_UNAVAILABLE (chưa có dự báo và không tính được ngay), PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/GetForecastOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    }
+  }
+}

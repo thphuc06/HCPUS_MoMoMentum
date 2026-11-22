@@ -1,0 +1,22 @@
+[
+  {
+    "name": "get_forecast",
+    "description": "Lấy dự báo 30 ngày của MỘT hũ đã tính sẵn: số dư P10/P50/P90 từng ngày, mốc nghĩa vụ và lương, ngày cạn dự kiến, xác suất hụt trước kỳ lương (chỉ khi đủ tin cậy) hoặc nhóm tin cậy Cao, Vừa, Thấp, độ phủ dữ liệu, độ tươi. Số liệu quá cũ thì hệ thống tính lại trước khi trả. Dùng để trả lời 'hũ này còn trụ được bao lâu'.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "jar": {
+          "type": "string",
+          "description": "Mã hũ cần xem dự báo (lấy từ kết quả get_jar_balances)."
+        }
+      },
+      "required": [
+        "jar"
+      ]
+    }
+  }
+]

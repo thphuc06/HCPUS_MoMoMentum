@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "id": "receipt:record_transaction:5d0c8a52-1b3e-4f7a-9c61-2e4d6f8a0b13",
+  "type": "receipt_action",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Đã ghi tiền vào 9.000.000 ₫ vào Tiền vào khác.",
+  "source": {
+    "tool": "rest:POST /actions",
+    "as_of": "2026-12-10T03:02:11Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "tool": "drop_table",
+    "reference_id": "5d0c8a52-1b3e-4f7a-9c61-2e4d6f8a0b13",
+    "occurred_at": "2026-12-10T03:02:11Z",
+    "app_date": "2026-11-21",
+    "amount_vnd": 9000000,
+    "summary": "Đã ghi tiền vào 9.000.000 ₫ vào Tiền vào khác",
+    "jars_after": [
+      {
+        "code": "tien_vao_khac",
+        "name": "Tiền vào khác",
+        "balance_after_vnd": 9350000
+      }
+    ],
+    "details": [
+      {
+        "label": "Loại",
+        "value": "Lương"
+      }
+    ],
+    "follow_up": {
+      "kind": "confirm_salary",
+      "label": "Xác nhận chia lương vào các hũ",
+      "salary_event_id": "7e1f3a90-2c4b-4d6e-8f01-a3b5c7d9e0f2",
+      "expected_vnd": 9000000,
+      "received_vnd": 9000000,
+      "deviation_percent": 0.0,
+      "ask_update_salary": false
+    }
+  }
+}

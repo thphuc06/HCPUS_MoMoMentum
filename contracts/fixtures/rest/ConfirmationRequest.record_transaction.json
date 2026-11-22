@@ -1,0 +1,12 @@
+{
+  "tool": "record_transaction",
+  "params": {
+    "kind": "expense",
+    "amount_vnd": 300000,
+    "jar": "giai_tri",
+    "tx_type": "bnpl_purchase",
+    "funding": "credit",
+    "counterparty": "Cửa hàng tai nghe",
+    "client_ref": "ui-7f3a"
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/ml/forecast_io.schema.json",
+  "title": "ForecastIO",
+  "description": "Dạng JSON của đầu vào và đầu ra của `yofina_ml.forecast_user` (hợp đồng ML <-> pipeline). Khớp kiểu dữ liệu ở ml/yofina_ml/types.py; chuyển qua lại bằng yofina_ml.serde. Ngày là ngày mô phỏng (ADR-0003); tiền là số nguyên VND. Đầu ra khớp từng cột của bảng forecast_runs, forecast_jar_summaries, forecasts (db/migrations/0006_forecast.sql). Schema gốc không ràng buộc gì; dùng $defs ForecastInputs và ForecastResult. Bất biến mà JSON Schema không diễn đạt được (phân vị tăng dần, đủ horizon_days dòng, p_shortfall chỉ có khi show_probability) do test tests/unit/test_contracts_ml.py kiểm.",
+  "$defs": {
+    "ScheduledFlow": {
+      "description": "Khoản tiền vào (lương phần của hũ) hoặc ra (nghĩa vụ trả bằng hũ) biết trước, đã được pipeline mở rộng theo lịch trong horizon.",
+      "type": "object",
+      "required": ["date", "kind", "label", "amount_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "kind": { "type": "string", "enum": ["obligation", "salary"] },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
+        "amount_min_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
+        "amount_max_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
+        "ref_id": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "JarInput": {
+      "type": "object",
+      "required": ["code", "kind", "balance_vnd", "split_percent", "history_start", "daily_spend_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" },
+        "kind": { "type": "string", "enum": ["spending", "saving", "obligation"] },
+        "balance_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "split_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "history_start": {
+          "description": "Ngày của phần tử đầu của daily_spend_vnd.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "daily_spend_vnd": {
+          "description": "Chi tiêu mỗi ngày (>= 0) từ history_start tới app_date - 1, cũ tới mới, không thủng ngày.",
+          "type": "array",
+          "maxItems": 800,
+          "items": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" }
+        },
+        "inflows": { "type": "array", "maxItems": 40, "items": { "$ref": "#/$defs/ScheduledFlow" } },
+        "outflows": { "type": "array", "maxItems": 40, "items": { "$ref": "#/$defs/ScheduledFlow" } }
+      }
+    },
+    "CoverageInputs": {
+      "type": "object",
+      "required": ["income_vnd", "spend_vnd", "balance_start_vnd", "balance_end_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "income_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "spend_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "balance_start_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndSigned" },
+        "balance_end_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndSigned" }
+      }
+    },
+    "ForecastConfig": {
+      "description": "Tham số chạy do pipeline đọc từ cấu hình; ML không tự đặt ngưỡng.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "n_paths": { "type": "integer", "minimum": 100, "maximum": 100000 },
+        "seed": { "type": "integer" },
+        "cold_start_min_days": { "type": "integer", "minimum": 1, "maximum": 365 },
+        "aci_gamma": { "type": "number", "minimum": 0, "maximum": 1 },
+        "coverage_target": { "$ref": "../blocks/envelope.schema.json#/$defs/Ratio" },
+        "short_threshold": { "$ref": "../blocks/envelope.schema.json#/$defs/Ratio" },
+        "tight_threshold": { "$ref": "../blocks/envelope.schema.json#/$defs/Ratio" },
+        "probability_enabled": { "type": "boolean" },
+        "band_high_min_days": { "type": "integer", "minimum": 1, "maximum": 3650 },
+        "band_high_min_coverage": { "$ref": "../blocks/envelope.schema.json#/$defs/Ratio" },
+        "band_medium_min_days": { "type": "integer", "minimum": 1, "maximum": 3650 },
+        "rho": { "$ref": "../blocks/envelope.schema.json#/$defs/Ratio" },
+        "extra": { "type": "object" }
+      }
+    },
+    "ForecastInputs": {
+      "type": "object",
+      "required": ["app_date", "horizon_days", "next_payday", "payday_dates", "jars"],
+      "additionalProperties": false,
+      "properties": {
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "horizon_days": { "type": "integer", "minimum": 1, "maximum": 90 },
+        "next_payday": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "payday_dates": {
+          "description": "Mọi ngày lương trong (app_date, app_date + horizon].",
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" }
+        },
+        "jars": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/JarInput" } },
+        "coverage": { "$ref": "#/$defs/CoverageInputs" },
+        "config": { "$ref": "#/$defs/ForecastConfig" }
+      }
+    },
+    "DayQuantiles": {
+      "description": "Một dòng của bảng forecasts. Chi tiêu ngày >= 0; số dư có thể âm. Mỗi nhóm tăng dần p10 <= p50 <= p90.",
+      "type": "object",
+      "required": [
+        "date", "spend_p10_vnd", "spend_p50_vnd", "spend_p90_vnd",
+        "balance_p10_vnd", "balance_p50_vnd", "balance_p90_vnd"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "spend_p10_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "spend_p50_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "spend_p90_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "balance_p10_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndSigned" },
+        "balance_p50_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndSigned" },
+        "balance_p90_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndSigned" }
+      }
+    },
+    "JarSummary": {
+      "description": "Một dòng của bảng forecast_jar_summaries. p_shortfall có khi và chỉ khi show_probability là true.",
+      "type": "object",
+      "required": [
+        "jar_code", "start_balance_vnd", "payday_date", "days_to_payday", "status",
+        "confidence_band", "show_probability", "series_kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "jar_code": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" },
+        "start_balance_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndSigned" },
+        "payday_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "days_to_payday": { "type": "integer", "minimum": 0, "maximum": 400 },
+        "runout_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "p_shortfall": { "$ref": "../blocks/envelope.schema.json#/$defs/Ratio" },
+        "p_shortfall_se": { "$ref": "../blocks/envelope.schema.json#/$defs/Ratio" },
+        "status": { "$ref": "../blocks/forecast_timeline.schema.json#/$defs/JarStatus" },
+        "confidence_band": { "$ref": "../blocks/forecast_timeline.schema.json#/$defs/ConfidenceBand" },
+        "show_probability": { "type": "boolean" },
+        "series_kind": { "type": "string", "enum": ["dense", "sparse", "cold_start"] }
+      }
+    },
+    "JarForecast": {
+      "type": "object",
+      "required": ["summary", "days"],
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "$ref": "#/$defs/JarSummary" },
+        "days": { "type": "array", "minItems": 1, "maxItems": 90, "items": { "$ref": "#/$defs/DayQuantiles" } }
+      }
+    },
+    "RunMeta": {
+      "description": "Phần metadata của forecast_runs do ML quyết định. Pipeline thêm user_id, computed_at, trigger, parent_run_id, source_event_id khi ghi.",
+      "type": "object",
+      "required": [
+        "model", "app_date", "horizon_days", "history_days", "confidence_label", "is_initial_estimate", "params"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$" },
+        "model_version": { "type": "string", "maxLength": 40 },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "horizon_days": { "type": "integer", "minimum": 1, "maximum": 90 },
+        "history_days": { "type": "integer", "minimum": 0 },
+        "data_coverage": { "$ref": "../blocks/envelope.schema.json#/$defs/Ratio" },
+        "confidence_label": { "$ref": "../blocks/forecast_timeline.schema.json#/$defs/ConfidenceBand" },
+        "is_initial_estimate": { "type": "boolean" },
+        "n_paths": { "type": "integer", "minimum": 1 },
+        "seed": { "type": "integer" },
+        "params": { "type": "object" }
+      }
+    },
+    "ForecastResult": {
+      "type": "object",
+      "required": ["run", "jars"],
+      "additionalProperties": false,
+      "properties": {
+        "run": { "$ref": "#/$defs/RunMeta" },
+        "jars": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/JarForecast" } }
+      }
+    }
+  }
+}

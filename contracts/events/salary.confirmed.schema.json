@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/events/salary.confirmed.schema.json",
+  "title": "SalaryConfirmedEvent",
+  "description": "Phần `detail` của sự kiện `salary.confirmed` (source `yofina.ledger`): người dùng đã xác nhận lương về và hệ thống đã chia vào hũ (hoặc giữ ở Tiền vào khác nếu decision là keep_as_other). Số dư nhiều hũ đổi cùng lúc nên consumer chạy lại dự báo cho mọi hũ trong `jar_codes`. `event_id` bằng `salary_event_id`. Sự kiện `transaction.recorded` của lần chia (tx_type salary_split) cũng được phát; consumer phải idempotent theo event_id nên hai sự kiện không làm tính hai lần.",
+  "type": "object",
+  "required": [
+    "v", "event_id", "user_id", "salary_event_id", "occurred_at", "app_date", "period_date",
+    "decision", "amount_vnd", "salary_updated", "jar_codes", "effects"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "common.schema.json#/$defs/EventVersion" },
+    "event_id": { "$ref": "common.schema.json#/$defs/EventId" },
+    "user_id": { "$ref": "common.schema.json#/$defs/UserId" },
+    "trace_id": { "$ref": "../blocks/envelope.schema.json#/$defs/TraceId" },
+    "salary_event_id": { "$ref": "common.schema.json#/$defs/Uuid" },
+    "occurred_at": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+    "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+    "period_date": {
+      "description": "Kỳ lương (ngày lương gần nhất với ngày nhận).",
+      "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+    },
+    "decision": { "type": "string", "enum": ["split", "keep_as_other"] },
+    "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
+    "salary_updated": {
+      "description": "Đúng nếu lương đã khai được cập nhật bằng số vừa nhận (dự báo phải dùng lương mới).",
+      "type": "boolean"
+    },
+    "jar_codes": {
+      "description": "Hũ nhận tiền. Rỗng khi keep_as_other (không hũ nào đổi).",
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" }
+    },
+    "effects": {
+      "type": "array",
+      "maxItems": 21,
+      "items": { "$ref": "common.schema.json#/$defs/JarEffect" }
+    }
+  }
+}

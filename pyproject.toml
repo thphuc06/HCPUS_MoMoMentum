@@ -13,16 +13,18 @@ package = false
 default-groups = ["dev"]
 
 [tool.uv.workspace]
-members = ["libs/*", "agent"]
+members = ["libs/*", "agent", "ml"]
 
 [tool.uv.sources]
 yofina-core = { workspace = true }
 yofina-agent = { workspace = true }
+yofina-ml = { workspace = true }
 
 [dependency-groups]
 dev = [
     "yofina-core",
     "yofina-agent",
+    "yofina-ml",
     "httpx>=0.28",
     # credential `aws login` trên máy dev cần awscrt (không đưa vào zip Runtime)
     "awscrt>=0.23",
@@ -59,4 +61,4 @@ ignore = [
 "**/tests/**" = ["B011"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["yofina_core", "yofina_ledger", "personas"]
+known-first-party = ["yofina_core", "yofina_ledger", "yofina_ml", "personas"]

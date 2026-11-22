@@ -1,0 +1,49 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "obligations": [
+      {
+        "id": "9a4d0e11-6b2c-4f3a-8d5e-1c7b9a3f5e20",
+        "kind": "bill",
+        "name": "Tiền điện",
+        "amount_vnd": 375000,
+        "amount_min_vnd": 300000,
+        "amount_max_vnd": 450000,
+        "fee_vnd": 0,
+        "due_date": "2026-11-26",
+        "cycle": "monthly",
+        "due_day": 26,
+        "status": "active",
+        "pay_jar": "hoa_don",
+        "is_essential": true,
+        "source": "declared"
+      },
+      {
+        "id": "2b6e8f40-3d1a-4c5b-9e7f-0a1b2c3d4e5f",
+        "kind": "bnpl",
+        "name": "Trả sau (mô phỏng)",
+        "amount_vnd": 333000,
+        "fee_vnd": 33000,
+        "principal_vnd": 300000,
+        "due_date": "2026-12-05",
+        "cycle": "once",
+        "status": "active",
+        "pay_jar": "nghia_vu",
+        "is_essential": false,
+        "source": "bnpl_auto"
+      }
+    ],
+    "total_due_vnd": 708000,
+    "credit_line": {
+      "product_code": "bnpl_sim",
+      "product_label": "Trả sau (mô phỏng)",
+      "limit_vnd": 5000000,
+      "outstanding_vnd": 300000,
+      "available_vnd": 4700000,
+      "due_day": 5,
+      "status": "active"
+    }
+  }
+}

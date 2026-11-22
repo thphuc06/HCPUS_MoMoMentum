@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+from datetime import UTC, date, datetime
+
 import pytest
 from conftest import BASE, CONTRACTS, REPO, fixture_files, load_json
 from jsonschema import Draft202012Validator
@@ -10,9 +13,18 @@ from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
 from yofina_core import blocks as b
-from yofina_core.confirm import params_hash
+from yofina_core.confirm import canonical_json, hash_normalized_params, params_hash
 
-BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice"]
+BLOCK_TYPES = [
+    "jar_summary",
+    "confirm",
+    "receipt",
+    "notice",
+    "forecast_timeline",
+    "proactive_card",
+    "confirm_action",
+    "receipt_action",
+]
 BLOCK_SCHEMA_FILES = {t: CONTRACTS / "blocks" / f"{t}.schema.json" for t in BLOCK_TYPES}
 
 
@@ -37,7 +49,7 @@ def test_schema_hop_le_theo_metaschema_2020_12(path):
     assert schema["$id"].startswith(BASE + "/")
 
 
-def test_union_dung_bon_khoi_theo_thu_tu():
+def test_union_dung_tam_khoi_theo_thu_tu():
     union = load_json(CONTRACTS / "blocks" / "block.schema.json")
     refs = [m["$ref"] for m in union["oneOf"]]
     assert refs == [f"{t}.schema.json" for t in BLOCK_TYPES]
@@ -105,6 +117,18 @@ def test_confirm_fixture_co_hash_dung_va_id_theo_quy_tac(path):
         assert f["code"] == d["params"]["from_jar"] and t["code"] == d["params"]["to_jar"]
         assert f["before_vnd"] - f["after_vnd"] == amount
         assert t["after_vnd"] - t["before_vnd"] == amount
+    elif obj["type"] == "confirm_action":
+        d = obj["data"]
+        digest = hashlib.sha256(
+            canonical_json({"tool": d["tool"], "params": d["params"]}).encode("utf-8")
+        ).hexdigest()
+        assert d["params_hash"] == digest == hash_normalized_params(d["tool"], d["params"])
+        assert obj["id"] == f"confirm:{obj['trace_id']}:{digest[:12]}"
+        assert d["tool"] != "move_between_jars"  # chuyển hũ dùng khối confirm
+        assert "user_id" not in d["params"]
+    elif obj["type"] == "receipt_action":
+        data = obj["data"]
+        assert obj["id"] == f"receipt:{data['tool']}:{data.get('reference_id', obj['trace_id'])}"
     elif obj["type"] == "receipt":
         assert obj["id"] == f"receipt:{obj['data']['transaction_id']}"
     elif obj["type"] == "jar_summary" and obj["data"]["jars"]:
@@ -171,3 +195,130 @@ def test_khong_con_tham_chieu_toi_file_ngoai_thu_muc_contracts():
     for path in CONTRACTS.glob("**/*.schema.json"):
         text = path.read_text(encoding="utf-8")
         assert "http://" not in text and str(REPO) not in text
+
+
+# --- dự báo và thẻ chủ động: nhất quán nội bộ của khối ---------------------------------------
+FORECAST_FIXTURES = [
+    p for p in fixture_files("blocks/valid") if p.name.startswith("forecast_timeline.")
+]
+
+
+@pytest.mark.parametrize("path", FORECAST_FIXTURES, ids=lambda p: p.name)
+def test_forecast_timeline_nhat_quan(path):
+    obj = load_json(path)
+    d = obj["data"]
+    assert obj["id"] == f"forecast_timeline:{obj['trace_id']}:{d['jar']['code']}"
+    days = d["days"]
+    assert [x["date"] for x in days] == sorted(x["date"] for x in days)  # tăng dần
+    assert len({x["date"] for x in days}) == len(days)  # không trùng ngày
+    assert days[0]["date"] > d["origin_date"]  # ngày đầu là origin_date + 1 trở đi
+    assert all(x["p10_vnd"] <= x["p50_vnd"] <= x["p90_vnd"] for x in days)
+    assert len(days) <= d["horizon_days"]
+    if "runout_date" in d:
+        assert d["origin_date"] < d["runout_date"] <= days[-1]["date"]
+        assert d["status"] in ("short", "tight")
+    if "p_shortfall" in d:  # xác suất không đi cùng ước lượng ban đầu
+        assert not d["is_initial_estimate"]
+    else:
+        assert "p_shortfall_se" not in d
+    ev = [e["date"] for e in d["events"]]
+    assert ev == sorted(ev)
+    assert all(days[0]["date"] <= e <= days[-1]["date"] for e in ev)
+
+
+def test_xac_suat_hut_la_ty_le_0_den_1_khong_phai_phan_tram(registry):
+    obj = load_json(CONTRACTS / "fixtures/blocks/valid/forecast_timeline.short.json")
+    assert 0 <= obj["data"]["p_shortfall"] <= 1
+    obj["data"]["p_shortfall"] = 71
+    assert errors(registry, "forecast_timeline.schema.json", obj)
+
+
+def _forecast_kwargs():
+    return dict(
+        jar={"code": "an_uong", "name": "Ăn uống", "color_key": "violet", "icon_key": "utensils"},
+        events=[],
+        trace_id="t1",
+        source_tool="forecast___get_forecast",
+        as_of=datetime(2026, 12, 10, 3, 0, tzinfo=UTC),
+        app_date=date(2026, 11, 21),
+    )
+
+
+def _forecast_summary(**over):
+    base = {
+        "computed_at": "2026-11-21 19:00:03.512000",
+        "run_app_date": "2026-11-21",
+        "model": "hurdle_calendar",
+        "horizon_days": "30",
+        "history_days": "47",
+        "data_coverage": "0.620",
+        "is_initial_estimate": False,
+        "start_balance_vnd": "380000",
+        "payday_date": "2026-12-05",
+        "days_to_payday": "14",
+        "runout_date": "2026-11-29",
+        "p_shortfall": "0.7100",
+        "p_shortfall_se": "0.00600",
+        "status": "short",
+        "confidence_band": "medium",
+        "show_probability": True,
+    }
+    return {**base, **over}
+
+
+def test_builder_forecast_nhan_hang_data_api_dang_chuoi_va_giu_dau_am():
+    days = [
+        {
+            "day": "2026-11-22",
+            "balance_p10_vnd": "-5000",
+            "balance_p50_vnd": "100",
+            "balance_p90_vnd": "9000",
+        }
+    ]
+    block = b.build_forecast_timeline(
+        summary=_forecast_summary(), days=days, stale=False, **_forecast_kwargs()
+    )
+    d = block.data
+    assert d.computed_at == "2026-11-21T19:00:03Z" and d.p_shortfall == 0.71
+    assert d.horizon_days == 30 and d.payday.days_until == 14
+    assert d.days[0].p10_vnd == -5000
+    assert (
+        block.fallback_text == "Hũ Ăn uống dự kiến cạn ngày 29/11, còn 6 ngày tới kỳ lương 05/12."
+    )
+
+
+def test_builder_forecast_khong_phat_xac_suat_khi_show_probability_sai():
+    days = [{"day": "2026-11-22", "balance_p10_vnd": 1, "balance_p50_vnd": 2, "balance_p90_vnd": 3}]
+    summary = _forecast_summary(
+        show_probability=False, runout_date=None, status="ok", is_initial_estimate=True,
+        data_coverage=None, confidence_band="low",
+    )  # fmt: skip
+    block = b.build_forecast_timeline(summary=summary, days=days, stale=True, **_forecast_kwargs())
+    d = block.data
+    assert d.p_shortfall is None and d.p_shortfall_se is None and d.coverage is None
+    wire = b.block_to_wire(block)["data"]
+    assert "p_shortfall" not in wire and "runout_date" not in wire and "coverage" not in wire
+    assert "ước lượng ban đầu" in block.fallback_text and "đã cũ" in block.fallback_text
+
+
+def test_builders_confirm_action_va_receipt_action_chi_nhan_tool_khac_chuyen_hu():
+    kw = dict(trace_id="t1", source_tool="x", app_date=date(2026, 11, 21))
+    now = datetime(2026, 12, 10, tzinfo=UTC)
+    with pytest.raises(ValueError):
+        b.build_confirm_action(
+            tool="move_between_jars", params={}, summary="x", changes=[{"label": "a", "after": "b"}],
+            as_of=now, expires_at=now, **kw,
+        )  # fmt: skip
+    with pytest.raises(ValueError):
+        b.build_receipt_action(tool="move_between_jars", occurred_at=now, summary="x", **kw)
+    rec = b.build_receipt_action(tool="assign_jar", occurred_at=now, summary="Đã gán", **kw)
+    assert rec.id == "receipt:assign_jar:t1"  # không có reference_id thì dùng trace_id
+
+
+def test_builder_proactive_card_cat_van_ban_dai_trong_fallback():
+    card = b.build_proactive_card(
+        kind="low_data", status="ok", title="T" * 70, reason="R" * 190,
+        actions=[{"kind": "snooze", "label": "Để sau"}], trace_id="t1", source_tool="x",
+        as_of=datetime(2026, 12, 10, tzinfo=UTC), app_date=date(2026, 11, 21),
+    )  # fmt: skip
+    assert len(card.fallback_text) <= 280 and card.id == "proactive_card:t1:low_data"

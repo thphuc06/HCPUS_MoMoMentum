@@ -1,0 +1,14 @@
+{
+  "app_date": "2026-11-21",
+  "credit_line": null,
+  "fees": [
+    {
+      "fee_type": "x",
+      "period": "per_month",
+      "condition_code": "always",
+      "source_name": "s",
+      "source_url": "http://insecure.invalid",
+      "effective_from": "2026-11-21"
+    }
+  ]
+}

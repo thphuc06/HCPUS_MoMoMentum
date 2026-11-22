@@ -1,0 +1,38 @@
+{
+  "status": "NEEDS_CONFIRMATION",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "tool": "record_transaction",
+    "params": {
+      "kind": "expense",
+      "amount_vnd": 300000,
+      "jar": "giai_tri",
+      "tx_type": "bnpl_purchase",
+      "funding": "credit",
+      "counterparty": "Cửa hàng tai nghe"
+    },
+    "params_hash": "c83b0a8790f92ed7f335d26a15a7de0f77f32071f6661f88f6e46173bf6471d1",
+    "summary": "Mua 300.000 ₫ bằng Trả sau (mô phỏng), tính vào hũ Giải trí",
+    "changes": [
+      {
+        "label": "Nghĩa vụ mới",
+        "after": "333.000 ₫ đến hạn 05/12 (gốc 300.000 ₫ cộng phí 33.000 ₫)"
+      },
+      {
+        "label": "Hạn mức còn lại",
+        "before": "5.000.000 ₫",
+        "after": "4.700.000 ₫"
+      },
+      {
+        "label": "Số dư hũ Giải trí",
+        "before": "760.000 ₫",
+        "after": "760.000 ₫"
+      }
+    ],
+    "warnings": [
+      "Số dư hũ không đổi lúc mua; khoản 333.000 ₫ sẽ cần trả khi đến hạn ngày 05/12."
+    ],
+    "expires_at": "2026-12-10T03:10:00Z"
+  }
+}

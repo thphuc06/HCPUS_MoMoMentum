@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "user_id": "a1b2c3d4-0000-4000-8000-000000000001",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "occurred_at": "2026-12-10T03:02:11Z",
+  "app_date": "2026-11-21",
+  "event_id": "0a1b2c3d-1111-4222-8333-444455556666",
+  "transaction_id": "0a1b2c3d-1111-4222-8333-444455556666",
+  "kind": "expense",
+  "tx_type": "food_drink",
+  "funding_source": "bank",
+  "amount_vnd": 45000,
+  "jar_codes": [
+    "an_uong"
+  ],
+  "effects": [
+    {
+      "jar_code": "an_uong",
+      "delta_vnd": -45000,
+      "balance_after_vnd": 335000
+    }
+  ]
+}

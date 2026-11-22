@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/proactive_card.schema.json",
+  "title": "ProactiveCardBlock",
+  "description": "Thẻ chủ động: MỘT việc cần chú ý, trên Tổng quan. Lý do ngắn, một hành động chính và các hành động phụ. Phase 2 do ledger dựng từ số liệu thật (ví dụ hũ sắp cạn từ dự báo); phase 4-5 cổng nhắc dùng cùng khối. Không chứa lời khuyên đầu tư.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "proactive_card" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ProactiveCardData" }
+  },
+  "$defs": {
+    "ProactiveAction": {
+      "description": "Một nút trên thẻ. kind quyết định giao diện làm gì: open_forecast (mở Chi tiết hũ, cần jar_code), confirm_salary (mở bước xác nhận lương về), review_unclassified (mở danh sách xem lại), open_obligations (mở màn nghĩa vụ), ask_why (mở chat và gửi `prompt`), snooze ('Để sau'), mute_kind ('Ít nhắc loại này'). snooze và mute_kind phase 2 chỉ lưu phía giao diện; lưu ở server khi có bảng nudges (F7).",
+      "type": "object",
+      "required": ["kind", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "open_forecast", "confirm_salary", "review_unclassified", "open_obligations",
+            "ask_why", "snooze", "mute_kind"
+          ]
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "jar_code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "prompt": {
+          "description": "Câu gửi vào chat khi kind là ask_why. Do code dựng, không do LLM viết.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "ProactiveCardData": {
+      "type": "object",
+      "required": ["kind", "status", "title", "reason", "actions"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Loại việc: runout_warning (hũ sắp cạn), obligation_due (nghĩa vụ sắp đến hạn), salary_pending (lương về chờ xác nhận), review_needed (có giao dịch cần xem lại), low_data (dữ liệu ít, mời khai thêm).",
+          "type": "string",
+          "enum": ["runout_warning", "obligation_due", "salary_pending", "review_needed", "low_data"]
+        },
+        "status": {
+          "description": "Mức độ để chọn màu và biểu tượng: ok (thông tin), tight (sát), short (hụt, cần làm ngay).",
+          "$ref": "forecast_timeline.schema.json#/$defs/JarStatus"
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "reason": {
+          "description": "Một hai câu lý do, số lấy từ tool.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "jar_code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "actions": {
+          "description": "Hành động chính đứng đầu, rồi các hành động phụ. Tối đa 4.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/ProactiveAction" }
+        }
+      }
+    }
+  }
+}

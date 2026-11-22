@@ -14,12 +14,25 @@ info:
     **Tiền** là số nguyên VND. **Ngày** là ngày mô phỏng của người dùng (ADR-0003), trừ trường nói
     rõ là thời điểm thật (`as_of`, `occurred_at`, `expires_at`: RFC 3339, UTC).
 
-    **Luồng ghi**: (1) agent hoặc UI lấy khối `confirm` (tool trả NEEDS_CONFIRMATION); (2) người dùng
+    **Luồng ghi**: (1) agent hoặc UI lấy khối `confirm` / `confirm_action` (tool trả
+    NEEDS_CONFIRMATION, hoặc màn hình tự dựng bản xem lại từ `params` của mình); (2) người dùng
     bấm xác nhận → `POST /confirmations` cấp token dùng một lần; (3) `POST /actions` kèm token →
-    ghi và trả khối `receipt`. LLM không nằm trên đường ghi.
+    ghi và trả khối `receipt` (chuyển hũ) hoặc `receipt_action` (mọi thao tác ghi khác). LLM không
+    nằm trên đường ghi.
+
+    **Không có đường ghi tắt.** Mọi thao tác GHI, kể cả khi người dùng bấm trực tiếp trên màn hình
+    (khai lương, tạo hũ, ghi chi tiêu, chuyển tiền cho người nhận, xác nhận lương về, onboarding),
+    đều là `tool` + `params` đi qua `POST /confirmations` rồi `POST /actions`. Chỉ có hai khác biệt
+    so với đường chat: màn hình không có khối `confirm`, nên `conversation_id` và `confirm_block_id`
+    được bỏ; và màn hình tự dựng bản xem lại từ `params` đã nhập. Các endpoint `GET` còn lại
+    không ghi gì. Bảng `tool` -> việc trên màn hình nằm ở mô tả của `POST /actions`.
+
+    **Lambda phục vụ**: trường `x-lambda` của thao tác (`ledger` hoặc `forecast`) cho CDK nối route
+    vào đúng Lambda; không có thì mặc định là `ledger`. Chỉ `GET /forecasts/{jar_code}` do `forecast`.
 
     Mã lỗi (`ErrorCode`) dùng chung với kết quả tool và `notice.data.code`; ánh xạ HTTP status ở
-    `x-http-status`. Schema khối UI và tham số được tham chiếu tới `../blocks/*.schema.json`.
+    `x-http-status`. Schema khối UI và tham số được tham chiếu tới `../blocks/*.schema.json` và
+    `../tools/*.results.schema.json`.
 servers:
   - url: https://{host}
     description: Domain API do CDK xuất ra (output của stack YofinaTools); không gắn cứng trong repo.
@@ -31,6 +44,10 @@ security:
 tags:
   - name: ledger
     description: Số dư hũ và thao tác ghi sổ cái.
+  - name: wallet
+    description: Màn hình ví mô phỏng (Tổng quan, hũ, giao dịch, nghĩa vụ, hạn mức, lương). Chỉ đọc.
+  - name: forecast
+    description: Dự báo 30 ngày theo hũ (F1). Chỉ đọc.
   - name: conversations
     description: Đọc lại các lượt hội thoại đã lưu (không cần LLM).
   - name: demo
@@ -104,10 +121,24 @@ paths:
       tags: [ledger]
       operationId: applyAction
       summary: Thực hiện thao tác ghi với token xác nhận
+      x-lambda: ledger
       description: |
         Kiểm token (chữ ký, hạn, tool, sub, hash tham số, `jti` chưa dùng) rồi ghi trong một
         transaction và ghi `audit_events`. Thiếu `confirm_token` thì không ghi, trả 428
-        `NEEDS_CONFIRMATION`. Thành công trả khối `receipt`.
+        `NEEDS_CONFIRMATION`. Thành công trả khối `receipt` (chuyển hũ) hoặc `receipt_action`.
+
+        **Bảng `tool` -> việc trên màn hình** (mọi dòng đều theo luồng `POST /confirmations` rồi
+        `POST /actions`; `params` được chuẩn hóa ở server, xem contracts/README.md mục "Chuẩn hóa
+        tham số"):
+
+        | `tool` | Việc | Agent gọi được |
+        |---|---|---|
+        | `move_between_jars` | Chuyển tiền giữa hai hũ (kể cả từ hũ Tiền vào khác sang hũ để gán) | có |
+        | `record_transaction` | Chi tiêu trên ví mô phỏng bằng tiền hũ hoặc bằng hạn mức Trả sau (mô phỏng); chuyển tiền cho người nhận; nhận tiền vào (lương hoặc tiền vào khác); trả một nghĩa vụ (`obligation_id`) | có |
+        | `assign_jar` | Gán hoặc sửa hũ của một giao dịch (Chưa phân loại, Tiền vào khác), tùy chọn nhớ thành luật | có |
+        | `update_profile` | Khai và sửa lương, ngày nhận, mức rủi ro, tên; thêm, sửa, xóa MỘT nghĩa vụ mỗi lần. Onboarding tài khoản trắng: lần gọi đầu có lương và ngày nhận (bắt buộc cả hai) tạo hồ sơ, hai hũ hệ thống và hũ mặc định từ `GET /jar-templates` | có |
+        | `save_jars` | Tạo, sửa hũ, tỷ lệ chia lương, mục tiêu và hạn (thay cả danh sách hũ của người dùng, tổng tỷ lệ bằng 100) | không (chỉ màn hình) |
+        | `confirm_salary` | Xác nhận một chạm lương về: chia vào hũ theo luật, hoặc giữ ở Tiền vào khác; tùy chọn cập nhật lương đã khai | không (chỉ màn hình) |
 
         **Một đề nghị chỉ được thực hiện một lần.** Khi client gửi `conversation_id` và
         `confirm_block_id` (id của khối `confirm` đang được thực hiện), server lưu khối `receipt`
@@ -124,11 +155,13 @@ paths:
               $ref: '#/components/schemas/ActionRequest'
       responses:
         '200':
-          description: Đã ghi; số dư sau nằm trong biên nhận.
+          description: |
+            Đã ghi. `move_between_jars` trả khối `receipt` (như phase 1); mọi tool khác trả khối
+            `receipt_action`. Phân biệt bằng `type`.
           content:
             application/json:
               schema:
-                $ref: '../blocks/receipt.schema.json'
+                $ref: '#/components/schemas/ActionResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -218,6 +251,382 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '500':
           $ref: '#/components/responses/InternalError'
+  /overview:
+    get:
+      tags: [wallet]
+      operationId: getOverview
+      summary: Mọi thứ Tổng quan cần, trong một lần gọi
+      x-lambda: ledger
+      description: |
+        Một lệnh gọi cho màn Tổng quan (không cần LLM): hồ sơ (kể cả `display_name`), ngày mô phỏng,
+        tổng số dư, hũ kèm trạng thái đủ/sát/hụt và ngày cạn lấy từ dự báo mới nhất, hai hũ hệ thống,
+        thẻ chủ động (tối đa một), kỳ lương kế, nghĩa vụ sắp đến hạn, hạn mức Trả sau (mô phỏng),
+        giao dịch gần đây. Số liệu đọc từ Aurora bằng ba truy vấn (`app_get_overview_extras`,
+        `app_list_jars`, `app_get_forecast_summaries`), không tính lại dự báo ở đây.
+
+        **Tổng số dư** `balance.total_vnd` là tổng số dư của MỌI hũ, gồm hũ Tiền vào khác và hũ Chưa
+        phân loại (số dư hũ này thường âm: tiền đã chi chưa xếp hũ). Tiền vào khác lương nằm ở hũ
+        Tiền vào khác, vẫn tính vào tổng nhưng KHÔNG phải thu nhập.
+
+        **Tài khoản trắng** (chưa khai lương và ngày nhận): `profile.onboarded` là false,
+        `jars` rỗng, `next_payday`, `forecast`, `proactive_card` là null; giao diện chuyển sang
+        onboarding (`update_profile`).
+
+        **Thẻ chủ động** (`proactive_card`): phase 2 do server chọn bằng luật tất định theo thứ tự ưu
+        tiên: lương về chờ xác nhận, hũ hụt có ngày cạn sớm nhất, hũ sát, nghĩa vụ đến hạn trong 3
+        ngày, giao dịch cần xem lại, dữ liệu ít (ước lượng ban đầu); không có việc nào thì null.
+        `snooze` và `mute_kind` chỉ lưu phía giao diện ở phase 2.
+
+        **Kỳ lương kế** (`next_payday.state`): gọi L là ngày lương gần nhất không sau hôm nay mô
+        phỏng. `confirmed` nếu có sự kiện lương đã xác nhận với `period_date` bằng L; `pending_confirmation`
+        nếu có sự kiện lương đang chờ (kèm `salary_event_id`); còn lại `expected`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Dữ liệu Tổng quan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OverviewResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /profile:
+    get:
+      tags: [wallet]
+      operationId: getProfile
+      summary: Hồ sơ đã khai (lương, ngày nhận, mức rủi ro)
+      x-lambda: ledger
+      description: |
+        Sửa hồ sơ đi qua `POST /confirmations` và `POST /actions` với `tool` là `update_profile`
+        (không có PUT). Tài khoản chưa có hồ sơ nhận `onboarded` false và các trường khai báo vắng.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Hồ sơ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /jars/{jar_code}:
+    get:
+      tags: [wallet]
+      operationId: getJar
+      summary: Chi tiết một hũ (kể cả hũ hệ thống)
+      x-lambda: ledger
+      description: |
+        Thông tin hũ, tóm tắt dự báo mới nhất, giao dịch gần đây của hũ (tối đa 10) và nghĩa vụ đang
+        hoạt động trả bằng hũ này. Chuỗi 30 ngày lấy ở `GET /forecasts/{jar_code}` (màn Chi tiết hũ gọi
+        song song hai endpoint).
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/JarCodePath'
+      responses:
+        '200':
+          description: Chi tiết hũ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JarDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /transactions:
+    get:
+      tags: [wallet]
+      operationId: listTransactions
+      summary: Danh sách giao dịch (màn Hoạt động), lọc và phân trang con trỏ
+      x-lambda: ledger
+      description: |
+        Mới nhất trước. `next_cursor` là con trỏ mờ (client truyền lại nguyên văn qua `cursor`), vắng ở
+        trang cuối. Sổ cái không có dòng sửa số tiền; chuyển hũ và chia lương là các dòng `kind`
+        `transfer` cùng `transfer_id`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: jar
+          in: query
+          required: false
+          schema:
+            $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [expense, income, transfer]
+        - name: tx_type
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[a-z][a-z0-9_]{0,39}$'
+        - name: from
+          in: query
+          required: false
+          description: Từ ngày mô phỏng (gồm).
+          schema:
+            $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        - name: to
+          in: query
+          required: false
+          description: Đến ngày mô phỏng (gồm).
+          schema:
+            $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        - name: needs_review
+          in: query
+          required: false
+          description: true chỉ lấy giao dịch cần xem lại.
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          required: false
+          description: Số dòng tối đa (1 đến 50). Mặc định 20.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      responses:
+        '200':
+          description: Một trang giao dịch (rỗng nếu không có).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /tx-types:
+    get:
+      tags: [wallet]
+      operationId: listTxTypes
+      summary: Loại giao dịch người dùng chọn được khi ghi giao dịch
+      x-lambda: ledger
+      description: Đọc bảng tra `tx_type_map` (chỉ các loại `is_selectable`). Giao diện không gắn cứng danh sách này.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Danh sách loại giao dịch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TxTypesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /payees:
+    get:
+      tags: [wallet]
+      operationId: listPayees
+      summary: Người nhận đã lưu của ví mô phỏng
+      x-lambda: ledger
+      description: Màn chọn người nhận (T1). Yêu thích trước, rồi dùng gần nhất. Không bao giờ có số tài khoản đầy đủ.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Danh sách người nhận (tối đa 100).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayeesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /obligations:
+    get:
+      tags: [wallet]
+      operationId: listObligations
+      summary: Nghĩa vụ đã khai hoặc tự sinh
+      x-lambda: ledger
+      description: |
+        Thêm, sửa, xóa nghĩa vụ đi qua `POST /confirmations` và `POST /actions` với `tool`
+        `update_profile` (trường `obligation`). Khoản trả sau không khai được: tự sinh khi mua bằng hạn mức.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: status
+          in: query
+          required: false
+          description: Mặc định active.
+          schema:
+            type: string
+            enum: [active, paid, cancelled, all]
+        - name: within_days
+          in: query
+          required: false
+          description: Chỉ lấy khoản đến hạn trong N ngày tới tính từ hôm nay mô phỏng.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 400
+      responses:
+        '200':
+          description: Danh sách nghĩa vụ theo ngày đến hạn tăng dần (tối đa 100).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObligationsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /credit-line:
+    get:
+      tags: [wallet]
+      operationId: getCreditLine
+      summary: Hạn mức Trả sau (mô phỏng) và biểu phí có nguồn
+      x-lambda: ledger
+      description: |
+        Hạn mức, dư nợ gốc còn lại và biểu phí đang hiệu lực (đọc bảng `fee_schedules`, kèm tên nguồn và
+        đường dẫn để giao diện ghi rõ). Người dùng chưa có hạn mức nhận `credit_line` null.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Hạn mức và biểu phí.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditLineResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /salary-events:
+    get:
+      tags: [wallet]
+      operationId: listSalaryEvents
+      summary: Lương về chờ xác nhận (hoặc đã xử lý)
+      x-lambda: ledger
+      description: |
+        Bước "xác nhận lương về": khi tiền vào được nhận diện là lương, một sự kiện `pending` được sinh. Người dùng
+        xác nhận một chạm bằng `tool` `confirm_salary`. `ask_update_salary` đúng khi số nhận lệch nhiều so
+        với lương đã khai (ngưỡng ở cấu hình): giao diện hỏi có cập nhật lương không và gửi
+        `update_declared_salary` trong `params`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: status
+          in: query
+          required: false
+          description: Mặc định pending.
+          schema:
+            type: string
+            enum: [pending, confirmed, kept_other, all]
+      responses:
+        '200':
+          description: Danh sách sự kiện lương (tối đa 20).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaryEventsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /jar-templates:
+    get:
+      tags: [wallet]
+      operationId: listJarTemplates
+      summary: Gợi ý hũ cho onboarding
+      x-lambda: ledger
+      description: |
+        Đọc bảng `jar_templates` (seed ở `db/seed/jar_templates.sql`). Giao diện onboarding hiện các hũ này kèm
+        tỷ lệ gợi ý để người dùng sửa; không gắn cứng. Người dùng chỉ khai lương và ngày nhận thì server tự dùng các
+        hũ `is_default` này khi tạo hồ sơ.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Danh sách hũ gợi ý.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JarTemplatesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /forecasts/{jar_code}:
+    get:
+      tags: [forecast]
+      operationId: getForecast
+      summary: Dự báo 30 ngày của một hũ (khối forecast_timeline)
+      x-lambda: forecast
+      description: |
+        Trả đúng khối `forecast_timeline`, cùng một khối và cùng số với tool `forecast___get_forecast` trong chat.
+        Số liệu đọc từ bảng `forecasts` (lần chạy mới nhất có chứa hũ). Quá hạn độ tươi (cấu hình) hoặc ngày mô
+        phỏng đã sang ngày khác so với `origin_date` thì tính lại trước khi trả; không tính lại được thì trả
+        bản cũ với `stale` true; chưa có bản nào và không tính được thì 503 `FORECAST_UNAVAILABLE`.
+
+        Hiển thị: `p_shortfall` có thì hiện kèm `confidence_band`; vắng thì chỉ hiện `confidence_band` (Cao, Vừa,
+        Thấp); `is_initial_estimate` thì ghi "ước lượng ban đầu".
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/JarCodePath'
+      responses:
+        '200':
+          description: Khối dự báo của hũ.
+          content:
+            application/json:
+              schema:
+                $ref: '../blocks/forecast_timeline.schema.json'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /demo/reset:
     post:
       tags: [demo]
@@ -260,6 +669,13 @@ components:
       schema:
         type: string
         pattern: '^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+    JarCodePath:
+      name: jar_code
+      in: path
+      required: true
+      description: Mã hũ (khóa của hũ trong một người dùng).
+      schema:
+        $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
   schemas:
     ErrorCode:
       type: string
@@ -281,6 +697,15 @@ components:
         - MODEL_BUDGET_EXCEEDED
         - DATABASE_UNAVAILABLE
         - INTERNAL_ERROR
+        - PROFILE_INCOMPLETE
+        - TRANSACTION_NOT_FOUND
+        - OBLIGATION_NOT_FOUND
+        - PAYEE_NOT_FOUND
+        - SALARY_EVENT_NOT_FOUND
+        - JAR_PROTECTED
+        - CREDIT_LIMIT_EXCEEDED
+        - DUPLICATE_TRANSACTION
+        - FORECAST_UNAVAILABLE
       x-http-status:
         UNAUTHENTICATED: 401
         FORBIDDEN: 403
@@ -298,6 +723,15 @@ components:
         MODEL_BUDGET_EXCEEDED: 503
         DATABASE_UNAVAILABLE: 503
         INTERNAL_ERROR: 500
+        PROFILE_INCOMPLETE: 422
+        TRANSACTION_NOT_FOUND: 404
+        OBLIGATION_NOT_FOUND: 404
+        PAYEE_NOT_FOUND: 404
+        SALARY_EVENT_NOT_FOUND: 404
+        JAR_PROTECTED: 422
+        CREDIT_LIMIT_EXCEEDED: 422
+        DUPLICATE_TRANSACTION: 409
+        FORECAST_UNAVAILABLE: 503
       x-meaning:
         UNAUTHENTICATED: Thiếu hoặc sai access token.
         FORBIDDEN: Không được phép (token xác nhận không thuộc người dùng này, v.v.).
@@ -315,6 +749,15 @@ components:
         MODEL_BUDGET_EXCEEDED: Chạm trần lượt gọi model trong ngày (agent, không phải REST).
         DATABASE_UNAVAILABLE: Aurora đang thức dậy hoặc không sẵn sàng; thử lại sau vài giây.
         INTERNAL_ERROR: Lỗi không lường trước; xem log theo trace_id.
+        PROFILE_INCOMPLETE: Chưa khai lương và ngày nhận lương nên chưa làm được việc này (ví dụ dự báo).
+        TRANSACTION_NOT_FOUND: Mã giao dịch không tồn tại với người dùng này.
+        OBLIGATION_NOT_FOUND: Mã nghĩa vụ không tồn tại với người dùng này.
+        PAYEE_NOT_FOUND: Mã người nhận không tồn tại với người dùng này.
+        SALARY_EVENT_NOT_FOUND: Mã sự kiện lương không tồn tại với người dùng này.
+        JAR_PROTECTED: Hũ hệ thống hoặc hũ còn tiền hay còn nghĩa vụ nên không sửa hoặc bỏ được.
+        CREDIT_LIMIT_EXCEEDED: Vượt hạn mức Trả sau (mô phỏng) còn lại.
+        DUPLICATE_TRANSACTION: Giao dịch trùng khóa khử trùng (cùng ngày, số tiền, đối tác, mã tham chiếu) với giao dịch đã có.
+        FORECAST_UNAVAILABLE: Chưa có dự báo cho hũ này và chưa tính được ngay; thử lại sau ít phút.
     ErrorResponse:
       type: object
       required: [error]
@@ -334,6 +777,613 @@ components:
               maxLength: 280
             trace_id:
               $ref: '../blocks/envelope.schema.json#/$defs/TraceId'
+    Profile:
+      description: |
+        Hồ sơ đã khai. `onboarded` đúng khi đã có cả lương và ngày nhận (hai thứ bắt buộc duy nhất).
+        `display_name` luôn có: lấy từ hồ sơ, tài khoản chưa có hồ sơ thì server dùng claim `name`
+        hoặc `cognito:username` của JWT (không dùng email).
+      type: object
+      required: [display_name, onboarded]
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        monthly_salary_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        payday_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        risk_tolerance:
+          type: string
+          enum: [low, medium, high]
+        onboarded:
+          type: boolean
+    ProfileResponse:
+      type: object
+      required: [app_date, as_of, profile]
+      additionalProperties: false
+      properties:
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        as_of:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        profile:
+          $ref: '#/components/schemas/Profile'
+    JarKind:
+      description: spending (chi tiêu), saving (tiết kiệm), obligation (nghĩa vụ), system (hũ hệ thống Tiền vào khác và Chưa phân loại).
+      type: string
+      enum: [spending, saving, obligation, system]
+    JarFull:
+      description: |
+        Một hũ, đủ để vẽ thẻ hũ trên Tổng quan và Danh sách hũ. `balance_vnd` có dấu: chỉ hũ hệ thống
+        Chưa phân loại mới âm. Các trường dự báo (`status`, `runout_date`, `p_shortfall`, `confidence_band`) lấy từ
+        lần chạy dự báo mới nhất có chứa hũ; vắng nếu hũ chưa có dự báo (hũ hệ thống không có dự báo).
+        `p_shortfall` chỉ có khi đủ tin cậy (xem khối `forecast_timeline`).
+      type: object
+      required: [code, name, color_key, icon_key, kind, balance_vnd, split_percent]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        color_key:
+          type: string
+          pattern: '^[a-z][a-z0-9_-]{0,31}$'
+        icon_key:
+          type: string
+          pattern: '^[a-z][a-z0-9_-]{0,31}$'
+        kind:
+          $ref: '#/components/schemas/JarKind'
+        system_role:
+          type: string
+          enum: [other_income, unclassified]
+        balance_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+        split_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+        goal_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        goal_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        status:
+          $ref: '../blocks/forecast_timeline.schema.json#/$defs/JarStatus'
+        runout_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        p_shortfall:
+          $ref: '../blocks/envelope.schema.json#/$defs/Ratio'
+        confidence_band:
+          $ref: '../blocks/forecast_timeline.schema.json#/$defs/ConfidenceBand'
+    OverviewBalance:
+      type: object
+      required: [total_vnd, jars_total_vnd, other_income_vnd, unclassified_vnd]
+      additionalProperties: false
+      properties:
+        total_vnd:
+          description: Tổng số dư của mọi hũ, gồm Tiền vào khác và Chưa phân loại (= jars_total_vnd + other_income_vnd + unclassified_vnd).
+          $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+        jars_total_vnd:
+          description: Tổng số dư các hũ người dùng (không gồm hũ hệ thống).
+          $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+        other_income_vnd:
+          description: Số dư hũ Tiền vào khác. Không phải thu nhập.
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        unclassified_vnd:
+          description: Số dư hũ Chưa phân loại (có dấu, thường âm). Giao diện ghi "đã chi, chưa xếp hũ" theo giá trị tuyệt đối khi âm.
+          $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+    NextPayday:
+      type: object
+      required: [date, days_until, state]
+      additionalProperties: false
+      properties:
+        date:
+          description: Ngày lương kế tiếp (sau hôm nay mô phỏng), theo ngày lương đã khai.
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        days_until:
+          type: integer
+          minimum: 1
+          maximum: 400
+        expected_vnd:
+          description: Lương đã khai.
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        state:
+          description: expected (chưa về), pending_confirmation (đã nhận, chờ xác nhận chia), confirmed (kỳ lương hiện tại đã xác nhận).
+          type: string
+          enum: [expected, pending_confirmation, confirmed]
+        salary_event_id:
+          description: Có khi state là pending_confirmation.
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+    ForecastMeta:
+      description: Chất lượng của lần chạy dự báo mới nhất, để hiện dải "độ phủ dữ liệu", "ước lượng ban đầu", "số liệu cũ".
+      type: object
+      required: [computed_at, run_app_date, stale, is_initial_estimate, confidence_band, history_days, model]
+      additionalProperties: false
+      properties:
+        computed_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        run_app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        stale:
+          description: Quá hạn độ tươi hoặc ngày mô phỏng đã sang ngày khác so với run_app_date. Tổng quan không tự tính lại; bấm vào hũ (GET /forecasts/{jar_code}) sẽ tính lại.
+          type: boolean
+        is_initial_estimate:
+          type: boolean
+        confidence_band:
+          $ref: '../blocks/forecast_timeline.schema.json#/$defs/ConfidenceBand'
+        coverage:
+          $ref: '../blocks/envelope.schema.json#/$defs/Ratio'
+        history_days:
+          type: integer
+          minimum: 0
+        model:
+          type: string
+          minLength: 1
+          maxLength: 40
+    OverviewResponse:
+      type: object
+      required:
+        - app_date
+        - as_of
+        - profile
+        - balance
+        - jars
+        - system_jars
+        - next_payday
+        - forecast
+        - proactive_card
+        - credit_line
+        - obligations_due
+        - recent_transactions
+        - needs_review_count
+      additionalProperties: false
+      properties:
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        as_of:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        profile:
+          $ref: '#/components/schemas/Profile'
+        balance:
+          $ref: '#/components/schemas/OverviewBalance'
+        jars:
+          description: Hũ người dùng (không gồm hũ hệ thống), theo thứ tự hiển thị. Rỗng với tài khoản trắng.
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/JarFull'
+        system_jars:
+          description: Hai hũ hệ thống Tiền vào khác và Chưa phân loại (rỗng nếu chưa tạo).
+          type: array
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/JarFull'
+        next_payday:
+          description: Null nếu chưa khai ngày nhận lương.
+          oneOf:
+            - $ref: '#/components/schemas/NextPayday'
+            - type: 'null'
+        forecast:
+          description: Null nếu chưa có lần chạy dự báo nào.
+          oneOf:
+            - $ref: '#/components/schemas/ForecastMeta'
+            - type: 'null'
+        proactive_card:
+          description: Một việc cần chú ý, hoặc null nếu không có.
+          oneOf:
+            - $ref: '../blocks/proactive_card.schema.json'
+            - type: 'null'
+        credit_line:
+          oneOf:
+            - $ref: '../tools/ledger.results.schema.json#/$defs/CreditLine'
+            - type: 'null'
+        obligations_due:
+          description: Nghĩa vụ đang hoạt động đến hạn trong 30 ngày tới, gần nhất trước (tối đa 5).
+          type: array
+          maxItems: 5
+          items:
+            $ref: '../tools/ledger.results.schema.json#/$defs/Obligation'
+        recent_transactions:
+          description: 5 giao dịch gần nhất (không gồm dòng chuyển hũ).
+          type: array
+          maxItems: 5
+          items:
+            $ref: '../tools/ledger.results.schema.json#/$defs/Transaction'
+        needs_review_count:
+          description: Số giao dịch cần xem lại hoặc đang ở Chưa phân loại.
+          type: integer
+          minimum: 0
+    JarDetailResponse:
+      type: object
+      required: [app_date, as_of, jar, forecast, recent_transactions, obligations]
+      additionalProperties: false
+      properties:
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        as_of:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        jar:
+          $ref: '#/components/schemas/JarFull'
+        forecast:
+          description: Null nếu hũ chưa có dự báo.
+          oneOf:
+            - $ref: '#/components/schemas/ForecastMeta'
+            - type: 'null'
+        recent_transactions:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '../tools/ledger.results.schema.json#/$defs/Transaction'
+        obligations:
+          description: Nghĩa vụ đang hoạt động có hũ trả là hũ này.
+          type: array
+          maxItems: 10
+          items:
+            $ref: '../tools/ledger.results.schema.json#/$defs/Obligation'
+    TransactionsResponse:
+      type: object
+      required: [app_date, as_of, transactions]
+      additionalProperties: false
+      properties:
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        as_of:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        transactions:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '../tools/ledger.results.schema.json#/$defs/Transaction'
+        next_cursor:
+          description: Vắng ở trang cuối.
+          type: string
+          minLength: 1
+          maxLength: 200
+    TxType:
+      type: object
+      required: [tx_type, label, direction]
+      additionalProperties: false
+      properties:
+        tx_type:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,39}$'
+        label:
+          type: string
+          minLength: 1
+          maxLength: 60
+        direction:
+          description: out (chi), in (tiền vào).
+          type: string
+          enum: [out, in]
+        default_jar:
+          description: Hũ chuẩn của loại này (bước 0 của phân loại), nếu người dùng có hũ đó.
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        system_role:
+          type: string
+          enum: [other_income, unclassified]
+    TxTypesResponse:
+      type: object
+      required: [tx_types]
+      additionalProperties: false
+      properties:
+        tx_types:
+          type: array
+          maxItems: 60
+          items:
+            $ref: '#/components/schemas/TxType'
+    PayeesResponse:
+      type: object
+      required: [payees]
+      additionalProperties: false
+      properties:
+        payees:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '../tools/ledger.results.schema.json#/$defs/Payee'
+    ObligationsResponse:
+      type: object
+      required: [app_date, obligations, total_due_vnd]
+      additionalProperties: false
+      properties:
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        obligations:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '../tools/ledger.results.schema.json#/$defs/Obligation'
+        total_due_vnd:
+          description: Tổng amount_vnd của các khoản active trong danh sách.
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+    FeeLine:
+      description: Một dòng của biểu phí có cấu trúc (bảng fee_schedules), đang hiệu lực tại ngày mô phỏng.
+      type: object
+      required: [fee_type, period, condition_code, source_name, source_url, effective_from]
+      additionalProperties: false
+      properties:
+        fee_type:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,39}$'
+        amount_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        rate_percent:
+          type: number
+          minimum: 0
+        period:
+          type: string
+          enum: [per_month, per_transaction, once]
+        condition_code:
+          type: string
+          enum: [always, month_has_transaction, overdue]
+        condition_note:
+          type: string
+          maxLength: 200
+        source_name:
+          type: string
+          maxLength: 200
+        source_url:
+          type: string
+          pattern: '^https://'
+        effective_from:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+    CreditLineResponse:
+      type: object
+      required: [app_date, credit_line, fees]
+      additionalProperties: false
+      properties:
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        credit_line:
+          oneOf:
+            - $ref: '../tools/ledger.results.schema.json#/$defs/CreditLine'
+            - type: 'null'
+        fees:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/FeeLine'
+    SalaryEventsResponse:
+      type: object
+      required: [salary_events]
+      additionalProperties: false
+      properties:
+        salary_events:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '../tools/ledger.results.schema.json#/$defs/SalaryEvent'
+    JarTemplate:
+      type: object
+      required: [code, name, color_key, icon_key, kind, default_split_percent, is_default]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        color_key:
+          type: string
+          pattern: '^[a-z][a-z0-9_-]{0,31}$'
+        icon_key:
+          type: string
+          pattern: '^[a-z][a-z0-9_-]{0,31}$'
+        kind:
+          type: string
+          enum: [spending, saving, obligation]
+        default_split_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+        is_default:
+          type: boolean
+    JarTemplatesResponse:
+      type: object
+      required: [templates]
+      additionalProperties: false
+      properties:
+        templates:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/JarTemplate'
+    RecordTransactionParams:
+      description: |
+        Tham số của `record_transaction`. Chuẩn hóa ở server (contracts/README.md): điền `tx_type`
+        mặc định (`other_expense` hoặc `income_other`), `funding` mặc định `jar`; nếu thiếu `jar` thì
+        suy từ `tx_type` qua bảng tra, không suy được thì hũ Chưa phân loại; tiền vào luôn có `jar` là hũ
+        Tiền vào khác. Bản chuẩn hóa mới là thứ được ký.
+      type: object
+      required: [kind, amount_vnd]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [expense, income]
+        amount_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        jar:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        tx_type:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,39}$'
+        funding:
+          description: jar (mặc định) hoặc credit (hạn mức Trả sau mô phỏng; chỉ với chi tiêu).
+          type: string
+          enum: [jar, credit]
+        payee_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        counterparty:
+          type: string
+          minLength: 1
+          maxLength: 120
+        note:
+          type: string
+          minLength: 1
+          maxLength: 200
+        obligation_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        client_ref:
+          description: Mã chống ghi trùng khi gửi lại; vào `dedupe_key` của sổ cái.
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Za-z0-9_.:-]+$'
+    AssignJarParams:
+      type: object
+      required: [transaction_id, jar]
+      additionalProperties: false
+      properties:
+        transaction_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        jar:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        remember:
+          description: once (mặc định) hoặc always (lưu luật `category_rules` cho người nhận hoặc đối tác).
+          type: string
+          enum: [once, always]
+    ObligationChange:
+      description: |
+        Một thay đổi nghĩa vụ trong `update_profile`. `upsert` không có `obligation_id` là thêm mới và
+        cần `kind`, `name` và số tiền (`amount_vnd`, hoặc cặp `amount_min_vnd` + `amount_max_vnd` khi đó
+        `amount_vnd` là trung điểm làm tròn xuống); có `obligation_id` là sửa. `delete` cần `obligation_id`
+        (đặt trạng thái cancelled). Khoản trả sau (`bnpl`) không khai được.
+      type: object
+      required: [op]
+      additionalProperties: false
+      properties:
+        op:
+          type: string
+          enum: [upsert, delete]
+        obligation_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        kind:
+          type: string
+          enum: [loan, rent, bill, subscription]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        amount_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        amount_min_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        amount_max_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        fee_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        due_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        due_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        cycle:
+          type: string
+          enum: [once, weekly, monthly, yearly]
+        pay_jar:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        is_essential:
+          type: boolean
+    UpdateProfileParams:
+      description: |
+        Phải có ít nhất một trường. Tài khoản chưa có hồ sơ (onboarding): lần gọi đầu phải có cả
+        `monthly_salary_vnd` và `payday_day`; server tạo hồ sơ, hai hũ hệ thống và (nếu chưa có hũ nào)
+        các hũ `is_default` của `jar_templates` với tỷ lệ mặc định. Dự báo được tính lại sau khi ghi.
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        monthly_salary_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        payday_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        risk_tolerance:
+          type: string
+          enum: [low, medium, high]
+        obligation:
+          $ref: '#/components/schemas/ObligationChange'
+    JarSpec:
+      description: |
+        Một hũ trong `save_jars`. Có `code` là sửa hũ đó; không có là tạo hũ mới (server sinh `code` từ
+        `name`). `color_key` và `icon_key` là khóa giao diện ánh xạ (xem `GET /jar-templates`).
+      type: object
+      required: [name, color_key, icon_key, kind, split_percent]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        color_key:
+          type: string
+          pattern: '^[a-z][a-z0-9_-]{0,31}$'
+        icon_key:
+          type: string
+          pattern: '^[a-z][a-z0-9_-]{0,31}$'
+        kind:
+          type: string
+          enum: [spending, saving, obligation]
+        split_percent:
+          type: number
+          minimum: 0
+          maximum: 100
+        goal_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        goal_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+    SaveJarsParams:
+      description: |
+        Thay cả danh sách hũ người dùng (không gồm hũ hệ thống) theo thứ tự trong mảng (thứ tự hiển thị).
+        Tổng `split_percent` phải bằng 100. Hũ đang có mà không có trong danh sách chỉ bị bỏ khi số dư
+        bằng 0 và không còn nghĩa vụ trả bằng hũ đó, nếu không trả 422 `JAR_PROTECTED`.
+      type: object
+      required: [jars]
+      additionalProperties: false
+      properties:
+        jars:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/JarSpec'
+    ConfirmSalaryParams:
+      description: |
+        split: chia số tiền lương vào hũ theo `split_percent` (làm tròn xuống từng hũ, phần dư vào hũ có tỷ lệ
+        lớn nhất, hòa thì hũ đứng trước). keep_as_other: giữ ở Tiền vào khác (không phải lương). `update_declared_salary`
+        chỉ có nghĩa khi `decision` là split: đặt lương đã khai bằng số vừa nhận.
+      type: object
+      required: [salary_event_id, decision]
+      additionalProperties: false
+      properties:
+        salary_event_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        decision:
+          type: string
+          enum: [split, keep_as_other]
+        update_declared_salary:
+          type: boolean
+    ActionResponse:
+      description: Biên nhận của `POST /actions`, phân biệt bằng `type`.
+      oneOf:
+        - $ref: '../blocks/receipt.schema.json'
+        - $ref: '../blocks/receipt_action.schema.json'
     JarsResponse:
       type: object
       required: [app_date, as_of, jars, jars_total_vnd]
@@ -454,7 +1504,7 @@ components:
             resolved_at:
               $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
             receipt:
-              $ref: '../blocks/receipt.schema.json'
+              $ref: '#/components/schemas/ActionResponse'
         - type: object
           required: [block_id, status]
           additionalProperties: false
@@ -465,9 +1515,66 @@ components:
               enum: [pending, expired]
     ToolName:
       type: string
-      description: Tên tool ngắn (không có tiền tố target). Hiện chỉ có chuyển hũ.
-      enum: [move_between_jars]
+      description: |
+        Tên tool ghi (ngắn, không có tiền tố target). Mỗi giá trị có schema `params` riêng, xem `allOf` của
+        `ConfirmationRequest` và `ActionRequest` và bảng ở mô tả của `POST /actions`.
+      enum: [move_between_jars, record_transaction, assign_jar, update_profile, save_jars, confirm_salary]
+    ParamsByTool:
+      description: |
+        Ràng buộc `params` theo `tool` (dùng chung cho `ConfirmationRequest` và `ActionRequest`). `params` chưa chuẩn hóa
+        cũng được nhận (server chuẩn hóa lại và chỉ ký bản chuẩn hóa); trường lạ và `user_id` bị từ chối.
+      allOf:
+        - if:
+            properties:
+              tool:
+                const: move_between_jars
+          then:
+            properties:
+              params:
+                $ref: '../blocks/confirm.schema.json#/$defs/MoveParams'
+        - if:
+            properties:
+              tool:
+                const: record_transaction
+          then:
+            properties:
+              params:
+                $ref: '#/components/schemas/RecordTransactionParams'
+        - if:
+            properties:
+              tool:
+                const: assign_jar
+          then:
+            properties:
+              params:
+                $ref: '#/components/schemas/AssignJarParams'
+        - if:
+            properties:
+              tool:
+                const: update_profile
+          then:
+            properties:
+              params:
+                $ref: '#/components/schemas/UpdateProfileParams'
+        - if:
+            properties:
+              tool:
+                const: save_jars
+          then:
+            properties:
+              params:
+                $ref: '#/components/schemas/SaveJarsParams'
+        - if:
+            properties:
+              tool:
+                const: confirm_salary
+          then:
+            properties:
+              params:
+                $ref: '#/components/schemas/ConfirmSalaryParams'
     ConfirmationRequest:
+      allOf:
+        - $ref: '#/components/schemas/ParamsByTool'
       type: object
       required: [tool, params]
       additionalProperties: false
@@ -475,16 +1582,18 @@ components:
         tool:
           $ref: '#/components/schemas/ToolName'
         params:
-          description: Sao nguyên từ khối `confirm` (đã chuẩn hóa).
-          $ref: '../blocks/confirm.schema.json#/$defs/MoveParams'
+          description: |
+            Sao nguyên từ khối `confirm` hoặc `confirm_action` (đã chuẩn hóa), hoặc do màn hình tự dựng. Schema
+            theo `tool` ở `ParamsByTool`.
+          type: object
         conversation_id:
           $ref: '#/components/schemas/ConfirmConversationId'
         confirm_block_id:
           $ref: '#/components/schemas/ConfirmBlockRef'
         params_hash:
           description: |
-            `params_hash` của khối `confirm` người dùng đang nhìn. Nếu gửi, server so với hash tự
-            tính từ `tool` và `params`; lệch thì trả PARAMS_MISMATCH.
+            `params_hash` của khối `confirm` hoặc `confirm_action` người dùng đang nhìn. Nếu gửi, server so với hash
+            tự tính từ `tool` và `params`; lệch thì trả PARAMS_MISMATCH. Màn hình không có khối thì bỏ trường này.
           type: string
           pattern: '^[0-9a-f]{64}$'
     ConfirmationResponse:
@@ -507,11 +1616,14 @@ components:
         tool:
           $ref: '#/components/schemas/ToolName'
         params:
-          $ref: '../blocks/confirm.schema.json#/$defs/MoveParams'
+          description: Bản tham số đã chuẩn hóa mà token đã ký.
+          type: object
         params_hash:
           type: string
           pattern: '^[0-9a-f]{64}$'
     ActionRequest:
+      allOf:
+        - $ref: '#/components/schemas/ParamsByTool'
       type: object
       required: [tool, params]
       additionalProperties: false
@@ -519,7 +1631,8 @@ components:
         tool:
           $ref: '#/components/schemas/ToolName'
         params:
-          $ref: '../blocks/confirm.schema.json#/$defs/MoveParams'
+          description: Như `ConfirmationRequest.params`; phải khớp bản đã xác nhận (hash khớp), nếu không PARAMS_MISMATCH.
+          type: object
         conversation_id:
           $ref: '#/components/schemas/ConfirmConversationId'
         confirm_block_id:
@@ -547,6 +1660,13 @@ components:
         transactions_count:
           type: integer
           minimum: 0
+        obligations_count:
+          description: Số nghĩa vụ đã seed (phase 2).
+          type: integer
+          minimum: 0
+        forecast_ready:
+          description: Đúng nếu đã tính xong dự báo đồng bộ trước khi trả lời (phase 2), để mở app là có số.
+          type: boolean
   responses:
     BadRequest:
       description: PARAMS_INVALID (tham số sai định dạng hoặc vô lý).
@@ -567,19 +1687,19 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: JAR_NOT_FOUND.
+      description: JAR_NOT_FOUND, TRANSACTION_NOT_FOUND, OBLIGATION_NOT_FOUND, PAYEE_NOT_FOUND hoặc SALARY_EVENT_NOT_FOUND.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: TOKEN_REUSED, PARAMS_MISMATCH hoặc ALREADY_APPLIED.
+      description: TOKEN_REUSED, PARAMS_MISMATCH, ALREADY_APPLIED hoặc DUPLICATE_TRANSACTION.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Unprocessable:
-      description: INSUFFICIENT_FUNDS hoặc AMOUNT_LIMIT_EXCEEDED.
+      description: INSUFFICIENT_FUNDS, AMOUNT_LIMIT_EXCEEDED, CREDIT_LIMIT_EXCEEDED, JAR_PROTECTED hoặc PROFILE_INCOMPLETE.
       content:
         application/json:
           schema:
@@ -597,7 +1717,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Unavailable:
-      description: DATABASE_UNAVAILABLE. Thử lại sau vài giây (Aurora có thể đang thức dậy).
+      description: DATABASE_UNAVAILABLE hoặc FORECAST_UNAVAILABLE. Thử lại sau vài giây (Aurora có thể đang thức dậy).
       content:
         application/json:
           schema:

@@ -1,0 +1,236 @@
+{
+  "app_date": "2026-11-21",
+  "as_of": "2026-12-10T03:00:00Z",
+  "profile": {
+    "display_name": "Minh",
+    "monthly_salary_vnd": 9000000,
+    "payday_day": 5,
+    "risk_tolerance": "medium",
+    "onboarded": true
+  },
+  "balance": {
+    "total_vnd": 7900000,
+    "jars_total_vnd": 7730000,
+    "other_income_vnd": 350000,
+    "unclassified_vnd": -180000
+  },
+  "jars": [
+    {
+      "code": "an_uong",
+      "name": "Ăn uống",
+      "color_key": "violet",
+      "icon_key": "utensils",
+      "kind": "spending",
+      "balance_vnd": 380000,
+      "split_percent": 30,
+      "status": "short",
+      "runout_date": "2026-11-29",
+      "p_shortfall": 0.71,
+      "confidence_band": "medium"
+    },
+    {
+      "code": "di_lai",
+      "name": "Đi lại",
+      "color_key": "sky",
+      "icon_key": "bus",
+      "kind": "spending",
+      "balance_vnd": 640000,
+      "split_percent": 7,
+      "status": "ok",
+      "confidence_band": "medium"
+    },
+    {
+      "code": "hoa_don",
+      "name": "Hóa đơn",
+      "color_key": "brown",
+      "icon_key": "receipt",
+      "kind": "spending",
+      "balance_vnd": 450000,
+      "split_percent": 31,
+      "status": "tight",
+      "confidence_band": "medium"
+    },
+    {
+      "code": "giai_tri",
+      "name": "Giải trí",
+      "color_key": "orchid",
+      "icon_key": "gamepad",
+      "kind": "spending",
+      "balance_vnd": 760000,
+      "split_percent": 7,
+      "status": "ok",
+      "confidence_band": "medium"
+    },
+    {
+      "code": "du_lich",
+      "name": "Du lịch",
+      "color_key": "teal",
+      "icon_key": "plane",
+      "kind": "saving",
+      "balance_vnd": 1800000,
+      "split_percent": 10,
+      "goal_vnd": 6000000,
+      "goal_date": "2027-04-01",
+      "status": "ok",
+      "confidence_band": "low"
+    },
+    {
+      "code": "du_phong",
+      "name": "Dự phòng",
+      "color_key": "blue",
+      "icon_key": "shield",
+      "kind": "saving",
+      "balance_vnd": 2700000,
+      "split_percent": 10,
+      "status": "ok",
+      "confidence_band": "medium"
+    },
+    {
+      "code": "nghia_vu",
+      "name": "Nghĩa vụ",
+      "color_key": "slate",
+      "icon_key": "wallet",
+      "kind": "obligation",
+      "balance_vnd": 1000000,
+      "split_percent": 5,
+      "status": "ok",
+      "confidence_band": "medium"
+    }
+  ],
+  "system_jars": [
+    {
+      "code": "tien_vao_khac",
+      "name": "Tiền vào khác",
+      "color_key": "gray",
+      "icon_key": "inbox",
+      "kind": "system",
+      "balance_vnd": 350000,
+      "split_percent": 0,
+      "system_role": "other_income"
+    },
+    {
+      "code": "chua_phan_loai",
+      "name": "Chưa phân loại",
+      "color_key": "gray",
+      "icon_key": "help",
+      "kind": "system",
+      "balance_vnd": -180000,
+      "split_percent": 0,
+      "system_role": "unclassified"
+    }
+  ],
+  "next_payday": {
+    "date": "2026-12-05",
+    "days_until": 14,
+    "expected_vnd": 9000000,
+    "state": "expected"
+  },
+  "forecast": {
+    "computed_at": "2026-11-21T19:00:03Z",
+    "run_app_date": "2026-11-21",
+    "stale": false,
+    "is_initial_estimate": false,
+    "confidence_band": "medium",
+    "coverage": 0.62,
+    "history_days": 47,
+    "model": "hurdle_calendar"
+  },
+  "proactive_card": [
+    {
+      "v": 1,
+      "id": "proactive_card:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:runout_warning",
+      "type": "proactive_card",
+      "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+      "fallback_text": "Hũ Ăn uống dự kiến cạn ngày 29/11. Còn 380.000 ₫, còn 6 ngày tới kỳ lương 05/12. Xác suất hụt khoảng 71%.",
+      "source": {
+        "tool": "rest:GET /overview",
+        "as_of": "2026-12-10T03:00:00Z",
+        "app_date": "2026-11-21"
+      },
+      "data": {
+        "kind": "runout_warning",
+        "status": "short",
+        "title": "Hũ Ăn uống dự kiến cạn ngày 29/11",
+        "reason": "Còn 380.000 ₫, còn 6 ngày tới kỳ lương 05/12. Xác suất hụt khoảng 71%.",
+        "jar_code": "an_uong",
+        "actions": [
+          {
+            "kind": "open_forecast",
+            "label": "Xem dự báo",
+            "jar_code": "an_uong"
+          },
+          {
+            "kind": "ask_why",
+            "label": "Hỏi vì sao",
+            "jar_code": "an_uong",
+            "prompt": "Vì sao hũ Ăn uống sắp cạn?"
+          },
+          {
+            "kind": "snooze",
+            "label": "Để sau"
+          },
+          {
+            "kind": "mute_kind",
+            "label": "Ít nhắc loại này"
+          }
+        ]
+      }
+    }
+  ],
+  "credit_line": {
+    "product_code": "bnpl_sim",
+    "product_label": "Trả sau (mô phỏng)",
+    "limit_vnd": 5000000,
+    "outstanding_vnd": 300000,
+    "available_vnd": 4700000,
+    "due_day": 5,
+    "status": "active"
+  },
+  "obligations_due": [
+    {
+      "id": "9a4d0e11-6b2c-4f3a-8d5e-1c7b9a3f5e20",
+      "kind": "bill",
+      "name": "Tiền điện",
+      "amount_vnd": 375000,
+      "amount_min_vnd": 300000,
+      "amount_max_vnd": 450000,
+      "fee_vnd": 0,
+      "due_date": "2026-11-26",
+      "cycle": "monthly",
+      "due_day": 26,
+      "status": "active",
+      "pay_jar": "hoa_don",
+      "is_essential": true,
+      "source": "declared"
+    },
+    {
+      "id": "2b6e8f40-3d1a-4c5b-9e7f-0a1b2c3d4e5f",
+      "kind": "bnpl",
+      "name": "Trả sau (mô phỏng)",
+      "amount_vnd": 333000,
+      "fee_vnd": 33000,
+      "principal_vnd": 300000,
+      "due_date": "2026-12-05",
+      "cycle": "once",
+      "status": "active",
+      "pay_jar": "nghia_vu",
+      "is_essential": false,
+      "source": "bnpl_auto"
+    }
+  ],
+  "recent_transactions": [
+    {
+      "id": "0a1b2c3d-1111-4222-8333-444455556666",
+      "occurred_at": "2026-12-09T11:20:00Z",
+      "app_date": "2026-11-20",
+      "kind": "expense",
+      "jar": "an_uong",
+      "amount_vnd": -45000,
+      "merchant": "Quán cơm",
+      "note": "Bữa trưa",
+      "tx_type": "food_drink",
+      "funding_source": "jar"
+    }
+  ],
+  "needs_review_count": 3
+}

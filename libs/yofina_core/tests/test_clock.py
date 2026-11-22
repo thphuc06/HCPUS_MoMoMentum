@@ -2,7 +2,15 @@ from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
-from yofina_core.clock import app_timezone, app_today, clock_offset_for
+from yofina_core.clock import (
+    app_timezone,
+    app_today,
+    clock_offset_for,
+    latest_payday,
+    next_payday,
+    payday_dates,
+    payday_in_month,
+)
 
 VN = app_timezone()
 
@@ -50,3 +58,43 @@ def test_tu_choi_datetime_khong_co_mui_gio():
         app_today(0, naive)
     with pytest.raises(ValueError):
         clock_offset_for(date(2026, 11, 21), naive)
+
+
+# --- ngày lương ---
+def test_next_payday_la_ngay_luong_sau_hom_nay():
+    assert next_payday(5, date(2026, 11, 21)) == date(2026, 12, 5)
+    assert next_payday(5, date(2026, 11, 1)) == date(2026, 11, 5)
+    assert next_payday(5, date(2026, 11, 4)) == date(2026, 11, 5)
+    assert next_payday(5, date(2026, 11, 5)) == date(
+        2026, 12, 5
+    )  # hôm nay là ngày lương: lấy tháng sau
+    assert next_payday(5, date(2026, 12, 20)) == date(2027, 1, 5)  # qua năm
+
+
+def test_ngay_luong_lon_hon_so_ngay_cua_thang_lay_ngay_cuoi_thang():
+    assert payday_in_month(31, 2026, 11) == date(2026, 11, 30)
+    assert payday_in_month(31, 2027, 2) == date(2027, 2, 28)
+    assert payday_in_month(30, 2028, 2) == date(2028, 2, 29)  # năm nhuận
+    assert next_payday(31, date(2026, 11, 30)) == date(2026, 12, 31)
+    assert next_payday(31, date(2027, 1, 31)) == date(2027, 2, 28)
+
+
+def test_latest_payday_la_ngay_luong_khong_sau_hom_nay():
+    assert latest_payday(5, date(2026, 11, 21)) == date(2026, 11, 5)
+    assert latest_payday(5, date(2026, 11, 5)) == date(2026, 11, 5)
+    assert latest_payday(5, date(2026, 11, 4)) == date(2026, 10, 5)
+    assert latest_payday(5, date(2027, 1, 2)) == date(2026, 12, 5)  # lùi qua năm
+
+
+def test_payday_dates_trong_khoang_nua_mo():
+    assert payday_dates(5, date(2026, 11, 21), date(2026, 12, 5)) == [date(2026, 12, 5)]
+    assert payday_dates(5, date(2026, 12, 5), date(2026, 12, 20)) == []
+    assert payday_dates(5, date(2026, 11, 21), date(2027, 2, 5)) == [
+        date(2026, 12, 5), date(2027, 1, 5), date(2027, 2, 5)
+    ]  # fmt: skip
+
+
+def test_payday_day_ngoai_khoang_bi_tu_choi():
+    for bad in (0, 32, -1):
+        with pytest.raises(ValueError):
+            payday_in_month(bad, 2026, 11)
