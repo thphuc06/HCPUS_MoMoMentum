@@ -2,7 +2,7 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: 2026-11-22 (đêm). Phase 3 đóng có điều kiện: mã xong và đã merge vào `main` local (HEAD `37e4c77`, chưa push), deploy một phần (F1 và F3 chưa deploy).
+Cập nhật lần cuối: 2026-11-22 (đêm). Phase 3 đóng có điều kiện: mã xong và đã merge vào `main` local (HEAD `069babe`, chưa push (14 commit đi trước `origin/main`)), deploy một phần (F1 và F3 chưa deploy).
 
 ## Đang ở đâu trong kế hoạch
 
@@ -42,6 +42,8 @@ Thứ tự làm:
 5. Phát hiện để sau (F4 đến F10) ở file phase 3; quyết định mở F5 (guardrail fail-open) và ngưỡng sát/hụt ở [open-questions.md](docs/requirements/open-questions.md).
 
 Việc phase 2 chuyển sang, chưa chắc đã làm: preview cho sửa hồ sơ, `save_jars`, nghĩa vụ; câu riêng cho hũ 0 ₫ ở tài khoản mới; "gần như chắc chắn" thay "100%"; nhãn bước công cụ của lời gọi dự báo; nhãn mốc biểu đồ chồng nhau; tên cho trình đọc màn hình.
+
+**Nhánh của đồng đội**: `origin/feat/ingest` (Ingest F6, phase 5: `YofinaIngest`, migration `0050`, tách `confirm_rows` trong contracts, màn ingest, persona `vy`) làm song song, chưa merge. Khi merge với `main` kiểm xung đột ở `contracts/`, `frontend/src/blocks`, `scripts/gen_contracts.mjs`, `docs/aws-resources.md` và số migration (0050 chen sau 0010).
 
 **Git**: `main` local đi trước `origin/main`; push `origin main` bị chính sách chặn ở phiên người điều phối, **chủ dự án tự push** (hoặc mở PR từ `origin/r1-merge-phase3`, nhánh này giữ commit merge và sửa test, tồn tại trên origin). Nhánh `wip/phase3-streams` đã merge vào `main`, có thể xóa (local và `origin`). `evals/results/` không vào git (chứa dữ liệu persona; đã có trong `.gitignore`).
 
