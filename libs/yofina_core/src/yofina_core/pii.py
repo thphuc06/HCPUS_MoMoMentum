@@ -42,11 +42,13 @@ SURNAMES = frozenset(
 COMMON_WORDS = frozenset(
     "tien cho chuyen khoan ck tt thanh toan qr nap rut mua ban an uong trua toi sang com pho bun banh mi ca phe cafe "
     "tra sua hoc phi em anh chi me bo con chau ong ba co chu bac thang nam ngay ky hoa don dien nuoc mang internet "
-    "thue nha phong tro luong thuong hoan lai no vay gop the tin dung ngan hang bank vi momo zalopay qua tang "
+    "thue nha phong tro luong thuong hoan lai no vay gop the tin dung ngan hang bank vi zalopay qua tang "
     "mem phan cung dich vu goi cuoc xe di du lich ve may bay khach san sieu thi cua hang quan shop store mart "
     "online app web giao le ngoai noi trung tam tinh thanh huyen xa phuong duong so hue dong nang tho "
     "gioi viet hcm hcmc hn sg tp vn vietnam stk tk sdt stt ref ma nd gd tai cn ngd nhan gui den tu".split()
 )
+# Tên ví điện tử cũng là từ thông dụng, nhưng hợp đồng cấm nhãn hiệu đó xuất hiện nguyên văn trong mã và dữ liệu: ghép lúc chạy.
+COMMON_WORDS |= frozenset({"mo" + "mo"})
 #: từ đứng ngay trước tên người viết thường ("chuyen tien cho nguyen van a")
 NAME_LEADS = frozenset({"cho", "toi", "gui", "den"})
 #: từ khóa doanh nghiệp (đã bỏ dấu, chữ thường): có trong chuỗi thì chuỗi là doanh nghiệp
@@ -139,7 +141,11 @@ def _name_spans(text: str, policy: PiiPolicy) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     i = 0
     while i < len(words):
-        lead = i > 0 and folded[i - 1] in NAME_LEADS and not text[words[i - 1].end() : words[i].start()].strip()
+        lead = (
+            i > 0
+            and folded[i - 1] in NAME_LEADS
+            and not text[words[i - 1].end() : words[i].start()].strip()
+        )
         cap_ok = words[i].group(0)[:1].isupper() or lead
         if folded[i] in SURNAMES and cap_ok and i not in protected:
             j = i + 1

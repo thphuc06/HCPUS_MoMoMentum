@@ -16,16 +16,30 @@ from personas.generator import (
     parse_groups_claim,
     persona_from_groups,
 )
+from personas.out_of_wallet import (
+    OutOfWallet,
+    OutOfWalletSource,
+    OutOfWalletTx,
+    generate_out_of_wallet,
+    statement_balances,
+    statement_csv,
+)
 
 __all__ = [
     "Materialized",
     "MaterializedTx",
+    "OutOfWallet",
+    "OutOfWalletSource",
+    "OutOfWalletTx",
     "PersonaData",
     "PersonaError",
     "available_personas",
     "generate",
+    "generate_out_of_wallet",
     "load_accounts",
     "materialize",
     "parse_groups_claim",
     "persona_from_groups",
+    "statement_balances",
+    "statement_csv",
 ]

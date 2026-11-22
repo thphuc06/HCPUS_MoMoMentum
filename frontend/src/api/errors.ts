@@ -134,7 +134,7 @@ export const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   INGEST_JOB_NOT_READY: 'Lần nạp này chưa đọc xong hoặc đã được chốt rồi.',
   INGEST_UNSUPPORTED_TYPE: 'Loại tệp này chưa được hỗ trợ. Hãy dùng ảnh PNG, JPEG, WEBP hoặc tệp CSV.',
   INGEST_TOO_LARGE: 'Tệp lớn hơn giới hạn cho phép. Hãy chọn tệp nhỏ hơn.',
-  INGEST_NOT_FINANCIAL: 'Ảnh này không phải biên lai hay sao kê nên chưa đọc được dòng nào. Hãy chọn ảnh hóa đơn, thông báo chuyển khoản hoặc tệp sao kê.',
+  INGEST_NOT_FINANCIAL: 'Tệp này không phải biên lai, thông báo chuyển khoản hay sao kê nên chưa đọc được dòng nào. Hãy chọn ảnh hóa đơn, thông báo chuyển khoản hoặc tệp sao kê.',
   INGEST_DUPLICATE_FILE: 'Tệp này đã được nạp trước đó rồi, không nạp thêm lần nữa.',
   NETWORK: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
   TIMEOUT: 'Máy chủ phản hồi quá lâu. Nếu bạn vừa ghi một giao dịch, kiểm tra ở Hoạt động trước khi thử lại.',

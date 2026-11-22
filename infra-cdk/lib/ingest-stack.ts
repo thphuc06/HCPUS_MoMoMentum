@@ -23,7 +23,7 @@ import { ToolsConfig } from './tools-stack';
  * lấy từ `ToolsConfig` (cùng nguồn, cùng context) để hai Lambda không lệch nhau.
  */
 export interface IngestConfig {
-  /** Zip chung của hai Lambda (`handler_api`, `handler_worker`), luồng backend đóng bằng scripts/build_lambda.py. */
+  /** Zip chung của hai Lambda (`handler_api`, `handler_worker`), đóng bằng scripts/build_lambda.py (`INGEST_BUILD_COMMAND`). */
   readonly zip: string;
   readonly apiMemoryMb: number;
   readonly apiTimeoutSeconds: number;
@@ -46,10 +46,13 @@ export interface IngestConfig {
   /** Tiền tố khóa của tệp người dùng (`u/{user_id}/{job_id}`); chỉ tiền tố này kích hoạt worker. */
   readonly uploadPrefix: string;
   /**
-   * Vai model trong `llm_defaults.json` mà Lambda được gọi (quyền Bedrock lấy từ chuỗi model của các vai này). Vai chưa có
-   * trong file thì bỏ qua kèm thông báo; không vai nào có thì stack báo lỗi (không có model nào để cấp quyền).
+   * Vai model trong `llm_defaults.json` mà worker được gọi (quyền Bedrock lấy từ chuỗi model của các vai này): `ingest` (đọc ảnh:
+   * Sonnet 4.6, dự phòng Kimi K3) và `ingest_columns` (ánh xạ cột và gắn nhãn CSV: model nhỏ). Vai chưa có trong file thì bỏ qua kèm
+   * cảnh báo; không vai nào có thì stack báo lỗi (không có model nào để cấp quyền).
    */
   readonly llmRoles: string[];
+  /** Cửa sổ lịch sử của độ phủ dữ liệu (ngày): CÙNG context `forecastHistoryWindowDays` với pipeline dự báo, để hai bên cùng một công thức. */
+  readonly forecastHistoryWindowDays: number;
   /** Đường dẫn `llm_defaults.json` (mặc định là file của yofina_core; test đổi bằng context `ingestLlmDefaults`). */
   readonly llmDefaults: string;
 }
@@ -57,7 +60,8 @@ export interface IngestConfig {
 /** Lệnh đóng zip của hai Lambda ingest (luồng backend xác nhận). */
 export const INGEST_BUILD_COMMAND =
   'uv run scripts/build_lambda.py gateway/tools/ingest --arch arm64 --name ingest ' +
-  '--extra pipelines/ingest/yofina_ingest:yofina_ingest --extra gateway/tools/ledger/yofina_ledger:yofina_ledger';
+  '--extra pipelines/ingest/yofina_ingest:yofina_ingest --extra gateway/tools/ledger/yofina_ledger:yofina_ledger ' +
+  '--extra db/seed:seed';
 
 /** Route REST của F6. Chỉ GET/POST: CORS preflight của `yofina-api` (YofinaTools) chỉ cho GET, POST, OPTIONS. */
 export const INGEST_ROUTES: ReadonlyArray<readonly [method: 'GET' | 'POST', path: string]> = [
@@ -99,7 +103,8 @@ export function loadIngestConfig(app: App): IngestConfig {
     objectExpirationDays: ctxNum(app, 'ingestObjectExpirationDays', 30),
     abortMultipartDays: ctxNum(app, 'ingestAbortMultipartDays', 1),
     uploadPrefix: prefix,
-    llmRoles: ctxStr(app, 'ingestLlmRoles', 'ingest_vision,ingest_columns')
+    forecastHistoryWindowDays: ctxNum(app, 'forecastHistoryWindowDays', 330),
+    llmRoles: ctxStr(app, 'ingestLlmRoles', 'ingest,ingest_columns')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
@@ -179,8 +184,6 @@ export class IngestStack extends Stack {
     const userPoolId = param('auth/user-pool-id');
     const clientId = param('auth/client-id');
     const amplifyUrl = param('frontend/amplify-url');
-    const busName = param('events/bus-name');
-    const busArn = param('events/bus-arn');
     const apiUrl = param('api/url');
     const forecastBatchName = param('forecast/batch-function-name');
     const alertTopic = sns.Topic.fromTopicArn(this, 'AlertTopic', param('sns/alert-topic-arn'));
@@ -256,46 +259,35 @@ export class IngestStack extends Stack {
       code = lambda.Code.fromInline('raise RuntimeError("ingest zip missing")');
     }
 
+    // Biến môi trường: chỉ những khóa mà mã ingest đọc (yofina_core.config, yofina_core.db, yofina_core.confirm, yofina_core.llm,
+    // yofina_ingest.settings). Giá trị dùng chung với ledger lấy từ ToolsConfig nên hai Lambda không lệch nhau.
     const environment = (timeoutSeconds: number): Record<string, string> => ({
       YOFINA_REGION: cfg.region,
       YOFINA_LOG_LEVEL: 'INFO',
       YOFINA_SSM_PREFIX: `/${p}`,
-      // yofina_core.db
+      // yofina_core.db (role yofina_app, không bao giờ secret master)
       YOFINA_DB_CLUSTER_ARN: clusterArn,
-      YOFINA_DB_SECRET_ARN: appSecretArn,
-      YOFINA_DB_APP_SECRET_ARN: appSecretArn, // tên yofina_core.db đọc (db_app_secret_arn); cùng secret yofina_app
+      YOFINA_DB_APP_SECRET_ARN: appSecretArn,
       YOFINA_DB_NAME: dbName,
       YOFINA_DB_RESUME_MAX_WAIT_SECONDS: String(tools.dbResumeMaxWaitSeconds),
       // F6
       YOFINA_INGEST_BUCKET: this.bucket.bucketName,
-      // yofina_core.confirm
+      YOFINA_INGEST_UPLOAD_PREFIX: ingest.uploadPrefix,
+      YOFINA_INGEST_MAX_RECEIVE_COUNT: String(ingest.maxReceiveCount),
+      // yofina_core.confirm (cùng khóa HMAC và bảng jti với ledger)
       YOFINA_CONFIRM_HMAC_SECRET_ARN: hmacSecretArn,
       YOFINA_CONFIRM_JTI_TABLE: jtiTable,
       YOFINA_CONFIRM_TOKEN_TTL_SECONDS: String(tools.confirmTokenTtlSeconds),
       YOFINA_CONFIRM_TOKEN_MAX_TTL_SECONDS: String(tools.confirmTokenTtlSeconds),
       YOFINA_CONFIRM_OFFER_TTL_SECONDS: String(tools.confirmOfferTtlSeconds),
-      // dự báo và sự kiện (tên ledger đọc là forecast_function_name; đặt cả hai)
-      YOFINA_FORECAST_BATCH_FUNCTION: forecastBatchName,
+      // tính lại dự báo sau khi chốt (ledger gọi cùng Lambda khi đặt lại demo) và cửa sổ độ phủ dữ liệu
       YOFINA_FORECAST_FUNCTION_NAME: forecastBatchName,
       YOFINA_FORECAST_SYNC_TIMEOUT_SECONDS: String(Math.max(timeoutSeconds - 8, 5)),
-      YOFINA_EVENT_BUS_NAME: busName,
+      YOFINA_FORECAST_HISTORY_WINDOW_DAYS: String(ingest.forecastHistoryWindowDays),
       // đồng hồ mô phỏng (ADR-0003)
       YOFINA_APP_TIMEZONE: tools.appTimezone,
-      YOFINA_DEMO_ANCHOR_DATE: tools.demoAnchorDate,
-      // yofina_core.llm: DynamoUsageStore đọc YOFINA_USAGE_TABLE; YOFINA_LLM_USAGE_TABLE cho mã ingest
-      YOFINA_LLM_USAGE_TABLE: usageTable,
+      // yofina_core.llm: DynamoUsageStore đọc YOFINA_USAGE_TABLE
       YOFINA_USAGE_TABLE: usageTable,
-      // cấu hình ledger dùng chung (nếu mã ingest gọi yofina_ledger để chốt dòng): cùng giá trị với yofina-ledger
-      YOFINA_MOVE_MAX_AMOUNT_VND: String(tools.moveMaxAmountVnd),
-      YOFINA_TRANSACTIONS_DEFAULT_LIMIT: String(tools.transactionsDefaultLimit),
-      YOFINA_TRANSACTIONS_MAX_LIMIT: String(tools.transactionsMaxLimit),
-      YOFINA_TRANSACTION_MAX_AMOUNT_VND: String(tools.transactionMaxAmountVnd),
-      YOFINA_SALARY_DEVIATION_ASK_PERCENT: String(tools.salaryDeviationAskPercent),
-      YOFINA_DEFAULT_CREDIT_LIMIT_VND: String(tools.defaultCreditLimitVnd),
-      YOFINA_DEFAULT_DISPLAY_NAME: tools.defaultDisplayName,
-      YOFINA_FORECAST_FRESHNESS_SECONDS: String(tools.forecastFreshnessSeconds),
-      YOFINA_PROACTIVE_OBLIGATION_DAYS: String(tools.proactiveObligationDays),
-      YOFINA_REFERENCE_CACHE_SECONDS: String(tools.referenceCacheSeconds),
     });
 
     const makeFn = (
@@ -422,6 +414,14 @@ export class IngestStack extends Stack {
       arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
 
+    // Quyền chung của hai Lambda: Data API (role yofina_app) và đọc cấu hình. Mọi khóa `YOFINA_*` vắng trong môi trường đi
+    // GetParameter (yofina_core.config), nên phải được phép để nhận ParameterNotFound thay vì AccessDenied.
+    const configParams = [
+      ssmArn(`${p}/ingest_*`),
+      ssmArn(`${p}/db_*`),
+      ssmArn(`${p}/confirm_*`),
+      ssmArn(`${p}/forecast_*`),
+    ];
     for (const fn of [this.api, this.worker]) {
       fn.addToRolePolicy(
         new iam.PolicyStatement({
@@ -436,75 +436,55 @@ export class IngestStack extends Stack {
           resources: [clusterArn],
         }),
       );
-      for (const st of bedrockStatements) fn.addToRolePolicy(st);
+      // CHỈ secret của yofina_app (không master)
       fn.addToRolePolicy(
         new iam.PolicyStatement({
-          sid: 'CountModelCalls',
-          actions: ['dynamodb:UpdateItem'],
-          resources: [this.formatArn({ service: 'dynamodb', resource: 'table', resourceName: usageTable })],
-        }),
-      );
-      // YOFINA_SSM_PREFIX bật đường SSM của yofina_core.config: llm đọc gộp nhánh /yofina/llm; khóa tùy chọn vắng trong env
-      // (ingest_*, db_*, confirm_*, forecast_*) đi GetParameter, nên phải được phép để nhận ParameterNotFound thay vì AccessDenied.
-      fn.addToRolePolicy(
-        new iam.PolicyStatement({
-          sid: 'ReadConfig',
-          actions: ['ssm:GetParameter', 'ssm:GetParametersByPath'],
-          resources: [
-            ssmArn(`${p}/llm`),
-            ssmArn(`${p}/llm/*`),
-            ssmArn(`${p}/ingest_*`),
-            ssmArn(`${p}/db_*`),
-            ssmArn(`${p}/confirm_*`),
-            ssmArn(`${p}/forecast_*`),
-            ssmArn(`${p}/dynamodb/usage-table`),
-          ],
-        }),
-      );
-      fn.addToRolePolicy(
-        new iam.PolicyStatement({
-          sid: 'InvokeForecastBatch',
-          actions: ['lambda:InvokeFunction'],
-          resources: [forecastBatchArn],
-        }),
-      );
-      fn.addToRolePolicy(
-        new iam.PolicyStatement({
-          sid: 'PublishIngestEvents',
-          actions: ['events:PutEvents'],
-          resources: [busArn],
+          sid: 'ReadAppSecretOnly',
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [appSecretArn],
         }),
       );
     }
 
-    // worker: CHỈ secret của yofina_app (không master), đọc tệp người dùng
+    // --- worker: Bedrock, bộ đếm lượt gọi, đọc/xóa tệp người dùng ------------------------------------------------------------
+    for (const st of bedrockStatements) this.worker.addToRolePolicy(st);
     this.worker.addToRolePolicy(
       new iam.PolicyStatement({
-        sid: 'ReadAppSecretOnly',
-        actions: ['secretsmanager:GetSecretValue'],
-        resources: [appSecretArn],
+        sid: 'CountModelCalls',
+        actions: ['dynamodb:UpdateItem'],
+        resources: [this.formatArn({ service: 'dynamodb', resource: 'table', resourceName: usageTable })],
+      }),
+    );
+    // yofina_core.llm đọc gộp nhánh /yofina/llm (GetParametersByPath) và khóa `dynamodb/usage-table` khi không có biến môi trường
+    this.worker.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'ReadConfig',
+        actions: ['ssm:GetParameter', 'ssm:GetParametersByPath'],
+        resources: [ssmArn(`${p}/llm`), ssmArn(`${p}/llm/*`), ssmArn(`${p}/dynamodb/usage-table`), ...configParams],
       }),
     );
     this.worker.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'ReadAndDeleteUserUploads',
-        // HeadObject dùng quyền s3:GetObject; DeleteObject để worker xóa tệp gốc ngay khi đọc xong (không chờ vòng đời 30 ngày)
+        // GetObject cũng là quyền của HeadObject; DeleteObject để worker xóa tệp gốc ngay khi đọc xong (không chờ vòng đời 30 ngày)
         actions: ['s3:GetObject', 's3:DeleteObject'],
         resources: [userObjects],
       }),
     );
 
-    // API: secret app + khóa HMAC; PutItem lên bảng jti (dùng token một lần, cùng bảng với ledger).
+    // --- API: khóa HMAC, token một lần, presigned POST, kích hoạt tính lại dự báo ---------------------------------------------
     // Presigned POST được S3 kiểm bằng quyền của role ký, nên role cần s3:PutObject; điều kiện `s3:authType = POST` làm quyền
     // này CHỈ dùng được qua form POST đã ký (Lambda không PutObject trực tiếp, không presigned PUT). Kích thước và Content-Type
     // do điều kiện `content-length-range`, `Content-Type` trong POST policy mà backend ký (S3 kiểm khi nhận form).
-    // DeleteObject/ListBucket (prefix u/) để xóa tệp khi người dùng hủy job hoặc đặt lại tài khoản demo.
     this.api.addToRolePolicy(
       new iam.PolicyStatement({
-        sid: 'ReadAppAndHmacSecretsOnly',
+        sid: 'ReadHmacSecretOnly',
         actions: ['secretsmanager:GetSecretValue'],
-        resources: [appSecretArn, hmacSecretArn],
+        resources: [hmacSecretArn],
       }),
+    );
+    this.api.addToRolePolicy(
+      new iam.PolicyStatement({ sid: 'ReadConfig', actions: ['ssm:GetParameter'], resources: configParams }),
     );
     this.api.addToRolePolicy(
       new iam.PolicyStatement({
@@ -516,24 +496,17 @@ export class IngestStack extends Stack {
     );
     this.api.addToRolePolicy(
       new iam.PolicyStatement({
-        sid: 'DeleteUserFiles',
-        actions: ['s3:DeleteObject'],
-        resources: [userObjects],
-      }),
-    );
-    this.api.addToRolePolicy(
-      new iam.PolicyStatement({
-        sid: 'ListUserFiles',
-        actions: ['s3:ListBucket'],
-        resources: [this.bucket.bucketArn],
-        conditions: { StringLike: { 's3:prefix': [ingest.uploadPrefix, `${ingest.uploadPrefix}*`] } },
-      }),
-    );
-    this.api.addToRolePolicy(
-      new iam.PolicyStatement({
         sid: 'ConsumeConfirmJti',
         actions: ['dynamodb:PutItem'],
         resources: [this.formatArn({ service: 'dynamodb', resource: 'table', resourceName: jtiTable })],
+      }),
+    );
+    // sau khi chốt: tính lại dự báo ĐẦY ĐỦ (bất đồng bộ, như ledger khi đặt lại demo); lỗi không làm hỏng việc đã ghi
+    this.api.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'InvokeForecastBatch',
+        actions: ['lambda:InvokeFunction'],
+        resources: [forecastBatchArn],
       }),
     );
 

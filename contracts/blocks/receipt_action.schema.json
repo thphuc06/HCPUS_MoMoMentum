@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/blocks/receipt_action.schema.json",
   "title": "ReceiptActionBlock",
-  "description": "Biên nhận của thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge, confirm_rows; với schedule_nudge `reference_id` là id của nhắc, cũng là thứ Hoàn tác dùng để hủy). Trả bởi POST /actions (cùng với `receipt` của chuyển hũ) và dựng lại từ kết quả tool. Id khối `receipt:{tool}:{reference_id}`, hoặc `receipt:{tool}:{trace_id}` khi thao tác không có reference_id (kèm tool vì assign_jar và record_transaction dùng chung id giao dịch).",
+  "description": "Biên nhận của thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge, confirm_rows; với schedule_nudge `reference_id` là id của nhắc, cũng là thứ Hoàn tác dùng để hủy). Trả bởi POST /actions (cùng với `receipt` của chuyển hũ) và, với confirm_rows, bởi POST /ingest/actions và dựng lại từ kết quả tool. Id khối `receipt:{tool}:{reference_id}`, hoặc `receipt:{tool}:{trace_id}` khi thao tác không có reference_id (kèm tool vì assign_jar và record_transaction dùng chung id giao dịch).",
   "type": "object",
   "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
   "additionalProperties": false,

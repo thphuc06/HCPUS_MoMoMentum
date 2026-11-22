@@ -19,12 +19,14 @@ import {
   SalaryEventsResponse,
   TransactionsResponse,
   TxTypesResponse,
+  INGEST_TOOL_NAMES,
   type ActionRequest,
   type CancelConfirmationRequest,
   type ConfirmationRequest,
   type TransactionQuery,
 } from './schemas'
 import {
+  IngestJobListResponse,
   IngestJobResponse,
   IngestRowJarResponse,
   IngestUploadResponse,
@@ -68,11 +70,21 @@ export type ApiClient = {
   getIngestJob(jobId: string): Promise<IngestJobResponse>
   /** Đổi hũ ĐỀ XUẤT của một dòng chi (không ghi sổ cái, không token). `POST .../jar` vì CORS của HTTP API chỉ cho GET, POST, OPTIONS. */
   setIngestRowJar(rowId: string, req: IngestRowJarRequest): Promise<IngestRowJarResponse>
-  /** Xin token + xem trước cho `confirm_rows` (cùng hình dạng `POST /confirmations`, không gửi conversation_id). */
+  /** Các lần nạp gần đây (mới nhất trước), để quay lại một lần đang chờ duyệt. */
+  listIngestJobs(limit?: number): Promise<IngestJobListResponse>
+  /** Xin token + xem trước cho `confirm_rows` (`POST /ingest/confirmations`, cùng hình dạng `POST /confirmations`). */
   createIngestConfirmation(req: ConfirmationRequest): Promise<ConfirmationResponse>
-  /** Chốt các dòng bằng token (cùng hình dạng `POST /actions`); trả `receipt_action` kèm `coverage_change`. */
+  /** Chốt các dòng bằng token (`POST /ingest/actions`); trả `receipt_action` kèm `coverage_change`. */
   applyIngestAction(req: ActionRequest): Promise<ActionResponse>
 }
+
+/**
+ * `confirm_rows` chỉ đi qua cặp endpoint của Lambda `ingest`; ledger từ chối nó (PARAMS_INVALID). Chọn theo `tool` ở MỘT nơi để
+ * mọi nơi gọi (màn Nạp dữ liệu, khối `confirm_action` trong chat) đều đúng mà không phải tự biết.
+ */
+const isIngestTool = (tool: string) => (INGEST_TOOL_NAMES as readonly string[]).includes(tool)
+const confirmPath = (tool: string) => (isIngestTool(tool) ? '/ingest/confirmations' : '/confirmations')
+const actionPath = (tool: string) => (isIngestTool(tool) ? '/ingest/actions' : '/actions')
 
 async function readBody(res: Response): Promise<unknown> {
   const text = await res.text()
@@ -155,11 +167,12 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     getCreditLine: () => call('GET', '/credit-line', CreditLineResponse),
     listSalaryEvents: () => call('GET', '/salary-events', SalaryEventsResponse),
     listJarTemplates: () => call('GET', '/jar-templates', JarTemplatesResponse),
-    createConfirmation: (req) => call('POST', '/confirmations', ConfirmationResponse, req),
+    createConfirmation: (req) => call('POST', confirmPath(req.tool), ConfirmationResponse, req),
     cancelConfirmation: (req) => call('POST', '/confirmations/cancel', CancelConfirmationResponse, req),
-    applyAction: (req) => call('POST', '/actions', ActionResponse, req),
+    applyAction: (req) => call('POST', actionPath(req.tool), ActionResponse, req),
     resetDemo: () => call('POST', '/demo/reset', ResetResponse, undefined, RESET_TIMEOUT_MS),
     createIngestUpload: (req) => call('POST', '/ingest/uploads', IngestUploadResponse, req),
+    listIngestJobs: (limit) => call('GET', `/ingest/jobs${limit ? `?limit=${limit}` : ''}`, IngestJobListResponse),
     getIngestJob: (id) => call('GET', `/ingest/jobs/${enc(id)}`, IngestJobResponse),
     setIngestRowJar: (id, req) => call('POST', `/ingest/rows/${enc(id)}/jar`, IngestRowJarResponse, req),
     createIngestConfirmation: (req) => call('POST', '/ingest/confirmations', ConfirmationResponse, req),

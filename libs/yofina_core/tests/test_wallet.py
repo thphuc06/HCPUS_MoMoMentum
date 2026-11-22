@@ -62,6 +62,11 @@ def test_so_tien_am_bi_tu_choi():
 def test_tool_ghi_tren_man_hinh_va_cho_agent_khong_trung_nhau_o_nhom_con_lai():
     assert set(wallet.AGENT_WRITE_TOOLS) <= set(wallet.ACTION_TOOLS)
     assert wallet.MOVE_BETWEEN_JARS not in wallet.GENERIC_ACTION_TOOLS
-    # phase 5 thêm confirm_rows (target ingest, ghi qua POST /actions như các tool khác)
-    assert len(set(wallet.ACTION_TOOLS)) == len(wallet.ACTION_TOOLS) == 8
-    assert wallet.ACTION_TOOLS[-1] == wallet.CONFIRM_ROWS
+    # phase 5: confirm_rows (target ingest) KHÔNG nằm trong ACTION_TOOLS của ledger; nó đi qua /ingest/confirmations và
+    # /ingest/actions của Lambda ingest, nhưng vẫn dùng khối confirm_action / receipt_action
+    assert len(set(wallet.ACTION_TOOLS)) == len(wallet.ACTION_TOOLS) == 7
+    assert wallet.CONFIRM_ROWS not in wallet.ACTION_TOOLS
+    assert wallet.INGEST_ACTION_TOOLS == (wallet.CONFIRM_ROWS,)
+    assert not set(wallet.INGEST_ACTION_TOOLS) & set(wallet.ACTION_TOOLS)
+    assert wallet.CONFIRM_ROWS in wallet.GENERIC_ACTION_TOOLS
+    assert wallet.GENERIC_ACTION_TOOLS[-1] == wallet.CONFIRM_ROWS

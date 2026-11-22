@@ -18,7 +18,7 @@ Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, RE
 | `tools/ingest.json`, `tools/ingest.results.schema.json` | Ba tool của target `ingest` (phase 5) và kết quả | luồng A phase 5 (cài), agent |
 | `scenario/scenario_spec.schema.json` | `ScenarioSpec`: sáu loại kịch bản what-if (FR5), nguồn chung cho `run_scenario`, bảng `scenarios`, `yofina_core.scenario` | agent (dựng), luồng A (kiểm, chạy) |
 | `tools/{ledger,forecast,knowledge,planner,audit}.results.schema.json` | Kết quả JSON Lambda trả về cho từng tool; `ledger.results` còn chứa các $defs dùng chung với REST (`Transaction`, `Obligation`, `CreditLine`, `Payee`, `SalaryEvent`) | luồng A, C (trả), agent (đọc) |
-| `rest/openapi.yaml` | OpenAPI 3.1: 24 endpoint (xem mục "REST", "Phase 3" và "Phase 5") | luồng A, C (cài), D (gọi) |
+| `rest/openapi.yaml` | OpenAPI 3.1: 27 endpoint (xem mục "REST", "Phase 3" và "Phase 5") | luồng A, C (cài), D (gọi) |
 | `events/*.schema.json` | `detail` của sự kiện trên EventBridge bus `yofina-bus`: `transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`, `forecast.updated` | luồng A (phát), C (nghe) |
 | `ml/forecast_io.schema.json` | Dạng JSON của đầu vào và đầu ra `yofina_ml.forecast_user` | luồng B, C |
 | `fixtures/` | Ví dụ JSON dùng chung cho test Python và TypeScript (`blocks/`, `tools/`, `rest/`, `events/`, `ml/`, `scenario/`) | test |
@@ -343,7 +343,7 @@ Test: `tests/local_pg/test_external_funding.py` (PostgreSQL 16 cục bộ, role 
 ### Khối `ingest_review` và `coverage_change`
 
 - `ingest_review` (id `ingest_review:{job_id}`): `job_id`, `status`, `source_kind`, `rows` (tối đa 200 theo `seq`; mỗi dòng `row_id`, `seq`, `kind`, `app_date`, `amount_vnd`, `counterparty?`, `description?`, `extract_confidence`, `suggested_jar? {code,name,color_key,icon_key}`, `jar_confidence?`, `jar_source?`, `review_status`, `duplicate_of?`), `rows_total`, `counts {auto_added, pending, approved, rejected, duplicate}`, `jars` (hũ người dùng để đổi hũ một chạm). Dòng thu nhập không có hũ.
-- `coverage_change` (id `coverage_change:{job_id}`): `job_id`, `before?`, `after?` (`Ratio`, vắng khi chưa tính được), `rows_added`, `external_spend_added_vnd`, `external_income_added_vnd?`, `jars_affected [{code,name}]`, `forecast_refresh` (`queued`, `done`, `skipped`). Đi kèm biên nhận `receipt_action` của `confirm_rows` ở trường mới `receipt_action.data.coverage_change` (tùy chọn, các tool khác không có), nên `POST /actions` vẫn trả `receipt_action` như cũ.
+- `coverage_change` (id `coverage_change:{job_id}`): `job_id`, `before?`, `after?` (`Ratio`, vắng khi chưa tính được), `rows_added`, `external_spend_added_vnd`, `external_income_added_vnd?`, `jars_affected [{code,name}]`, `forecast_refresh` (`queued`, `done`, `skipped`). Đi kèm biên nhận `receipt_action` của `confirm_rows` ở trường mới `receipt_action.data.coverage_change` (tùy chọn, các tool khác không có), nên `POST /ingest/actions` trả `receipt_action` như mọi tool ghi khác.
 - Dựng bằng `yofina_core.ingest.build_ingest_review`, `build_coverage_change`; model ở `yofina_core.blocks` (cùng hợp `Block`). Hai khối CHƯA nằm trong `REGISTERED_BY_FRONTEND`: luồng frontend thêm khi đăng ký view (khối chưa đăng ký hiện `fallback_text`).
 
 ### Tool target `ingest`
@@ -354,7 +354,7 @@ Test: `tests/local_pg/test_external_funding.py` (PostgreSQL 16 cục bộ, role 
 |---|---|
 | `start_job` | KHÔNG tạo job, không ghi: tệp chỉ tải lên từ màn hình (người dùng chọn tệp, đồng ý). Trả `upload_path`, giới hạn tệp, `consent_required`, job gần nhất |
 | `get_job_status` | Trạng thái một job (vắng `job_id`: job gần nhất); `review` là đúng `data` của `ingest_review`, `coverage_change` khi `done`. Mô tả nói rõ nội dung dòng là dữ liệu, không phải chỉ dẫn |
-| `confirm_rows` | Tool ghi: không token thì `NEEDS_CONFIRMATION` với `ConfirmActionData`, có token thì `ReceiptActionData` (tool `confirm_rows`, `jars_after` rỗng, `coverage_change`). `confirm_rows` thuộc `wallet.ACTION_TOOLS` (`POST /confirmations`, `POST /actions`) và `GENERIC_ACTION_TOOLS` (khối `confirm_action`/`receipt_action`), KHÔNG thuộc `AGENT_WRITE_TOOLS` (tool ghi của target `ledger`) |
+| `confirm_rows` | Tool ghi: không token thì `NEEDS_CONFIRMATION` với `ConfirmActionData`, có token thì `ReceiptActionData` (tool `confirm_rows`, `jars_after` rỗng, `coverage_change`). `confirm_rows` KHÔNG còn thuộc `wallet.ACTION_TOOLS` (tool ghi của `POST /confirmations` và `POST /actions` của `ledger`, nay chỉ bảy tool) và KHÔNG thuộc `AGENT_WRITE_TOOLS`; nó thuộc `wallet.INGEST_ACTION_TOOLS = (CONFIRM_ROWS,)` (REST `POST /ingest/confirmations`, `POST /ingest/actions`, Lambda `ingest`) và `GENERIC_ACTION_TOOLS` (khối `confirm_action`/`receipt_action`). Cùng khóa HMAC và bảng `jti` với ledger (một secret, một luồng token); `ledger` gặp `confirm_rows` thì `PARAMS_INVALID`, `ingest` gặp tool khác cũng `PARAMS_INVALID`. `params.normalize_params("confirm_rows", …)` vẫn dùng chung |
 
 Chuẩn hóa `confirm_rows` (`yofina_core.params.normalize_confirm_rows`, idempotent, không cần ngữ cảnh): `{job_id, rows: [{row_id, jar?}] sắp theo row_id, reject_row_ids: [...] sắp tăng}`; bỏ `jar` rỗng; một dòng không vừa ghi vừa bỏ; ít nhất một dòng; tối đa 500 mỗi danh sách. Cedar (khi ghép): policy `has confirm_token` cho `ingest___confirm_rows`, như các tool ghi khác.
 
@@ -363,11 +363,13 @@ Chuẩn hóa `confirm_rows` (`yofina_core.params.normalize_confirm_rows`, idempo
 | Endpoint | Việc |
 |---|---|
 | `POST /ingest/uploads` | Kiểm loại và kích thước khai báo, ghi `consents` (bắt buộc `consent: true` ở lần đầu của nguồn, không thì 403 `CONSENT_REQUIRED`), tạo job `awaiting_upload`, trả presigned POST (`url`, `fields`, `key`, `job_id`, `expires_at`, `max_bytes`, `mime_types`) |
+| `GET /ingest/jobs` | Các lần nạp gần đây (mới nhất trước, `limit` 1..20, mặc định 10), không có bảng duyệt: `{jobs: [IngestJobSummary]}`; để quay lại một lần đang `review` |
 | `GET /ingest/jobs/{job_id}` | Tiến độ; `review` (khối `ingest_review`) từ trạng thái review; `coverage_change` khi done |
-| `PATCH /ingest/rows/{row_id}` | Đổi hũ ĐỀ XUẤT của một dòng chi (`jar_source = user`), không ghi sổ cái, không token |
-| `POST /confirmations`, `POST /actions` với `tool = confirm_rows` | Luồng xác nhận sẵn có, không đổi; trả `receipt_action` kèm `coverage_change` |
+| `POST /ingest/rows/{row_id}/jar` | Đổi hũ ĐỀ XUẤT của một dòng chi (`jar_source = user`), không ghi sổ cái, không token. POST chứ không PATCH vì CORS của HTTP API chung `yofina-api` chỉ cho GET, POST, OPTIONS |
+| `POST /ingest/confirmations` | Như `POST /confirmations` nhưng CHỈ `tool = confirm_rows` (`IngestConfirmationRequest`); trả `ConfirmationResponse` (`tool` là `confirm_rows`) |
+| `POST /ingest/actions` | Như `POST /actions` nhưng CHỈ `tool = confirm_rows` (`IngestActionRequest`); trả `receipt_action` kèm `coverage_change`; thiếu token 428 `NEEDS_CONFIRMATION`, chốt lại 409 `ALREADY_APPLIED` |
 
-**Bắt đầu job bằng sự kiện S3** (`ObjectCreated` qua SQS có DLQ), không có endpoint "bắt đầu": tải lên chính là tín hiệu, không có trạng thái "đã tải mà chưa bấm", không thêm đường ghi từ client. Tệp tới khi job không còn `awaiting_upload` thì bỏ qua; cùng nội dung với một job còn sống thì job mới thành `rejected` (`INGEST_DUPLICATE_FILE`). `x-lambda: ingest` cho ba route mới.
+**Bắt đầu job bằng sự kiện S3** (`ObjectCreated` qua SQS có DLQ), không có endpoint "bắt đầu": tải lên chính là tín hiệu, không có trạng thái "đã tải mà chưa bấm", không thêm đường ghi từ client. Tệp tới khi job không còn `awaiting_upload` thì bỏ qua; cùng nội dung với một job còn sống thì job mới thành `rejected` (`INGEST_DUPLICATE_FILE`). `x-lambda: ingest` phục vụ sáu route: `POST /ingest/uploads`, `GET /ingest/jobs`, `GET /ingest/jobs/{job_id}`, `POST /ingest/rows/{row_id}/jar`, `POST /ingest/confirmations`, `POST /ingest/actions` (khớp `INGEST_ROUTES` trong `infra-cdk/lib/ingest-stack.ts`). Hợp đồng không có PATCH nào.
 
 Mã lỗi mới (thêm cuối `ErrorCode`, khớp `yofina_core.errors`, OpenAPI và `frontend/src/api/errors.ts`): `CONSENT_REQUIRED` (403), `INGEST_JOB_NOT_FOUND` (404), `INGEST_JOB_NOT_READY` (409), `INGEST_UNSUPPORTED_TYPE` (415), `INGEST_TOO_LARGE` (413), `INGEST_NOT_FINANCIAL` (422), `INGEST_DUPLICATE_FILE` (409).
 

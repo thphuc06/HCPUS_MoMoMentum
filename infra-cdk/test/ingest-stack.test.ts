@@ -12,34 +12,35 @@ import { loadToolsConfig } from '../lib/tools-stack';
 
 const ENV = { account: '111111111111', region: 'ap-southeast-1' }; // account giả của test
 
+// Biến môi trường mà mã ingest đọc thật (yofina_core.config, db, confirm, llm; yofina_ingest.settings).
 const REQUIRED_ENV = [
+  'YOFINA_REGION',
+  'YOFINA_LOG_LEVEL',
+  'YOFINA_SSM_PREFIX',
   'YOFINA_DB_CLUSTER_ARN',
-  'YOFINA_DB_SECRET_ARN',
+  'YOFINA_DB_APP_SECRET_ARN',
   'YOFINA_DB_NAME',
   'YOFINA_DB_RESUME_MAX_WAIT_SECONDS',
   'YOFINA_INGEST_BUCKET',
+  'YOFINA_INGEST_UPLOAD_PREFIX',
+  'YOFINA_INGEST_MAX_RECEIVE_COUNT',
   'YOFINA_CONFIRM_HMAC_SECRET_ARN',
   'YOFINA_CONFIRM_JTI_TABLE',
   'YOFINA_CONFIRM_TOKEN_TTL_SECONDS',
   'YOFINA_CONFIRM_TOKEN_MAX_TTL_SECONDS',
   'YOFINA_CONFIRM_OFFER_TTL_SECONDS',
-  'YOFINA_FORECAST_BATCH_FUNCTION',
-  'YOFINA_EVENT_BUS_NAME',
+  'YOFINA_FORECAST_FUNCTION_NAME',
+  'YOFINA_FORECAST_SYNC_TIMEOUT_SECONDS',
+  'YOFINA_FORECAST_HISTORY_WINDOW_DAYS',
   'YOFINA_APP_TIMEZONE',
-  'YOFINA_DEMO_ANCHOR_DATE',
-  'YOFINA_LLM_USAGE_TABLE',
-  'YOFINA_SSM_PREFIX',
-  // tên mà yofina_core đang đọc thật
-  'YOFINA_REGION',
-  'YOFINA_DB_APP_SECRET_ARN',
   'YOFINA_USAGE_TABLE',
 ];
 
-// llm_defaults.json giả: có `ingest_vision` (Sonnet 4.6 + Kimi K3, như backend sẽ thêm), CHƯA có `ingest_columns`,
-// thêm một model không global để kiểm nhánh gọi thẳng ở region.
+// llm_defaults.json giả: có `ingest` (Sonnet 4.6 + Kimi K3), CHƯA có `ingest_columns`, thêm một model không global để kiểm nhánh
+// gọi thẳng ở region.
 const LLM_DEFAULTS = {
   roles: {
-    ingest_vision: {
+    ingest: {
       daily_cap: 300,
       models: [
         { id: 'global.anthropic.claude-sonnet-4-6', rpm: 8 },
@@ -200,7 +201,11 @@ describe('YofinaIngest', () => {
       assert.equal(fn.Environment.Variables.YOFINA_CONFIRM_TOKEN_TTL_SECONDS, '120');
       assert.equal(fn.Environment.Variables.YOFINA_CONFIRM_OFFER_TTL_SECONDS, '600');
       assert.equal(fn.Environment.Variables.YOFINA_DB_RESUME_MAX_WAIT_SECONDS, '18');
-      assert.equal(fn.Environment.Variables.YOFINA_DEMO_ANCHOR_DATE, '2026-11-21');
+      assert.equal(fn.Environment.Variables.YOFINA_INGEST_UPLOAD_PREFIX, 'u/');
+      assert.equal(fn.Environment.Variables.YOFINA_INGEST_MAX_RECEIVE_COUNT, '3');
+      assert.equal(fn.Environment.Variables.YOFINA_FORECAST_HISTORY_WINDOW_DAYS, '330');
+      assert.equal(fn.Environment.Variables.YOFINA_FORECAST_FUNCTION_NAME !== undefined, true);
+      assert.ok(!('YOFINA_DB_SECRET_ARN' in fn.Environment.Variables), 'chỉ tên db_app_secret_arn mà yofina_core.db đọc');
       assert.equal(fn.Environment.Variables.YOFINA_SSM_PREFIX, '/yofina');
     }
     // mặc định không reserved concurrency (quota tài khoản 10); trần nằm ở maxConcurrency của event source
@@ -244,7 +249,7 @@ describe('YofinaIngest', () => {
     const api = statementsOf(template, 'ApiServiceRole');
     const has = (sts: any[], action: string) => sts.some((s) => asList<string>(s.Action).includes(action));
     assert.ok(has(worker, 's3:GetObject') && has(worker, 's3:DeleteObject') && !has(worker, 's3:PutObject'));
-    assert.ok(has(api, 's3:PutObject') && has(api, 's3:DeleteObject') && has(api, 's3:ListBucket'));
+    assert.ok(has(api, 's3:PutObject') && !has(api, 's3:DeleteObject') && !has(api, 's3:ListBucket'));
     assert.ok(!has(api, 's3:GetObject'), 'API không cần đọc tệp người dùng');
     // S3 chỉ trên tiền tố u/* (trừ ListBucket trên bucket, có điều kiện prefix)
     for (const st of [...api, ...worker]) {
@@ -258,23 +263,30 @@ describe('YofinaIngest', () => {
     assert.deepEqual(put[0].Condition, { StringEquals: { 's3:authType': 'POST' } });
     assert.deepEqual(asList(put[0].Action), ['s3:PutObject']);
     assert.ok(has(api, 'dynamodb:PutItem') && !has(worker, 'dynamodb:PutItem'));
-    for (const sts of [api, worker]) {
-      for (const a of ['rds-data:ExecuteStatement', 'bedrock:InvokeModel', 'dynamodb:UpdateItem', 'lambda:InvokeFunction', 'events:PutEvents', 'secretsmanager:GetSecretValue']) {
-        assert.ok(has(sts, a), `thiếu ${a}`);
-      }
+    // mỗi Lambda chỉ có quyền nó dùng: API (token, presigned POST, kích hoạt dự báo), worker (Bedrock, bộ đếm lượt gọi, đọc tệp)
+    for (const a of ['rds-data:ExecuteStatement', 'secretsmanager:GetSecretValue', 'rds-data:BeginTransaction']) {
+      assert.ok(has(api, a) && has(worker, a), `thiếu ${a}`);
     }
+    for (const a of ['lambda:InvokeFunction', 'dynamodb:PutItem', 's3:PutObject']) {
+      assert.ok(has(api, a) && !has(worker, a), a);
+    }
+    for (const a of ['bedrock:InvokeModel', 'dynamodb:UpdateItem', 's3:GetObject']) {
+      assert.ok(has(worker, a) && !has(api, a), a);
+    }
+    for (const sts of [api, worker]) assert.ok(!has(sts, 'events:PutEvents'), 'không phát sự kiện: không cần quyền EventBridge');
+    // gọi lại dự báo chỉ trên yofina-forecast-batch
+    const invoke = api.find((s) => asList<string>(s.Action).includes('lambda:InvokeFunction'));
+    assert.match(JSON.stringify(invoke.Resource), /forecastbatchfunctionname/);
     // HMAC chỉ cho API
     const secretRes = (sts: any[]) =>
       JSON.stringify(sts.filter((s) => asList<string>(s.Action).includes('secretsmanager:GetSecretValue')).map((s) => s.Resource));
     assert.match(secretRes(api), /confirmhmacarn/);
     assert.doesNotMatch(secretRes(worker), /confirmhmacarn/);
-    // ListBucket chỉ trong prefix u/
-    const list = api.find((s) => asList<string>(s.Action).includes('s3:ListBucket'));
-    assert.deepEqual(list.Condition, { StringLike: { 's3:prefix': ['u/', 'u/*'] } });
   });
 
   it('Bedrock: mẫu 3 phần của global cross-Region inference, chỉ model của vai ingest', () => {
-    for (const prefix of ['ApiServiceRole', 'WorkerServiceRole']) {
+    assert.ok(!statementsOf(template, 'ApiServiceRole').some((s) => asList<string>(s.Action).includes('bedrock:InvokeModel')));
+    for (const prefix of ['WorkerServiceRole']) {
       const sts = statementsOf(template, prefix).filter((s) => asList<string>(s.Action).includes('bedrock:InvokeModel'));
       const json = JSON.stringify(sts);
       for (const m of ['anthropic.claude-sonnet-4-6', 'moonshotai.kimi-k3']) {
@@ -308,9 +320,16 @@ describe('YofinaIngest', () => {
     assert.match(JSON.stringify(sts[0].Resource), /ap-southeast-1::foundation-model\/amazon\.titan-text-lite-v1/);
   });
 
-  it('llm_defaults.json thật của repo đọc được (vai ingest_* có thể chưa có)', () => {
-    const { stack: s } = build({ ingestLlmDefaults: '../libs/yofina_core/src/yofina_core/llm_defaults.json', ingestLlmRoles: 'ingest_vision,ingest_columns,planner' });
-    assert.ok(s.worker);
+  it('llm_defaults.json thật của repo có hai vai ingest: không cảnh báo, quyền đúng model của vai', () => {
+    const real = path.resolve(__dirname, '..', '..', 'libs', 'yofina_core', 'src', 'yofina_core', 'llm_defaults.json');
+    const defaults = JSON.parse(fs.readFileSync(real, 'utf-8'));
+    assert.ok(defaults.roles.ingest && defaults.roles.ingest_columns, 'llm_defaults.json thiếu vai ingest hoặc ingest_columns');
+    const { stack: s, template: t } = build({ ingestLlmDefaults: real });
+    Annotations.fromStack(s).hasNoWarning('*', Match.stringLikeRegexp('llm-role-missing|chưa có vai'));
+    Annotations.fromStack(s).hasNoError('*', Match.anyValue());
+    const json = JSON.stringify(statementsOf(t, 'WorkerServiceRole').filter((x) => asList<string>(x.Action).includes('bedrock:InvokeModel')));
+    for (const m of ['claude-sonnet-4-6', 'kimi-k3', 'nova-2-lite-v1:0', 'claude-haiku-4-5-20251001-v1:0']) assert.ok(json.includes(m), m);
+    assert.ok(!json.includes('embed'), 'vai embedding không thuộc ingest');
   });
 
   it('6 route JWT trên API có sẵn, chỉ GET/POST (CORS của yofina-api), authorizer cùng issuer/audience, AWS_PROXY 2.0', () => {

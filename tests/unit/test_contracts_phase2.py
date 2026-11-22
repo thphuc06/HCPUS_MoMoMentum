@@ -123,8 +123,8 @@ def test_tool_ghi():
         "save_jars",
         "confirm_salary",
         "schedule_nudge",
-        "confirm_rows",
     }
+    assert "confirm_rows" not in wallet.ACTION_TOOLS  # đi qua /ingest/actions (Lambda ingest)
 
 
 def test_so_khoi_mot_nguon_su_that_cho_ma_hu_he_thong_trong_sql():

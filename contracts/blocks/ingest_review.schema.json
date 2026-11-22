@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/blocks/ingest_review.schema.json",
   "title": "IngestReviewBlock",
-  "description": "Bảng duyệt các dòng trích được từ MỘT lần nạp ảnh hoặc CSV (F6): chi tiêu và thu nhập NGOÀI ví. Dòng được duyệt vào sổ cái với funding_source external (không đổi số dư hũ). Dòng auto_added (tin cậy cao) được CHỌN SẴN nhưng chưa ghi; chỉ confirm_rows (có token, ADR-0002) ghi sổ cái. Văn bản đã che PII trước khi lưu. Đổi hũ một chạm: PATCH /ingest/rows/{row_id} với một mã trong `jars` (không ghi sổ cái). Id khối `ingest_review:{job_id}`; cùng id thì khối sau thay khối trước.",
+  "description": "Bảng duyệt các dòng trích được từ MỘT lần nạp ảnh hoặc CSV (F6): chi tiêu và thu nhập NGOÀI ví. Dòng được duyệt vào sổ cái với funding_source external (không đổi số dư hũ). Dòng auto_added (tin cậy cao) được CHỌN SẴN nhưng chưa ghi; chỉ confirm_rows (có token, ADR-0002) ghi sổ cái. Văn bản đã che PII trước khi lưu. Đổi hũ một chạm: POST /ingest/rows/{row_id}/jar với một mã trong `jars` (không ghi sổ cái). Id khối `ingest_review:{job_id}`; cùng id thì khối sau thay khối trước.",
   "type": "object",
   "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
   "additionalProperties": false,

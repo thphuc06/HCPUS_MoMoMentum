@@ -206,7 +206,7 @@ function rest(req: IncomingMessage, res: ServerResponse, url: string, query: URL
   return (async () => {
     if (!String(req.headers.authorization ?? '').startsWith('Bearer ')) return err(res, 401, 'UNAUTHENTICATED', 'Thiếu token.')
     const method = req.method ?? 'GET'
-    const ctx = { method, path: url, query, body: method === 'POST' || method === 'PATCH' ? await body(req) : {}, email: emailOf(req), trace: traceOf(req) }
+    const ctx = { method, path: url, query, body: method === 'POST' ? await body(req) : {}, email: emailOf(req), trace: traceOf(req) }
     const reply = url.startsWith('/ingest/') ? handleIngest(ctx) : handleWallet(ctx)
     if (reply) return json(res, reply.status, reply.body)
     return err(res, 404, 'PARAMS_INVALID', 'Không có đường dẫn này.')

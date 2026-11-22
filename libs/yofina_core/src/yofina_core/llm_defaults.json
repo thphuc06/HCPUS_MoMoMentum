@@ -8,6 +8,20 @@
         { "id": "global.moonshotai.kimi-k3", "rpm": 8, "temperature": false }
       ]
     },
+    "ingest": {
+      "daily_cap": 300,
+      "models": [
+        { "id": "global.anthropic.claude-sonnet-4-6", "rpm": 8 },
+        { "id": "global.moonshotai.kimi-k3", "rpm": 8, "temperature": false }
+      ]
+    },
+    "ingest_columns": {
+      "daily_cap": 600,
+      "models": [
+        { "id": "global.amazon.nova-2-lite-v1:0", "rpm": 18 },
+        { "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0", "rpm": 8 }
+      ]
+    },
     "small": {
       "daily_cap": 2000,
       "models": [

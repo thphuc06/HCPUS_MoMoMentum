@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/blocks/coverage_change.schema.json",
   "title": "CoverageChangeBlock",
-  "description": "Độ phủ dữ liệu trước và sau khi chốt MỘT lần nạp (confirm_rows). Số do code tính bằng đúng công thức của dự báo (quality.data_coverage trên các thành phần của app_get_data_coverage, migration 0050), nên khớp dải độ phủ của dự báo. Đi kèm biên nhận của confirm_rows (trường `coverage_change` của `receipt_action.data`, cả ở POST /actions lẫn tool ingest___confirm_rows) và trong phản hồi GET /ingest/jobs/{job_id} khi job đã xong. Id khối `coverage_change:{job_id}`.",
+  "description": "Độ phủ dữ liệu trước và sau khi chốt MỘT lần nạp (confirm_rows). Số do code tính bằng đúng công thức của dự báo (quality.data_coverage trên các thành phần của app_get_data_coverage, migration 0050), nên khớp dải độ phủ của dự báo. Đi kèm biên nhận của confirm_rows (trường `coverage_change` của `receipt_action.data`, cả ở POST /ingest/actions lẫn tool ingest___confirm_rows) và trong phản hồi GET /ingest/jobs/{job_id} khi job đã xong. Id khối `coverage_change:{job_id}`.",
   "type": "object",
   "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
   "additionalProperties": false,

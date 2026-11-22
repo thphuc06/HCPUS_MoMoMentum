@@ -55,8 +55,11 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
         ("POST", "/feedback"),
         # phase 5 (F6): nạp dữ liệu
         ("POST", "/ingest/uploads"),
+        ("GET", "/ingest/jobs"),
         ("GET", "/ingest/jobs/{job_id}"),
-        ("PATCH", "/ingest/rows/{row_id}"),
+        ("POST", "/ingest/rows/{row_id}/jar"),
+        ("POST", "/ingest/confirmations"),
+        ("POST", "/ingest/actions"),
     }
     assert SPEC["security"] == [{"bearerAuth": []}]
     scheme = SPEC["components"]["securitySchemes"]["bearerAuth"]
@@ -67,7 +70,8 @@ def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
     """Mọi thao tác ghi SỔ CÁI đi qua token xác nhận: ngoài hai endpoint đó chỉ có huỷ đề nghị (không ghi sổ cái), demo/reset,
     `POST /affordability` (POST chỉ để có thân yêu cầu, không ghi gì), `POST /feedback` (một dòng phản hồi, không đụng
     tiền) và hai endpoint nạp dữ liệu (phase 5, không ghi sổ cái): xin URL tải lên (tạo job, ghi đồng ý) và đổi hũ ĐỀ XUẤT
-    của một dòng. Lời nhắc (`schedule_nudge`) KHÔNG có endpoint riêng: đi qua /confirmations và /actions."""
+    của một dòng; cộng hai endpoint ghi của Lambda ingest (`/ingest/confirmations`, `/ingest/actions`) cho `confirm_rows`,
+    cùng luồng token (không có đường ghi tắt). Không có PATCH (CORS của HTTP API chung chỉ cho GET, POST, OPTIONS). Lời nhắc (`schedule_nudge`) KHÔNG có endpoint riêng: đi qua /confirmations và /actions."""
     writes = {op for op in operations() if op[0] != "GET"}
     assert writes == {
         ("POST", "/confirmations"),
@@ -77,10 +81,12 @@ def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
         ("POST", "/affordability"),
         ("POST", "/feedback"),
         ("POST", "/ingest/uploads"),
-        ("PATCH", "/ingest/rows/{row_id}"),
+        ("POST", "/ingest/rows/{row_id}/jar"),
+        ("POST", "/ingest/confirmations"),
+        ("POST", "/ingest/actions"),
     }
     assert not any("nudge" in path for _, path in operations())
-    for path, method in (("/ingest/uploads", "post"), ("/ingest/rows/{row_id}", "patch")):
+    for path, method in (("/ingest/uploads", "post"), ("/ingest/rows/{row_id}/jar", "post")):
         text = SPEC["paths"][path][method]["description"]
         assert "không ghi sổ cái" in text or "presigned" in text, path
 

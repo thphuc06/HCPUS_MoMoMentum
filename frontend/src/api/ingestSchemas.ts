@@ -53,6 +53,13 @@ export const IngestJobResponse = z.object({
 })
 export type IngestJobResponse = z.infer<typeof IngestJobResponse>
 
+/** Một phần tử của `GET /ingest/jobs` (IngestJobSummary): như IngestJobResponse nhưng không có `review`, `coverage_change`. */
+export const IngestJobSummary = IngestJobResponse.omit({ review: true, coverage_change: true })
+export type IngestJobSummary = z.infer<typeof IngestJobSummary>
+
+export const IngestJobListResponse = z.object({ jobs: z.array(IngestJobSummary).max(20) })
+export type IngestJobListResponse = z.infer<typeof IngestJobListResponse>
+
 export const IngestRowJarRequest = z.object({ jar: JarCode })
 export type IngestRowJarRequest = z.infer<typeof IngestRowJarRequest>
 

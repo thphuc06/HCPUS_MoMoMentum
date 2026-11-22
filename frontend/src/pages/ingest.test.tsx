@@ -47,6 +47,7 @@ function ingestBackend(sequence: Json[], extra: Routes = {}) {
   let i = 0
   return backend({
     'POST /ingest/uploads': restFixture('IngestUploadResponse.image'),
+    'GET /ingest/jobs': { jobs: [] },
     [`GET /ingest/jobs/${JOB}`]: () => sequence[Math.min(i++, sequence.length - 1)],
     'POST /ingest/confirmations': (init) => confirmation(init),
     'POST /ingest/actions': () => receipt(),
@@ -225,12 +226,51 @@ describe('I1 chọn tệp', () => {
   })
 })
 
+describe('quay lại lần nạp dang dở và trợ năng', () => {
+  it('GET /ingest/jobs: lần nạp đang chờ duyệt hiện ở I1, "Duyệt tiếp" mở đúng job; lần đã bị từ chối không hiện', async () => {
+    const { router } = mountIngest(withS3(ingestBackend([job('review')], { 'GET /ingest/jobs': restFixture('IngestJobListResponse.recent') })))
+    const box = await screen.findByTestId('ingest-resume')
+    expect(box).toHaveTextContent('Đã đọc 5 dòng từ ảnh, chờ bạn duyệt')
+    expect(within(box).getAllByRole('listitem')).toHaveLength(1)
+    await userEvent.setup().click(within(box).getByRole('button', { name: 'Duyệt tiếp' }))
+    await screen.findByRole('list', { name: 'Dòng đã đọc' })
+    expect(router.state.location.search).toBe(`?job=${JOB}`)
+  })
+
+  it('GET /ingest/jobs lỗi thì bỏ qua, vẫn chọn tệp được', async () => {
+    mountIngest(withS3(ingestBackend([job('review')], { 'GET /ingest/jobs': json(503, { error: { code: 'DATABASE_UNAVAILABLE', message: 'x' } }) })))
+    expect(await screen.findByLabelText('Chọn ảnh có sẵn')).toBeEnabled()
+    expect(screen.queryByTestId('ingest-resume')).toBeNull()
+  })
+
+  it('đổi bước thì tiêu điểm chuyển tới tiêu đề của bước mới (I1 → I2)', async () => {
+    mountIngest(withS3(ingestBackend([job('processing')])))
+    const user = userEvent.setup()
+    await pickImage(user)
+    const h = await screen.findByRole('heading', { name: 'Đang xử lý' })
+    await waitFor(() => expect(h).toHaveFocus())
+  })
+
+  it('bỏ chọn hết: nút nói rõ là bỏ qua, xác nhận chỉ gửi reject_row_ids', async () => {
+    const { calls } = mountIngest(withS3(ingestBackend([job('review')])), `/ingest?job=${JOB}`)
+    const user = userEvent.setup()
+    await screen.findByRole('list', { name: 'Dòng đã đọc' })
+    for (const box of screen.getAllByRole('checkbox', { checked: true })) await user.click(box)
+    await user.click(screen.getByRole('button', { name: 'Bỏ qua tất cả các dòng' }))
+    await user.click(await screen.findByRole('button', { name: /Xác nhận bỏ \d+ dòng/ }))
+    await screen.findByTestId('coverage-ratios')
+    const sent = bodyOf(callsTo(calls, 'POST', '/ingest/confirmations')[0]!) as { params: { rows: unknown[]; reject_row_ids: string[] } }
+    expect(sent.params.rows).toEqual([])
+    expect(sent.params.reject_row_ids.length).toBeGreaterThan(0)
+  })
+})
+
 describe('lỗi có câu tiếng Việt và lối thoát', () => {
   it('ảnh không phải tài liệu tài chính (job rejected): câu rõ ràng, nút chọn tệp khác, polling dừng', async () => {
     const { calls } = mountIngest(withS3(ingestBackend([job('processing'), job('rejected')])))
     const user = userEvent.setup()
     await pickImage(user)
-    expect(await screen.findByTestId('ingest-error')).toHaveTextContent('Ảnh này không phải biên lai hay sao kê')
+    expect(await screen.findByTestId('ingest-error')).toHaveTextContent('Tệp này không phải biên lai')
     const n = jobCalls(calls).length
     await new Promise((r) => setTimeout(r, 120))
     expect(jobCalls(calls)).toHaveLength(n)

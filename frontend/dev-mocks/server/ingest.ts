@@ -121,6 +121,16 @@ export function handleIngest(c: Ctx): Reply | null {
       mime_types: [...lim.mimes],
     })
   }
+  if (method === 'GET' && p === '/ingest/jobs') {
+    const limit = Math.min(20, Math.max(1, Number(c.query.get('limit')) || 10))
+    const mine = [...jobs.values()].filter((j) => j.email === c.email).reverse().slice(0, limit)
+    return ok({
+      jobs: mine.map((j) => {
+        const { review: _r, coverage_change: _c, ...summary } = view(j)
+        return summary
+      }),
+    })
+  }
   const jm = /^\/ingest\/jobs\/([0-9a-f-]{36})$/.exec(p)
   if (method === 'GET' && jm) {
     const job = jobs.get(jm[1]!)

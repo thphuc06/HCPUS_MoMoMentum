@@ -292,9 +292,19 @@ export type TransactionQuery = {
 
 // ---------------------------------------------------------------- ghi: xác nhận và hành động
 
-export const TOOL_NAMES = ['move_between_jars', 'record_transaction', 'assign_jar', 'update_profile', 'save_jars', 'confirm_salary', 'schedule_nudge', 'confirm_rows'] as const
+/** Tool ghi của Lambda `ledger` (`POST /confirmations`, `POST /actions`): bảy tool, KHÔNG có `confirm_rows`. */
+export const TOOL_NAMES = ['move_between_jars', 'record_transaction', 'assign_jar', 'update_profile', 'save_jars', 'confirm_salary', 'schedule_nudge'] as const
 export const ToolName = z.enum(TOOL_NAMES)
 export type ToolName = z.infer<typeof ToolName>
+
+/** Tool ghi của Lambda `ingest` (`POST /ingest/confirmations`, `POST /ingest/actions`): chỉ `confirm_rows` (phase 5). */
+export const INGEST_TOOL_NAMES = ['confirm_rows'] as const
+export const IngestToolName = z.enum(INGEST_TOOL_NAMES)
+export type IngestToolName = z.infer<typeof IngestToolName>
+
+/** Mọi tool ghi mà màn hình hoặc khối `confirm_action` có thể yêu cầu; `ApiClient` tự chọn cặp endpoint theo tool. */
+export const AnyToolName = z.enum([...TOOL_NAMES, ...INGEST_TOOL_NAMES])
+export type AnyToolName = z.infer<typeof AnyToolName>
 
 /** Tham số của tool: object đã (hoặc chưa) chuẩn hóa; server chuẩn hóa lại và chỉ ký bản chuẩn hóa. */
 export type ToolParams = Record<string, unknown>
@@ -309,7 +319,7 @@ const ConfirmRef = {
 }
 
 export const ConfirmationRequest = z.object({
-  tool: ToolName,
+  tool: AnyToolName,
   params: z.record(z.string(), z.unknown()),
   params_hash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   ...ConfirmRef,
@@ -331,7 +341,7 @@ export const ConfirmationResponse = z.object({
   confirm_token: z.string().min(3).max(1024),
   expires_at: IsoDateTime,
   ttl_seconds: z.int().min(1),
-  tool: ToolName,
+  tool: AnyToolName,
   params: z.record(z.string(), z.unknown()),
   params_hash: z.string().regex(/^[0-9a-f]{64}$/),
   // Chỉ để hiển thị: sai hình dạng thì bỏ xem trước chứ không chặn việc ghi.
@@ -354,7 +364,7 @@ export const CancelConfirmationResponse = z.object({
 export type CancelConfirmationResponse = z.infer<typeof CancelConfirmationResponse>
 
 export const ActionRequest = z.object({
-  tool: ToolName,
+  tool: AnyToolName,
   params: z.record(z.string(), z.unknown()),
   confirm_token: z.string().max(1024).optional(),
   ...ConfirmRef,

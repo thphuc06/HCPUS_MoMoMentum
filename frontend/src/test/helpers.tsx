@@ -78,6 +78,7 @@ export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
     createIngestUpload: vi.fn(async () => {
       throw new Error('createIngestUpload chưa được giả')
     }),
+    listIngestJobs: vi.fn(async () => ({ jobs: [] })),
     getIngestJob: vi.fn(async () => {
       throw new Error('getIngestJob chưa được giả')
     }),

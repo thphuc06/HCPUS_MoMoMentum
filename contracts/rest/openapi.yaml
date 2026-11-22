@@ -36,7 +36,10 @@ info:
     chỉ dùng POST để có thân yêu cầu, không ghi gì. `POST /feedback` ghi một dòng phản hồi không đụng tiền nên KHÔNG đi qua
     token xác nhận (lý do ở "Quyết định hợp đồng phase 3"). Lời nhắc (`schedule_nudge`) là thao tác ghi thật nên vẫn đi qua
     `POST /confirmations` rồi `POST /actions`, không có endpoint ghi riêng.
-    Các route `/ingest/*` (phase 5) do `ingest`; tool `confirm_rows` vẫn đi qua `POST /actions` của `ledger` (một đường ghi duy nhất).
+    Sáu route `/ingest/*` (phase 5) do `ingest`: `POST /ingest/uploads`, `GET /ingest/jobs`, `GET /ingest/jobs/{job_id}`,
+    `POST /ingest/rows/{row_id}/jar`, `POST /ingest/confirmations`, `POST /ingest/actions`. Tool `confirm_rows` CHỈ đi qua hai
+    route `/ingest/confirmations` và `/ingest/actions` (cùng luồng token, cùng khóa HMAC và bảng `jti` với ledger); `POST /confirmations` và
+    `POST /actions` của `ledger` không nhận nó. Việc đổi hũ dùng POST (không PATCH) vì CORS của HTTP API chung chỉ cho GET, POST, OPTIONS.
 
     Mã lỗi (`ErrorCode`) dùng chung với kết quả tool và `notice.data.code`; ánh xạ HTTP status ở
     `x-http-status`. Schema khối UI và tham số được tham chiếu tới `../blocks/*.schema.json` và
@@ -68,7 +71,7 @@ tags:
     description: |
       Nạp chi tiêu và thu nhập NGOÀI ví từ ảnh hoặc CSV (phase 5, F6). Tải lên bằng presigned POST thẳng vào S3; S3 tự bắt
       đầu job (sự kiện ObjectCreated qua SQS). Đọc trạng thái và bảng duyệt; đổi hũ đề xuất của một dòng (không ghi sổ cái).
-      Chốt dòng vào sổ cái là tool `confirm_rows` qua `POST /confirmations` rồi `POST /actions` (không có đường ghi tắt).
+      Chốt dòng vào sổ cái là tool `confirm_rows` qua `POST /ingest/confirmations` rồi `POST /ingest/actions` (không có đường ghi tắt).
 paths:
   /jars:
     get:
@@ -199,7 +202,8 @@ paths:
         | `save_jars` | Tạo, sửa hũ, tỷ lệ chia lương, mục tiêu và hạn (thay cả danh sách hũ của người dùng, tổng tỷ lệ bằng 100) | không (chỉ màn hình) |
         | `confirm_salary` | Xác nhận một chạm lương về: chia vào hũ theo luật, hoặc giữ ở Tiền vào khác; tùy chọn cập nhật lương đã khai | không (chỉ màn hình) |
         | `schedule_nudge` | Đặt (`op` create) hoặc hủy (`op` cancel, nút Hoàn tác) một lời nhắc vào một ngày mô phỏng; ghi bảng `nudges`. Agent gọi qua target `planner` | có |
-        | `confirm_rows` | Chốt các dòng của một lần nạp ảnh hoặc CSV (phase 5): dòng được ghi vào sổ cái với `funding_source = external` (KHÔNG đổi số dư hũ), dòng bị bỏ thì đánh dấu; trả `receipt_action` kèm khối `coverage_change` (độ phủ dữ liệu trước và sau) và kích hoạt tính lại dự báo | có (target `ingest`, `ingest___confirm_rows`) |
+
+        `confirm_rows` (phase 5) KHÔNG nằm ở đây: nó đi qua `POST /ingest/confirmations` và `POST /ingest/actions`.
 
         **Một đề nghị chỉ được thực hiện một lần.** Khi client gửi `conversation_id` và
         `confirm_block_id` (id của khối `confirm` đang được thực hiện), server lưu khối `receipt`
@@ -877,6 +881,41 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '500':
           $ref: '#/components/responses/InternalError'
+  /ingest/jobs:
+    get:
+      tags: [ingest]
+      operationId: listIngestJobs
+      summary: Các lần nạp gần đây của người dùng (để mở lại một lần đang chờ duyệt)
+      x-lambda: ingest
+      description: |
+        Mới nhất trước, chỉ của người gọi. Mỗi phần tử có `status` và `progress` nhưng không có bảng duyệt; mở một lần nạp bằng
+        `GET /ingest/jobs/{job_id}`. Chưa có lần nào thì `jobs` rỗng. Dùng để người dùng quay lại thấy lần nạp đang `review`
+        thay vì phải tải lại.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: limit
+          in: query
+          required: false
+          description: Số lần nạp tối đa (1 đến 20). Mặc định 10.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+      responses:
+        '200':
+          description: Danh sách lần nạp gần đây (rỗng nếu chưa có).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestJobListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /ingest/jobs/{job_id}:
     get:
       tags: [ingest]
@@ -908,8 +947,8 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '500':
           $ref: '#/components/responses/InternalError'
-  /ingest/rows/{row_id}:
-    patch:
+  /ingest/rows/{row_id}/jar:
+    post:
       tags: [ingest]
       operationId: setIngestRowJar
       summary: Đổi hũ đề xuất của một dòng chi (một chạm), không ghi sổ cái
@@ -917,7 +956,8 @@ paths:
       description: |
         Chỉ đổi ĐỀ XUẤT trong bảng duyệt (`ingest_rows.suggested_jar_code`, `jar_source = user`); không ghi sổ cái, không cần
         token. Dòng phải là dòng chi còn mở (`auto_added` hoặc `pending`) của một job đang `review`, hũ phải là hũ người dùng
-        (không phải hũ hệ thống). Ghi thật chỉ xảy ra khi chốt bằng `confirm_rows`.
+        (không phải hũ hệ thống). Ghi thật chỉ xảy ra khi chốt bằng `confirm_rows`. Dùng POST (không phải PATCH) vì CORS của
+        HTTP API chung `yofina-api` chỉ cho GET, POST, OPTIONS.
       parameters:
         - $ref: '#/components/parameters/Traceparent'
         - $ref: '#/components/parameters/RowIdPath'
@@ -944,6 +984,100 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /ingest/confirmations:
+    post:
+      tags: [ingest]
+      operationId: createIngestConfirmation
+      summary: Cấp token xác nhận cho việc chốt các dòng của một lần nạp (`confirm_rows`)
+      x-lambda: ingest
+      description: |
+        Như `POST /confirmations` nhưng CHỈ nhận `tool` = `confirm_rows`; tool khác bị từ chối `PARAMS_INVALID` (và ngược lại
+        `POST /confirmations` của `ledger` không nhận `confirm_rows`). Cùng khóa HMAC, cùng bảng `jti`, cùng thời gian sống token
+        và cùng cách chuẩn hóa tham số (`normalize_confirm_rows`). Server kiểm job thuộc người gọi và đang `review`, các dòng
+        còn mở (`auto_added`, `pending`; dòng `duplicate` không chốt được), hũ là hũ người dùng; trả bản xem trước (`preview`):
+        số dòng và tổng tiền sẽ ghi, dòng bỏ, và cảnh báo. Không ghi gì.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestConfirmationRequest'
+      responses:
+        '200':
+          description: Token đã cấp (cùng hình dạng với `POST /confirmations`, `tool` luôn là `confirm_rows`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /ingest/actions:
+    post:
+      tags: [ingest]
+      operationId: applyIngestAction
+      summary: Chốt các dòng của một lần nạp vào sổ cái với token xác nhận (`confirm_rows`)
+      x-lambda: ingest
+      description: |
+        Như `POST /actions` nhưng CHỈ nhận `tool` = `confirm_rows`; tool khác bị từ chối `PARAMS_INVALID`. Kiểm token (chữ ký,
+        hạn, tool, sub, hash tham số, `jti` chưa dùng) rồi ghi các dòng đã chọn vào sổ cái với `funding_source = external` (KHÔNG
+        đổi số dư hũ), đánh dấu dòng bị bỏ, ghi `audit_events` và kích hoạt tính lại dự báo trong một lần. Thiếu `confirm_token`
+        thì không ghi, trả 428 `NEEDS_CONFIRMATION`. Thành công trả khối `receipt_action` có `coverage_change` (độ phủ dữ liệu
+        trước và sau). Chốt lại một lần đã chốt (job `done`) trả 409 `ALREADY_APPLIED`, không ghi gì.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestActionRequest'
+      responses:
+        '200':
+          description: Đã chốt; khối `receipt_action` của tool `confirm_rows` kèm `coverage_change`.
+          content:
+            application/json:
+              schema:
+                $ref: '../blocks/receipt_action.schema.json'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '428':
+          $ref: '#/components/responses/NeedsConfirmation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         '503':
           $ref: '#/components/responses/Unavailable'
         '500':
@@ -1846,6 +1980,48 @@ components:
         coverage_change:
           description: Có khi done.
           $ref: '../blocks/coverage_change.schema.json'
+    IngestJobSummary:
+      description: |
+        Một lần nạp trong danh sách gần đây; như `IngestJobResponse` nhưng không có `review` và `coverage_change`.
+      type: object
+      required: [job_id, status, source_kind, progress, rows_total, created_at, updated_at]
+      additionalProperties: false
+      properties:
+        job_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        status:
+          $ref: '../blocks/ingest_review.schema.json#/$defs/IngestJobStatus'
+        source_kind:
+          $ref: '#/components/schemas/IngestSourceKind'
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        rows_total:
+          type: integer
+          minimum: 0
+        error_code:
+          $ref: '#/components/schemas/ErrorCode'
+        error_message:
+          type: string
+          minLength: 1
+          maxLength: 280
+        created_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        updated_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        finished_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+    IngestJobListResponse:
+      type: object
+      required: [jobs]
+      additionalProperties: false
+      properties:
+        jobs:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/IngestJobSummary'
     IngestRowJarRequest:
       type: object
       required: [jar]
@@ -2059,9 +2235,10 @@ components:
     ToolName:
       type: string
       description: |
-        Tên tool ghi (ngắn, không có tiền tố target). Mỗi giá trị có schema `params` riêng, xem `allOf` của
-        `ConfirmationRequest` và `ActionRequest` và bảng ở mô tả của `POST /actions`.
-      enum: [move_between_jars, record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge, confirm_rows]
+        Tên tool ghi của Lambda `ledger` (ngắn, không có tiền tố target). Mỗi giá trị có schema `params` riêng, xem `allOf` của
+        `ConfirmationRequest` và `ActionRequest` và bảng ở mô tả của `POST /actions`. `confirm_rows` (phase 5) không thuộc tập này:
+        xem `IngestToolName`.
+      enum: [move_between_jars, record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge]
     ParamsByTool:
       description: |
         Ràng buộc `params` theo `tool` (dùng chung cho `ConfirmationRequest` và `ActionRequest`). `params` chưa chuẩn hóa
@@ -2123,14 +2300,52 @@ components:
             properties:
               params:
                 $ref: '#/components/schemas/ScheduleNudgeParams'
-        - if:
-            properties:
-              tool:
-                const: confirm_rows
-          then:
-            properties:
-              params:
-                $ref: '#/components/schemas/ConfirmRowsParams'
+    IngestToolName:
+      type: string
+      description: |
+        Tool ghi của Lambda `ingest` (phase 5), chỉ một giá trị. Tool khác gửi tới `/ingest/*` bị `PARAMS_INVALID`.
+      enum: [confirm_rows]
+    IngestConfirmationRequest:
+      description: |
+        Thân của `POST /ingest/confirmations`: như `ConfirmationRequest` nhưng `tool` chỉ là `confirm_rows` và `params` theo
+        `ConfirmRowsParams`. Màn hình duyệt không có khối `confirm_action`, nên bỏ `conversation_id`, `confirm_block_id`,
+        `params_hash`; đường chat (có khối) gửi như `POST /confirmations`.
+      type: object
+      required: [tool, params]
+      additionalProperties: false
+      properties:
+        tool:
+          $ref: '#/components/schemas/IngestToolName'
+        params:
+          $ref: '#/components/schemas/ConfirmRowsParams'
+        conversation_id:
+          $ref: '#/components/schemas/ConfirmConversationId'
+        confirm_block_id:
+          $ref: '#/components/schemas/ConfirmBlockRef'
+        params_hash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Như `ConfirmationRequest.params_hash`.
+    IngestActionRequest:
+      description: |
+        Thân của `POST /ingest/actions`; như `ActionRequest` nhưng `tool` chỉ là `confirm_rows`.
+      type: object
+      required: [tool, params]
+      additionalProperties: false
+      properties:
+        tool:
+          $ref: '#/components/schemas/IngestToolName'
+        params:
+          $ref: '#/components/schemas/ConfirmRowsParams'
+        conversation_id:
+          $ref: '#/components/schemas/ConfirmConversationId'
+        confirm_block_id:
+          $ref: '#/components/schemas/ConfirmBlockRef'
+        confirm_token:
+          description: Token từ `POST /ingest/confirmations`. Vắng thì không ghi, trả 428 NEEDS_CONFIRMATION.
+          type: string
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+          maxLength: 1024
     ConfirmationRequest:
       allOf:
         - $ref: '#/components/schemas/ParamsByTool'
@@ -2173,7 +2388,10 @@ components:
           minimum: 1
           description: Thời gian sống của token, từ cấu hình; frontend đếm ngược theo đây.
         tool:
-          $ref: '#/components/schemas/ToolName'
+          description: Tool đã ký; `confirm_rows` khi do `POST /ingest/confirmations` cấp.
+          anyOf:
+            - $ref: '#/components/schemas/ToolName'
+            - $ref: '#/components/schemas/IngestToolName'
         params:
           description: Bản tham số đã chuẩn hóa mà token đã ký.
           type: object

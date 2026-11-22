@@ -438,7 +438,7 @@ export const CoverageChangeData = z.object({
 })
 export type CoverageChangeData = z.infer<typeof CoverageChangeData>
 
-/** Độ phủ dữ liệu trước và sau khi chốt MỘT lần nạp (confirm_rows). Số do code tính bằng đúng công thức của dự báo (quality.data_coverage trên các thành phần của app_get_data_coverage, migration 0050), nên khớp dải độ phủ của dự báo. Đi kèm biên nhận của confirm_rows (trường `coverage_change` của `receipt_action.data`, cả ở POST /actions lẫn tool ingest___confirm_rows) và trong phản hồi GET /ingest/jobs/{job_id} khi job đã xong. Id khối `coverage_change:{job_id}`. */
+/** Độ phủ dữ liệu trước và sau khi chốt MỘT lần nạp (confirm_rows). Số do code tính bằng đúng công thức của dự báo (quality.data_coverage trên các thành phần của app_get_data_coverage, migration 0050), nên khớp dải độ phủ của dự báo. Đi kèm biên nhận của confirm_rows (trường `coverage_change` của `receipt_action.data`, cả ở POST /ingest/actions lẫn tool ingest___confirm_rows) và trong phản hồi GET /ingest/jobs/{job_id} khi job đã xong. Id khối `coverage_change:{job_id}`. */
 export const CoverageChangeBlock = z.object({
   v: SchemaVersion,
   id: BlockId,
@@ -464,7 +464,7 @@ export const ReceiptActionData = z.object({
 })
 export type ReceiptActionData = z.infer<typeof ReceiptActionData>
 
-/** Biên nhận của thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge, confirm_rows; với schedule_nudge `reference_id` là id của nhắc, cũng là thứ Hoàn tác dùng để hủy). Trả bởi POST /actions (cùng với `receipt` của chuyển hũ) và dựng lại từ kết quả tool. Id khối `receipt:{tool}:{reference_id}`, hoặc `receipt:{tool}:{trace_id}` khi thao tác không có reference_id (kèm tool vì assign_jar và record_transaction dùng chung id giao dịch). */
+/** Biên nhận của thao tác ghi KHÔNG phải chuyển hũ (record_transaction, assign_jar, update_profile, save_jars, confirm_salary, schedule_nudge, confirm_rows; với schedule_nudge `reference_id` là id của nhắc, cũng là thứ Hoàn tác dùng để hủy). Trả bởi POST /actions (cùng với `receipt` của chuyển hũ) và, với confirm_rows, bởi POST /ingest/actions và dựng lại từ kết quả tool. Id khối `receipt:{tool}:{reference_id}`, hoặc `receipt:{tool}:{trace_id}` khi thao tác không có reference_id (kèm tool vì assign_jar và record_transaction dùng chung id giao dịch). */
 export const ReceiptActionBlock = z.object({
   v: SchemaVersion,
   id: BlockId,
@@ -786,7 +786,7 @@ export const IngestReviewData = z.object({
 })
 export type IngestReviewData = z.infer<typeof IngestReviewData>
 
-/** Bảng duyệt các dòng trích được từ MỘT lần nạp ảnh hoặc CSV (F6): chi tiêu và thu nhập NGOÀI ví. Dòng được duyệt vào sổ cái với funding_source external (không đổi số dư hũ). Dòng auto_added (tin cậy cao) được CHỌN SẴN nhưng chưa ghi; chỉ confirm_rows (có token, ADR-0002) ghi sổ cái. Văn bản đã che PII trước khi lưu. Đổi hũ một chạm: PATCH /ingest/rows/{row_id} với một mã trong `jars` (không ghi sổ cái). Id khối `ingest_review:{job_id}`; cùng id thì khối sau thay khối trước. */
+/** Bảng duyệt các dòng trích được từ MỘT lần nạp ảnh hoặc CSV (F6): chi tiêu và thu nhập NGOÀI ví. Dòng được duyệt vào sổ cái với funding_source external (không đổi số dư hũ). Dòng auto_added (tin cậy cao) được CHỌN SẴN nhưng chưa ghi; chỉ confirm_rows (có token, ADR-0002) ghi sổ cái. Văn bản đã che PII trước khi lưu. Đổi hũ một chạm: POST /ingest/rows/{row_id}/jar với một mã trong `jars` (không ghi sổ cái). Id khối `ingest_review:{job_id}`; cùng id thì khối sau thay khối trước. */
 export const IngestReviewBlock = z.object({
   v: SchemaVersion,
   id: BlockId,

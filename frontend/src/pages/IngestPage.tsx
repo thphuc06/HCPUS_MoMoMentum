@@ -8,7 +8,7 @@ import { ErrorState } from '@/components/StateViews'
 import { PreviewPanel } from '@/components/PreviewPanel'
 import { useApi } from '@/api/ApiProvider'
 import { ApiError, ERROR_CODES, ERROR_MESSAGES, type ErrorCode } from '@/api/errors'
-import type { ConfirmRowsParams, IngestJobResponse, IngestSourceKind } from '@/api/ingestSchemas'
+import type { ConfirmRowsParams, IngestJobResponse, IngestJobSummary, IngestSourceKind } from '@/api/ingestSchemas'
 import { CoverageChangeBlock, IngestReviewBlock, type IngestJar, type IngestReviewData, type IngestRow as Row } from '@/contracts/blocks'
 import { ACCEPT_CAMERA, ACCEPT_CSV, ACCEPT_IMAGE, DEFAULT_LIMITS, RETENTION_DAYS, useIngestPollTiming } from '@/features/ingest/config'
 import { checkFile, mimeOf, uploadToS3 } from '@/features/ingest/upload'
@@ -55,11 +55,34 @@ function FilePick({ kind, label, accept, capture, Icon, disabled, onFile }: { ki
   )
 }
 
-function PickStep({ busy, error, pending, onFile, onConsent, onCancelConsent }: { busy: boolean; error: ApiError | null; pending: Pending | null; onFile: (k: IngestSourceKind, f: File) => void; onConsent: () => void; onCancelConsent: () => void }) {
+function PickStep({ busy, error, pending, resumable, onOpen, onFile, onConsent, onCancelConsent }: { busy: boolean; error: ApiError | null; pending: Pending | null; resumable: IngestJobSummary[]; onOpen: (jobId: string) => void; onFile: (k: IngestSourceKind, f: File) => void; onConsent: () => void; onCancelConsent: () => void }) {
   const [agree, setAgree] = useState(false)
-  useEffect(() => setAgree(false), [pending])
+  const consentTitle = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    setAgree(false)
+    if (pending) consentTitle.current?.focus() // đưa tiêu điểm tới hộp đồng ý vừa hiện (trình đọc màn hình đọc ngay nội dung)
+  }, [pending])
   return (
     <div className="space-y-4" data-step="pick">
+      {resumable.length > 0 && (
+        <section className="rounded-card border-2 border-brand bg-surface p-4" aria-labelledby="ingest-resume-title" data-testid="ingest-resume">
+          <h2 id="ingest-resume-title" className="text-subtitle font-semibold text-ink">
+            Lần nạp gần đây
+          </h2>
+          <ul className="mt-2 space-y-2">
+            {resumable.map((j) => (
+              <li key={j.job_id} className="flex items-center justify-between gap-3">
+                <span className="text-small text-ink">
+                  {j.status === 'review' ? `Đã đọc ${j.rows_total} dòng từ ${SOURCE_LABEL[j.source_kind]}, chờ bạn duyệt` : `Đang đọc ${SOURCE_LABEL[j.source_kind]}…`}
+                </span>
+                <Button type="button" variant="soft" onClick={() => onOpen(j.job_id)}>
+                  {j.status === 'review' ? 'Duyệt tiếp' : 'Xem tiến độ'}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section className="rounded-card bg-surface p-4 shadow-card" aria-labelledby="ingest-pick-title">
         <h2 id="ingest-pick-title" className="text-subtitle font-semibold text-ink">
           Thêm chi tiêu ngoài ví
@@ -93,7 +116,7 @@ function PickStep({ busy, error, pending, onFile, onConsent, onCancelConsent }: 
 
       {pending && (
         <section className="rounded-card border-2 border-brand bg-surface p-4" aria-labelledby="ingest-consent-title" data-testid="consent">
-          <h2 id="ingest-consent-title" className="flex items-center gap-2 text-subtitle font-semibold text-ink">
+          <h2 id="ingest-consent-title" ref={consentTitle} tabIndex={-1} className="flex items-center gap-2 text-subtitle font-semibold text-ink outline-none">
             <ShieldCheck className="size-5 text-brand-text" aria-hidden />
             Cho phép đọc {SOURCE_LABEL[pending.kind]}
           </h2>
@@ -262,7 +285,7 @@ function ReviewStep({ data, onDone, onPickOther }: { data: IngestReviewData; onD
             </p>
           )}
           <Button type="button" className="w-full" disabled={missingJar.length > 0 || busyRow !== null} onClick={start}>
-            Xong, cập nhật dự báo
+            {chosen.length === 0 ? 'Bỏ qua tất cả các dòng' : 'Xong, cập nhật dự báo'}
           </Button>
           <p className="text-center text-note text-ink-2">
             {chosen.length} dòng sẽ được thêm, {open.length - chosen.length} dòng bỏ qua. Chưa có gì được ghi cho tới khi bạn xác nhận.
@@ -284,7 +307,7 @@ function ReviewStep({ data, onDone, onPickOther }: { data: IngestReviewData; onD
             </p>
           )}
           <Button type="button" className="w-full" disabled={flow.phase !== 'ready'} aria-busy={flow.phase === 'working'} onClick={() => void confirm()}>
-            {flow.phase === 'working' ? 'Đang thêm…' : `Xác nhận thêm ${chosen.length} dòng`}
+            {flow.phase === 'working' ? 'Đang xử lý…' : chosen.length === 0 ? `Xác nhận bỏ ${open.length} dòng` : `Xác nhận thêm ${chosen.length} dòng`}
           </Button>
           <Button type="button" variant="outline" className="w-full" disabled={flow.phase === 'working'} onClick={flow.reset}>
             Quay lại sửa
@@ -366,9 +389,24 @@ export function IngestPage() {
   const [pickError, setPickError] = useState<ApiError | null>(null)
   const [pending, setPending] = useState<Pending | null>(null)
   const [finished, setFinished] = useState<{ coverage: unknown; review: IngestReviewData } | null>(null)
+  const [recent, setRecent] = useState<IngestJobSummary[]>([])
   const abort = useRef<AbortController | null>(null)
+  const stepRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => () => abort.current?.abort(), [])
+
+  // Lần nạp còn dang dở (đang đọc hoặc chờ duyệt) để quay lại sau khi rời trang. Chỉ là tiện ích: lỗi thì bỏ qua, không chặn việc chọn tệp.
+  useEffect(() => {
+    if (jobId || finished) return
+    let stopped = false
+    api
+      .listIngestJobs(5)
+      .then((r) => !stopped && setRecent(r.jobs.filter((j) => j.status === 'review' || j.status === 'queued' || j.status === 'processing').slice(0, 3)))
+      .catch(() => {})
+    return () => {
+      stopped = true
+    }
+  }, [api, jobId, finished])
 
   const goPick = useCallback(() => {
     abort.current?.abort()
@@ -426,11 +464,15 @@ export function IngestPage() {
   }, [job])
 
   let body
+  let step = 'processing'
   if (finished) {
+    step = 'done'
     body = <DoneStep coverage={finished.coverage} review={finished.review} onMore={goPick} />
   } else if (!jobId) {
-    body = <PickStep busy={uploading} error={pickError} pending={pending} onFile={(k, f) => void upload(k, f, false)} onConsent={() => pending && void upload(pending.kind, pending.file, true)} onCancelConsent={() => setPending(null)} />
+    step = 'pick'
+    body = <PickStep busy={uploading} error={pickError} pending={pending} resumable={recent} onOpen={(id) => setSearch({ job: id })} onFile={(k, f) => void upload(k, f, false)} onConsent={() => pending && void upload(pending.kind, pending.file, true)} onCancelConsent={() => setPending(null)} />
   } else if (job && (job.status === 'failed' || job.status === 'rejected')) {
+    step = 'failed'
     body = (
       <section className="space-y-3" data-step="failed">
         <p role="alert" data-testid="ingest-error" className="rounded-card bg-bad-bg p-4 text-small font-semibold text-bad-fg">
@@ -443,6 +485,7 @@ export function IngestPage() {
     )
   } else if (job && (job.status === 'review' || job.status === 'done') && review) {
     if ('invalid' in review) {
+      step = 'failed'
       const fb = review.invalid && typeof review.invalid === 'object' ? (review.invalid as { fallback_text?: unknown }).fallback_text : undefined
       body = (
         <section className="space-y-3" data-step="failed">
@@ -455,21 +498,50 @@ export function IngestPage() {
         </section>
       )
     } else if (job.status === 'done') {
+      step = 'done'
       body = <DoneStep coverage={job.coverage_change} review={review} onMore={goPick} />
     } else {
+      step = 'review'
       body = <ReviewStep key={job.job_id} data={review} onDone={(coverage, reviewed) => setFinished({ coverage, review: reviewed })} onPickOther={goPick} />
     }
+  } else if (job && (job.status === 'review' || job.status === 'done')) {
+    // Server báo đã đọc xong mà không kèm bảng duyệt: không để màn "Đang xử lý" treo vô hạn.
+    step = 'failed'
+    body = (
+      <section className="space-y-3" data-step="failed">
+        <p role="alert" className="rounded-card bg-surface-2 p-4 text-small text-ink">
+          Chưa tải được bảng duyệt của lần nạp này. Bạn thử lại nhé.
+        </p>
+        <Button type="button" className="w-full" onClick={poll.retry}>
+          Thử lại
+        </Button>
+      </section>
+    )
   } else if (poll.error && !poll.error.retryable && !job) {
+    step = 'error'
     body = <ErrorState error={poll.error} title="Chưa xem được lần nạp này" onRetry={poll.retry} />
   } else {
     body = <ProcessingStep job={job} slow={poll.slow} error={poll.error} onRetry={poll.retry} onCancel={goPick} />
   }
 
+  // Đổi bước (chọn tệp, xử lý, duyệt, xong, lỗi) thì đưa tiêu điểm tới tiêu đề của bước mới, để người dùng bàn phím và trình đọc
+  // màn hình biết màn đã đổi. Không làm ở lần vẽ đầu (không cướp tiêu điểm khi vừa mở trang).
+  const lastStep = useRef(step)
+  useEffect(() => {
+    if (lastStep.current === step) return
+    lastStep.current = step
+    const el = stepRef.current?.querySelector<HTMLElement>('h2, [role="alert"]')
+    if (!el) return
+    el.setAttribute('tabindex', '-1')
+    el.classList.add('outline-none')
+    el.focus()
+  }, [step])
+
   return (
     <>
       <ScreenHeader title="Nạp ảnh / sao kê" backTo="/income" />
       <div className="space-y-4 px-4 pb-10">
-        {body}
+        <div ref={stepRef}>{body}</div>
         {!jobId && !finished && (
           <p className="text-center text-small">
             <Link to="/activity" className="inline-flex min-h-11 items-center font-semibold text-brand-text">

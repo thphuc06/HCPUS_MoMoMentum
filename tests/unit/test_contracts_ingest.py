@@ -209,11 +209,11 @@ def test_mo_ta_tool_neu_gia_tri_hop_le():
         assert kind in sk
 
 
-def test_confirm_rows_la_tool_ghi_qua_actions_nhung_khong_thuoc_target_ledger():
-    assert (
-        wallet.CONFIRM_ROWS in wallet.ACTION_TOOLS
-        and wallet.CONFIRM_ROWS in wallet.GENERIC_ACTION_TOOLS
-    )
+def test_confirm_rows_la_tool_ghi_qua_ingest_actions_khong_thuoc_ledger():
+    # chỉ đi qua /ingest/confirmations và /ingest/actions; ledger không nhận nữa, nhưng vẫn dùng khối confirm_action/receipt_action
+    assert wallet.CONFIRM_ROWS not in wallet.ACTION_TOOLS
+    assert wallet.INGEST_ACTION_TOOLS == (wallet.CONFIRM_ROWS,)
+    assert wallet.CONFIRM_ROWS in wallet.GENERIC_ACTION_TOOLS
     assert (
         wallet.CONFIRM_ROWS not in wallet.AGENT_WRITE_TOOLS
     )  # AGENT_WRITE_TOOLS là tool ghi của target ledger
@@ -282,7 +282,10 @@ def test_endpoint_ingest_dung_lambda_ingest_va_co_loi_chuan():
     for path, method in (
         ("/ingest/uploads", "post"),
         ("/ingest/jobs/{job_id}", "get"),
-        ("/ingest/rows/{row_id}", "patch"),
+        ("/ingest/rows/{row_id}/jar", "post"),
+        ("/ingest/jobs", "get"),
+        ("/ingest/confirmations", "post"),
+        ("/ingest/actions", "post"),
     ):
         op = SPEC["paths"][path][method]
         assert op["x-lambda"] == "ingest" and op["tags"] == ["ingest"]
@@ -291,26 +294,79 @@ def test_endpoint_ingest_dung_lambda_ingest_va_co_loi_chuan():
     assert {"403", "413", "415"} <= set(up["responses"])
     assert "CONSENT_REQUIRED" in up["description"] and "ObjectCreated" in up["description"]
     assert "404" in SPEC["paths"]["/ingest/jobs/{job_id}"]["get"]["responses"]
-    assert "không ghi sổ cái" in SPEC["paths"]["/ingest/rows/{row_id}"]["patch"]["description"]
-    assert "confirm_rows" in SPEC["paths"]["/actions"]["post"]["description"]
+    assert "không ghi sổ cái" in SPEC["paths"]["/ingest/rows/{row_id}/jar"]["post"]["description"]
+    # CORS của HTTP API chung chỉ cho GET, POST, OPTIONS: không có PATCH nào trong hợp đồng
+    assert not any("patch" in item for item in SPEC["paths"].values())
+    # confirm_rows không còn ở /actions của ledger; chỉ nhắc để chỉ sang đường ingest
+    assert "/ingest/actions" in SPEC["paths"]["/actions"]["post"]["description"]
+    assert not any(
+        "`confirm_rows` |" in line
+        for line in SPEC["paths"]["/actions"]["post"]["description"].splitlines()
+    )
+
+
+def test_ingest_phuc_vu_dung_sau_route_va_khop_cdk_draft():
+    routes = {
+        (m.upper(), p)
+        for p, item in SPEC["paths"].items()
+        for m, op in item.items()
+        if op.get("x-lambda") == "ingest"
+    }
+    assert routes == {
+        ("POST", "/ingest/uploads"),
+        ("GET", "/ingest/jobs"),
+        ("GET", "/ingest/jobs/{job_id}"),
+        ("POST", "/ingest/rows/{row_id}/jar"),
+        ("POST", "/ingest/confirmations"),
+        ("POST", "/ingest/actions"),
+    }
 
 
 def test_khong_endpoint_nao_nhan_user_id():
-    for name in ("IngestUploadRequest", "IngestRowJarRequest", "ConfirmRowsParams"):
+    for name in (
+        "IngestUploadRequest",
+        "IngestRowJarRequest",
+        "ConfirmRowsParams",
+        "IngestConfirmationRequest",
+        "IngestActionRequest",
+    ):
         assert (
             "user_id" not in SCHEMAS[name]["properties"]
             and SCHEMAS[name]["additionalProperties"] is False
         )
 
 
-def test_confirm_rows_trong_tool_name_va_params_by_tool(registry):
-    assert "confirm_rows" in SCHEMAS["ToolName"]["enum"]
+def test_confirm_rows_chi_o_endpoint_ingest_khong_o_tool_name_cua_ledger(registry):
+    assert "confirm_rows" not in SCHEMAS["ToolName"]["enum"]
+    assert SCHEMAS["IngestToolName"]["enum"] == list(wallet.INGEST_ACTION_TOOLS)
     mapped = [c["if"]["properties"]["tool"]["const"] for c in SCHEMAS["ParamsByTool"]["allOf"]]
-    assert mapped[-1] == "confirm_rows"
-    act = schema_validator(registry, "ActionRequest")
-    good = load_json(FIX / "rest/ActionRequest.confirm_rows.json")
+    assert "confirm_rows" not in mapped
+    good = load_json(FIX / "rest/IngestActionRequest.confirm_rows.json")
+    # ledger từ chối, ingest nhận
+    assert not schema_validator(registry, "ActionRequest").is_valid(good)
+    assert not schema_validator(registry, "ConfirmationRequest").is_valid(
+        load_json(FIX / "rest/IngestConfirmationRequest.confirm_rows.json")
+    )
+    act = schema_validator(registry, "IngestActionRequest")
     assert act.is_valid(good)
     assert not act.is_valid({**good, "params": {"job_id": JOB, "rows": [{"row_id": "x"}]}})
+    # tool khác không vào được endpoint ingest
+    move = {"from_jar": "a", "to_jar": "b", "amount_vnd": 5}
+    assert not act.is_valid({"tool": "move_between_jars", "params": move})
+    conf = schema_validator(registry, "IngestConfirmationRequest")
+    assert not conf.is_valid({"tool": "record_transaction", "params": move})
+    # token trả về của ingest mang tool confirm_rows
+    resp = schema_validator(registry, "ConfirmationResponse")
+    assert resp.is_valid(
+        {
+            "confirm_token": "aaa.bbb",
+            "expires_at": "2026-12-10T03:02:00Z",
+            "ttl_seconds": 120,
+            "tool": "confirm_rows",
+            "params": good["params"],
+            "params_hash": "a" * 64,
+        }
+    )
 
 
 @pytest.mark.parametrize("path", sorted((FIX / "rest").glob("Ingest*.json")), ids=lambda p: p.name)

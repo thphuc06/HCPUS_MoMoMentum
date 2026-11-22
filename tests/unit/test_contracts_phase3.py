@@ -558,8 +558,8 @@ def test_notice_kind_co_du_bon_loai_va_loi_co_thu_lai():
 def test_cac_tap_gia_tri_phase_3_khop_hang_so():
     opt = load_json(CONTRACTS / "blocks" / "options.schema.json")["$defs"]
     assert tuple(opt["OptionItem"]["properties"]["kind"]["enum"]) == wallet.OPTION_KINDS
-    # confirm_rows (phase 5, target ingest) không phải việc một phương án đề xuất: phương án chỉ dẫn tới tool của phase 1 tới 3
-    option_tools = tuple(t for t in wallet.ACTION_TOOLS if t != wallet.CONFIRM_ROWS)
+    # phương án chỉ dẫn tới tool của ledger/planner (phase 1 tới 3); confirm_rows (phase 5) không thuộc ACTION_TOOLS
+    option_tools = wallet.ACTION_TOOLS
     assert tuple(opt["OptionAction"]["properties"]["tool"]["enum"]) == option_tools
     assert tuple(b.OptionKind.__args__) == wallet.OPTION_KINDS
     assert tuple(b.ActionToolName.__args__) == option_tools
