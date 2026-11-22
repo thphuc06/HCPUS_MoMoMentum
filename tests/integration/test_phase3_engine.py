@@ -674,3 +674,58 @@ def test_huy_loi_nhac_cua_nguoi_khac_bi_tu_choi(api, master, subs):
     assert status in (404, 403) and code(body) in ("NUDGE_NOT_FOUND", "FORBIDDEN"), body
     rows = master.query("SELECT status FROM nudges WHERE id = CAST(:i AS uuid)", {"i": nudge_id})
     assert [r["status"] for r in rows] == ["scheduled"]
+
+
+# --- F1: bản ghi lượt ghi qua Gateway tool (đường thật của agent), không dùng secret master -----------------------------
+def test_record_turn_qua_gateway_roi_get_traces_200_feedback_200_nguoi_khac_404(
+    api, tool, master, subs, schema_validator
+):
+    """Cần Gateway đã có tool `audit___record_turn` (deploy Tools) và Lambda ledger mới. Không dùng master để dựng bản ghi."""
+    trace = uuid.uuid4().hex
+    record = {
+        "trace_id": trace,
+        "conversation_id": f"it-{trace[:12]}",
+        "intent": "what_if",
+        "outcome": "ok",
+        "data_used": [{"label": "Số dư các hũ", "value": "6 hũ", "tool": "ledger___get_jar_balances"}],
+        "rules_checked": [{"rule_id": "obligations_first", "label": "Nghĩa vụ trước", "outcome": "pass"}],
+        "confidence": {"band": "high", "reasons": ["Số liệu lấy trực tiếp từ sổ cái của bạn."]},
+        "blocks_emitted": [{"id": f"options:{trace}", "type": "options"}],
+        "token_usage": {"input_tokens": 10, "output_tokens": 5, "model_calls": 1},
+        "step_timings": [{"step": "router", "ms": 120}],
+        "duration_ms": 900,
+    }
+    # chưa ghi: 404 cho cả đọc lẫn phản hồi
+    assert api("minh", "GET", f"/traces/{trace}")[0] == 404
+    first = ok(tool("minh", "audit___record_turn", record))
+    assert first == {"trace_id": trace, "recorded": True}
+    again = ok(tool("minh", "audit___record_turn", {**record, "duration_ms": 1}))
+    assert again["recorded"] is False  # chỉ thêm: ghi lại không đổi bản đầu
+    # user_id trong thân không đổi được người ghi (interceptor/Lambda lấy từ JWT)
+    spoof_trace = uuid.uuid4().hex
+    spoof = tool("lan", "audit___record_turn", {**record, "user_id": subs["minh"], "trace_id": spoof_trace})
+    assert spoof["status"] == "OK"
+    owner = master.query("SELECT user_id FROM audit_events WHERE event_type = 'agent_turn' AND trace_id = :t", {"t": spoof_trace})
+    assert [r["user_id"] for r in owner] == [subs["lan"]]
+    rows = master.query(
+        "SELECT user_id, duration_ms FROM audit_events WHERE event_type = 'agent_turn' AND trace_id = :t",
+        {"t": trace},
+    )
+    assert [(r["user_id"], r["duration_ms"]) for r in rows] == [(subs["minh"], 900)]
+    # đọc lại: 200 cho chính chủ, đúng bản ghi đã ghi
+    status, body = api("minh", "GET", f"/traces/{trace}")
+    assert status == 200, body
+    assert body["detail"]["duration_ms"] == 900 and body["detail"]["intent"] == "what_if"
+    schema_validator(f"{BLOCKS}/explain.schema.json", body["explain"])
+    # phản hồi chấp nhận trace_id thật
+    fb = {"trace_id": trace, "block_id": f"options:{trace}", "option_id": "defer_payday", "decision": "accepted"}
+    status, res = api("minh", "POST", "/feedback", fb)
+    assert status == 200 and res["decision"] == "accepted", res
+    # người khác: 404 cho đọc và phản hồi
+    status, other = api("lan", "GET", f"/traces/{trace}")
+    assert (status, code(other)) == (404, "TRACE_NOT_FOUND")
+    status, other_fb = api("lan", "POST", "/feedback", fb)
+    assert (status, code(other_fb)) == (404, "TRACE_NOT_FOUND")
+    # tham số sai: bị từ chối, không ghi
+    bad = tool("minh", "audit___record_turn", {**record, "trace_id": uuid.uuid4().hex, "outcome": "weird"})
+    assert bad["status"] == "ERROR" and bad["code"] in ("PARAMS_INVALID", "VALIDATION_ERROR")

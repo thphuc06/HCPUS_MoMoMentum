@@ -397,6 +397,7 @@ export class AgentStack extends Stack {
         YOFINA_GATEWAY_URL: gateway.attrGatewayUrl,
         YOFINA_USAGE_TABLE: usageTable,
         YOFINA_TURN_BLOCKS_TOOL: 'ledger___save_turn',
+        YOFINA_TURN_RECORD_TOOL: 'audit___record_turn',
         YOFINA_LOG_LEVEL: 'INFO',
       },
     });

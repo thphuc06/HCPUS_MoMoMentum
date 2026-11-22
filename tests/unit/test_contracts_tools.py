@@ -63,7 +63,7 @@ def test_cac_target_phase_3_khop_hang_so():
     assert [t["name"] for t in FORECAST] == ["get_forecast", "run_scenario", "affordability_check"]
     assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == ["get_fee_schedule"]
     assert [t["name"] for t in PLANNER] == list(wallet.PLANNER_TOOLS)
-    assert [t["name"] for t in AUDIT] == list(wallet.AUDIT_TOOLS) == ["get_trace"]
+    assert [t["name"] for t in AUDIT] == list(wallet.AUDIT_TOOLS) == ["get_trace", "record_turn"]
 
 
 def test_target_forecast_co_get_forecast():
@@ -231,7 +231,7 @@ RESULT_FILE = {name: "ledger" for name in wallet.LEDGER_TOOLS}
 RESULT_FILE["get_forecast"] = "forecast"
 RESULT_FILE.update(
     run_scenario="forecast", affordability_check="forecast", get_fee_schedule="knowledge",
-    check_suitability="planner", schedule_nudge="planner", get_trace="audit",
+    check_suitability="planner", schedule_nudge="planner", get_trace="audit", record_turn="audit",
 )  # fmt: skip
 RESULT_DEF = {
     "get_jar_balances": "GetJarBalancesResult",
@@ -251,6 +251,7 @@ RESULT_DEF = {
     "check_suitability": "CheckSuitabilityResult",
     "schedule_nudge": "ScheduleNudgeResult",
     "get_trace": "GetTraceResult",
+    "record_turn": "RecordTurnResult",
 }
 
 

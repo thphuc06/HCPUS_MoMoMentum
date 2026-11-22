@@ -96,6 +96,32 @@
         "data": { "$ref": "#/$defs/TraceData" }
       }
     },
+    "RecordTurnOk": {
+      "description": "Đã ghi bản ghi lượt (`recorded` true) hoặc lượt này đã có bản ghi từ trước nên không ghi thêm (`recorded` false). Không mang app_date vì không đọc số liệu tài chính.",
+      "type": "object",
+      "required": ["status", "as_of", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "data": {
+          "type": "object",
+          "required": ["trace_id", "recorded"],
+          "additionalProperties": false,
+          "properties": {
+            "trace_id": { "$ref": "../blocks/envelope.schema.json#/$defs/TraceId" },
+            "recorded": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "RecordTurnResult": {
+      "description": "Mã lỗi có thể gặp: PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/RecordTurnOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
     "GetTraceResult": {
       "description": "Mã lỗi có thể gặp: TRACE_NOT_FOUND, PARAMS_INVALID.",
       "oneOf": [

@@ -18,5 +18,207 @@
         "trace_id"
       ]
     }
+  },
+  {
+    "name": "record_turn",
+    "description": "Ghi MỘT bản ghi lượt trả lời (event_type agent_turn trong audit_events) của CHÍNH người dùng để bảng 'Vì sao' và phản hồi tham chiếu được. Chỉ agent gọi, một lần cuối mỗi lượt có trace; gọi lại cùng trace_id không ghi thêm (recorded=false). Không đụng tiền, không cần xác nhận. Lỗi: PARAMS_INVALID.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "trace_id": {
+          "type": "string",
+          "description": "Mã trace của lượt (1 đến 64 ký tự chữ, số, gạch dưới, gạch ngang)."
+        },
+        "conversation_id": {
+          "type": "string",
+          "description": "Mã hội thoại (session của Runtime)."
+        },
+        "intent": {
+          "type": "string",
+          "description": "Ý định router đã nhận ra: lookup, what_if, affordability, profile_update, move, out_of_scope hoặc chitchat. Bỏ trống nếu lượt không qua router."
+        },
+        "outcome": {
+          "type": "string",
+          "description": "Kết quả của lượt: ok, rejected hoặc error."
+        },
+        "code": {
+          "type": "string",
+          "description": "Mã lỗi hoặc mã suy giảm của lượt, nếu có."
+        },
+        "data_used": {
+          "type": "array",
+          "description": "Dữ liệu lượt đã dùng (1 đến 20 dòng).",
+          "items": {
+            "type": "object",
+            "description": "Một nguồn dữ liệu.",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Nhãn hiển thị của nguồn."
+              },
+              "value": {
+                "type": "string",
+                "description": "Giá trị mô tả ngắn, nếu có."
+              },
+              "tool": {
+                "type": "string",
+                "description": "Tên tool nguồn."
+              },
+              "as_of": {
+                "type": "string",
+                "description": "Thời điểm dữ liệu, ISO 8601, nếu có."
+              }
+            },
+            "required": [
+              "label",
+              "tool"
+            ]
+          }
+        },
+        "rules_checked": {
+          "type": "array",
+          "description": "Luật đã kiểm trong lượt (tối đa 20 dòng).",
+          "items": {
+            "type": "object",
+            "description": "Một luật đã kiểm.",
+            "properties": {
+              "rule_id": {
+                "type": "string",
+                "description": "Mã luật."
+              },
+              "label": {
+                "type": "string",
+                "description": "Nhãn hiển thị của luật."
+              },
+              "outcome": {
+                "type": "string",
+                "description": "pass, warn, fail hoặc skipped."
+              },
+              "detail": {
+                "type": "string",
+                "description": "Chi tiết ngắn, nếu có."
+              }
+            },
+            "required": [
+              "rule_id",
+              "label",
+              "outcome"
+            ]
+          }
+        },
+        "confidence": {
+          "type": "object",
+          "description": "Nhóm tin cậy của lượt.",
+          "properties": {
+            "band": {
+              "type": "string",
+              "description": "high, medium hoặc low."
+            },
+            "reasons": {
+              "type": "array",
+              "description": "Lý do (1 đến 4 câu).",
+              "items": {
+                "type": "string",
+                "description": "Một lý do."
+              }
+            }
+          },
+          "required": [
+            "band",
+            "reasons"
+          ]
+        },
+        "blocks_emitted": {
+          "type": "array",
+          "description": "Khối UI đã phát trong lượt (tối đa 40).",
+          "items": {
+            "type": "object",
+            "description": "Một khối đã phát.",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Mã khối."
+              },
+              "type": {
+                "type": "string",
+                "description": "Loại khối."
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ]
+          }
+        },
+        "token_usage": {
+          "type": "object",
+          "description": "Số token và lượt gọi model của cả lượt.",
+          "properties": {
+            "input_tokens": {
+              "type": "integer",
+              "description": "Token đầu vào."
+            },
+            "output_tokens": {
+              "type": "integer",
+              "description": "Token đầu ra."
+            },
+            "model_calls": {
+              "type": "integer",
+              "description": "Số lượt gọi model."
+            },
+            "cache_read_tokens": {
+              "type": "integer",
+              "description": "Token đọc từ cache, nếu có."
+            }
+          },
+          "required": [
+            "input_tokens",
+            "output_tokens",
+            "model_calls"
+          ]
+        },
+        "step_timings": {
+          "type": "array",
+          "description": "Thời lượng từng bước (tối đa 30).",
+          "items": {
+            "type": "object",
+            "description": "Một bước.",
+            "properties": {
+              "step": {
+                "type": "string",
+                "description": "Tên bước."
+              },
+              "ms": {
+                "type": "integer",
+                "description": "Mili giây."
+              }
+            },
+            "required": [
+              "step",
+              "ms"
+            ]
+          }
+        },
+        "duration_ms": {
+          "type": "integer",
+          "description": "Tổng thời lượng lượt, mili giây."
+        }
+      },
+      "required": [
+        "trace_id",
+        "outcome",
+        "data_used",
+        "rules_checked",
+        "confidence",
+        "blocks_emitted",
+        "token_usage",
+        "step_timings",
+        "duration_ms"
+      ]
+    }
   }
 ]

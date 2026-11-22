@@ -13,7 +13,7 @@ Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, RE
 | `blocks/block.schema.json` | Hợp của mười bốn khối, phân biệt theo `type` | kiểm tra |
 | `tools/ledger.json` | Mười tool của target `ledger` (chín tool của overview và `save_turn`) đúng định dạng `inlinePayload` của AgentCore Gateway (Lambda target) | luồng A (cài), agent |
 | `tools/forecast.json` | Ba tool của target `forecast`: `get_forecast` (phase 2), `run_scenario`, `affordability_check` (phase 3) | luồng C phase 2, A phase 3 (cài), agent |
-| `tools/{knowledge,planner,audit}.json` | Target mới của phase 3: `get_fee_schedule`; `check_suitability`, `schedule_nudge` (tool GHI qua token); `get_trace` | luồng A (cài), agent |
+| `tools/{knowledge,planner,audit}.json` | Target mới của phase 3: `get_fee_schedule`; `check_suitability`, `schedule_nudge` (tool GHI qua token); `get_trace`, `record_turn` (ghi bản ghi lượt, không qua token) | luồng A (cài), agent |
 | `scenario/scenario_spec.schema.json` | `ScenarioSpec`: sáu loại kịch bản what-if (FR5), nguồn chung cho `run_scenario`, bảng `scenarios`, `yofina_core.scenario` | agent (dựng), luồng A (kiểm, chạy) |
 | `tools/{ledger,forecast,knowledge,planner,audit}.results.schema.json` | Kết quả JSON Lambda trả về cho từng tool; `ledger.results` còn chứa các $defs dùng chung với REST (`Transaction`, `Obligation`, `CreditLine`, `Payee`, `SalaryEvent`) | luồng A, C (trả), agent (đọc) |
 | `rest/openapi.yaml` | OpenAPI 3.1: 21 endpoint (xem mục "REST" và "Phase 3") | luồng A, C (cài), D (gọi) |
@@ -242,6 +242,7 @@ Tên đầy đủ qua Gateway `<target>___<tool>`. `user_id` giống mọi tool:
 | `planner___check_suitability` | ĐỌC, tất định | `proposal` (có `kind`) | `CheckSuitabilityResult`: `SuitabilityVerdict` (`ok`, `violations`, `checked`, `rules_version`) |
 | `planner___schedule_nudge` | **GHI** (qua token) | không (Lambda kiểm theo `op`) | `ScheduleNudgeResult`: `NEEDS_CONFIRMATION` (`ConfirmActionData`), `OK` (`ReceiptActionData`, `reference_id` = id nhắc) |
 | `audit___get_trace` | ĐỌC, chỉ của chính người dùng | `trace_id` | `GetTraceResult`: `TraceData` (`explain` đã dựng + `detail`) |
+| `audit___record_turn` | GHI một lần mỗi lượt (không qua token, không đụng tiền), chỉ của chính người dùng | `trace_id` + các trường của bản ghi lượt (không có `user_id`) | `RecordTurnResult`: `{trace_id, recorded}` (`recorded` false nếu lượt đã có bản ghi) |
 
 - `run_scenario` nhận `scenario` là object phẳng gộp mọi trường của sáu loại (Gateway không có `oneOf`); mô tả nói trường nào bắt buộc theo loại, Lambda kiểm lại bằng `parse_scenario` và trả `SCENARIO_INVALID` hoặc `PARAMS_INVALID`. Thiếu số tiền hay cách trả thì agent KHÔNG gọi tool mà phát `clarify`.
 - `schedule_nudge` có `confirm_token` tùy chọn (không có thì không ghi, trả `NEEDS_CONFIRMATION`), mô tả nói "KHÔNG tự tạo token", đúng mẫu tool ghi của `ledger`. `wallet.PLANNER_WRITE_TOOLS = ("schedule_nudge",)`; `ACTION_TOOLS` (REST) có thêm `schedule_nudge` ở CUỐI.

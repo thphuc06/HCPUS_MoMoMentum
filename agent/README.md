@@ -63,6 +63,7 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
 | `YOFINA_LLM_ROLES` (JSON), `YOFINA_LLM_DAILY_CAP_<VAI>`, `YOFINA_LLM_RATE_LIMIT_MAX_WAIT_SECONDS`, `YOFINA_LLM_BUDGET_TIMEZONE`... | không | Ghi đè cấu hình model/trần/tốc độ (SSM tương ứng: `/yofina/llm/roles`, `/yofina/llm/daily_cap_planner`...) |
 | `YOFINA_RUN_TIMEOUT_SECONDS`, `YOFINA_MAX_MODEL_CALLS_PER_TURN`, `YOFINA_MAX_TOOL_CALLS_PER_TURN`, `YOFINA_TOOL_TIMEOUT_SECONDS`, `YOFINA_ROUTER_MAX_ATTEMPTS`, `YOFINA_HISTORY_MESSAGES`, ... | không | Tham số của agent (mặc định ở `src/yofina_agent/defaults.json`; chỉ đọc từ env, không tra SSM từng khóa) |
 | `YOFINA_TURN_BLOCKS_TOOL` | không | Tên tool Gateway để lưu `turn_blocks` (rỗng = chưa lưu) |
+| `YOFINA_TURN_RECORD_TOOL` | không | Tên tool Gateway để ghi bản ghi lượt `agent_turn` (Runtime đặt `audit___record_turn`; rỗng = chưa ghi, "Vì sao" và `POST /feedback` sẽ 404) |
 | `YOFINA_LOG_LEVEL` | không | Mặc định INFO |
 
 ## Chạy cục bộ

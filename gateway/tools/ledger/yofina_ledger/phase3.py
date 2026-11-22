@@ -14,6 +14,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from yofina_audit.record import parse_turn_record
 from yofina_audit.trace import build_trace_data
 from yofina_core.blocks import format_instant
 from yofina_core.errors import ErrorCode, YofinaError
@@ -138,6 +139,17 @@ class Phase3Reads:
             "as_of": data["explain"]["source"]["as_of"],
             "app_date": data["explain"]["source"]["app_date"],
             "data": data,
+        }
+
+    def record_turn_result(self, user_id: str, **args: Any) -> dict[str, Any]:
+        """Tool `audit___record_turn`: ghi MỘT bản ghi lượt của chính người gọi (`user_id` do interceptor ghi đè từ JWT, không
+        nhận từ thân). Đã có bản ghi cùng trace thì không ghi thêm (`recorded` false). Không đụng tiền nên không qua token."""
+        rec = parse_turn_record(args)
+        recorded = self.repo.record_turn(user_id, rec)
+        return {
+            "status": "OK",
+            "as_of": format_instant(self.now()),
+            "data": {"trace_id": rec["trace_id"], "recorded": recorded},
         }
 
     def trace_response(self, user_id: str, trace_id: Any) -> dict[str, Any]:

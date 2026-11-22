@@ -93,7 +93,7 @@ LEDGER_TOOLS = (
 FORECAST_TOOLS = ("get_forecast", "run_scenario", "affordability_check")
 KNOWLEDGE_TOOLS = ("get_fee_schedule",)
 PLANNER_TOOLS = ("check_suitability", "schedule_nudge")
-AUDIT_TOOLS = ("get_trace",)
+AUDIT_TOOLS = ("get_trace", "record_turn")
 
 # --- phase 3: kịch bản, nhắc, phản hồi, ý định ---------------------------------------------------
 #: Sáu loại kịch bản của FR5 (khớp `kind` trong contracts/scenario/scenario_spec.schema.json).

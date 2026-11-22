@@ -420,7 +420,7 @@ def test_cau_hinh_doc_tu_bien_moi_truong_va_thieu_thi_bao_loi():
 TOOLS = load_json(CONTRACTS / "tools" / "ledger.json")
 
 
-PHASE3_LEDGER_TOOLS = {"check_suitability", "schedule_nudge", "get_fee_schedule", "get_trace"}
+PHASE3_LEDGER_TOOLS = {"check_suitability", "schedule_nudge", "get_fee_schedule", "get_trace", "record_turn"}
 
 
 def test_moi_tool_trong_hop_dong_co_dung_tham_so_o_gateway_api():

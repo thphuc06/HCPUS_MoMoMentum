@@ -1,0 +1,8 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "data": {
+    "trace_id": "trace-abc",
+    "recorded": true
+  }
+}

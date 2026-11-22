@@ -44,6 +44,15 @@ SQL_CANCEL_NUDGE = (
     "WHERE user_id = :uid AND id = CAST(:id AS uuid) AND status = 'scheduled' "
     "RETURNING id, kind, fire_on, jar_code, note"
 )
+# Bản ghi lượt: đúng một dòng mỗi (user_id, trace_id) nhờ chỉ mục duy nhất một phần của migration 0010; ghi lại thì không làm gì.
+SQL_RECORD_TURN = (
+    "INSERT INTO audit_events (user_id, trace_id, event_type, tool, outcome, code, conversation_id, intent, data_used, "
+    "rules_checked, confidence, blocks_emitted, token_usage, step_timings, duration_ms) "
+    "VALUES (:uid, :trace_id, 'agent_turn', 'record_turn', :outcome, :code, :conversation_id, :intent, "
+    "CAST(:data_used AS jsonb), CAST(:rules_checked AS jsonb), CAST(:confidence AS jsonb), CAST(:blocks_emitted AS jsonb), "
+    "CAST(:token_usage AS jsonb), CAST(:step_timings AS jsonb), :duration_ms) "
+    "ON CONFLICT (user_id, trace_id) WHERE event_type = 'agent_turn' AND trace_id IS NOT NULL DO NOTHING RETURNING id"
+)
 SQL_AUDIT_WRITE = (
     "INSERT INTO audit_events (user_id, trace_id, event_type, tool, outcome, code, params, details) "
     "VALUES (:uid, :trace_id, :event_type, :tool, 'ok', NULL, CAST(:params AS jsonb), CAST(:details AS jsonb))"
@@ -71,6 +80,30 @@ class Phase3Repo:
             SQL_LIST_NUDGES, {"uid": user_id, "status": "scheduled", "lim": 200}, max_rows=200
         )
         return next((r for r in rows if str(r["id"]) == nudge_id), None)
+
+    # --- ghi: bản ghi lượt ---------------------------------------------------------------------------------
+    def record_turn(self, user_id: str, rec: Mapping[str, Any]) -> bool:
+        """Ghi bản ghi lượt của CHÍNH người gọi (user_id từ JWT, RLS cộng điều kiện). True nếu ghi mới, False nếu đã có."""
+        with self.db.transaction(user_id) as tx:
+            rows = tx.execute(
+                SQL_RECORD_TURN,
+                {
+                    "uid": user_id,
+                    "trace_id": rec["trace_id"],
+                    "outcome": rec["outcome"],
+                    "code": rec.get("code"),
+                    "conversation_id": rec.get("conversation_id"),
+                    "intent": rec.get("intent"),
+                    "data_used": rec["data_used"],
+                    "rules_checked": rec["rules_checked"],
+                    "confidence": rec["confidence"],
+                    "blocks_emitted": rec["blocks_emitted"],
+                    "token_usage": rec["token_usage"],
+                    "step_timings": rec["step_timings"],
+                    "duration_ms": rec["duration_ms"],
+                },
+            )
+        return bool(rows)
 
     # --- ghi: phản hồi -------------------------------------------------------------------------------------
     def upsert_feedback(

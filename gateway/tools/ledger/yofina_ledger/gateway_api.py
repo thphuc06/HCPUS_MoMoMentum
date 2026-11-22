@@ -8,7 +8,7 @@
 - Mười tool (đúng thứ tự `yofina_core.wallet.LEDGER_TOOLS`): năm tool đọc, bốn tool ghi, `save_turn`. Tool ghi KHÔNG có
   `confirm_token` thì không ghi, trả `NEEDS_CONFIRMATION` kèm bản xem trước. `save_jars` và `confirm_salary` chỉ có ở REST.
 - Phase 3: Lambda này CŨNG phục vụ ba target Gateway `planner` (`check_suitability`, `schedule_nudge`), `knowledge`
-  (`get_fee_schedule`) và `audit` (`get_trace`) theo quyết định của người điều phối (không có Lambda riêng). Tên tool của các
+  (`get_fee_schedule`) và `audit` (`get_trace`, `record_turn`) theo quyết định của người điều phối (không có Lambda riêng). Tên tool của các
   target đó là duy nhất trong Gateway nên phân biệt theo tên (phần sau `___`). `schedule_nudge` là tool GHI qua token như các
   tool ghi khác.
 """
@@ -73,6 +73,20 @@ _ARG_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "get_fee_schedule": ("fee_type", "product"),
     "get_trace": ("trace_id",),
+    "record_turn": (
+        "trace_id",
+        "conversation_id",
+        "intent",
+        "outcome",
+        "code",
+        "data_used",
+        "rules_checked",
+        "confidence",
+        "blocks_emitted",
+        "token_usage",
+        "step_timings",
+        "duration_ms",
+    ),
 }
 
 
@@ -159,6 +173,8 @@ def _run(
         )
     if tool == "get_trace":
         return service.trace_result(user_id, args.get("trace_id"))
+    if tool == "record_turn":
+        return service.record_turn_result(user_id, **args)
     # tool ghi: move_between_jars, update_profile, record_transaction, assign_jar, schedule_nudge
     assert tool == MOVE_BETWEEN_JARS or tool in AGENT_WRITE_TOOLS or tool in PLANNER_WRITE_TOOLS
     prefix = PLANNER_PREFIX if tool in PLANNER_WRITE_TOOLS else TOOL_PREFIX

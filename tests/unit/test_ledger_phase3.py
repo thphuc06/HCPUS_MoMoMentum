@@ -84,6 +84,14 @@ class Fake3(FakeRepo):
     def get_trace(self, uid, trace_id):
         return self.traces.get(uid, {}).get(trace_id)
 
+    def record_turn(self, uid, rec):
+        """Như SQL thật: mỗi (user, trace) một dòng, ghi lại thì không làm gì."""
+        store = self.traces.setdefault(uid, {})
+        if rec["trace_id"] in store:
+            return False
+        store[rec["trace_id"]] = {"created_at": self.clock(), "code": None, **rec}
+        return True
+
     def get_scenario(self, uid, sid):
         return self.scenarios.get(uid, {}).get(sid)
 
@@ -257,6 +265,91 @@ def test_trace_chi_cua_chinh_nguoi_dung_nguoi_khac_va_khong_co_deu_404(svc, regi
         with pytest.raises(YofinaError) as e:
             service.trace_data(who, tid, source_tool="t")
         assert e.value.code == ErrorCode.TRACE_NOT_FOUND  # cùng một mã, không lộ sự tồn tại
+
+
+def turn_args(**kw):
+    """Tham số `audit___record_turn` đúng như agent gửi (không có created_at, không có user_id)."""
+    args = {k: v for k, v in turn_row().items() if k not in ("created_at", "code")}
+    args.update(kw)
+    return args
+
+
+def test_record_turn_ghi_roi_get_trace_va_feedback_chap_nhan_chi_cua_chinh_chu(svc, registry):
+    service, repo, _ = svc
+    res = handle_gateway({"user_id": U, **turn_args()}, gateway_context("audit___record_turn"), service)
+    validate(registry, "audit", "RecordTurnResult", res)
+    assert res["status"] == "OK" and res["data"] == {"trace_id": "trace-abc", "recorded": True}
+    # vòng đầy đủ: đọc lại bằng tool và REST, rồi phản hồi
+    got = handle_gateway({"user_id": U, "trace_id": "trace-abc"}, gateway_context("audit___get_trace"), service)
+    validate(registry, "audit", "GetTraceResult", got)
+    assert got["status"] == "OK" and got["data"]["detail"]["intent"] == "what_if"
+    rest = handle_http(http_event("GET", "/traces/trace-abc", sub=U, path_params={"trace_id": "trace-abc"}), service)
+    assert rest["statusCode"] == 200
+    body = {"trace_id": "trace-abc", "option_id": "defer_payday", "decision": "accepted"}
+    assert handle_http(http_event("POST", "/feedback", sub=U, body=body), service)["statusCode"] == 200
+    # người khác: 404 cho cả đọc lẫn phản hồi
+    other = handle_http(http_event("GET", "/traces/trace-abc", sub=V, path_params={"trace_id": "trace-abc"}), service)
+    assert other["statusCode"] == 404
+    assert handle_http(http_event("POST", "/feedback", sub=V, body=body), service)["statusCode"] == 404
+    assert "trace-abc" not in repo.traces.get(V, {})
+
+
+def test_record_turn_ghi_lai_cung_trace_khong_ghi_them(svc):
+    service, repo, _ = svc
+    assert service.record_turn_result(U, **turn_args())["data"]["recorded"] is True
+    again = service.record_turn_result(U, **turn_args(duration_ms=1))
+    assert again["status"] == "OK" and again["data"]["recorded"] is False
+    assert repo.traces[U]["trace-abc"]["duration_ms"] == 4200  # bản đầu giữ nguyên (chỉ thêm)
+
+
+def test_record_turn_danh_tinh_chi_tu_user_id_cua_interceptor_khong_tu_than(svc):
+    service, repo, _ = svc
+    # thân mang user_id khác không có đường nào tới DB: tham số lạ bị bỏ, người ghi là user_id của sự kiện (đã bị interceptor ghi đè)
+    ev = {"user_id": U, **turn_args(), "conversation_id": "c9"}
+    handle_gateway({**ev, "owner": V}, gateway_context("audit___record_turn"), service)
+    assert "trace-abc" in repo.traces[U] and "trace-abc" not in repo.traces.get(V, {})
+    no_user = handle_gateway(turn_args(), gateway_context("audit___record_turn"), service)
+    assert no_user["status"] == "ERROR" and no_user["code"] == "UNAUTHENTICATED"
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"trace_id": "sai dạng!"},
+        {"trace_id": "x" * 65},
+        {"outcome": "weird"},
+        {"intent": "hack"},
+        {"data_used": []},
+        {"data_used": [{"label": "a"}]},
+        {"confidence": {"band": "super", "reasons": ["x"]}},
+        {"rules_checked": [{"rule_id": "r", "label": "l", "outcome": "maybe"}]},
+        {"token_usage": {"input_tokens": -1, "output_tokens": 0, "model_calls": 0}},
+        {"duration_ms": -5},
+        {"blocks_emitted": [{"id": "b", "type": "Sai Loai"}]},
+    ],
+)
+def test_record_turn_tham_so_sai_la_params_invalid_va_khong_ghi(svc, patch):
+    service, repo, _ = svc
+    res = handle_gateway({"user_id": U, **turn_args(**patch)}, gateway_context("audit___record_turn"), service)
+    assert res["status"] == "ERROR" and res["code"] == "PARAMS_INVALID"
+    assert not repo.traces.get(U)
+
+
+def test_record_turn_nhan_dung_ban_ghi_ma_agent_dung(svc):
+    """Hợp đồng agent -> backend: bản ghi do `trace.build_record` của agent dựng được ghi và đọc lại được."""
+    from yofina_agent import trace as agent_trace
+
+    from yofina_core import blocks as B
+
+    service, _, _ = svc
+    rec = agent_trace.build_record(
+        trace_id="trace-agent-1", conversation_id="conv-1", intent="move", outcome="ok", code=None,
+        outcomes=[], suitability=[], extra_rules=[B.RuleCheck(rule_id="obligations_first", label="Nghĩa vụ trước", outcome="pass")],
+        bases=[], blocks=[{"id": "clarify:t", "type": "clarify"}], usage_by_model=[{"inputTokens": 5, "outputTokens": 2}],
+        model_calls=1, steps=[("router", 120), ("router", 30)], duration_ms=900,
+    )  # fmt: skip
+    assert service.record_turn_result(U, **rec)["data"]["recorded"] is True
+    assert service.trace_data(U, "trace-agent-1", source_tool="t")["detail"]["duration_ms"] == 900
 
 
 def test_trace_thieu_phan_nao_thi_dung_gia_tri_trung_tinh_khong_bia(svc, registry):
