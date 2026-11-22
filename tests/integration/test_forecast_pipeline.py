@@ -383,7 +383,7 @@ def test_tool_forecast_qua_gateway_cung_so_voi_rest_va_khop_hop_dong(
     bad = gw("minh").call("forecast___get_forecast", {"jar": "khong_co"})
     assert bad.status == "ERROR" and bad.data["code"] == "JAR_NOT_FOUND"
     sysjar = gw("minh").call("forecast___get_forecast", {"jar": "tien_vao_khac"})
-    assert sysjar.status == "ERROR" and sysjar.data["code"] == "FORECAST_UNAVAILABLE"
+    assert sysjar.status == "ERROR" and sysjar.data["code"] == "FORECAST_NOT_APPLICABLE"
 
 
 def test_tool_forecast_user_id_la_cua_chinh_nguoi_goi_khong_doc_duoc_cua_nguoi_khac(

@@ -102,6 +102,10 @@ def test_du_bao_chua_co_thi_tra_503_forecast_unavailable_dung_hinh_dang(api):
     assert (status, code(body)) == (503, "FORECAST_UNAVAILABLE")
     status, body = api("minh", "GET", "/forecasts/khong_co")
     assert (status, code(body)) == (404, "JAR_NOT_FOUND")
+    # hũ hệ thống không bao giờ có dự báo: 404 FORECAST_NOT_APPLICABLE, không phải 503 (503 chỉ là lỗi tạm thời)
+    for system_jar in ("tien_vao_khac", "chua_phan_loai"):
+        status, body = api("minh", "GET", f"/forecasts/{system_jar}")
+        assert (status, code(body)) == (404, "FORECAST_NOT_APPLICABLE")
 
 
 def test_giao_dich_loc_va_phan_trang_con_tro_khong_trung_dong(api):
@@ -575,7 +579,7 @@ def test_de_nghi_het_han_bi_server_tu_choi_o_confirmations_va_actions(api, invok
     status, body = api(
         "minh", "POST", "/confirmations", {"tool": "record_transaction", "params": params, **ref}
     )
-    assert (status, code(body)) == (403, "TOKEN_EXPIRED") and "hết hạn" in body["error"]["message"]
+    assert (status, code(body)) == (410, "OFFER_EXPIRED") and "hết hạn" in body["error"]["message"]
     _, conf = api(
         "minh", "POST", "/confirmations", {"tool": "record_transaction", "params": params}
     )
@@ -590,7 +594,7 @@ def test_de_nghi_het_han_bi_server_tu_choi_o_confirmations_va_actions(api, invok
             **ref,
         },
     )
-    assert (status, code(body)) == (403, "TOKEN_EXPIRED")
+    assert (status, code(body)) == (410, "OFFER_EXPIRED")
     turn = get(api, "minh", f"/conversations/{conv}")["turns"][0]
     assert turn["resolutions"] == [{"block_id": block["id"], "status": "expired"}]
 

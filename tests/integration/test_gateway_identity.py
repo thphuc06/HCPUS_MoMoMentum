@@ -6,8 +6,11 @@ Chạy: `uv run pytest tests/integration/test_gateway_identity.py -m integration
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from agentcore_helpers import McpFailure, raw_gateway_post
+from conftest import REPO
 
 # Mười tool của target `ledger` (chín tool của overview và save_turn); save_jars và confirm_salary KHÔNG lộ cho agent.
 EXPECTED_TOOLS = {
@@ -42,7 +45,18 @@ def gw_balances(reply):
 
 
 def test_tools_list_dung_ten_co_tien_to_target(gw):
-    assert set(gw("minh").tool_names()) == EXPECTED_TOOLS | {"forecast___get_forecast"}
+    names = set(gw("minh").tool_names())
+    phase3 = {
+        f"{target}___{t['name']}"
+        for target in ("forecast", "planner", "knowledge", "audit")
+        for t in json.loads(
+            (REPO / "contracts" / "tools" / f"{target}.json").read_text(encoding="utf-8")
+        )
+    }
+    if not phase3 <= names:  # Gateway còn bản phase 2 cho tới khi YofinaAgent được deploy (bước ghép)
+        assert names == EXPECTED_TOOLS | {"forecast___get_forecast"}
+        pytest.skip("Gateway chưa có tool phase 3: chờ deploy YofinaAgent")
+    assert names == EXPECTED_TOOLS | phase3
 
 
 def test_minh_doc_hu_qua_gateway_khop_rest(gw, api):
