@@ -87,6 +87,17 @@ Thay đổi trên tài nguyên có sẵn (phase 2, luồng C): `yofina-ledger` t
 
 **Đóng phase 2 (2026-11-22)**: không tạo tài nguyên mới. Deploy lại `YofinaTools` (chỉ đổi code 4 Lambda: `yofina-ledger`, `yofina-forecast-batch`, `yofina-on-transaction`, `yofina-forecast`) và một lần deploy Amplify. Tạo rồi xóa một user Cognito tạm trong `yofina-users` để thử onboarding (kèm mọi dòng DB của nó).
 
+**Phase 3, luồng A (2026-11-22)**: deploy lại `YofinaTools`. Tài nguyên mới (đều không tính tiền theo giờ, không có thẻ nào chạy khi nhàn rỗi):
+
+| Tài nguyên | Loại | Ghi chú |
+|---|---|---|
+| route `POST /affordability` | HTTP API `yofina-api`, JWT authorizer Cognito | Tích hợp Lambda `yofina-forecast` (khối `affordability_card`, không qua LLM) |
+| route `GET /traces/{trace_id}` | HTTP API `yofina-api` | Tích hợp Lambda `yofina-ledger` (bảng "Vì sao", chỉ của chính người dùng) |
+| route `POST /feedback` | HTTP API `yofina-api` | Tích hợp Lambda `yofina-ledger` (không qua token xác nhận, không đụng tiền) |
+| 3 quyền `lambda:InvokeFunction` cho API Gateway | Lambda permission | Một quyền mỗi route mới |
+
+Thay đổi trên tài nguyên có sẵn: code Lambda `yofina-ledger` (thêm `yofina_planner`, `yofina_knowledge`, `yofina_audit`, thư mục `rules/` YAML cho tool `planner`, `knowledge`, `audit`; chạy chung Lambda theo quyết định của người điều phối, không có Lambda riêng) và `yofina-forecast`, `yofina-forecast-batch`, `yofina-on-transaction` (cùng một zip, thêm `run_scenario`, `affordability_check`, engine kịch bản 5.000 đường). Biến môi trường mới: `YOFINA_FORECAST_SCENARIO_N_PATHS`, `YOFINA_FORECAST_SCENARIO_KEEP`, `YOFINA_AFFORDABILITY_TIGHT_P10_FLOOR_VND`, `YOFINA_AFFORDABILITY_SHORT_P50_FLOOR_VND`, `YOFINA_REFERENCE_CACHE_SECONDS` (Lambda forecast) và `YOFINA_SUITABILITY_WINDOW_DAYS` (Lambda ledger); mọi ngưỡng nằm trong cấu hình, không gắn cứng trong mã. Cổng của Gateway (bốn target `forecast`, `planner`, `knowledge`, `audit` và các policy Cedar) thuộc stack `YofinaAgent`, **chưa deploy** ở bước này. Không thêm Lambda, bảng, hàng đợi hay endpoint tính tiền theo giờ.
+
 ### Stack `YofinaAgent` (phase 1, bước ghép, luồng C và D)
 
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
