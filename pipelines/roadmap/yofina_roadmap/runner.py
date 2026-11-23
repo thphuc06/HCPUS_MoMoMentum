@@ -136,7 +136,10 @@ class RoadmapRunner:
             )
         if result.model_error is not None:
             log.warning(
-                "roadmap_model_error job=%s type=%s", job["id"], type(result.model_error).__name__
+                "roadmap_model_error job=%s type=%s error=%s",
+                job["id"],
+                type(result.model_error).__name__,
+                str(result.model_error)[:500],  # đường dẫn field lỗi, không chứa dữ liệu người dùng
             )
             raise YofinaError(ErrorCode.INTERNAL_ERROR, notices.GENERIC_ERROR_MESSAGE)
         if result.outcome is None:
