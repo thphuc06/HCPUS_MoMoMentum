@@ -24,6 +24,7 @@ TOOL_LABELS: dict[str, str] = {
     "get_obligations": "Nghĩa vụ sắp đến hạn",
     "get_forecast": "Dự báo hũ",
     "run_scenario": "Mô phỏng kịch bản",
+    "list_scenarios": "Các khoản đang cân nhắc trong cuộc trò chuyện",
     "affordability_check": "Kiểm tra trước khi chi",
     "get_fee_schedule": "Biểu phí",
     "check_suitability": "Kiểm tra luật phù hợp",
@@ -47,7 +48,13 @@ def describe_tool(outcome: ToolOutcome) -> tuple[str, str | None]:
     elif name == "get_forecast":
         value = (d.get("jar") or {}).get("name")
     elif name == "run_scenario":
-        value = (d.get("spec") or {}).get("label") or (d.get("spec") or {}).get("kind")
+        bundle = d.get("bundle") or []
+        if len(bundle) > 1:
+            value = " + ".join(str(b.get("label") or b.get("kind")) for b in bundle if isinstance(b, dict))
+        else:
+            value = (d.get("spec") or {}).get("label") or (d.get("spec") or {}).get("kind")
+    elif name == "list_scenarios":
+        value = f"{len(d.get('scenarios', []))} kịch bản"
     elif name == "get_fee_schedule":
         value = d.get("product_label")
     elif name == "affordability_check":

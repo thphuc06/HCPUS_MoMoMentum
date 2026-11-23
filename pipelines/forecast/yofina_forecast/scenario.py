@@ -12,6 +12,11 @@ Cách làm (spike-ml-forecasting §6 và §10, "common random numbers"):
 4. Dựng `timelines` (hũ bị tác động nhiều nhất trước, tối đa ba), `effects`, `obligation_impact` (kịch bản Trả sau) và `basis`;
    ghi một dòng `scenarios` (dữ liệu dẫn xuất) rồi trả kết quả theo `contracts/tools/forecast.results.schema.json`.
 
+Gộp kịch bản trong một cuộc chat: `with_scenarios` là các kịch bản người dùng VẪN GIỮ từ trước (mua một lần, khoản chi định kỳ,
+mua Trả sau; tối đa bốn, tối đa MỘT Trả sau cho cả bó). `apply_bundle` áp chúng nối tiếp rồi mới áp `scenario`; TRƯỚC vẫn là thực
+tế hiện tại, SAU là thực tế cộng mọi kịch bản của bó. Mỗi lần chạy lưu `conversation_id` và `bundle` (migration 0051) để tool
+`list_scenarios` cho agent biết cuộc chat này đã chạy những gì.
+
 Không có số ngẫu nhiên nào do LLM chọn; mọi số trong kết quả đi từ DB qua engine.
 """
 
@@ -33,6 +38,7 @@ from yofina_core.blocks import (
     ObligationImpactData,
     format_instant,
 )
+from yofina_core.clock import app_today
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd_short
 from yofina_core.scenario import parse_scenario, scenario_hash, scenario_to_wire
@@ -71,6 +77,22 @@ MAX_RESULT_CHARS = (
     55_000  # bảng `scenarios.result` giới hạn 60.000 ký tự (Data API ~64 KB mỗi dòng)
 )
 CYCLE_WORD = {"weekly": "mỗi tuần", "monthly": "mỗi tháng", "yearly": "mỗi năm"}
+
+#: `with_scenarios`: tối đa bốn kịch bản đã giữ từ trước, chỉ ba loại này; cả bó có tối đa MỘT `bnpl_purchase`
+MAX_PRIOR_SCENARIOS = 4
+BUNDLE_PRIOR_KINDS = ("one_time_purchase", "recurring_expense", "bnpl_purchase")
+KIND_VN = {
+    "one_time_purchase": "mua một lần",
+    "bnpl_purchase": "mua Trả sau",
+    "income_change": "đổi lương",
+    "recurring_expense": "khoản chi định kỳ",
+    "jar_transfer": "chuyển hũ",
+    "goal_delay": "lùi mục tiêu",
+}
+#: loại có `amount_vnd` mà tổng của bó (`bundle_total_vnd`) cộng vào: tiền thật sự bỏ ra một lần
+BUNDLE_TOTAL_KINDS = ("one_time_purchase", "bnpl_purchase")
+CONVERSATION_ID_MAX = 256
+LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX = 5, 10
 
 
 @dataclass(frozen=True)
@@ -131,6 +153,8 @@ class Applied:
     #: tổng các khoản nghĩa vụ ĐÃ có của hũ trả vào ngày đến hạn (cho `due_vnd` của `JarAtDue`)
     existing_due_on_pay_jar: int = 0
     added_obligation_vnd: int = 0
+    #: kết quả áp từng kịch bản của bó theo thứ tự (with_scenarios rồi scenario); rỗng khi không gộp (chỉ một kịch bản)
+    parts: tuple[Applied, ...] = ()
 
 
 def _short(n: int) -> str:
@@ -208,6 +232,17 @@ def _label(spec: Any, text: str) -> str:
     return clip(text, 80)
 
 
+def item_name(label: str | None) -> str | None:
+    """Tên món để ghép sau chữ "mua": bỏ chữ "mua"/"Mua" đứng đầu mà model hay để sẵn trong `label` ("Mua dép"),
+    tránh nhãn "mua Mua dép"."""
+    if not label:
+        return None
+    name = label.strip()
+    if name.lower() == "mua" or name.lower().startswith("mua "):
+        name = name[3:].strip()
+    return name or None
+
+
 def apply_scenario(
     spec: Any,
     inputs: ForecastInputs,
@@ -223,7 +258,7 @@ def apply_scenario(
     """Áp `spec` (đã qua `parse_scenario`) lên `inputs`. Hàm thuần: không I/O, không đồng hồ."""
     kind = spec.kind
     wire = scenario_to_wire(spec)
-    item = getattr(spec, "label", None)
+    item = item_name(getattr(spec, "label", None))
     first_forecast = inputs.jars[0].code if inputs.jars else None
 
     if kind == "one_time_purchase":
@@ -441,6 +476,99 @@ def apply_scenario(
     return Applied(inputs, [code], label, wire, kind)
 
 
+def apply_bundle(
+    specs: Sequence[Any],
+    inputs: ForecastInputs,
+    metas: Mapping[str, JarMeta],
+    *,
+    today: date,
+    horizon: int,
+    shares: Sequence[tuple[str, Any]],
+    salary_vnd: int,
+    obligations: Sequence[Mapping[str, Any]],
+    credit: CreditEnv | None,
+) -> Applied:
+    """Áp một bó kịch bản (phần tử cuối là kịch bản chính) lên `inputs`, nối tiếp. Hàm thuần.
+
+    Một kịch bản thì trả đúng `apply_scenario`. Nhiều kịch bản: đầu vào SAU cộng dồn mọi thay đổi; `targets` là hợp các hũ bị tác
+    động (hũ của kịch bản chính đứng đầu); sự kiện gộp theo hũ; chi phí và nghĩa vụ lấy từ khoản Trả sau duy nhất (nếu có), còn
+    `added_obligation_vnd` cộng dồn; nhãn gộp bằng " + ". Khoản Trả sau được áp SAU CÙNG (kết quả không phụ thuộc thứ tự áp, chỉ
+    `existing_due_on_pay_jar` cần thấy các khoản chi cùng ngày đến hạn của bó)."""
+    n = len(specs)
+    if n == 0:
+        raise YofinaError(ErrorCode.PARAMS_INVALID, "Thiếu kịch bản.")
+    common: dict[str, Any] = {
+        "today": today,
+        "horizon": horizon,
+        "shares": shares,
+        "salary_vnd": salary_vnd,
+        "obligations": obligations,
+        "credit": credit,
+    }
+    if n == 1:
+        return apply_scenario(specs[0], inputs, metas, **common)
+    results: list[Applied | None] = [None] * n
+    current = inputs
+    for i in sorted(range(n), key=lambda k: specs[k].kind == "bnpl_purchase"):
+        try:
+            applied = apply_scenario(specs[i], current, metas, **common)
+        except YofinaError as exc:
+            if i == n - 1:
+                raise
+            raise YofinaError(
+                exc.code,
+                f"Khoản đã giữ từ trước ({KIND_VN.get(specs[i].kind, specs[i].kind)}): {exc.message}",
+            ) from exc
+        results[i] = applied
+        current = applied.inputs
+    parts = tuple(a for a in results if a is not None)
+    main = parts[-1]
+    targets: list[str] = []
+    for a in (main, *parts[:-1]):
+        targets.extend(t for t in a.targets if t not in targets)
+    events: dict[str, list[dict[str, Any]]] = {}
+    for a in parts:
+        for code, evs in a.extra_events.items():
+            events.setdefault(code, []).extend(evs)
+    for evs in events.values():
+        evs.sort(key=lambda e: (e["date"], e["label"]))
+    credit_part = next((a for a in parts if a.cost is not None), None)
+    return Applied(
+        inputs=current,
+        targets=targets,
+        label=_label(None, " + ".join(a.label for a in parts)),
+        spec=main.spec,
+        kind=main.kind,
+        extra_events=events,
+        cost=credit_part.cost if credit_part else None,
+        pay_jar=credit_part.pay_jar if credit_part else None,
+        existing_due_on_pay_jar=credit_part.existing_due_on_pay_jar if credit_part else 0,
+        added_obligation_vnd=sum(a.added_obligation_vnd for a in parts),
+        parts=parts,
+    )
+
+
+def bundle_items(applied: Applied) -> list[dict[str, Any]]:
+    """Tóm tắt từng khoản của bó theo thứ tự áp (kể cả khi chỉ có một): `kind`, `label` riêng, `amount_vnd` và `jar_code` nếu có,
+    `spec` dạng wire đã chuẩn hóa."""
+    items: list[dict[str, Any]] = []
+    for part in applied.parts or (applied,):
+        item: dict[str, Any] = {"kind": part.kind, "label": part.label}
+        amount = part.spec.get("amount_vnd")
+        if isinstance(amount, int) and not isinstance(amount, bool):
+            item["amount_vnd"] = amount
+        if part.spec.get("jar_code"):
+            item["jar_code"] = part.spec["jar_code"]
+        item["spec"] = part.spec
+        items.append(item)
+    return items
+
+
+def bundle_total_vnd(items: Sequence[Mapping[str, Any]]) -> int:
+    """Tổng `amount_vnd` các khoản mua một lần và mua Trả sau của bó."""
+    return sum(int(i["amount_vnd"]) for i in items if i["kind"] in BUNDLE_TOTAL_KINDS)
+
+
 def _event(d: date, label: str, amount: int) -> dict[str, Any]:
     return {
         "date": d.isoformat(),
@@ -541,8 +669,19 @@ class ScenarioEngine:
         return self._rules or cached_rules()
 
     # ----------------------------------------------------------------------------------------------
-    def run(self, user_id: str, scenario: Any, *, trace_id: str) -> dict[str, Any]:
+    def run(
+        self,
+        user_id: str,
+        scenario: Any,
+        *,
+        trace_id: str,
+        conversation_id: Any = None,
+        with_scenarios: Any = None,
+    ) -> dict[str, Any]:
         spec = self._parse(scenario)
+        conversation = self._conversation_id(conversation_id)
+        prior = self._parse_prior(with_scenarios, spec)
+        bundle_specs = [*prior, spec]
         s = self.settings
         now = self.pipeline.now()
         ctx = self.pipeline.load_context(user_id, now)
@@ -552,10 +691,14 @@ class ScenarioEngine:
         metas = {r["code"]: JarMeta.from_row(r) for r in view.jars}
         profile = ctx.meta.get("profile") or {}
         user_jars = [j for j in ctx.jars if j["kind"] != "system"]
-        credit = self._credit_env(user_id, today) if spec.kind == "bnpl_purchase" else None
+        credit = (
+            self._credit_env(user_id, today)
+            if any(sp.kind == "bnpl_purchase" for sp in bundle_specs)
+            else None
+        )
 
-        applied = apply_scenario(
-            spec,
+        applied = apply_bundle(
+            bundle_specs,
             built.inputs,
             metas,
             today=today,
@@ -615,6 +758,8 @@ class ScenarioEngine:
             seed=before.run.seed,
             result=result_for_db,
             keep=s.scenario_keep,
+            conversation_id=conversation,
+            bundle=[part.spec for part in applied.parts or (applied,)],
         )
         return {
             "status": "OK",
@@ -624,10 +769,61 @@ class ScenarioEngine:
         }
 
     # ----------------------------------------------------------------------------------------------
+    def list_scenarios(
+        self, user_id: str, *, conversation_id: Any, limit: Any = None
+    ) -> dict[str, Any]:
+        """`forecast___list_scenarios`: các kịch bản đã chạy trong MỘT cuộc chat của chính người dùng, mới nhất trước (đọc, không ghi).
+        Dòng cũ không có `bundle` thì `bundle` là [spec chính]."""
+        cid = self._conversation_id(conversation_id, required=True)
+        if limit is None:
+            n = LIST_LIMIT_DEFAULT
+        elif isinstance(limit, int) and not isinstance(limit, bool):
+            n = min(max(limit, 1), LIST_LIMIT_MAX)
+        else:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "limit phải là số nguyên từ 1 đến 10.")
+        now = self.pipeline.now()
+        view = self.repo.jar_view(user_id)
+        if view.clock_offset_days is None:
+            raise YofinaError(ErrorCode.PROFILE_INCOMPLETE, "Người dùng chưa có hồ sơ.")
+        today = app_today(view.clock_offset_days, now, self.settings.tz)
+        rows = forecast_repo.list_conversation_scenarios(self.pipeline.repo, user_id, cid, n)
+        return {
+            "status": "OK",
+            "as_of": format_instant(now),
+            "app_date": today.isoformat(),
+            "data": {"scenarios": [self._scenario_item(r) for r in rows[:n]]},
+        }
+
     @staticmethod
-    def _parse(scenario: Any) -> Any:
+    def _scenario_item(row: Mapping[str, Any]) -> dict[str, Any]:
+        spec = dict(row["spec"])
+        label = row.get("result_label") or KIND_VN.get(row["kind"], row["kind"])
+        summary = row.get("result_bundle")
+        if isinstance(summary, list) and summary:
+            bundle = list(summary)
+        else:  # dòng cũ (trước migration 0051) hoặc kết quả không có tóm tắt: bó chỉ có spec chính
+            single: dict[str, Any] = {"kind": row["kind"], "label": label}
+            amount = spec.get("amount_vnd")
+            if isinstance(amount, int) and not isinstance(amount, bool):
+                single["amount_vnd"] = amount
+            if spec.get("jar_code"):
+                single["jar_code"] = spec["jar_code"]
+            single["spec"] = spec
+            bundle = [single]
+        return {
+            "scenario_id": str(row["id"]),
+            "created_at": format_instant(row["created_at"]),
+            "kind": row["kind"],
+            "label": label,
+            "spec": spec,
+            "bundle": bundle,
+        }
+
+    # ----------------------------------------------------------------------------------------------
+    @staticmethod
+    def _parse(scenario: Any, what: str = "scenario") -> Any:
         if not isinstance(scenario, Mapping):
-            raise YofinaError(ErrorCode.PARAMS_INVALID, "scenario phải là một đối tượng.")
+            raise YofinaError(ErrorCode.PARAMS_INVALID, f"{what} phải là một đối tượng.")
         clean = {k: v for k, v in scenario.items() if v is not None and v != ""}
         try:
             return parse_scenario(clean)
@@ -638,7 +834,9 @@ class ScenarioEngine:
             if first.get("type") in ("union_tag_invalid", "union_tag_not_found") or "kind" in where:
                 raise YofinaError(
                     ErrorCode.PARAMS_INVALID,
-                    "kind phải là một trong sáu loại kịch bản đã nêu trong mô tả tool.",
+                    "kind phải là một trong sáu loại kịch bản đã nêu trong mô tả tool."
+                    if what == "scenario"
+                    else f"kind của {what} phải là một trong sáu loại kịch bản đã nêu trong mô tả tool.",
                 ) from None
             if first.get("type") == "value_error":
                 raise YofinaError(
@@ -646,8 +844,51 @@ class ScenarioEngine:
                 ) from None
             raise YofinaError(
                 ErrorCode.PARAMS_INVALID,
-                f"scenario không hợp lệ ({where or 'scenario'}): thiếu hoặc sai trường theo loại.",
+                f"{what} không hợp lệ ({where or what}): thiếu hoặc sai trường theo loại.",
             ) from None
+
+    @staticmethod
+    def _conversation_id(value: Any, *, required: bool = False) -> str | None:
+        """`conversation_id` (session id của cuộc chat): chuỗi 1 tới 256 ký tự. Vắng hoặc rỗng thì None (trừ khi `required`)."""
+        if value is None or value == "":
+            if required:
+                raise YofinaError(ErrorCode.PARAMS_INVALID, "Thiếu conversation_id.")
+            return None
+        if not isinstance(value, str) or len(value) > CONVERSATION_ID_MAX:
+            raise YofinaError(
+                ErrorCode.PARAMS_INVALID,
+                f"conversation_id phải là chuỗi tối đa {CONVERSATION_ID_MAX} ký tự.",
+            )
+        return value
+
+    def _parse_prior(self, with_scenarios: Any, main: Any) -> list[Any]:
+        """Kiểm và parse `with_scenarios` (các kịch bản đã giữ từ trước). Luật của bó: tối đa bốn khoản trước đó, chỉ mua một lần,
+        khoản chi định kỳ và mua Trả sau, tối đa MỘT khoản Trả sau cho cả bó (tính cả kịch bản chính)."""
+        if with_scenarios is None:
+            return []
+        if not isinstance(with_scenarios, Sequence) or isinstance(
+            with_scenarios, str | bytes | Mapping
+        ):
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "with_scenarios phải là một danh sách.")
+        if len(with_scenarios) > MAX_PRIOR_SCENARIOS:
+            raise YofinaError(
+                ErrorCode.SCENARIO_INVALID,
+                f"Chỉ gộp được tối đa {MAX_PRIOR_SCENARIOS} kịch bản đã giữ từ trước vào một mô phỏng.",
+            )
+        prior = [self._parse(item, f"with_scenarios[{i}]") for i, item in enumerate(with_scenarios)]
+        for item in prior:
+            if item.kind not in BUNDLE_PRIOR_KINDS:
+                raise YofinaError(
+                    ErrorCode.SCENARIO_INVALID,
+                    f"Chưa gộp được kịch bản {KIND_VN[item.kind]} vào mô phỏng chung; chỉ gộp được "
+                    "mua một lần, khoản chi định kỳ và mua Trả sau.",
+                )
+        if sum(1 for sp in (*prior, main) if sp.kind == "bnpl_purchase") > 1:
+            raise YofinaError(
+                ErrorCode.SCENARIO_INVALID,
+                "Chưa gộp được hai khoản Trả sau trong một mô phỏng.",
+            )
+        return prior
 
     def _credit_env(self, user_id: str, today: date) -> CreditEnv:
         line = self.repo.credit_line(user_id)
@@ -810,6 +1051,10 @@ class ScenarioEngine:
             "timelines": timelines,
             "basis": ForecastBasis.model_validate(basis).model_dump(mode="json", exclude_none=True),
         }
+        items = bundle_items(applied)
+        data["bundle"] = items
+        if len(items) >= 2:
+            data["bundle_total_vnd"] = bundle_total_vnd(items)
         if applied.cost is not None and applied.pay_jar is not None:
             data["obligation_impact"] = self._obligation_impact(
                 applied, after, metas, basis, now, today, facts_inputs, ctx_profile
@@ -890,4 +1135,13 @@ class ScenarioEngine:
         return out
 
 
-__all__ = ["Applied", "CreditEnv", "JarMeta", "ScenarioEngine", "apply_scenario"]
+__all__ = [
+    "Applied",
+    "CreditEnv",
+    "JarMeta",
+    "ScenarioEngine",
+    "apply_bundle",
+    "apply_scenario",
+    "bundle_items",
+    "bundle_total_vnd",
+]

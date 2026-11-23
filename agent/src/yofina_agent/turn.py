@@ -80,6 +80,7 @@ from yofina_core import blocks as B
 from yofina_core.clock import app_timezone
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
+from yofina_core.money import format_vnd
 from yofina_core.pii import mask_pii
 from yofina_core.suitability import SuitabilityVerdict
 
@@ -668,6 +669,8 @@ class Turn:
         if routed is None:
             return
         self.intent = routed.intent
+        if await self.answer_keep_previous(routed, question, index):
+            return
         handler = {
             "lookup": self.on_lookup,
             "what_if": self.on_what_if,
@@ -681,6 +684,47 @@ class Turn:
             await self.emit_clarify(req, routed)
             return
         await handler(routed, question)
+
+    async def answer_keep_previous(self, routed: IntentResult, question: str, index: int) -> bool:
+        """Người dùng trả lời câu "vẫn giữ khoản trước chứ" (lượt trước agent hỏi để gộp kịch bản). True nếu đã xử lý lượt.
+
+        Router chỉ quyết định GIỮ hay BỎ (đo trên model thật: đúng ổn định); khoản MỚI lấy lại bằng cách chạy what-if trên chính câu hỏi
+        "nếu ... thì sao" trước đó của người dùng (câu đứng riêng thì Orchestrator dựng đúng), không nhờ model ghép hai câu có hai số tiền.
+        Bấm chip thì giữ/bỏ theo đúng chuỗi chip. Guardrail chặn (ra out_of_scope) thì không đi đường này.
+        """
+        pending = ev.pending_question_before(self.run_input, before_index=index, marker=notices.KEEP_PREVIOUS_MARKER)
+        if pending is None or routed.intent == "out_of_scope":
+            return False
+        chips = [c["value"] for c in notices.KEEP_PREVIOUS_CHIPS]
+        if question.strip() == chips[0]:
+            keep: bool | None = True
+        elif question.strip() == chips[1]:
+            keep = False
+        else:
+            keep = routed.params.keep_previous if routed.intent == "what_if" else None
+        if keep is None:
+            return False
+        pending_q = mask_pii(ev.message_text(self.run_input.messages[pending])).text
+        pending_history = mask_pii(
+            ev.format_history(
+                self.run_input,
+                before_index=pending,
+                max_messages=self.s.history_messages,
+                max_chars=self.s.history_chars_per_message,
+            )
+        ).text
+        self.intent = "what_if"
+        r = IntentResult(
+            intent="what_if",
+            params=IntentParams(keep_previous=keep),
+            confidence=routed.confidence,
+            needs_clarification=False,
+        )
+        self.whatif = await run_what_if(self, r, pending_q, pending_history)
+        if self.whatif.spec is None and not self.whatif.handled:
+            t, m = notices.SCENARIO_UNBUILDABLE
+            self.emit_notice(kind="error", code=ErrorCode.SCENARIO_INVALID.value, title=t, message=m)
+        return True
 
     async def classify_guarded(self, question: str, history: str) -> IntentResult | None:
         """Router song song với Guardrail đầu vào. Guardrail chặn thì coi là ngoài phạm vi (kết quả của router bị bỏ)."""
@@ -966,7 +1010,15 @@ class Turn:
 
     # --- ngoài phạm vi và xã giao -----------------------------------------------------------
     async def on_out_of_scope(self, r: IntentResult, question: str) -> None:
-        """`notice` (giới hạn) + `suggestions` (việc làm được). Không có câu do model viết: lời từ chối là chuỗi sản phẩm, không thể lọt mã chứng khoán."""
+        """`notice` (giới hạn) + `suggestions` (việc làm được). Không có câu do model viết: lời từ chối là chuỗi sản phẩm, không thể lọt mã chứng khoán.
+
+        Ngoại lệ: router xếp ngoài phạm vi nhưng vẫn trích được dấu hiệu chi tiêu của chính người dùng (số tiền, món, loại mua) và Guardrail
+        KHÔNG chặn: có thể router hiểu nhầm (lỗi thật 23/11: "đi du lịch 5 triệu" sau chuỗi câu khác). Khi đó hỏi xác nhận một câu kèm chip
+        thay vì từ chối cứng; câu ngoài phạm vi thật (cổ phiếu, vay, dữ liệu người khác) router không trích tham số chi tiêu nên vẫn bị từ chối.
+        """
+        if self.guardrail_reason is None and (req := spending_confirm_request(r)) is not None:
+            await self.emit_clarify(req, r)
+            return
         title, message = notices.OUT_OF_SCOPE
         self.emit_notice(kind="out_of_scope", code=None, title=title, message=message)
         self.emit_block(
@@ -1091,6 +1143,33 @@ def _kind_question() -> ClarifyRequest:
         slot="other",
         question=c["question"],
         chips=[ClarifyChipIn(label=x["label"], value=x["value"]) for x in c["chips"]],
+    )
+
+
+def spending_confirm_request(r: IntentResult) -> ClarifyRequest | None:
+    """Câu hỏi xác nhận khi router xếp ngoài phạm vi mà vẫn trích được dấu hiệu chi tiêu (None nếu không có dấu hiệu đó).
+
+    Dấu hiệu: số tiền, tên món hoặc loại kịch bản mua hàng. Câu ngoài phạm vi thật (cổ phiếu, vay, thời tiết...) router trả `params` rỗng
+    (đo trên Nova 2 Lite 23/11), nên không vào đây. Nhãn dựng bằng mã từ tham số, không do model viết.
+    """
+    from yofina_agent.schemas import ClarifyChipIn
+
+    p = r.params
+    if r.intent != "out_of_scope":
+        return None
+    spending = p.amount_vnd is not None or (p.label or "").strip() or p.scenario_kind in (
+        "one_time_purchase", "bnpl_purchase", "recurring_expense",
+    )  # fmt: skip
+    if not spending:
+        return None
+    what = " ".join(x for x in ((p.label or "").strip()[:40], format_vnd(p.amount_vnd) if p.amount_vnd else "") if x)
+    question = (
+        notices.CONFIRM_SPENDING_QUESTION.format(what=what) if what else notices.CONFIRM_SPENDING_QUESTION_NO_NAME
+    )
+    return ClarifyRequest(
+        slot="other",
+        question=question[:200],
+        chips=[ClarifyChipIn(label=c["label"], value=c["value"]) for c in notices.CONFIRM_SPENDING_CHIPS],
     )
 
 

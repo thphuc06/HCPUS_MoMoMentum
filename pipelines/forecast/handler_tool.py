@@ -1,5 +1,5 @@
 """Điểm vào của Lambda `yofina-forecast`: target `forecast` của AgentCore Gateway (tool `forecast___get_forecast`, `forecast___run_scenario`,
-`forecast___affordability_check`) và đường REST `POST /affordability` của HTTP API."""
+`forecast___list_scenarios`, `forecast___affordability_check`) và đường REST `POST /affordability` của HTTP API."""
 
 from __future__ import annotations
 

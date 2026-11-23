@@ -81,6 +81,23 @@ describe('ChatSession: luồng bình thường', () => {
     expect(session.getHistory().map((m) => m.role)).toEqual(['user', 'assistant'])
   })
 
+  it('lượt chỉ có khối: lịch sử gửi agent có tóm tắt khối (fallback_text), giao diện không thêm bong bóng chữ', async () => {
+    const jarBlock = validBlock('jar_summary.seven_jars')
+    const fb = String(jarBlock.fallback_text)
+    expect(fb.length).toBeGreaterThan(0)
+    const { session, calls } = makeSession([
+      () => sseResponse([runStarted(), blockSnapshot(String(jarBlock.id), jarBlock), runFinished()]),
+      () => sseResponse([runStarted(), ...textMessage('m1', 'ok'), runFinished()]),
+    ])
+    await session.send('số dư')
+    expect(kinds(session.getSnapshot().items)).toEqual(['user', 'block'])
+    expect(session.getHistory().map((m) => m.role)).toEqual(['user', 'assistant'])
+    expect(session.getHistory()[1]!.content).toBe(fb)
+    await session.send('còn hũ ăn uống?')
+    const body2 = JSON.parse(String(calls[1]!.init.body))
+    expect(body2.messages[1]).toMatchObject({ role: 'assistant', content: fb })
+  })
+
   it('lượt hai gửi lại toàn bộ messages, kèm ghi chú hệ thống nhưng không hiện cho người dùng', async () => {
     const { session, calls } = makeSession([
       () => sseResponse([runStarted(), ...textMessage('m1', 'Chào bạn'), runFinished()]),
@@ -299,6 +316,19 @@ describe('ChatSession: khối và phát lại', () => {
     const items = session.getSnapshot().items
     expect(kinds(items)).toEqual(['user', 'block', 'assistant'])
     expect(session.getHistory().map((m) => m.role)).toEqual(['user', 'assistant'])
+    const jar = validBlock('jar_summary.seven_jars')
+    expect(session.getHistory()[1]!.content).toBe(`${String(jar.fallback_text)}\nđây`)
+  })
+
+  it('hydrate lượt chỉ có khối: lịch sử có tóm tắt khối, giao diện không có bong bóng chữ rỗng', () => {
+    const { session } = makeSession([])
+    const jar = validBlock('jar_summary.seven_jars')
+    session.hydrate([{ trace_id: 'b'.repeat(32), created_at: '2026-11-21T01:00:00Z', user_text: 'số dư', assistant_text: '', blocks: [jar] }])
+    expect(kinds(session.getSnapshot().items)).toEqual(['user', 'block'])
+    expect(session.getHistory()).toEqual([
+      { id: `u-${'b'.repeat(32)}`, role: 'user', content: 'số dư' },
+      { id: `a-${'b'.repeat(32)}`, role: 'assistant', content: String(jar.fallback_text) },
+    ])
   })
 
   it('replaceBlock đánh dấu khối là kết quả của đề nghị đã thực hiện (resolved)', async () => {

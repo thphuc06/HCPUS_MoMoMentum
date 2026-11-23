@@ -67,6 +67,10 @@ class FakeTools:
             "get_obligations": lambda args: classify_result("x", mcp_ok(fixture("get_obligations.ok.json"))),
             "get_fee_schedule": lambda args: classify_result("x", mcp_ok(fixture("get_fee_schedule.ok.json"))),
             "run_scenario": lambda args: classify_result("x", mcp_ok(fixture("run_scenario.ok_bnpl.json"))),
+            # cuộc trò chuyện chưa có kịch bản nào (test gộp tự đặt kết quả riêng)
+            "list_scenarios": lambda args: classify_result(
+                "x", mcp_ok({"status": "OK", "as_of": "2026-11-21T02:00:00Z", "app_date": "2026-11-21", "data": {"scenarios": []}})
+            ),
             "check_suitability": lambda args: classify_result("x", mcp_ok(fixture("check_suitability.ok.json"))),
             "affordability_check": lambda args: classify_result("x", mcp_ok(fixture("affordability_check.ok.json"))),
             "update_profile": lambda args: classify_result("x", mcp_ok(fixture("update_profile.needs_confirmation.json"))),
@@ -121,7 +125,7 @@ _LEGACY_INTENT = {
 }
 _PARAM_KEYS = (
     "jar_text", "from_jar_text", "to_jar_text", "amount_vnd", "days_back", "limit", "funding", "scenario_kind",
-    "label", "date_text", "salary_vnd", "payday_day", "obligation_name", "obligation_kind", "due_day",
+    "label", "date_text", "salary_vnd", "payday_day", "obligation_name", "obligation_kind", "due_day", "keep_previous",
 )  # fmt: skip
 
 

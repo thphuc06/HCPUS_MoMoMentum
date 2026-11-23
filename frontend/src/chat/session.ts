@@ -50,10 +50,33 @@ export type ChatDeps = {
 }
 
 type AgentEvent = { type: string } & Record<string, unknown>
-type TurnState = { n: number; started: boolean; finished: boolean; errored: boolean; produced: boolean }
+type TurnState = {
+  n: number
+  started: boolean
+  finished: boolean
+  errored: boolean
+  produced: boolean
+  /** `fallback_text` của các khối đã phát trong lượt, theo id khối (cùng id thì khối sau thay khối trước). */
+  blockTexts: Map<string, string>
+}
 
 function str(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined
+}
+
+/** `fallback_text` của một khối thô (mọi khối đều có, do engine dựng, không phải chữ của model). */
+function blockFallback(raw: unknown): string | undefined {
+  const t = str((raw as { fallback_text?: unknown } | null)?.fallback_text)
+  return t?.trim() ? t.trim() : undefined
+}
+
+/**
+ * Nội dung lượt của trợ lý trong lịch sử gửi agent: tóm tắt các khối (dòng thời gian, thẻ kiểm tra, câu hỏi lại...) rồi tới
+ * phần chữ. Nhiều lượt chỉ có khối, không có chữ: thiếu phần này thì agent không biết lượt trước nó đã trả lời gì
+ * (ví dụ đã mô phỏng khoản nào, vừa hỏi lại câu gì). Chỉ vào lịch sử, không đổi những gì người dùng thấy.
+ */
+export function assistantHistoryText(blockTexts: readonly string[], text: string): string {
+  return [...blockTexts, text.trim()].filter(Boolean).join('\n')
 }
 
 type SettledBlock = { id: string; raw: unknown; ui?: BlockUi; resolved?: boolean; note?: { key: string; text: string } }
@@ -199,17 +222,20 @@ export class ChatSession {
       }
       const byId = new Map((t.resolutions ?? []).map((r) => [r.block_id, r]))
       const notes: Array<{ key: string; text: string }> = []
+      const blockTexts = new Map<string, string>()
       for (const raw of t.blocks) {
         const rawId = (raw as { id?: unknown } | null)?.id
         const s = settleBlock(raw, typeof rawId === 'string' ? byId.get(rawId) : undefined)
         items.push({ kind: 'block', id: s.id, raw: s.raw, ui: s.ui, resolved: s.resolved })
         if (s.note) notes.push(s.note)
+        const fb = blockFallback(raw)
+        if (fb) blockTexts.set(typeof rawId === 'string' ? rawId : s.id, fb)
       }
       if (t.assistant_text) {
-        const id = `a-${t.trace_id}`
-        items.push({ kind: 'assistant', id, text: t.assistant_text, done: true })
-        history.push({ id, role: 'assistant', content: t.assistant_text })
+        items.push({ kind: 'assistant', id: `a-${t.trace_id}`, text: t.assistant_text, done: true })
       }
+      const content = assistantHistoryText([...blockTexts.values()], t.assistant_text)
+      if (content) history.push({ id: `a-${t.trace_id}`, role: 'assistant', content })
       // Việc đã thực hiện xảy ra sau lượt này (lúc người dùng bấm): báo agent như lúc bấm.
       for (const n of notes) history.push({ id: `sys-${n.key}`, role: 'system', content: n.text })
     }
@@ -327,7 +353,14 @@ export class ChatSession {
     })
     this.agent = agent
 
-    const turn: TurnState = { n: ++this.turnSeq, started: false, finished: false, errored: false, produced: false }
+    const turn: TurnState = {
+      n: ++this.turnSeq,
+      started: false,
+      finished: false,
+      errored: false,
+      produced: false,
+      blockTexts: new Map(),
+    }
     const texts = new Map<string, string>()
     const subscriber: AgentSubscriber = {
       onEvent: ({ event }) => {
@@ -367,7 +400,10 @@ export class ChatSession {
       } else if (!turn.produced) {
         this.notice({ title: CHAT_MESSAGES.noAnswerTitle, message: CHAT_MESSAGES.noAnswerMessage, retry: true })
       } else {
-        const answer = [...texts.values()].filter((t) => t.trim()).join('\n\n')
+        const answer = assistantHistoryText(
+          [...turn.blockTexts.values()],
+          [...texts.values()].filter((t) => t.trim()).join('\n\n'),
+        )
         if (answer) this.history = [...this.history, { id: `a-${newUuid()}`, role: 'assistant', content: answer }]
       }
     }
@@ -447,6 +483,8 @@ export class ChatSession {
         const id = str(e.messageId)
         if (!id) break
         turn.produced = true
+        const fb = blockFallback(e.content)
+        if (fb) turn.blockTexts.set(id, fb)
         const i = this.items.findIndex((p) => p.kind === 'block' && p.id === id)
         if (i === -1) this.setItems([...this.items, { kind: 'block', id, raw: e.content }])
         else {

@@ -146,6 +146,22 @@ _ROLE_LABEL = {
 }
 
 
+def pending_question_before(run_input: RunAgentInput, *, before_index: int, marker: str) -> int | None:
+    """Chỉ số câu hỏi của người dùng mà agent đang chờ trả lời giữ/bỏ khoản trước, hoặc None.
+
+    Tin trợ lý gần nhất trước `before_index` (bỏ qua dòng hệ thống) phải chứa `marker` (chuỗi sản phẩm cố định của câu hỏi giữ/bỏ);
+    câu hỏi cần lấy lại là tin người dùng gần nhất trước tin trợ lý đó.
+    """
+    msgs = run_input.messages
+    a = next(
+        (i for i in range(before_index - 1, -1, -1) if msgs[i].role not in ("system", "developer")),
+        None,
+    )
+    if a is None or msgs[a].role != "assistant" or marker not in message_text(msgs[a]):
+        return None
+    return next((i for i in range(a - 1, -1, -1) if msgs[i].role == "user" and message_text(msgs[i])), None)
+
+
 def format_history(
     run_input: RunAgentInput, *, before_index: int, max_messages: int, max_chars: int
 ) -> str:

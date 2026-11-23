@@ -21,7 +21,7 @@
   },
   {
     "name": "run_scenario",
-    "description": "Chạy một kịch bản 'nếu thì' lên dự báo đã tính: so SAU với TRƯỚC trên cùng dãy số ngẫu nhiên (5.000 đường Monte Carlo). Trả chênh lệch ngày cạn, xác suất hụt (chỉ khi đủ tin cậy), số dư thấp nhất, hũ nào đổi trạng thái đủ/sát/hụt, với kịch bản Trả sau còn có tác động nghĩa vụ (chi phí của món này, tổng phải trả ngày đến hạn, hũ hụt khi đến hạn) và độ tin cậy. Chỉ ĐỌC và tính: KHÔNG đổi số dư, KHÔNG cần xác nhận (kết quả được lưu như dữ liệu dẫn xuất để giải thích). `scenario` phải đủ trường theo loại; thiếu số tiền hoặc cách trả thì KHÔNG gọi tool, hãy hỏi lại người dùng. Mọi con số trong câu trả lời phải lấy từ kết quả tool, không tự tính.",
+    "description": "Chạy một kịch bản 'nếu thì' lên dự báo đã tính: so SAU với TRƯỚC trên cùng dãy số ngẫu nhiên (5.000 đường Monte Carlo). Trả chênh lệch ngày cạn, xác suất hụt (chỉ khi đủ tin cậy), số dư thấp nhất, hũ nào đổi trạng thái đủ/sát/hụt, với kịch bản Trả sau còn có tác động nghĩa vụ (chi phí của món này, tổng phải trả ngày đến hạn, hũ hụt khi đến hạn) và độ tin cậy. Chỉ ĐỌC và tính: KHÔNG đổi số dư, KHÔNG cần xác nhận (kết quả được lưu như dữ liệu dẫn xuất để giải thích). `scenario` phải đủ trường theo loại; thiếu số tiền hoặc cách trả thì KHÔNG gọi tool, hãy hỏi lại người dùng. Mọi con số trong câu trả lời phải lấy từ kết quả tool, không tự tính. GỘP KỊCH BẢN TRONG MỘT CUỘC CHAT: nếu người dùng vừa hỏi một kịch bản mua sắm khác trong cuộc chat này (xem list_scenarios) và nói họ VẪN GIỮ ý định đó, chạy MỘT mô phỏng gộp: đưa kịch bản mới vào `scenario` và các kịch bản vẫn giữ vào `with_scenarios` (tối đa 4, chỉ one_time_purchase, recurring_expense, bnpl_purchase; cả bó tối đa MỘT bnpl_purchase). TRƯỚC là thực tế hiện tại, SAU là thực tế cộng mọi kịch bản của bó; kết quả có `bundle` (từng khoản và nhãn riêng) và `bundle_total_vnd` (tổng tiền mua khi gộp từ hai khoản). Luôn truyền `conversation_id` (id cuộc chat hiện tại) để list_scenarios nhìn thấy kịch bản này sau đó. Người dùng không giữ ý định cũ thì KHÔNG truyền with_scenarios (mô phỏng riêng khoản mới).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -85,10 +85,99 @@
           "required": [
             "kind"
           ]
+        },
+        "conversation_id": {
+          "type": "string",
+          "description": "Id của cuộc chat hiện tại (session id), tối đa 256 ký tự. Truyền để lưu kịch bản này vào cuộc chat, nhờ đó list_scenarios trả lại được. Vắng thì kịch bản vẫn chạy nhưng không gắn với cuộc chat nào."
+        },
+        "with_scenarios": {
+          "type": "array",
+          "description": "Các kịch bản người dùng VẪN GIỮ từ trước trong cuộc chat, áp TRƯỚC `scenario` theo thứ tự để chạy một mô phỏng gộp. Tối đa 4 phần tử; chỉ kind one_time_purchase, recurring_expense, bnpl_purchase; cả bó (kể cả `scenario`) tối đa MỘT bnpl_purchase. Chỉ điền khi người dùng đã xác nhận còn giữ ý định cũ; không bịa kịch bản người dùng chưa nói.",
+          "items": {
+            "type": "object",
+            "description": "MỘT kịch bản người dùng vẫn giữ từ trước, cùng dạng với `scenario` (lấy từ `spec` hoặc phần tử của `bundle` mà list_scenarios hoặc run_scenario đã trả, giữ nguyên số liệu). Chỉ kind one_time_purchase, recurring_expense hoặc bnpl_purchase.",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "Loại kịch bản, đúng một trong: one_time_purchase (mua một lần bằng tiền hũ), bnpl_purchase (mua bằng Trả sau (mô phỏng)), income_change (đổi lương), recurring_expense (thêm khoản chi định kỳ), jar_transfer (chuyển tiền giữa hai hũ), goal_delay (lùi mục tiêu của hũ tiết kiệm)."
+              },
+              "amount_vnd": {
+                "type": "integer",
+                "description": "Số tiền VND, số nguyên dương, KHÔNG có dấu chấm phẩy. Bắt buộc với one_time_purchase, bnpl_purchase, recurring_expense, jar_transfer. Không bịa: thiếu thì hỏi lại người dùng."
+              },
+              "new_monthly_salary_vnd": {
+                "type": "integer",
+                "description": "Lương tháng mới (không phải mức chênh), số nguyên dương. Bắt buộc với income_change."
+              },
+              "funding_source": {
+                "type": "string",
+                "description": "Nguồn trả: jar (tiền hũ) hoặc credit (Trả sau (mô phỏng)). one_time_purchase luôn là jar; bnpl_purchase luôn là credit."
+              },
+              "jar_code": {
+                "type": "string",
+                "description": "Mã hũ (lấy từ ledger___get_jar_balances). Bắt buộc với one_time_purchase (hũ trả), recurring_expense (hũ trả) và goal_delay (hũ có mục tiêu); tùy chọn với bnpl_purchase (hũ để tính chi tiêu)."
+              },
+              "from_jar": {
+                "type": "string",
+                "description": "Hũ nguồn của jar_transfer (mã hũ)."
+              },
+              "to_jar": {
+                "type": "string",
+                "description": "Hũ đích của jar_transfer (mã hũ), khác from_jar."
+              },
+              "date": {
+                "type": "string",
+                "description": "Ngày YYYY-MM-DD. Ngày mua, ngày chuyển, ngày lương mới có hiệu lực; với recurring_expense là ngày của lần đầu và BẮT BUỘC. Vắng thì hôm nay mô phỏng."
+              },
+              "end_date": {
+                "type": "string",
+                "description": "Ngày YYYY-MM-DD cuối còn tính của recurring_expense, không trước date. Vắng thì không kết thúc."
+              },
+              "cycle": {
+                "type": "string",
+                "description": "Chu kỳ của recurring_expense: weekly, monthly hoặc yearly. Bắt buộc với recurring_expense."
+              },
+              "delay_months": {
+                "type": "integer",
+                "description": "Số tháng lùi hạn của goal_delay, từ 1 đến 60. Bắt buộc với goal_delay."
+              },
+              "label": {
+                "type": "string",
+                "description": "Tên ngắn của món theo lời người dùng, tối đa 80 ký tự (ví dụ 'tai nghe'). Chỉ để hiển thị."
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
         }
       },
       "required": [
         "scenario"
+      ]
+    }
+  },
+  {
+    "name": "list_scenarios",
+    "description": "Liệt kê các kịch bản 'nếu thì' đã chạy trong CUỘC CHAT hiện tại (mới nhất trước, tối đa 10): loại, nhãn, spec và `bundle` (các khoản đã gộp, mỗi khoản có nhãn, số tiền, hũ). Dùng khi người dùng hỏi thêm một kịch bản mua sắm khác để biết họ đã hỏi gì trước đó, rồi HỎI LẠI 'bạn vẫn giữ ý định mua X chứ?'; nếu giữ thì gọi run_scenario với with_scenarios là các spec đó. Chỉ đọc: không ghi gì, không cần xác nhận. Chỉ thấy kịch bản của chính người dùng.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "conversation_id": {
+          "type": "string",
+          "description": "Id của cuộc chat hiện tại (session id), tối đa 256 ký tự. Bắt buộc."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Số kịch bản tối đa cần lấy, từ 1 đến 10. Vắng thì 5."
+        }
+      },
+      "required": [
+        "conversation_id"
       ]
     }
   },

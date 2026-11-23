@@ -45,6 +45,9 @@ tự nó không thành yêu cầu (ví dụ chỉ có "1 triệu", "trả sau", 
 cộng phần mới. Nếu <cau_moi> tự đủ nghĩa (có việc cần làm hoặc món, chuyến, khoản tiền riêng) thì đó là yêu cầu MỚI: \
 phân loại chỉ dựa trên <cau_moi>, KHÔNG lấy số tiền, cách trả (funding), hũ hay món từ các câu trước, \
 và các câu trước dù về chủ đề gì cũng không làm câu mới thành out_of_scope.
+- keep_previous: nếu dòng "Yofina:" gần nhất trong <lich_su> hỏi người dùng có còn giữ ý định một khoản trước đó để tính gộp không, \
+và <cau_moi> trả lời câu đó: đồng ý (giữ, vẫn mua, gộp, có) thì keep_previous=true, từ chối (bỏ, không mua nữa, chỉ tính khoản mới) thì false, \
+intent là what_if (hệ thống tự lấy lại khoản mới từ câu hỏi trước, các tham số khác có thể để null). Mọi trường hợp khác để keep_previous null.
 - Việc "Ứng dụng" đã ghi nhận là đã thực hiện xong: nếu người dùng hỏi lại kết quả thì chọn chitchat (reply dựa đúng dòng đó), KHÔNG chọn move hay profile_update lần nữa.
 
 Hỏi lại (needs_clarification=true kèm clarify): chỉ khi thiếu thông tin BẮT BUỘC và không thể suy ra từ câu hoặc lịch sử:

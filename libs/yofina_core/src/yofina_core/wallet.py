@@ -103,7 +103,7 @@ LEDGER_TOOLS = (
     "assign_jar",
     "save_turn",
 )
-FORECAST_TOOLS = ("get_forecast", "run_scenario", "affordability_check")
+FORECAST_TOOLS = ("get_forecast", "run_scenario", "list_scenarios", "affordability_check")
 KNOWLEDGE_TOOLS = ("get_fee_schedule",)
 PLANNER_TOOLS = ("check_suitability", "schedule_nudge")
 AUDIT_TOOLS = ("get_trace", "record_turn")

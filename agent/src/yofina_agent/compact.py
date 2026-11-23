@@ -243,6 +243,17 @@ def compact_scenario(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
     if spec.get("amount_vnd") is not None:
         out["scenario"]["amount_text"] = format_vnd(spec["amount_vnd"])
+    bundle = [b for b in (d.get("bundle") or []) if isinstance(b, Mapping)]
+    if len(bundle) > 1:  # mô phỏng GỘP: các khoản người dùng vẫn giữ + khoản mới (khoản cuối là `scenario`)
+        out["bundle"] = [
+            {
+                "label": str(b.get("label") or b.get("kind")),
+                **({"amount_text": format_vnd(b["amount_vnd"])} if isinstance(b.get("amount_vnd"), int) else {}),
+            }
+            for b in bundle
+        ]
+        if isinstance(d.get("bundle_total_vnd"), int):
+            out["bundle_total_text"] = format_vnd(d["bundle_total_vnd"])
     for e in d["effects"]:
         row: dict[str, Any] = {
             "jar": e["jar"]["name"],

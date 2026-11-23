@@ -13,6 +13,11 @@ Mã của tool không nằm riêng ở đây: nó dùng chung **một zip** vớ
 - **Mã lỗi** (lỗi nghiệp vụ là kết quả thành công của Lambda, dạng `{status: "ERROR", code, message}`): `JAR_NOT_FOUND`, `PROFILE_INCOMPLETE`, `FORECAST_UNAVAILABLE` (kể cả hũ hệ thống), `PARAMS_INVALID`, `UNAUTHENTICATED` (thiếu `user_id`).
 - **An toàn**: `user_id` luôn do interceptor ghi đè từ JWT (client gửi `user_id` của người khác vẫn nhận dự báo của chính mình; có test). IAM của Lambda: Data API trên cluster, `secretsmanager:GetSecretValue` CHỈ trên secret của role `yofina_app` (không master), `events:PutEvents` trên `yofina-bus` (phát `forecast.updated` khi tính lại).
 
+## `forecast___run_scenario` và `forecast___list_scenarios` (gộp kịch bản trong một cuộc chat)
+
+- `run_scenario {scenario, conversation_id?, with_scenarios?}`: `with_scenarios` là các kịch bản người dùng VẪN GIỮ (tối đa 4; chỉ `one_time_purchase`, `recurring_expense`, `bnpl_purchase`; cả bó tối đa một `bnpl_purchase`), áp trước `scenario`. Kết quả thêm `bundle` và `bundle_total_vnd`; dòng `scenarios` lưu `conversation_id` và `bundle` (migration 0051). Chi tiết luật và mã lỗi: [contracts/README.md](../../../contracts/README.md) (mục "Gộp kịch bản trong một cuộc chat"); mã: `pipelines/forecast/yofina_forecast/scenario.py` (`apply_bundle`).
+- `list_scenarios {conversation_id, limit?}`: các kịch bản đã chạy trong cuộc chat (mới nhất trước, `limit` 1 đến 10, mặc định 5), hàm DB `app_list_conversation_scenarios` (RLS: chỉ của chính người dùng). Chỉ đọc. Cedar [`list_scenarios.cedar`](../../policies/list_scenarios.cedar).
+
 ## Cedar
 
 [`gateway/policies/get_forecast.cedar`](../../policies/get_forecast.cedar): `action == AgentCore::Action::"forecast___get_forecast"`, điều kiện `context.input has user_id && context.input.user_id == principal.id`; engine vẫn `ENFORCE`. Stack `YofinaAgent` đọc mọi file của `contracts/tools/forecast.json` như với `ledger.json` (thiếu file là synth lỗi).

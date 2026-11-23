@@ -117,6 +117,8 @@ Thay đổi trên tài nguyên có sẵn: code Lambda `yofina-ledger` (thêm `yo
 
 **Deploy 23/11 sáng** (`scripts/agent_deploy.py`, ba lần, chỉ `YofinaAgent`): IAM `ApplyGuardrail` cho hồ sơ guardrail ở 6 vùng đích; cấu hình guardrail mới (MISCONDUCT LOW, version mới); mã router và schema sửa. Runtime `yofina_agent` version 9. Không thêm tài nguyên tính tiền theo giờ.
 
+**Deploy 23/11 trưa**: migration `0051_scenario_conversation` (cột `scenarios.conversation_id`, `scenarios.bundle`, hàm `app_list_conversation_scenarios`); zip `yofina-forecast` + `YofinaTools`; `YofinaAgent` (tool `forecast___list_scenarios` trên target `forecast` + Cedar `forecast_list_scenarios_own_user`; `run_scenario` thêm `conversation_id`, `with_scenarios`); Runtime `yofina_agent` version 12; Amplify job 8. Không thêm tài nguyên tính tiền theo giờ.
+
 ### Stack `YofinaIngest` (phase 5, F6 nạp dữ liệu từ ảnh và CSV) — đã deploy 23/11
 
 Code ở `infra-cdk/lib/ingest-stack.ts`. Không có thứ tính tiền theo giờ. Nhóm Cognito mới `persona-vy` (tạo bằng `scripts/seed_demo.py giamkhao3`, gán `giamkhao3`).

@@ -119,11 +119,14 @@ def test_target_forecast_dung_lambda_va_schema_theo_hop_dong(gateway, control, s
     assert set(deployed) == {t["name"] for t in FORECAST_TOOLS} == {
         "get_forecast",
         "run_scenario",
+        "list_scenarios",
         "affordability_check",
     }
     got = deployed["get_forecast"]["inputSchema"]
     assert set(got["properties"]) == {"user_id", "jar"} and got["required"] == ["jar"]
     assert deployed["run_scenario"]["inputSchema"]["required"] == ["scenario"]
+    assert {"conversation_id", "with_scenarios"} <= set(deployed["run_scenario"]["inputSchema"]["properties"])
+    assert deployed["list_scenarios"]["inputSchema"]["required"] == ["conversation_id"]
     assert deployed["affordability_check"]["inputSchema"]["required"] == ["amount_vnd"]
 
 

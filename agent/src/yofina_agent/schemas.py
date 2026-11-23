@@ -107,6 +107,8 @@ class IntentParams(_Model):
     obligation_name: Annotated[str, Field(max_length=80)] | None = None
     obligation_kind: ObligationKind | None = None
     due_day: Annotated[int, Field(ge=1, le=31)] | None = None
+    # what_if: người dùng vừa trả lời câu "vẫn giữ khoản trước để tính gộp không": true giữ, false bỏ, null khi không có câu hỏi đó
+    keep_previous: bool | None = None
 
 
 class IntentResult(_Model):

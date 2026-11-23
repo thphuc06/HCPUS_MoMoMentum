@@ -34,6 +34,8 @@ from yofina_agent.compact import compact_forecast, compact_jars, compact_obligat
 from yofina_agent.jars import resolve_jar
 from yofina_agent.schemas import (
     Analysis,
+    ClarifyChipIn,
+    ClarifyRequest,
     IntentResult,
     OptionSuitability,
     Plan,
@@ -59,7 +61,7 @@ from yofina_agent.verifier import (
 from yofina_core import blocks as B
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import user_message
-from yofina_core.money import format_vnd
+from yofina_core.money import format_vnd, format_vnd_short
 from yofina_core.scenario import parse_scenario, scenario_to_wire
 from yofina_core.suitability import SuitabilityVerdict
 
@@ -162,14 +164,136 @@ def focus_jar(spec: Mapping[str, Any]) -> str | None:
     return spec.get("jar_code") or spec.get("from_jar")
 
 
-def build_plan(spec: dict[str, Any], limits: PlanLimits) -> Plan:
+# --- gộp với khoản trước trong cùng cuộc trò chuyện ------------------------------------------------
+#: loại kịch bản tiêu tiền từ MỘT hũ: gộp được với khoản trước cùng hũ (hợp đồng `with_scenarios` của run_scenario)
+BUNDLE_KINDS = ("one_time_purchase", "recurring_expense", "bnpl_purchase")
+#: tối đa số khoản trước gửi kèm (`with_scenarios` tối đa 4)
+MAX_WITH_SCENARIOS = 4
+
+
+def pay_jar(spec: Mapping[str, Any]) -> str | None:
+    """Hũ trả tiền của một khoản chi (None nếu không phải khoản chi từ một hũ, hoặc Trả sau không nêu hũ)."""
+    return spec.get("jar_code") if spec.get("kind") in BUNDLE_KINDS else None
+
+
+def _same_item(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
+    keys = ("kind", "amount_vnd", "jar_code", "cycle")
+    return all(a.get(k) == b.get(k) for k in keys) and (a.get("label") or "") == (b.get("label") or "")
+
+
+def previous_same_jar(rows: list[Any], spec: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Các khoản người dùng ĐANG cân nhắc cùng hũ với `spec`, lấy từ kết quả `list_scenarios` (mới nhất trước).
+
+    Lần chạy gần nhất có đụng hũ đó là trạng thái hiện tại: nó đã gộp những khoản người dùng giữ và bỏ những khoản họ bỏ. Bỏ khoản
+    trùng với khoản đang hỏi (hỏi lại cùng câu) và chỉ giữ một khoản Trả sau trong cả bộ (engine không gộp hai khoản Trả sau).
+    """
+    jar = pay_jar(spec)
+    if jar is None:
+        return []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        items = [
+            it
+            for it in (row.get("bundle") or [])
+            if isinstance(it, Mapping)
+            and isinstance(it.get("spec"), Mapping)
+            and it["spec"].get("kind") in BUNDLE_KINDS
+            and it["spec"].get("jar_code") == jar
+        ]
+        if not items:
+            continue
+        out: list[dict[str, Any]] = []
+        has_credit = spec.get("kind") == "bnpl_purchase"
+        for it in items:
+            s = it["spec"]
+            if _same_item(s, spec):
+                continue
+            if s.get("kind") == "bnpl_purchase":
+                if has_credit:
+                    continue
+                has_credit = True
+            out.append(dict(it))
+        return out[:MAX_WITH_SCENARIOS]
+    return []
+
+
+def item_label(spec: Mapping[str, Any]) -> str:
+    """Nhãn ngắn của một khoản (cùng kiểu nhãn engine dựng: "mua giày 800k"), chỉ từ spec đã kiểm."""
+    label = (spec.get("label") or "").strip()
+    if label.lower().startswith("mua "):  # model hay để sẵn "Mua dép": tránh "mua Mua dép"
+        label = label[4:].strip()
+    amount = spec.get("amount_vnd")
+    short = format_vnd_short(amount) if isinstance(amount, int) else ""
+    if spec.get("kind") == "recurring_expense":
+        return " ".join(x for x in (label or "khoản chi định kỳ", short) if x)
+    return " ".join(x for x in ("mua", label, short) if x)
+
+
+def keep_previous_question(previous: list[dict[str, Any]], spec: Mapping[str, Any], jar_rows: list[dict[str, Any]]) -> ClarifyRequest:
+    names = {j["code"]: j["name"] for j in jar_rows}
+    prev = ", ".join(str(it.get("label") or item_label(it["spec"])) for it in previous)
+    jar = names.get(str(pay_jar(spec)), str(pay_jar(spec)))
+    q = notices.KEEP_PREVIOUS_QUESTION.format(previous=prev[:70], jar=jar[:30], new=item_label(spec)[:50])
+    return ClarifyRequest(
+        slot="other",
+        question=q[:200],
+        chips=[ClarifyChipIn(label=c["label"], value=c["value"]) for c in notices.KEEP_PREVIOUS_CHIPS],
+    )
+
+
+async def bundle_with_previous(turn: Turn, r: IntentResult, spec: Mapping[str, Any]) -> tuple[list[dict[str, Any]], bool]:
+    """(các spec trước để gộp, đã hỏi lại hay chưa). Đọc các kịch bản đã chạy trong cuộc trò chuyện bằng `forecast___list_scenarios`.
+
+    Có khoản trước cùng hũ mà người dùng chưa nói giữ hay bỏ thì hỏi lại đúng một câu (khối `clarify`) và kết thúc lượt; lượt sau router
+    ghép câu trả lời với câu hỏi cũ và đặt `keep_previous`. Không đọc được thì chạy khoản mới một mình (không đoán).
+    """
+    if pay_jar(spec) is None or not turn.conversation_id:
+        return [], False
+    res = await turn.call_tool_retry("list_scenarios", {"conversation_id": turn.conversation_id}, target="forecast")
+    if not res.outcome.ok:
+        log.warning(json.dumps({"event": "list_scenarios_failed", "code": res.outcome.code}))
+        return [], False
+    rows = ((res.outcome.payload or {}).get("data") or {}).get("scenarios") or []
+    previous = previous_same_jar(list(rows), spec)
+    if not previous:
+        return [], False
+    keep = r.params.keep_previous
+    if keep is None:
+        await turn.emit_clarify(keep_previous_question(previous, spec, turn.jar_rows), r)
+        return [], True
+    return ([carry_spec(it["spec"], turn.app_date) for it in previous] if keep else []), False
+
+
+def carry_spec(spec: Mapping[str, Any], app_date: Any) -> dict[str, Any]:
+    """Spec của khoản đã giữ để gửi lại. Engine lưu kèm ngày của lần chạy đó (khi người dùng không nói ngày thì là "hôm nay" lúc ấy);
+    ngày đó đã qua thì bỏ để engine hiểu là hôm nay, không báo lỗi "ngày ở quá khứ" cho khoản người dùng chưa từng chọn ngày."""
+    out = dict(spec)
+    d = out.get("date")
+    if isinstance(d, str) and app_date is not None and d < str(app_date):
+        out.pop("date")
+    return out
+
+
+def build_plan(
+    spec: dict[str, Any],
+    limits: PlanLimits,
+    *,
+    with_scenarios: list[dict[str, Any]] | None = None,
+    conversation_id: str | None = None,
+) -> Plan:
     """Kế hoạch chỉ gồm tool ĐỌC (nhóm 0 chạy song song, nhóm 1 là run_scenario)."""
     steps = [PlanStep(tool="ledger___get_obligations", args={}, parallel_group=0)]
-    if spec["kind"] == "bnpl_purchase":
+    if spec["kind"] == "bnpl_purchase" or any(s.get("kind") == "bnpl_purchase" for s in with_scenarios or []):
         steps.append(PlanStep(tool="knowledge___get_fee_schedule", args={}, parallel_group=0))
     if (jar := focus_jar(spec)) is not None:
         steps.append(PlanStep(tool="forecast___get_forecast", args={"jar": jar}, parallel_group=0))
-    steps.append(PlanStep(tool="forecast___run_scenario", args={"scenario": spec}, parallel_group=1))
+    args: dict[str, Any] = {"scenario": spec}
+    if with_scenarios:
+        args["with_scenarios"] = with_scenarios[:MAX_WITH_SCENARIOS]
+    if conversation_id:
+        args["conversation_id"] = conversation_id
+    steps.append(PlanStep(tool="forecast___run_scenario", args=args, parallel_group=1))
     return Plan(intent="what_if", scenario=spec, steps=steps, limits=limits)
 
 
@@ -195,7 +319,10 @@ Quy tắc số liệu (bị kiểm tra bằng mã, sai sẽ bị trả lại):
 - Không bịa ngày: ngày chép từ trường *_date_text (dạng dd/mm).
 
 Phần giải thích (narrative): 2 đến 4 câu tiếng Việt (tối đa khoảng 450 ký tự), văn bản thuần (không markdown, không gạch đầu dòng, không emoji). Nói kịch bản làm hũ nào đổi trạng thái \
-(đủ, sát, hụt), khoản đến hạn nào bị ảnh hưởng nếu có, và độ tin cậy của dữ liệu (basis). Trả sau chỉ là sản phẩm mô phỏng.
+(đủ, sát, hụt), khoản đến hạn nào bị ảnh hưởng nếu có, và độ tin cậy của dữ liệu (basis). Trả sau chỉ là sản phẩm mô phỏng. \
+Nếu <du_lieu> có `bundle` (nhiều khoản) thì đây là mô phỏng gộp: các khoản người dùng vẫn giữ từ trước cộng khoản mới (khoản mới là `scenario`); \
+nói tự nhiên là đã tính chung các khoản đó (nêu tên theo `bundle`, viết chữ thường như câu nói bình thường, không viết hoa để nhấn), \
+tổng tiền chỉ được nêu bằng `bundle_total_text`, và phương án có thể là bỏ hoặc hoãn một trong các khoản.
 
 Phương án (options): 2 đến 3 lựa chọn THẬT SỰ khác nhau cho người dùng (ví dụ hoãn mua, dùng hũ khác, giảm số tiền, chuyển bù giữa hũ, nhắc lại sau, vẫn mua). \
 Mỗi phương án: option_id (chữ thường, số, gạch dưới), kind (defer, switch_jar, split, pay_now, use_credit, proceed, reduce_amount, move_between_jars, remind_later, skip), \
@@ -244,6 +371,8 @@ class WhatIfState:
     """Thứ chạy lượt what-if giữ lại để dựng bản ghi lượt và để test."""
 
     spec: dict[str, Any] | None = None
+    #: các khoản trước người dùng giữ, đã gộp vào lần chạy này
+    with_scenarios: list[dict[str, Any]] = field(default_factory=list)
     scenario_id: str | None = None
     handled: bool = False  # đã tự phát thông báo (lỗi tool, thiếu hũ...) nên người gọi không phát thêm
     verdicts: list[Verdict] = field(default_factory=list)
@@ -268,11 +397,21 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
         return st  # người gọi (Turn.on_what_if) quyết định: thẻ kiểm tra tất định hoặc thông báo chưa dựng được
     st.spec = spec
 
+    # 1b) khoản trước cùng hũ trong cuộc trò chuyện: hỏi giữ hay bỏ, giữ thì gộp
+    with turn.step("bundle"):
+        with_scenarios, asked = await bundle_with_previous(turn, r, spec)
+    if asked:
+        st.handled = True
+        return st
+    st.with_scenarios = with_scenarios
+
     # 2) kế hoạch và tool đọc
     s = turn.s
     plan = build_plan(
         spec,
         PlanLimits(max_rounds=s.verifier_max_rounds, max_tokens=s.plan_max_tokens, max_model_calls=s.max_model_calls_per_turn),
+        with_scenarios=with_scenarios,
+        conversation_id=turn.conversation_id,
     )
     missing: list[str] = []
     with turn.step("tools"):

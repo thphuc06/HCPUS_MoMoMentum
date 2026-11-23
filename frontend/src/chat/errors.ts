@@ -73,6 +73,7 @@ const TOOL_LABELS: Record<string, { running: string; done: string }> = {
   move_between_jars: { running: 'Đang chuẩn bị chuyển tiền giữa hai hũ…', done: 'Đã chuẩn bị chuyển tiền giữa hai hũ' },
   get_forecast: { running: 'Đang đọc dự báo 30 ngày của hũ…', done: 'Đã đọc dự báo 30 ngày của hũ' },
   run_scenario: { running: 'Đang chạy kịch bản "nếu"…', done: 'Đã chạy kịch bản "nếu"' },
+  list_scenarios: { running: 'Đang xem các khoản bạn đang cân nhắc…', done: 'Đã xem các khoản bạn đang cân nhắc' },
   affordability_check: { running: 'Đang kiểm tra trước khi trả…', done: 'Đã kiểm tra trước khi trả' },
   get_fee_schedule: { running: 'Đang tra biểu phí…', done: 'Đã tra biểu phí' },
   check_suitability: { running: 'Đang kiểm tra các luật tài chính…', done: 'Đã kiểm tra các luật tài chính' },

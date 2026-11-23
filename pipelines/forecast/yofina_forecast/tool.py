@@ -6,7 +6,7 @@ chat và màn Chi tiết hũ cùng số). Khác ledger ở chỗ Lambda này có
 
 Kết quả theo `contracts/tools/forecast.results.schema.json`: `{status, as_of, app_date, data}`, `data` = `ForecastTimelineData`.
 
-Phase 3: Lambda này CŨNG phục vụ `forecast___run_scenario` (`scenario.py`) và `forecast___affordability_check` (`afford.py`) qua Gateway,
+Phase 3: Lambda này CŨNG phục vụ `forecast___run_scenario` và `forecast___list_scenarios` (`scenario.py`) và `forecast___affordability_check` (`afford.py`) qua Gateway,
 và đường REST `POST /affordability` của HTTP API (cùng engine, trả khối `affordability_card`). `GET /forecasts/{jar_code}` vẫn do
 Lambda ledger phục vụ.
 """
@@ -139,7 +139,19 @@ def handle_gateway(
         if tool == "get_forecast":
             result = get_forecast(reader, pipeline, user_id, event.get("jar"), trace_id=trace_id)
         elif tool == "run_scenario" and scenario is not None:
-            result = scenario.run(user_id, event.get("scenario"), trace_id=trace_id)
+            result = scenario.run(
+                user_id,
+                event.get("scenario"),
+                trace_id=trace_id,
+                conversation_id=event.get("conversation_id"),
+                with_scenarios=event.get("with_scenarios"),
+            )
+        elif tool == "list_scenarios" and scenario is not None:
+            result = scenario.list_scenarios(
+                user_id,
+                conversation_id=event.get("conversation_id"),
+                limit=event.get("limit"),
+            )
         elif tool == "affordability_check" and afford is not None:
             result = afford.check(
                 user_id,

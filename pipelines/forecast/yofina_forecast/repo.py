@@ -47,10 +47,12 @@ SQL_INSERT_DAY = (
     "CAST(:s90 AS numeric), CAST(:b10 AS numeric), CAST(:b50 AS numeric), CAST(:b90 AS numeric))"
 )
 SQL_INSERT_SCENARIO = (
-    "INSERT INTO scenarios (id, user_id, trace_id, kind, spec, spec_hash, app_date, baseline_run_id, n_paths, seed, result) "
+    "INSERT INTO scenarios (id, user_id, trace_id, kind, spec, spec_hash, app_date, baseline_run_id, n_paths, seed, result, "
+    "conversation_id, bundle) "
     "VALUES (CAST(:id AS uuid), :uid, :trace_id, :kind, CAST(:spec AS jsonb), :spec_hash, CAST(:app_date AS date), "
-    "CAST(:run AS uuid), :n_paths, :seed, CAST(:result AS jsonb))"
+    "CAST(:run AS uuid), :n_paths, :seed, CAST(:result AS jsonb), CAST(:conversation_id AS text), CAST(:bundle AS jsonb))"
 )
+SQL_LIST_CONVERSATION_SCENARIOS = "SELECT * FROM app_list_conversation_scenarios(CAST(:uid AS text), CAST(:cid AS text), CAST(:lim AS integer))"
 SQL_PRUNE_SCENARIOS = (
     "SELECT app_prune_scenarios(CAST(:uid AS text), CAST(:keep AS integer)) AS removed"
 )
@@ -187,8 +189,13 @@ def save_scenario(
     seed: int | None,
     result: Mapping[str, Any],
     keep: int,
+    conversation_id: str | None = None,
+    bundle: Sequence[Mapping[str, Any]] | None = None,
 ) -> None:
-    """Ghi một kịch bản đã chạy (dữ liệu DẪN XUẤT, không phải sổ cái; bảng `scenarios`) rồi dọn bớt bản cũ, trong một transaction."""
+    """Ghi một kịch bản đã chạy (dữ liệu DẪN XUẤT, không phải sổ cái; bảng `scenarios`) rồi dọn bớt bản cũ, trong một transaction.
+
+    `conversation_id` (id phiên chat) và `bundle` (các spec đã gộp, theo thứ tự áp, phần tử cuối là `spec`) là của migration 0051;
+    vắng thì lưu NULL."""
     with repo.db.transaction(user_id) as tx:
         tx.execute(
             SQL_INSERT_SCENARIO,
@@ -204,9 +211,24 @@ def save_scenario(
                 "n_paths": n_paths,
                 "seed": seed,
                 "result": json.dumps(result, ensure_ascii=False, separators=(",", ":")),
+                "conversation_id": conversation_id,
+                "bundle": None
+                if bundle is None
+                else json.dumps(list(bundle), ensure_ascii=False, separators=(",", ":")),
             },
         )
         tx.execute(SQL_PRUNE_SCENARIOS, {"uid": user_id, "keep": keep})
+
+
+def list_conversation_scenarios(
+    repo: ForecastRepo, user_id: str, conversation_id: str, limit: int
+) -> list[Row]:
+    """Các kịch bản của CHÍNH người dùng trong một cuộc chat, mới nhất trước (hàm `app_list_conversation_scenarios`, tối đa 10)."""
+    return repo.db.query(
+        SQL_LIST_CONVERSATION_SCENARIOS,
+        {"uid": user_id, "cid": conversation_id, "lim": limit},
+        max_rows=10,
+    )
 
 
 def to_date(value: Any) -> date | None:

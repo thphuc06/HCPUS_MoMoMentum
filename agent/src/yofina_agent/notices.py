@@ -128,6 +128,25 @@ GUARDRAIL_OUTPUT_BLOCKED: tuple[str, str] = (
 UNKNOWN_JAR_QUESTION = "Mình chưa thấy hũ “{name}” trong ví của bạn. Bạn muốn dùng hũ nào?"
 UNKNOWN_JAR_QUESTION_NO_NAME = "Mình chưa xác định được hũ bạn nói. Bạn muốn dùng hũ nào?"
 
+# Gộp kịch bản trong một cuộc trò chuyện: khoản mới cùng hũ với khoản người dùng đã hỏi trước đó.
+# {previous}: nhãn các khoản trước (do engine dựng, ví dụ "mua giày 800k"); {jar}: tên hũ; {new}: nhãn khoản mới.
+# Router xếp "ngoài phạm vi" nhưng câu có dấu hiệu chi tiêu của chính người dùng (số tiền, món mua): hỏi xác nhận thay vì từ chối cứng.
+# {what}: nhãn khoản ("đi du lịch 5.000.000 ₫") dựng bằng mã từ tham số router; rỗng thì dùng câu không tên.
+CONFIRM_SPENDING_QUESTION = "Mình chưa chắc bạn muốn làm gì với khoản {what}. Bạn muốn mình làm việc nào?"
+CONFIRM_SPENDING_QUESTION_NO_NAME = "Mình chưa chắc ý bạn. Bạn muốn mình xem khoản chi này theo cách nào?"
+CONFIRM_SPENDING_CHIPS: list[dict[str, str]] = [
+    {"label": "Thử nếu chi khoản này", "value": "Mô phỏng giúp mình nếu chi khoản này"},
+    {"label": "Kiểm tra có đủ tiền không", "value": "Kiểm tra giúp mình khoản này có ổn không"},
+    {"label": "Không cần", "value": "Không cần đâu, cảm ơn"},
+]
+
+KEEP_PREVIOUS_MARKER = "Bạn vẫn giữ ý định đó chứ?"
+KEEP_PREVIOUS_QUESTION = "Trước đó bạn có hỏi {previous} từ hũ {jar}. " + KEEP_PREVIOUS_MARKER + " Nếu giữ, mình tính gộp với {new}."
+KEEP_PREVIOUS_CHIPS: list[dict[str, str]] = [
+    {"label": "Vẫn giữ, tính gộp", "value": "Vẫn giữ khoản trước, tính gộp cả hai"},
+    {"label": "Chỉ tính khoản mới", "value": "Bỏ khoản trước, chỉ tính khoản mới"},
+]
+
 SCENARIO_UNBUILDABLE: tuple[str, str] = (
     "Chưa dựng được kịch bản",
     "Mình chưa hiểu đủ để dựng kịch bản này. Bạn nói rõ món gì, bao nhiêu tiền và trả bằng cách nào nhé.",

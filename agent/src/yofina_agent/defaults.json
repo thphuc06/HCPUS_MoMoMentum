@@ -4,7 +4,7 @@
   "max_model_calls_per_turn": 4,
   "max_tool_calls_per_turn": 16,
   "history_messages": 6,
-  "history_chars_per_message": 600,
+  "history_chars_per_message": 900,
   "tool_timeout_seconds": 20,
   "tool_startup_timeout_seconds": 15,
   "router_max_attempts": 2,

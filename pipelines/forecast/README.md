@@ -12,7 +12,8 @@
 | `yofina_forecast/runner.py` | `Pipeline.run_user(user_id, trigger, ...)`: chọn đường nhanh hay đầy đủ, `contract.check_result` trước khi ghi, ghi, phát `forecast.updated` |
 | `yofina_forecast/consumer.py`, `idempotency.py`, `events.py` | Đường sự kiện: luật sự kiện -> việc, gộp theo người dùng, idempotency DynamoDB, đọc phong bì EventBridge, phát `forecast.updated` |
 | `yofina_forecast/batch.py` | Các `op` của Lambda batch: `list_users`, `run_user`, `run_users`, `summarize` |
-| `yofina_forecast/tool.py` | Tool `forecast___get_forecast` (dùng `WalletReads.forecast_block_or_none` của ledger: cùng mã dựng khối với REST) |
+| `yofina_forecast/tool.py` | Tool `forecast___get_forecast` (dùng `WalletReads.forecast_block_or_none` của ledger: cùng mã dựng khối với REST); chuyển `forecast___run_scenario` (kèm `conversation_id`, `with_scenarios`) và `forecast___list_scenarios` cho `scenario.py` |
+| `yofina_forecast/scenario.py` | `ScenarioEngine`: `run` (what-if; gộp bó kịch bản bằng `apply_bundle`) và `list_scenarios` (các kịch bản đã chạy trong một cuộc chat) |
 | `yofina_forecast/bootstrap.py`, `handler_batch.py`, `handler_event.py`, `handler_tool.py` | Vỏ Lambda: dựng thành phần một lần mỗi môi trường thực thi |
 | `requirements.txt` | numpy, scipy (cùng `pydantic`, `tzdata` của `yofina_core`) |
 

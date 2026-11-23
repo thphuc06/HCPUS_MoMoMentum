@@ -154,8 +154,48 @@ def test_run_scenario_nhan_dung_cac_truong_cua_scenario_spec():
     assert "Không bịa" in props["properties"]["amount_vnd"]["description"]
 
 
+def test_run_scenario_nhan_with_scenarios_cung_dang_voi_scenario_va_conversation_id():
+    props = FORECAST["run_scenario"]["inputSchema"]["properties"]
+    assert set(props) == {"user_id", "scenario", "conversation_id", "with_scenarios"}
+    assert FORECAST["run_scenario"]["inputSchema"]["required"] == ["scenario"]  # hai trường mới tùy chọn
+    assert props["conversation_id"]["type"] == "string"
+    ws = props["with_scenarios"]
+    assert ws["type"] == "array" and ws["items"]["type"] == "object"
+    assert set(ws["items"]["properties"]) == set(props["scenario"]["properties"]) == spec_property_names()
+    assert ws["items"]["required"] == ["kind"]
+    for kind in ("one_time_purchase", "recurring_expense", "bnpl_purchase"):
+        assert kind in ws["description"]
+    assert "Tối đa 4" in ws["description"] and "MỘT bnpl_purchase" in ws["description"]
+    desc = FORECAST["run_scenario"]["description"]
+    assert "with_scenarios" in desc and "list_scenarios" in desc and "bundle_total_vnd" in desc
+
+
+def test_list_scenarios_la_tool_doc_can_conversation_id():
+    tool = FORECAST["list_scenarios"]
+    props = tool["inputSchema"]["properties"]
+    assert set(props) == {"user_id", "conversation_id", "limit"}
+    assert tool["inputSchema"]["required"] == ["conversation_id"]
+    assert props["conversation_id"]["type"] == "string" and props["limit"]["type"] == "integer"
+    assert "1 đến 10" in props["limit"]["description"] and "5" in props["limit"]["description"]
+    assert "không cần xác nhận" in tool["description"] and "confirm_token" not in props
+
+
+def test_gop_kich_ban_khop_hang_so_cua_engine_va_co_cedar():
+    from yofina_forecast import scenario as engine
+
+    assert set(engine.BUNDLE_PRIOR_KINDS) <= set(wallet.SCENARIO_KINDS)
+    assert set(engine.BUNDLE_TOTAL_KINDS) <= set(engine.BUNDLE_PRIOR_KINDS)
+    assert set(engine.KIND_VN) == set(wallet.SCENARIO_KINDS)
+    assert engine.MAX_PRIOR_SCENARIOS == 4 and engine.LIST_LIMIT_DEFAULT == 5 and engine.LIST_LIMIT_MAX == 10
+    ws = FORECAST["run_scenario"]["inputSchema"]["properties"]["with_scenarios"]["description"]
+    assert f"Tối đa {engine.MAX_PRIOR_SCENARIOS}" in ws
+    cedar = (CONTRACTS.parent / "gateway" / "policies" / "list_scenarios.cedar").read_text(encoding="utf-8")
+    assert 'action == AgentCore::Action::"forecast___list_scenarios"' in cedar
+    assert "context.input has user_id && context.input.user_id == principal.id" in cedar
+
+
 def test_run_scenario_va_affordability_la_tool_doc_khong_xac_nhan():
-    for name in ("run_scenario", "affordability_check"):
+    for name in ("run_scenario", "list_scenarios", "affordability_check"):
         props = FORECAST[name]["inputSchema"]["properties"]
         assert "confirm_token" not in props
         assert (

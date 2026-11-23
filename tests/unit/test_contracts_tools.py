@@ -60,7 +60,9 @@ def test_cac_tool_cua_target_ledger_theo_danh_muc_overview():
 
 def test_cac_target_phase_3_khop_hang_so():
     assert [t["name"] for t in FORECAST] == list(wallet.FORECAST_TOOLS)
-    assert [t["name"] for t in FORECAST] == ["get_forecast", "run_scenario", "affordability_check"]
+    assert [t["name"] for t in FORECAST] == [
+        "get_forecast", "run_scenario", "list_scenarios", "affordability_check",
+    ]  # fmt: skip
     assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == ["get_fee_schedule"]
     assert [t["name"] for t in PLANNER] == list(wallet.PLANNER_TOOLS)
     assert [t["name"] for t in AUDIT] == list(wallet.AUDIT_TOOLS) == ["get_trace", "record_turn"]
@@ -227,10 +229,11 @@ def test_tap_gia_tri_trong_mo_ta_khop_hang_so_hop_dong():
 
 
 # --- kết quả tool ---------------------------------------------------------------------------
+wallet_bundle_total_kinds = ("one_time_purchase", "bnpl_purchase")  # khớp BUNDLE_TOTAL_KINDS của engine forecast
 RESULT_FILE = {name: "ledger" for name in wallet.LEDGER_TOOLS}
 RESULT_FILE["get_forecast"] = "forecast"
 RESULT_FILE.update(
-    run_scenario="forecast", affordability_check="forecast", get_fee_schedule="knowledge",
+    run_scenario="forecast", list_scenarios="forecast", affordability_check="forecast", get_fee_schedule="knowledge",
     check_suitability="planner", schedule_nudge="planner", get_trace="audit", record_turn="audit",
 )  # fmt: skip
 RESULT_DEF = {
@@ -246,6 +249,7 @@ RESULT_DEF = {
     "save_turn": "SaveTurnResult",
     "get_forecast": "GetForecastResult",
     "run_scenario": "RunScenarioResult",
+    "list_scenarios": "ListScenariosResult",
     "affordability_check": "AffordabilityCheckResult",
     "get_fee_schedule": "GetFeeScheduleResult",
     "check_suitability": "CheckSuitabilityResult",
@@ -289,6 +293,19 @@ def test_ket_qua_tool_fixture_hop_le(registry, path):
         if "obligation_impact" in data:
             b.ObligationImpactData.model_validate(data["obligation_impact"])
         scenario.parse_scenario(data["spec"])
+        if "bundle" in data:
+            for item in data["bundle"]:
+                assert scenario.parse_scenario(item["spec"]).kind == item["kind"]
+            assert data["bundle"][-1]["spec"] == data["spec"]  # phần tử cuối là kịch bản chính
+            assert ("bundle_total_vnd" in data) == (len(data["bundle"]) >= 2)
+            if "bundle_total_vnd" in data:
+                assert data["bundle_total_vnd"] == sum(
+                    i["amount_vnd"] for i in data["bundle"] if i["kind"] in wallet_bundle_total_kinds
+                )
+    elif tool == "list_scenarios":
+        for item in data["scenarios"]:
+            assert scenario.parse_scenario(item["spec"]).kind == item["kind"]
+            assert item["bundle"][-1]["spec"] == item["spec"]
     elif tool == "affordability_check":
         b.AffordabilityCardData.model_validate(data)
     elif tool == "check_suitability":

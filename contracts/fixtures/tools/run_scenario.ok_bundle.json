@@ -1,0 +1,214 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "scenario_id": "9e4a7c13-5b28-4d6f-8c01-3a7f2e9d5b68",
+    "spec": {
+      "kind": "one_time_purchase",
+      "amount_vnd": 300000,
+      "funding_source": "jar",
+      "jar_code": "giai_tri",
+      "label": "dép",
+      "date": "2026-11-21"
+    },
+    "n_paths": 5000,
+    "common_random_numbers": true,
+    "effects": [
+      {
+        "jar": {
+          "code": "giai_tri",
+          "name": "Giải trí",
+          "color_key": "orchid",
+          "icon_key": "gamepad"
+        },
+        "status_before": "ok",
+        "status_after": "short",
+        "min_balance_delta_vnd": -1100000,
+        "runout_date_after": "2026-11-22",
+        "p_shortfall_before": 0.0833,
+        "p_shortfall_after": 1.0
+      }
+    ],
+    "timelines": [
+      {
+        "jar": {
+          "code": "giai_tri",
+          "name": "Giải trí",
+          "color_key": "orchid",
+          "icon_key": "gamepad"
+        },
+        "status": "ok",
+        "origin_date": "2026-11-21",
+        "start_balance_vnd": 760000,
+        "horizon_days": 30,
+        "payday": {
+          "date": "2026-12-05",
+          "days_until": 14
+        },
+        "p_shortfall": 0.0833,
+        "p_shortfall_se": 0.01128,
+        "confidence_band": "medium",
+        "coverage": 1.0,
+        "history_days": 47,
+        "is_initial_estimate": false,
+        "model": "hurdle_calendar",
+        "computed_at": "2026-12-10T03:00:00Z",
+        "stale": false,
+        "days": [
+          {
+            "date": "2026-11-22",
+            "p10_vnd": 640000,
+            "p50_vnd": 760000,
+            "p90_vnd": 760000
+          },
+          {
+            "date": "2026-11-23",
+            "p10_vnd": 640000,
+            "p50_vnd": 640000,
+            "p90_vnd": 760000
+          },
+          {
+            "date": "2026-11-24",
+            "p10_vnd": 520000,
+            "p50_vnd": 640000,
+            "p90_vnd": 760000
+          },
+          {
+            "date": "2026-11-25",
+            "p10_vnd": 520000,
+            "p50_vnd": 640000,
+            "p90_vnd": 760000
+          },
+          {
+            "date": "2026-11-26",
+            "p10_vnd": 400000,
+            "p50_vnd": 640000,
+            "p90_vnd": 760000
+          },
+          {
+            "date": "2026-11-27",
+            "p10_vnd": 400000,
+            "p50_vnd": 520000,
+            "p90_vnd": 760000
+          },
+          {
+            "date": "2026-11-28",
+            "p10_vnd": 280000,
+            "p50_vnd": 520000,
+            "p90_vnd": 640000
+          }
+        ],
+        "events": [
+          {
+            "date": "2026-12-05",
+            "kind": "salary",
+            "label": "Lương",
+            "amount_vnd": 1800000
+          }
+        ],
+        "compare": {
+          "label": "mua giày 800 nghìn + mua dép 300 nghìn",
+          "kind": "one_time_purchase",
+          "scenario_id": "9e4a7c13-5b28-4d6f-8c01-3a7f2e9d5b68",
+          "after": {
+            "status": "short",
+            "runout_date": "2026-11-22",
+            "p_shortfall": 1.0,
+            "p_shortfall_se": 0.0,
+            "min_balance_p50_vnd": -820000,
+            "days": [
+              {
+                "date": "2026-11-22",
+                "p10_vnd": -460000,
+                "p50_vnd": -340000,
+                "p90_vnd": -340000
+              },
+              {
+                "date": "2026-11-23",
+                "p10_vnd": -460000,
+                "p50_vnd": -460000,
+                "p90_vnd": -340000
+              },
+              {
+                "date": "2026-11-24",
+                "p10_vnd": -580000,
+                "p50_vnd": -460000,
+                "p90_vnd": -340000
+              },
+              {
+                "date": "2026-11-25",
+                "p10_vnd": -580000,
+                "p50_vnd": -460000,
+                "p90_vnd": -340000
+              },
+              {
+                "date": "2026-11-26",
+                "p10_vnd": -700000,
+                "p50_vnd": -460000,
+                "p90_vnd": -340000
+              },
+              {
+                "date": "2026-11-27",
+                "p10_vnd": -700000,
+                "p50_vnd": -580000,
+                "p90_vnd": -340000
+              },
+              {
+                "date": "2026-11-28",
+                "p10_vnd": -820000,
+                "p50_vnd": -580000,
+                "p90_vnd": -460000
+              }
+            ]
+          },
+          "delta": {
+            "min_balance_delta_vnd": -1100000,
+            "runout_shift_days": -30,
+            "p_shortfall_delta": 0.9167
+          },
+          "n_paths": 5000,
+          "common_random_numbers": true
+        }
+      }
+    ],
+    "basis": {
+      "computed_at": "2026-12-10T03:00:00Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47
+    },
+    "bundle": [
+      {
+        "kind": "one_time_purchase",
+        "label": "mua giày 800 nghìn",
+        "amount_vnd": 800000,
+        "jar_code": "giai_tri",
+        "spec": {
+          "kind": "one_time_purchase",
+          "amount_vnd": 800000,
+          "funding_source": "jar",
+          "jar_code": "giai_tri",
+          "label": "giày",
+          "date": "2026-11-21"
+        }
+      },
+      {
+        "kind": "one_time_purchase",
+        "label": "mua dép 300 nghìn",
+        "amount_vnd": 300000,
+        "jar_code": "giai_tri",
+        "spec": {
+          "kind": "one_time_purchase",
+          "amount_vnd": 300000,
+          "funding_source": "jar",
+          "jar_code": "giai_tri",
+          "label": "dép",
+          "date": "2026-11-21"
+        }
+      }
+    ],
+    "bundle_total_vnd": 1100000
+  }
+}
