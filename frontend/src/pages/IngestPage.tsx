@@ -12,6 +12,7 @@ import type { ConfirmRowsParams, IngestJobResponse, IngestJobSummary, IngestSour
 import { CoverageChangeBlock, IngestReviewBlock, type IngestJar, type IngestReviewData, type IngestRow as Row } from '@/contracts/blocks'
 import { ACCEPT_CAMERA, ACCEPT_CSV, ACCEPT_IMAGE, DEFAULT_LIMITS, RETENTION_DAYS, useIngestPollTiming } from '@/features/ingest/config'
 import { checkFile, mimeOf, uploadToS3 } from '@/features/ingest/upload'
+import { prepareImage } from '@/features/ingest/compress'
 import { useIngestJob } from '@/features/ingest/useIngestJob'
 import { useIngestConfirm } from '@/features/ingest/useIngestConfirm'
 import { IngestReviewList } from '@/features/ingest/IngestReview'
@@ -97,7 +98,7 @@ function PickStep({ busy, error, pending, resumable, onOpen, onFile, onConsent, 
           <FilePick kind="csv" label="Tải sao kê CSV" accept={ACCEPT_CSV} Icon={FileSpreadsheet} disabled={busy} onFile={onFile} />
         </div>
         <p className="mt-3 text-note text-ink-2">
-          Ảnh PNG, JPEG, WEBP tối đa {(DEFAULT_LIMITS.image.maxBytes / 1_000_000).toLocaleString('vi-VN')} MB; CSV tối đa {(DEFAULT_LIMITS.csv.maxBytes / 1_000_000).toLocaleString('vi-VN')} MB.
+          Ảnh PNG, JPEG, WEBP; ảnh chụp lớn được tự thu nhỏ trên máy trước khi tải lên. CSV tối đa {(DEFAULT_LIMITS.csv.maxBytes / 1_000_000).toLocaleString('vi-VN')} MB.
         </p>
       </section>
 
@@ -417,8 +418,15 @@ export function IngestPage() {
   }, [setSearch])
 
   const upload = useCallback(
-    async (kind: IngestSourceKind, file: File, consent: boolean) => {
+    async (kind: IngestSourceKind, picked: File, consent: boolean) => {
       setPickError(null)
+      let file = picked
+      if (kind === 'image') {
+        // Ảnh máy ảnh lớn hơn giới hạn: thu nhỏ trên máy trước (model cũng chỉ đọc ở cạnh dài khoảng 1.568 đến 2.576 px).
+        setUploading(true)
+        file = await prepareImage(picked, DEFAULT_LIMITS.image.maxBytes, DEFAULT_LIMITS.image.mimeTypes)
+        setUploading(false)
+      }
       const early = checkFile(file, kind, DEFAULT_LIMITS[kind])
       if (early) {
         setPending(null)
