@@ -130,9 +130,9 @@ UNKNOWN_JAR_QUESTION_NO_NAME = "Mình chưa xác định được hũ bạn nói
 
 STRESS_QUESTION = "Bạn muốn thử cú sốc nào?"
 STRESS_CHIP_VALUE = "Thử cú sốc {label}"
-ROADMAP_MISSING: tuple[str, str] = (
-    "Chưa có lộ trình",
-    "Bạn chưa có lộ trình nào. Bạn có thể nhờ Yofina lập lộ trình cho mình nhé.",
+ROADMAP_UNBUILDABLE: tuple[str, str] = (
+    "Chưa lập được lộ trình",
+    "Mình chưa lập được lộ trình phù hợp với dữ liệu hiện có. Bạn có thể thử lại sau.",
 )
 
 # Gộp kịch bản trong một cuộc trò chuyện: khoản mới cùng hũ với khoản người dùng đã hỏi trước đó.

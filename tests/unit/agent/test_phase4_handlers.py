@@ -142,7 +142,6 @@ def test_stress_clarify_uses_config(monkeypatch, shock_id):
     [
         ("resilience", "get_resilience_score", "get_resilience_score.error_profile_incomplete.json"),
         ("stress", "stress_test", "stress_test.error_shock_not_found.json"),
-        ("roadmap", "get_roadmap", "get_roadmap.error_not_found.json"),
     ],
 )
 def test_phase4_tool_error(monkeypatch, intent, tool, error_fixture):
@@ -159,10 +158,7 @@ def test_phase4_tool_error(monkeypatch, intent, tool, error_fixture):
     (notice,) = blocks_of(events)
     assert notice["type"] == "notice" and notice["data"]["kind"] == "error"
     assert notice["data"]["code"] == payload["code"]
-    if intent == "roadmap":
-        assert (notice["data"]["title"], notice["data"]["message"]) == notices.ROADMAP_MISSING
-    else:
-        assert notice["data"]["message"] == payload["message"]
+    assert notice["data"]["message"] == payload["message"]
     assert len(tools.calls) == 1 and not writer.calls
 
 

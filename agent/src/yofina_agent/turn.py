@@ -56,6 +56,7 @@ from yofina_agent.fallback import classify_by_rules
 from yofina_agent.guardrail import Guardrail, GuardrailResult
 from yofina_agent.identity import Identity
 from yofina_agent.jars import JarMatch, resolve_jar
+from yofina_agent.roadmap_agent import build_roadmap
 from yofina_agent.router import route
 from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, Intent, IntentParams, IntentResult, Verdict
 from yofina_agent.settings import AgentSettings
@@ -89,6 +90,7 @@ from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, Tu
 from yofina_core.money import format_vnd
 from yofina_core.pii import mask_pii
 from yofina_core.resilience import load_shock_set
+from yofina_core.roadmap import JobStage, RoadmapReasonCode
 from yofina_core.suitability import SuitabilityVerdict
 
 log = logging.getLogger("yofina.agent.turn")
@@ -450,15 +452,19 @@ class Turn:
         self.emit(ev.tool_call_result(tcid, result_view))
         return CallResult(outcome, compact_view, built)
 
-    async def call_tool_retry(self, short_name: str, args: dict[str, Any], **kw: Any) -> CallResult:
+    async def call_tool_retry(
+        self, short_name: str, args: dict[str, Any], *, retry: bool = True, **kw: Any
+    ) -> CallResult:
         """`call_tool`, thử lại tối đa `tool_retry_attempts` lần khi lỗi tạm thời (hết giờ, dịch vụ chưa sẵn sàng)."""
         res = await self.call_tool(short_name, args, **kw)
+        if not retry:
+            return res
         for _ in range(self.s.tool_retry_attempts):
             o = res.outcome
             transient = o.kind is ToolKind.UNAVAILABLE or (
                 o.kind in (ToolKind.TOOL_ERROR, ToolKind.BAD_RESULT) and o.code in _TRANSIENT_CODES
             )
-            if o.ok or not transient:
+            if o.ok or not transient or self.tool_calls >= self.s.max_tool_calls_per_turn:
                 break
             log.info(json.dumps({"event": "tool_retry", "tool": o.name, "code": o.code}))
             res = await self.call_tool(short_name, args, **kw)
@@ -961,7 +967,8 @@ class Turn:
             block=roadmap_block,
         )
         if res.outcome.code == ErrorCode.ROADMAP_NOT_FOUND.value:
-            await self.on_roadmap_missing(r, question)
+            latest = res.outcome if self.s.roadmap_default_which == "latest" else None
+            await self.on_roadmap_missing(r, question, latest_outcome=latest)
             return
         if not res.outcome.ok:
             self.tool_failure(res.outcome)
@@ -969,10 +976,72 @@ class Turn:
         assert res.compact is not None
         await self.write("roadmap", question, res.compact)
 
-    async def on_roadmap_missing(self, r: IntentResult, question: str) -> None:
-        title, message = notices.ROADMAP_MISSING
-        # NoticeKind hiện chưa có kiểu thông báo cho trạng thái trống.
-        self.emit_notice(kind="error", code=ErrorCode.ROADMAP_NOT_FOUND.value, title=title, message=message)
+    async def on_roadmap_missing(
+        self, r: IntentResult, question: str, *, latest_outcome: ToolOutcome | None = None
+    ) -> None:
+        await self.generate_roadmap("initial", question, latest_outcome=latest_outcome)
+
+    async def generate_roadmap(
+        self,
+        reason_code: RoadmapReasonCode,
+        question: str,
+        *,
+        behavior_flag_id: str | None = None,
+        shock_id: str | None = None,
+        latest_outcome: ToolOutcome | None = None,
+    ) -> None:
+        await self.ensure_llm()
+
+        async def call(short_name: str, args: dict[str, Any], target: str) -> ToolOutcome:
+            if self.tool_calls >= self.s.max_tool_calls_per_turn:
+                return ToolOutcome(
+                    self.s.tool(short_name, target=target), ToolKind.UNAVAILABLE,
+                    code=ErrorCode.RATE_LIMITED.value, message=notices.GENERIC_ERROR_MESSAGE,
+                )
+            # Lưu có thể đã commit khi mất kết nối. Chỉ lõi xử lý retry khi có xung đột rõ ràng.
+            res = await self.call_tool_retry(
+                short_name, args, target=target, retry=short_name != "save_roadmap"
+            )
+            return res.outcome
+
+        with contextlib.ExitStack() as spans:
+            def on_stage(stage: JobStage, _progress: int) -> None:
+                spans.close()
+                spans.enter_context(self.step(f"roadmap_{stage}"))
+
+            result = await build_roadmap(
+                call, None if self.llm_down else self.llm, self.s, self.scope,
+                reason_code=reason_code, behavior_flag_id=behavior_flag_id, shock_id=shock_id,
+                on_stage=on_stage, tool_calls_left=self.s.max_tool_calls_per_turn - self.tool_calls,
+                latest_outcome=latest_outcome,
+            )
+        self.suitability.extend(result.suitability)
+        if result.model_error is not None:
+            self.llm_failed(result.model_error)
+        if result.model_budget_exhausted:
+            self.degrade_if_no_model()
+        if result.outcome is None:
+            if self.degrade_code is not None:
+                self.flush_degraded_notice(message_override=notices.ROADMAP_UNBUILDABLE)
+            else:
+                self.outcome, self.outcome_code = "error", ErrorCode.ROADMAP_INVALID.value
+                title, message = notices.ROADMAP_UNBUILDABLE
+                self.emit_notice(kind="error", code=self.outcome_code, title=title, message=message)
+            return
+        if not result.outcome.ok:
+            self.tool_failure(result.outcome)
+            return
+        try:
+            block = roadmap_block(result.outcome, self.trace_id)
+        except ContractMismatch as exc:
+            self.tool_failure(ToolOutcome(
+                result.outcome.name, ToolKind.BAD_RESULT,
+                code=ErrorCode.INTERNAL_ERROR.value, detail=str(exc),
+            ))
+            return
+        self.verified = True
+        self.emit_block(block)
+        await self.write("roadmap", question, compact_roadmap(result.outcome.payload or {}))
 
     # --- what-if và kiểm tra trước khi quẹt -------------------------------------------------
     async def on_what_if(self, r: IntentResult, question: str) -> None:
