@@ -298,6 +298,31 @@ def test_skip_cau_hoi_gop_idempotent_va_ngay_khong_co_cau_hoi_thi_400(env):
     )
 
 
+def test_skip_hom_nay_chua_co_dong_review_asks_thi_tao_dong_skipped(env):
+    """Sau đặt lại chỉ có khoản seed ở Chưa phân loại, chưa qua pipeline: GET báo `open`, skip tạo dòng `skipped` (không 400)."""
+    env.reset(MINH)
+    ask_date = "2026-11-21"  # ngày mô phỏng của đồng hồ cố định (offset -19)
+    _, body = rest(env, "GET", "/review", query={"mode": "daily_ask"})
+    assert body["data"]["ask"] == {"ask_date": ask_date, "status": "open"}
+    s1 = rest(env, "POST", "/review/daily-ask/skip", {"ask_date": ask_date})
+    assert s1 == (200, {"ask_date": ask_date, "status": "skipped"})
+    assert rest(env, "POST", "/review/daily-ask/skip", {"ask_date": ask_date}) == s1
+    with env.master() as c:
+        ask = c.execute(
+            "select status, item_count, pending_total_vnd, resolved_at is not null from review_asks where user_id = %s",
+            (MINH,),
+        ).fetchall()
+    assert ask == [("skipped", 2, 180_000, True)]  # hai khoản seed
+    _, body = rest(env, "GET", "/review", query={"mode": "daily_ask"})
+    assert body["data"]["ask"]["status"] == "skipped" and body["data"]["count"] == 2
+    svc, *_ = make(env, judge=FakeJudge(Verdict(None, 0.0)))
+    svc.run(MINH, record(env, amount_vnd=30_000, tx_type="qr_other", counterparty="Tiệm Lạ"))
+    with env.master() as c:
+        assert c.execute(
+            "select status, item_count from review_asks where user_id = %s", (MINH,)
+        ).fetchall() == [("skipped", 3)]  # pipeline giữ nguyên `skipped`, chỉ cập nhật số mục
+
+
 def test_review_ba_muc_tu_gan_vao_xem_lai_roi_dung_roi_xoa_co_khong_chuyen_tien(env, schema):
     env.reset(MINH)
     strict = load_thresholds(

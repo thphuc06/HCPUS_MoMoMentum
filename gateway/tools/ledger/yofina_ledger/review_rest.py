@@ -6,7 +6,8 @@ Nối vào `rest_api._dispatch` bằng MỘT khối chuyển tiếp cho tiền t
 - `GET /review?mode=review|daily_ask&limit=`: khối `review_list` (cả phong bì khối). Chỉ đọc: việc mở "câu hỏi gộp của hôm nay" do pipeline
   phân loại ghi (`classify_write.upsert_review_ask`). Chưa có dòng của hôm nay thì `ask.status` là `open` (sắp hỏi).
 - `POST /review/daily-ask/skip {ask_date}`: ghi `skipped` cho câu hỏi gộp của ngày đó (các giao dịch vẫn ở Chưa phân loại, hôm nay không
-  hỏi lại). Không đổi số dư, không qua token. Idempotent; đã `answered` thì trả `answered`. Ngày không có câu hỏi thì 400.
+  hỏi lại). Không đổi số dư, không qua token. Idempotent; đã `answered` thì trả `answered`. Hôm nay (ngày mô phỏng) chưa có dòng thì tạo
+  dòng `skipped` (GET đã báo câu hỏi của hôm nay là `open`). Ngày khác không có câu hỏi thì 400.
 
 Sửa hũ KHÔNG có đường ghi riêng ở đây: dùng `assign_jar` qua `POST /confirmations` rồi `POST /actions` (ADR-0002).
 """
@@ -166,6 +167,20 @@ def review_response(
     return block_to_wire(block)
 
 
+# Tạo câu hỏi gộp của hôm nay ở trạng thái `skipped` (số mục, tổng tiền từ tập đang ở Chưa phân loại, như `upsert_review_ask`). Có dòng
+# do pipeline vừa ghi song song thì chỉ chuyển `open` sang `skipped`, giữ `answered`.
+_SQL_INSERT_SKIPPED = (
+    "INSERT INTO review_asks (user_id, ask_date, status, item_count, pending_total_vnd, resolved_at) "
+    "SELECT :uid, CAST(:d AS date), 'skipped', count(*), coalesce(sum(abs(t.amount_vnd)), 0), now() "
+    "FROM transactions t JOIN jars j ON j.user_id = t.user_id AND j.code = t.jar_code "
+    "WHERE t.user_id = :uid AND t.kind <> 'transfer' AND j.system_role = 'unclassified' "
+    "ON CONFLICT (user_id, ask_date) DO UPDATE SET "
+    "status = CASE WHEN review_asks.status = 'open' THEN 'skipped' ELSE review_asks.status END, "
+    "resolved_at = CASE WHEN review_asks.status = 'open' THEN now() ELSE review_asks.resolved_at END "
+    "RETURNING status"
+)
+
+
 def skip_response(service: Any, user_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
     raw = body.get("ask_date")
     try:
@@ -177,13 +192,19 @@ def skip_response(service: Any, user_id: str, body: Mapping[str, Any]) -> dict[s
     if not isinstance(raw, str) or len(raw) != 10:
         raise YofinaError(ErrorCode.PARAMS_INVALID, "ask_date phải là ngày dạng YYYY-MM-DD.")
     db = service.repo.db
+    today = service._app_date(service.repo.clock_offset(user_id), service.now())
     with db.transaction(user_id) as t:
         rows = t.execute(
             "SELECT status FROM review_asks WHERE user_id = :uid AND ask_date = CAST(:d AS date)",
             {"uid": user_id, "d": ask_date},
         )
         if not rows:
-            raise YofinaError(ErrorCode.PARAMS_INVALID, "Ngày này không có câu hỏi gộp.")
+            if ask_date != today:
+                raise YofinaError(ErrorCode.PARAMS_INVALID, "Ngày này không có câu hỏi gộp.")
+            # Hôm nay luôn có câu hỏi gộp (GET /review báo `open` khi chưa có dòng): ghi luôn dòng `skipped` để lần đọc sau và
+            # pipeline phân loại (`upsert_review_ask` giữ nguyên `skipped`) đều thấy đã để sau. Cùng câu lệnh với lần ghi đồng thời.
+            out = t.execute(_SQL_INSERT_SKIPPED, {"uid": user_id, "d": ask_date})
+            return {"ask_date": ask_date.isoformat(), "status": out[0]["status"]}
         status = rows[0]["status"]
         if status == "open":
             t.execute(
