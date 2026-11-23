@@ -61,7 +61,7 @@ Lệnh chép cả gói `yofina_agent` (nhiều hơn danh sách module tối thi�
 | Visibility timeout SQS | 1.800 s | `roadmapVisibilityTimeoutSeconds` | 6 lần timeout (khuyến nghị của AWS), lớn hơn lease |
 | Batch size / `maxConcurrency` | 1 / 2 | `roadmapBatchSize`, `roadmapMaxConcurrency` | Một job một lần gọi; 2 là tối thiểu của SQS event source, giữ dưới rpm của Claude |
 | `ReportBatchItemFailures` | bật | | `JobBusy` và lỗi Data API trả về `batchItemFailures` |
-| `maxReceiveCount` | 6 | `roadmapMaxReceiveCount` | AWS khuyến nghị ≥ 5; `JobBusy` cũng tốn một lượt nhận. Mỗi lần giao lại cách 30 phút nên tin chờ được khoảng 3 giờ trước khi vào DLQ |
+| `maxReceiveCount` | 10 | `roadmapMaxReceiveCount` | AWS khuyến nghị ≥ 5; `JobBusy` cũng tốn một lượt nhận, và một người dùng có thể có vài sự kiện cùng lúc (hồ sơ, đổi hành vi, yêu cầu tay). Mỗi lần giao lại cách 30 phút nên tin chờ được khoảng 5 giờ trước khi vào DLQ |
 | Giữ tin | 4 ngày | `roadmapRetentionDays` | Phải dài hơn visibility × maxReceiveCount (synth kiểm) |
 | `YOFINA_ROADMAP_INVOKE_CONNECT_TIMEOUT_SECONDS` | 5 s | `roadmapInvokeConnectTimeoutSeconds` | |
 | `YOFINA_ROADMAP_INVOKE_READ_TIMEOUT_SECONDS` | 65 s | `roadmapInvokeReadTimeoutSeconds` | Mặc định là timeout lớn nhất của hai Lambda tool (forecast 60 s, ledger 30 s) cộng 5 s |
@@ -71,8 +71,8 @@ Lệnh chép cả gói `yofina_agent` (nhiều hơn danh sách module tối thi�
 
 `YOFINA_ROADMAP_FORECAST_FUNCTION_NAME` trỏ `yofina-forecast` (hàm tool), không phải `yofina-forecast-batch`. Biến `YOFINA_SSM_PREFIX` có đặt cho `yofina_core.llm` đọc nhánh `/yofina/llm`; `AgentSettings` tự bỏ khóa này.
 
-## Bàn giao cho Phúc
+## Bàn giao
 
-1. Áp dụng migration `0052` và triển khai các tool Phase 4 trước. Checkout C4 hiện chưa có nhánh dispatch thực tế cho `get_roadmap`, `optimize_allocation`, `save_roadmap` trong ledger hoặc `get_resilience_score` trong forecast. Các bên phát `roadmap.regeneration_requested` và `behavior.changed` cũng phải sẵn sàng.
-2. Thêm construct CDK cho Lambda và ba rule EventBridge trên bus, lọc cả `source` và `detail-type`. Gửi phong bì nguyên vẹn vào SQS với DLQ. Bật `ReportBatchItemFailures` cho event source mapping và cấu hình redrive đủ thời gian để thử lại lúc job khác cùng người dùng đang chạy.
-3. Đặt timeout Lambda theo ngân sách Bedrock, Data API và Invoke tool. Dùng batch size một khi deploy vì mỗi job có thể chạy lâu. Đặt visibility timeout và lease theo bảng cấu hình, và theo dõi DLQ cùng số job `failed` trước khi bật nguồn sự kiện.
+1. ~~Migration `0052` và các tool Phase 4~~: đã deploy 23/11. Ledger dispatch `planner___get_roadmap`, `planner___optimize_allocation`, `planner___save_roadmap`, `planner___check_suitability` (`gateway/tools/ledger/yofina_ledger/gateway_api.py`, `tool_name` lấy phần sau `___` cuối cùng nên tiền tố `planner___` dùng được). Forecast dispatch `forecast___get_resilience_score` (`pipelines/forecast/yofina_forecast/tool.py`). Nguồn sự kiện: ledger phát `roadmap.regeneration_requested` và `profile.updated` (`yofina_ledger/events.py`), forecast phát `behavior.changed` sau PELT (`yofina_forecast/events.py`).
+2. ~~Construct CDK~~: đã có (`RoadmapRegen`, mục trên), chưa deploy.
+3. Khi deploy: build zip, `uv run scripts/cdk.py diff YofinaTools`, `deploy YofinaTools`. Theo dõi DLQ `yofina-roadmap-events-dlq` và số job `failed` sau lần chạy đầu.

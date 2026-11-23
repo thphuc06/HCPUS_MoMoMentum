@@ -92,8 +92,10 @@ export function loadRoadmapRegenConfig(app: App): RoadmapRegenConfig {
   if (maxConcurrency < 2 || maxConcurrency > 1000) throw new Error('roadmapMaxConcurrency phải trong 2..1000 (giới hạn của SQS event source)');
   const batchSize = ctxNum(app, 'roadmapBatchSize', 1);
   if (batchSize < 1 || batchSize > 10) throw new Error('roadmapBatchSize phải trong 1..10');
-  // Tối thiểu 5 theo khuyến nghị của AWS; thêm một lượt vì JobBusy và Aurora đang dậy đều tốn lượt nhận.
-  const maxReceiveCount = ctxNum(app, 'roadmapMaxReceiveCount', 6);
+  // AWS khuyến nghị tối thiểu 5. Ở đây lấy 10 vì `JobBusy` (người dùng đang có job sống khác) cũng tốn một lượt nhận: một người dùng
+  // có thể cùng lúc có profile.updated, behavior.changed và yêu cầu tay, mỗi tin chờ nhau qua vài lần giao; cộng lượt Aurora đang dậy
+  // hoặc Data API lỗi. Mỗi lần giao lại cách một visibility timeout (30 phút) nên tin chờ được khoảng 5 giờ trước khi vào DLQ.
+  const maxReceiveCount = ctxNum(app, 'roadmapMaxReceiveCount', 10);
   if (maxReceiveCount < 1 || maxReceiveCount > 1000) throw new Error('roadmapMaxReceiveCount phải trong 1..1000');
   const retentionDays = ctxNum(app, 'roadmapRetentionDays', 4);
   if (retentionDays * 86400 <= visibility * maxReceiveCount) {

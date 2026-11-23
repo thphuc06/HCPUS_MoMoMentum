@@ -184,7 +184,9 @@ describe('RoadmapRegen', () => {
     const q = Object.values(
       template.findResources('AWS::SQS::Queue', { Properties: { QueueName: 'yofina-roadmap-events' } }) as Record<string, Res>,
     )[0];
-    assert.ok(q.Properties.RedrivePolicy.maxReceiveCount >= 5);
+    assert.equal(q.Properties.RedrivePolicy.maxReceiveCount, 10); // đủ lượt cho JobBusy (xem loadRoadmapRegenConfig)
+    // tin phải kịp vào DLQ trước khi hết hạn giữ: retention > visibility × maxReceiveCount
+    assert.ok(q.Properties.MessageRetentionPeriod > q.Properties.VisibilityTimeout * q.Properties.RedrivePolicy.maxReceiveCount);
     template.hasResourceProperties('AWS::SQS::Queue', { QueueName: 'yofina-roadmap-events-dlq', MessageRetentionPeriod: 1209600 });
   });
 
