@@ -57,6 +57,10 @@ affordability) đặt ở jar_text; from_jar_text và to_jar_text CHỈ dùng kh
 obligation_kind (rent, bill, subscription hoặc loan; không chắc thì null), amount_vnd (số tiền mỗi kỳ), due_day (ngày đến hạn trong tháng).
 - shock_id chỉ dùng cho stress: chọn mã của cú sốc mẫu phù hợp, kể cả khi người dùng gửi nhãn từ chip; không khớp cú sốc nào thì để null.
 - roadmap_action chỉ dùng cho roadmap: "view" khi muốn xem bản hiện có, "create" khi muốn lập mới hoặc lập lại. Chưa rõ thì để null.
+- roadmap có mục tiêu người dùng nói ("lập kế hoạch để dành 15 triệu ở hũ Mua xe trong 6 tháng"): số tiền mục tiêu đặt ở amount_vnd, \
+tên hũ chứa mục tiêu ở jar_text (giữ nguyên chữ họ gõ, không đặt ở from_jar_text hay to_jar_text), hạn ở date_text: chép nguyên cụm chữ chỉ \
+thời gian họ nói (ví dụ "cuối tháng này", "31/12", "6 tháng nữa"), không tự đổi thành ngày; roadmap_action là "create". \
+Phần nào người dùng không nói thì để null, không đoán.
 - <cau_moi> luôn là thứ cần phân loại; <lich_su> chỉ để hiểu câu cụt. Chỉ GHÉP với câu trước khi <cau_moi> là câu CỤT, \
 tự nó không thành yêu cầu (ví dụ chỉ có "1 triệu", "trả sau", "hũ ăn uống", "chuyển luôn đi"): khi đó lấy ý định và tham số của câu trước \
 cộng phần mới. Nếu <cau_moi> tự đủ nghĩa (có việc cần làm hoặc món, chuyến, khoản tiền riêng) thì đó là yêu cầu MỚI: \

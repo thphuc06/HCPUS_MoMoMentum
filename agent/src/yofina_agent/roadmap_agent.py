@@ -139,6 +139,18 @@ class RoadmapResult:
 
 
 @dataclass(frozen=True)
+class UserGoal:
+    """Mục tiêu người dùng nói trong câu (đã đổi bằng mã: mã hũ tiết kiệm, ngày ISO theo ngày mô phỏng).
+
+    Chỉ gửi cho `optimize_allocation` của lượt này, không lưu vào hũ. Vắng `target_vnd` hay `target_date` thì tool dùng giá trị đã khai ở hũ.
+    """
+
+    jar: str
+    target_vnd: int | None = None
+    target_date: str | None = None
+
+
+@dataclass(frozen=True)
 class RegenerationContext:
     """Thông tin từ job đã ghi trong DB, dùng khi chạy ngoài Turn."""
 
@@ -675,6 +687,7 @@ async def build_roadmap(
     tool_calls_left: int | None = None,
     latest_outcome: ToolOutcome | None = None,
     regeneration: RegenerationContext | None = None,
+    user_goal: UserGoal | None = None,
 ) -> RoadmapResult:
     """Sinh lộ trình, chỉ ghi bản nháp sau khi grounding và suitability đạt."""
 
@@ -786,6 +799,20 @@ async def build_roadmap(
             preferences["note"] = _clean_text(regeneration.note)
         if preferences:
             model_context["regeneration_preferences"] = preferences
+    # Mục tiêu người dùng nói trong câu: bản phác thảo đầu cũng phải thấy (không chỉ vòng sửa). Kiểm hũ và số đưa vào
+    # optimize_allocation vẫn làm ở bước allocate bên dưới.
+    if user_goal is not None:
+        model_context["user_goal"] = {
+            k: v
+            for k, v in {
+                "jar_code": user_goal.jar,
+                "target_text": format_vnd(user_goal.target_vnd)
+                if user_goal.target_vnd is not None
+                else None,
+                "target_date": user_goal.target_date,
+            }.items()
+            if v is not None
+        }
     # Lỗi schema của bản phác thảo (ví dụ `kind` ngoài enum) được gửi lại cho model một lần. Lần thử lại tính vào trần của lượt
     # nên lấy bớt vòng sửa: chat (router 1 + phác thảo 2) còn 1 vòng sửa trong trần 4, job sinh lại (phác thảo 2) còn 2.
     attempts = _DRAFT_ATTEMPTS
@@ -811,12 +838,42 @@ async def build_roadmap(
     goal_jars = {
         j["code"] for j in compact["jars"] if j.get("kind") == "saving" and "goal_vnd" in j
     }
-    goals = {goal.jar: goal.weight for goal in sketch.goals if goal.jar in goal_jars}
+    goals: dict[str, dict[str, Any]] = {
+        goal.jar: {"jar": goal.jar, "weight": goal.weight}
+        for goal in sketch.goals
+        if goal.jar in goal_jars
+    }
+    # Mục tiêu người dùng nói thay cho trọng số model chọn với cùng hũ. Chỉ hũ tiết kiệm; chỉ có hạn thì hũ phải có sẵn goal_vnd.
+    saving_jars = {j["code"]: j for j in compact["jars"] if j.get("kind") == "saving"}
+    if (
+        user_goal is not None
+        and (jar := saving_jars.get(user_goal.jar)) is not None
+        and (user_goal.target_vnd is not None or (user_goal.target_date and "goal_vnd" in jar))
+    ):
+        entry: dict[str, Any] = {"jar": user_goal.jar}
+        if user_goal.target_vnd is not None:
+            entry["target_vnd"] = user_goal.target_vnd
+        if user_goal.target_date:
+            entry["target_date"] = user_goal.target_date
+        goals[user_goal.jar] = entry
+        # Số tiền mục tiêu đến từ câu người dùng: đưa vào bản gọn để grounding của bước (Allowed) và model sửa thấy nó.
+        compact["user_goal"] = {
+            k: v
+            for k, v in {
+                "jar_code": user_goal.jar,
+                "target_vnd": user_goal.target_vnd,
+                "target_text": format_vnd(user_goal.target_vnd)
+                if user_goal.target_vnd is not None
+                else None,
+                "target_date": user_goal.target_date,
+            }.items()
+            if v is not None
+        }
     args: dict[str, Any] = {}
     if sketch.horizon_months is not None:
         args["horizon_months"] = sketch.horizon_months
     if goals:
-        args["goals"] = [{"jar": jar, "weight": weight} for jar, weight in goals.items()]
+        args["goals"] = list(goals.values())
     if shock_id is not None:
         args["shock_id"] = shock_id
     optimized = await tools("optimize_allocation", args, "planner")

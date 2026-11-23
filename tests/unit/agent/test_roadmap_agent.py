@@ -809,3 +809,64 @@ def test_whole_roadmap_rejected_logs_rules_without_amounts(caplog):
     amount = args_for(tools, "check_suitability")[0]["proposal"]["amount_vnd"]
     logged = "\n".join(record.getMessage() for record in caplog.records)
     assert str(amount) not in logged and "Bù hũ dự phòng" not in logged
+# --- mục tiêu người dùng nói trong câu (UserGoal) ----------------------------------------------------
+from yofina_agent.roadmap_agent import UserGoal  # noqa: E402
+
+USER_GOAL = UserGoal(jar="du_lich", target_vnd=1_000_000_000, target_date="2026-11-30")
+
+
+def test_muc_tieu_nguoi_dung_thay_trong_so_model_cung_hu():
+    tools = scripted_tools(get_jar_balances=goal_balances())
+    draft = outline(review())
+    draft["goals"] = [{"jar": "du_lich", "weight": 2}, {"jar": "du_phong", "weight": 3}]
+    result, _, _ = build(tools, draft, user_goal=USER_GOAL)
+    assert result.outcome.ok
+    assert args_for(tools, "optimize_allocation") == [
+        {
+            "goals": [
+                {"jar": "du_lich", "target_vnd": 1_000_000_000, "target_date": "2026-11-30"},
+                {"jar": "du_phong", "weight": 3},
+            ]
+        }
+    ]
+    # không ghi mục tiêu vào hũ
+    assert not args_for(tools, "save_jars") and "save_jars" not in tools.results
+
+
+@pytest.mark.parametrize(
+    "goal",
+    [
+        UserGoal(jar="an_uong", target_vnd=1_000_000_000),  # hũ chi tiêu
+        UserGoal(jar="nghia_vu", target_vnd=1_000_000_000),  # hũ nghĩa vụ
+        UserGoal(jar="khong_co", target_vnd=1_000_000_000),
+    ],
+)
+def test_muc_tieu_hu_khong_phai_tiet_kiem_khong_gui_optimize(goal):
+    tools = scripted_tools(get_jar_balances=goal_balances())
+    result, _, _ = build(tools, outline(review()), user_goal=goal)
+    assert result.outcome.ok
+    assert args_for(tools, "optimize_allocation") == [{}]
+
+
+def test_so_tien_muc_tieu_cua_nguoi_dung_co_can_cu_trong_buoc():
+    tools = scripted_tools(get_jar_balances=goal_balances())
+    reason = "Mục tiêu 1.000.000.000 ₫ của hũ Du lịch cần xem lại"
+    result, client, scope = build(tools, outline(review(reason=reason)), user_goal=USER_GOAL)
+    assert result.outcome.ok and scope.calls == 1  # không vòng sửa numeric_grounding
+    (stored,) = args_for(tools, "save_roadmap")
+    assert stored["phases"][0]["steps"][0]["reason"] == reason
+    # thiếu mục tiêu của người dùng thì cùng câu đó là số không căn cứ
+    tools = scripted_tools(get_jar_balances=goal_balances())
+    result, client, _ = build(tools, outline(review(reason=reason)), outline(review()))
+    assert prompt(client, 1)["feedback"][0]["rule_id"] == "numeric_grounding"
+
+
+def test_muc_tieu_nguoi_dung_vo_nghiem_luu_infeasible_va_hai_lua_chon():
+    tools = scripted_tools(allocation="ok_infeasible", get_jar_balances=goal_balances())
+    result, _, _ = build(tools, outline(review()), user_goal=USER_GOAL)
+    assert result.outcome.ok
+    assert args_for(tools, "optimize_allocation")[0]["goals"][0]["target_vnd"] == 1_000_000_000
+    (stored,) = args_for(tools, "save_roadmap")
+    data = fixture("optimize_allocation.ok_infeasible.json")["data"]
+    assert stored["feasibility"] == "infeasible"
+    assert stored["alternatives"] == data["alternatives"] and len(stored["alternatives"]) == 2

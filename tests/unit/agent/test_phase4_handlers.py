@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from typing import get_args
 
 import pytest
@@ -18,14 +19,22 @@ from agent_helpers import (
     mcp_ok,
     route_response,
     run_turn,
+    tool_response,
     types,
 )
 from yofina_agent import notices
 from yofina_agent.schemas import Intent
 from yofina_agent.textutil import strip_accents
 from yofina_agent.tools import classify_result
-from yofina_agent.turn import Turn
+from yofina_agent.turn import (
+    _GOAL_BAD_DATE,
+    _GOAL_NOT_SAVING,
+    _GOAL_UNKNOWN_JAR,
+    Turn,
+    _roadmap_goal_date,
+)
 from yofina_agent.writer import build_writer_prompt
+
 from yofina_core.errors import ErrorCode
 from yofina_core.resilience import load_shock_set
 
@@ -240,3 +249,180 @@ def test_phase4_writer_verifies_numbers_before_emitting(monkeypatch, text, groun
 
 def test_handlers_cover_every_intent():
     assert set(Turn._intent_handlers(object.__new__(Turn))) == set(get_args(Intent))
+
+
+# --- lộ trình nhận mục tiêu người dùng nói trong câu ------------------------------------------------
+GOAL_QUESTION = "Lập giúp mình lộ trình gom đủ 1 tỷ đồng trong hũ Du lịch trước cuối tháng này"
+
+
+def roadmap_tools(*, allocation="ok", latest="error_not_found"):
+    """Gateway giả cho đường lập lộ trình; `save_roadmap` lưu đúng feasibility, goals, alternatives được gửi (như ledger)."""
+
+    def ok(name, file):
+        return lambda _args: classify_result(name, mcp_ok(fixture(file)))
+
+    def save(args):
+        payload = fixture("save_roadmap.ok.json")
+        payload["data"].update(
+            feasibility=args["feasibility"], goals=args["goals"], alternatives=args["alternatives"]
+        )
+        return classify_result("save_roadmap", mcp_ok(payload))
+
+    return FakeTools(
+        {
+            "get_jar_balances": ok("get_jar_balances", "get_jar_balances.ok_goals.json"),
+            "get_resilience_score": ok("get_resilience_score", "get_resilience_score.ok.json"),
+            "get_roadmap": ok("get_roadmap", f"get_roadmap.{latest}.json"),
+            "optimize_allocation": ok("optimize_allocation", f"optimize_allocation.{allocation}.json"),
+            "save_roadmap": save,
+        }
+    )
+
+
+def review_outline():
+    step = {
+        "step_id": "giu_muc_tieu",
+        "kind": "review_goal",
+        "title": "Xem lại mục tiêu",
+        "reason": "Theo dõi khả năng giữ mục tiêu",
+        "jar_code": "du_lich",
+    }
+    return {"phases": [{"phase_id": "on_dinh", "title": "Ổn định ngân sách", "steps": [step]}]}
+
+
+def goal_turn(monkeypatch, *, tools, writer=None, **params):
+    llm = make_llm(
+        [route_response(intent="roadmap", **params), tool_response("draft_roadmap", review_outline())]
+    )
+    return run_turn(GOAL_QUESTION, llm=llm, tools=tools, writer=writer, monkeypatch=monkeypatch)
+
+
+def calls_of(tools, name):
+    return [args for tool, args in tools.calls if tool == name]
+
+
+def texts_of(events):
+    return [e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"]
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("cuối tháng này", date(2026, 11, 30)),
+        ("trước cuối tháng này", date(2026, 11, 30)),
+        ("cuối tháng sau", date(2026, 12, 31)),
+        ("31/12", date(2026, 12, 31)),
+        ("15/3", date(2027, 3, 15)),
+        ("20/11", date(2027, 11, 20)),  # không có năm và đã qua: năm sau
+        ("15/01/2027", date(2027, 1, 15)),
+        ("ngày 5 tháng 1 năm 2027", date(2027, 1, 5)),
+        ("6 tháng nữa", date(2027, 5, 21)),
+        ("2 tuần nữa", date(2026, 12, 5)),
+        ("tháng 3 năm sau", date(2027, 3, 31)),
+        ("cuối tháng 12 năm sau", date(2027, 12, 31)),
+        ("cuối năm", date(2026, 12, 31)),
+        ("2027-02-28", date(2027, 2, 28)),
+        ("20/11/2026", None),  # đã qua
+        ("31/02", None),
+        ("sớm nhất có thể", None),
+    ],
+)
+def test_doi_han_muc_tieu_theo_ngay_mo_phong(text, expected):
+    assert _roadmap_goal_date(text, date(2026, 11, 21)) == expected
+
+
+@pytest.mark.parametrize(
+    "action, latest, reason",
+    [("create", "error_not_found", "initial"), (None, "ok", "user_request")],
+)
+def test_lo_trinh_nhan_muc_tieu_trong_cau_va_khoi_infeasible(monkeypatch, action, latest, reason):
+    tools = roadmap_tools(allocation="ok_infeasible", latest=latest)
+    writer = FakeWriter("Mục tiêu 1 tỷ cho hũ Du lịch trước 30/11/2026 chưa khả thi.")
+    events, _, writer = goal_turn(
+        monkeypatch,
+        tools=tools,
+        writer=writer,
+        roadmap_action=action,
+        amount_vnd=1_000_000_000,
+        jar_text="hũ Du lịch",
+        date_text="cuối tháng này",
+    )
+    check_agui_order(events)
+    # đổi hũ và ngày bằng mã; mục tiêu chỉ gửi optimize_allocation, không lưu vào hũ
+    assert calls_of(tools, "optimize_allocation") == [
+        {"goals": [{"jar": "du_lich", "target_vnd": 1_000_000_000, "target_date": "2026-11-30"}]}
+    ]
+    assert len(calls_of(tools, "get_jar_balances")) == 1  # build_roadmap dùng lại lần đọc hũ của handler
+    assert {tool for tool, _ in tools.calls} <= {
+        "get_jar_balances", "get_obligations", "get_resilience_score", "get_roadmap",
+        "optimize_allocation", "check_suitability", "save_roadmap",
+    }  # fmt: skip  # check_suitability: agent kiểm mọi bước như ledger lúc lưu (fix/roadmap-robust)
+    (stored,) = calls_of(tools, "save_roadmap")
+    assert stored["reason_code"] == reason
+    assert stored["feasibility"] == "infeasible" and len(stored["alternatives"]) == 2
+    (block,) = blocks_of(events)
+    assert block["type"] == "roadmap"
+    assert block["data"]["feasibility"] == "infeasible"
+    assert [a["kind"] for a in block["data"]["alternatives"]] == ["delay_goal", "reduce_goal"]
+    # không hỏi lại; câu trả lời được nhắc số tiền mục tiêu người dùng nói (có căn cứ)
+    (call,) = writer.calls
+    assert call["compact"]["user_goal"] == {
+        "jar": "Du lịch",
+        "target_text": "1.000.000.000 ₫",
+        "target_short_text": "1 tỷ",
+        "target_date_text": "30/11/2026",
+        "target_day_month_text": "30/11",
+    }
+    assert texts_of(events) == ["Mục tiêu 1 tỷ cho hũ Du lịch trước 30/11/2026 chưa khả thi."]
+
+
+@pytest.mark.parametrize(
+    "jar_text, note",
+    [
+        ("hũ Ăn uống", _GOAL_NOT_SAVING.format(name="Ăn uống")),
+        ("hũ Nghĩa vụ", _GOAL_NOT_SAVING.format(name="Nghĩa vụ")),
+        ("hũ Mua nhà", _GOAL_UNKNOWN_JAR.format(typed="hũ Mua nhà")),
+    ],
+)
+def test_lo_trinh_bo_muc_tieu_hu_khong_phai_tiet_kiem_va_noi_ro(monkeypatch, jar_text, note):
+    tools = roadmap_tools()
+    events, _, _ = goal_turn(
+        monkeypatch,
+        tools=tools,
+        roadmap_action="create",
+        amount_vnd=1_000_000_000,
+        jar_text=jar_text,
+        date_text="cuối tháng này",
+    )
+    check_agui_order(events)
+    assert texts_of(events)[0] == note
+    assert calls_of(tools, "optimize_allocation") == [{}]  # không gửi mục tiêu
+    assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
+
+
+def test_lo_trinh_han_khong_doc_duoc_van_giu_so_tien(monkeypatch):
+    tools = roadmap_tools()
+    events, _, _ = goal_turn(
+        monkeypatch,
+        tools=tools,
+        roadmap_action="create",
+        amount_vnd=20_000_000,
+        jar_text="Du lịch",
+        date_text="sớm nhất có thể",
+    )
+    assert texts_of(events)[0] == _GOAL_BAD_DATE.format(typed="sớm nhất có thể", name="Du lịch")
+    assert calls_of(tools, "optimize_allocation") == [
+        {"goals": [{"jar": "du_lich", "target_vnd": 20_000_000}]}
+    ]
+
+
+def test_lo_trinh_chi_noi_han_dung_so_tien_da_khai_o_hu(monkeypatch):
+    tools = roadmap_tools()
+    events, _, _ = goal_turn(
+        monkeypatch, tools=tools, jar_text="hũ Dự phòng", date_text="6 tháng nữa"
+    )
+    check_agui_order(events)
+    assert calls_of(tools, "optimize_allocation") == [
+        {"goals": [{"jar": "du_phong", "target_date": "2027-05-21"}]}
+    ]
+    assert "TEXT_MESSAGE_CONTENT" not in types(events)[: types(events).index("ACTIVITY_SNAPSHOT")]
