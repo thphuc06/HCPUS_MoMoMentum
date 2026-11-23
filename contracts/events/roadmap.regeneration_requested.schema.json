@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/events/roadmap.regeneration_requested.schema.json",
+  "title": "RoadmapRegenerationRequestedEvent",
+  "description": "Phần `detail` của sự kiện `roadmap.regeneration_requested` (source `yofina.ledger`): người dùng bấm sinh lại lộ trình (`POST /roadmap/regenerate`) hoặc một thay đổi cần sinh lại (mục tiêu, thu nhập, dự báo lệch) đã ghi một dòng `roadmap_jobs`. Consumer là Lambda `yofina-roadmap-regen`, đọc job theo `job_id` (ghi chú tự do của người dùng nằm ở job, KHÔNG nằm trong sự kiện để tránh PII). `event_id` bằng `job_id`. Phát SAU khi dòng job đã commit.",
+  "type": "object",
+  "required": ["v", "event_id", "user_id", "occurred_at", "app_date", "job_id", "trigger"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "common.schema.json#/$defs/EventVersion" },
+    "event_id": { "$ref": "common.schema.json#/$defs/EventId" },
+    "user_id": { "$ref": "common.schema.json#/$defs/UserId" },
+    "trace_id": { "$ref": "../blocks/envelope.schema.json#/$defs/TraceId" },
+    "occurred_at": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+    "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+    "job_id": { "$ref": "common.schema.json#/$defs/Uuid" },
+    "trigger": {
+      "type": "string",
+      "enum": ["user_request", "behavior_changed", "goal_changed", "income_changed", "forecast_drift"]
+    },
+    "based_on_version": {
+      "description": "Phiên bản lộ trình mà lần sinh lại xuất phát.",
+      "$ref": "../blocks/roadmap.schema.json#/$defs/RoadmapVersion"
+    },
+    "alternative_id": {
+      "description": "`option_id` của lựa chọn người dùng đã chọn khi mục tiêu chưa khả thi.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+    },
+    "behavior_flag_id": { "$ref": "common.schema.json#/$defs/Uuid" }
+  }
+}

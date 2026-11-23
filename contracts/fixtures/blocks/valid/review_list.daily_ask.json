@@ -1,0 +1,118 @@
+{
+  "v": 1,
+  "id": "review_list:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:daily_ask",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Hôm nay mình chưa xếp được hũ cho 2 giao dịch, tổng 180.000 ₫.",
+  "source": {
+    "tool": "rest:GET /review",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "review_list",
+  "data": {
+    "mode": "daily_ask",
+    "headline": "Hôm nay mình chưa xếp được hũ cho 2 giao dịch, tổng 180.000 ₫.",
+    "count": 2,
+    "pending_total_vnd": 180000,
+    "items": [
+      {
+        "transaction_id": "8a3f5d14-9c4e-4f7a-8d02-1e9a8f7b6c43",
+        "occurred_at": "2026-12-10T01:30:00Z",
+        "app_date": "2026-11-21",
+        "kind": "expense",
+        "amount_vnd": 60000,
+        "counterparty": "Lê Thị Mai",
+        "tier": "ask",
+        "current_jar": {
+          "code": "chua_phan_loai",
+          "name": "Chưa phân loại"
+        },
+        "suggestions": [
+          {
+            "jar": {
+              "code": "an_uong",
+              "name": "Ăn uống",
+              "color_key": "violet",
+              "icon_key": "utensils"
+            },
+            "confidence": 0.41,
+            "reason": "Giờ ăn trưa, số tiền như một bữa ăn"
+          },
+          {
+            "jar": {
+              "code": "giai_tri",
+              "name": "Giải trí",
+              "color_key": "orchid",
+              "icon_key": "gamepad"
+            },
+            "confidence": 0.33,
+            "reason": "Giống 1 giao dịch trước gửi cho cùng người"
+          }
+        ],
+        "can_remember": true
+      },
+      {
+        "transaction_id": "0b5a7c36-1e6f-4a9b-9f24-3a1c0b9d8e54",
+        "occurred_at": "2026-12-10T02:10:00Z",
+        "app_date": "2026-11-21",
+        "kind": "expense",
+        "amount_vnd": 120000,
+        "tier": "ask",
+        "current_jar": {
+          "code": "chua_phan_loai",
+          "name": "Chưa phân loại"
+        },
+        "suggestions": [],
+        "can_remember": false
+      }
+    ],
+    "jars": [
+      {
+        "code": "an_uong",
+        "name": "Ăn uống",
+        "color_key": "violet",
+        "icon_key": "utensils"
+      },
+      {
+        "code": "di_lai",
+        "name": "Đi lại",
+        "color_key": "sky",
+        "icon_key": "bus"
+      },
+      {
+        "code": "hoa_don",
+        "name": "Hóa đơn",
+        "color_key": "brown",
+        "icon_key": "receipt"
+      },
+      {
+        "code": "giai_tri",
+        "name": "Giải trí",
+        "color_key": "orchid",
+        "icon_key": "gamepad"
+      },
+      {
+        "code": "du_lich",
+        "name": "Du lịch",
+        "color_key": "teal",
+        "icon_key": "plane"
+      },
+      {
+        "code": "du_phong",
+        "name": "Dự phòng",
+        "color_key": "blue",
+        "icon_key": "shield"
+      },
+      {
+        "code": "nghia_vu",
+        "name": "Nghĩa vụ",
+        "color_key": "slate",
+        "icon_key": "wallet"
+      }
+    ],
+    "ask": {
+      "ask_date": "2026-11-21",
+      "status": "open"
+    }
+  }
+}

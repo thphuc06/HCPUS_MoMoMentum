@@ -1,0 +1,25 @@
+{
+  "shocks": [
+    {
+      "shock_id": "mat_viec_2_thang",
+      "kind": "income_loss",
+      "label": "Mất việc 2 tháng",
+      "description": "Thu nhập dừng trong suốt thời gian này; chi tiêu và nghĩa vụ vẫn như cũ.",
+      "duration_days": 60
+    },
+    {
+      "shock_id": "tien_tro_tang",
+      "kind": "expense_increase",
+      "label": "Tiền trọ tăng",
+      "description": "Tiền nhà trọ hằng tháng tăng và giữ mức mới trong thời gian này.",
+      "duration_days": 90
+    },
+    {
+      "shock_id": "om_mot_tuan",
+      "kind": "health_event",
+      "label": "Ốm một tuần",
+      "description": "Nghỉ làm không lương trong thời gian này, thêm một khoản chi khám chữa bệnh.",
+      "duration_days": 7
+    }
+  ]
+}

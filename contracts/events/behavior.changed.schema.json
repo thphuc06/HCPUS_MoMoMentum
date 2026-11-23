@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/events/behavior.changed.schema.json",
+  "title": "BehaviorChangedEvent",
+  "description": "Phần `detail` của sự kiện `behavior.changed` (source `yofina.forecast`): điểm gãy hành vi chi tiêu của MỘT hũ đã được XÁC NHẬN (PELT trong batch đêm; mức mới giữ khoảng 2 tuần). Dấu hiệu nghi (CUSUM hoặc PageHinkley trong đường sự kiện) KHÔNG phát sự kiện này. Consumer đầu tiên là Lambda sinh lại lộ trình (`yofina-roadmap-regen`): tạo job `behavior_changed` với `dedupe_key` là `event_id`. `event_id` bằng `flag_id` (dòng `behavior_flags`), nên phát lại cùng một dấu hiệu thì cùng event_id. Không có PII: chỉ id, mã hũ và số tiền mỗi tuần.",
+  "type": "object",
+  "required": ["v", "event_id", "user_id", "occurred_at", "app_date", "flag_id", "jar_code", "direction", "old_weekly_vnd", "new_weekly_vnd", "method", "weeks_held"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "common.schema.json#/$defs/EventVersion" },
+    "event_id": { "$ref": "common.schema.json#/$defs/EventId" },
+    "user_id": { "$ref": "common.schema.json#/$defs/UserId" },
+    "trace_id": { "$ref": "../blocks/envelope.schema.json#/$defs/TraceId" },
+    "occurred_at": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+    "app_date": {
+      "description": "Ngày mô phỏng lúc xác nhận.",
+      "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+    },
+    "flag_id": { "$ref": "common.schema.json#/$defs/Uuid" },
+    "jar_code": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" },
+    "direction": {
+      "description": "up: chi tiêu mỗi tuần tăng lên mức mới; down: giảm xuống.",
+      "type": "string",
+      "enum": ["up", "down"]
+    },
+    "old_weekly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+    "new_weekly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+    "method": {
+      "description": "Phương pháp xác nhận: luôn là pelt.",
+      "const": "pelt"
+    },
+    "weeks_held": {
+      "description": "Mức mới đã giữ được bao nhiêu tuần khi xác nhận.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "change_point_date": {
+      "description": "Ngày mô phỏng của điểm gãy PELT, nếu có.",
+      "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+    }
+  }
+}

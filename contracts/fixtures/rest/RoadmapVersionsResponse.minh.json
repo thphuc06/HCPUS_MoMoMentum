@@ -1,0 +1,53 @@
+{
+  "versions": [
+    {
+      "roadmap_id": "5d1c7a42-8e3b-4f6a-9c20-1b7e4a9d3c58",
+      "version": 3,
+      "status": "proposed",
+      "reason_code": "behavior_changed",
+      "reason_text": "Chi Ăn uống mỗi tuần tăng từ 520.000 ₫ lên 810.000 ₫ và giữ mức đó 2 tuần.",
+      "based_on_version": 2,
+      "created_at": "2026-12-10T03:05:00Z",
+      "app_date": "2026-11-21",
+      "feasibility": "relaxed",
+      "counts": {
+        "pending": 5,
+        "accepted": 0,
+        "rejected": 0
+      }
+    },
+    {
+      "roadmap_id": "2b9e6f10-4c7d-4a85-b3e1-6d0a8c5f7e92",
+      "version": 2,
+      "status": "active",
+      "reason_code": "step_edited",
+      "reason_text": "Bạn đã sửa bước 'Bù Ăn uống' (100.000 ₫ mỗi tuần) và lưu thành phiên bản mới.",
+      "based_on_version": 1,
+      "created_at": "2026-11-22T08:12:30Z",
+      "app_date": "2026-11-21",
+      "feasibility": "on_track",
+      "counts": {
+        "pending": 2,
+        "accepted": 2,
+        "rejected": 1
+      }
+    },
+    {
+      "roadmap_id": "9e4a1c07-3b5d-4e82-a6f1-0c7d2b8e5a34",
+      "version": 1,
+      "status": "superseded",
+      "reason_code": "initial",
+      "reason_text": "Lộ trình đầu tiên của bạn.",
+      "created_at": "2026-11-21T10:00:00Z",
+      "app_date": "2026-11-21",
+      "feasibility": "infeasible",
+      "counts": {
+        "pending": 2,
+        "accepted": 0,
+        "rejected": 0
+      }
+    }
+  ],
+  "active_version": 2,
+  "proposed_version": 3
+}

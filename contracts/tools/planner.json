@@ -104,5 +104,386 @@
         }
       }
     }
+  },
+  {
+    "name": "optimize_allocation",
+    "description": "Tính phân bổ hằng tháng cho các hũ bằng quy hoạch tuyến tính (scipy linprog): sàn cứng cho khoản thiết yếu và nghĩa vụ, trọng số mục tiêu khác nhau, mục tiêu có hạn. Vô nghiệm thì nới ràng buộc mềm đúng một lần (lùi hạn mục tiêu, giảm hũ không thiết yếu); vẫn không được thì trả status infeasible kèm đúng hai lựa chọn để nói thẳng với người dùng. Trả từng hũ (sàn, mức hiện tại, mức đề xuất), mục tiêu kịp hay không, điều đã nới, độ trễ giải. Chỉ đọc và tính: không ghi gì. Mọi con số trong lộ trình phải lấy từ kết quả này.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "horizon_months": {
+          "type": "integer",
+          "description": "Số tháng của lộ trình, từ 1 đến 24. Bỏ trống: lấy từ cấu hình."
+        },
+        "goals": {
+          "type": "array",
+          "description": "Ghi đè ưu tiên hoặc mục tiêu của từng hũ. Bỏ trống: lấy mục tiêu đã khai ở các hũ.",
+          "items": {
+            "type": "object",
+            "description": "Một mục tiêu.",
+            "properties": {
+              "jar": {
+                "type": "string",
+                "description": "Mã hũ mục tiêu (lấy từ get_jar_balances)."
+              },
+              "weight": {
+                "type": "number",
+                "description": "Trọng số ưu tiên tương đối, lớn hơn 0. Bỏ trống: 1."
+              },
+              "target_vnd": {
+                "type": "integer",
+                "description": "Số tiền mục tiêu VND, số nguyên dương."
+              },
+              "target_date": {
+                "type": "string",
+                "description": "Hạn YYYY-MM-DD (ngày mô phỏng)."
+              }
+            },
+            "required": [
+              "jar"
+            ]
+          }
+        },
+        "shock_id": {
+          "type": "string",
+          "description": "Tùy chọn: tối ưu trong điều kiện một cú sốc mẫu (đúng một trong mat_viec_2_thang, tien_tro_tang, om_mot_tuan), để dựng lộ trình thích ứng sau stress_test."
+        },
+        "allow_relaxation": {
+          "type": "boolean",
+          "description": "Cho phép nới ràng buộc mềm một lần khi vô nghiệm. Bỏ trống: đúng."
+        }
+      }
+    }
+  },
+  {
+    "name": "save_roadmap",
+    "description": "Lưu MỘT phiên bản lộ trình mới (phiên bản tăng dần theo người dùng; không bao giờ ghi đè bản cũ). Đây là thao tác ghi KHÔNG đổi số dư nên không cần confirm_token; hành động đổi tiền trong từng bước vẫn phải qua luồng xác nhận riêng. Hệ thống chạy lại luật suitability cho từng bước: bước vi phạm mức block thì từ chối lưu (ROADMAP_INVALID) và trả mã luật để sửa. Chỉ truyền reason_code và nội dung; phiên bản, trạng thái, lý do bằng chữ, đếm bước do hệ thống điền, KHÔNG tự điền. Bước luôn được lưu ở trạng thái chờ.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "reason_code": {
+          "type": "string",
+          "description": "Vì sao sinh bản này, đúng một trong: initial, behavior_changed, goal_changed, income_changed, forecast_drift, user_request, step_edited."
+        },
+        "based_on_version": {
+          "type": "integer",
+          "description": "Phiên bản mà bản này xuất phát (để so sánh). Vắng ở bản đầu tiên. Nếu đã có bản mới hơn thì ROADMAP_VERSION_CONFLICT."
+        },
+        "behavior_flag_id": {
+          "type": "string",
+          "description": "Id (UUID) của dấu hiệu đổi hành vi đã xác nhận. Bắt buộc khi reason_code là behavior_changed."
+        },
+        "feasibility": {
+          "type": "string",
+          "description": "Đúng một trong: on_track (mục tiêu kịp), relaxed (kịp sau khi nới một lần), infeasible (chưa khả thi, kèm đúng 2 alternatives)."
+        },
+        "goals": {
+          "type": "array",
+          "description": "Các mục tiêu, lấy từ kết quả optimize_allocation.",
+          "items": {
+            "type": "object",
+            "description": "Một mục tiêu, lấy nguyên từ kết quả optimize_allocation (không tự tính lại).",
+            "properties": {
+              "jar": {
+                "type": "object",
+                "description": "Hũ (lấy nguyên từ kết quả optimize_allocation).",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "Mã hũ."
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Tên hiển thị của hũ."
+                  },
+                  "color_key": {
+                    "type": "string",
+                    "description": "Khóa màu của hũ."
+                  },
+                  "icon_key": {
+                    "type": "string",
+                    "description": "Khóa biểu tượng của hũ."
+                  }
+                },
+                "required": [
+                  "code",
+                  "name",
+                  "color_key",
+                  "icon_key"
+                ]
+              },
+              "target_vnd": {
+                "type": "integer",
+                "description": "Số tiền mục tiêu VND."
+              },
+              "target_date": {
+                "type": "string",
+                "description": "Hạn YYYY-MM-DD, nếu có."
+              },
+              "projected_date": {
+                "type": "string",
+                "description": "Ngày dự kiến đạt YYYY-MM-DD, nếu có."
+              },
+              "on_track": {
+                "type": "boolean",
+                "description": "Đúng nếu kịp hạn."
+              },
+              "shortfall_vnd": {
+                "type": "integer",
+                "description": "Còn thiếu bao nhiêu (0 nếu kịp)."
+              },
+              "monthly_needed_vnd": {
+                "type": "integer",
+                "description": "Mỗi tháng cần dành bao nhiêu để kịp hạn."
+              }
+            },
+            "required": [
+              "jar",
+              "target_vnd",
+              "on_track",
+              "shortfall_vnd",
+              "monthly_needed_vnd"
+            ]
+          }
+        },
+        "phases": {
+          "type": "array",
+          "description": "Từ 1 đến 5 giai đoạn, xếp theo ngày bắt đầu.",
+          "items": {
+            "type": "object",
+            "description": "Một giai đoạn.",
+            "properties": {
+              "phase_id": {
+                "type": "string",
+                "description": "Id giai đoạn, cùng dạng step_id, duy nhất trong lộ trình."
+              },
+              "title": {
+                "type": "string",
+                "description": "Tên giai đoạn, tối đa 60 ký tự."
+              },
+              "summary": {
+                "type": "string",
+                "description": "Tóm tắt một câu, tối đa 160 ký tự (tùy chọn)."
+              },
+              "start_date": {
+                "type": "string",
+                "description": "Ngày bắt đầu YYYY-MM-DD (ngày mô phỏng)."
+              },
+              "end_date": {
+                "type": "string",
+                "description": "Ngày kết thúc YYYY-MM-DD, không trước ngày bắt đầu."
+              },
+              "steps": {
+                "type": "array",
+                "description": "Từ 1 đến 8 bước.",
+                "items": {
+                  "type": "object",
+                  "description": "Một bước của giai đoạn.",
+                  "properties": {
+                    "step_id": {
+                      "type": "string",
+                      "description": "Id bước, chữ thường không dấu, gạch dưới, bắt đầu bằng chữ cái, tối đa 32 ký tự, duy nhất trong lộ trình."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "description": "Loại bước, đúng một trong: set_aside, adjust_split, pay_obligation, cut_spending, review_goal, remind."
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "Tên bước, tối đa 80 ký tự."
+                    },
+                    "reason": {
+                      "type": "string",
+                      "description": "Lý do (Vì sao) của bước, tối đa 240 ký tự. Số trong câu phải lấy từ kết quả optimize_allocation, không tự bịa."
+                    },
+                    "ai_generated": {
+                      "type": "boolean",
+                      "description": "Đúng nếu lý do do model viết."
+                    },
+                    "amount_vnd": {
+                      "type": "integer",
+                      "description": "Số tiền VND của bước (số nguyên dương), nếu có."
+                    },
+                    "jar_code": {
+                      "type": "string",
+                      "description": "Mã hũ liên quan (hũ nguồn với set_aside), nếu có."
+                    },
+                    "to_jar_code": {
+                      "type": "string",
+                      "description": "Mã hũ nhận, nếu có."
+                    },
+                    "due_date": {
+                      "type": "string",
+                      "description": "Ngày YYYY-MM-DD (ngày mô phỏng) cần làm xong, nếu có."
+                    },
+                    "metrics": {
+                      "type": "array",
+                      "description": "Tối đa 4 số trước và sau do optimize_allocation tính.",
+                      "items": {
+                        "type": "object",
+                        "description": "Một dòng trước và sau đã định dạng.",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "description": "Nhãn dòng, tối đa 60 ký tự."
+                          },
+                          "before": {
+                            "type": "string",
+                            "description": "Giá trị trước (tùy chọn), tối đa 80 ký tự."
+                          },
+                          "after": {
+                            "type": "string",
+                            "description": "Giá trị sau, tối đa 120 ký tự."
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "after"
+                        ]
+                      }
+                    },
+                    "checked_rules": {
+                      "type": "array",
+                      "description": "Mã luật suitability đã kiểm cho bước này.",
+                      "items": {
+                        "type": "string",
+                        "description": "Mã luật (rule_id)."
+                      }
+                    },
+                    "action": {
+                      "type": "object",
+                      "description": "Việc đổi tiền gắn vào bước, nếu có. Người dùng thực hiện bằng luồng xác nhận; chấp nhận bước KHÔNG tự thực hiện. Không được có user_id hay confirm_token trong params.",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "description": "Tool ghi sẽ được xác nhận, đúng một trong: move_between_jars, save_jars, schedule_nudge."
+                        },
+                        "params": {
+                          "type": "object",
+                          "description": "Tham số của tool đó (chưa chuẩn hóa cũng được)."
+                        }
+                      },
+                      "required": [
+                        "tool",
+                        "params"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "step_id",
+                    "kind",
+                    "title",
+                    "reason"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "phase_id",
+              "title",
+              "start_date",
+              "end_date",
+              "steps"
+            ]
+          }
+        },
+        "alternatives": {
+          "type": "array",
+          "description": "Đúng 2 lựa chọn khi feasibility là infeasible, không có ở trường hợp khác.",
+          "items": {
+            "type": "object",
+            "description": "Một lựa chọn khi mục tiêu chưa khả thi, lấy nguyên từ optimize_allocation.",
+            "properties": {
+              "option_id": {
+                "type": "string",
+                "description": "Id lựa chọn."
+              },
+              "kind": {
+                "type": "string",
+                "description": "Loại, đúng một trong: delay_goal, reduce_goal, cut_discretionary."
+              },
+              "label": {
+                "type": "string",
+                "description": "Nhãn, tối đa 60 ký tự."
+              },
+              "summary": {
+                "type": "string",
+                "description": "Mô tả, tối đa 200 ký tự."
+              },
+              "jar_code": {
+                "type": "string",
+                "description": "Mã hũ liên quan, nếu có."
+              },
+              "metrics": {
+                "type": "array",
+                "description": "Tối đa 4 số trước và sau.",
+                "items": {
+                  "type": "object",
+                  "description": "Một dòng trước và sau đã định dạng.",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "description": "Nhãn dòng, tối đa 60 ký tự."
+                    },
+                    "before": {
+                      "type": "string",
+                      "description": "Giá trị trước (tùy chọn), tối đa 80 ký tự."
+                    },
+                    "after": {
+                      "type": "string",
+                      "description": "Giá trị sau, tối đa 120 ký tự."
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "after"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "option_id",
+              "kind",
+              "label",
+              "summary"
+            ]
+          }
+        }
+      },
+      "required": [
+        "reason_code",
+        "feasibility",
+        "phases"
+      ]
+    }
+  },
+  {
+    "name": "get_roadmap",
+    "description": "Đọc một phiên bản lộ trình đã lưu: các giai đoạn và bước kèm lý do và trạng thái (chờ, đã chấp nhận, đã từ chối), lý do sinh lại, mục tiêu, lựa chọn nếu chưa khả thi. Mặc định đọc bản đang dùng. Chỉ đọc.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "version": {
+          "type": "integer",
+          "description": "Số phiên bản cần đọc (từ 1). Có thì which bị bỏ qua."
+        },
+        "which": {
+          "type": "string",
+          "description": "Chọn bản theo trạng thái, đúng một trong: active (đang dùng, mặc định), proposed (bản mới chờ người dùng chọn), latest (bản mới nhất bất kể trạng thái)."
+        }
+      }
+    }
   }
 ]

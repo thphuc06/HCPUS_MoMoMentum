@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "event_id": "7a3f9c21-6d4e-4b18-8e05-2c9b1d7a4f63",
+  "user_id": "a1b2c3d4-0000-4000-8000-000000000001",
+  "occurred_at": "2026-12-10T19:00:08Z",
+  "app_date": "2026-11-21",
+  "flag_id": "7a3f9c21-6d4e-4b18-8e05-2c9b1d7a4f63",
+  "jar_code": "an_uong",
+  "direction": "up",
+  "old_weekly_vnd": 520000,
+  "new_weekly_vnd": 810000,
+  "method": "pelt",
+  "weeks_held": 2,
+  "change_point_date": "2026-11-02"
+}

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/tools/planner.results.schema.json",
   "title": "PlannerToolResults",
-  "description": "Kết quả JSON mà Lambda `planner` trả cho Gateway: `check_suitability` (đọc, tất định) và `schedule_nudge` (GHI, qua luồng token như các tool ghi khác). `SuitabilityVerdict` cũng là kiểu Pydantic `yofina_core.suitability.SuitabilityVerdict`. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "description": "Kết quả JSON mà Lambda `planner` trả cho Gateway: `check_suitability` (đọc, tất định), `schedule_nudge` (GHI, qua luồng token như các tool ghi khác) và ba tool của phase 4: `optimize_allocation` (đọc và tính), `save_roadmap` (GHI KHÔNG đổi số dư nên không qua token), `get_roadmap` (đọc). `SuitabilityVerdict` cũng là kiểu Pydantic `yofina_core.suitability.SuitabilityVerdict`; `AllocationPlanData` là `yofina_core.roadmap.AllocationPlanData`; `data` của `save_roadmap` và `get_roadmap` là đúng `data` của khối roadmap. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
   "$defs": {
     "Violation": {
       "description": "Một vi phạm luật suitability.",
@@ -76,6 +76,146 @@
       "oneOf": [
         { "$ref": "ledger.results.schema.json#/$defs/ActionNeedsConfirmation" },
         { "$ref": "ledger.results.schema.json#/$defs/ActionOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
+    "AllocationLine": {
+      "description": "Phân bổ hằng tháng cho một hũ: sàn cứng, mức hiện tại theo tỷ lệ chia lương, mức đề xuất. `floor_gap_vnd` là phần sàn chưa đạt (biến elastic dương của LP); 0 nghĩa là sàn được giữ đủ.",
+      "type": "object",
+      "required": ["jar", "kind", "is_essential", "floor_vnd", "current_monthly_vnd", "proposed_monthly_vnd", "split_percent_current", "split_percent_proposed", "floor_gap_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "jar": { "$ref": "../blocks/forecast_timeline.schema.json#/$defs/ForecastJar" },
+        "kind": { "type": "string", "enum": ["spending", "saving", "obligation"] },
+        "is_essential": { "type": "boolean" },
+        "floor_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "current_monthly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "proposed_monthly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "split_percent_current": { "type": "number", "minimum": 0, "maximum": 100 },
+        "split_percent_proposed": { "type": "number", "minimum": 0, "maximum": 100 },
+        "floor_gap_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" }
+      }
+    },
+    "AllocationRelaxation": {
+      "description": "Một ràng buộc mềm đã được nới (đúng một vòng nới): lùi hạn mục tiêu hoặc giảm hũ không thiết yếu.",
+      "type": "object",
+      "required": ["kind", "jar_code", "label", "before", "after"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["goal_delayed", "discretionary_reduced"] },
+        "jar_code": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "before": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "after": { "type": "string", "minLength": 1, "maxLength": 120 }
+      }
+    },
+    "AllocationSolver": {
+      "description": "Thông tin lần giải (để ghi độ trễ vào file phase và trace).",
+      "type": "object",
+      "required": ["name", "method", "status", "elapsed_ms", "relaxation_rounds"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "const": "scipy.optimize.linprog" },
+        "method": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "status": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "elapsed_ms": { "type": "integer", "minimum": 0 },
+        "relaxation_rounds": {
+          "description": "Số vòng nới ràng buộc mềm đã dùng (tối đa một).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "AllocationPlanData": {
+      "description": "Kết quả `optimize_allocation`. Bất biến (Pydantic và test kiểm): tổng `proposed_monthly_vnd` cộng `unallocated_vnd` bằng `income_monthly_vnd`; mỗi hũ một dòng; `optimal` không nới gì và đạt mọi sàn; `relaxed` đã nới đúng một vòng và ghi lại điều đã nới; `infeasible` đã nới một vòng vẫn không được nên có đúng hai `alternatives`.",
+      "type": "object",
+      "required": ["status", "headline", "horizon_months", "period_start", "income_monthly_vnd", "obligations_monthly_vnd", "lines", "unallocated_vnd", "goals", "relaxations", "alternatives", "solver", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "description": "optimal (có nghiệm ngay), relaxed (có nghiệm sau khi nới một lần), infeasible (vô nghiệm kể cả sau khi nới: nói thẳng kèm hai lựa chọn).",
+          "type": "string",
+          "enum": ["optimal", "relaxed", "infeasible"]
+        },
+        "headline": {
+          "description": "Một câu do code dựng, luôn có chữ trạng thái.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "horizon_months": { "type": "integer", "minimum": 1, "maximum": 24 },
+        "period_start": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "income_monthly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "obligations_monthly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/AllocationLine" }
+        },
+        "unallocated_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "goals": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "../blocks/roadmap.schema.json#/$defs/GoalProjection" }
+        },
+        "relaxations": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/AllocationRelaxation" }
+        },
+        "alternatives": {
+          "description": "Đúng hai lựa chọn khi status là infeasible, rỗng ở các trường hợp khác.",
+          "type": "array",
+          "maxItems": 2,
+          "items": { "$ref": "../blocks/roadmap.schema.json#/$defs/RoadmapAlternative" }
+        },
+        "solver": { "$ref": "#/$defs/AllocationSolver" },
+        "basis": { "$ref": "../blocks/forecast_timeline.schema.json#/$defs/ForecastBasis" }
+      }
+    },
+    "OptimizeAllocationOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "#/$defs/AllocationPlanData" }
+      }
+    },
+    "OptimizeAllocationResult": {
+      "description": "Vô nghiệm KHÔNG phải lỗi: `status` của tool vẫn OK, còn `data.status` là infeasible kèm hai lựa chọn. Mã lỗi có thể gặp: PROFILE_INCOMPLETE, FORECAST_UNAVAILABLE, JAR_NOT_FOUND (mã hũ trong `goals` sai), SHOCK_NOT_FOUND, PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/OptimizeAllocationOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
+    "RoadmapOk": {
+      "description": "`data` là đúng `data` của khối roadmap (phiên bản vừa lưu hoặc vừa đọc), nên agent bọc bằng build_roadmap.",
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "../blocks/roadmap.schema.json#/$defs/RoadmapData" }
+      }
+    },
+    "SaveRoadmapResult": {
+      "description": "Tool GHI không qua token (không đổi số dư): lưu luôn, không có NEEDS_CONFIRMATION. Mã lỗi có thể gặp: ROADMAP_INVALID (cấu trúc sai, hoặc bước vi phạm luật suitability mức block: `message` nêu mã luật để agent sửa), ROADMAP_VERSION_CONFLICT (`based_on_version` không còn là bản mới nhất), JAR_NOT_FOUND, PROFILE_INCOMPLETE, PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/RoadmapOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
+    "GetRoadmapResult": {
+      "description": "Mã lỗi có thể gặp: ROADMAP_NOT_FOUND (chưa có lộ trình hoặc không có phiên bản đó), PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/RoadmapOk" },
         { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
       ]
     }

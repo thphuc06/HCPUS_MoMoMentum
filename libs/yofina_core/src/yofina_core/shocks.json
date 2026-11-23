@@ -1,0 +1,41 @@
+{
+  "version": "2026-12-1",
+  "note": "Ba cú sốc mẫu của F4 (proposal §10.4, FR7), dạng dữ liệu. Engine ĐỌC file này để áp cú sốc lên dự báo; giao diện đọc nhãn và mô tả từ đây (GET /resilience/shocks). Nhãn và tham số là giả định mô phỏng, chưa hiệu chỉnh. Mô tả không chứa số (số nằm ở `params` và ở kết quả).",
+  "shocks": [
+    {
+      "shock_id": "mat_viec_2_thang",
+      "kind": "income_loss",
+      "label": "Mất việc 2 tháng",
+      "description": "Thu nhập dừng trong suốt thời gian này; chi tiêu và nghĩa vụ vẫn như cũ.",
+      "params": {
+        "duration_days": 60,
+        "income_loss_percent": 100
+      },
+      "source": "Kịch bản mẫu của proposal §10.4 (mất việc 2 tháng); 60 ngày là cách quy đổi mô phỏng của dự án, chưa hiệu chỉnh."
+    },
+    {
+      "shock_id": "tien_tro_tang",
+      "kind": "expense_increase",
+      "label": "Tiền trọ tăng",
+      "description": "Tiền nhà trọ hằng tháng tăng và giữ mức mới trong thời gian này.",
+      "params": {
+        "target_obligation_kind": "rent",
+        "expense_increase_percent": 20,
+        "duration_days": 90
+      },
+      "source": "Kịch bản mẫu của proposal §10.4; mức tăng 20% và 90 ngày là giả định mô phỏng, chưa hiệu chỉnh."
+    },
+    {
+      "shock_id": "om_mot_tuan",
+      "kind": "health_event",
+      "label": "Ốm một tuần",
+      "description": "Nghỉ làm không lương trong thời gian này, thêm một khoản chi khám chữa bệnh.",
+      "params": {
+        "duration_days": 7,
+        "income_loss_percent": 100,
+        "extra_cost_vnd": 1500000
+      },
+      "source": "Kịch bản mẫu của proposal §10.4; khoản chi 1.500.000 ₫ là giả định mô phỏng, chưa hiệu chỉnh."
+    }
+  ]
+}

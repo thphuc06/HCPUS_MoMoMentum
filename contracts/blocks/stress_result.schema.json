@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/stress_result.schema.json",
+  "title": "StressResultBlock",
+  "description": "Kết quả một cú sốc (F4): điểm chống chịu trước và sau, số ngày trụ được (toàn bộ ví và riêng hũ Dự phòng), khoản thiếu. Engine áp cú sốc (định nghĩa dạng dữ liệu ở `shocks.json`: mất việc 2 tháng, tiền trọ tăng, ốm một tuần) lên dự báo bằng Monte Carlo cùng dãy số ngẫu nhiên với dự báo nền. Tool `forecast___stress_test` và `POST /resilience/stress` trả CÙNG khối. Trạng thái (`status`) và `headline` luôn có chữ, không chỉ màu. Id khối `stress_result:{trace_id}:{shock_id}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "stress_result" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/StressResultData" }
+  },
+  "$defs": {
+    "ShockSummary": {
+      "description": "Cú sốc đã áp: bản gọn của một mục trong `shocks.json`. Nhãn và mô tả lấy từ file dữ liệu, không viết trong mã.",
+      "type": "object",
+      "required": ["shock_id", "kind", "label", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "shock_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "kind": {
+          "description": "income_loss (mất thu nhập một thời gian), expense_increase (một khoản chi cố định tăng), health_event (ốm: mất thu nhập ngắn kèm chi phí).",
+          "type": "string",
+          "enum": ["income_loss", "expense_increase", "health_event"]
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "duration_days": {
+          "description": "Cú sốc kéo dài bao nhiêu ngày (vắng nếu không giới hạn thời gian trong khoảng dự báo).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365
+        }
+      }
+    },
+    "StressComponentDelta": {
+      "description": "Điểm một thành phần trước và sau cú sốc. Thành phần không áp dụng thì không có điểm.",
+      "type": "object",
+      "required": ["key"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "$ref": "resilience_score.schema.json#/$defs/ResilienceComponentKey" },
+        "score_before": { "$ref": "resilience_score.schema.json#/$defs/Score" },
+        "score_after": { "$ref": "resilience_score.schema.json#/$defs/Score" }
+      }
+    },
+    "StressResultData": {
+      "description": "Bất biến (Pydantic và test kiểm): cú sốc không làm điểm tăng; `score_delta` bằng sau trừ trước; đủ bốn thành phần đúng thứ tự; có khoản thiếu thì `status` không phải ok và có `shortfall_from`; `runway_days_emergency` chỉ có khi có `emergency_jar`.",
+      "type": "object",
+      "required": ["shock", "status", "headline", "score_before", "score_after", "score_delta", "band_before", "band_after", "horizon_days", "shortfall_vnd", "components", "method", "n_paths", "common_random_numbers", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "shock": { "$ref": "#/$defs/ShockSummary" },
+        "status": {
+          "description": "Đủ, sát hay hụt khi gặp cú sốc này (đủ: có khoản thiếu bằng 0; ngưỡng sát nằm ở cấu hình). Luôn kèm chữ ở giao diện.",
+          "$ref": "forecast_timeline.schema.json#/$defs/JarStatus"
+        },
+        "headline": {
+          "description": "Một câu do code dựng, luôn có chữ trạng thái và số ngày trụ được (ví dụ 'Mất việc 2 tháng: điểm tụt từ 58 xuống 34, trụ được 27 ngày').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "score_before": { "$ref": "resilience_score.schema.json#/$defs/Score" },
+        "score_after": { "$ref": "resilience_score.schema.json#/$defs/Score" },
+        "score_delta": {
+          "description": "Sau trừ trước, không dương.",
+          "type": "integer",
+          "minimum": -100,
+          "maximum": 0
+        },
+        "band_before": { "$ref": "resilience_score.schema.json#/$defs/ResilienceBand" },
+        "band_after": { "$ref": "resilience_score.schema.json#/$defs/ResilienceBand" },
+        "runway_days_total": {
+          "description": "Số ngày trụ được của TOÀN BỘ tiền khả dụng (P50 sau cú sốc). Vắng nghĩa là trụ hết khoảng dự báo `horizon_days`.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 400
+        },
+        "runway_days_emergency": {
+          "description": "Số ngày trụ được của RIÊNG hũ Dự phòng. Vắng khi trụ hết khoảng dự báo, hoặc khi người dùng không có hũ Dự phòng (khi đó `emergency_jar` cũng vắng).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 400
+        },
+        "emergency_jar": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastJar" },
+        "horizon_days": { "type": "integer", "minimum": 1, "maximum": 400 },
+        "shortfall_vnd": {
+          "description": "Khoản thiếu: số tiền còn thiếu để trụ hết thời gian cú sốc (0 nếu đủ).",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "shortfall_from": {
+          "description": "Ngày mô phỏng bắt đầu thiếu tiền. Có đúng khi `shortfall_vnd` lớn hơn 0.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "components": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/StressComponentDelta" }
+        },
+        "method": { "const": "monte_carlo" },
+        "n_paths": { "type": "integer", "minimum": 1 },
+        "common_random_numbers": {
+          "description": "Luôn đúng: dự báo nền và dự báo sau cú sốc dùng cùng dãy số ngẫu nhiên.",
+          "const": true
+        },
+        "basis": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastBasis" }
+      }
+    }
+  }
+}

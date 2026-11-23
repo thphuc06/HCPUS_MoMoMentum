@@ -103,9 +103,34 @@ LEDGER_TOOLS = (
     "assign_jar",
     "save_turn",
 )
-FORECAST_TOOLS = ("get_forecast", "run_scenario", "list_scenarios", "affordability_check")
+#: Phase 4 thêm `get_resilience_score` và `stress_test` ở cuối target `forecast`.
+FORECAST_TOOLS = (
+    "get_forecast",
+    "run_scenario",
+    "list_scenarios",
+    "affordability_check",
+    "get_resilience_score",
+    "stress_test",
+)
 KNOWLEDGE_TOOLS = ("get_fee_schedule",)
-PLANNER_TOOLS = ("check_suitability", "schedule_nudge")
+#: Phase 4 thêm `optimize_allocation`, `save_roadmap`, `get_roadmap` ở cuối target `planner`. `save_roadmap` là tool GHI nhưng
+#: KHÔNG qua token (không đổi số dư; quyết định số 3 của phase 4), nên KHÔNG nằm trong `PLANNER_WRITE_TOOLS` hay `ACTION_TOOLS`.
+PLANNER_TOOLS = (
+    "check_suitability",
+    "schedule_nudge",
+    "optimize_allocation",
+    "save_roadmap",
+    "get_roadmap",
+)
+#: Tool mới của phase 4 mà hợp đồng đã khai báo nhưng Lambda chưa cài (luồng A cài; test `test_ledger_wallet` dùng tập này để
+#: khỏi đòi `_ARG_KEYS` có chúng; luồng A xóa từng tên khi cài xong).
+PHASE4_TOOLS = (
+    "get_resilience_score",
+    "stress_test",
+    "optimize_allocation",
+    "save_roadmap",
+    "get_roadmap",
+)
 AUDIT_TOOLS = ("get_trace", "record_turn")
 
 # --- phase 3: kịch bản, nhắc, phản hồi, ý định ---------------------------------------------------
@@ -130,8 +155,9 @@ NUDGE_KINDS = (
 NUDGE_STATUSES = ("scheduled", "sent", "cancelled", "dismissed")
 NUDGE_OPS = ("create", "cancel")
 FEEDBACK_DECISIONS = ("accepted", "rejected")
-#: Ý định của router (L1).
-INTENTS = (
+#: Ý định của router (L1) ở phase 3. Cột `audit_events.intent` của migration 0010 chỉ chấp nhận bảy giá trị này; migration
+#: 0052 nới CHECK thành `INTENTS` (test_migration_0010 khóa bản cũ bằng tuple này, test_migration_0052 khóa bản mới).
+INTENTS_PHASE3 = (
     "lookup",
     "what_if",
     "affordability",
@@ -140,6 +166,9 @@ INTENTS = (
     "out_of_scope",
     "chitchat",
 )
+#: Ý định của router (L1): bảy ý định phase 3 và ba ý định phase 4 (`resilience`: hỏi điểm chống chịu, `stress`: bấm hoặc hỏi một
+#: cú sốc, `roadmap`: xin hoặc hỏi lộ trình). Luồng C cài router và xử lý chúng; hợp đồng chỉ khai báo.
+INTENTS = (*INTENTS_PHASE3, "resilience", "stress", "roadmap")
 #: Loại phương án của khối `options` và `affordability_card`.
 OPTION_KINDS = (
     "defer",
@@ -190,3 +219,66 @@ def split_amount(
             raise ValueError(f"mã hũ trùng: {code}")
         out[code] = part
     return out
+
+
+# --- phase 4: điểm chống chịu, cú sốc, lộ trình, phân hũ tự động -------------------------------------
+#: Bốn thành phần của Điểm chống chịu (proposal §11), theo thứ tự hiển thị.
+RESILIENCE_COMPONENTS = ("save", "spend", "borrow", "plan")
+#: Nhóm điểm (luôn kèm chữ ở giao diện, không chỉ màu): yếu, vừa, tốt. Ngưỡng nằm ở `resilience_defaults.json`.
+RESILIENCE_BANDS = ("weak", "fair", "strong")
+#: Điểm được tính do đâu (cột `resilience_scores.source`).
+RESILIENCE_SOURCES = ("nightly", "reset", "event", "read")
+#: Loại cú sốc (dữ liệu ở `shocks.json`; mỗi loại đòi các tham số riêng, xem `yofina_core.resilience.ShockParams`).
+SHOCK_KINDS = ("income_loss", "expense_increase", "health_event")
+#: Lý do một phiên bản lộ trình ra đời (cột `roadmaps.reason_code`).
+ROADMAP_REASON_CODES = (
+    "initial",
+    "behavior_changed",
+    "goal_changed",
+    "income_changed",
+    "forecast_drift",
+    "user_request",
+    "step_edited",
+)
+#: Lý do mà phiên bản mới được dùng NGAY (`active`); mọi lý do khác tạo bản `proposed` để người dùng chọn "Dùng bản mới" hay "Giữ bản cũ".
+ROADMAP_ACTIVE_REASONS = ("initial", "step_edited")
+#: Trạng thái một phiên bản: đang dùng, bản mới chờ chọn, đã bị thay, đã bỏ ("Giữ bản cũ").
+ROADMAP_VERSION_STATUSES = ("active", "proposed", "superseded", "discarded")
+#: Trạng thái một bước: chờ, đã chấp nhận, đã từ chối.
+ROADMAP_STEP_STATUSES = ("pending", "accepted", "rejected")
+ROADMAP_STEP_KINDS = (
+    "set_aside",
+    "adjust_split",
+    "pay_obligation",
+    "cut_spending",
+    "review_goal",
+    "remind",
+)
+#: Tool mà một bước có thể gắn để người dùng thực hiện bằng luồng xác nhận (ADR-0002): chuyển hũ, đổi tỷ lệ chia, nhắc.
+ROADMAP_STEP_ACTION_TOOLS = ("move_between_jars", "save_jars", "schedule_nudge")
+ROADMAP_FEASIBILITIES = ("on_track", "relaxed", "infeasible")
+#: Kết quả của `optimize_allocation` (trùng `ROADMAP_FEASIBILITIES`: lộ trình thừa hưởng).
+ALLOCATION_STATUSES = ("optimal", "relaxed", "infeasible")
+ALLOCATION_RELAXATION_KINDS = ("goal_delayed", "discretionary_reduced")
+#: Lựa chọn nói thẳng khi mục tiêu không khả thi (đúng hai lựa chọn).
+ALTERNATIVE_KINDS = ("delay_goal", "reduce_goal", "cut_discretionary")
+ROADMAP_JOB_STATUSES = ("queued", "running", "done", "failed")
+ROADMAP_JOB_STAGES = ("context", "draft", "allocate", "suitability", "save")
+ROADMAP_JOB_TRIGGERS = ("user_request", "behavior_changed", "goal_changed", "income_changed", "forecast_drift")
+ROADMAP_DECISIONS = ("accepted", "rejected", "pending")
+ROADMAP_VERSION_DECISIONS = ("adopt", "keep_previous")
+ROADMAP_WHICH = ("active", "proposed", "latest")
+#: Đổi hành vi (bảng `behavior_flags`): nghi (CUSUM hoặc PageHinkley trong đường sự kiện), đã xác nhận (PELT trong batch đêm),
+#: báo nhầm, đã dùng để sinh lại lộ trình.
+BEHAVIOR_FLAG_STATUSES = ("suspected", "confirmed", "dismissed", "applied")
+BEHAVIOR_METHODS = ("cusum", "page_hinkley", "pelt")
+BEHAVIOR_DIRECTIONS = ("up", "down")
+#: Ba mức tin cậy của phân loại tự động (ngưỡng ở cấu hình, hiệu chỉnh trên dữ liệu): tự gán; tự gán và vào "Xem lại"; hỏi gộp.
+CLASSIFICATION_TIERS = ("auto", "review", "ask")
+#: Hai chế độ của khối `review_list`: A1 "Xem lại" (mức `review`) và A2 hỏi gộp một lần mỗi ngày (mức `ask`).
+REVIEW_MODES = ("review", "daily_ask")
+REVIEW_ASK_STATUSES = ("open", "answered", "skipped")
+#: Nguồn của một dòng trong bộ nhãn k-NN (`tx_embeddings_labeled`): người dùng sửa, hoặc nhãn seed của persona.
+LABEL_SOURCES = ("user", "seed")
+#: Số chiều vector của vai `embedding` (`cohere.embed-multilingual-v3`, xem `llm_defaults.json`); khớp `vector(1024)` ở 0052.
+EMBEDDING_DIMENSIONS = 1024

@@ -1,0 +1,63 @@
+{
+  "v": 1,
+  "id": "stress_result:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:om_mot_tuan",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Ốm một tuần: điểm giảm từ 55 xuống 50 (vừa), sát: trụ được 6 ngày, thiếu 100.000 ₫.",
+  "source": {
+    "tool": "forecast___stress_test",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "stress_result",
+  "data": {
+    "shock": {
+      "shock_id": "om_mot_tuan",
+      "kind": "health_event",
+      "label": "Ốm một tuần",
+      "description": "Nghỉ làm không lương trong thời gian này, thêm một khoản chi khám chữa bệnh.",
+      "duration_days": 7
+    },
+    "status": "tight",
+    "headline": "Ốm một tuần: điểm giảm từ 55 xuống 50 (vừa), sát: trụ được 6 ngày, thiếu 100.000 ₫.",
+    "score_before": 55,
+    "score_after": 50,
+    "score_delta": -5,
+    "band_before": "fair",
+    "band_after": "fair",
+    "runway_days_total": 6,
+    "horizon_days": 90,
+    "shortfall_vnd": 100000,
+    "shortfall_from": "2026-11-27",
+    "components": [
+      {
+        "key": "save",
+        "score_before": 15,
+        "score_after": 11
+      },
+      {
+        "key": "spend",
+        "score_before": 80,
+        "score_after": 70
+      },
+      {
+        "key": "borrow",
+        "score_before": 86,
+        "score_after": 80
+      },
+      {
+        "key": "plan"
+      }
+    ],
+    "method": "monte_carlo",
+    "n_paths": 1000,
+    "common_random_numbers": true,
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 0.62
+    }
+  }
+}

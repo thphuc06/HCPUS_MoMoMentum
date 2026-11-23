@@ -1,0 +1,161 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "status": "optimal",
+    "headline": "Phân bổ khả thi: đủ sàn mọi hũ, mục tiêu Du lịch kịp hạn.",
+    "horizon_months": 4,
+    "period_start": "2026-11-21",
+    "income_monthly_vnd": 12000000,
+    "obligations_monthly_vnd": 2160000,
+    "lines": [
+      {
+        "jar": {
+          "code": "an_uong",
+          "name": "Ăn uống",
+          "color_key": "violet",
+          "icon_key": "utensils"
+        },
+        "kind": "spending",
+        "is_essential": true,
+        "floor_vnd": 2400000,
+        "current_monthly_vnd": 3600000,
+        "proposed_monthly_vnd": 3360000,
+        "split_percent_current": 30,
+        "split_percent_proposed": 28,
+        "floor_gap_vnd": 0
+      },
+      {
+        "jar": {
+          "code": "di_lai",
+          "name": "Đi lại",
+          "color_key": "sky",
+          "icon_key": "bus"
+        },
+        "kind": "spending",
+        "is_essential": true,
+        "floor_vnd": 720000,
+        "current_monthly_vnd": 1200000,
+        "proposed_monthly_vnd": 960000,
+        "split_percent_current": 10,
+        "split_percent_proposed": 8,
+        "floor_gap_vnd": 0
+      },
+      {
+        "jar": {
+          "code": "hoa_don",
+          "name": "Hóa đơn",
+          "color_key": "brown",
+          "icon_key": "receipt"
+        },
+        "kind": "obligation",
+        "is_essential": true,
+        "floor_vnd": 1800000,
+        "current_monthly_vnd": 1800000,
+        "proposed_monthly_vnd": 1800000,
+        "split_percent_current": 15,
+        "split_percent_proposed": 15,
+        "floor_gap_vnd": 0
+      },
+      {
+        "jar": {
+          "code": "giai_tri",
+          "name": "Giải trí",
+          "color_key": "orchid",
+          "icon_key": "gamepad"
+        },
+        "kind": "spending",
+        "is_essential": false,
+        "floor_vnd": 0,
+        "current_monthly_vnd": 1200000,
+        "proposed_monthly_vnd": 600000,
+        "split_percent_current": 10,
+        "split_percent_proposed": 5,
+        "floor_gap_vnd": 0
+      },
+      {
+        "jar": {
+          "code": "du_lich",
+          "name": "Du lịch",
+          "color_key": "teal",
+          "icon_key": "plane"
+        },
+        "kind": "saving",
+        "is_essential": false,
+        "floor_vnd": 0,
+        "current_monthly_vnd": 1200000,
+        "proposed_monthly_vnd": 1320000,
+        "split_percent_current": 10,
+        "split_percent_proposed": 11,
+        "floor_gap_vnd": 0
+      },
+      {
+        "jar": {
+          "code": "du_phong",
+          "name": "Dự phòng",
+          "color_key": "blue",
+          "icon_key": "shield"
+        },
+        "kind": "saving",
+        "is_essential": true,
+        "floor_vnd": 600000,
+        "current_monthly_vnd": 1200000,
+        "proposed_monthly_vnd": 1800000,
+        "split_percent_current": 10,
+        "split_percent_proposed": 15,
+        "floor_gap_vnd": 0
+      },
+      {
+        "jar": {
+          "code": "nghia_vu",
+          "name": "Nghĩa vụ",
+          "color_key": "slate",
+          "icon_key": "wallet"
+        },
+        "kind": "obligation",
+        "is_essential": true,
+        "floor_vnd": 2160000,
+        "current_monthly_vnd": 1800000,
+        "proposed_monthly_vnd": 2160000,
+        "split_percent_current": 15,
+        "split_percent_proposed": 18,
+        "floor_gap_vnd": 0
+      }
+    ],
+    "unallocated_vnd": 0,
+    "goals": [
+      {
+        "jar": {
+          "code": "du_lich",
+          "name": "Du lịch",
+          "color_key": "teal",
+          "icon_key": "plane"
+        },
+        "target_vnd": 6000000,
+        "target_date": "2027-03-31",
+        "projected_date": "2027-03-24",
+        "on_track": true,
+        "shortfall_vnd": 0,
+        "monthly_needed_vnd": 1150000
+      }
+    ],
+    "relaxations": [],
+    "alternatives": [],
+    "solver": {
+      "name": "scipy.optimize.linprog",
+      "method": "highs",
+      "status": "optimal",
+      "elapsed_ms": 14,
+      "relaxation_rounds": 0
+    },
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 0.62
+    }
+  }
+}

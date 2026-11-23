@@ -1,0 +1,11 @@
+{
+  "job_id": "c3d4e5f6-a7b8-4c9d-8e0f-a1b2c3d4e5f6",
+  "trigger": "user_request",
+  "requested_at": "2026-12-10T03:00:00Z",
+  "status": "done",
+  "stage": "save",
+  "progress": 100,
+  "finished_at": "2026-12-10T03:00:41Z",
+  "version": 3,
+  "roadmap_id": "5d1c7a42-8e3b-4f6a-9c20-1b7e4a9d3c58"
+}

@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/roadmap.schema.json",
+  "title": "RoadmapBlock",
+  "description": "Lộ trình theo giai đoạn (F5): mỗi giai đoạn có các bước, mỗi bước có lý do và trạng thái chờ, đã chấp nhận hay đã từ chối. Có phiên bản tăng dần theo người dùng, kèm lý do sinh lại (`reason`). Số trong bước do bộ tối ưu (`planner___optimize_allocation`) tính, không do LLM viết; câu `reason` của bước do Roadmap agent viết và phải qua NumericGrounding và `check_suitability` (vi phạm mức block thì bước bị bỏ). Đọc bằng `planner___get_roadmap` (chat) và `GET /roadmap` (màn Lộ trình) cùng một khối. Lưu lộ trình là thao tác ghi KHÔNG đổi số dư nên không qua token; hành động đổi tiền gắn trong bước (`action`) vẫn qua `POST /confirmations` rồi `POST /actions`. Id khối `roadmap:{trace_id}:v{version}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "roadmap" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/RoadmapData" }
+  },
+  "$defs": {
+    "RoadmapVersion": {
+      "description": "Số phiên bản, tăng dần theo người dùng từ 1.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "RoadmapVersionStatus": {
+      "description": "active (đang dùng; mỗi người dùng tối đa một), proposed (bản mới do hệ thống sinh lại, chờ người dùng chọn 'Dùng bản mới' hay 'Giữ bản cũ'; tối đa một), superseded (đã bị bản khác thay), discarded (người dùng chọn giữ bản cũ nên bản này bị bỏ).",
+      "type": "string",
+      "enum": ["active", "proposed", "superseded", "discarded"]
+    },
+    "RoadmapStepStatus": {
+      "description": "Trạng thái một bước: pending (chờ), accepted (đã chấp nhận), rejected (đã từ chối). Giao diện luôn hiện chữ. Chấp nhận KHÔNG tự thực hiện hành động của bước và không đổi số dư.",
+      "type": "string",
+      "enum": ["pending", "accepted", "rejected"]
+    },
+    "RoadmapReasonCode": {
+      "description": "initial (lần đầu), behavior_changed (điểm gãy hành vi đã xác nhận), goal_changed, income_changed, forecast_drift (dự báo lệch quá ngưỡng), user_request (người dùng bấm sinh lại), step_edited (người dùng sửa một bước, lưu bản mới, không sinh lại toàn bộ).",
+      "type": "string",
+      "enum": ["initial", "behavior_changed", "goal_changed", "income_changed", "forecast_drift", "user_request", "step_edited"]
+    },
+    "RoadmapReason": {
+      "description": "Vì sao có phiên bản này (frame L1: 'hành vi thay đổi'). `text` do code dựng từ sự kiện kích hoạt, không do LLM viết; `detail` là các con số của sự kiện (ví dụ chi Ăn uống mỗi tuần trước và sau).",
+      "type": "object",
+      "required": ["code", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/RoadmapReasonCode" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "detail": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "confirm_action.schema.json#/$defs/ActionChange" }
+        },
+        "behavior_flag_id": {
+          "description": "Id dòng `behavior_flags` đã gây ra phiên bản này (khi `code` là behavior_changed).",
+          "$ref": "envelope.schema.json#/$defs/Uuid"
+        }
+      }
+    },
+    "RoadmapHorizon": {
+      "type": "object",
+      "required": ["start_date", "end_date"],
+      "additionalProperties": false,
+      "properties": {
+        "start_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "end_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" }
+      }
+    },
+    "GoalProjection": {
+      "description": "Một mục tiêu (hũ có `goal_vnd`) so với kế hoạch. Bất biến (Pydantic kiểm): `on_track` thì `shortfall_vnd` bằng 0.",
+      "type": "object",
+      "required": ["jar", "target_vnd", "on_track", "shortfall_vnd", "monthly_needed_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "jar": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastJar" },
+        "target_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" },
+        "target_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "projected_date": {
+          "description": "Ngày dự kiến đạt mục tiêu theo kế hoạch; vắng nếu không đạt trong khoảng của lộ trình.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "on_track": { "type": "boolean" },
+        "shortfall_vnd": {
+          "description": "Còn thiếu bao nhiêu so với mục tiêu tại `target_date` theo kế hoạch.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "monthly_needed_vnd": {
+          "description": "Mỗi tháng cần dành bao nhiêu để kịp hạn.",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        }
+      }
+    },
+    "RoadmapStepAction": {
+      "description": "Việc đổi tiền gắn vào bước. Người dùng thực hiện bằng luồng xác nhận (ADR-0002): `POST /confirmations` rồi `POST /actions` với đúng `tool` và `params` (server chuẩn hóa lại và tính bản xem trước). Không chứa `user_id` hay `confirm_token`.",
+      "type": "object",
+      "required": ["tool", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "type": "string", "enum": ["move_between_jars", "save_jars", "schedule_nudge"] },
+        "params": { "type": "object" }
+      }
+    },
+    "RoadmapStep": {
+      "description": "Một bước. `step_id` ổn định trong một phiên bản (cũng dùng làm `option_id` của `POST /feedback`). Bất biến (Pydantic kiểm): `decided_at` có đúng khi `status` khác pending.",
+      "type": "object",
+      "required": ["step_id", "kind", "title", "reason", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "step_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "kind": {
+          "description": "set_aside (để riêng một khoản sang hũ), adjust_split (đổi tỷ lệ chia lương), pay_obligation (trả nghĩa vụ), cut_spending (giảm chi hũ không thiết yếu), review_goal (lùi hạn hoặc giảm mục tiêu), remind (đặt nhắc).",
+          "type": "string",
+          "enum": ["set_aside", "adjust_split", "pay_obligation", "cut_spending", "review_goal", "remind"]
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "reason": {
+          "description": "'Vì sao' của bước. Số trong câu phải có ở `metrics` hoặc ở các trường số của bước (NumericGrounding).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "ai_generated": {
+          "description": "Đúng nếu `reason` do model viết (giao diện ghi 'do AI diễn giải').",
+          "type": "boolean"
+        },
+        "amount_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" },
+        "jar_code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "to_jar_code": {
+          "description": "Hũ nhận (với set_aside: hũ nguồn là `jar_code`).",
+          "$ref": "envelope.schema.json#/$defs/JarCode"
+        },
+        "due_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "metrics": {
+          "description": "Vài số trước và sau do bộ tối ưu tính (ví dụ hũ Dự phòng trước và sau).",
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "confirm_action.schema.json#/$defs/ActionChange" }
+        },
+        "checked_rules": {
+          "description": "Luật suitability đã kiểm cho bước này (`rule_id`).",
+          "type": "array",
+          "maxItems": 8,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$", "maxLength": 64 }
+        },
+        "action": { "$ref": "#/$defs/RoadmapStepAction" },
+        "status": { "$ref": "#/$defs/RoadmapStepStatus" },
+        "decided_at": { "$ref": "envelope.schema.json#/$defs/IsoDateTime" },
+        "edited": {
+          "description": "Đúng nếu người dùng đã sửa bước này (số hoặc ngày khác bản hệ thống đề xuất).",
+          "type": "boolean"
+        }
+      }
+    },
+    "RoadmapPhase": {
+      "type": "object",
+      "required": ["phase_id", "title", "start_date", "end_date", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "phase_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "start_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "end_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/RoadmapStep" }
+        }
+      }
+    },
+    "RoadmapAlternative": {
+      "description": "Một trong hai lựa chọn nói thẳng khi mục tiêu chưa khả thi (`feasibility` là infeasible). Chọn nó thì gửi `alternative_id` ở `POST /roadmap/regenerate`.",
+      "type": "object",
+      "required": ["option_id", "kind", "label", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "option_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "kind": {
+          "description": "delay_goal (lùi hạn mục tiêu), reduce_goal (giảm mục tiêu), cut_discretionary (giảm hũ không thiết yếu).",
+          "type": "string",
+          "enum": ["delay_goal", "reduce_goal", "cut_discretionary"]
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "jar_code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "metrics": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "confirm_action.schema.json#/$defs/ActionChange" }
+        }
+      }
+    },
+    "RoadmapCounts": {
+      "description": "Số bước theo trạng thái (phải bằng đếm từ `phases`).",
+      "type": "object",
+      "required": ["pending", "accepted", "rejected"],
+      "additionalProperties": false,
+      "properties": {
+        "pending": { "type": "integer", "minimum": 0 },
+        "accepted": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "RoadmapData": {
+      "description": "Một phiên bản lộ trình. Bất biến (Pydantic và test kiểm): `step_id` và `phase_id` duy nhất; `counts` đúng; `based_on_version` nhỏ hơn `version`; giai đoạn xếp theo `start_date`; `infeasible` đi với đúng hai `alternatives` và ít nhất một mục tiêu không kịp, `on_track` thì mọi mục tiêu kịp, các trường hợp khác không có `alternatives`.",
+      "type": "object",
+      "required": ["roadmap_id", "version", "status", "reason", "created_at", "app_date", "headline", "feasibility", "horizon", "goals", "phases", "alternatives", "counts", "rules_version", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "roadmap_id": { "$ref": "envelope.schema.json#/$defs/Uuid" },
+        "version": { "$ref": "#/$defs/RoadmapVersion" },
+        "status": { "$ref": "#/$defs/RoadmapVersionStatus" },
+        "reason": { "$ref": "#/$defs/RoadmapReason" },
+        "based_on_version": {
+          "description": "Phiên bản mà bản này xuất phát (để so sánh). Vắng ở bản đầu tiên.",
+          "$ref": "#/$defs/RoadmapVersion"
+        },
+        "created_at": { "$ref": "envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": {
+          "description": "Ngày mô phỏng lúc sinh.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "headline": {
+          "description": "Một câu do code dựng, có phiên bản, số giai đoạn, số bước và tính khả thi bằng chữ.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "feasibility": {
+          "description": "on_track (mục tiêu kịp), relaxed (kịp sau khi nới ràng buộc mềm một lần), infeasible (chưa khả thi: nói thẳng kèm hai lựa chọn).",
+          "type": "string",
+          "enum": ["on_track", "relaxed", "infeasible"]
+        },
+        "horizon": { "$ref": "#/$defs/RoadmapHorizon" },
+        "goals": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/GoalProjection" }
+        },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/RoadmapPhase" }
+        },
+        "alternatives": {
+          "description": "Đúng hai lựa chọn khi `feasibility` là infeasible, rỗng ở các trường hợp khác.",
+          "type": "array",
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/RoadmapAlternative" }
+        },
+        "counts": { "$ref": "#/$defs/RoadmapCounts" },
+        "rules_version": {
+          "description": "Phiên bản bộ luật suitability đã kiểm lộ trình này.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "basis": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastBasis" }
+      }
+    }
+  }
+}

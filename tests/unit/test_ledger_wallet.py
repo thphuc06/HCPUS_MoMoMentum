@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator
 from yofina_core.blocks import parse_block
 from yofina_core.config import Config
 from yofina_core.errors import YofinaError
+from yofina_core.wallet import PHASE4_TOOLS
 from yofina_ledger import convert, events
 from yofina_ledger.gateway_api import _ARG_KEYS
 from yofina_ledger.proactive import choose_proactive_card
@@ -429,6 +430,9 @@ def test_moi_tool_trong_hop_dong_co_dung_tham_so_o_gateway_api():
     contracts = list(TOOLS)
     for name in ("planner", "knowledge", "audit"):
         contracts += load_json(CONTRACTS / "tools" / f"{name}.json")
+    # Phase 4: tool của target planner đã có trong hợp đồng nhưng Lambda chưa cài (luồng A cài; xóa từng tên khỏi
+    # `yofina_core.wallet.PHASE4_TOOLS` khi cài xong). Gateway gọi tool chưa cài thì nhận "Tool không tồn tại" (PARAMS_INVALID).
+    contracts = [t for t in contracts if t["name"] not in PHASE4_TOOLS]
     assert {t["name"] for t in contracts} == set(_ARG_KEYS)
     for t in contracts:
         props = set(t["inputSchema"]["properties"]) - {"user_id"}

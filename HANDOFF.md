@@ -13,7 +13,7 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 | [1. Nền và lát dọc](docs/plan/phases/phase-1-nen-va-lat-doc.md) | **Xong 22/11**, trừ hai việc chờ chủ dự án (mục C). Kết quả ở cuối file phase |
 | [2. Ví mô phỏng và dự báo](docs/plan/phases/phase-2-vi-va-du-bao.md) | **Xong 22/11**: 8 tiêu chí đạt, tiêu chí 5 lệch câu chữ (độ phủ luôn 100% trên ví khép kín), tiêu chí 6 đạt có điều kiện. Kết quả, bằng chứng và việc chuyển sang phase sau ở cuối file phase |
 | [3. What-if, kiểm tra trước khi quẹt, harness](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | **Đóng 23/11** (Runtime v13): golden **30/30**, đối kháng 16/16, integration 169/169, ép lỗi model 6/6, đã đo p95. **Kiểm sau**: đi cảnh 2 trên trình duyệt, Figma, Hoàn tác thật trên UI; Guardrail 446 ms vượt ngưỡng 400 ms. Xem mục A |
-| [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | Chưa bắt đầu (bước 0 hợp đồng là việc kế tiếp, mục B) |
+| [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | **Bước 0 (hợp đồng) xong 23/11** trên `main`: migration 0052 (chưa chạy trên Aurora), 5 khối, 5 tool, 13 REST, kiểu dùng chung, cú sốc và trọng số dạng dữ liệu. Chia việc: Phúc luồng A (ML) và B (phân hũ tự động), deploy; Học luồng C (agent) và D (frontend) trên nhánh `feat/phase4-agent-ui`. Xem mục B |
 | [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) | **Luồng A (F6) xong và deploy 23/11** (stack `YofinaIngest`, migration 0050, persona `vy` cho `giamkhao3`, test tích hợp 11/11, eval 58 mục). Luồng B–E chưa làm. Kết quả ở cuối file phase |
 | [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) | Chưa bắt đầu |
 
@@ -57,9 +57,13 @@ Việc phase 2 chuyển sang, chưa chắc đã làm: preview cho sửa hồ sơ
 
 **Git**: `main` đã push. Nhánh `feat/ingest` đã xóa sau khi merge. `origin/wip/phase3-streams` và `origin/r1-merge-phase3` đã nằm trọn trong `main`, xóa được khi đồng đội đồng ý. `evals/results/` không vào git (chứa dữ liệu persona; đã có trong `.gitignore`).
 
-### B. Phase 4, bước 0 (hợp đồng)
+### B. Phase 4: bước 0 xong, chia hai nhánh
 
-Bắt đầu từ [file phase 4](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md): đọc "Bước 0 — Hợp đồng", đọc mục "Kết quả thực hiện" của phase 3 để biết chỗ đã lệch. Có thể làm song song với mục A, nhưng không deploy phase 4 trước khi F1 và F3 lên môi trường thật.
+Hợp đồng: mục "Quyết định hợp đồng phase 4" (25 quyết định) và "Cho các luồng sau" trong [file phase 4](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md), `contracts/README.md` mục Phase 4, `db/README.md`. Kiểm lúc chốt: pytest 2352, local_pg 132, vitest 588, infra 19/19, Zod khớp.
+
+- **Phúc (máy mạnh, nhánh `feat/phase4-engine`)**: luồng A (điểm chống chịu, cú sốc Monte Carlo, LP `optimize_allocation`, phát hiện đổi hành vi), luồng B (Lambda phân loại, embedding Cohere `vector(1024)`, k-NN, bộ kiểm ≥ 300 giao dịch), seed persona `minh` lộ trình v1–v3, chạy migration 0052, thêm 13 route REST vào `tools-stack.ts`, mọi deploy và test tích hợp. **Chọn sớm**: target Gateway `planner` đang trỏ Lambda ledger không có scipy: thêm scipy vào zip ledger hay chuyển `planner` sang Lambda forecast.
+- **Học (máy yếu, nhánh `feat/phase4-agent-ui`)**: luồng C (Roadmap agent, router ý định `resilience`/`stress`/`roadmap`, khối trong chat, cổng nhắc), luồng D (R1–R3, L1–L3, A1–A2), viết `evals/golden|adversarial/phase4.jsonl`; code theo `contracts/fixtures/`; chỉ chạy unit test agent và frontend; không deploy. Thêm việc kiểm sau của phase 3 (đi cảnh 2 trên trình duyệt, Học tự đăng nhập).
+- Năm tool mới đã có trong hợp đồng và Cedar nên lần deploy `YofinaAgent` kế tiếp sẽ đăng ký chúng; trước khi luồng A cài, Gateway trả "Tool không tồn tại" (`wallet.PHASE4_TOOLS` liệt kê tên chưa cài).
 
 ### C. Lưu ý khi kiểm
 

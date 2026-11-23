@@ -1,0 +1,130 @@
+{
+  "v": 1,
+  "id": "review_list:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:review",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Có 2 giao dịch mình đã tự xếp hũ nhưng chưa chắc, tổng 125.000 ₫. Bạn xem lại giúp nhé.",
+  "source": {
+    "tool": "rest:GET /review",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "review_list",
+  "data": {
+    "mode": "review",
+    "headline": "Có 2 giao dịch mình đã tự xếp hũ nhưng chưa chắc, tổng 125.000 ₫. Bạn xem lại giúp nhé.",
+    "count": 2,
+    "pending_total_vnd": 125000,
+    "items": [
+      {
+        "transaction_id": "4c8e2a70-5f1b-4d3c-8a9e-7b6d5c4e3f21",
+        "occurred_at": "2026-12-09T11:20:00Z",
+        "app_date": "2026-11-20",
+        "kind": "expense",
+        "amount_vnd": 65000.5,
+        "counterparty": "Highlands Coffee",
+        "tier": "review",
+        "current_jar": {
+          "code": "an_uong",
+          "name": "Ăn uống"
+        },
+        "classified_by": "embedding",
+        "confidence": 0.82,
+        "suggestions": [
+          {
+            "jar": {
+              "code": "giai_tri",
+              "name": "Giải trí",
+              "color_key": "orchid",
+              "icon_key": "gamepad"
+            },
+            "confidence": 0.11,
+            "reason": "Giống 2 giao dịch trước ở Giải trí"
+          }
+        ],
+        "can_remember": true
+      },
+      {
+        "transaction_id": "6f1d3b92-7a2c-4e5d-9b80-8c7e6d5f4a32",
+        "occurred_at": "2026-12-08T14:02:00Z",
+        "app_date": "2026-11-19",
+        "kind": "expense",
+        "amount_vnd": 60000,
+        "counterparty": "Trần Quang Huy",
+        "note": "gửi xe tháng",
+        "tier": "review",
+        "current_jar": {
+          "code": "di_lai",
+          "name": "Đi lại"
+        },
+        "classified_by": "llm",
+        "confidence": 0.74,
+        "suggestions": [
+          {
+            "jar": {
+              "code": "an_uong",
+              "name": "Ăn uống",
+              "color_key": "violet",
+              "icon_key": "utensils"
+            },
+            "confidence": 0.18,
+            "reason": "Người này từng nhận tiền ăn từ bạn"
+          },
+          {
+            "jar": {
+              "code": "hoa_don",
+              "name": "Hóa đơn",
+              "color_key": "brown",
+              "icon_key": "receipt"
+            },
+            "reason": "Số tiền tròn, lặp lại theo tháng"
+          }
+        ],
+        "can_remember": true
+      }
+    ],
+    "jars": [
+      {
+        "code": "an_uong",
+        "name": "Ăn uống",
+        "color_key": "violet",
+        "icon_key": "utensils"
+      },
+      {
+        "code": "di_lai",
+        "name": "Đi lại",
+        "color_key": "sky",
+        "icon_key": "bus"
+      },
+      {
+        "code": "hoa_don",
+        "name": "Hóa đơn",
+        "color_key": "brown",
+        "icon_key": "receipt"
+      },
+      {
+        "code": "giai_tri",
+        "name": "Giải trí",
+        "color_key": "orchid",
+        "icon_key": "gamepad"
+      },
+      {
+        "code": "du_lich",
+        "name": "Du lịch",
+        "color_key": "teal",
+        "icon_key": "plane"
+      },
+      {
+        "code": "du_phong",
+        "name": "Dự phòng",
+        "color_key": "blue",
+        "icon_key": "shield"
+      },
+      {
+        "code": "nghia_vu",
+        "name": "Nghĩa vụ",
+        "color_key": "slate",
+        "icon_key": "wallet"
+      }
+    ]
+  }
+}

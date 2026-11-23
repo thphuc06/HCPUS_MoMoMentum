@@ -1,0 +1,129 @@
+{
+  "v": 1,
+  "id": "roadmap:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:v1",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Lộ trình phiên bản 1: mục tiêu Du lịch chưa khả thi, có 2 lựa chọn.",
+  "source": {
+    "tool": "rest:GET /roadmap",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "roadmap",
+  "data": {
+    "roadmap_id": "9e4a1c07-3b5d-4e82-a6f1-0c7d2b8e5a34",
+    "version": 1,
+    "status": "active",
+    "reason": {
+      "code": "initial",
+      "text": "Lộ trình đầu tiên của bạn."
+    },
+    "created_at": "2026-11-21T10:00:00Z",
+    "app_date": "2026-11-21",
+    "headline": "Lộ trình phiên bản 1: mục tiêu Du lịch chưa khả thi, có 2 lựa chọn.",
+    "feasibility": "infeasible",
+    "horizon": {
+      "start_date": "2026-11-21",
+      "end_date": "2027-02-21"
+    },
+    "goals": [
+      {
+        "jar": {
+          "code": "du_lich",
+          "name": "Du lịch",
+          "color_key": "teal",
+          "icon_key": "plane"
+        },
+        "target_vnd": 12000000,
+        "target_date": "2027-02-28",
+        "on_track": false,
+        "shortfall_vnd": 4500000,
+        "monthly_needed_vnd": 2500000
+      }
+    ],
+    "phases": [
+      {
+        "phase_id": "giu_vung_nen",
+        "title": "Giữ vững nền",
+        "start_date": "2026-11-21",
+        "end_date": "2027-02-21",
+        "steps": [
+          {
+            "step_id": "giu_san_tra_sau",
+            "kind": "pay_obligation",
+            "title": "Giữ sẵn khoản Trả sau ngày 05/12",
+            "reason": "Khoản Trả sau 1.000.000 ₫ đến hạn 05/12 trùng kỳ lương; giữ sẵn để hũ Nghĩa vụ không hụt.",
+            "amount_vnd": 300000,
+            "jar_code": "giai_tri",
+            "to_jar_code": "nghia_vu",
+            "due_date": "2026-12-05",
+            "checked_rules": [
+              "obligations_first"
+            ],
+            "action": {
+              "tool": "move_between_jars",
+              "params": {
+                "from_jar": "giai_tri",
+                "to_jar": "nghia_vu",
+                "amount_vnd": 300000
+              }
+            },
+            "status": "pending"
+          },
+          {
+            "step_id": "nhac_du_lich",
+            "kind": "remind",
+            "title": "Nhắc xem lại mục tiêu Du lịch ngày 05/01",
+            "reason": "Mục tiêu Du lịch chưa khả thi với thu nhập hiện tại; xem lại sau khi chọn một trong hai lựa chọn.",
+            "due_date": "2027-01-05",
+            "jar_code": "du_lich",
+            "status": "pending"
+          }
+        ]
+      }
+    ],
+    "alternatives": [
+      {
+        "option_id": "lui_han",
+        "kind": "delay_goal",
+        "label": "Lùi hạn Du lịch tới 31/05/2027",
+        "summary": "Giữ mục tiêu 12.000.000 ₫ nhưng dời hạn thêm 3 tháng để kịp mà không cắt chi tiêu thiết yếu.",
+        "jar_code": "du_lich",
+        "metrics": [
+          {
+            "label": "Hạn mục tiêu",
+            "before": "28/02/2027",
+            "after": "31/05/2027"
+          }
+        ]
+      },
+      {
+        "option_id": "giam_muc_tieu",
+        "kind": "reduce_goal",
+        "label": "Giảm mục tiêu còn 7.500.000 ₫",
+        "summary": "Giữ hạn 28/02/2027 và giảm số tiền cần dành để kịp với thu nhập hiện tại.",
+        "jar_code": "du_lich",
+        "metrics": [
+          {
+            "label": "Mục tiêu Du lịch",
+            "before": "12.000.000 ₫",
+            "after": "7.500.000 ₫"
+          }
+        ]
+      }
+    ],
+    "counts": {
+      "pending": 2,
+      "accepted": 0,
+      "rejected": 0
+    },
+    "rules_version": "1",
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 0.62
+    }
+  }
+}

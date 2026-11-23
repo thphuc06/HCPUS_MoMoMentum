@@ -1,0 +1,70 @@
+{
+  "v": 1,
+  "id": "roadmap:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:v3",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Lộ trình phiên bản 3: 3 giai đoạn, 5 bước, kịp hạn sau khi giảm hũ Giải trí.",
+  "source": {
+    "tool": "planner___get_roadmap",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "roadmap",
+  "data": {
+    "roadmap_id": "5d1c7a42-8e3b-4f6a-9c20-1b7e4a9d3c58",
+    "version": 3,
+    "status": "proposed",
+    "reason": {
+      "code": "behavior_changed",
+      "text": "Chi Ăn uống mỗi tuần tăng từ 520.000 ₫ lên 810.000 ₫ và giữ mức đó 2 tuần.",
+      "detail": [
+        {
+          "label": "Chi Ăn uống mỗi tuần",
+          "before": "520.000 ₫",
+          "after": "810.000 ₫"
+        }
+      ],
+      "behavior_flag_id": "7a3f9c21-6d4e-4b18-8e05-2c9b1d7a4f63"
+    },
+    "based_on_version": 2,
+    "created_at": "2026-12-10T03:05:00Z",
+    "app_date": "2026-11-21",
+    "headline": "Lộ trình phiên bản 3: 3 giai đoạn, 5 bước, kịp hạn sau khi giảm hũ Giải trí.",
+    "feasibility": "relaxed",
+    "horizon": {
+      "start_date": "2026-11-21",
+      "end_date": "2027-02-21"
+    },
+    "goals": [
+      {
+        "jar": {
+          "code": "du_lich",
+          "name": "Du lịch",
+          "color_key": "teal",
+          "icon_key": "plane"
+        },
+        "target_vnd": 6000000,
+        "target_date": "2027-03-31",
+        "projected_date": "2027-03-24",
+        "on_track": true,
+        "shortfall_vnd": 0,
+        "monthly_needed_vnd": 1150000
+      }
+    ],
+    "phases": [],
+    "alternatives": [],
+    "counts": {
+      "pending": 5,
+      "accepted": 0,
+      "rejected": 0
+    },
+    "rules_version": "1",
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 0.62
+    }
+  }
+}

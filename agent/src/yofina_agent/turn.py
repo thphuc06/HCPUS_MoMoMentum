@@ -679,7 +679,7 @@ class Turn:
             "move": self.on_move,
             "out_of_scope": self.on_out_of_scope,
             "chitchat": self.on_chitchat,
-        }[routed.intent]
+        }.get(routed.intent, self.on_out_of_scope)  # resilience, stress, roadmap (phase 4) chưa có bộ xử lý: luồng C thêm
         if req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed):
             await self.emit_clarify(req, routed)
             return

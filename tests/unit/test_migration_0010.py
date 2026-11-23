@@ -89,7 +89,7 @@ def test_tap_gia_tri_khop_hang_so():
     assert sql_set(nudges, "status") == wallet.NUDGE_STATUSES
     assert sql_set(create_table("feedback"), "decision") == wallet.FEEDBACK_DECISIONS
     intent = next(s for s in STATEMENTS if "ADD COLUMN IF NOT EXISTS intent" in s)
-    assert sql_set(intent, "intent") == wallet.INTENTS
+    assert sql_set(intent, "intent") == wallet.INTENTS_PHASE3  # 0052 nới thành INTENTS
 
 
 def test_nudges_co_rang_buoc_trang_thai_va_ngay():

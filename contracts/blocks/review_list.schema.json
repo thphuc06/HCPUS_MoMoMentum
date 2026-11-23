@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/review_list.schema.json",
+  "title": "ReviewListBlock",
+  "description": "Danh sách giao dịch người dùng cần quyết định về hũ (F2 phân hũ tự động), một khối cho hai màn: A1 'Xem lại' (`mode` review: giao dịch đã được tự gán hũ ở mức tin cậy vừa, người dùng soát và sửa bằng một chạm) và A2 hỏi gộp (`mode` daily_ask: giao dịch chưa xếp được hũ, hỏi MỘT lần mỗi ngày kèm tối đa 2 gợi ý). Ba mức tin cậy (`tier`): auto (tự gán, không cần hỏi, không vào danh sách), review (tự gán và vào 'Xem lại'), ask (vào hũ Chưa phân loại và hỏi gộp); ngưỡng nằm ở cấu hình, hiệu chỉnh trên dữ liệu. Số tiền là số của sổ cái (không phải ước lượng) nên khối không có `basis`. Sửa hũ dùng lại đường `assign_jar` qua `POST /confirmations` và `POST /actions` (`remember` once hoặc always); xác nhận 'đúng rồi' cho mục mức review là `assign_jar` với chính hũ hiện tại (xóa cờ cần xem lại, không chuyển tiền). Id khối `review_list:{trace_id}:{mode}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "review_list" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ReviewListData" }
+  },
+  "$defs": {
+    "ReviewJarRef": {
+      "description": "Hũ hiện tại của giao dịch (tên rút gọn).",
+      "type": "object",
+      "required": ["code", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 }
+      }
+    },
+    "ReviewSuggestion": {
+      "description": "Một hũ gợi ý. `reason` do code dựng từ tín hiệu đã dùng (ví dụ 'Giống 4 giao dịch trước gửi cho cùng người'), không do LLM viết.",
+      "type": "object",
+      "required": ["jar", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "jar": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastJar" },
+        "confidence": { "$ref": "envelope.schema.json#/$defs/Ratio" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
+    },
+    "ReviewItem": {
+      "description": "Một giao dịch cần quyết định. `can_remember` đúng khi có người nhận đã lưu hoặc đối tác để lưu luật 'luôn luôn cho người này' (`assign_jar` với `remember` always). Số tiền dương; hướng nằm ở `kind`. Tên người nhận là dữ liệu của chính người dùng, không đi vào model.",
+      "type": "object",
+      "required": ["transaction_id", "occurred_at", "app_date", "kind", "amount_vnd", "tier", "suggestions", "can_remember"],
+      "additionalProperties": false,
+      "properties": {
+        "transaction_id": { "$ref": "envelope.schema.json#/$defs/Uuid" },
+        "occurred_at": { "$ref": "envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "kind": { "type": "string", "enum": ["expense", "income"] },
+        "amount_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" },
+        "counterparty": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "note": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "tier": {
+          "type": "string",
+          "enum": ["auto", "review", "ask"]
+        },
+        "current_jar": { "$ref": "#/$defs/ReviewJarRef" },
+        "classified_by": {
+          "description": "Bước đã gán hũ (khớp `transactions.classified_by`): user, type_map (bảng tra loại), rule (luật của người dùng), embedding (giống giao dịch đã gán), llm (model nhỏ), seed.",
+          "type": "string",
+          "enum": ["user", "type_map", "rule", "embedding", "llm", "seed"]
+        },
+        "confidence": { "$ref": "envelope.schema.json#/$defs/Ratio" },
+        "suggestions": {
+          "type": "array",
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/ReviewSuggestion" }
+        },
+        "can_remember": { "type": "boolean" }
+      }
+    },
+    "ReviewAsk": {
+      "description": "Trạng thái câu hỏi gộp của ngày (một câu mỗi ngày mô phỏng): open (đã hỏi, chưa xong), answered (đã xếp hết), skipped (người dùng chọn để sau).",
+      "type": "object",
+      "required": ["ask_date", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "ask_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "status": { "type": "string", "enum": ["open", "answered", "skipped"] }
+      }
+    },
+    "ReviewListData": {
+      "description": "Bất biến (Pydantic và test kiểm): `review` chỉ có mục mức review, `daily_ask` chỉ có mức ask và kèm `ask`; `count` không nhỏ hơn số mục đang hiện (danh sách bị cắt ở 50); mỗi giao dịch một lần.",
+      "type": "object",
+      "required": ["mode", "headline", "count", "pending_total_vnd", "items", "jars"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["review", "daily_ask"] },
+        "headline": {
+          "description": "Một câu do code dựng (ví dụ 'Hôm nay mình chưa xếp được hũ cho 2 giao dịch, tổng 180.000 ₫').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "count": {
+          "description": "Tổng số giao dịch thuộc chế độ này (có thể nhiều hơn số mục trong `items`).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "pending_total_vnd": {
+          "description": "Tổng số tiền của các giao dịch đó. Hiện ở Tổng quan và màn dự báo ('chưa phân loại').",
+          "$ref": "envelope.schema.json#/$defs/Vnd"
+        },
+        "items": {
+          "description": "Mới nhất trước, tối đa 50.",
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/ReviewItem" }
+        },
+        "jars": {
+          "description": "Hũ của người dùng để đổi hũ bằng một chạm.",
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastJar" }
+        },
+        "ask": { "$ref": "#/$defs/ReviewAsk" }
+      }
+    }
+  }
+}

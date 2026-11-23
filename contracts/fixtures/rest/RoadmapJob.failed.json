@@ -1,0 +1,11 @@
+{
+  "job_id": "c3d4e5f6-a7b8-4c9d-8e0f-a1b2c3d4e5f6",
+  "trigger": "user_request",
+  "requested_at": "2026-12-10T03:00:00Z",
+  "status": "failed",
+  "stage": "suitability",
+  "progress": 80,
+  "finished_at": "2026-12-10T03:00:30Z",
+  "error_code": "ROADMAP_INVALID",
+  "error_message": "Mọi bước đề xuất đều vi phạm luật phù hợp, chưa lưu được lộ trình mới."
+}

@@ -42,6 +42,11 @@ export const ERROR_CODES = [
   'INGEST_TOO_LARGE',
   'INGEST_NOT_FINANCIAL',
   'INGEST_DUPLICATE_FILE',
+  // phase 4 (chống chịu, lộ trình)
+  'ROADMAP_NOT_FOUND',
+  'ROADMAP_INVALID',
+  'ROADMAP_VERSION_CONFLICT',
+  'SHOCK_NOT_FOUND',
 ] as const
 
 export const ErrorCode = z.enum(ERROR_CODES)
@@ -94,6 +99,10 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   INGEST_TOO_LARGE: 413,
   INGEST_NOT_FINANCIAL: 422,
   INGEST_DUPLICATE_FILE: 409,
+  ROADMAP_NOT_FOUND: 404,
+  ROADMAP_INVALID: 422,
+  ROADMAP_VERSION_CONFLICT: 409,
+  SHOCK_NOT_FOUND: 404,
 }
 
 /** Thông báo tiếng Việt cho từng mã lỗi (thay vì hiện mã thô hay chữ tiếng Anh của server). */
@@ -136,6 +145,10 @@ export const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   INGEST_TOO_LARGE: 'Tệp lớn hơn giới hạn cho phép. Hãy chọn tệp nhỏ hơn.',
   INGEST_NOT_FINANCIAL: 'Tệp này không phải biên lai, thông báo chuyển khoản hay sao kê nên chưa đọc được dòng nào. Hãy chọn ảnh hóa đơn, thông báo chuyển khoản hoặc tệp sao kê.',
   INGEST_DUPLICATE_FILE: 'Tệp này đã được nạp trước đó rồi, không nạp thêm lần nữa.',
+  ROADMAP_NOT_FOUND: 'Chưa có lộ trình này. Bạn có thể nhờ Yofina lập một lộ trình mới.',
+  ROADMAP_INVALID: 'Lộ trình này chưa hợp lệ hoặc có bước không phù hợp với tình hình của bạn nên chưa lưu.',
+  ROADMAP_VERSION_CONFLICT: 'Lộ trình đã có phiên bản mới hơn. Tải lại để xem bản hiện tại.',
+  SHOCK_NOT_FOUND: 'Không có cú sốc này. Bạn chọn một trong các cú sốc có sẵn nhé.',
   NETWORK: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
   TIMEOUT: 'Máy chủ phản hồi quá lâu. Nếu bạn vừa ghi một giao dịch, kiểm tra ở Hoạt động trước khi thử lại.',
   INVALID_RESPONSE: 'Máy chủ trả dữ liệu không đọc được. Thử lại sau ít phút.',

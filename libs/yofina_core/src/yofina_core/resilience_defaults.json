@@ -1,0 +1,145 @@
+{
+  "version": "2026-12-mo-phong-1",
+  "note": "Trọng số và ngưỡng của Điểm chống chịu và của cú sốc. TẤT CẢ là giá trị mô phỏng, chưa hiệu chỉnh cho người dùng Việt Nam; hiệu chỉnh trên ba persona ở luồng A phase 4 rồi tăng `version`. Mã engine đọc từ đây, không gắn cứng số nào ngoài file này.",
+  "disclaimer": "Đây không phải điểm tín dụng. Đây chỉ là thước đo sức chịu đựng tài chính của riêng bạn, tính từ dữ liệu trong ví.",
+  "weights": {
+    "save": {
+      "value": 0.35,
+      "unit": "ratio",
+      "note": "Trọng số của Save trong điểm tổng. Cao nhất vì quỹ dự phòng là lớp đệm đầu tiên khi mất thu nhập.",
+      "source": "Giá trị mô phỏng. Khung bốn thành phần Spend, Save, Borrow, Plan theo proposal §11; trọng số do dự án chọn, chưa hiệu chỉnh."
+    },
+    "spend": {
+      "value": 0.25,
+      "unit": "ratio",
+      "note": "Trọng số của Spend.",
+      "source": "Giá trị mô phỏng, chưa hiệu chỉnh."
+    },
+    "borrow": {
+      "value": 0.25,
+      "unit": "ratio",
+      "note": "Trọng số của Borrow.",
+      "source": "Giá trị mô phỏng, chưa hiệu chỉnh."
+    },
+    "plan": {
+      "value": 0.15,
+      "unit": "ratio",
+      "note": "Trọng số của Plan. Thấp nhất vì nhiều người dùng chưa đặt mục tiêu; khi thiếu mục tiêu, thành phần này bị bỏ và trọng số các thành phần còn lại được chuẩn hóa để cộng bằng 1.",
+      "source": "Giá trị mô phỏng, chưa hiệu chỉnh."
+    }
+  },
+  "bands": {
+    "weak_max_score": {
+      "value": 39,
+      "unit": "score",
+      "note": "Điểm từ 0 tới ngưỡng này (gồm cả ngưỡng) thuộc nhóm yếu.",
+      "source": "Giá trị mô phỏng, chưa hiệu chỉnh."
+    },
+    "fair_max_score": {
+      "value": 69,
+      "unit": "score",
+      "note": "Điểm trên ngưỡng yếu tới ngưỡng này (gồm cả ngưỡng) thuộc nhóm vừa; cao hơn là tốt.",
+      "source": "Giá trị mô phỏng, chưa hiệu chỉnh."
+    }
+  },
+  "components": {
+    "save": {
+      "label": "Tiết kiệm",
+      "explanation_template": "Số dư khả dụng đủ sống {runway_days} ngày; mức tham chiếu là {full_score_days} ngày.",
+      "thresholds": {
+        "zero_score_days": {
+          "value": 0,
+          "unit": "days",
+          "note": "Số ngày sống được ứng với 0 điểm.",
+          "source": "Quy ước: không còn ngày nào thì 0 điểm."
+        },
+        "full_score_days": {
+          "value": 180,
+          "unit": "days",
+          "note": "Số ngày sống được ứng với 100 điểm; giữa hai mốc nội suy tuyến tính.",
+          "source": "Tham khảo lời khuyên phổ biến về quỹ dự phòng 3 tới 6 tháng chi tiêu; giá trị mô phỏng, chưa hiệu chỉnh."
+        }
+      }
+    },
+    "spend": {
+      "label": "Chi tiêu",
+      "explanation_template": "Chi tiêu bằng {spend_ratio_percent}% thu nhập, {on_time_percent}% khoản đến hạn được trả đúng hạn.",
+      "thresholds": {
+        "full_score_spend_ratio": {
+          "value": 0.7,
+          "unit": "ratio",
+          "note": "Tỷ lệ chi trên thu ứng với 100 điểm cho phần chi tiêu.",
+          "source": "Tham khảo quy tắc 50/30/20 (nhu cầu và mong muốn khoảng 80% thu nhập); giá trị mô phỏng, chưa hiệu chỉnh."
+        },
+        "zero_score_spend_ratio": {
+          "value": 1.0,
+          "unit": "ratio",
+          "note": "Tỷ lệ chi trên thu ứng với 0 điểm (chi hết hoặc hơn thu nhập).",
+          "source": "Quy ước: chi bằng thu nhập thì không để dành được gì."
+        },
+        "on_time_share_weight": {
+          "value": 0.3,
+          "unit": "ratio",
+          "note": "Phần điểm của Spend đến từ việc trả đúng hạn các khoản đến hạn (phần còn lại từ tỷ lệ chi trên thu).",
+          "source": "Giá trị mô phỏng, chưa hiệu chỉnh."
+        }
+      }
+    },
+    "borrow": {
+      "label": "Vay nợ",
+      "explanation_template": "Nghĩa vụ hằng tháng bằng {obligation_ratio_percent}% thu nhập; mức nên giữ dưới {full_score_percent}%.",
+      "thresholds": {
+        "full_score_obligation_ratio": {
+          "value": 0.15,
+          "unit": "ratio",
+          "note": "Tỷ lệ nghĩa vụ trên thu nhập ứng với 100 điểm.",
+          "source": "Giá trị mô phỏng, chưa hiệu chỉnh."
+        },
+        "zero_score_obligation_ratio": {
+          "value": 0.5,
+          "unit": "ratio",
+          "note": "Tỷ lệ nghĩa vụ trên thu nhập ứng với 0 điểm; giữa hai mốc nội suy tuyến tính.",
+          "source": "Tham khảo ngưỡng nợ trên thu nhập 36% của luật obligation_to_income, nới lên làm mốc 0 điểm; giá trị mô phỏng, chưa hiệu chỉnh."
+        }
+      }
+    },
+    "plan": {
+      "label": "Kế hoạch",
+      "explanation_template": "Các mục tiêu đang đạt {progress_percent}% so với tiến độ cần có.",
+      "thresholds": {
+        "full_score_progress_ratio": {
+          "value": 1.0,
+          "unit": "ratio",
+          "note": "Tiến độ thực tế trên tiến độ cần có ứng với 100 điểm (kịp hoặc vượt kế hoạch).",
+          "source": "Quy ước: kịp kế hoạch là điểm tối đa."
+        },
+        "zero_score_progress_ratio": {
+          "value": 0.0,
+          "unit": "ratio",
+          "note": "Tiến độ ứng với 0 điểm; giữa hai mốc nội suy tuyến tính.",
+          "source": "Quy ước: chưa dành đồng nào cho mục tiêu thì 0 điểm."
+        }
+      }
+    }
+  },
+  "stress": {
+    "horizon_days": {
+      "value": 90,
+      "unit": "days",
+      "note": "Khoảng dự báo dùng khi áp cú sốc (không vượt horizon của dự báo nền).",
+      "source": "Giá trị mô phỏng, đủ dài hơn cú sốc dài nhất trong shocks.json."
+    },
+    "n_paths": {
+      "value": 1000,
+      "unit": "count",
+      "note": "Số đường Monte Carlo khi áp cú sốc.",
+      "source": "Giá trị mô phỏng; luồng A đo độ trễ và sai số rồi chỉnh."
+    },
+    "short_shortfall_ratio": {
+      "value": 0.25,
+      "unit": "ratio",
+      "note": "Khoản thiếu trên nhu cầu chi trong thời gian sốc từ ngưỡng này trở lên thì status là short (hụt); dưới ngưỡng mà vẫn thiếu thì tight (sát); không thiếu thì ok (đủ).",
+      "source": "Giá trị mô phỏng, chưa hiệu chỉnh."
+    }
+  }
+}

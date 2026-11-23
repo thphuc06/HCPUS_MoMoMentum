@@ -25,6 +25,9 @@ Quy tắc `id` (ổn định trong một lượt, cùng id thì khối sau thay 
 - suggestions: `suggestions:{trace_id}:{context}`
 - ingest_review: `ingest_review:{job_id}`; coverage_change: `coverage_change:{job_id}` (dựng bằng
   `yofina_core.ingest.build_ingest_review` và `build_coverage_change`)
+- resilience_score: `resilience_score:{trace_id}`; stress_result: `stress_result:{trace_id}:{shock_id}`
+- roadmap: `roadmap:{trace_id}:v{version}`; roadmap_diff: `roadmap_diff:{trace_id}:v{from}-v{to}`
+- review_list: `review_list:{trace_id}:{mode}`
 """
 
 from __future__ import annotations
@@ -742,6 +745,442 @@ class SuggestionsBlock(_BlockBase):
     data: SuggestionsData
 
 
+# --- phase 4: điểm chống chịu, cú sốc, lộ trình, danh sách "Xem lại" -------------------------------------
+Number = Annotated[float, Field(ge=-MAX_VND, le=MAX_VND)]
+Score = Annotated[int, Field(ge=0, le=100)]
+Weight = Annotated[float, Field(ge=0, le=1)]
+RoadmapVersion = Annotated[int, Field(ge=1, le=10000)]
+ResilienceComponentKey = Literal["save", "spend", "borrow", "plan"]
+ResilienceBand = Literal["weak", "fair", "strong"]
+MetricUnit = Literal["vnd", "days", "ratio", "count"]
+ShockKind = Literal["income_loss", "expense_increase", "health_event"]
+RoadmapReasonCode = Literal[
+    "initial", "behavior_changed", "goal_changed", "income_changed", "forecast_drift",
+    "user_request", "step_edited",
+]  # fmt: skip
+RoadmapVersionStatus = Literal["active", "proposed", "superseded", "discarded"]
+RoadmapStepStatus = Literal["pending", "accepted", "rejected"]
+RoadmapStepKind = Literal[
+    "set_aside", "adjust_split", "pay_obligation", "cut_spending", "review_goal", "remind"
+]  # fmt: skip
+RoadmapStepActionTool = Literal["move_between_jars", "save_jars", "schedule_nudge"]
+RoadmapFeasibility = Literal["on_track", "relaxed", "infeasible"]
+AlternativeKind = Literal["delay_goal", "reduce_goal", "cut_discretionary"]
+ClassificationTier = Literal["auto", "review", "ask"]
+ClassifiedByName = Literal["user", "type_map", "rule", "embedding", "llm", "seed"]
+ReviewMode = Literal["review", "daily_ask"]
+ReviewAskStatus = Literal["open", "answered", "skipped"]
+#: Thứ tự cố định của bốn thành phần (hiển thị và lưu).
+RESILIENCE_ORDER: tuple[str, ...] = ("save", "spend", "borrow", "plan")
+
+
+class ResilienceInput(_Strict):
+    """Một đầu vào đã dùng để tính một thành phần (ví dụ số dư khả dụng, chi tiêu mỗi ngày)."""
+
+    key: SlugKey
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+    value: Number
+    unit: MetricUnit
+
+    @model_validator(mode="after")
+    def _unit_matches_value(self) -> ResilienceInput:
+        """Tiền và số đếm là số nguyên (hợp đồng "tiền là số nguyên VND"); JSON Schema chỉ biết `number`."""
+        if self.unit in ("vnd", "count") and self.value != int(self.value):
+            raise ValueError("đầu vào đơn vị vnd hoặc count phải là số nguyên")
+        if self.unit in ("days", "ratio", "count") and self.value < 0:
+            raise ValueError("đầu vào days, ratio, count không âm")
+        return self
+
+
+class ResilienceComponent(_Strict):
+    key: ResilienceComponentKey
+    label: Annotated[str, Field(min_length=1, max_length=40)]
+    score: Score | None = None
+    weight: Weight
+    applicable: bool
+    band: ResilienceBand | None = None
+    explanation: Annotated[str, Field(min_length=1, max_length=200)]
+    inputs: Annotated[list[ResilienceInput], Field(max_length=6)]
+
+    @model_validator(mode="after")
+    def _applicable_consistent(self) -> ResilienceComponent:
+        if self.applicable != (self.score is not None) or self.applicable != (
+            self.band is not None
+        ):
+            raise ValueError("applicable đúng khi và chỉ khi có score và band")
+        if not self.applicable and self.weight != 0:
+            raise ValueError("thành phần không áp dụng có weight bằng 0")
+        return self
+
+
+class ResilienceScoreData(_Strict):
+    score: Score
+    band: ResilienceBand
+    headline: Annotated[str, Field(min_length=1, max_length=160)]
+    app_date: IsoDate
+    computed_at: IsoDateTime
+    components: Annotated[list[ResilienceComponent], Field(min_length=4, max_length=4)]
+    weakest: ResilienceComponentKey
+    previous_score: Score | None = None
+    config_version: Annotated[str, Field(min_length=1, max_length=40)]
+    disclaimer: Annotated[str, Field(min_length=1, max_length=160)]
+    basis: ForecastBasis
+
+    @model_validator(mode="after")
+    def _invariants(self) -> ResilienceScoreData:
+        """Bất biến của hợp đồng: đủ bốn thành phần đúng thứ tự, trọng số của các thành phần áp dụng cộng lại bằng 1,
+        điểm tổng bằng trung bình có trọng số (sai lệch tối đa 1 do làm tròn), `weakest` là thành phần áp dụng thấp nhất."""
+        if tuple(c.key for c in self.components) != RESILIENCE_ORDER:
+            raise ValueError("components phải đủ save, spend, borrow, plan đúng thứ tự")
+        live = [c for c in self.components if c.applicable]
+        if not live:
+            raise ValueError("cần ít nhất một thành phần áp dụng")
+        if abs(sum(c.weight for c in live) - 1) > 0.005:
+            raise ValueError("trọng số của các thành phần áp dụng phải cộng lại bằng 1")
+        weighted = sum(c.weight * (c.score or 0) for c in live)
+        if abs(self.score - weighted) > 1:
+            raise ValueError("score phải bằng trung bình có trọng số của các thành phần")
+        lowest = min(live, key=lambda c: (c.score or 0, RESILIENCE_ORDER.index(c.key)))
+        if self.weakest != lowest.key:
+            raise ValueError("weakest phải là thành phần áp dụng có điểm thấp nhất")
+        return self
+
+
+class ResilienceScoreBlock(_BlockBase):
+    type: Literal["resilience_score"]
+    data: ResilienceScoreData
+
+
+class ShockSummary(_Strict):
+    """Cú sốc đã áp (bản gọn của một mục trong `shocks.json`); nhãn và mô tả lấy từ file dữ liệu, không viết trong mã."""
+
+    shock_id: SlugKey
+    kind: ShockKind
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+    description: Annotated[str, Field(min_length=1, max_length=160)]
+    duration_days: Annotated[int, Field(ge=1, le=365)] | None = None
+
+
+class StressComponentDelta(_Strict):
+    key: ResilienceComponentKey
+    score_before: Score | None = None
+    score_after: Score | None = None
+
+
+class StressResultData(_Strict):
+    shock: ShockSummary
+    status: JarStatus
+    headline: Annotated[str, Field(min_length=1, max_length=160)]
+    score_before: Score
+    score_after: Score
+    score_delta: Annotated[int, Field(ge=-100, le=0)]
+    band_before: ResilienceBand
+    band_after: ResilienceBand
+    runway_days_total: Annotated[int, Field(ge=0, le=400)] | None = None
+    runway_days_emergency: Annotated[int, Field(ge=0, le=400)] | None = None
+    emergency_jar: ForecastJar | None = None
+    horizon_days: Annotated[int, Field(ge=1, le=400)]
+    shortfall_vnd: Vnd
+    shortfall_from: IsoDate | None = None
+    components: Annotated[list[StressComponentDelta], Field(min_length=4, max_length=4)]
+    method: Literal["monte_carlo"]
+    n_paths: Annotated[int, Field(ge=1)]
+    common_random_numbers: Literal[True]
+    basis: ForecastBasis
+
+    @model_validator(mode="after")
+    def _invariants(self) -> StressResultData:
+        """Cú sốc không làm điểm tăng; `score_delta` đúng bằng sau trừ trước; có khoản thiếu thì không thể là "đủ"; số ngày
+        của hũ Dự phòng chỉ có khi có hũ đó."""
+        if self.score_after > self.score_before:
+            raise ValueError("score_after không được cao hơn score_before")
+        if self.score_delta != self.score_after - self.score_before:
+            raise ValueError("score_delta phải bằng score_after - score_before")
+        if tuple(c.key for c in self.components) != RESILIENCE_ORDER:
+            raise ValueError("components phải đủ save, spend, borrow, plan đúng thứ tự")
+        if self.shortfall_vnd > 0 and self.status == "ok":
+            raise ValueError("có khoản thiếu thì status không thể là ok")
+        if (self.shortfall_from is None) != (self.shortfall_vnd == 0):
+            raise ValueError("shortfall_from có đúng khi shortfall_vnd lớn hơn 0")
+        if self.runway_days_emergency is not None and self.emergency_jar is None:
+            raise ValueError("runway_days_emergency cần emergency_jar")
+        return self
+
+
+class StressResultBlock(_BlockBase):
+    type: Literal["stress_result"]
+    data: StressResultData
+
+
+class RoadmapReason(_Strict):
+    """Vì sao có phiên bản này. `text` do code dựng từ sự kiện kích hoạt (không do LLM viết); `detail` là các con số của sự kiện."""
+
+    code: RoadmapReasonCode
+    text: Annotated[str, Field(min_length=1, max_length=160)]
+    detail: Annotated[list[ActionChange], Field(max_length=3)] | None = None
+    behavior_flag_id: Uuid | None = None
+
+
+class RoadmapHorizon(_Strict):
+    start_date: IsoDate
+    end_date: IsoDate
+
+
+class GoalProjection(_Strict):
+    """Một mục tiêu (hũ có `goal_vnd`) so với kế hoạch: kịp hạn hay không, thiếu bao nhiêu, mỗi tháng cần bao nhiêu."""
+
+    jar: ForecastJar
+    target_vnd: VndPositive
+    target_date: IsoDate | None = None
+    projected_date: IsoDate | None = None
+    on_track: bool
+    shortfall_vnd: Vnd
+    monthly_needed_vnd: Vnd
+
+    @model_validator(mode="after")
+    def _on_track_has_no_shortfall(self) -> GoalProjection:
+        if self.on_track and self.shortfall_vnd != 0:
+            raise ValueError("mục tiêu kịp hạn (on_track) thì shortfall_vnd bằng 0")
+        return self
+
+
+class RoadmapStepAction(_Strict):
+    """Việc đổi tiền gắn vào bước. Người dùng thực hiện bằng luồng xác nhận của ADR-0002 (`POST /confirmations` rồi `POST /actions`
+    với đúng `tool` và `params`); chấp nhận một bước KHÔNG tự thực hiện hành động và không đổi số dư."""
+
+    tool: RoadmapStepActionTool
+    params: dict[str, Any]
+
+    @model_validator(mode="after")
+    def _no_secrets(self) -> RoadmapStepAction:
+        if {"user_id", "confirm_token"} & set(self.params):
+            raise ValueError("params không được có user_id hoặc confirm_token")
+        return self
+
+
+class RoadmapStep(_Strict):
+    step_id: SlugKey
+    kind: RoadmapStepKind
+    title: Annotated[str, Field(min_length=1, max_length=80)]
+    reason: Annotated[str, Field(min_length=1, max_length=240)]
+    ai_generated: bool | None = None
+    amount_vnd: VndPositive | None = None
+    jar_code: JarCode | None = None
+    to_jar_code: JarCode | None = None
+    due_date: IsoDate | None = None
+    metrics: Annotated[list[ActionChange], Field(max_length=4)] | None = None
+    checked_rules: Annotated[list[RuleId], Field(max_length=8)] | None = None
+    action: RoadmapStepAction | None = None
+    status: RoadmapStepStatus
+    decided_at: IsoDateTime | None = None
+    edited: bool | None = None
+
+    @model_validator(mode="after")
+    def _decided_iff_not_pending(self) -> RoadmapStep:
+        if (self.status == "pending") != (self.decided_at is None):
+            raise ValueError("decided_at có đúng khi status khác pending")
+        return self
+
+
+class RoadmapPhase(_Strict):
+    phase_id: SlugKey
+    title: Annotated[str, Field(min_length=1, max_length=60)]
+    summary: Annotated[str, Field(min_length=1, max_length=160)] | None = None
+    start_date: IsoDate
+    end_date: IsoDate
+    steps: Annotated[list[RoadmapStep], Field(min_length=1, max_length=8)]
+
+    @model_validator(mode="after")
+    def _dates_ordered(self) -> RoadmapPhase:
+        if self.end_date < self.start_date:
+            raise ValueError("end_date không được trước start_date")
+        return self
+
+
+class RoadmapAlternative(_Strict):
+    """Một trong hai lựa chọn nói thẳng khi mục tiêu chưa khả thi. Chọn nó thì gửi `alternative_id` ở `POST /roadmap/regenerate`."""
+
+    option_id: SlugKey
+    kind: AlternativeKind
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+    summary: Annotated[str, Field(min_length=1, max_length=200)]
+    jar_code: JarCode | None = None
+    metrics: Annotated[list[ActionChange], Field(max_length=4)] | None = None
+
+
+class RoadmapCounts(_Strict):
+    pending: Annotated[int, Field(ge=0)]
+    accepted: Annotated[int, Field(ge=0)]
+    rejected: Annotated[int, Field(ge=0)]
+
+
+class RoadmapData(_Strict):
+    roadmap_id: Uuid
+    version: RoadmapVersion
+    status: RoadmapVersionStatus
+    reason: RoadmapReason
+    based_on_version: RoadmapVersion | None = None
+    created_at: IsoDateTime
+    app_date: IsoDate
+    headline: Annotated[str, Field(min_length=1, max_length=160)]
+    feasibility: RoadmapFeasibility
+    horizon: RoadmapHorizon
+    goals: Annotated[list[GoalProjection], Field(max_length=8)]
+    phases: Annotated[list[RoadmapPhase], Field(min_length=1, max_length=5)]
+    alternatives: Annotated[list[RoadmapAlternative], Field(max_length=2)]
+    counts: RoadmapCounts
+    rules_version: Annotated[str, Field(min_length=1, max_length=40)]
+    basis: ForecastBasis
+
+    @model_validator(mode="after")
+    def _invariants(self) -> RoadmapData:
+        """Id duy nhất, số bước đếm đúng, phiên bản gốc cũ hơn, giai đoạn xếp theo thời gian, và nói thẳng khi chưa khả thi:
+        `infeasible` kèm đúng hai lựa chọn và ít nhất một mục tiêu không kịp; `on_track` thì mọi mục tiêu kịp; các trường hợp
+        khác không có lựa chọn."""
+        steps = [s for p in self.phases for s in p.steps]
+        if len({s.step_id for s in steps}) != len(steps):
+            raise ValueError("step_id phải duy nhất trong lộ trình")
+        if len({p.phase_id for p in self.phases}) != len(self.phases):
+            raise ValueError("phase_id phải duy nhất trong lộ trình")
+        derived = RoadmapCounts(
+            pending=sum(s.status == "pending" for s in steps),
+            accepted=sum(s.status == "accepted" for s in steps),
+            rejected=sum(s.status == "rejected" for s in steps),
+        )
+        if derived != self.counts:
+            raise ValueError("counts phải bằng số bước theo từng trạng thái")
+        if self.based_on_version is not None and self.based_on_version >= self.version:
+            raise ValueError("based_on_version phải nhỏ hơn version")
+        starts = [p.start_date for p in self.phases]
+        if starts != sorted(starts):
+            raise ValueError("giai đoạn phải xếp theo start_date")
+        if (self.feasibility == "infeasible") != (len(self.alternatives) == 2):
+            raise ValueError(
+                "infeasible đi với đúng hai lựa chọn, trường hợp khác không có lựa chọn"
+            )
+        if len({a.option_id for a in self.alternatives}) != len(self.alternatives):
+            raise ValueError("option_id của lựa chọn phải duy nhất")
+        if self.feasibility == "on_track" and not all(g.on_track for g in self.goals):
+            raise ValueError("on_track thì mọi mục tiêu phải kịp")
+        if self.feasibility == "infeasible" and all(g.on_track for g in self.goals):
+            raise ValueError("infeasible thì phải có ít nhất một mục tiêu không kịp")
+        return self
+
+
+class RoadmapBlock(_BlockBase):
+    type: Literal["roadmap"]
+    data: RoadmapData
+
+
+class RoadmapChange(_Strict):
+    kind: Literal["added", "removed", "changed"]
+    step_id: SlugKey
+    phase_id: SlugKey | None = None
+    title: Annotated[str, Field(min_length=1, max_length=80)]
+    fields: Annotated[list[ActionChange], Field(max_length=6)] | None = None
+    reason_after: Annotated[str, Field(min_length=1, max_length=240)] | None = None
+
+
+class RoadmapDiffCounts(_Strict):
+    added: Annotated[int, Field(ge=0)]
+    removed: Annotated[int, Field(ge=0)]
+    changed: Annotated[int, Field(ge=0)]
+    unchanged: Annotated[int, Field(ge=0)]
+
+
+class RoadmapDiffData(_Strict):
+    from_version: RoadmapVersion
+    to_version: RoadmapVersion
+    from_roadmap_id: Uuid
+    to_roadmap_id: Uuid
+    to_status: RoadmapVersionStatus
+    reason: RoadmapReason
+    headline: Annotated[str, Field(min_length=1, max_length=160)]
+    changes: Annotated[list[RoadmapChange], Field(max_length=30)]
+    counts: RoadmapDiffCounts
+    can_adopt: bool
+
+    @model_validator(mode="after")
+    def _invariants(self) -> RoadmapDiffData:
+        if self.from_version == self.to_version:
+            raise ValueError("from_version và to_version phải khác nhau")
+        for kind in ("added", "removed", "changed"):
+            if sum(c.kind == kind for c in self.changes) != getattr(self.counts, kind):
+                raise ValueError(f"counts.{kind} phải bằng số thay đổi loại {kind}")
+        if len({c.step_id for c in self.changes}) != len(self.changes):
+            raise ValueError("mỗi bước chỉ có một thay đổi")
+        if self.can_adopt != (self.to_status == "proposed"):
+            raise ValueError("can_adopt đúng khi to_status là proposed")
+        return self
+
+
+class RoadmapDiffBlock(_BlockBase):
+    type: Literal["roadmap_diff"]
+    data: RoadmapDiffData
+
+
+class ReviewJarRef(_Strict):
+    code: JarCode
+    name: JarName
+
+
+class ReviewSuggestion(_Strict):
+    jar: ForecastJar
+    confidence: Ratio | None = None
+    reason: Annotated[str, Field(min_length=1, max_length=80)]
+
+
+class ReviewItem(_Strict):
+    transaction_id: Uuid
+    occurred_at: IsoDateTime
+    app_date: IsoDate
+    kind: Literal["expense", "income"]
+    amount_vnd: VndPositive
+    counterparty: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    note: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+    tier: ClassificationTier
+    current_jar: ReviewJarRef | None = None
+    classified_by: ClassifiedByName | None = None
+    confidence: Ratio | None = None
+    suggestions: Annotated[list[ReviewSuggestion], Field(max_length=2)]
+    can_remember: bool
+
+
+class ReviewAsk(_Strict):
+    ask_date: IsoDate
+    status: ReviewAskStatus
+
+
+class ReviewListData(_Strict):
+    mode: ReviewMode
+    headline: Annotated[str, Field(min_length=1, max_length=160)]
+    count: Annotated[int, Field(ge=0)]
+    pending_total_vnd: Vnd
+    items: Annotated[list[ReviewItem], Field(max_length=50)]
+    jars: Annotated[list[ForecastJar], Field(max_length=20)]
+    ask: ReviewAsk | None = None
+
+    @model_validator(mode="after")
+    def _invariants(self) -> ReviewListData:
+        """A1 chỉ có mục mức `review`, A2 (hỏi gộp) chỉ có mức `ask` và kèm trạng thái câu hỏi hôm nay; `count` không nhỏ hơn số
+        mục đang hiện (có thể nhiều hơn vì danh sách bị cắt)."""
+        want = "review" if self.mode == "review" else "ask"
+        if any(i.tier != want for i in self.items):
+            raise ValueError(f"chế độ {self.mode} chỉ nhận mục mức {want}")
+        if (self.ask is not None) != (self.mode == "daily_ask"):
+            raise ValueError("ask có đúng khi mode là daily_ask")
+        if self.count < len(self.items):
+            raise ValueError("count không được nhỏ hơn số mục đang hiện")
+        if len({i.transaction_id for i in self.items}) != len(self.items):
+            raise ValueError("mỗi giao dịch chỉ xuất hiện một lần")
+        return self
+
+
+class ReviewListBlock(_BlockBase):
+    type: Literal["review_list"]
+    data: ReviewListData
+
+
 Block = Annotated[
     JarSummaryBlock
     | ConfirmBlock
@@ -758,7 +1197,12 @@ Block = Annotated[
     | ClarifyBlock
     | SuggestionsBlock
     | IngestReviewBlock
-    | CoverageChangeBlock,
+    | CoverageChangeBlock
+    | ResilienceScoreBlock
+    | StressResultBlock
+    | RoadmapBlock
+    | RoadmapDiffBlock
+    | ReviewListBlock,
     Field(discriminator="type"),
 ]
 BLOCK_ADAPTER: TypeAdapter[Any] = TypeAdapter(Block)
@@ -781,6 +1225,11 @@ BLOCK_MODELS: dict[str, type[_BlockBase]] = {
     "suggestions": SuggestionsBlock,
     "ingest_review": IngestReviewBlock,
     "coverage_change": CoverageChangeBlock,
+    "resilience_score": ResilienceScoreBlock,
+    "stress_result": StressResultBlock,
+    "roadmap": RoadmapBlock,
+    "roadmap_diff": RoadmapDiffBlock,
+    "review_list": ReviewListBlock,
 }
 
 
@@ -1491,4 +1940,116 @@ def build_suggestions(
             cannot_do=list(cannot_do) if cannot_do is not None else None,
             items=rows,
         ),
+    )
+
+
+# --- dựng khối phase 4 ---------------------------------------------------------------------
+def build_resilience_score(
+    *,
+    data: Mapping[str, Any] | ResilienceScoreData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> ResilienceScoreBlock:
+    """Bọc `data` ĐÃ DỰNG (kết quả `forecast___get_resilience_score` hoặc `GET /resilience`) thành khối. `fallback_text` là
+    `headline` do code dựng (có điểm, nhóm bằng chữ và thành phần yếu nhất)."""
+    d = _data_model(ResilienceScoreData, data)
+    return ResilienceScoreBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"resilience_score:{trace_id}",
+        type="resilience_score",
+        trace_id=trace_id,
+        fallback_text=_clip(d.headline, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+def build_stress_result(
+    *,
+    data: Mapping[str, Any] | StressResultData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> StressResultBlock:
+    """Bọc `data` (kết quả `forecast___stress_test` hoặc `POST /resilience/stress`) thành khối. Id theo cú sốc."""
+    d = _data_model(StressResultData, data)
+    return StressResultBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"stress_result:{trace_id}:{d.shock.shock_id}",
+        type="stress_result",
+        trace_id=trace_id,
+        fallback_text=_clip(d.headline, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+def build_roadmap(
+    *,
+    data: Mapping[str, Any] | RoadmapData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> RoadmapBlock:
+    """Bọc `RoadmapData` (kết quả `planner___save_roadmap`, `planner___get_roadmap` hoặc `GET /roadmap`) thành khối."""
+    d = _data_model(RoadmapData, data)
+    return RoadmapBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"roadmap:{trace_id}:v{d.version}",
+        type="roadmap",
+        trace_id=trace_id,
+        fallback_text=_clip(d.headline, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+def build_roadmap_diff(
+    *,
+    data: Mapping[str, Any] | RoadmapDiffData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> RoadmapDiffBlock:
+    """Bọc `RoadmapDiffData` (`GET /roadmap/diff`) thành khối."""
+    d = _data_model(RoadmapDiffData, data)
+    return RoadmapDiffBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"roadmap_diff:{trace_id}:v{d.from_version}-v{d.to_version}",
+        type="roadmap_diff",
+        trace_id=trace_id,
+        fallback_text=_clip(d.headline, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+def build_review_list(
+    *,
+    data: Mapping[str, Any] | ReviewListData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> ReviewListBlock:
+    """Bọc `ReviewListData` (`GET /review`) thành khối. Id theo chế độ để A1 và A2 không đè nhau trong một lượt."""
+    d = _data_model(ReviewListData, data)
+    return ReviewListBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"review_list:{trace_id}:{d.mode}",
+        type="review_list",
+        trace_id=trace_id,
+        fallback_text=_clip(d.headline, 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
     )

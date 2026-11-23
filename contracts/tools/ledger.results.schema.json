@@ -707,11 +707,21 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 40
+        },
+        "confidence": {
+          "description": "Độ tin cậy của gợi ý (0 đến 1), nếu bước phân loại cho được (phase 4).",
+          "$ref": "../blocks/envelope.schema.json#/$defs/Ratio"
+        },
+        "reason": {
+          "description": "Lý do gợi ý, do code dựng từ tín hiệu đã dùng (ví dụ giống các giao dịch trước gửi cho cùng người); tối đa 80 ký tự (phase 4).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
         }
       }
     },
     "UnclassifiedItem": {
-      "description": "Một giao dịch chưa xếp hũ hoặc cần xem lại, kèm tối đa 2 hũ gợi ý.",
+      "description": "Một giao dịch chưa xếp hũ hoặc cần xem lại, kèm tối đa 2 hũ gợi ý. Phase 4 thêm (tùy chọn, tương thích ngược) `tier`, `classified_by`, `confidence` và `confidence`, `reason` của từng gợi ý; tên và hình dạng cũ không đổi.",
       "type": "object",
       "required": [
         "transaction",
@@ -728,6 +738,30 @@
           "items": {
             "$ref": "#/$defs/JarSuggestion"
           }
+        },
+        "tier": {
+          "description": "Mức tin cậy của phân loại tự động (phase 4): review (đã tự gán, vào 'Xem lại') hoặc ask (chưa xếp được hũ, hỏi gộp). Vắng ở dữ liệu cũ.",
+          "type": "string",
+          "enum": [
+            "review",
+            "ask"
+          ]
+        },
+        "classified_by": {
+          "description": "Bước đã gán hũ (khớp `transactions.classified_by`), nếu có (phase 4).",
+          "type": "string",
+          "enum": [
+            "user",
+            "type_map",
+            "rule",
+            "embedding",
+            "llm",
+            "seed"
+          ]
+        },
+        "confidence": {
+          "description": "Độ tin cậy của lần gán hiện tại (0 đến 1), nếu có (phase 4).",
+          "$ref": "../blocks/envelope.schema.json#/$defs/Ratio"
         }
       }
     },

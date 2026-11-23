@@ -34,6 +34,12 @@ BLOCK_TYPES = [
     # phase 5 (F6)
     "ingest_review",
     "coverage_change",
+    # phase 4
+    "resilience_score",
+    "stress_result",
+    "roadmap",
+    "roadmap_diff",
+    "review_list",
 ]
 BLOCK_SCHEMA_FILES = {t: CONTRACTS / "blocks" / f"{t}.schema.json" for t in BLOCK_TYPES}
 
@@ -59,7 +65,7 @@ def test_schema_hop_le_theo_metaschema_2020_12(path):
     assert schema["$id"].startswith(BASE + "/")
 
 
-def test_union_dung_muoi_bon_khoi_theo_thu_tu():
+def test_union_dung_hai_muoi_mot_khoi_theo_thu_tu():
     union = load_json(CONTRACTS / "blocks" / "block.schema.json")
     refs = [m["$ref"] for m in union["oneOf"]]
     assert refs == [f"{t}.schema.json" for t in BLOCK_TYPES]

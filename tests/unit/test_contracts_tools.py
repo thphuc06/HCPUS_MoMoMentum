@@ -8,7 +8,7 @@ from jsonschema import Draft202012Validator
 from pydantic import TypeAdapter
 
 from yofina_core import blocks as b
-from yofina_core import scenario, suitability, wallet
+from yofina_core import roadmap, scenario, suitability, wallet
 from yofina_core.errors import ErrorCode
 
 LEDGER = load_json(CONTRACTS / "tools" / "ledger.json")
@@ -62,6 +62,7 @@ def test_cac_target_phase_3_khop_hang_so():
     assert [t["name"] for t in FORECAST] == list(wallet.FORECAST_TOOLS)
     assert [t["name"] for t in FORECAST] == [
         "get_forecast", "run_scenario", "list_scenarios", "affordability_check",
+        "get_resilience_score", "stress_test",
     ]  # fmt: skip
     assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == ["get_fee_schedule"]
     assert [t["name"] for t in PLANNER] == list(wallet.PLANNER_TOOLS)
@@ -235,6 +236,8 @@ RESULT_FILE["get_forecast"] = "forecast"
 RESULT_FILE.update(
     run_scenario="forecast", list_scenarios="forecast", affordability_check="forecast", get_fee_schedule="knowledge",
     check_suitability="planner", schedule_nudge="planner", get_trace="audit", record_turn="audit",
+    get_resilience_score="forecast", stress_test="forecast",
+    optimize_allocation="planner", save_roadmap="planner", get_roadmap="planner",
 )  # fmt: skip
 RESULT_DEF = {
     "get_jar_balances": "GetJarBalancesResult",
@@ -256,6 +259,11 @@ RESULT_DEF = {
     "schedule_nudge": "ScheduleNudgeResult",
     "get_trace": "GetTraceResult",
     "record_turn": "RecordTurnResult",
+    "get_resilience_score": "GetResilienceScoreResult",
+    "stress_test": "StressTestResult",
+    "optimize_allocation": "OptimizeAllocationResult",
+    "save_roadmap": "SaveRoadmapResult",
+    "get_roadmap": "GetRoadmapResult",
 }
 
 
@@ -312,6 +320,14 @@ def test_ket_qua_tool_fixture_hop_le(registry, path):
         suitability.SuitabilityVerdict.model_validate(data)
     elif tool == "get_trace":
         b.parse_block(data["explain"])
+    elif tool == "get_resilience_score":
+        b.ResilienceScoreData.model_validate(data)
+    elif tool == "stress_test":
+        b.StressResultData.model_validate(data)
+    elif tool == "optimize_allocation":
+        roadmap.AllocationPlanData.model_validate(data)
+    elif tool in ("save_roadmap", "get_roadmap"):
+        b.RoadmapData.model_validate(data)
     elif tool == "get_fee_schedule":
         assert data["fees"]
     elif tool in ("update_profile", "record_transaction", "assign_jar", "schedule_nudge"):

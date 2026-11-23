@@ -41,6 +41,17 @@ info:
     route `/ingest/confirmations` và `/ingest/actions` (cùng luồng token, cùng khóa HMAC và bảng `jti` với ledger); `POST /confirmations` và
     `POST /actions` của `ledger` không nhận nó. Việc đổi hũ dùng POST (không PATCH) vì CORS của HTTP API chung chỉ cho GET, POST, OPTIONS.
 
+    **Phase 4** (chống chịu, lộ trình, phân hũ tự động): 13 endpoint mới. Điểm chống chịu và cú sốc (`GET /resilience`,
+    `GET /resilience/shocks`, `POST /resilience/stress`, `x-lambda: forecast`, tất định, không qua LLM, không ghi gì; `POST` chỉ để có
+    thân yêu cầu). Lộ trình (`GET /roadmap`, `GET /roadmap/versions`, `GET /roadmap/diff`, `POST /roadmap/steps/{step_id}/decision`,
+    `POST /roadmap/steps/{step_id}/edit`, `POST /roadmap/versions/{version}/decision`, `POST /roadmap/regenerate`,
+    `GET /roadmap/jobs/{job_id}`, `x-lambda: ledger`): lưu và đổi trạng thái lộ trình là thao tác ghi KHÔNG đổi số dư nên KHÔNG qua
+    token xác nhận (như `POST /feedback`); hành động đổi tiền gắn trong một bước (`action`) vẫn đi qua `POST /confirmations` rồi
+    `POST /actions`, và chấp nhận một bước không tự thực hiện nó. Sinh lại chạy nền: `POST /roadmap/regenerate` trả ngay một job, giao
+    diện hỏi tiến độ bằng `GET /roadmap/jobs/{job_id}` (polling). Danh sách "Xem lại" và hỏi gộp (`GET /review`,
+    `POST /review/daily-ask/skip`, `x-lambda: ledger`): sửa hũ dùng lại `assign_jar` qua `POST /confirmations` và `POST /actions` (đừng
+    tạo đường ghi thứ hai); `remember` once hoặc always chọn phạm vi luật.
+
     Mã lỗi (`ErrorCode`) dùng chung với kết quả tool và `notice.data.code`; ánh xạ HTTP status ở
     `x-http-status`. Schema khối UI và tham số được tham chiếu tới `../blocks/*.schema.json` và
     `../tools/*.results.schema.json`.
@@ -72,6 +83,12 @@ tags:
       Nạp chi tiêu và thu nhập NGOÀI ví từ ảnh hoặc CSV (phase 5, F6). Tải lên bằng presigned POST thẳng vào S3; S3 tự bắt
       đầu job (sự kiện ObjectCreated qua SQS). Đọc trạng thái và bảng duyệt; đổi hũ đề xuất của một dòng (không ghi sổ cái).
       Chốt dòng vào sổ cái là tool `confirm_rows` qua `POST /ingest/confirmations` rồi `POST /ingest/actions` (không có đường ghi tắt).
+  - name: resilience
+    description: Điểm chống chịu 0 đến 100 với bốn thành phần và ba cú sốc mẫu (F4). Tất định, không qua LLM, không ghi.
+  - name: roadmap
+    description: Lộ trình theo giai đoạn có phiên bản (F5). Đọc, đổi trạng thái từng bước, so phiên bản, yêu cầu sinh lại (chạy nền, hỏi tiến độ bằng polling). Không đổi số dư, không qua token.
+  - name: review
+    description: Danh sách "Xem lại" và hỏi gộp một lần mỗi ngày của phân hũ tự động (F2). Sửa hũ đi qua `assign_jar` ở `POST /confirmations` và `POST /actions`.
 paths:
   /jars:
     get:
@@ -1082,6 +1099,486 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '500':
           $ref: '#/components/responses/InternalError'
+  /resilience:
+    get:
+      tags: [resilience]
+      operationId: getResilienceScore
+      summary: Điểm chống chịu 0 đến 100 và bốn thành phần (khối resilience_score)
+      x-lambda: forecast
+      description: |
+        Trả đúng khối `resilience_score`, cùng khối và cùng số với tool `forecast___get_resilience_score` trong chat. Đọc điểm đã lưu
+        (batch đêm, đặt lại dữ liệu); quá cũ (ngày mô phỏng đã sang ngày khác, hoặc cấu hình trọng số đã đổi) thì tính lại trước khi trả.
+        Bốn thành phần Save, Spend, Borrow, Plan, mỗi thành phần có điểm, trọng số, đầu vào đã dùng và câu giải thích do code dựng. Thành
+        phần không áp dụng được (chưa có mục tiêu thì Plan) có `applicable` sai và trọng số bị chuẩn hóa lại cho các thành phần còn lại.
+        Nhóm điểm (yếu, vừa, tốt) luôn hiện bằng chữ. Chưa khai lương thì 422 `PROFILE_INCOMPLETE`; chưa có dự báo và không tính được
+        ngay thì 503 `FORECAST_UNAVAILABLE`. Điểm này KHÔNG phải điểm tín dụng (`disclaimer`).
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Khối `resilience_score`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResilienceScoreResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /resilience/shocks:
+    get:
+      tags: [resilience]
+      operationId: listStressShocks
+      summary: Ba cú sốc mẫu (nhãn và mô tả lấy từ file dữ liệu)
+      x-lambda: forecast
+      description: |
+        Danh sách cú sốc mà màn "Nhìn trước" hiện thành ba thẻ (R1): mất việc 2 tháng, tiền trọ tăng, ốm một tuần. Đọc từ
+        `yofina_core/shocks.json` (dạng dữ liệu, không gắn cứng trong mã hay giao diện); `shock_id` là thứ gửi cho `POST /resilience/stress`.
+        Không cần dữ liệu người dùng, không qua model.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Các cú sốc mẫu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShocksResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /resilience/stress:
+    post:
+      tags: [resilience]
+      operationId: runStressTest
+      summary: Chạy một cú sốc mẫu (khối stress_result)
+      x-lambda: forecast
+      description: |
+        Áp cú sốc `shock_id` lên dự báo bằng Monte Carlo (cùng dãy số ngẫu nhiên với dự báo nền) và trả khối `stress_result`: điểm trước
+        và sau, số ngày trụ được của toàn bộ tiền và của riêng hũ Dự phòng, khoản thiếu. CÙNG khối với tool `forecast___stress_test`.
+        Không LLM, không ghi gì (POST chỉ để có thân yêu cầu). Mã cú sốc lạ thì 404 `SHOCK_NOT_FOUND`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StressRequest'
+      responses:
+        '200':
+          description: Khối `stress_result`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StressResultResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /roadmap:
+    get:
+      tags: [roadmap]
+      operationId: getRoadmap
+      summary: Một phiên bản lộ trình (khối roadmap)
+      x-lambda: ledger
+      description: |
+        Trả khối `roadmap`, cùng khối với tool `planner___get_roadmap`. Không có tham số thì đọc bản đang dùng (`active`; chưa có bản
+        đang dùng thì bản mới nhất). `version` chọn đúng một phiên bản; `which` chọn theo trạng thái (`active`, `proposed` là bản mới
+        chờ người dùng chọn, `latest`). Trạng thái từng bước (`pending`, `accepted`, `rejected`) đã được gộp vào khối. Chưa có lộ
+        trình hoặc không có phiên bản đó thì 404 `ROADMAP_NOT_FOUND`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: version
+          in: query
+          required: false
+          schema:
+            $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+        - name: which
+          in: query
+          required: false
+          description: Chọn bản theo trạng thái khi không nêu `version`. Mặc định `active`.
+          schema:
+            type: string
+            enum: [active, proposed, latest]
+      responses:
+        '200':
+          description: Khối `roadmap`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoadmapResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /roadmap/versions:
+    get:
+      tags: [roadmap]
+      operationId: listRoadmapVersions
+      summary: Các phiên bản lộ trình, bản mới nhất trước
+      x-lambda: ledger
+      description: |
+        Danh sách gọn (không mang giai đoạn và bước) để giao diện biết bản nào đang dùng, có bản mới nào chờ chọn không, và có lần sinh
+        lại nào đang chạy không (`current_job`, để hiện tiến độ khi mở màn Lộ trình giữa chừng). Chưa có lộ trình thì `versions` rỗng.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: limit
+          in: query
+          required: false
+          description: Số phiên bản tối đa (1 đến 50, mặc định 20).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Danh sách phiên bản.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoadmapVersionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /roadmap/diff:
+    get:
+      tags: [roadmap]
+      operationId: getRoadmapDiff
+      summary: So hai phiên bản lộ trình (khối roadmap_diff)
+      x-lambda: ledger
+      description: |
+        Bước thêm, bỏ, đổi giữa hai phiên bản (so theo `step_id`) kèm lý do sinh lại của bản mới; dùng cho "so với bản cũ" ở màn L3. Vắng
+        `to_version` thì lấy bản chờ chọn (`proposed`), không có thì bản đang dùng; vắng `from_version` thì lấy `based_on_version` của
+        bản `to`. `can_adopt` đúng khi bản `to` đang chờ chọn. Hai phiên bản trùng nhau thì 400; phiên bản không có thì 404
+        `ROADMAP_NOT_FOUND`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: from_version
+          in: query
+          required: false
+          schema:
+            $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+        - name: to_version
+          in: query
+          required: false
+          schema:
+            $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+      responses:
+        '200':
+          description: Khối `roadmap_diff`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoadmapDiffResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /roadmap/steps/{step_id}/decision:
+    post:
+      tags: [roadmap]
+      operationId: decideRoadmapStep
+      summary: Chấp nhận, từ chối hoặc đưa về chờ một bước
+      x-lambda: ledger
+      description: |
+        Ghi trạng thái một bước của phiên bản `version` (bản `active` hoặc `proposed`), trả khối `roadmap` đã cập nhật. KHÔNG đổi số dư và
+        KHÔNG tự thực hiện `action` của bước (muốn thực hiện thì dùng `POST /confirmations` rồi `POST /actions` với `action.tool` và
+        `action.params`), nên không qua token. Idempotent: gửi lại cùng quyết định không đổi gì. Ghi một dòng `feedback`
+        (`block_id` là id khối `roadmap`, `option_id` là `step_id`; `decision` accepted hoặc rejected, `reason` nếu có) và `audit_events`.
+        `pending` xóa quyết định đã ghi (hoàn tác). Phiên bản đã bị thay hoặc bỏ thì 409 `ROADMAP_VERSION_CONFLICT`; bước hoặc phiên
+        bản không có thì 404 `ROADMAP_NOT_FOUND`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/StepIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoadmapStepDecisionRequest'
+      responses:
+        '200':
+          description: Khối `roadmap` sau khi cập nhật.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoadmapResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /roadmap/steps/{step_id}/edit:
+    post:
+      tags: [roadmap]
+      operationId: editRoadmapStep
+      summary: Sửa một bước (lưu phiên bản mới, không sinh lại toàn bộ)
+      x-lambda: ledger
+      description: |
+        Người dùng đổi số tiền hoặc ngày của MỘT bước. Server lưu một phiên bản MỚI (lý do `step_edited`, trạng thái `active` ngay,
+        bản gốc `version` thành `superseded`, bản chờ nếu có bị bỏ), bước đã sửa có `edited` đúng và trạng thái `accepted`, các bước khác
+        giữ nguyên trạng thái. Chạy lại luật suitability cho bước đã sửa (vi phạm mức block thì 422 `ROADMAP_INVALID`, không lưu), ghi
+        một dòng `feedback` (accepted, lý do `edited`) và `audit_events`. KHÔNG sinh lại toàn bộ lộ trình, không gọi model, không đổi số dư.
+        Trả khối `roadmap` của phiên bản mới. Bản gốc đã bị thay thì 409 `ROADMAP_VERSION_CONFLICT`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/StepIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoadmapStepEditRequest'
+      responses:
+        '200':
+          description: Khối `roadmap` của phiên bản mới.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoadmapResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /roadmap/versions/{version}/decision:
+    post:
+      tags: [roadmap]
+      operationId: decideRoadmapVersion
+      summary: Dùng bản mới hoặc giữ bản cũ
+      x-lambda: ledger
+      description: |
+        Quyết định với bản chờ (`proposed`) do hệ thống sinh lại: `adopt` ("Dùng bản mới") làm nó thành `active` và bản đang dùng
+        thành `superseded`; `keep_previous` ("Giữ bản cũ") bỏ nó (`discarded`), bản đang dùng giữ nguyên. Idempotent: gửi lại cùng quyết
+        định trả cùng kết quả. Trả khối `roadmap` của bản được chọn (ở `adopt` là bản mới, ở `keep_previous` là bản đã bỏ để giao diện
+        hiện trạng thái). Bản không còn chờ chọn thì 409 `ROADMAP_VERSION_CONFLICT`; không có phiên bản đó thì 404 `ROADMAP_NOT_FOUND`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/RoadmapVersionPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoadmapVersionDecisionRequest'
+      responses:
+        '200':
+          description: Khối `roadmap` của bản được chọn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoadmapResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /roadmap/regenerate:
+    post:
+      tags: [roadmap]
+      operationId: regenerateRoadmap
+      summary: Yêu cầu sinh lại lộ trình (chạy nền)
+      x-lambda: ledger
+      description: |
+        Ghi một dòng `roadmap_jobs` (trigger `user_request`), phát sự kiện `roadmap.regeneration_requested` rồi trả NGAY job (HTTP 200,
+        `status` queued). Việc sinh (Roadmap agent, `optimize_allocation`, `check_suitability`, `save_roadmap`) chạy nền; giao diện hỏi tiến
+        độ bằng `GET /roadmap/jobs/{job_id}` cho tới khi `done` (có `version`) hoặc `failed`. Đang có một lần sinh lại chưa xong thì trả
+        CHÍNH job đó (không tạo thêm). `alternative_id` (một trong hai lựa chọn của bản `based_on_version` khi mục tiêu chưa khả thi)
+        được áp khi sinh. Chưa có lộ trình thì job sinh bản đầu tiên. Bản mới ra là `proposed` (trừ bản đầu tiên): người dùng chọn bằng
+        `POST /roadmap/versions/{version}/decision`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegenerateRoadmapRequest'
+      responses:
+        '200':
+          description: Job sinh lại (mới tạo hoặc đang chạy).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoadmapJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /roadmap/jobs/{job_id}:
+    get:
+      tags: [roadmap]
+      operationId: getRoadmapJob
+      summary: Tiến độ một lần sinh lại lộ trình
+      x-lambda: ledger
+      description: |
+        Hỏi tiến độ bằng polling (chu kỳ do giao diện chọn; trạng thái chỉ đổi theo các bước `context`, `draft`, `allocate`, `suitability`,
+        `save`). `done` có `version` và `roadmap_id` của bản vừa lưu; `failed` có `error_code` và `error_message`. Job của người khác
+        hoặc không tồn tại đều 404 `ROADMAP_NOT_FOUND` như nhau.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/RoadmapJobIdPath'
+      responses:
+        '200':
+          description: Trạng thái job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoadmapJob'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /review:
+    get:
+      tags: [review]
+      operationId: getReviewList
+      summary: Danh sách "Xem lại" hoặc hỏi gộp (khối review_list)
+      x-lambda: ledger
+      description: |
+        `mode` review (mặc định): giao dịch đã được tự gán hũ ở mức tin cậy vừa và cần soát (A1). `mode` daily_ask: giao dịch đang ở hũ
+        Chưa phân loại kèm tối đa 2 gợi ý, hỏi MỘT lần mỗi ngày (A2), kèm trạng thái câu hỏi hôm nay (`ask`). Mới nhất trước, tối đa 50
+        mục; `count` và `pending_total_vnd` là của toàn bộ tập (hiện ở Tổng quan và màn dự báo). Chỉ đọc, không ghi gì (việc "đã hỏi hôm
+        nay" do pipeline phân loại ghi). Sửa hũ: `assign_jar` qua `POST /confirmations` rồi `POST /actions` (`remember` once hoặc
+        always); "đúng rồi" với mục mức review là `assign_jar` với chính hũ hiện tại.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [review, daily_ask]
+        - name: limit
+          in: query
+          required: false
+          description: Số mục tối đa (1 đến 50, mặc định 20).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Khối `review_list`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /review/daily-ask/skip:
+    post:
+      tags: [review]
+      operationId: skipReviewAsk
+      summary: Để sau câu hỏi gộp của một ngày
+      x-lambda: ledger
+      description: |
+        Ghi `skipped` cho câu hỏi gộp của `ask_date` (ngày mô phỏng): các giao dịch vẫn ở hũ Chưa phân loại, chỉ là hôm nay không hỏi
+        lại. Không đổi số dư, không qua token. Idempotent; câu hỏi đã được trả lời xong thì trả `answered`. Ngày đó không có câu hỏi gộp
+        thì 400 `PARAMS_INVALID`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewAskSkipRequest'
+      responses:
+        '200':
+          description: Trạng thái câu hỏi gộp của ngày.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewAskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -1126,6 +1623,28 @@ components:
       description: Mã trace của câu trả lời cần giải thích (từ `trace_id` của khối).
       schema:
         $ref: '../blocks/envelope.schema.json#/$defs/TraceId'
+    StepIdPath:
+      name: step_id
+      in: path
+      required: true
+      description: Id một bước của lộ trình (`step_id`, ổn định trong một phiên bản).
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9_]{0,31}$'
+    RoadmapVersionPath:
+      name: version
+      in: path
+      required: true
+      description: Số phiên bản lộ trình.
+      schema:
+        $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+    RoadmapJobIdPath:
+      name: job_id
+      in: path
+      required: true
+      description: Id lần sinh lại lộ trình (UUID).
+      schema:
+        $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
   schemas:
     ErrorCode:
       type: string
@@ -1169,6 +1688,10 @@ components:
         - INGEST_TOO_LARGE
         - INGEST_NOT_FINANCIAL
         - INGEST_DUPLICATE_FILE
+        - ROADMAP_NOT_FOUND
+        - ROADMAP_INVALID
+        - ROADMAP_VERSION_CONFLICT
+        - SHOCK_NOT_FOUND
       x-http-status:
         UNAUTHENTICATED: 401
         FORBIDDEN: 403
@@ -1208,6 +1731,10 @@ components:
         INGEST_TOO_LARGE: 413
         INGEST_NOT_FINANCIAL: 422
         INGEST_DUPLICATE_FILE: 409
+        ROADMAP_NOT_FOUND: 404
+        ROADMAP_INVALID: 422
+        ROADMAP_VERSION_CONFLICT: 409
+        SHOCK_NOT_FOUND: 404
       x-meaning:
         UNAUTHENTICATED: Thiếu hoặc sai access token.
         FORBIDDEN: Không được phép (token xác nhận không thuộc người dùng này, v.v.).
@@ -1247,6 +1774,10 @@ components:
         INGEST_TOO_LARGE: Tệp lớn hơn giới hạn cấu hình của loại này.
         INGEST_NOT_FINANCIAL: Tệp không phải tài liệu tài chính (sao kê, hóa đơn, lịch sử giao dịch) nên không đọc dòng nào.
         INGEST_DUPLICATE_FILE: Cùng nội dung tệp đã được nạp ở một lần nạp khác còn hiệu lực.
+        ROADMAP_NOT_FOUND: Chưa có lộ trình, hoặc không có phiên bản, bước hoặc lần sinh lại này với người dùng (của người khác thì cũng như không có).
+        ROADMAP_INVALID: Lộ trình hoặc bước sai cấu trúc, hoặc vi phạm luật suitability mức block (thông điệp nêu mã luật để sửa); không lưu gì.
+        ROADMAP_VERSION_CONFLICT: Phiên bản gốc đã bị thay hoặc bỏ, hoặc bản này không còn ở trạng thái làm được việc này (ví dụ không còn chờ chọn); hãy đọc lại lộ trình.
+        SHOCK_NOT_FOUND: Mã cú sốc không có trong danh sách cú sốc mẫu.
     ErrorResponse:
       type: object
       required: [error]
@@ -2578,6 +3109,189 @@ components:
           enum: [accepted, rejected]
         recorded_at:
           $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+    ResilienceScoreResponse:
+      description: Khối `resilience_score` (cả phong bì), cùng khối với tool `forecast___get_resilience_score`.
+      $ref: '../blocks/resilience_score.schema.json'
+    StressRequest:
+      description: Yêu cầu chạy một cú sốc mẫu. `shock_id` là một trong các mã của `GET /resilience/shocks`.
+      type: object
+      required: [shock_id]
+      additionalProperties: false
+      properties:
+        shock_id:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,31}$'
+    StressResultResponse:
+      description: Khối `stress_result` (cả phong bì), cùng khối với tool `forecast___stress_test`.
+      $ref: '../blocks/stress_result.schema.json'
+    ShocksResponse:
+      description: Các cú sốc mẫu đọc từ `shocks.json`.
+      $ref: '../tools/forecast.results.schema.json#/$defs/ListShocksData'
+    RoadmapResponse:
+      description: Khối `roadmap` (cả phong bì), cùng khối với tool `planner___get_roadmap`.
+      $ref: '../blocks/roadmap.schema.json'
+    RoadmapDiffResponse:
+      description: Khối `roadmap_diff` (cả phong bì).
+      $ref: '../blocks/roadmap_diff.schema.json'
+    ReviewListResponse:
+      description: Khối `review_list` (cả phong bì).
+      $ref: '../blocks/review_list.schema.json'
+    RoadmapJob:
+      description: |
+        Một lần sinh lại lộ trình chạy nền (bảng `roadmap_jobs`), cùng hình dạng với `yofina_core.roadmap.RoadmapJob`. `stage` là bước đang
+        chạy; `progress` 0 đến 100. `done` có `version` và `roadmap_id`; `failed` có `error_code` và `error_message`.
+      type: object
+      required: [job_id, status, trigger, progress, requested_at]
+      additionalProperties: false
+      properties:
+        job_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        status:
+          type: string
+          enum: [queued, running, done, failed]
+        trigger:
+          type: string
+          enum: [user_request, behavior_changed, goal_changed, income_changed, forecast_drift]
+        stage:
+          type: string
+          enum: [context, draft, allocate, suitability, save]
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        requested_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        finished_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        version:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+        roadmap_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        error_code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]*$'
+        error_message:
+          type: string
+          minLength: 1
+          maxLength: 280
+    RoadmapVersionSummary:
+      description: Một dòng của danh sách phiên bản, cùng hình dạng với `yofina_core.roadmap.RoadmapVersionSummary`.
+      type: object
+      required: [roadmap_id, version, status, reason_code, reason_text, created_at, app_date, feasibility, counts]
+      additionalProperties: false
+      properties:
+        roadmap_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        version:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+        status:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersionStatus'
+        reason_code:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapReasonCode'
+        reason_text:
+          type: string
+          minLength: 1
+          maxLength: 160
+        based_on_version:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+        created_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        feasibility:
+          type: string
+          enum: [on_track, relaxed, infeasible]
+        counts:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapCounts'
+    RoadmapVersionsResponse:
+      description: |
+        Các phiên bản (mới nhất trước). `active_version` và `proposed_version` chỉ có khi có bản ở trạng thái đó; `current_job` chỉ có khi
+        đang có một lần sinh lại chưa xong (queued hoặc running).
+      type: object
+      required: [versions]
+      additionalProperties: false
+      properties:
+        versions:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/RoadmapVersionSummary'
+        active_version:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+        proposed_version:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+        current_job:
+          $ref: '#/components/schemas/RoadmapJob'
+    RoadmapStepDecisionRequest:
+      description: |
+        Quyết định cho một bước của phiên bản `version`. `reason` (tùy chọn, không chứa PII) chỉ có nghĩa khi `rejected` ("hỏi một câu lý do"
+        khi từ chối). Không có `user_id`.
+      type: object
+      required: [version, decision]
+      additionalProperties: false
+      properties:
+        version:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+        decision:
+          type: string
+          enum: [accepted, rejected, pending]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+    RoadmapStepEditRequest:
+      description: |
+        Sửa một bước của phiên bản `version`: đổi số tiền (`amount_vnd`, số nguyên dương) hoặc ngày (`due_date`, ngày mô phỏng), ít nhất một
+        trong hai. Không có `user_id`.
+      type: object
+      required: [version]
+      additionalProperties: false
+      properties:
+        version:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+        amount_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        due_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+      anyOf:
+        - required: [amount_vnd]
+        - required: [due_date]
+    RoadmapVersionDecisionRequest:
+      description: '`adopt` là "Dùng bản mới", `keep_previous` là "Giữ bản cũ" (áp cho bản đang chờ chọn).'
+      type: object
+      required: [decision]
+      additionalProperties: false
+      properties:
+        decision:
+          type: string
+          enum: [adopt, keep_previous]
+    RegenerateRoadmapRequest:
+      description: |
+        Yêu cầu sinh lại lộ trình. Mọi trường tùy chọn. `based_on_version` vắng thì lấy bản đang dùng. `alternative_id` là `option_id` của một
+        trong hai lựa chọn của bản gốc khi mục tiêu chưa khả thi. `note` là ghi chú tự do của người dùng (lưu ở job, không đi vào sự kiện).
+      type: object
+      additionalProperties: false
+      properties:
+        note:
+          type: string
+          minLength: 1
+          maxLength: 200
+        alternative_id:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,31}$'
+        based_on_version:
+          $ref: '../blocks/roadmap.schema.json#/$defs/RoadmapVersion'
+    ReviewAskSkipRequest:
+      description: Để sau câu hỏi gộp của `ask_date` (ngày mô phỏng).
+      type: object
+      required: [ask_date]
+      additionalProperties: false
+      properties:
+        ask_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+    ReviewAskResponse:
+      description: Trạng thái câu hỏi gộp của ngày (cùng `ReviewAsk` của khối `review_list`).
+      $ref: '../blocks/review_list.schema.json#/$defs/ReviewAsk'
   responses:
     BadRequest:
       description: PARAMS_INVALID (tham số sai định dạng hoặc vô lý).
@@ -2598,19 +3312,19 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: JAR_NOT_FOUND, TRANSACTION_NOT_FOUND, OBLIGATION_NOT_FOUND, PAYEE_NOT_FOUND, SALARY_EVENT_NOT_FOUND, TRACE_NOT_FOUND, NUDGE_NOT_FOUND, FEE_SCHEDULE_NOT_FOUND, FORECAST_NOT_APPLICABLE hoặc INGEST_JOB_NOT_FOUND.
+      description: JAR_NOT_FOUND, TRANSACTION_NOT_FOUND, OBLIGATION_NOT_FOUND, PAYEE_NOT_FOUND, SALARY_EVENT_NOT_FOUND, TRACE_NOT_FOUND, NUDGE_NOT_FOUND, FEE_SCHEDULE_NOT_FOUND, FORECAST_NOT_APPLICABLE, INGEST_JOB_NOT_FOUND, ROADMAP_NOT_FOUND hoặc SHOCK_NOT_FOUND.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: TOKEN_REUSED, PARAMS_MISMATCH, ALREADY_APPLIED, DUPLICATE_TRANSACTION, INGEST_JOB_NOT_READY hoặc INGEST_DUPLICATE_FILE.
+      description: TOKEN_REUSED, PARAMS_MISMATCH, ALREADY_APPLIED, DUPLICATE_TRANSACTION, INGEST_JOB_NOT_READY, INGEST_DUPLICATE_FILE hoặc ROADMAP_VERSION_CONFLICT.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Unprocessable:
-      description: INSUFFICIENT_FUNDS, AMOUNT_LIMIT_EXCEEDED, CREDIT_LIMIT_EXCEEDED, JAR_PROTECTED, PROFILE_INCOMPLETE, SCENARIO_INVALID hoặc INGEST_NOT_FINANCIAL.
+      description: INSUFFICIENT_FUNDS, AMOUNT_LIMIT_EXCEEDED, CREDIT_LIMIT_EXCEEDED, JAR_PROTECTED, PROFILE_INCOMPLETE, SCENARIO_INVALID, INGEST_NOT_FINANCIAL hoặc ROADMAP_INVALID.
       content:
         application/json:
           schema:

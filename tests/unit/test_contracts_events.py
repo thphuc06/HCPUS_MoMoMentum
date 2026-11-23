@@ -16,6 +16,9 @@ EVENTS = {
     "obligation.changed": "yofina.ledger",
     "profile.updated": "yofina.ledger",
     "forecast.updated": "yofina.forecast",
+    # phase 4
+    "behavior.changed": "yofina.forecast",
+    "roadmap.regeneration_requested": "yofina.ledger",
 }
 
 

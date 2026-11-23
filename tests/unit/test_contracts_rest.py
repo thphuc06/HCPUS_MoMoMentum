@@ -60,6 +60,20 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
         ("POST", "/ingest/rows/{row_id}/jar"),
         ("POST", "/ingest/confirmations"),
         ("POST", "/ingest/actions"),
+        # phase 4: điểm chống chịu, cú sốc (không LLM), lộ trình, "Xem lại" và hỏi gộp
+        ("GET", "/resilience"),
+        ("GET", "/resilience/shocks"),
+        ("POST", "/resilience/stress"),
+        ("GET", "/roadmap"),
+        ("GET", "/roadmap/versions"),
+        ("GET", "/roadmap/diff"),
+        ("POST", "/roadmap/steps/{step_id}/decision"),
+        ("POST", "/roadmap/steps/{step_id}/edit"),
+        ("POST", "/roadmap/versions/{version}/decision"),
+        ("POST", "/roadmap/regenerate"),
+        ("GET", "/roadmap/jobs/{job_id}"),
+        ("GET", "/review"),
+        ("POST", "/review/daily-ask/skip"),
     }
     assert SPEC["security"] == [{"bearerAuth": []}]
     scheme = SPEC["components"]["securitySchemes"]["bearerAuth"]
@@ -84,6 +98,13 @@ def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
         ("POST", "/ingest/rows/{row_id}/jar"),
         ("POST", "/ingest/confirmations"),
         ("POST", "/ingest/actions"),
+        # phase 4: không đổi số dư, không qua token (xem test_contracts_phase4)
+        ("POST", "/resilience/stress"),
+        ("POST", "/roadmap/steps/{step_id}/decision"),
+        ("POST", "/roadmap/steps/{step_id}/edit"),
+        ("POST", "/roadmap/versions/{version}/decision"),
+        ("POST", "/roadmap/regenerate"),
+        ("POST", "/review/daily-ask/skip"),
     }
     assert not any("nudge" in path for _, path in operations())
     for path, method in (("/ingest/uploads", "post"), ("/ingest/rows/{row_id}/jar", "post")):
@@ -109,7 +130,9 @@ def test_moi_operation_co_id_duy_nhat_va_x_lambda_hop_le():
             if op.get("x-lambda", "ledger") == lam
         }
 
-    assert served_by("forecast") == {"/forecasts/{jar_code}", "/affordability"}
+    assert served_by("forecast") == {
+        "/forecasts/{jar_code}", "/affordability", "/resilience", "/resilience/shocks", "/resilience/stress",
+    }  # fmt: skip
     assert served_by("audit") == set()  # phase 3: audit chạy chung Lambda ledger
     assert {"/traces/{trace_id}", "/feedback"} <= served_by("ledger")
     ingest = {

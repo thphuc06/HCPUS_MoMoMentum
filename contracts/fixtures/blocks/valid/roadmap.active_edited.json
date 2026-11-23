@@ -1,0 +1,204 @@
+{
+  "v": 1,
+  "id": "roadmap:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:v2",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Lộ trình phiên bản 2: 3 giai đoạn, 5 bước, kịp hạn.",
+  "source": {
+    "tool": "planner___get_roadmap",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "roadmap",
+  "data": {
+    "roadmap_id": "2b9e6f10-4c7d-4a85-b3e1-6d0a8c5f7e92",
+    "version": 2,
+    "status": "active",
+    "reason": {
+      "code": "step_edited",
+      "text": "Bạn đã sửa bước 'Bù Ăn uống' (100.000 ₫ mỗi tuần) và lưu thành phiên bản mới."
+    },
+    "based_on_version": 1,
+    "created_at": "2026-11-22T08:12:30Z",
+    "app_date": "2026-11-21",
+    "headline": "Lộ trình phiên bản 2: 3 giai đoạn, 5 bước, kịp hạn.",
+    "feasibility": "on_track",
+    "horizon": {
+      "start_date": "2026-11-21",
+      "end_date": "2027-02-21"
+    },
+    "goals": [
+      {
+        "jar": {
+          "code": "du_lich",
+          "name": "Du lịch",
+          "color_key": "teal",
+          "icon_key": "plane"
+        },
+        "target_vnd": 6000000,
+        "target_date": "2027-03-31",
+        "projected_date": "2027-03-24",
+        "on_track": true,
+        "shortfall_vnd": 0,
+        "monthly_needed_vnd": 1150000
+      }
+    ],
+    "phases": [
+      {
+        "phase_id": "on_dinh_thang_nay",
+        "title": "Ổn định tháng này",
+        "summary": "Giữ nghĩa vụ và bù hũ Ăn uống tới kỳ lương.",
+        "start_date": "2026-11-21",
+        "end_date": "2026-12-05",
+        "steps": [
+          {
+            "step_id": "giu_san_tra_sau",
+            "kind": "pay_obligation",
+            "title": "Giữ sẵn khoản Trả sau ngày 05/12",
+            "reason": "Khoản Trả sau 1.000.000 ₫ đến hạn 05/12 trùng kỳ lương; giữ sẵn để hũ Nghĩa vụ không hụt.",
+            "amount_vnd": 300000,
+            "jar_code": "giai_tri",
+            "to_jar_code": "nghia_vu",
+            "due_date": "2026-12-05",
+            "metrics": [
+              {
+                "label": "Hũ Nghĩa vụ",
+                "before": "700.000 ₫",
+                "after": "1.000.000 ₫"
+              }
+            ],
+            "checked_rules": [
+              "obligations_first"
+            ],
+            "action": {
+              "tool": "move_between_jars",
+              "params": {
+                "from_jar": "giai_tri",
+                "to_jar": "nghia_vu",
+                "amount_vnd": 300000
+              }
+            },
+            "status": "accepted",
+            "decided_at": "2026-11-22T08:10:00Z"
+          },
+          {
+            "step_id": "bu_an_uong",
+            "kind": "set_aside",
+            "title": "Bù 100.000 ₫ mỗi tuần cho Ăn uống",
+            "reason": "Chi Ăn uống mỗi tuần khoảng 520.000 ₫; bù từ Giải trí để hũ Ăn uống không cạn trước kỳ lương.",
+            "ai_generated": true,
+            "amount_vnd": 100000,
+            "jar_code": "giai_tri",
+            "to_jar_code": "an_uong",
+            "metrics": [
+              {
+                "label": "Chi Ăn uống mỗi tuần",
+                "before": "450.000 ₫",
+                "after": "520.000 ₫"
+              }
+            ],
+            "checked_rules": [
+              "obligations_first",
+              "no_borrow_to_spend"
+            ],
+            "action": {
+              "tool": "move_between_jars",
+              "params": {
+                "from_jar": "giai_tri",
+                "to_jar": "an_uong",
+                "amount_vnd": 100000
+              }
+            },
+            "status": "accepted",
+            "decided_at": "2026-11-22T08:12:00Z",
+            "edited": true
+          },
+          {
+            "step_id": "cat_giai_tri",
+            "kind": "cut_spending",
+            "title": "Cắt 50.000 ₫ mỗi tuần hũ Giải trí",
+            "reason": "Giảm chi hũ không thiết yếu để có thêm tiền cho Ăn uống.",
+            "amount_vnd": 50000,
+            "jar_code": "giai_tri",
+            "metrics": [
+              {
+                "label": "Chi Giải trí mỗi tuần",
+                "before": "300.000 ₫",
+                "after": "250.000 ₫"
+              }
+            ],
+            "checked_rules": [
+              "obligations_first"
+            ],
+            "status": "rejected",
+            "decided_at": "2026-11-22T08:13:00Z"
+          }
+        ]
+      },
+      {
+        "phase_id": "xay_quy_du_phong",
+        "title": "Xây quỹ dự phòng",
+        "start_date": "2026-12-06",
+        "end_date": "2027-01-31",
+        "steps": [
+          {
+            "step_id": "nhac_du_lich",
+            "kind": "remind",
+            "title": "Nhắc xem lại tiến độ Du lịch ngày 05/01",
+            "reason": "Kiểm tra hũ Du lịch sau khi đã bù Ăn uống và nâng Dự phòng.",
+            "due_date": "2027-01-05",
+            "jar_code": "du_lich",
+            "checked_rules": [
+              "obligations_first"
+            ],
+            "action": {
+              "tool": "schedule_nudge",
+              "params": {
+                "op": "create",
+                "kind": "review_needed",
+                "fire_on": "2027-01-05",
+                "jar_code": "du_lich",
+                "note": "xem lai tien do du lich"
+              }
+            },
+            "status": "pending"
+          }
+        ]
+      },
+      {
+        "phase_id": "ve_dich_du_lich",
+        "title": "Về đích Du lịch",
+        "start_date": "2027-02-01",
+        "end_date": "2027-02-21",
+        "steps": [
+          {
+            "step_id": "ve_dich_du_lich",
+            "kind": "review_goal",
+            "title": "Lùi hạn Du lịch 2 tuần nếu chưa đủ",
+            "reason": "Nếu hũ Du lịch chưa đủ 4.000.000 ₫ vào 01/02, lùi hạn thay vì vay để đi.",
+            "due_date": "2027-02-01",
+            "jar_code": "du_lich",
+            "checked_rules": [
+              "no_borrow_to_spend"
+            ],
+            "status": "pending"
+          }
+        ]
+      }
+    ],
+    "alternatives": [],
+    "counts": {
+      "pending": 2,
+      "accepted": 2,
+      "rejected": 1
+    },
+    "rules_version": "1",
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 0.62
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/ml/shock_set.schema.json",
+  "title": "ShockSetFile",
+  "description": "Định dạng của `libs/yofina_core/src/yofina_core/shocks.json`: các cú sốc mẫu của F4 (mất việc 2 tháng, tiền trọ tăng, ốm một tuần) dạng DỮ LIỆU. Cùng định dạng với model Pydantic `yofina_core.resilience.ShockSet`. Mỗi `kind` đòi và chỉ nhận các tham số riêng (Pydantic quyết định, vì JSON Schema tập con của repo không diễn đạt được): income_loss cần duration_days và income_loss_percent; expense_increase cần target_obligation_kind, expense_increase_percent và duration_days; health_event cần duration_days, income_loss_percent và extra_cost_vnd. Mô tả (`description`) không chứa số.",
+  "type": "object",
+  "required": ["version", "note", "shocks"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "minLength": 1, "maxLength": 40 },
+    "note": { "type": "string", "minLength": 1, "maxLength": 600 },
+    "shocks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/ShockDefinition" }
+    }
+  },
+  "$defs": {
+    "ShockParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duration_days": { "type": "integer", "minimum": 1, "maximum": 365 },
+        "income_loss_percent": {
+          "description": "Phần trăm thu nhập mất đi trong thời gian cú sốc (100 là mất hẳn).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "extra_cost_vnd": {
+          "description": "Khoản chi thêm một lần (VND, số nguyên).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99999999999999
+        },
+        "expense_increase_percent": {
+          "description": "Phần trăm tăng của khoản chi bị ảnh hưởng.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "target_obligation_kind": {
+          "description": "Loại nghĩa vụ bị tăng (khớp `obligations.kind`).",
+          "type": "string",
+          "enum": ["bnpl", "loan", "rent", "bill", "subscription"]
+        }
+      }
+    },
+    "ShockDefinition": {
+      "type": "object",
+      "required": ["shock_id", "kind", "label", "description", "params", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "shock_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "kind": { "type": "string", "enum": ["income_loss", "expense_increase", "health_event"] },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "params": { "$ref": "#/$defs/ShockParams" },
+        "source": {
+          "description": "Nguồn hoặc lý do của các tham số; giá trị mô phỏng phải nói rõ là mô phỏng.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      }
+    }
+  }
+}

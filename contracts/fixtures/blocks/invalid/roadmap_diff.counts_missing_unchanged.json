@@ -1,0 +1,67 @@
+{
+  "v": 1,
+  "id": "roadmap_diff:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:v2-v3",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Phiên bản 3 khác phiên bản 2 ở 3 bước: thêm 1, bỏ 1, đổi 1.",
+  "source": {
+    "tool": "rest:GET /roadmap/diff",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "roadmap_diff",
+  "data": {
+    "from_version": 2,
+    "to_version": 3,
+    "from_roadmap_id": "2b9e6f10-4c7d-4a85-b3e1-6d0a8c5f7e92",
+    "to_roadmap_id": "5d1c7a42-8e3b-4f6a-9c20-1b7e4a9d3c58",
+    "to_status": "proposed",
+    "reason": {
+      "code": "behavior_changed",
+      "text": "Chi Ăn uống mỗi tuần tăng từ 520.000 ₫ lên 810.000 ₫ và giữ mức đó 2 tuần.",
+      "detail": [
+        {
+          "label": "Chi Ăn uống mỗi tuần",
+          "before": "520.000 ₫",
+          "after": "810.000 ₫"
+        }
+      ],
+      "behavior_flag_id": "7a3f9c21-6d4e-4b18-8e05-2c9b1d7a4f63"
+    },
+    "headline": "Phiên bản 3 khác phiên bản 2 ở 3 bước: thêm 1, bỏ 1, đổi 1.",
+    "changes": [
+      {
+        "kind": "changed",
+        "step_id": "bu_an_uong",
+        "phase_id": "on_dinh_thang_nay",
+        "title": "Bù 150.000 ₫ mỗi tuần cho Ăn uống",
+        "fields": [
+          {
+            "label": "Số tiền mỗi tuần",
+            "before": "100.000 ₫",
+            "after": "150.000 ₫"
+          }
+        ],
+        "reason_after": "Chi Ăn uống mỗi tuần tăng từ 520.000 ₫ lên 810.000 ₫; bù từ Giải trí để hũ Ăn uống không cạn trước kỳ lương."
+      },
+      {
+        "kind": "added",
+        "step_id": "danh_cho_du_phong",
+        "phase_id": "xay_quy_du_phong",
+        "title": "Dành 200.000 ₫ mỗi tuần cho Dự phòng",
+        "reason_after": "Hũ Dự phòng chỉ đủ sống 9 ngày; ưu tiên hũ này trước mọi mục tiêu khác."
+      },
+      {
+        "kind": "removed",
+        "step_id": "cat_giai_tri",
+        "phase_id": "on_dinh_thang_nay",
+        "title": "Cắt 50.000 ₫ mỗi tuần hũ Giải trí"
+      }
+    ],
+    "counts": {
+      "added": 1,
+      "removed": 1,
+      "changed": 1
+    },
+    "can_adopt": true
+  }
+}

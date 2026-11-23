@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/roadmap_diff.schema.json",
+  "title": "RoadmapDiffBlock",
+  "description": "So hai phiên bản lộ trình (frame L3: 'so với bản cũ'): bước thêm, bỏ, đổi, kèm lý do sinh lại của bản mới. Do code dựng từ hai bản đã lưu (so theo `step_id`), không qua LLM. `GET /roadmap/diff` trả khối này. `can_adopt` đúng khi bản mới đang chờ chọn (`proposed`): giao diện hiện 'Dùng bản mới' và 'Giữ bản cũ' (`POST /roadmap/versions/{version}/decision`). Id khối `roadmap_diff:{trace_id}:v{from}-v{to}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "roadmap_diff" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/RoadmapDiffData" }
+  },
+  "$defs": {
+    "RoadmapChange": {
+      "description": "Một thay đổi của một bước giữa hai phiên bản. `fields` liệt kê trường đổi (số tiền, ngày, hũ) trước và sau; `reason_after` là 'Vì sao' mới của bước.",
+      "type": "object",
+      "required": ["kind", "step_id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["added", "removed", "changed"] },
+        "step_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "phase_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "fields": {
+          "type": "array",
+          "maxItems": 6,
+          "items": { "$ref": "confirm_action.schema.json#/$defs/ActionChange" }
+        },
+        "reason_after": { "type": "string", "minLength": 1, "maxLength": 240 }
+      }
+    },
+    "RoadmapDiffCounts": {
+      "description": "Số bước theo loại thay đổi; `unchanged` là bước giữ nguyên (không liệt kê trong `changes`).",
+      "type": "object",
+      "required": ["added", "removed", "changed", "unchanged"],
+      "additionalProperties": false,
+      "properties": {
+        "added": { "type": "integer", "minimum": 0 },
+        "removed": { "type": "integer", "minimum": 0 },
+        "changed": { "type": "integer", "minimum": 0 },
+        "unchanged": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "RoadmapDiffData": {
+      "description": "Bất biến (Pydantic và test kiểm): hai phiên bản khác nhau; `counts.added`, `removed`, `changed` bằng số phần tử cùng loại trong `changes`; mỗi bước tối đa một thay đổi; `can_adopt` đúng khi `to_status` là proposed.",
+      "type": "object",
+      "required": ["from_version", "to_version", "from_roadmap_id", "to_roadmap_id", "to_status", "reason", "headline", "changes", "counts", "can_adopt"],
+      "additionalProperties": false,
+      "properties": {
+        "from_version": { "$ref": "roadmap.schema.json#/$defs/RoadmapVersion" },
+        "to_version": { "$ref": "roadmap.schema.json#/$defs/RoadmapVersion" },
+        "from_roadmap_id": { "$ref": "envelope.schema.json#/$defs/Uuid" },
+        "to_roadmap_id": { "$ref": "envelope.schema.json#/$defs/Uuid" },
+        "to_status": { "$ref": "roadmap.schema.json#/$defs/RoadmapVersionStatus" },
+        "reason": {
+          "description": "Lý do sinh lại của bản mới (`to_version`).",
+          "$ref": "roadmap.schema.json#/$defs/RoadmapReason"
+        },
+        "headline": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "changes": {
+          "type": "array",
+          "maxItems": 30,
+          "items": { "$ref": "#/$defs/RoadmapChange" }
+        },
+        "counts": { "$ref": "#/$defs/RoadmapDiffCounts" },
+        "can_adopt": { "type": "boolean" }
+      }
+    }
+  }
+}

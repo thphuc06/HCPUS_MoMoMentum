@@ -121,6 +121,8 @@ def test_target_forecast_dung_lambda_va_schema_theo_hop_dong(gateway, control, s
         "run_scenario",
         "list_scenarios",
         "affordability_check",
+        "get_resilience_score",
+        "stress_test",
     }
     got = deployed["get_forecast"]["inputSchema"]
     assert set(got["properties"]) == {"user_id", "jar"} and got["required"] == ["jar"]

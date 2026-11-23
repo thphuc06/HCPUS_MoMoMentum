@@ -1,0 +1,125 @@
+{
+  "v": 1,
+  "id": "resilience_score:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Điểm chống chịu 58/100 (vừa). Yếu nhất: Tiết kiệm, chỉ đủ sống 27 ngày.",
+  "source": {
+    "tool": "forecast___get_resilience_score",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "resilience_score",
+  "data": {
+    "score": 58,
+    "band": "fair",
+    "headline": "Điểm chống chịu 58/100 (vừa). Yếu nhất: Tiết kiệm, chỉ đủ sống 27 ngày.",
+    "app_date": "2026-11-21",
+    "computed_at": "2026-11-21T19:00:05Z",
+    "components": [
+      {
+        "key": "save",
+        "label": "Tiết kiệm",
+        "score": 15,
+        "weight": 0.35,
+        "applicable": true,
+        "band": "weak",
+        "explanation": "Số dư khả dụng đủ sống 27 ngày; mức tham chiếu là 180 ngày.",
+        "inputs": [
+          {
+            "key": "liquid_balance_vnd",
+            "label": "Số dư khả dụng",
+            "value": 7310000,
+            "unit": "vnd"
+          },
+          {
+            "key": "daily_spend_vnd",
+            "label": "Chi tiêu mỗi ngày",
+            "value": 270000,
+            "unit": "vnd"
+          },
+          {
+            "key": "runway_days",
+            "label": "Số ngày sống được",
+            "value": 27,
+            "unit": "days"
+          }
+        ]
+      },
+      {
+        "key": "spend",
+        "label": "Chi tiêu",
+        "score": 80,
+        "weight": 0.25,
+        "applicable": true,
+        "band": "strong",
+        "explanation": "Chi tiêu bằng 78% thu nhập, 100% khoản đến hạn được trả đúng hạn.",
+        "inputs": [
+          {
+            "key": "spend_ratio",
+            "label": "Chi trên thu",
+            "value": 0.78,
+            "unit": "ratio"
+          },
+          {
+            "key": "on_time_ratio",
+            "label": "Trả đúng hạn",
+            "value": 1,
+            "unit": "ratio"
+          }
+        ]
+      },
+      {
+        "key": "borrow",
+        "label": "Vay nợ",
+        "score": 86,
+        "weight": 0.25,
+        "applicable": true,
+        "band": "strong",
+        "explanation": "Nghĩa vụ hằng tháng bằng 20% thu nhập; mức nên giữ dưới 15%.",
+        "inputs": [
+          {
+            "key": "obligation_monthly_vnd",
+            "label": "Nghĩa vụ hằng tháng",
+            "value": 2400000,
+            "unit": "vnd"
+          },
+          {
+            "key": "obligation_ratio",
+            "label": "Nghĩa vụ trên thu nhập",
+            "value": 0.2,
+            "unit": "ratio"
+          }
+        ]
+      },
+      {
+        "key": "plan",
+        "label": "Kế hoạch",
+        "score": 75,
+        "weight": 0.15,
+        "applicable": true,
+        "band": "strong",
+        "explanation": "Các mục tiêu đang đạt 75% so với tiến độ cần có.",
+        "inputs": [
+          {
+            "key": "goal_progress_ratio",
+            "label": "Tiến độ mục tiêu",
+            "value": 0.75,
+            "unit": "ratio"
+          }
+        ]
+      }
+    ],
+    "weakest": "invest",
+    "previous_score": 61,
+    "config_version": "2026-12-mo-phong-1",
+    "disclaimer": "Đây không phải điểm tín dụng. Đây chỉ là thước đo sức chịu đựng tài chính của riêng bạn, tính từ dữ liệu trong ví.",
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 0.62
+    }
+  }
+}

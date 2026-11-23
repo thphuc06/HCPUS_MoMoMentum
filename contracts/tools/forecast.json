@@ -216,5 +216,42 @@
         "amount_vnd"
       ]
     }
+  },
+  {
+    "name": "get_resilience_score",
+    "description": "Lấy Điểm chống chịu 0 đến 100 của người dùng với bốn thành phần Save (số ngày sống được bằng số dư khả dụng), Spend (tỷ lệ chi trên thu, trả đúng hạn), Borrow (nghĩa vụ trên thu nhập), Plan (tiến độ mục tiêu). Mỗi thành phần có điểm, trọng số, đầu vào đã dùng và câu giải thích do code dựng; kèm nhóm điểm (yếu, vừa, tốt), thành phần yếu nhất và độ tươi. Tính sẵn trong batch đêm và khi đặt lại dữ liệu; quá cũ thì hệ thống tính lại. Chỉ đọc. Dùng cho 'điểm chống chịu của mình bao nhiêu', 'vì sao điểm thấp'. Đây KHÔNG phải điểm tín dụng.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "refresh": {
+          "type": "boolean",
+          "description": "Đúng thì tính lại ngay thay vì đọc bản đã lưu (chậm hơn). Bỏ trống: sai."
+        }
+      }
+    }
+  },
+  {
+    "name": "stress_test",
+    "description": "Áp MỘT cú sốc mẫu lên dự báo của người dùng (Monte Carlo, cùng dãy số ngẫu nhiên với dự báo nền) và trả điểm chống chịu trước và sau, số ngày trụ được của toàn bộ tiền và của riêng hũ Dự phòng, khoản thiếu. Chỉ có ba cú sốc mẫu, chọn bằng mã trong shock_id; KHÔNG tự bịa mã hay con số của cú sốc (đổi con số là việc của what-if, không phải của tool này). Chỉ đọc và tính: không ghi gì, không cần xác nhận.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "shock_id": {
+          "type": "string",
+          "description": "Mã cú sốc, đúng một trong: mat_viec_2_thang (mất việc 2 tháng), tien_tro_tang (tiền trọ tăng), om_mot_tuan (ốm một tuần). Bắt buộc; thiếu hoặc không rõ người dùng muốn cú sốc nào thì hỏi lại."
+        }
+      },
+      "required": [
+        "shock_id"
+      ]
+    }
   }
 ]

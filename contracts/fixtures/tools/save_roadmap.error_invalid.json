@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "ROADMAP_INVALID",
+  "message": "Bước 'dau_tu_chung_khoan' vi phạm luật emergency_before_investing: chưa có quỹ dự phòng thì không đầu tư. Hãy bỏ hoặc đổi bước này."
+}

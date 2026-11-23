@@ -1,6 +1,6 @@
 # contracts/
 
-Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, REST, sự kiện và ML. Mọi bên đọc từ đây; muốn đổi hợp đồng thì sửa ở đây trước, rồi sinh lại và chạy test. Kế hoạch: [phase 1 mục "Bước 0"](../docs/plan/phases/phase-1-nen-va-lat-doc.md), [phase 2 mục "Bước 0"](../docs/plan/phases/phase-2-vi-va-du-bao.md), [phase 3 mục "Bước 0"](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md); quyết định liên quan: [ADR-0002](../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md) (xác nhận trước khi ghi), [ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md) (đồng hồ mô phỏng); các lựa chọn thiết kế của phase 2 (hũ hệ thống, nguồn trả, tổng số dư...) ở mục "Quyết định hợp đồng phase 2" cuối [file phase 2](../docs/plan/phases/phase-2-vi-va-du-bao.md); của phase 3 (what-if, kiểm tra trước khi quẹt, luật suitability) ở "Quyết định hợp đồng phase 3" cuối [file phase 3](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md).
+Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, REST, sự kiện và ML. Mọi bên đọc từ đây; muốn đổi hợp đồng thì sửa ở đây trước, rồi sinh lại và chạy test. Kế hoạch: [phase 1 mục "Bước 0"](../docs/plan/phases/phase-1-nen-va-lat-doc.md), [phase 2 mục "Bước 0"](../docs/plan/phases/phase-2-vi-va-du-bao.md), [phase 3 mục "Bước 0"](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md), [phase 4 mục "Bước 0"](../docs/plan/phases/phase-4-chong-chiu-lo-trinh.md); quyết định liên quan: [ADR-0002](../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md) (xác nhận trước khi ghi), [ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md) (đồng hồ mô phỏng); các lựa chọn thiết kế của phase 2 (hũ hệ thống, nguồn trả, tổng số dư...) ở mục "Quyết định hợp đồng phase 2" cuối [file phase 2](../docs/plan/phases/phase-2-vi-va-du-bao.md); của phase 3 (what-if, kiểm tra trước khi quẹt, luật suitability) ở "Quyết định hợp đồng phase 3" cuối [file phase 3](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md); của phase 4 (điểm chống chịu, cú sốc, lộ trình, phân hũ tự động) ở "Quyết định hợp đồng phase 4" cuối [file phase 4](../docs/plan/phases/phase-4-chong-chiu-lo-trinh.md).
 
 | Thư mục / file | Nội dung | Ai dùng |
 |---|---|---|
@@ -11,19 +11,21 @@ Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, RE
 | `blocks/{confirm_action,receipt_action}.schema.json` | Xác nhận và biên nhận của MỌI tool ghi khác chuyển hũ | luồng A, agent (dựng), D (vẽ) |
 | `blocks/{affordability_card,obligation_impact,options,explain,clarify,suggestions}.schema.json` | Sáu khối phase 3 (xem mục "Phase 3"); `notice` và `forecast_timeline` được mở rộng tương thích ngược | luồng A (dựng số), agent, C (vẽ) |
 | `blocks/{ingest_review,coverage_change}.schema.json` | Bảng duyệt một lần nạp ảnh hoặc CSV và độ phủ dữ liệu trước/sau (phase 5) | luồng A phase 5 (dựng), frontend (vẽ) |
-| `blocks/block.schema.json` | Hợp của mười sáu khối, phân biệt theo `type` | kiểm tra |
+| `blocks/{resilience_score,stress_result,roadmap,roadmap_diff,review_list}.schema.json` | Năm khối phase 4 (xem mục "Phase 4") | luồng A, B (dựng số), agent, D (vẽ) |
+| `blocks/block.schema.json` | Hợp của hai mươi mốt khối, phân biệt theo `type` | kiểm tra |
 | `tools/ledger.json` | Mười tool của target `ledger` (chín tool của overview và `save_turn`) đúng định dạng `inlinePayload` của AgentCore Gateway (Lambda target) | luồng A (cài), agent |
-| `tools/forecast.json` | Bốn tool của target `forecast`: `get_forecast` (phase 2), `run_scenario`, `list_scenarios` (gộp kịch bản trong một cuộc chat), `affordability_check` (phase 3) | luồng C phase 2, A phase 3 (cài), agent |
-| `tools/{knowledge,planner,audit}.json` | Target mới của phase 3: `get_fee_schedule`; `check_suitability`, `schedule_nudge` (tool GHI qua token); `get_trace`, `record_turn` (ghi bản ghi lượt, không qua token) | luồng A (cài), agent |
+| `tools/forecast.json` | Sáu tool của target `forecast`: `get_forecast` (phase 2), `run_scenario`, `list_scenarios` (gộp kịch bản trong một cuộc chat), `affordability_check` (phase 3), `get_resilience_score`, `stress_test` (phase 4) | luồng C phase 2, A phase 3 và 4 (cài), agent |
+| `tools/{knowledge,planner,audit}.json` | Target mới của phase 3: `get_fee_schedule`; `check_suitability`, `schedule_nudge` (tool GHI qua token); `get_trace`, `record_turn` (ghi bản ghi lượt, không qua token). Phase 4 thêm vào `planner`: `optimize_allocation`, `save_roadmap` (GHI không qua token), `get_roadmap` | luồng A (cài), agent |
 | `tools/ingest.json`, `tools/ingest.results.schema.json` | Ba tool của target `ingest` (phase 5) và kết quả | luồng A phase 5 (cài), agent |
 | `scenario/scenario_spec.schema.json` | `ScenarioSpec`: sáu loại kịch bản what-if (FR5), nguồn chung cho `run_scenario`, bảng `scenarios`, `yofina_core.scenario` | agent (dựng), luồng A (kiểm, chạy) |
 | `tools/{ledger,forecast,knowledge,planner,audit}.results.schema.json` | Kết quả JSON Lambda trả về cho từng tool; `ledger.results` còn chứa các $defs dùng chung với REST (`Transaction`, `Obligation`, `CreditLine`, `Payee`, `SalaryEvent`) | luồng A, C (trả), agent (đọc) |
-| `rest/openapi.yaml` | OpenAPI 3.1: 27 endpoint (xem mục "REST", "Phase 3" và "Phase 5") | luồng A, C (cài), D (gọi) |
-| `events/*.schema.json` | `detail` của sự kiện trên EventBridge bus `yofina-bus`: `transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`, `forecast.updated` | luồng A (phát), C (nghe) |
+| `rest/openapi.yaml` | OpenAPI 3.1: 40 endpoint (xem mục "REST", "Phase 3", "Phase 5" và "Phase 4") | luồng A, C (cài), D (gọi) |
+| `events/*.schema.json` | `detail` của sự kiện trên EventBridge bus `yofina-bus`: `transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`, `forecast.updated`; phase 4 thêm `behavior.changed`, `roadmap.regeneration_requested` | luồng A (phát), C (nghe) |
 | `ml/forecast_io.schema.json` | Dạng JSON của đầu vào và đầu ra `yofina_ml.forecast_user` | luồng B, C |
+| `ml/{resilience_config,shock_set}.schema.json` | Định dạng của `resilience_defaults.json` (trọng số, ngưỡng điểm chống chịu) và `shocks.json` (ba cú sốc mẫu), hai file dữ liệu nằm trong `libs/yofina_core/src/yofina_core/` | luồng A (đọc) |
 | `fixtures/` | Ví dụ JSON dùng chung cho test Python và TypeScript (`blocks/`, `tools/`, `rest/`, `events/`, `ml/`, `scenario/`) | test |
 
-Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã tương ứng: Pydantic ở [libs/yofina_core](../libs/yofina_core/README.md) (`blocks.py`, `wallet.py`, `errors.py`, `clock.py`, `scenario.py`, `suitability.py`), Zod ở `frontend/src/contracts/blocks.ts` (file sinh ra, không sửa tay), kiểu ML ở [ml/yofina_ml](../ml/README.md).
+Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã tương ứng: Pydantic ở [libs/yofina_core](../libs/yofina_core/README.md) (`blocks.py`, `wallet.py`, `errors.py`, `clock.py`, `scenario.py`, `suitability.py`, `resilience.py`, `roadmap.py`), Zod ở `frontend/src/contracts/blocks.ts` (file sinh ra, không sửa tay), kiểu ML ở [ml/yofina_ml](../ml/README.md).
 
 ## Quy ước
 
@@ -48,7 +50,7 @@ Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã 
 - **`receipt`**: `transaction_id` (UUID; với chuyển hũ là `transfer_id` chung của hai dòng sổ cái), `occurred_at`, `app_date`, số dư sau của hai hũ.
 - **`notice`**: `kind` ∈ `out_of_scope` | `degraded` | `low_data` | `error`; không chứa số liệu tài chính.
 - **Thêm một loại khối**: tạo `blocks/<type>.schema.json` (theo mẫu: phong bì + `data`), thêm vào `block.schema.json` và `FILES` trong `scripts/gen_contracts.mjs`, viết model Pydantic và `build_*` trong `blocks.py`, thêm fixture hợp lệ và không hợp lệ, chạy `uv run pytest` và `node scripts/gen_contracts.mjs`.
-- **`BLOCK_TYPES` của Zod chỉ gồm khối mà registry frontend đã đăng ký.** `frontend/src/contracts/blocks.ts` xuất `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` cho MỌI khối trong `block.schema.json` (mười sáu khối sau phase 3 và phase 5), nhưng `BLOCK_TYPES` và kiểu `BlockType` chỉ liệt kê khối đã có view (nay là cả mười sáu khối) (hằng `REGISTERED_BY_FRONTEND` trong `scripts/gen_contracts.mjs`), vì `registry.tsx` dùng `Record<BlockType, Entry>` phải đủ khóa. Khối chưa đăng ký hiện `fallback_text` (không vỡ trang). **Luồng frontend thêm khối mới vào `REGISTERED_BY_FRONTEND` cùng lúc với việc đăng ký view trong `registry.tsx`** (phase 2 đã làm cho `forecast_timeline`, `proactive_card`, `confirm_action`, `receipt_action`; phase 3 làm cho `affordability_card`, `obligation_impact`, `options`, `explain`, `clarify`, `suggestions`; phase 5 làm cho `ingest_review`, `coverage_change`).
+- **`BLOCK_TYPES` của Zod chỉ gồm khối mà registry frontend đã đăng ký.** `frontend/src/contracts/blocks.ts` xuất `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` cho MỌI khối trong `block.schema.json` (hai mươi mốt khối sau phase 3, 4 và 5), nhưng `BLOCK_TYPES` và kiểu `BlockType` chỉ liệt kê khối đã có view (nay là cả mười sáu khối) (hằng `REGISTERED_BY_FRONTEND` trong `scripts/gen_contracts.mjs`), vì `registry.tsx` dùng `Record<BlockType, Entry>` phải đủ khóa. Khối chưa đăng ký hiện `fallback_text` (không vỡ trang). **Luồng frontend thêm khối mới vào `REGISTERED_BY_FRONTEND` cùng lúc với việc đăng ký view trong `registry.tsx`** (phase 2 đã làm cho `forecast_timeline`, `proactive_card`, `confirm_action`, `receipt_action`; phase 3 làm cho `affordability_card`, `obligation_impact`, `options`, `explain`, `clarify`, `suggestions`; phase 5 làm cho `ingest_review`, `coverage_change`; năm khối phase 4 CHƯA có view nên chưa vào danh sách, luồng D thêm khi đăng ký).
 
 ### Tool `ledger` (AgentCore Gateway)
 
@@ -398,6 +400,93 @@ Khóa là tên trường (biến `YOFINA_<TÊN>` hoặc SSM `<prefix>/<tên>`); 
 | `ingest_consent_version` | `2026-12` | ghi vào `consents.version` |
 
 Cửa sổ độ phủ dùng chung `forecast_history_window_days` của dự báo.
+
+## Phase 4: chống chịu, lộ trình, phân hũ tự động
+
+Hợp đồng cho bốn luồng của [phase 4](../docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) (A ML, B phân hũ tự động, C agent, D frontend). Lý do từng lựa chọn: mục "Quyết định hợp đồng phase 4" cuối file phase. Migration [0052](../db/migrations/0052_resilience_roadmap_classify.sql) (schema ở [db/README.md](../db/README.md#schema-phase-4-0052)), tool, REST và sự kiện mới **chưa chạy, chưa deploy**. Kiểm: `uv run pytest tests/unit/test_contracts_phase4.py tests/unit/test_migration_0052.py` và `tests/local_pg/test_phase4_schema.py` (lệnh ở docstring của `tests/local_pg/conftest.py`).
+
+### Kiểu dùng chung (một nguồn cho bảng, tool, REST, khối)
+
+| Kiểu Pydantic | Là | Nơi dùng |
+|---|---|---|
+| `yofina_core.resilience.ResilienceScore` | `blocks.ResilienceScoreData` | bảng `resilience_scores`, `forecast___get_resilience_score`, `GET /resilience`, khối `resilience_score` |
+| `yofina_core.resilience.StressResult` | `blocks.StressResultData` | `forecast___stress_test`, `POST /resilience/stress`, khối `stress_result` |
+| `yofina_core.roadmap.Roadmap` (`RoadmapPhase`, `RoadmapStep`) | `blocks.RoadmapData` | bảng `roadmaps`, `planner___save_roadmap` và `get_roadmap`, `GET /roadmap`, khối `roadmap` |
+| `yofina_core.roadmap.AllocationPlanData` | kiểu riêng (khớp `planner.results.schema.json`) | `planner___optimize_allocation` |
+| `yofina_core.roadmap.RoadmapDraft` | bản nháp agent gửi (khớp `planner.json`) | `planner___save_roadmap` (đầu vào) |
+| `yofina_core.roadmap.RoadmapJob`, `RoadmapVersionSummary` | khớp OpenAPI | bảng `roadmap_jobs`, `GET /roadmap/jobs/{job_id}`, `GET /roadmap/versions` |
+| `yofina_core.resilience.ResilienceConfig`, `ShockSet` | khớp `contracts/ml/*.schema.json` | `resilience_defaults.json`, `shocks.json` |
+
+**Cấu hình và cú sốc là dữ liệu** (`libs/yofina_core/src/yofina_core/resilience_defaults.json`, `shocks.json`): mỗi số có `value`, `unit`, `note`, `source`; nạp bằng `load_resilience_config()` và `load_shock_set()`. Hợp đồng KHÔNG có công thức tính điểm hay mô phỏng. Bốn thành phần (`wallet.RESILIENCE_COMPONENTS`, theo thứ tự save, spend, borrow, plan) và trọng số mẫu 0,35 / 0,25 / 0,25 / 0,15; thành phần không áp dụng được (chưa có mục tiêu thì Plan) bị bỏ và trọng số còn lại chuẩn hóa về tổng 1.
+
+### Khối mới (năm khối, `block.schema.json` nay có hai mươi mốt)
+
+| Khối | Việc | Id | Do ai dựng |
+|---|---|---|---|
+| `resilience_score` | Điểm 0 đến 100, nhóm (yếu, vừa, tốt), bốn thành phần (điểm, trọng số, đầu vào, câu giải thích), thành phần yếu nhất, `disclaimer` "không phải điểm tín dụng", `basis` | `resilience_score:{trace_id}` | Engine (tool và REST cùng khối) |
+| `stress_result` | Cú sốc đã áp, điểm trước và sau, số ngày trụ được (toàn bộ và riêng hũ Dự phòng), khoản thiếu, điểm từng thành phần, `basis` | `stress_result:{trace_id}:{shock_id}` | Engine |
+| `roadmap` | Một phiên bản lộ trình: `reason`, `feasibility`, `goals`, `phases[].steps[]` (lý do, trạng thái chờ / đã chấp nhận / đã từ chối, `action` tùy chọn), `alternatives` (đúng hai khi infeasible), `counts`, `basis` | `roadmap:{trace_id}:v{version}` | Lambda ledger (đọc bảng), agent chỉ bọc |
+| `roadmap_diff` | Bước thêm, bỏ, đổi giữa hai phiên bản kèm lý do sinh lại; `can_adopt` | `roadmap_diff:{trace_id}:v{from}-v{to}` | Code (REST) |
+| `review_list` | A1 "Xem lại" (`mode` review) và A2 hỏi gộp (`mode` daily_ask): mục kèm mức tin cậy, hũ hiện tại, tối đa 2 gợi ý có lý do; `count`, `pending_total_vnd`; không có `basis` | `review_list:{trace_id}:{mode}` | Lambda ledger |
+
+Ba trạng thái luôn có chữ: nhóm điểm, `status` đủ/sát/hụt của cú sốc, trạng thái bước, đều kèm `headline` hoặc nhãn bằng chữ do code dựng. `fallback_text` của năm khối là `headline`. Cả năm khối **chưa** nằm ở `REGISTERED_BY_FRONTEND` (có Zod ở `blocks.ts`, chưa có view): hiện `fallback_text` cho tới khi luồng D đăng ký.
+
+Hình dạng mẫu (rút gọn; số của bảng Figma 58 → 34, 27 ngày): `resilience_score.data` = `{score: 58, band: "fair", headline, app_date, computed_at, components: [{key: "save", label: "Tiết kiệm", score: 15, weight: 0.35, applicable: true, band: "weak", explanation, inputs: [{key, label, value, unit}]}, ...4], weakest: "save", previous_score?, config_version, disclaimer, basis}`; `stress_result.data` = `{shock: {shock_id: "mat_viec_2_thang", kind, label, description, duration_days: 60}, status: "short", headline, score_before: 58, score_after: 34, score_delta: -24, band_before, band_after, runway_days_total: 27, runway_days_emergency: 9, emergency_jar, horizon_days: 90, shortfall_vnd: 8890000, shortfall_from, components: [{key, score_before, score_after}, ...4], method: "monte_carlo", n_paths, common_random_numbers: true, basis}`; `roadmap.data` = `{roadmap_id, version: 3, status: "proposed", reason: {code: "behavior_changed", text, detail: [{label, before, after}], behavior_flag_id}, based_on_version: 2, created_at, app_date, headline, feasibility: "relaxed", horizon, goals: [{jar, target_vnd, target_date, projected_date, on_track, shortfall_vnd, monthly_needed_vnd}], phases: [{phase_id, title, start_date, end_date, steps: [{step_id, kind, title, reason, amount_vnd, jar_code, to_jar_code, metrics, checked_rules, action: {tool: "move_between_jars", params}, status: "pending"}]}], alternatives: [], counts: {pending, accepted, rejected}, rules_version, basis}`.
+
+Bất biến mà JSON Schema (tập con của repo) không diễn đạt được nên **Pydantic quyết định** (test `test_contracts_phase4.py` có ca từ chối cho từng cái): điểm tổng bằng trung bình có trọng số (lệch tối đa 1) và `weakest` đúng; `score_delta = score_after - score_before` không dương; có khoản thiếu thì không thể "đủ" và có `shortfall_from`; `step_id` và `phase_id` duy nhất, `counts` đúng, giai đoạn xếp theo `start_date`, `based_on_version < version`, bước `decided_at` có đúng khi khác pending; `infeasible` đi với đúng hai `alternatives` và ít nhất một mục tiêu không kịp, `on_track` thì mọi mục tiêu kịp; `review` chỉ có mục mức review, `daily_ask` chỉ có mức ask kèm `ask`; tiền trong `inputs` đơn vị `vnd` là số nguyên.
+
+### Tool (bảy tool; hai target `forecast` và `planner` mở rộng)
+
+| Tool | Loại | Bắt buộc | Kết quả (`tools/*.results.schema.json`) |
+|---|---|---|---|
+| `forecast___get_resilience_score` | ĐỌC (đọc điểm đã lưu, tính lại nếu quá cũ hoặc `refresh`) | không | `GetResilienceScoreResult`: `data` = `ResilienceScoreData` |
+| `forecast___stress_test` | ĐỌC và tính | `shock_id` (ba mã của `shocks.json`) | `StressTestResult`: `data` = `StressResultData`. Lỗi `SHOCK_NOT_FOUND` |
+| `planner___optimize_allocation` | ĐỌC và tính (LP, `scipy.optimize.linprog`) | không (`horizon_months`, `goals`, `shock_id`, `allow_relaxation`) | `OptimizeAllocationResult`: `data` = `AllocationPlanData` (`optimal`, `relaxed`, `infeasible` kèm hai lựa chọn; vô nghiệm KHÔNG phải lỗi) |
+| `planner___save_roadmap` | **GHI không đổi số dư, KHÔNG qua token** | `reason_code`, `feasibility`, `phases` | `SaveRoadmapResult`: `data` = `RoadmapData` (phiên bản vừa lưu). Lỗi `ROADMAP_INVALID` (kể cả bước vi phạm luật suitability mức block), `ROADMAP_VERSION_CONFLICT` |
+| `planner___get_roadmap` | ĐỌC | không (`version` hoặc `which`) | `GetRoadmapResult`: `data` = `RoadmapData`. Lỗi `ROADMAP_NOT_FOUND` |
+| `ledger___get_unclassified` | ĐỌC (đã có; đầu vào KHÔNG đổi) | không | Mở rộng tương thích ngược: mục thêm `tier`, `classified_by`, `confidence`; gợi ý thêm `confidence`, `reason` |
+| `ledger___assign_jar` | GHI qua token (đã có, KHÔNG đổi schema) | `transaction_id`, `jar` | `remember` once hoặc always chọn phạm vi luật; luồng B cài thêm hành vi nâng ngưỡng của người nhận và "đúng rồi" (gán chính hũ hiện tại) |
+
+`wallet.FORECAST_TOOLS` và `PLANNER_TOOLS` có thêm các tool này ở CUỐI; `save_roadmap` không thuộc `PLANNER_WRITE_TOOLS` hay `ACTION_TOOLS`. **CDK tự đăng ký mọi tool trong hai file này ở lần deploy `YofinaAgent` kế tiếp, và mỗi tool có một file `gateway/policies/<tool>.cedar` (chỉ ép `user_id`)**; Lambda chưa cài thì Gateway nhận "Tool không tồn tại" cho tới khi luồng A cài (`wallet.PHASE4_TOOLS` liệt kê năm tool chưa cài). Bước lộ trình có thể gắn `action = {tool, params}` với `tool` ∈ `move_between_jars`, `save_jars`, `schedule_nudge`: người dùng thực hiện bằng `POST /confirmations` rồi `POST /actions`; chấp nhận bước không tự thực hiện.
+
+Hình dạng `optimize_allocation` (rút gọn): `{status: "relaxed", headline, horizon_months, period_start, income_monthly_vnd, obligations_monthly_vnd, lines: [{jar, kind, is_essential, floor_vnd, current_monthly_vnd, proposed_monthly_vnd, split_percent_current, split_percent_proposed, floor_gap_vnd}], unallocated_vnd, goals: [GoalProjection], relaxations: [{kind, jar_code, label, before, after}], alternatives: [], solver: {name: "scipy.optimize.linprog", method: "highs", status, elapsed_ms, relaxation_rounds}, basis}`; bảo toàn tiền: tổng `proposed_monthly_vnd` + `unallocated_vnd` = `income_monthly_vnd`.
+
+### REST (mười ba endpoint mới)
+
+| Endpoint | `x-lambda` | Việc |
+|---|---|---|
+| `GET /resilience` | `forecast` | Khối `resilience_score` (cùng khối với tool) |
+| `GET /resilience/shocks` | `forecast` | Ba cú sốc mẫu từ `shocks.json` (`ShocksResponse`), để vẽ ba thẻ R1 |
+| `POST /resilience/stress` | `forecast` | Thân `StressRequest {shock_id}`; khối `stress_result`. POST chỉ để có thân, không ghi |
+| `GET /roadmap` | `ledger` | Khối `roadmap`; `version` hoặc `which` (`active` mặc định, `proposed`, `latest`) |
+| `GET /roadmap/versions` | `ledger` | `RoadmapVersionsResponse`: danh sách gọn, `active_version`, `proposed_version`, `current_job` |
+| `GET /roadmap/diff` | `ledger` | Khối `roadmap_diff`; vắng `to_version` thì bản chờ, vắng `from_version` thì bản gốc của `to` |
+| `POST /roadmap/steps/{step_id}/decision` | `ledger` | `{version, decision: accepted\|rejected\|pending, reason?}` → khối `roadmap` mới. Không đổi số dư, không qua token |
+| `POST /roadmap/steps/{step_id}/edit` | `ledger` | `{version, amount_vnd?, due_date?}` → lưu phiên bản MỚI `active` (lý do `step_edited`), ghi `feedback`, không sinh lại toàn bộ |
+| `POST /roadmap/versions/{version}/decision` | `ledger` | `{decision: adopt\|keep_previous}` ("Dùng bản mới", "Giữ bản cũ") → khối `roadmap` |
+| `POST /roadmap/regenerate` | `ledger` | `{note?, alternative_id?, based_on_version?}` → ghi `roadmap_jobs`, phát `roadmap.regeneration_requested`, trả `RoadmapJob` NGAY (HTTP 200); đang có job thì trả chính job đó |
+| `GET /roadmap/jobs/{job_id}` | `ledger` | Hỏi tiến độ bằng polling (`RoadmapJob`) |
+| `GET /review` | `ledger` | Khối `review_list`; `mode` review (mặc định) hoặc daily_ask, `limit` |
+| `POST /review/daily-ask/skip` | `ledger` | `{ask_date}` → `ReviewAskResponse {ask_date, status}`; để sau câu hỏi gộp của ngày |
+
+Sửa hũ cho "Xem lại" và hỏi gộp **dùng lại `assign_jar` qua `POST /confirmations` rồi `POST /actions`** (không có endpoint ghi thứ hai). Lưu và đổi trạng thái lộ trình không qua token (không đổi số dư); mỗi thao tác ghi `audit_events` và một dòng `feedback`. Mã lỗi mới (thêm cuối `ErrorCode`, khớp `yofina_core.errors`, OpenAPI và `frontend/src/api/errors.ts`): `ROADMAP_NOT_FOUND` (404), `ROADMAP_INVALID` (422), `ROADMAP_VERSION_CONFLICT` (409), `SHOCK_NOT_FOUND` (404). Route trong `infra-cdk/lib/tools-stack.ts` được liệt kê tay: luồng A thêm 13 route này khi cài.
+
+### Sự kiện mới
+
+`behavior.changed` (source `yofina.forecast`; chỉ khi PELT xác nhận điểm gãy; `event_id` = `flag_id`; chỉ id, mã hũ, số tiền mỗi tuần) và `roadmap.regeneration_requested` (source `yofina.ledger`; `event_id` = `job_id`; ghi chú tự do ở lại job, không vào sự kiện). Lambda `yofina-roadmap-regen` nghe cả hai và `profile.updated` (đổi thu nhập, mục tiêu).
+
+### Ý định của agent
+
+`wallet.INTENTS` có mười giá trị (thêm `resilience`, `stress`, `roadmap`; `INTENTS_PHASE3` giữ bảy cũ cho migration 0010). `agent/src/yofina_agent/schemas.py` `Intent` khớp. Router CHƯA được hướng dẫn chọn ba ý định này và `turn.py` chưa có bộ xử lý (ba ý định rơi về `on_out_of_scope` cho tới khi luồng C cài).
+
+### Kiểm
+
+```
+uv run pytest tests/unit/test_contracts_phase4.py tests/unit/test_migration_0052.py
+cd tests/local_pg && uv run --python 3.12 --no-project --with pgserver --with "psycopg[binary]" --with pydantic --with pytest --with jsonschema --with pyyaml --with referencing --with numpy --with scipy pytest test_phase4_schema.py -p no:cacheprovider
+```
+
+Test cũ đã sửa cho phase 4: `test_contracts_blocks.py` (hai mươi mốt khối), `test_contracts_rest.py` (tập endpoint, ghi không qua token, `x-lambda`), `test_contracts_tools.py` (bảng kết quả), `test_contracts_events.py` (hai sự kiện), `test_contracts_ingest.py` (mã lỗi liền nhau, không còn là bốn mã cuối), `test_migration_0010.py` (`INTENTS_PHASE3`), `test_ledger_wallet.py` (`PHASE4_TOOLS`), `tests/unit/agent/test_schemas.py` và `test_jars_fallback_router.py` (mười ý định), `tests/unit/ts/blocks.fixtures.test.mjs`, `tests/integration/test_gateway_config.py` (sáu tool forecast; không chạy ở bước 0). Frontend: `errors.ts` thêm bốn mã; `registry.test.tsx` lọc fixture hợp lệ theo khối đã đăng ký; `walletBlocks.test.tsx` đổi số đếm.
 
 ## Cách chọn công cụ sinh
 

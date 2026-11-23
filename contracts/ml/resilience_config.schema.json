@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/ml/resilience_config.schema.json",
+  "title": "ResilienceConfigFile",
+  "description": "Định dạng của `libs/yofina_core/src/yofina_core/resilience_defaults.json`: trọng số và ngưỡng của Điểm chống chịu (bốn thành phần) và của stress test. Cùng định dạng với model Pydantic `yofina_core.resilience.ResilienceConfig` (test kiểm khớp). Mọi giá trị là dữ liệu có đơn vị, ghi chú và nguồn; mã engine không đặt số nào ngoài file này. Không có engine ở bước hợp đồng.",
+  "type": "object",
+  "required": ["version", "note", "disclaimer", "weights", "bands", "components", "stress"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "Phiên bản cấu hình; đi vào `config_version` của khối `resilience_score`. Tăng khi đổi số hoặc cách tính.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    },
+    "note": { "type": "string", "minLength": 1, "maxLength": 600 },
+    "disclaimer": {
+      "description": "Câu 'không phải điểm tín dụng' hiện ở R3 (đi vào `disclaimer` của khối).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "weights": {
+      "description": "Trọng số của bốn thành phần (đủ save, spend, borrow, plan); cộng lại bằng 1.",
+      "type": "object",
+      "required": ["save", "spend", "borrow", "plan"],
+      "additionalProperties": false,
+      "properties": {
+        "save": { "$ref": "#/$defs/ConfigValue" },
+        "spend": { "$ref": "#/$defs/ConfigValue" },
+        "borrow": { "$ref": "#/$defs/ConfigValue" },
+        "plan": { "$ref": "#/$defs/ConfigValue" }
+      }
+    },
+    "bands": {
+      "description": "Ngưỡng cắt nhóm điểm: yếu tới `weak_max_score`, vừa tới `fair_max_score`, còn lại tốt.",
+      "type": "object",
+      "required": ["weak_max_score", "fair_max_score"],
+      "additionalProperties": false,
+      "properties": {
+        "weak_max_score": { "$ref": "#/$defs/ConfigValue" },
+        "fair_max_score": { "$ref": "#/$defs/ConfigValue" }
+      }
+    },
+    "components": {
+      "description": "Nhãn, mẫu câu giải thích và ngưỡng của từng thành phần.",
+      "type": "object",
+      "required": ["save", "spend", "borrow", "plan"],
+      "additionalProperties": false,
+      "properties": {
+        "save": { "$ref": "#/$defs/ComponentConfig" },
+        "spend": { "$ref": "#/$defs/ComponentConfig" },
+        "borrow": { "$ref": "#/$defs/ComponentConfig" },
+        "plan": { "$ref": "#/$defs/ComponentConfig" }
+      }
+    },
+    "stress": {
+      "description": "Tham số chung của stress test: `horizon_days`, `n_paths`, `short_shortfall_ratio`.",
+      "type": "object",
+      "required": ["horizon_days", "n_paths", "short_shortfall_ratio"],
+      "additionalProperties": false,
+      "properties": {
+        "horizon_days": { "$ref": "#/$defs/ConfigValue" },
+        "n_paths": { "$ref": "#/$defs/ConfigValue" },
+        "short_shortfall_ratio": { "$ref": "#/$defs/ConfigValue" }
+      }
+    }
+  },
+  "$defs": {
+    "ConfigValue": {
+      "description": "Một giá trị cấu hình: số, đơn vị, ghi chú và nguồn (giá trị mô phỏng phải nói rõ là mô phỏng).",
+      "type": "object",
+      "required": ["value", "unit", "note", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "number" },
+        "unit": { "type": "string", "enum": ["ratio", "days", "vnd", "score", "count"] },
+        "note": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "source": { "type": "string", "minLength": 1, "maxLength": 300 }
+      }
+    },
+    "ComponentConfig": {
+      "type": "object",
+      "required": ["label", "explanation_template", "thresholds"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "explanation_template": {
+          "description": "Mẫu câu giải thích với các chỗ `{tên}` do engine điền (tên hợp lệ của từng thành phần ở `yofina_core.resilience.EXPLANATION_PLACEHOLDERS`). Câu sau khi điền tối đa 200 ký tự.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "thresholds": {
+          "description": "Ngưỡng theo tên (tên bắt buộc của từng thành phần ở `yofina_core.resilience.REQUIRED_THRESHOLDS`).",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/ConfigValue" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "v": 1,
+  "id": "stress_result:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:mat_viec_2_thang",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Mất việc 2 tháng: điểm tụt từ 58 xuống 34 (yếu), trụ được 27 ngày, thiếu 8.890.000 ₫.",
+  "source": {
+    "tool": "forecast___stress_test",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "stress_result",
+  "data": {
+    "shock": {
+      "shock_id": "mat_viec_2_thang",
+      "kind": "income_loss",
+      "label": "Mất việc 2 tháng",
+      "description": "Thu nhập dừng trong suốt thời gian này; chi tiêu và nghĩa vụ vẫn như cũ.",
+      "duration_days": 60
+    },
+    "status": "short",
+    "headline": "Mất việc 2 tháng: điểm tụt từ 58 xuống 34 (yếu), trụ được 27 ngày, thiếu 8.890.000 ₫.",
+    "score_before": 58,
+    "score_after": 34,
+    "score_delta": 5,
+    "band_before": "fair",
+    "band_after": "weak",
+    "runway_days_total": 27,
+    "runway_days_emergency": 9,
+    "emergency_jar": {
+      "code": "du_phong",
+      "name": "Dự phòng",
+      "color_key": "blue",
+      "icon_key": "shield"
+    },
+    "horizon_days": 90,
+    "shortfall_vnd": 8890000,
+    "shortfall_from": "2026-12-18",
+    "components": [
+      {
+        "key": "save",
+        "score_before": 15,
+        "score_after": 15
+      },
+      {
+        "key": "spend",
+        "score_before": 80,
+        "score_after": 36
+      },
+      {
+        "key": "borrow",
+        "score_before": 86,
+        "score_after": 35
+      },
+      {
+        "key": "plan",
+        "score_before": 75,
+        "score_after": 75
+      }
+    ],
+    "method": "monte_carlo",
+    "n_paths": 1000,
+    "common_random_numbers": true,
+    "basis": {
+      "computed_at": "2026-11-21T19:00:03Z",
+      "stale": false,
+      "confidence_band": "medium",
+      "is_initial_estimate": false,
+      "history_days": 47,
+      "coverage": 0.62
+    }
+  }
+}

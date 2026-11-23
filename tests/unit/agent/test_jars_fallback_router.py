@@ -119,6 +119,9 @@ def test_schema_router_phang_va_day_du():
         "move",
         "out_of_scope",
         "chitchat",
+        "resilience",
+        "stress",
+        "roadmap",
     ]
     assert set(schema["required"]) == set(IntentResult.model_fields)
 

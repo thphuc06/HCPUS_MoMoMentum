@@ -209,6 +209,58 @@
         { "$ref": "#/$defs/AffordabilityCheckOk" },
         { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
       ]
+    },
+    "GetResilienceScoreOk": {
+      "description": "`data` là đúng `data` của khối resilience_score, nên agent bọc bằng build_resilience_score và `GET /resilience` trả cùng khối.",
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "../blocks/resilience_score.schema.json#/$defs/ResilienceScoreData" }
+      }
+    },
+    "GetResilienceScoreResult": {
+      "description": "Điểm đã lưu (batch đêm, đặt lại dữ liệu), tính lại khi quá cũ hoặc `refresh` đúng. Mã lỗi có thể gặp: PROFILE_INCOMPLETE (chưa khai lương và ngày nhận), FORECAST_UNAVAILABLE (chưa có dự báo và không tính được ngay), PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/GetResilienceScoreOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
+    "StressTestOk": {
+      "description": "`data` là đúng `data` của khối stress_result, nên agent bọc bằng build_stress_result và `POST /resilience/stress` trả cùng khối.",
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "../blocks/stress_result.schema.json#/$defs/StressResultData" }
+      }
+    },
+    "StressTestResult": {
+      "description": "Mã lỗi có thể gặp: SHOCK_NOT_FOUND (mã cú sốc không có trong shocks.json), PROFILE_INCOMPLETE, FORECAST_UNAVAILABLE, PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/StressTestOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
+    "ListShocksData": {
+      "description": "Danh sách cú sốc mẫu đọc từ `shocks.json` (REST `GET /resilience/shocks`); không có tool Gateway tương ứng (agent biết mã qua mô tả của `stress_test`).",
+      "type": "object",
+      "required": ["shocks"],
+      "additionalProperties": false,
+      "properties": {
+        "shocks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": { "$ref": "../blocks/stress_result.schema.json#/$defs/ShockSummary" }
+        }
+      }
     }
   }
 }

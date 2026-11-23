@@ -26,8 +26,12 @@ from yofina_core.scenario import SCENARIO_ADAPTER, ScenarioSpec
 from yofina_core.suitability import Proposal, SuitabilityVerdict
 from yofina_core.wallet import INTENTS
 
+# Phase 3 có bảy ý định; phase 4 thêm `resilience`, `stress`, `roadmap` (hợp đồng chỉ khai báo: router, bộ xử lý và tool nằm ở luồng C,
+# xem "Quyết định hợp đồng phase 4" số 24). Router CHƯA được mời chọn ba ý định này (ROUTER_SYSTEM không liệt kê) và `turn.py`
+# CHƯA có bộ xử lý: luồng C thêm bộ xử lý trước khi sửa lời nhắc của router.
 Intent = Literal[
-    "lookup", "what_if", "affordability", "profile_update", "move", "out_of_scope", "chitchat"
+    "lookup", "what_if", "affordability", "profile_update", "move", "out_of_scope", "chitchat",
+    "resilience", "stress", "roadmap",
 ]  # fmt: skip
 
 #: Tool ĐỌC mà Orchestrator được đặt vào kế hoạch (tên đầy đủ qua Gateway). Tool ghi KHÔNG ở đây: ghi luôn đi qua khối

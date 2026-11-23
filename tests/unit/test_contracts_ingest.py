@@ -396,7 +396,8 @@ def test_ma_loi_moi_khop_ba_noi():
     for code, status in new.items():
         assert HTTP_STATUS[ErrorCode(code)] == status == schema["x-http-status"][code]
         assert schema["x-meaning"][code]
-    assert schema["enum"][-len(new) :] == list(new)  # thêm cuối, không đổi thứ tự mã cũ
+    first = schema["enum"].index("CONSENT_REQUIRED")
+    assert schema["enum"][first : first + len(new)] == list(new)  # liền nhau, không đổi thứ tự mã cũ (phase 4 thêm sau)
     front = (CONTRACTS.parent / "frontend/src/api/errors.ts").read_text(encoding="utf-8")
     for code, status in new.items():
         assert f"'{code}'," in front and f"{code}: {status}," in front

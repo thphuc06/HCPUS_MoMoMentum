@@ -1,0 +1,63 @@
+{
+  "v": 1,
+  "id": "review_list:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:review",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Không có giao dịch nào cần xem lại.",
+  "source": {
+    "tool": "rest:GET /review",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "review_list",
+  "data": {
+    "mode": "review",
+    "headline": "Không có giao dịch nào cần xem lại.",
+    "count": 0,
+    "pending_total_vnd": 0,
+    "items": [],
+    "jars": [
+      {
+        "code": "an_uong",
+        "name": "Ăn uống",
+        "color_key": "violet",
+        "icon_key": "utensils"
+      },
+      {
+        "code": "di_lai",
+        "name": "Đi lại",
+        "color_key": "sky",
+        "icon_key": "bus"
+      },
+      {
+        "code": "hoa_don",
+        "name": "Hóa đơn",
+        "color_key": "brown",
+        "icon_key": "receipt"
+      },
+      {
+        "code": "giai_tri",
+        "name": "Giải trí",
+        "color_key": "orchid",
+        "icon_key": "gamepad"
+      },
+      {
+        "code": "du_lich",
+        "name": "Du lịch",
+        "color_key": "teal",
+        "icon_key": "plane"
+      },
+      {
+        "code": "du_phong",
+        "name": "Dự phòng",
+        "color_key": "blue",
+        "icon_key": "shield"
+      },
+      {
+        "code": "nghia_vu",
+        "name": "Nghĩa vụ",
+        "color_key": "slate",
+        "icon_key": "wallet"
+      }
+    ]
+  }
+}

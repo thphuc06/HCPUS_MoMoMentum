@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/resilience_score.schema.json",
+  "title": "ResilienceScoreBlock",
+  "description": "Điểm chống chịu 0 đến 100 với bốn thành phần Save, Spend, Borrow, Plan (F4, proposal §11). Tất định: tool `forecast___get_resilience_score` (chat) và `GET /resilience` (màn Nhìn trước) trả CÙNG khối nên hai nơi cùng số. Mọi con số và câu giải thích do code dựng từ đầu vào thật và từ cấu hình trọng số, ngưỡng (`yofina_core/resilience_defaults.json`); LLM không viết. Nhóm điểm (`band`) luôn kèm chữ ở giao diện, không chỉ màu. Điểm này KHÔNG phải điểm tín dụng (`disclaimer`). Id khối `resilience_score:{trace_id}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "resilience_score" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ResilienceScoreData" }
+  },
+  "$defs": {
+    "Score": {
+      "description": "Điểm nguyên từ 0 đến 100.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "ResilienceBand": {
+      "description": "Nhóm điểm: weak (yếu), fair (vừa), strong (tốt). Ngưỡng cắt nằm ở cấu hình, không trong mã. Giao diện luôn hiện chữ của nhóm.",
+      "type": "string",
+      "enum": ["weak", "fair", "strong"]
+    },
+    "ResilienceComponentKey": {
+      "description": "Bốn thành phần theo thứ tự hiển thị: save (số ngày sống được bằng số dư khả dụng), spend (tỷ lệ chi trên thu và trả đúng hạn), borrow (nghĩa vụ trên thu nhập), plan (tiến độ mục tiêu).",
+      "type": "string",
+      "enum": ["save", "spend", "borrow", "plan"]
+    },
+    "ResilienceInput": {
+      "description": "Một đầu vào đã dùng để tính một thành phần. Tiền (`vnd`) và số đếm (`count`) là số nguyên (Pydantic kiểm, JSON Schema chỉ biết `number`); `days` và `ratio` không âm.",
+      "type": "object",
+      "required": ["key", "label", "value", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "value": { "type": "number", "minimum": -99999999999999, "maximum": 99999999999999 },
+        "unit": { "type": "string", "enum": ["vnd", "days", "ratio", "count"] }
+      }
+    },
+    "ResilienceComponent": {
+      "description": "Một thành phần. Không áp dụng được (ví dụ chưa có mục tiêu thì Plan) thì `applicable` sai, không có `score` và `band`, `weight` bằng 0; trọng số của các thành phần áp dụng được chuẩn hóa để cộng lại bằng 1.",
+      "type": "object",
+      "required": ["key", "label", "weight", "applicable", "explanation", "inputs"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "$ref": "#/$defs/ResilienceComponentKey" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "score": { "$ref": "#/$defs/Score" },
+        "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "applicable": { "type": "boolean" },
+        "band": { "$ref": "#/$defs/ResilienceBand" },
+        "explanation": {
+          "description": "Câu giải thích do code dựng từ đầu vào (ví dụ 'Số dư khả dụng đủ sống 27 ngày; mục tiêu tham chiếu là 180 ngày').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "inputs": {
+          "description": "Đầu vào đã dùng (số dư khả dụng, chi tiêu mỗi ngày...).",
+          "type": "array",
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/ResilienceInput" }
+        }
+      }
+    },
+    "ResilienceScoreData": {
+      "description": "Bất biến (Pydantic và test kiểm): đủ bốn thành phần đúng thứ tự save, spend, borrow, plan; trọng số của các thành phần áp dụng cộng lại bằng 1; `score` bằng trung bình có trọng số (lệch tối đa 1 do làm tròn); `weakest` là thành phần áp dụng có điểm thấp nhất (hòa thì đứng trước).",
+      "type": "object",
+      "required": ["score", "band", "headline", "app_date", "computed_at", "components", "weakest", "config_version", "disclaimer", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "score": { "$ref": "#/$defs/Score" },
+        "band": { "$ref": "#/$defs/ResilienceBand" },
+        "headline": {
+          "description": "Một câu do code dựng, luôn có điểm, nhóm bằng chữ và thành phần yếu nhất (ví dụ 'Điểm chống chịu 58/100 (vừa). Yếu nhất: Tiết kiệm.').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "app_date": {
+          "description": "Ngày mô phỏng mà điểm được tính cho.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "computed_at": { "$ref": "envelope.schema.json#/$defs/IsoDateTime" },
+        "components": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/ResilienceComponent" }
+        },
+        "weakest": { "$ref": "#/$defs/ResilienceComponentKey" },
+        "previous_score": {
+          "description": "Điểm của lần tính trước (ngày mô phỏng gần nhất trước đó), nếu có, để hiện chiều thay đổi.",
+          "$ref": "#/$defs/Score"
+        },
+        "config_version": {
+          "description": "Phiên bản cấu hình trọng số và ngưỡng đã dùng (`resilience_defaults.json`), để truy vết.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "disclaimer": {
+          "description": "Câu 'không phải điểm tín dụng' lấy từ cấu hình, giao diện luôn hiện (R3).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "basis": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastBasis" }
+      }
+    }
+  }
+}
