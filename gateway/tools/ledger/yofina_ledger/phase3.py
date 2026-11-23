@@ -34,6 +34,16 @@ FEEDBACK_BODY_FIELDS = frozenset(
     {"trace_id", "block_id", "option_id", "decision", "scenario_id", "reason"}
 )
 TRACE_TOOL = "audit___get_trace"
+#: loại phương án chính là việc thực hiện khoản của kịch bản (vay Trả sau, hoặc vẫn mua đúng khoản đó). Khớp `CREDIT_OPTION_KINDS`
+#: của agent (`yofina_agent.whatif`).
+SCENARIO_OBLIGATION_KINDS = frozenset({"use_credit", "proceed"})
+
+
+def adds_scenario_obligation(prop: Proposal) -> bool:
+    """Đề xuất có làm phát sinh khoản nghĩa vụ của kịch bản không: dùng tín dụng, hoặc vẫn mua đúng khoản đó. Cùng luật với
+    `yofina_agent.whatif.adds_scenario_obligation`. Phương án không mua (hoãn, bỏ, nhắc lại, chuyển bù hũ, dùng hũ khác) không thêm
+    nghĩa vụ nào, nên không được cộng nghĩa vụ của kịch bản vào tỷ lệ nghĩa vụ trên thu nhập."""
+    return prop.funding_source == "credit" or prop.kind in SCENARIO_OBLIGATION_KINDS
 
 
 class Phase3Reads:
@@ -58,8 +68,9 @@ class Phase3Reads:
     def check_suitability_result(
         self, user_id: str, *, proposal: Any, scenario_id: Any = None
     ) -> dict[str, Any]:
-        """`planner___check_suitability`: đề xuất đối chiếu năm luật (tất định, không model). Có `scenario_id` thì lấy
-        nghĩa vụ phát sinh đã tính của kịch bản thay vì ước lượng từ số tiền."""
+        """`planner___check_suitability`: đề xuất đối chiếu bộ luật (tất định, không model). Có `scenario_id` và đề xuất thật sự
+        thêm nghĩa vụ của kịch bản (`adds_scenario_obligation`) thì lấy nghĩa vụ phát sinh đã tính của kịch bản thay vì ước lượng từ
+        số tiền; đề xuất không thêm nghĩa vụ (hoãn, bỏ...) thì kịch bản chỉ được kiểm tồn tại, không cộng gì."""
         if not isinstance(proposal, Mapping):
             raise YofinaError(ErrorCode.PARAMS_INVALID, "proposal phải là một đối tượng.")
         clean = {k: v for k, v in proposal.items() if v is not None and v != ""}
@@ -93,7 +104,7 @@ class Phase3Reads:
             if row is None:
                 raise YofinaError(ErrorCode.PARAMS_INVALID, "Không tìm thấy kịch bản này.")
             cost = ((row.get("result") or {}).get("obligation_impact") or {}).get("cost") or {}
-            if isinstance(cost.get("item_cost_vnd"), int):
+            if adds_scenario_obligation(prop) and isinstance(cost.get("item_cost_vnd"), int):
                 added = int(cost["item_cost_vnd"])
         facts = facts_from_rows(
             today=today,

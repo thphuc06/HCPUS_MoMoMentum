@@ -96,17 +96,27 @@ def jar_check(
     tight_floor_vnd: int,
     runout_threshold_vnd: int,
 ) -> dict[str, Any]:
-    """`JarCheck` của một hũ nếu chi `amount_vnd` ngày `pay_date` bằng tiền hũ này (xem docstring module cho luật trạng thái)."""
+    """`JarCheck` của một hũ nếu chi `amount_vnd` ngày `pay_date` bằng tiền hũ này (xem docstring module cho luật trạng thái).
+
+    Chi vào ngày tương lai: số dư lúc chi là số dư P50 cuối ngày hôm trước. Riêng chi ĐÚNG hoặc SAU ngày lương kế (phương án "Hoãn
+    tới kỳ lương"): lương đã về hũ trong ngày đó nên số dư lúc chi là số dư P50 cuối chính ngày chi (đã gồm lương và các khoản đến hạn
+    cùng ngày, cách tính thận trọng), và cửa sổ xét hụt/sát là từ ngày chi tới hết khoảng dự báo, vì các ngày trước kỳ lương không
+    bị khoản chi này đụng tới."""
     first = origin + timedelta(days=1)
     start = max(pay_date, first)
+    after_payday = pay_date >= payday
     if pay_date <= origin:
         before = balance_now_vnd
     else:
-        prior = next((p50 for d, _a, p50, _b in series if d == pay_date - timedelta(days=1)), None)
+        on = pay_date if after_payday else pay_date - timedelta(days=1)
+        prior = next((p50 for d, _a, p50, _b in series if d == on), None)
         before = prior if prior is not None else balance_now_vnd
     after_balance = before - amount_vnd
     after = shifted(series, amount_vnd, start)
-    window = [x for x in after if first <= x[0] < payday]
+    if after_payday:
+        window = [x for x in after if x[0] >= start]
+    else:
+        window = [x for x in after if first <= x[0] < payday]
     min_p50 = min((x[2] for x in window), default=None)
     min_p10 = min((x[1] for x in window), default=None)
     lows = [v for v in (min_p50, after_balance) if v is not None]
@@ -134,6 +144,24 @@ def jar_check(
     if status == "short":
         out["shortfall_vnd"] = max(0, short_floor_vnd - min(lows))
     return out
+
+
+def _defer_summary(check: Mapping[str, Any], jar_name: str, payday: date) -> str:
+    """Câu của phương án "Hoãn tới kỳ lương", dựng từ số của `jar_check` (chi ngày lương, sau khi lương về). Còn sát hoặc hụt thì nói
+    rõ vì sao: số dư dự kiến lúc chi (đã gồm lương) và ngày hũ cạn hoặc phần thiếu sau khi chi."""
+    st = check["status"]
+    head = f"{STATUS_WORD[st]}: chi ngày lương {dm(payday)}, khi tiền lương đã về hũ {jar_name}"
+    if st == "ok":
+        return f"{head}; còn {format_vnd(check['balance_after_vnd'])} sau khi chi."
+    have = f"lúc đó hũ dự kiến có {format_vnd(check['balance_before_vnd'])}"
+    if st == "tight":
+        return f"{head}, nhưng {have} nên dễ thiếu nếu chi nhiều hơn dự kiến."
+    where = (
+        f"hũ vẫn cạn ngày {dm(check['runout_date_after'])}"
+        if check.get("runout_date_after")
+        else "hũ vẫn âm"
+    )
+    return f"{head}, nhưng {have}; {where}, thiếu khoảng {format_vnd(check.get('shortfall_vnd', 0))}."
 
 
 def jar_headline(check: Mapping[str, Any], payday: date, amount_vnd: int) -> str:
@@ -762,12 +790,16 @@ class AffordabilityEngine:
                     "option_id": "defer_payday",
                     "kind": "defer",
                     "label": "Hoãn tới kỳ lương",
-                    "summary": clip(
-                        f"{STATUS_WORD[deferred['status']]}: chi sau ngày lương {dm(payday)}, khi tiền lương đã về hũ {jar['name']}.",
-                        200,
-                    ),
+                    "summary": clip(_defer_summary(deferred, jar["name"], payday), 200),
                     "status": deferred["status"],
-                    "metrics": [{"label": "Ngày chi", "after": dm(payday)}],
+                    "metrics": [
+                        {"label": "Ngày chi", "after": dm(payday)},
+                        {
+                            "label": f"Hũ {jar['name']} lúc chi",
+                            "before": format_vnd(deferred["balance_before_vnd"]),
+                            "after": format_vnd(deferred["balance_after_vnd"]),
+                        },
+                    ],
                     "checked_rules": [],
                 }
             )

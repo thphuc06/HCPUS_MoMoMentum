@@ -95,6 +95,19 @@ def test_chi_vao_ngay_tuong_lai_dung_so_du_du_bao_ngay_hom_truoc():
     assert c["balance_before_vnd"] == 400_000 and c["balance_after_vnd"] == 300_000
 
 
+def test_hoan_toi_ky_luong_dung_so_du_sau_khi_luong_ve():
+    """Hũ Hóa đơn của minh: 04/12 còn khoảng 42.000 ₫, lương về 05/12 lên khoảng 2.830.000 ₫, tiền thuê 06/12 trừ 2.000.000 ₫.
+    Chi 250.000 ₫ ngày lương: số dư lúc chi là số dư ngày lương (lương đã về), không phải ngày hôm trước."""
+    p50 = [450_000] * 4 + [60_000] * 9 + [2_830_000, 823_000] + [810_000] * 15  # ngày 22/11 .. 21/12
+    c = check(p50, 250_000, balance=450_000, pay_date=PAYDAY)
+    assert c["balance_before_vnd"] == 2_830_000 and c["balance_after_vnd"] == 2_580_000
+    assert c["status"] == "ok" and "shortfall_vnd" not in c
+    # sau khi chi, khoản đến hạn sau ngày lương làm hũ âm thì vẫn hụt (cửa sổ xét từ ngày chi tới hết khoảng dự báo)
+    bad = check(p50, 900_000, balance=450_000, pay_date=PAYDAY)
+    assert bad["status"] == "short" and bad["shortfall_vnd"] == 900_000 - 810_000
+    assert bad["runout_date_after"] == (PAYDAY + timedelta(days=1)).isoformat()
+
+
 # --- engine ------------------------------------------------------------------------------------------
 def engine(**kw):
     pipeline, mem, repo, ref, settings = build(**kw)

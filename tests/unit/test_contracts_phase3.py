@@ -645,10 +645,11 @@ def load_rule(path):
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def test_co_du_nam_luat_cua_phase_3():
+def test_co_du_sau_luat():
+    """Năm luật của phase 3 cộng `source_jar_covers` (hũ nguồn đủ tiền, thêm khi đóng phase 4)."""
     assert {p.stem for p in RULE_FILES} == {
         "obligations_first", "emergency_before_investing", "risk_within_tolerance",
-        "no_borrow_to_spend", "obligation_to_income",
+        "no_borrow_to_spend", "obligation_to_income", "source_jar_covers",
     }  # fmt: skip
 
 
@@ -706,7 +707,7 @@ def test_ket_luan_suitability_bat_bien():
     with pytest.raises(ValidationError):
         suitability.SuitabilityVerdict.model_validate(orphan)
     rule_ids = {p.stem for p in RULE_FILES}
-    assert {c["rule_id"] for c in ok["checked"]} == rule_ids  # kiểm đủ năm luật
+    assert {c["rule_id"] for c in ok["checked"]} == rule_ids  # kiểm đủ mọi luật
 
 
 # =====================================================================================

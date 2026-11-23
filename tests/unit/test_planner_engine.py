@@ -25,6 +25,7 @@ RULE_IDS = [
     "risk_within_tolerance",
     "no_borrow_to_spend",
     "obligation_to_income",
+    "source_jar_covers",
 ]
 
 
@@ -67,9 +68,9 @@ def by(verdict):
 
 
 # --- nạp luật -------------------------------------------------------------------------------------------
-def test_nam_luat_nap_tu_yaml_theo_thu_tu_va_phien_ban():
+def test_sau_luat_nap_tu_yaml_theo_thu_tu_va_phien_ban():
     assert [r.id for r in RULES] == RULE_IDS
-    assert rules_version(RULES) == "v1.1.1.1.1"
+    assert rules_version(RULES) == "v1.1.1.1.1.1"
     assert all(p.stem in RULE_IDS for p in default_rules_dir().glob("*.yaml"))
 
 
@@ -125,9 +126,9 @@ def test_dau_tu_can_quy_du_phong_va_khau_vi_rui_ro():
     assert by(check({**prop, "risk_level": None}, rich))["risk_within_tolerance"].outcome == "fail"  # chưa rõ rủi ro: coi là cao
 
 
-def test_khong_phai_dau_tu_thi_luat_dau_tu_bi_bo_qua_va_van_du_nam_luat():
+def test_khong_phai_dau_tu_thi_luat_dau_tu_bi_bo_qua_va_van_du_moi_luat():
     v = check({"kind": "defer"})
-    assert len(v.checked) == 5 and by(v)["emergency_before_investing"].outcome == "skipped"
+    assert len(v.checked) == len(RULE_IDS) and by(v)["emergency_before_investing"].outcome == "skipped"
     assert {c.outcome for c in v.checked} <= {"pass", "skipped"}
 
 
@@ -190,3 +191,33 @@ def test_facts_from_rows_bo_hu_he_thong_va_nghia_vu_khong_hoat_dong():
     )
     assert [j.code for j in f.jars] == ["a"] and [o.name for o in f.obligations] == ["y"]
     assert f.next_payday == date(2026, 12, 5) and f.risk_tolerance == "low"
+
+
+# --- luật 6: hũ nguồn đủ tiền --------------------------------------------------------------------------
+def test_hu_nguon_khong_du_tien_he_thong_de_xuat_thi_chan_nguoi_dung_hoi_thi_canh_bao():
+    # hũ Dự phòng 2.700.000 ₫, khoản 15.000.000 ₫ (lỗi đi cảnh 2: phương án "Dùng hũ Dự phòng" hiện "Đủ")
+    prop = {"kind": "switch_jar", "amount_vnd": 15_000_000, "funding_source": "jar", "jar_code": "du_phong", "origin": "recommendation"}
+    v = check(prop)
+    c = by(v)["source_jar_covers"]
+    assert c.outcome == "fail" and not v.ok and "Dự phòng" in c.detail and "12.300.000" in c.detail
+    assert [x.severity for x in v.violations if x.rule_id == "source_jar_covers"] == ["block"]
+    user = check({**prop, "origin": "user_request"})
+    assert by(user)["source_jar_covers"].outcome == "warn" and user.ok
+    # vừa đúng số dư thì qua (ngưỡng còn lại 0 ₫ trong file luật)
+    assert by(check({**prop, "amount_vnd": 2_700_000}))["source_jar_covers"].outcome == "pass"
+
+
+def test_hu_nguon_bo_qua_khi_khong_lay_tien_tu_hu():
+    assert by(check({"kind": "defer", "funding_source": "jar"}))["source_jar_covers"].outcome == "skipped"
+    credit = {"kind": "use_credit", "amount_vnd": 15_000_000, "funding_source": "credit", "jar_code": "du_phong"}
+    assert by(check(credit))["source_jar_covers"].outcome == "skipped"  # nguồn tín dụng: không áp luật
+
+
+def test_nguong_hu_nguon_la_du_lieu(tmp_path: Path):
+    shutil.copytree(default_rules_dir(), tmp_path / "r")
+    path = tmp_path / "r" / "source_jar_covers.yaml"
+    path.write_text(path.read_text(encoding="utf-8").replace("value: 0", "value: 500000"), encoding="utf-8")
+    prop = {"kind": "switch_jar", "amount_vnd": 2_500_000, "funding_source": "jar", "jar_code": "du_phong", "origin": "recommendation"}
+    assert by(check(prop))["source_jar_covers"].outcome == "pass"
+    v = evaluate(Proposal.model_validate(prop, strict=False), facts(), load_rules(tmp_path / "r"))
+    assert by(v)["source_jar_covers"].outcome == "fail"  # phải giữ lại 500.000 ₫

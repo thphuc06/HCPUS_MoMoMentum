@@ -782,7 +782,7 @@ def test_save_roadmap_ban_cho_chon_phien_ban_tang_dan_va_chay_lai_suitability(mi
     assert d["rules_version"].startswith("v") and d["basis"]["confidence_band"] == "medium"
     assert d["basis"]["coverage"] == 0.62 and d["basis"]["stale"] is False
     step = d["phases"][0]["steps"][0]
-    assert step["status"] == "pending" and step["checked_rules"] == ["obligations_first"]
+    assert step["status"] == "pending" and step["checked_rules"] == ["obligations_first", "source_jar_covers"]
     # bản chờ cũ (v3) bị bỏ, bản đang dùng v2 giữ nguyên
     assert statuses(env) == {1: "superseded", 2: "active", 3: "discarded", 4: "proposed"}
     assert count(env, "audit_events", MINH, "event_type = 'roadmap_saved'") == audit0 + 1
@@ -806,7 +806,7 @@ def test_save_roadmap_bo_trang_thai_do_agent_tu_khai(minh):
     d["phases"][0]["steps"][0]["checked_rules"] = ["emergency_before_investing", "khong_co_that"]
     out = tool(env, "save_roadmap", **d)
     assert out["status"] == "OK"
-    assert out["data"]["phases"][0]["steps"][0]["checked_rules"] == ["obligations_first"]
+    assert out["data"]["phases"][0]["steps"][0]["checked_rules"] == ["obligations_first", "source_jar_covers"]
     out = tool(env, "save_roadmap", **draft(env, based_on_version=2, version=9, status="active"))
     assert out["status"] == "OK"  # tham số lạ bị bỏ qua (Gateway không từ chối chúng)
     assert out["data"]["version"] == 5 and out["data"]["status"] == "proposed"

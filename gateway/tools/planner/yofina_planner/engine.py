@@ -1,4 +1,4 @@
-"""Bộ đánh giá suitability: năm luật của `rules/*.yaml`, mỗi luật một hàm theo tên `evaluator`. Tất định, không model.
+"""Bộ đánh giá suitability: sáu luật của `rules/*.yaml`, mỗi luật một hàm theo tên `evaluator`. Tất định, không model.
 
 `evaluate(proposal, facts, rules)` trả `SuitabilityVerdict` có `checked` LIỆT KÊ ĐỦ mọi luật (luật không áp dụng thì `skipped`),
 `violations` (mỗi vi phạm kèm mức block hoặc warn theo luật và theo nguồn của đề xuất) và `ok` (đúng khi không có block).
@@ -165,12 +165,35 @@ def _obligation_income_ratio(
     )
 
 
+def _source_jar_covers(
+    rule: SuitabilityRule, proposal: Proposal, facts: SuitabilityFacts, ctx: Context
+) -> Outcome:
+    """Khoản lấy từ hũ nguồn (`funding_source` jar, `jar_code`) không vượt số dư hiện có của hũ trừ mức phải giữ lại."""
+    if not proposal.amount_vnd or not proposal.jar_code:
+        return Outcome("skipped", "Đề xuất không lấy một khoản tiền cụ thể từ hũ nào.")
+    jar = facts.jar(proposal.jar_code)
+    if jar is None:
+        return Outcome("skipped", "Không thấy hũ nguồn trong ví để đối chiếu số dư.")
+    keep = int(_threshold(rule, "min_remaining_vnd"))
+    left = jar.balance_vnd - proposal.amount_vnd
+    if left >= keep:
+        return Outcome(
+            "pass",
+            f"Hũ {jar.name} có {format_vnd(jar.balance_vnd)}, còn {format_vnd(left)} sau khi lấy {format_vnd(proposal.amount_vnd)}.",
+        )
+    return Outcome(
+        "fail",
+        f"Hũ {jar.name} chỉ có {format_vnd(jar.balance_vnd)}, thiếu {format_vnd(keep - left)} cho khoản {format_vnd(proposal.amount_vnd)}.",
+    )
+
+
 EVALUATORS_BY_NAME: dict[str, Evaluator] = {
     "essential_obligations_covered": _essential_covered,
     "emergency_fund_before_investing": _emergency_before_investing,
     "risk_within_tolerance": _risk_within_tolerance,
     "no_credit_for_discretionary": _no_credit_for_discretionary,
     "obligation_income_ratio": _obligation_income_ratio,
+    "source_jar_balance_covers": _source_jar_covers,
 }
 
 

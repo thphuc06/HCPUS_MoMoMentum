@@ -206,3 +206,20 @@ def test_hu_khac_khong_bi_tinh_lai_chi_hu_bi_tac_dong(saved):
     d = run(eng, {"kind": "one_time_purchase", "amount_vnd": 10_000, "funding_source": "jar", "jar_code": "an_uong"}, saved)
     assert [e["jar"]["code"] for e in d["effects"]] == ["an_uong"]
     assert date.fromisoformat(d["timelines"][0]["origin_date"]) == APP_DATE
+
+
+def test_tra_sau_den_han_dung_ngay_luong_lam_hu_can_thi_trang_thai_sau_la_hut(saved):
+    """Lỗi đi cảnh 2: khoản Trả sau đến hạn đúng ngày lương (05/12) làm hũ Nghĩa vụ âm và cạn ngày đó, nhưng xác suất hụt của engine
+    chỉ xét các ngày TRƯỚC ngày lương nên trạng thái SAU là "đủ, 0%". Dữ liệu dựng sẵn chia 20% lương (1.800.000 ₫) cho hũ Nghĩa vụ
+    (minh chỉ 5%), nên dùng khoản 3.000.000 ₫ (trong hạn mức còn 4.033.000 ₫) để tổng đến hạn 05/12 vượt số dư cộng phần lương."""
+    eng, _ = engine()
+    d = run(eng, {"kind": "bnpl_purchase", "amount_vnd": 3_000_000, "funding_source": "credit", "label": "tai nghe"}, saved)
+    tl = d["timelines"][0]
+    after = tl["compare"]["after"]
+    assert tl["jar"]["code"] == "nghia_vu"
+    assert after["min_balance_p50_vnd"] < 0 and after["runout_date"] <= tl["payday"]["date"]
+    assert after["status"] == "short" and "p_shortfall" not in after and "p_shortfall_se" not in after
+    assert "p_shortfall_delta" not in tl["compare"]["delta"]
+    eff = d["effects"][0]
+    assert eff["status_after"] == "short" and "p_shortfall_after" not in eff
+    assert tl["status"] == eff["status_before"]  # TRƯỚC giữ đúng trạng thái của dự báo nền

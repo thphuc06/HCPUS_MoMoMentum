@@ -23,7 +23,8 @@
         "emergency_fund_before_investing",
         "risk_within_tolerance",
         "no_credit_for_discretionary",
-        "obligation_income_ratio"
+        "obligation_income_ratio",
+        "source_jar_balance_covers"
       ]
     },
     "severity": {

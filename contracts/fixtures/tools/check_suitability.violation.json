@@ -37,6 +37,11 @@
         "rule_id": "obligation_to_income",
         "label": "Nghĩa vụ trên thu nhập",
         "outcome": "pass"
+      },
+      {
+        "rule_id": "source_jar_covers",
+        "label": "Hũ nguồn đủ tiền",
+        "outcome": "skipped"
       }
     ],
     "rules_version": "1"

@@ -180,7 +180,7 @@ def test_check_suitability_dau_tu_khi_chua_du_quy_du_phong_bi_chan(svc, registry
     )
     validate(registry, "planner", "CheckSuitabilityResult", res)
     v = res["data"]
-    assert v["ok"] is False and len(v["checked"]) == 5  # đủ năm luật
+    assert v["ok"] is False and len(v["checked"]) == 6  # đủ sáu luật
     by = {c["rule_id"]: c["outcome"] for c in v["checked"]}
     assert by["emergency_before_investing"] == "fail" and by["risk_within_tolerance"] == "fail"
     assert by["obligations_first"] == "skipped" and by["no_borrow_to_spend"] == "skipped"
@@ -234,6 +234,33 @@ def test_check_suitability_dung_nghia_vu_da_tinh_cua_kich_ban(svc):
     assert ratio["outcome"] == "warn"  # 6.000.000 trên lương 9.000.000 vượt 0,36 (số lấy từ kịch bản, không phải 1.000)
     with pytest.raises(YofinaError):
         service.check_suitability_result(U, proposal={"kind": "proceed"}, scenario_id=str(uuid.uuid4()))
+
+
+@pytest.mark.parametrize(
+    ("proposal", "adds"),
+    [
+        ({"kind": "defer", "funding_source": "jar"}, False),
+        ({"kind": "skip"}, False),
+        ({"kind": "remind_later"}, False),
+        ({"kind": "move_between_jars", "funding_source": "jar", "jar_code": "an_uong", "amount_vnd": 1_000}, False),
+        ({"kind": "defer", "funding_source": "credit"}, True),  # nhãn hoãn nhưng vẫn vay: không né được kiểm nghĩa vụ
+        ({"kind": "use_credit", "funding_source": "credit"}, True),
+        ({"kind": "proceed"}, True),
+    ],
+)
+def test_check_suitability_chi_cong_nghia_vu_kich_ban_khi_de_xuat_them_nghia_vu(svc, proposal, adds):
+    """Gốc lỗi verifier_failed của ca Trả sau: có `scenario_id` thì trước đây MỌI đề xuất bị cộng nghĩa vụ của kịch bản. Khớp
+    `yofina_agent.whatif.adds_scenario_obligation`."""
+    service, repo, _ = svc
+    sid = str(uuid.uuid4())
+    repo.scenarios[U] = {sid: {"result": {"obligation_impact": {"cost": {"item_cost_vnd": 6_000_000}}}}}
+    prop = {**proposal, "is_essential": True, "origin": "user_request"}
+    data = service.check_suitability_result(U, proposal=prop, scenario_id=sid)["data"]
+    ratio = next(c for c in data["checked"] if c["rule_id"] == "obligation_to_income")
+    if adds:
+        assert ratio["outcome"] == "warn"  # 6.000.000 của kịch bản trên lương 9.000.000
+    else:
+        assert ratio["outcome"] == "skipped" and data["ok"] is True
 
 
 # --- audit: get_trace ---------------------------------------------------------------------------------

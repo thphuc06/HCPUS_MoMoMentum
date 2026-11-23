@@ -325,7 +325,7 @@ def test_check_steps_obligations_first_chan_rut_tien_khoi_hu_gánh_nghia_vu():
         to_jar_code="an_uong",
     )
     v, checked = rl.check_steps(phases_of(safe), facts(), rules)
-    assert v == [] and checked["buoc_thu"] == ["obligations_first"]
+    assert v == [] and checked["buoc_thu"] == ["obligations_first", "source_jar_covers"]
     v, checked = rl.check_steps(phases_of(safe, bad), facts(), rules)
     assert [(s, r) for s, r, _m in v] == [("rut_nhieu", "obligations_first")]
     err = rl.violation_error(v)
@@ -349,7 +349,8 @@ def test_check_steps_obligations_first_chan_rut_tien_khoi_hu_gánh_nghia_vu():
     v, checked = rl.check_steps(
         phases_of(pay, step("remind", step_id="nhac", jar_code="an_uong")), facts(), rules
     )
-    assert v == [] and checked["tra"] == [] and checked["nhac"] == []
+    # bước trả nghĩa vụ rút tiền khỏi một hũ nên vẫn được kiểm hũ nguồn đủ tiền (400.000 trong 450.000: qua)
+    assert v == [] and checked["tra"] == ["source_jar_covers"] and checked["nhac"] == []
     two = rl.violation_error([("a", "obligations_first", "m."), ("b", "obligations_first", "m.")])
     assert "và 1 bước khác" in two.message
 

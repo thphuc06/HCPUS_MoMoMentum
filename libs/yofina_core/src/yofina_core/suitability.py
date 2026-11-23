@@ -22,6 +22,7 @@ EvaluatorName = Literal[
     "risk_within_tolerance",
     "no_credit_for_discretionary",
     "obligation_income_ratio",
+    "source_jar_balance_covers",
 ]
 EVALUATORS: tuple[str, ...] = (
     "essential_obligations_covered",
@@ -29,6 +30,7 @@ EVALUATORS: tuple[str, ...] = (
     "risk_within_tolerance",
     "no_credit_for_discretionary",
     "obligation_income_ratio",
+    "source_jar_balance_covers",
 )
 Severity = Literal["block", "warn"]
 Category = Literal["spending", "saving", "investment", "debt_payment"]

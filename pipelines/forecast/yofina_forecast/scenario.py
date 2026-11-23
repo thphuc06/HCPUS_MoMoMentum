@@ -623,26 +623,46 @@ def _runout_shift(
     return ((after or beyond) - (before or beyond)).days
 
 
-def _p(jf: JarForecast) -> float | None:
+def _runs_out_by_payday(jf: JarForecast) -> bool:
+    """Số dư P50 chạm ngưỡng cạn TRƯỚC hoặc ĐÚNG ngày lương kế.
+
+    Xác suất hụt của engine ML (và trạng thái suy từ nó) chỉ xét các ngày TRƯỚC ngày lương (`window` = số ngày tới lương - 1). Một
+    khoản đến hạn đúng ngày lương (Trả sau của `minh` đến hạn 05/12, lương cũng ngày 5) lớn hơn số dư cộng phần lương về hũ thì hũ
+    cạn ngay ngày đó mà xác suất "trước kỳ lương" vẫn là 0, nên trạng thái "đủ" mâu thuẫn với số dư thấp nhất âm và ngày cạn."""
     s = jf.summary
-    return (
-        round(float(s.p_shortfall), 4) if s.show_probability and s.p_shortfall is not None else None
-    )
+    return s.runout_date is not None and s.runout_date <= s.payday_date
+
+
+def _status(jf: JarForecast) -> str:
+    """Trạng thái hiển thị trên thẻ what-if: trạng thái của engine, trừ khi hũ cạn trước hoặc đúng ngày lương thì là hụt (cùng
+    nghĩa "hụt trước kỳ lương" mà người dùng đọc cạnh ngày cạn và số dư thấp nhất của chính thẻ)."""
+    return "short" if _runs_out_by_payday(jf) else jf.summary.status
+
+
+def _p(jf: JarForecast) -> float | None:
+    """Xác suất hụt để hiển thị. Bỏ khi hũ cạn ngay ngày lương: xác suất của engine không xét ngày đó nên con số (thường 0%)
+    sẽ nói ngược với trạng thái hụt và ngày cạn; khi đó thẻ chỉ nói ngày cạn."""
+    s = jf.summary
+    if not s.show_probability or s.p_shortfall is None:
+        return None
+    if _runs_out_by_payday(jf) and s.status != "short":
+        return None
+    return round(float(s.p_shortfall), 4)
 
 
 def _p_se(jf: JarForecast) -> float | None:
     s = jf.summary
     return (
         round(float(s.p_shortfall_se), 5)
-        if s.show_probability and s.p_shortfall_se is not None
+        if _p(jf) is not None and s.p_shortfall_se is not None
         else None
     )
 
 
 def _impact_key(b: JarForecast, a: JarForecast) -> tuple[int, int, int]:
     """Hũ bị tác động nhiều hơn xếp trước: trạng thái xấu đi nhiều, rồi số dư thấp nhất giảm nhiều, rồi trạng thái SAU nặng hơn."""
-    worsen = STATUS_RANK[a.summary.status] - STATUS_RANK[b.summary.status]
-    return (-worsen, _min_p50(a) - _min_p50(b), -STATUS_RANK[a.summary.status])
+    worsen = STATUS_RANK[_status(a)] - STATUS_RANK[_status(b)]
+    return (-worsen, _min_p50(a) - _min_p50(b), -STATUS_RANK[_status(a)])
 
 
 class ScenarioEngine:
@@ -967,8 +987,8 @@ class ScenarioEngine:
             sb, sa = b.summary, a.summary
             effect: dict[str, Any] = {
                 "jar": meta.ref(),
-                "status_before": sb.status,
-                "status_after": sa.status,
+                "status_before": _status(b),
+                "status_after": _status(a),
                 "min_balance_delta_vnd": _min_p50(a) - _min_p50(b),
             }
             if sb.runout_date:
@@ -986,7 +1006,7 @@ class ScenarioEngine:
             jar_in = built_inputs.jars[_jar_index(built_inputs, code)]
             p_b, p_a = _p(b), _p(a)
             path: dict[str, Any] = {
-                "status": sa.status,
+                "status": _status(a),
                 "min_balance_p50_vnd": _min_p50(a),
                 "days": _days_payload(a),
             }
@@ -1007,7 +1027,7 @@ class ScenarioEngine:
                 delta["p_shortfall_delta"] = round(p_a - p_b, 4)
             tl: dict[str, Any] = {
                 "jar": meta.ref(),
-                "status": sb.status,
+                "status": _status(b),
                 "origin_date": today.isoformat(),
                 "start_balance_vnd": sb.start_balance_vnd,
                 "horizon_days": horizon,
