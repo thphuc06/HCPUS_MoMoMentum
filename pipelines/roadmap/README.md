@@ -42,6 +42,35 @@ Payload gồm tham số tool và `user_id` của sự kiện hệ thống. `Clie
 
 Giới hạn model, tool và số vòng sửa lấy từ `yofina_agent/defaults.json` và có thể ghi đè bằng env như trong agent. Đóng gói `handler.py`, cả gói `yofina_roadmap`, cả gói `yofina_core` kèm các tệp dữ liệu JSON/YAML theo gói, và cài `requirements.txt` theo runtime/kiến trúc Lambda. Chép các module `yofina_agent` gồm `__init__.py`, `roadmap_agent.py`, `settings.py`, `compact.py`, `textutil.py`, `tools.py`, `identity.py`, `notices.py`, `verifier.py`, `schemas.py`, `writer.py`, `metered_model.py` và `defaults.json`. `writer.py` nạp `metered_model.py` nên cần Strands. boto3 và botocore có sẵn trong Lambda runtime.
 
+## Hạ tầng (CDK) và giá trị đã chọn
+
+Construct `RoadmapRegen` ở `infra-cdk/lib/roadmap-regen.ts`, nối vào `YofinaTools` (`infra-cdk/lib/tools-stack.ts`), test `infra-cdk/test/roadmap-regen.test.ts`. **Chưa deploy.** Tài nguyên: [docs/aws-resources.md](../../docs/aws-resources.md).
+
+Đóng zip (chạy ở gốc repo; ra `build/lambda/roadmap-arm64.zip`, khoảng 13 MB nén, `handler.py` ở gốc, `strands-agents` 1.65.0 và gói native cài theo `aarch64`):
+
+```bash
+uv run scripts/build_lambda.py pipelines/roadmap --arch arm64 --name roadmap --extra agent/src/yofina_agent:yofina_agent
+```
+
+Lệnh chép cả gói `yofina_agent` (nhiều hơn danh sách module tối thiểu ở trên, không sao). Thiếu zip thì `YofinaTools` báo lỗi lúc synth.
+
+| Giá trị | Mặc định | Context | Lý do |
+| --- | --- | --- | --- |
+| Timeout Lambda | 300 s | `roadmapTimeoutSeconds` | Tối đa 4 lượt model `planner` (mỗi lượt đọc tối đa 60 s) cộng Invoke tool và Data API |
+| `YOFINA_ROADMAP_RUNNING_LEASE_SECONDS` | 360 s | `roadmapRunningLeaseSeconds` | Lớn hơn timeout: chỉ dọn job `running` khi lần chạy trước chắc đã dừng |
+| Visibility timeout SQS | 1.800 s | `roadmapVisibilityTimeoutSeconds` | 6 lần timeout (khuyến nghị của AWS), lớn hơn lease |
+| Batch size / `maxConcurrency` | 1 / 2 | `roadmapBatchSize`, `roadmapMaxConcurrency` | Một job một lần gọi; 2 là tối thiểu của SQS event source, giữ dưới rpm của Claude |
+| `ReportBatchItemFailures` | bật | | `JobBusy` và lỗi Data API trả về `batchItemFailures` |
+| `maxReceiveCount` | 6 | `roadmapMaxReceiveCount` | AWS khuyến nghị ≥ 5; `JobBusy` cũng tốn một lượt nhận. Mỗi lần giao lại cách 30 phút nên tin chờ được khoảng 3 giờ trước khi vào DLQ |
+| Giữ tin | 4 ngày | `roadmapRetentionDays` | Phải dài hơn visibility × maxReceiveCount (synth kiểm) |
+| `YOFINA_ROADMAP_INVOKE_CONNECT_TIMEOUT_SECONDS` | 5 s | `roadmapInvokeConnectTimeoutSeconds` | |
+| `YOFINA_ROADMAP_INVOKE_READ_TIMEOUT_SECONDS` | 65 s | `roadmapInvokeReadTimeoutSeconds` | Mặc định là timeout lớn nhất của hai Lambda tool (forecast 60 s, ledger 30 s) cộng 5 s |
+| `YOFINA_ROADMAP_STAGE_PROGRESS` | `5,25,45,65,85` | `roadmapStageProgress` | |
+| Bộ nhớ | 1.024 MB | `roadmapMemoryMb` | |
+| Vai model được cấp Bedrock | `planner` | `roadmapLlmRoles` | Roadmap agent chỉ gọi `planner` |
+
+`YOFINA_ROADMAP_FORECAST_FUNCTION_NAME` trỏ `yofina-forecast` (hàm tool), không phải `yofina-forecast-batch`. Biến `YOFINA_SSM_PREFIX` có đặt cho `yofina_core.llm` đọc nhánh `/yofina/llm`; `AgentSettings` tự bỏ khóa này.
+
 ## Bàn giao cho Phúc
 
 1. Áp dụng migration `0052` và triển khai các tool Phase 4 trước. Checkout C4 hiện chưa có nhánh dispatch thực tế cho `get_roadmap`, `optimize_allocation`, `save_roadmap` trong ledger hoặc `get_resilience_score` trong forecast. Các bên phát `roadmap.regeneration_requested` và `behavior.changed` cũng phải sẵn sàng.

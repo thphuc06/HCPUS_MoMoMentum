@@ -16,6 +16,7 @@ import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { YofinaConfig } from '../config/config';
 import { ClassifyConfig, ClassifyPipeline } from './classify';
 import { ForecastPipeline, ForecastPipelineConfig } from './forecast-pipeline';
+import { RoadmapRegen, RoadmapRegenConfig } from './roadmap-regen';
 import { publishParams } from './ssm-outputs';
 
 /**
@@ -119,6 +120,8 @@ export interface ToolsProps extends StackProps {
   readonly forecast: ForecastPipelineConfig;
   /** Phase 4 (luồng B): Lambda phân loại `yofina-classify`. Vắng thì không dựng (test cũ của stack giữ nguyên). */
   readonly classify?: ClassifyConfig;
+  /** Phase 4 (luồng C): Lambda sinh lại lộ trình `yofina-roadmap-regen`. Vắng thì không dựng. */
+  readonly roadmap?: RoadmapRegenConfig;
 }
 
 /**
@@ -276,6 +279,27 @@ export class ToolsStack extends Stack {
         resources: [this.bus.eventBusArn],
       }),
     );
+
+    // --- Phase 4 luồng C: sinh lại lộ trình (EventBridge ba loại sự kiện → SQS + DLQ → Lambda yofina-roadmap-regen) -------
+    // Gọi thẳng hai Lambda tool (ledger cho target ledger/planner, forecast TOOL cho target forecast), không qua Gateway.
+    if (props.roadmap) {
+      new RoadmapRegen(this, 'RoadmapRegen', {
+        cfg,
+        roadmap: props.roadmap,
+        bus: this.bus,
+        alertTopic,
+        ledgerFunction: this.ledger,
+        ledgerTimeoutSeconds: tools.ledgerTimeoutSeconds,
+        forecastToolFunction: this.forecast.tool,
+        forecastToolTimeoutSeconds: props.forecast.toolTimeoutSeconds,
+        appTimezone: tools.appTimezone,
+        clusterArn,
+        appSecretArn,
+        dbName: param('db/name'),
+        dbResumeMaxWaitSeconds: tools.dbResumeMaxWaitSeconds,
+        usageTableName: param('dynamodb/usage-table'),
+      });
+    }
 
     // --- HTTP API + JWT authorizer của Cognito -----------------------------------------------
     // Frontend chỉ gửi ACCESS token (có `client_id`, không có `aud`): HTTP API so `jwtAudience` với `aud` hoặc `client_id`.

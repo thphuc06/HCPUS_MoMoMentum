@@ -9,6 +9,7 @@ import { loadForecastConfig } from '../lib/forecast-pipeline';
 import { FrontendStack } from '../lib/frontend-stack';
 import { IdentityStack } from '../lib/identity-stack';
 import { IngestStack, loadIngestConfig } from '../lib/ingest-stack';
+import { loadRoadmapRegenConfig } from '../lib/roadmap-regen';
 import { ToolsStack, loadToolsConfig } from '../lib/tools-stack';
 
 const app = new App();
@@ -28,6 +29,7 @@ new ToolsStack(app, 'YofinaTools', {
   tools: toolsCfg,
   forecast: loadForecastConfig(app),
   classify: loadClassifyConfig(app),
+  roadmap: loadRoadmapRegenConfig(app),
 });
 new AgentStack(app, 'YofinaAgent', { env, cfg, tools: toolsCfg, agent: loadAgentConfig(app) });
 new IngestStack(app, 'YofinaIngest', { env, cfg, tools: toolsCfg, ingest: loadIngestConfig(app) });

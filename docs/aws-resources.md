@@ -155,6 +155,20 @@ Thuộc stack `YofinaTools` (construct `ClassifyPipeline`, `infra-cdk/lib/classi
 
 **Deploy 23/11 chiều (phase 4, phần Phúc)**: migration `0052`; `YofinaTools` ba lần (lần đầu: 13 route, `yofina-classify` + SQS + DLQ + rule + bảng idempotency, code ledger và forecast mới kèm `ruptures`; lần hai: sửa thông điệp lỗi hỏng dấu của `ROADMAP_VERSION_CONFLICT`; lần ba: ngưỡng phân loại đã hiệu chỉnh và nhãn seed trong zip ledger và classify); `YofinaAgent` qua `scripts/agent_deploy.py` (5 tool và 5 policy) -> Runtime `yofina_agent` version 14. Frontend không đổi.
 
+### Phase 4 luồng C: sinh lại lộ trình chạy nền — **chưa deploy**
+
+Thuộc stack `YofinaTools` (construct `RoadmapRegen`, `infra-cdk/lib/roadmap-regen.ts`). Mã ở `pipelines/roadmap/`. Chỉ đã synth và chạy test CDK, chưa tạo trên AWS. Không có thứ nào tính tiền theo giờ.
+
+| Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
+|---|---|---|---|---|
+| `yofina-roadmap-regen` | Lambda (Python 3.13, arm64, ngoài VPC, 1.024 MB, timeout 300 s) + IAM role + log group `/aws/lambda/yofina-roadmap-regen` | 4 | Không | Chạy lõi Roadmap agent, cập nhật `roadmap_jobs`. Zip `roadmap-arm64` (13,1 MB nén, 41 MB giải nén; có `strands-agents`). IAM: Data API (ExecuteStatement, BeginTransaction, CommitTransaction, RollbackTransaction) và secret `yofina-db-app`, `lambda:InvokeFunction` CHỈ trên `yofina-ledger` và `yofina-forecast`, Bedrock mẫu 3 phần global cho model của vai `planner` (Sonnet 4.6, Kimi K3), `dynamodb:UpdateItem` trên `yofina-usage`, SSM đọc `/yofina/llm*`, `/yofina/db_*`. Không có `events:PutEvents` (mã không phát sự kiện) |
+| `yofina-roadmap-events` | SQS (visibility 1.800 s, giữ 4 ngày, SSE-SQS, `enforceSSL`) | 4 | Không | Event source cho `yofina-roadmap-regen`: lô 1, `ReportBatchItemFailures`, `maxConcurrency` 2. Queue policy cho `events.amazonaws.com` theo ARN từng rule |
+| `yofina-roadmap-events-dlq` | SQS (giữ 14 ngày) | 4 | Không | Sau 6 lần giao không thành (`JobBusy` cũng tốn lượt) |
+| `yofina-roadmap-roadmap-regeneration-requested`, `yofina-roadmap-behavior-changed`, `yofina-roadmap-profile-updated` | 3 EventBridge rule trên `yofina-bus` | 4 | Không | Lọc `source` + `detail-type`: `yofina.ledger`/`roadmap.regeneration_requested`, `yofina.forecast`/`behavior.changed`, `yofina.ledger`/`profile.updated`; đích `yofina-roadmap-events`, gửi nguyên phong bì |
+| `yofina-roadmap-events-dlq-not-empty` | CloudWatch alarm | 4 | Không đáng kể (khoảng 0,10 USD/tháng nếu vượt 10 alarm miễn phí) | -> SNS `yofina-alerts` |
+
+Thứ tự khi deploy: build zip (`pipelines/roadmap/README.md`), `uv run scripts/cdk.py diff YofinaTools`, rồi `deploy YofinaTools`. Không cần đổi `YofinaAgent`.
+
 ## Không do CDK tạo
 
 | Tên | Loại | Cách tạo | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
