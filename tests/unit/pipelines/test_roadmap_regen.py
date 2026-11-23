@@ -172,6 +172,8 @@ class FakeBedrock:
         self.prompts = []
         self.fail_on_call = None
         self.repair_needed = False
+        self.bad_kind_first = False
+        self.only_ungrounded = False
 
     def converse(self, **kwargs):
         self.prompts.append(json.loads(kwargs["messages"][0]["content"][0]["text"]))
@@ -187,7 +189,11 @@ class FakeBedrock:
             "amount_ref": {"jar_code": "du_phong", "field": "proposed_increase"},
             "action": "move_between_jars",
         }
+        if self.bad_kind_first and len(self.prompts) == 1:
+            step["kind"] = "move_between_jars"  # tên action, không phải kind (lỗi thật trên Runtime v17)
         steps = [step]
+        if self.only_ungrounded:
+            steps = [{**step, "title": "Số 9912345678"}]
         if self.repair_needed:
             steps.append({**step, "step_id": "loi_so", "title": "Số 9912345678"})
         return {
@@ -459,3 +465,47 @@ def test_tool_caller_classifies_result_envelopes(pipeline, payload, kind):
     lambda_tools = import_module("yofina_roadmap.tool_caller").LambdaTools
     tools = lambda_tools(client, {"ledger": "ledger-test"}, "event-user")
     assert asyncio.run(tools("get_jar_balances", {}, "ledger")).kind is kind
+
+
+def test_draft_with_kind_outside_enum_is_retried_and_job_finishes(pipeline):
+    # Lambda regen 16:01–16:24 UTC 23/11: roadmap_model_error type=StructuredOutputError vì phác thảo chỉ được thử 1 lần.
+    handle, db, tools, model, event = pipeline
+    model.bad_kind_first = True
+    assert handle(event("behavior.changed", "confirmed"), None) == {"status": "done"}
+    assert len(model.prompts) == 2
+    (job,) = db.jobs.values()
+    assert job["status"] == "done"
+    assert len(tools.arguments("planner", "save_roadmap")) == 1
+
+
+def test_every_step_rejected_fails_job_with_structured_logs(pipeline, caplog):
+    caplog.set_level("WARNING")
+    handle, db, tools, model, event = pipeline
+    model.only_ungrounded = True
+    assert handle(event("behavior.changed", "confirmed"), None) == {"status": "failed"}
+    (job,) = db.jobs.values()
+    assert job["error_code"] == ErrorCode.ROADMAP_INVALID
+    assert not tools.arguments("planner", "save_roadmap")
+    events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.getMessage().startswith("{")
+    ]
+    rejected = [e for e in events if e["event"] == "roadmap_step_rejected"]
+    assert [(e["round"], e["reason"], e["field"]) for e in rejected] == [
+        (0, "grounding", "title"),
+        (1, "grounding", "title"),
+        (2, "grounding", "title"),
+    ]
+    (invalid,) = [e for e in events if e["event"] == "roadmap_invalid"]
+    assert invalid["stage"] == "verify" and invalid["rules"] == {"numeric_grounding": 1}
+    (job_log,) = [e for e in events if e["event"] == "roadmap_job_invalid"]
+    assert job_log == {
+        "event": "roadmap_job_invalid",
+        "job": job["id"],
+        "trigger": "behavior_changed",
+        "stage": "verify",
+        "suitability_blocks": 0,
+    }
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "9912345678" not in logged and "Bù hũ" not in logged

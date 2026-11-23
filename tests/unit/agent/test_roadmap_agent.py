@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import date
 
 import pytest
 from agent_helpers import (
@@ -28,6 +29,11 @@ from yofina_agent.tools import ToolKind, ToolOutcome, classify_result
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import TurnScope
 from yofina_core.params import normalize_params
+from yofina_core.suitability import Proposal
+from yofina_ledger.roadmap_logic import check_steps, proposal_for_step
+from yofina_planner.engine import evaluate
+from yofina_planner.facts import facts_from_rows
+from yofina_planner.rules import cached_rules
 
 
 def step(step_id="bu_du_phong", **changes):
@@ -77,11 +83,17 @@ def scripted_tools(
             "get_resilience_score": respond("get_resilience_score", ("ok",)),
             "get_roadmap": respond("get_roadmap", latest),
             "optimize_allocation": respond("optimize_allocation", (allocation,)),
-            "check_suitability": respond("check_suitability", checks),
+            "check_suitability": checks if callable(checks) else respond("check_suitability", checks),
             "save_roadmap": respond("save_roadmap", saves),
             **other,
         }
     )
+
+
+def block_jar_funded(args):
+    """check_suitability giả: chặn đề xuất lấy tiền từ hũ (funding_source jar), cho qua bước còn lại."""
+    name = "violation" if args["proposal"].get("funding_source") == "jar" else "ok"
+    return classify_result("check_suitability", mcp_ok(fixture(f"check_suitability.{name}.json")))
 
 
 def build(tools, *outputs, settings=None, scope=None, stages=None, **kwargs):
@@ -182,7 +194,15 @@ def test_save_grounded_roadmap_and_report_stages():
         assert action["params"] == normalize_params(action["tool"], action["params"])
         assert {"user_id", "confirm_token"}.isdisjoint(action["params"])
     proposals = [args["proposal"] for args in args_for(tools, "check_suitability")]
-    assert [proposal["kind"] for proposal in proposals] == ["move_between_jars", "remind_later"]
+    # cùng đề xuất mà save_roadmap (ledger) dựng lại từ bước đã lưu
+    assert proposals == [
+        proposal_for_step(item).model_dump(exclude_none=True) for item in (move, nudge)
+    ]
+    assert [proposal["kind"] for proposal in proposals] == [
+        "roadmap_set_aside",
+        "roadmap_review_goal",
+    ]
+    assert proposals[0]["funding_source"] == "jar" and proposals[0]["jar_code"] == "giai_tri"
     assert [proposal.get("amount_vnd") for proposal in proposals] == [expected, None]
     assert all(proposal["origin"] == "recommendation" for proposal in proposals)
     assert "weakest" in prompt(client)["context"]
@@ -229,7 +249,7 @@ def test_drop_blocked_steps_after_both_repairs(keep_step):
     draft = outline(step())
     if keep_step:
         draft["phases"].append({"phase_id": "theo_doi", "title": "Theo dõi", "steps": [review()]})
-    tools = scripted_tools(checks=("violation",) * 3)
+    tools = scripted_tools(checks=block_jar_funded)
     result, _, scope = build(tools, draft, draft, draft)
     assert scope.calls == 3
     saves = args_for(tools, "save_roadmap")
@@ -270,7 +290,7 @@ def test_draft_model_failure_or_no_budget_does_not_save(exhausted):
 
 
 def test_model_budget_limits_repairs_and_preserves_valid_steps():
-    tools = scripted_tools(checks=("violation",))
+    tools = scripted_tools(checks=block_jar_funded)
     result, _, scope = build(tools, outline(step(), review()), scope=TurnScope(1))
     assert result.outcome.ok and scope.calls == 1
     (stored,) = args_for(tools, "save_roadmap")
@@ -379,7 +399,7 @@ def test_adjust_split_gan_save_jars_giu_loai_va_muc_tieu_goc():
         assert got.get("goal_date") == jar.get("goal_date")
     assert sum(j["split_percent"] for j in params["jars"]) == 100
     (proposal,) = [args["proposal"] for args in args_for(tools, "check_suitability")]
-    assert proposal["kind"] == "split"
+    assert proposal["kind"] == "roadmap_adjust_split" and "funding_source" not in proposal
 
 
 def test_save_jars_chi_gan_cho_buoc_adjust_split():
@@ -399,7 +419,7 @@ def test_optimization_error_stops_before_save():
 
 
 def test_save_invalid_uses_same_repair_budget():
-    tools = scripted_tools(saves=("error_invalid", "ok"))
+    tools = scripted_tools(checks=("ok", "ok"), saves=("error_invalid", "ok"))
     result, client, scope = build(
         tools, outline(review()), outline(review(title="Rà soát mục tiêu"))
     )
@@ -551,7 +571,7 @@ def test_turn_draft_failure_emits_degraded_notice(monkeypatch):
 
 def test_turn_caps_model_calls_after_two_repairs(monkeypatch):
     steps = outline(step(), review())
-    tools = scripted_tools(checks=("violation",) * 3)
+    tools = scripted_tools(checks=block_jar_funded)
     llm = make_llm(
         [
             route_response(intent="roadmap"),
@@ -567,3 +587,225 @@ def test_turn_caps_model_calls_after_two_repairs(monkeypatch):
     assert len(llm[1].calls) == settings.max_model_calls_per_turn
     assert not writer.calls
     assert len(tools.calls) <= settings.max_tool_calls_per_turn
+
+
+# --- chạy ổn định trên Runtime (23/11): thử lại phác thảo, luật source_jar_covers, log từng bước bị loại ----------------
+def roadmap_events(caplog, event):
+    found = []
+    for record in caplog.records:
+        if record.name != "yofina.agent.roadmap":
+            continue
+        payload = json.loads(record.getMessage())
+        if payload["event"] == event:
+            found.append(payload)
+    return found
+
+
+def test_draft_retries_once_when_kind_is_an_action_name():
+    # Runtime v17: "phases.0.steps.1.kind: Input should be 'set_aside', ..." với max_attempts=1 làm hỏng cả lượt.
+    tools = scripted_tools(checks=("ok", "ok"))
+    bad = outline(review(), step(kind="move_between_jars"))
+    result, client, scope = build(tools, bad, outline(review(), step()))
+    assert result.outcome.ok and scope.calls == 2
+    tool_result = client.calls[1]["messages"][-1]["content"][0]["toolResult"]
+    assert tool_result["status"] == "error"
+    assert "phases.0.steps.1.kind" in tool_result["content"][0]["text"]
+    system = json.dumps(client.calls[0]["system"], ensure_ascii=False)
+    assert "không bao giờ" in system and "là kind" in system
+    assert len(args_for(tools, "save_roadmap")) == 1
+
+
+def test_draft_retry_stays_within_turn_cap():
+    from yofina_core.llm import StructuredOutputError
+
+    tools = scripted_tools()
+    bad = outline(step(kind="move_between_jars"))
+    result, client, scope = build(tools, bad, outline(step()), scope=TurnScope(1))
+    assert isinstance(result.model_error, StructuredOutputError)
+    assert scope.calls == len(client.calls) == 1
+    assert not args_for(tools, "optimize_allocation")
+
+
+@pytest.mark.parametrize(("used_by_router", "repairs"), [(0, 2), (1, 1)])
+def test_retried_draft_leaves_repairs_inside_cap_of_four(used_by_router, repairs):
+    # Job sinh lại (không router): phác thảo 2 + sửa 2 = 4. Chat (router 1): phác thảo 2 + sửa 1 = 4.
+    from yofina_core.llm import CallRecord
+
+    settings = agent_settings()
+    assert settings.max_model_calls_per_turn == 4 and settings.roadmap_fix_max_rounds == 2
+    scope = TurnScope(settings.max_model_calls_per_turn)
+    for _ in range(used_by_router):
+        scope.begin_call("small")
+        scope.add(CallRecord("small", "router", 0, 0, 0, "ok"))
+    draft = outline(step(), review())
+    tools = scripted_tools(checks=block_jar_funded)
+    bad = outline(step(kind="move_between_jars"), review())
+    result, client, _ = build(tools, bad, *[draft] * 3, scope=scope)
+    assert result.outcome.ok
+    assert len(client.calls) == 2 + repairs
+    assert scope.calls == settings.max_model_calls_per_turn
+
+
+def suitability_from_engine(facts):
+    """check_suitability chạy đúng bộ luật thật (gồm source_jar_covers) trên dữ kiện cho trước."""
+
+    def result(args):
+        verdict = evaluate(Proposal.model_validate(args["proposal"]), facts, cached_rules())
+        payload = {
+            **fixture("check_suitability.ok.json"),
+            "data": verdict.model_dump(mode="json", exclude_none=True),
+        }
+        return classify_result("check_suitability", mcp_ok(payload))
+
+    return result
+
+
+def low_entertainment_balances(balance_vnd):
+    payload = fixture("get_jar_balances.ok_goals.json")
+    for jar in payload["data"]["jars"]:
+        if jar["code"] == "giai_tri":
+            jar["balance_vnd"] = balance_vnd
+    facts = facts_from_rows(
+        today=date.fromisoformat(payload["app_date"]),
+        user={"monthly_salary_vnd": 12_000_000, "payday_day": 1, "risk_tolerance": "low"},
+        jars=payload["data"]["jars"],
+        obligations=[],
+        window_days=30,
+    )
+    return classify_result("get_jar_balances", mcp_ok(payload)), facts
+
+
+def test_future_step_over_source_balance_is_repaired_like_save_would_require(caplog):
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    balances, facts = low_entertainment_balances(200_000)
+    tools = scripted_tools(get_jar_balances=balances, checks=suitability_from_engine(facts))
+    future = {"phase_id": "tich_luy", "title": "Tích lũy dự phòng", "steps": [step()]}
+    draft = outline(review())
+    draft["phases"].append(future)
+    fixed = outline(review())
+    fixed["phases"].append(
+        {
+            **future,
+            "steps": [
+                step(kind="adjust_split", jar_code="du_phong", to_jar_code=None, action=None)
+            ],
+        }
+    )
+    result, client, scope = build(tools, draft, fixed)
+    assert result.outcome.ok and scope.calls == 2
+
+    # Bước tương lai lấy khoản hằng tháng (600.000 ₫) từ hũ Giải trí đang có 200.000 ₫: agent kiểm bằng ĐÚNG đề xuất mà
+    # save_roadmap dựng lại, nên thấy vi phạm source_jar_covers trước khi lưu.
+    first_round = args_for(tools, "check_suitability")[:2]
+    move = next(a["proposal"] for a in first_round if a["proposal"]["kind"] == "roadmap_set_aside")
+    assert move["funding_source"] == "jar" and move["jar_code"] == "giai_tri"
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert feedback["step_id"] == "bu_du_phong" and feedback["rule_id"] == "source_jar_covers"
+    assert "mọi giai đoạn" in feedback["message"] and "adjust_split" in feedback["message"]
+
+    # Lý do giữ đối chiếu ở giai đoạn sau: ledger kiểm lại mọi bước bằng proposal_for_step lúc lưu, bất kể ngày giai đoạn.
+    rules = cached_rules()
+    data = fixture("optimize_allocation.ok.json")["data"]
+    line = next(item for item in data["lines"] if item["jar"]["code"] == "du_phong")
+    monthly = line["proposed_monthly_vnd"] - line["current_monthly_vnd"]
+    original = {
+        "step_id": "bu_du_phong", "kind": "set_aside", "title": "t", "reason": "r",
+        "jar_code": "giai_tri", "to_jar_code": "du_phong", "amount_vnd": monthly,
+    }  # fmt: skip
+    violations, _ = check_steps([{"phase_id": "tich_luy", "steps": [original]}], facts, rules)
+    assert [rule for _, rule, _ in violations] == ["source_jar_covers"]
+
+    (stored,) = args_for(tools, "save_roadmap")
+    assert [phase["phase_id"] for phase in stored["phases"]] == ["on_dinh", "tich_luy"]
+    assert stored["phases"][1]["start_date"] > fixture("get_jar_balances.ok_goals.json")["app_date"]
+    assert check_steps(stored["phases"], facts, rules)[0] == []
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected == {
+        "event": "roadmap_step_rejected",
+        "round": 0,
+        "phase_id": "tich_luy",
+        "step_id": "bu_du_phong",
+        "kind": "set_aside",
+        "action": "move_between_jars",
+        "reason": "suitability",
+        "rule_id": "source_jar_covers",
+        "funding_source": "jar",
+    }
+
+
+@pytest.mark.parametrize(
+    "draft_step",
+    [
+        step(),
+        step(action=None),
+        step(kind="pay_obligation", jar_code="nghia_vu", to_jar_code=None, action=None,
+             amount_ref={"jar_code": "nghia_vu", "field": "floor_vnd"}),
+        step(kind="pay_obligation", jar_code="an_uong", to_jar_code="nghia_vu", action=None,
+             amount_ref={"jar_code": "nghia_vu", "field": "floor_vnd"}),
+        step(kind="cut_spending", jar_code="giai_tri", to_jar_code="du_phong",
+             amount_ref={"jar_code": "giai_tri", "field": "proposed_decrease"}),
+        review(),
+        review(action="schedule_nudge"),
+    ],
+)  # fmt: skip
+def test_agent_proposal_matches_ledger_save_check(draft_step):
+    # Trước đây bước pay_obligation một hũ bị agent gắn funding_source jar (ledger thì không) nên bị source_jar_covers chặn
+    # oan; bước set_aside không action thì agent không gắn nguồn (ledger có) nên lỗi chỉ lộ ra lúc lưu.
+    tools = scripted_tools()
+    result, _, _ = build(tools, {"phases": [{"phase_id": "p", "title": "Ổn định", "steps": [draft_step]}]})
+    assert result.outcome.ok
+    (stored,) = args_for(tools, "save_roadmap")
+    (saved_step,) = stored["phases"][0]["steps"]
+    (checked,) = [args["proposal"] for args in args_for(tools, "check_suitability")]
+    assert checked == proposal_for_step(saved_step).model_dump(exclude_none=True)
+
+
+def test_ordinal_prefix_in_titles_is_not_a_grounding_failure():
+    tools = scripted_tools()
+    draft = {
+        "phases": [
+            {"phase_id": "on_dinh", "title": "Giai đoạn 1: Ổn định", "steps": [step(title="Bước 1. Bù hũ dự phòng")]}
+        ]
+    }
+    result, _, scope = build(tools, draft)
+    assert result.outcome.ok and scope.calls == 1
+    (stored,) = args_for(tools, "save_roadmap")
+    assert stored["phases"][0]["title"] == "Ổn định"
+    assert stored["phases"][0]["steps"][0]["title"] == "Bù hũ dự phòng"
+
+
+def test_grounding_feedback_names_the_numbers_and_logs_without_text(caplog):
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    tools = scripted_tools()
+    bad = outline(step(reason="Quỹ dự phòng nên đủ 3 đến 6 tháng chi tiêu"))
+    result, client, _ = build(tools, bad, outline(step()))
+    assert result.outcome.ok
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert feedback["rule_id"] == "numeric_grounding" and "3, 6" in feedback["message"]
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected["reason"] == "grounding" and rejected["field"] == "reason"
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "Quỹ dự phòng" not in logged and "tháng" not in logged
+
+
+def test_whole_roadmap_rejected_logs_rules_without_amounts(caplog):
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    tools = scripted_tools(checks=("violation",) * 3)
+    draft = outline(step())
+    result, _, _ = build(tools, draft, draft, draft)
+    assert result.outcome is None and not args_for(tools, "save_roadmap")
+    rule = fixture("check_suitability.violation.json")["data"]["violations"][0]["rule_id"]
+    rejected = roadmap_events(caplog, "roadmap_step_rejected")
+    assert [(item["round"], item["rule_id"]) for item in rejected] == [(0, rule), (1, rule), (2, rule)]
+    (invalid,) = roadmap_events(caplog, "roadmap_invalid")
+    assert invalid == {
+        "event": "roadmap_invalid",
+        "stage": "verify",
+        "reason_code": "initial",
+        "rounds": 2,
+        "rejected": 1,
+        "rules": {rule: 1},
+    }
+    amount = args_for(tools, "check_suitability")[0]["proposal"]["amount_vnd"]
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert str(amount) not in logged and "Bù hũ dự phòng" not in logged
