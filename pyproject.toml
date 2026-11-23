@@ -49,6 +49,7 @@ pythonpath = [
     "gateway/tools/audit",
     "data",
     "pipelines/forecast",
+    "pipelines/roadmap",
 ]
 markers = ["integration: gọi môi trường AWS đã deploy (chạy: pytest tests/integration -m integration)"]
 

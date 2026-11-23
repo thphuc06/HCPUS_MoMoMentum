@@ -7,7 +7,9 @@ import base64
 import json
 from contextlib import contextmanager
 from importlib import import_module
+from importlib.util import module_from_spec, spec_from_file_location
 from io import BytesIO
+from pathlib import Path
 from uuid import uuid4
 
 import boto3
@@ -19,6 +21,18 @@ from yofina_agent.tools import ToolKind
 from yofina_core.config import Config
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import LlmGateway, LlmSettings, ModelSpec
+
+# handler.py của Lambda regen trùng tên với handler.py của ledger (cùng nằm trong pythonpath),
+# nên nạp theo đường dẫn file với tên module riêng.
+_HANDLER_PATH = Path(__file__).resolve().parents[3] / "pipelines" / "roadmap" / "handler.py"
+
+
+def _load_handler():
+    spec = spec_from_file_location("yofina_roadmap_handler", _HANDLER_PATH)
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 SETTINGS = {
     "YOFINA_ROADMAP_LEDGER_FUNCTION_NAME": "ledger-test",
@@ -211,7 +225,7 @@ def pipeline(monkeypatch, contracts_dir):
         pytest.fail("Unit test vừa thử tạo AWS client thật")
 
     monkeypatch.setattr(boto3, "client", forbid_aws)
-    handler = import_module("handler")
+    handler = _load_handler()
     settings_type = import_module("yofina_roadmap.settings").RoadmapSettings
     repo_type = import_module("yofina_roadmap.repo").RoadmapRepo
     runner_type = import_module("yofina_roadmap.runner").RoadmapRunner
