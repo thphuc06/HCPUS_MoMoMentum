@@ -526,7 +526,13 @@ def bedrock_json_schema(model: type[BaseModel]) -> dict[str, Any]:
                 if "description" in node:
                     merged.setdefault("description", node["description"])
                 return merged
-        out = {k: walk(v) for k, v in node.items() if k not in {"title", "default"}}
+        # `title`/`default` là khóa mô tả pydantic thêm vào, bỏ đi; nhưng trong `properties` thì khóa là TÊN FIELD (vd. field
+        # `title` của dàn ý lộ trình) nên phải giữ nguyên.
+        out = {
+            k: ({name: walk(sub) for name, sub in v.items()} if k == "properties" else walk(v))
+            for k, v in node.items()
+            if k not in {"title", "default"}
+        }
         if out.get("type") == "object" and "properties" in out:
             out["required"] = list(out["properties"])
             out["additionalProperties"] = False

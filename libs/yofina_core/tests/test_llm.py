@@ -443,6 +443,27 @@ def test_schema_phang_khong_con_ref_va_moi_truong_la_required():
     assert schema["properties"]["kind"]["description"] == "mô tả"
 
 
+def test_schema_giu_field_ten_title_va_default():
+    """Field tên `title`/`default` là dữ liệu (vd. dàn ý lộ trình), không phải khóa mô tả của pydantic: phải còn trong schema,
+    nếu không model không gửi được field bắt buộc và mọi lần gọi đều hỏng xác thực."""
+
+    class Step(BaseModel):
+        title: str
+        default: int | None = None
+
+    class Phase(BaseModel):
+        title: str = Field(min_length=1)
+        steps: list[Step]
+
+    schema = bedrock_json_schema(Phase)
+    assert schema["required"] == ["title", "steps"]
+    assert schema["properties"]["title"] == {"minLength": 1, "type": "string"}
+    step = schema["properties"]["steps"]["items"]
+    assert step["required"] == ["title", "default"]
+    assert step["properties"]["default"]["type"] == ["integer", "null"]
+    assert "title" not in step and "title" not in schema  # khóa mô tả của model vẫn bị bỏ
+
+
 # --- nguồn SSM gộp ---------------------------------------------------------------------------
 class FakeSsmBulk:
     def __init__(self, params: dict[str, str], fail: bool = False) -> None:
