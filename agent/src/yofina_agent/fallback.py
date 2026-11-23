@@ -5,6 +5,10 @@ Mục đích duy nhất: vẫn nhận ra mấy ý định mà agent có tool t�
 thẻ số liệu thật từ tool thay vì luồng rỗng. Không phải nhánh riêng cho câu nào: luật chỉ dựa trên
 từ khóa chung về số dư / giao dịch / dự báo (cạn, trụ được, bao lâu) / chuyển tiền, và tên hũ vẫn được ánh xạ bằng dữ liệu tool.
 Câu không khớp luật nào trả `None`: agent hiện thông báo "chưa xử lý được" chứ không đoán.
+
+What-if và kiểm tra trước khi chi còn cần hũ nguồn và cách trả để dựng kịch bản bằng mã (`whatif.deterministic_spec`) và để thẻ
+kiểm tra có "hũ trả": luật tách cụm tên hũ sau "hũ" hoặc "từ/trong" (chỉ là chữ người dùng gõ; ánh xạ ra mã hũ vẫn bằng dữ liệu tool),
+nhận "Trả sau"/BNPL, và tên món sau "mua"/"cho". Thiếu dữ kiện thì để trống cho luồng chính hỏi lại, không đoán.
 """
 
 from __future__ import annotations
@@ -27,11 +31,81 @@ _FORECAST = (
     "du den ky luong",
 )
 _FORECAST_WHEN = re.compile(r"\b(?:khi nao|bao gio)\b.*\b(?:can|het)\b")  # "khi nào hũ X cạn"
-_WHAT_IF = re.compile(r"\b(?:neu|gia su)\b.*\b(?:thi sao|thi the nao|se ra sao)\b|\bthi sao\b|\bgia su\b")
+_WHAT_IF = re.compile(
+    r"\b(?:neu|gia su)\b.*\b(?:thi sao|thi the nao|se ra sao)\b|\bthi sao\b|\bgia su\b"
+)
 _AFFORD = ("co on khong", "du tien", "kiem tra", "tra duoc khong", "co nen chi", "quet")
 _CREDIT = ("tra sau", "bnpl", "mua truoc tra sau")
 _MOVE_VERB = ("chuyen", "dieu chuyen", "rut tu", "doi tien")
 _AMOUNT_TOKEN = re.compile(r"\d[\d.,]*\s*(?:k|nghin|ngan|trieu|tr|ty|ti|d|dong|vnd)?\b")
+_INVEST = (  # ngoài phạm vi sản phẩm: không dựng kịch bản hay thẻ kiểm tra cho khoản đầu tư
+    "co phieu",
+    "chung khoan",
+    "crypto",
+    "bitcoin",
+    "tien ma hoa",
+    "tien so",
+    "forex",
+    "quy dau tu",
+    "chung chi quy",
+)
+#: Từ kết thúc một cụm tên hũ hoặc tên món (lời nối, từ hỏi, từ chỉ thời gian, đại từ, chỗ trả tiền khác hũ)
+_PHRASE_STOP = frozenset(
+    {
+        "cho",
+        "de",
+        "thi",
+        "sao",
+        "co",
+        "nhe",
+        "nha",
+        "duoc",
+        "khong",
+        "ko",
+        "gium",
+        "giup",
+        "vao",
+        "sang",
+        "den",
+        "qua",
+        "voi",
+        "roi",
+        "la",
+        "ma",
+        "nua",
+        "bang",
+        "mua",
+        "tra",
+        "va",
+        "hay",
+        "hoac",
+        "neu",
+        "se",
+        "thoi",
+        "luon",
+        "tu",
+        "trong",
+        "hu",
+        "thang",
+        "tuan",
+        "ngay",
+        "mai",
+        "nay",
+        "sau",
+        "truoc",
+        "hom",
+        "luc",
+        "khi",
+        "gio",
+        "cua",
+        "minh",
+        "toi",
+        "em",
+    }
+)
+_JAR_AFTER_HU = re.compile(r"\bhu\s+(?P<rest>.+)$")
+_JAR_AFTER_FROM = re.compile(r"\b(?:tu|trong)\s+(?P<rest>.+)$")
+_PUNCT = ",.;:!?\"'()"
 _FROM_TO = re.compile(r"\b(?:tu|rut tu)\s+(?P<src>.+?)\s+(?:sang|vao|den|qua)\s+(?P<dst>.+)$")
 _TO_FROM = re.compile(r"\b(?:sang|vao|den|qua)\s+(?P<dst>.+?)\s+tu\s+(?P<src>.+)$")
 
@@ -42,6 +116,61 @@ def _has(norm: str, words: tuple[str, ...]) -> bool:
 
 def _clean_jar(fragment: str) -> str | None:
     return _AMOUNT_TOKEN.sub(" ", fragment).strip() or None
+
+
+def _take_words(words: list[str], limit: int) -> list[str]:
+    """Các từ đầu của `words` cho tới từ kết thúc cụm, số, hoặc đủ `limit` từ."""
+    out: list[str] = []
+    for w in words:
+        if w in _PHRASE_STOP or w[:1].isdigit():
+            break
+        out.append(w)
+        if len(out) == limit:
+            break
+    return out
+
+
+def _jar_phrase(norm: str) -> str | None:
+    """Chữ người dùng gõ chỉ hũ trả tiền ("hũ Giải trí", "từ Hóa đơn"), đã bỏ dấu; None nếu không có. Chưa ánh xạ ra mã hũ."""
+    for pattern in (_JAR_AFTER_HU, _JAR_AFTER_FROM):
+        for m in pattern.finditer(norm):
+            if words := _take_words(m["rest"].split(), 4):
+                return " ".join(words)
+    return None
+
+
+def _label_after(text: str, markers: tuple[str, ...]) -> str | None:
+    """Tên món hoặc người nhận (giữ nguyên chữ gõ) ngay sau từ đánh dấu ("mua tai nghe 500k" -> "tai nghe"); None nếu không có."""
+    tokens = text.split()
+    norms = [normalize(t) for t in tokens]
+    for i, n in enumerate(norms):
+        if n not in markers:
+            continue
+        words: list[str] = []
+        for tok, nn in zip(tokens[i + 1 :], norms[i + 1 :], strict=True):
+            if not nn:
+                continue
+            if nn in _PHRASE_STOP or nn[0].isdigit():
+                break
+            words.append(tok.strip(_PUNCT))
+            if len(words) == 5:
+                break
+        if words:
+            return " ".join(words)[:80]
+    return None
+
+
+def _spend_params(
+    text: str, norm: str, amount: int | None, credit: bool, markers: tuple[str, ...]
+) -> dict[str, object]:
+    """Tham số chung của what-if mua hàng và kiểm tra trước khi chi: số tiền, cách trả, hũ trả, tên món."""
+    jar = _jar_phrase(norm)  # Trả sau vẫn có thể kèm hũ tính chi tiêu
+    return {
+        "amount_vnd": amount,
+        "funding": "credit" if credit else ("jar" if jar else None),
+        "jar_text": jar,
+        "label": _label_after(text, markers),
+    }
 
 
 def _result(intent: str, **params: object) -> IntentResult:
@@ -60,7 +189,22 @@ def classify_by_rules(text: str) -> IntentResult | None:
         return None
     amount = parse_amount_vnd(text)
     credit = _has(norm, _CREDIT)
-    if _has(norm, _MOVE_VERB):
+    invest = _has(norm, _INVEST)
+    moves = _has(norm, _MOVE_VERB)
+    if _WHAT_IF.search(norm) and not invest:
+        if moves and amount is not None and (m := _FROM_TO.search(norm) or _TO_FROM.search(norm)):
+            src, dst = (" ".join(_take_words(m[k].split(), 4)) or None for k in ("src", "dst"))
+            return _result(
+                "what_if",
+                scenario_kind="jar_transfer",
+                amount_vnd=amount,
+                from_jar_text=src,
+                to_jar_text=dst,
+            )
+        p = _spend_params(text, norm, amount, credit, ("mua",))
+        kind = "bnpl_purchase" if credit else ("one_time_purchase" if p["jar_text"] else None)
+        return _result("what_if", scenario_kind=kind, **p)
+    if moves:
         m = _FROM_TO.search(norm) or _TO_FROM.search(norm)
         if m:
             return _result(
@@ -69,18 +213,17 @@ def classify_by_rules(text: str) -> IntentResult | None:
                 to_jar_text=_clean_jar(m["dst"]),
                 amount_vnd=amount,
             )
-        if amount is not None:  # "chuyển 250k cho bạn": không phải chuyển giữa hũ, là kiểm tra trước khi chi
-            return _result("affordability", amount_vnd=amount, funding="credit" if credit else None)
+        if invest:
+            return None  # chuyển tiền để đầu tư: ngoài phạm vi, không đoán
+        if (
+            amount is not None
+        ):  # "chuyển 250k cho bạn": không phải chuyển giữa hũ, là kiểm tra trước khi chi
+            return _result(
+                "affordability", **_spend_params(text, norm, amount, credit, ("mua", "cho"))
+            )
         return _result("move")
-    if _WHAT_IF.search(norm):
-        return _result(
-            "what_if",
-            amount_vnd=amount,
-            funding="credit" if credit else None,
-            scenario_kind="bnpl_purchase" if credit else None,
-        )
-    if _has(norm, _AFFORD) and amount is not None:
-        return _result("affordability", amount_vnd=amount, funding="credit" if credit else None)
+    if _has(norm, _AFFORD) and amount is not None and not invest:
+        return _result("affordability", **_spend_params(text, norm, amount, credit, ("mua", "cho")))
     if _has(norm, _FORECAST) or _FORECAST_WHEN.search(norm):
         return _result("lookup", lookup_kind="forecast")
     if _has(norm, _TRANSACTIONS):

@@ -117,6 +117,8 @@ Thay đổi trên tài nguyên có sẵn: code Lambda `yofina-ledger` (thêm `yo
 
 **Deploy 23/11 sáng** (`scripts/agent_deploy.py`, ba lần, chỉ `YofinaAgent`): IAM `ApplyGuardrail` cho hồ sơ guardrail ở 6 vùng đích; cấu hình guardrail mới (MISCONDUCT LOW, version mới); mã router và schema sửa. Runtime `yofina_agent` version 9. Không thêm tài nguyên tính tiền theo giờ.
 
+**Deploy 23/11 chiều (đóng phase 3)**: `YofinaData` min ACU tạm lên 0,5 để đo rồi trả về 0 (auto-pause 600 s, đã kiểm `describe-db-clusters`); Runtime `yofina_agent` version 13 (sửa ca Trả sau, luật dự phòng khi model hỏng); Amplify job 9 (thu nhỏ ảnh trước khi tải). SSM `/yofina/llm/*` đã được test ép lỗi khôi phục. Không thêm tài nguyên tính tiền theo giờ.
+
 **Deploy 23/11 trưa**: migration `0051_scenario_conversation` (cột `scenarios.conversation_id`, `scenarios.bundle`, hàm `app_list_conversation_scenarios`); zip `yofina-forecast` + `YofinaTools`; `YofinaAgent` (tool `forecast___list_scenarios` trên target `forecast` + Cedar `forecast_list_scenarios_own_user`; `run_scenario` thêm `conversation_id`, `with_scenarios`); Runtime `yofina_agent` version 12; Amplify job 8. Không thêm tài nguyên tính tiền theo giờ.
 
 ### Stack `YofinaIngest` (phase 5, F6 nạp dữ liệu từ ảnh và CSV) — đã deploy 23/11

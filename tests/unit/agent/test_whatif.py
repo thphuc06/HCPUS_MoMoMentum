@@ -30,6 +30,7 @@ from agent_helpers import (
     types,
 )
 from yofina_agent.tools import ToolKind, ToolOutcome, classify_result
+from yofina_agent.whatif import adds_scenario_obligation
 
 WHAT_IF_Q = "Nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao"
 ROUTE_WHAT_IF = {
@@ -176,6 +177,49 @@ def test_phuong_an_vi_pham_luat_khong_duoc_phat(monkeypatch):
     events, _, _ = run_turn(WHAT_IF_Q, llm=llm, tools=tools, monkeypatch=monkeypatch)
     assert "options" not in block_types(events)
     assert blocks_of(events)[-1]["data"]["degraded_reason"] == "verifier_failed"
+
+
+def _option(option_id: str, kind: str, funding: str, **extra: Any) -> dict[str, Any]:
+    proposal = {"kind": kind, "funding_source": funding, "is_essential": False, "category": "spending", "risk_level": "low", "origin": "recommendation"}
+    return {"option_id": option_id, "kind": kind, "label": f"Phương án {option_id}", "summary": "Giữ hũ Nghĩa vụ không hụt.", "proposal": proposal, **extra}
+
+
+def test_scenario_id_chi_gan_cho_phuong_an_mang_nghia_vu_cua_kich_ban(monkeypatch):
+    """Nguyên nhân verifier_failed của ca Trả sau: engine cộng nghĩa vụ của kịch bản vào MỌI đề xuất có scenario_id, nên phương án
+    bỏ qua, hoãn, chuyển bù hũ bị luật obligation_to_income chặn oan. Chỉ phương án dùng tín dụng mới được gắn scenario_id."""
+    a = analysis()
+    a["options"] = [
+        _option("skip", "skip", "jar", recommended=True),
+        _option("defer", "defer", "jar"),
+        _option("cover", "move_between_jars", "jar"),
+    ]
+    llm = what_if_llm(tool_response("analyze", a))
+    _, tools, _ = run_turn(WHAT_IF_Q, llm=llm, monkeypatch=monkeypatch)
+    suit_args = [a for n, a in tools.calls if n == "check_suitability"]
+    assert len(suit_args) == 3 and all("scenario_id" not in x for x in suit_args)
+
+
+def test_phuong_an_dung_tin_dung_van_duoc_kiem_voi_nghia_vu_that_cua_kich_ban(monkeypatch):
+    a = analysis()
+    a["options"] = [
+        _option("skip", "skip", "jar", recommended=True),
+        _option("credit", "use_credit", "credit"),
+        _option("proceed", "proceed", "jar"),
+    ]
+    llm = what_if_llm(tool_response("analyze", a))
+    _, tools, _ = run_turn(WHAT_IF_Q, llm=llm, monkeypatch=monkeypatch)
+    by_kind = {x["proposal"]["kind"]: x for n, x in tools.calls if n == "check_suitability"}
+    assert "scenario_id" not in by_kind["skip"]
+    assert by_kind["use_credit"]["scenario_id"] and by_kind["proceed"]["scenario_id"]
+    # nhãn defer nhưng nguồn tín dụng: không né được kiểm nghĩa vụ
+    assert adds_scenario_obligation(types_option("defer", "credit")) is True
+    assert adds_scenario_obligation(types_option("defer", "jar")) is False
+
+
+def types_option(kind: str, funding: str) -> Any:
+    from yofina_agent.schemas import AnalysisOption
+
+    return AnalysisOption.model_validate(_option("x", kind, funding))
 
 
 def test_so_tien_trong_tham_so_hanh_dong_cung_phai_co_can_cu(monkeypatch):

@@ -329,9 +329,10 @@ Mỗi phương án: option_id (chữ thường, số, gạch dưới), kind (def
 label (tối đa 60 ký tự), summary (tối đa 140 ký tự, nêu hệ quả, chỉ dùng số có trong dữ liệu), proposal (xem dưới), action (xem dưới) và jar_code nếu liên quan một hũ. \
 Phương án tốt nhất đặt recommended=true (tối đa một).
 - proposal dùng để kiểm luật: kind (giống kind của phương án), amount_vnd (số tiền khoản chi, lấy từ scenario.amount_vnd; bỏ trống nếu phương án không chi tiền), \
-funding_source (jar hoặc credit), jar_code (hũ trả), is_essential (true chỉ khi là khoản thiết yếu như tiền trọ, điện nước, thuốc; \
+funding_source (nguồn tiền của CHÍNH phương án này: jar hoặc credit), jar_code (hũ trả), is_essential (true chỉ khi là khoản thiết yếu như tiền trọ, điện nước, thuốc; \
 đồ điện tử, giải trí là false trừ khi người dùng nói rõ là cần thiết), category (spending, saving, investment hoặc debt_payment), risk_level (low với chi tiêu thường), \
 origin luôn là "recommendation".
+- funding_source theo từng phương án, không chép từ kịch bản: phương án không mua bằng tín dụng (skip, defer, remind_later, move_between_jars, switch_jar, pay_now, reduce_amount) đặt funding_source="jar". Không đề xuất phương án vẫn mua bằng Trả sau (use_credit, proceed) cho khoản chi tùy ý vì luật không cho khuyên vay để tiêu và sẽ bị loại.
 - action: chỉ khi phương án là việc ghi mà người dùng sẽ xác nhận, còn lại để null. Hai loại duy nhất:
   * move_between_jars: params {from_jar, to_jar, amount_vnd}. Mã hũ lấy từ <danh_sach_hu>; amount_vnd phải là số CÓ trong dữ liệu (ví dụ phần hụt shortfall_vnd hoặc một số dư).
   * schedule_nudge: params {op: "create", kind (purchase_review, runout_warning, obligation_due, salary_pending, review_needed hoặc low_data), \
@@ -571,10 +572,26 @@ async def _call_analyst(
     return a.model_copy(update={"options": options})
 
 
+#: loại phương án chính là việc vay (thực hiện khoản Trả sau của kịch bản): chỉ phương án này mang nghĩa vụ mới của kịch bản
+CREDIT_OPTION_KINDS = frozenset({"use_credit", "proceed"})
+
+
+def adds_scenario_obligation(o: Any) -> bool:
+    """Phương án có làm phát sinh khoản nghĩa vụ của kịch bản không (dùng tín dụng, hoặc vẫn mua đúng khoản đó).
+
+    `check_suitability` có `scenario_id` thì lấy nghĩa vụ phát sinh CỦA KỊCH BẢN làm số thêm vào tỷ lệ nghĩa vụ trên thu nhập cho MỌI đề xuất
+    đi kèm. Phương án không mua (bỏ qua, hoãn, nhắc lại, chuyển bù hũ) không thêm nghĩa vụ nào, nên không được gắn `scenario_id`, nếu không
+    chúng bị luật `obligation_to_income` chặn oan (nguyên nhân verifier_failed của ca Trả sau). Phương án dùng tín dụng vẫn bị kiểm bằng
+    số thật của kịch bản, và `no_borrow_to_spend` vẫn chặn theo `funding_source`.
+    """
+    p = o.proposal
+    return p.funding_source == "credit" or p.kind in CREDIT_OPTION_KINDS
+
+
 async def _check_suitability(turn: Turn, analysis: Analysis, scenario_id: str | None) -> list[tuple[Any, SuitabilityVerdict | None]]:
     async def one(o: Any) -> tuple[Any, SuitabilityVerdict | None]:
         args: dict[str, Any] = {"proposal": o.proposal.model_dump(exclude_none=True)}
-        if scenario_id:
+        if scenario_id and adds_scenario_obligation(o):
             args["scenario_id"] = scenario_id
         res = await turn.call_tool_retry("check_suitability", args, target="planner")
         if not res.outcome.ok:

@@ -97,6 +97,33 @@ Sở hữu: `frontend/`.
 
 ## Kết quả thực hiện
 
+### Đóng phase ngày 2026-11-23 (Runtime `yofina_agent` version 13)
+
+Chủ dự án quyết định đóng phase 3, để lại một việc kiểm sau: đi cảnh 2 trên trình duyệt (agent không được tự đăng nhập Cognito; chủ dự án làm việc từ xa nên chưa đăng nhập hộ được). Mọi số dưới đây chạy trên môi trường thật.
+
+| # | Tiêu chí | Kết quả 23/11 | Bằng chứng |
+|---|---|---|---|
+| 1 | What-if tai nghe 1,2 triệu Trả sau | **Đạt** (số theo engine, lệch câu chữ 1.233.000 ₫ như ghi dưới) | Golden `whatif-bnpl` đạt: `forecast_timeline`, `obligation_impact`, `options`. Nguyên nhân đỏ cũ: `check_suitability` nhận `scenario_id` thì cộng nghĩa vụ Trả sau của kịch bản vào MỌI phương án (cả "hoãn", "bỏ"), tỷ lệ nghĩa vụ/thu nhập lên 60% nên bị chặn; agent nay chỉ gắn `scenario_id` cho phương án dùng tín dụng (`whatif.adds_scenario_obligation`). Chạy cục bộ với Bedrock thật 10/10 đạt ngay vòng 1 |
+| 2 | Chuyển hũ → xác nhận → Hoàn tác | **Chưa kiểm trên UI** (kiểm sau) | `test_agent_runtime.py::test_chuyen_hu_hien_confirm_roi_xac_nhan_bang_rest` (Runtime + REST thật) và unit UI `phase3Chat.test.tsx`; bấm thật trên trình duyệt chưa làm |
+| 3 | Chuyển 250.000 ₫ ba hũ | **Đạt có điều kiện** (lệch câu chữ như ghi dưới) | Golden `afford-3`, `afford-4` đạt |
+| 4 | "Vì sao" có `trace_id`; trace người khác bị từ chối | **Đạt** (phía server) | `test_record_turn_qua_gateway_roi_get_traces_200_feedback_200_nguoi_khac_404` trong integration; mở bảng trên UI thuộc việc kiểm trình duyệt |
+| 5 | Từ chối "nên mua cổ phiếu nào" | **Đạt** | Golden 2/2, đối kháng 16/16; Guardrail nay chạy thật (trước 23/11 luôn AccessDenied) |
+| 6 | Thiếu số tiền: hỏi lại rồi chạy tiếp | **Đạt** | Golden `clarify` 6/6; `multiturn-fragment` (trả lời câu cụt rồi chạy tiếp) đạt; test nhiều lượt `test_whatif_bundle_live.py` |
+| 7 | Quỹ đạo golden ≥ 85%, grounding 100%, đối kháng 0 vi phạm | **Đạt** | Golden **30/30 (100%)**, NumericGrounding/Schema/Suitability 100%; đối kháng 16/16 |
+| 8 | Ép lỗi model vẫn có thẻ số liệu | **Đạt** | `tests/integration/test_degraded_live.py` 6/6 (trần model = 0 và model id sai, qua SSM, khôi phục trong `finally`): what-if từ hũ, what-if Trả sau ra `forecast_timeline`; kiểm tra trước khi chi ra `affordability_card`; notice suy giảm, không chữ của model. Luật dự phòng mới ở `fallback.py` |
+| 9 | Số đo | **Đạt phần mục tiêu, Guardrail vượt ngưỡng** | `scripts/measure_phase3.py` (từ máy qua Internet, 10 lượt mỗi loại, Aurora 0,5 ACU lúc đo rồi trả về 0): `POST /affordability` p50 191 / p95 282 ms (< 2 s); what-if `model_calls` = 3 cả 10 lượt (≤ 4); what-if khối đầu p50 6,9 s / p95 18,2 s, tổng p50 16,7 s / p95 28,2 s (server p50 13,8 s; `analyst` chiếm khoảng 8,4 s); kiểm tra qua chat tổng p50 6,3 s. `ApplyGuardrail` p50 446 / p95 531 ms trong lượt, **vượt ngưỡng 400 ms**; đầu vào chạy song song với router nên không cộng vào lượt, đầu ra cộng khoảng 0,4 s |
+| 10 | Sáu loại kịch bản đều có ca golden đạt | **Đạt** | what_if 9/9 gồm `one_time`, `bnpl` (`whatif-bnpl`, `whatif-bnpl2` đổi 15 triệu → 3 triệu vì hạn mức còn 4.033.000 ₫; ca vượt hạn mức tách thành `whatif-bnpl-over-limit`), `income_change`, `recurring`, `transfer`, `goal` |
+
+**Kiểm sau (ghi nợ khi đóng phase):**
+- Đi cảnh 2 trên trình duyệt 390x844, so frame Figma; bấm Hoàn tác thật (tiêu chí 2); mở "Vì sao" trên UI; tự gõ ba câu ngoài golden và đối chiếu số với trace.
+- `ApplyGuardrail` 446 ms vượt ngưỡng 400 ms: cân nhắc bỏ lọc đầu ra cho phần chữ đã qua NumericGrounding, hoặc chấp nhận và ghi vào open-questions.
+- Gốc của lỗi suitability nằm ở Lambda (`gateway/tools/ledger/yofina_ledger/phase3.py` cộng `added` cho mọi đề xuất có `scenario_id`); agent đã tránh, nên sửa luôn phía Lambda cho chắc.
+- What-if khối đầu p95 18 s ở một lượt có khoảng 5 s không thuộc bước nào (nghi chờ rate limiter), chưa xác nhận.
+
+Test cục bộ lúc đóng: pytest 2116 passed; vitest 558 passed. Integration cả bộ trên AWS **169/169**.
+
+### Lịch sử: đóng có điều kiện ngày 2026-11-22
+
 **Đóng có điều kiện ngày 2026-11-22 (đêm).** Mã của ba luồng A (engine), B (harness), C (frontend) xong và nằm trên `main` local (chưa push). Deploy một phần: `YofinaAgent`, `YofinaTools` và Amplify đã deploy ở `508e974`; Runtime `yofina_agent` đang chạy version 4. Hai bản sửa sau đó (F1 ở `8102089`, F3 ở `37e4c77`) **chưa deploy**. Chủ dự án quyết định tạm bỏ qua evals bổ sung và deploy lại, nên phase ghi nhận trạng thái hiện tại; phần chưa kiểm ghi rõ ở dưới.
 
 Test cùng ngày (chạy cục bộ, không gọi AWS): `uv run pytest` 1665 passed (libs và `tests/unit`, sau F1 và F3); vitest 486 passed (lúc ghép); `npx tsc --noEmit` trong `infra-cdk` không lỗi. Integration trên môi trường thật ở `508e974`: 146 đạt, 3 lỗi do test cũ, sửa rồi chạy lại ba ca: 10 đạt. Chưa chạy lại cả bộ sau F1 và F3.

@@ -92,7 +92,8 @@ Các điểm này được thử trong [phase 1](../plan/phases/phase-1-nen-va-l
 
 ### Cần chủ dự án chốt (phát sinh ở phase 3, 22/11)
 
-- [ ] **Guardrail fail-open** (F5): `guardrail_fail_open: true` trong `agent/src/yofina_agent/defaults.json`; Guardrail lỗi hoặc quá 3 giây thì lượt đi tiếp không lọc đầu vào, chỉ còn router và Verifier chặn. Giữ fail-open (ưu tiên demo không gãy) hay đổi sang fail-closed (chặn khi không lọc được)?
+- [ ] **Độ trễ Guardrail** (đo 23/11, `scripts/measure_phase3.py`): `ApplyGuardrail` p50 446 ms, p95 531 ms trong lượt, vượt ngưỡng 400 ms của kế hoạch phase 3. Đầu vào chạy song song với router nên không cộng vào lượt; đầu ra chạy tuần tự trước khi phát chữ (khoảng 0,4 s). Chấp nhận, hay bỏ lọc đầu ra cho phần chữ đã qua NumericGrounding và luật suitability?
+- [ ] **Guardrail fail-open** (F5): lưu ý 22–23/11 Guardrail luôn AccessDenied trên Runtime mà không ai thấy vì fail-open chỉ ghi log; nên có cảnh báo CloudWatch cho `guardrail_error`. `guardrail_fail_open: true` trong `agent/src/yofina_agent/defaults.json`; Guardrail lỗi hoặc quá 3 giây thì lượt đi tiếp không lọc đầu vào, chỉ còn router và Verifier chặn. Giữ fail-open (ưu tiên demo không gãy) hay đổi sang fail-closed (chặn khi không lọc được)?
 - [ ] **Ngưỡng đủ/sát/hụt**: `short_floor` và `tight_floor` cùng bằng 0 nên Hóa đơn 250.000 ₫ của `minh` ra "hụt" (không phải "vàng" như câu chữ tiêu chí 3) và dải "sát" rất hẹp; hụt 1 đồng và hụt 200 nghìn cùng một nhãn. Giữ, hay đặt `tight_floor` > 0 (CDK context `affordabilityTightP10FloorVnd`)?
 - [ ] **Phí Trả sau trong tiêu chí 1 và 3** (đã chốt tạm 22/11 theo engine: 2.200.000 ₫ và 1.250.000 ₫): giữ quy tắc phí một lần mỗi nghĩa vụ, hay đổi quy tắc hoặc persona `minh` để ra 1.233.000 ₫ và 283.000 ₫ như câu chữ cũ?
 - [ ] **Trần model mỗi lượt** (F6): 4 lượt (`max_model_calls_per_turn`) làm vòng sửa thứ hai của Verifier không chạy được. Giữ 4 (khớp tiêu chí 9) hay nâng lên 5?
