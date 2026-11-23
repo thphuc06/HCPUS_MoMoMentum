@@ -10,11 +10,13 @@ từ `thresholds` của file luật. Ngưỡng là dữ liệu, mỗi ngưỡng 
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
-from yofina_core.blocks import JarCode, RuleCheck, RuleId, VndPositive
+from yofina_core.blocks import IsoDate, JarCode, RuleCheck, RuleId, VndPositive
 
 EvaluatorName = Literal[
     "essential_obligations_covered",
@@ -55,6 +57,20 @@ class Proposal(_Model):
     category: Category | None = None
     risk_level: RiskLevel | None = None
     origin: Origin | None = None
+    #: Ngày khoản tiền bắt đầu rời hũ nguồn (bước lộ trình: ngày bắt đầu giai đoạn của bước); vắng là làm ngay. Từ kỳ lương kế trở
+    #: đi, tiền đến từ lương các kỳ sau (xem `yofina_planner.engine`). Bỏ khỏi JSON Schema: `Proposal` cũng là một phần output có
+    #: cấu trúc của LLM ở what-if (`AnalysisOption.proposal`), nên model không thấy và không điền trường này; chỉ code dựng đề xuất
+    #: cho bước lộ trình điền. Docstring của lớp cũng đi vào schema đó nên không nhắc trường này.
+    start_date: SkipJsonSchema[IsoDate | None] = None
+
+    @model_validator(mode="after")
+    def _real_date(self) -> Proposal:
+        if self.start_date is not None:
+            try:
+                date.fromisoformat(self.start_date)
+            except ValueError:
+                raise ValueError("start_date phải là một ngày có thật (YYYY-MM-DD)") from None
+        return self
 
 
 class Violation(_Model):

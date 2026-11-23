@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -194,10 +195,12 @@ def test_save_grounded_roadmap_and_report_stages():
         assert action["params"] == normalize_params(action["tool"], action["params"])
         assert {"user_id", "confirm_token"}.isdisjoint(action["params"])
     proposals = [args["proposal"] for args in args_for(tools, "check_suitability")]
-    # cùng đề xuất mà save_roadmap (ledger) dựng lại từ bước đã lưu
+    # cùng đề xuất mà save_roadmap (ledger) dựng lại từ bước đã lưu, với ngày bắt đầu giai đoạn của bước
     assert proposals == [
-        proposal_for_step(item).model_dump(exclude_none=True) for item in (move, nudge)
+        proposal_for_step(item, phase["start_date"]).model_dump(exclude_none=True)
+        for item, phase in ((move, first), (nudge, second))
     ]
+    assert proposals[0]["start_date"] == first["start_date"] and "start_date" not in proposals[1]
     assert [proposal["kind"] for proposal in proposals] == [
         "roadmap_set_aside",
         "roadmap_review_goal",
@@ -675,62 +678,90 @@ def low_entertainment_balances(balance_vnd):
     return classify_result("get_jar_balances", mcp_ok(payload)), facts
 
 
-def test_future_step_over_source_balance_is_repaired_like_save_would_require(caplog):
+def monthly_reserve():
+    data = fixture("optimize_allocation.ok.json")["data"]
+    line = next(item for item in data["lines"] if item["jar"]["code"] == "du_phong")
+    return line["proposed_monthly_vnd"] - line["current_monthly_vnd"]
+
+
+def test_future_step_over_current_balance_but_within_monthly_income_passes_like_save():
+    # Hũ Giải trí chỉ còn 200.000 ₫, ngày lương mùng 1 (kỳ lương kế 01/12). Bước của giai đoạn sau lấy khoản hằng tháng từ lương
+    # các kỳ sau, nên luật so nó với thu nhập tháng chứ không với số dư hôm nay: qua ngay, không cần vòng sửa.
+    balances, facts = low_entertainment_balances(200_000)
+    assert facts.jar("giai_tri").balance_vnd < monthly_reserve() < facts.monthly_income_vnd
+    tools = scripted_tools(get_jar_balances=balances, checks=suitability_from_engine(facts))
+    draft = outline(review())
+    draft["phases"].append({"phase_id": "tich_luy", "title": "Tích lũy dự phòng", "steps": [step()]})
+    result, client, scope = build(tools, draft)
+    assert result.outcome.ok and scope.calls == 1 and len(client.calls) == 1
+
+    (stored,) = args_for(tools, "save_roadmap")
+    later = stored["phases"][1]
+    assert later["phase_id"] == "tich_luy" and later["start_date"] >= facts.next_payday.isoformat()
+    (move,) = [a["proposal"] for a in args_for(tools, "check_suitability") if a["proposal"]["kind"] == "roadmap_set_aside"]
+    assert move["funding_source"] == "jar" and move["jar_code"] == "giai_tri"
+    assert move == proposal_for_step(later["steps"][0], later["start_date"]).model_dump(exclude_none=True)
+    # save_roadmap kiểm lại đúng như vậy và không chặn
+    violations, checked = check_steps(stored["phases"], facts, cached_rules())
+    assert violations == [] and "source_jar_covers" in checked["bu_du_phong"]
+
+
+def test_step_starting_now_over_current_balance_is_still_blocked(caplog):
+    # Cùng bước đó ở giai đoạn đầu (bắt đầu hôm nay, trước kỳ lương kế): tiền lấy từ số dư hiện có nên vẫn bị chặn và sửa.
     caplog.set_level("WARNING", logger="yofina.agent.roadmap")
     balances, facts = low_entertainment_balances(200_000)
     tools = scripted_tools(get_jar_balances=balances, checks=suitability_from_engine(facts))
-    future = {"phase_id": "tich_luy", "title": "Tích lũy dự phòng", "steps": [step()]}
-    draft = outline(review())
-    draft["phases"].append(future)
-    fixed = outline(review())
-    fixed["phases"].append(
-        {
-            **future,
-            "steps": [
-                step(kind="adjust_split", jar_code="du_phong", to_jar_code=None, action=None)
-            ],
-        }
-    )
-    result, client, scope = build(tools, draft, fixed)
+    fixed = outline(step(kind="adjust_split", jar_code="du_phong", to_jar_code=None, action=None))
+    result, client, scope = build(tools, outline(step()), fixed)
     assert result.outcome.ok and scope.calls == 2
 
-    # Bước tương lai lấy khoản hằng tháng (600.000 ₫) từ hũ Giải trí đang có 200.000 ₫: agent kiểm bằng ĐÚNG đề xuất mà
-    # save_roadmap dựng lại, nên thấy vi phạm source_jar_covers trước khi lưu.
-    first_round = args_for(tools, "check_suitability")[:2]
-    move = next(a["proposal"] for a in first_round if a["proposal"]["kind"] == "roadmap_set_aside")
-    assert move["funding_source"] == "jar" and move["jar_code"] == "giai_tri"
+    move = args_for(tools, "check_suitability")[0]["proposal"]
+    assert move["kind"] == "roadmap_set_aside" and move["start_date"] < facts.next_payday.isoformat()
     (feedback,) = prompt(client, 1)["feedback"]
     assert feedback["step_id"] == "bu_du_phong" and feedback["rule_id"] == "source_jar_covers"
-    assert "mọi giai đoạn" in feedback["message"] and "adjust_split" in feedback["message"]
 
-    # Lý do giữ đối chiếu ở giai đoạn sau: ledger kiểm lại mọi bước bằng proposal_for_step lúc lưu, bất kể ngày giai đoạn.
-    rules = cached_rules()
-    data = fixture("optimize_allocation.ok.json")["data"]
-    line = next(item for item in data["lines"] if item["jar"]["code"] == "du_phong")
-    monthly = line["proposed_monthly_vnd"] - line["current_monthly_vnd"]
+    # ledger chặn cùng bước đó lúc lưu (giai đoạn bắt đầu hôm nay)
     original = {
         "step_id": "bu_du_phong", "kind": "set_aside", "title": "t", "reason": "r",
-        "jar_code": "giai_tri", "to_jar_code": "du_phong", "amount_vnd": monthly,
+        "jar_code": "giai_tri", "to_jar_code": "du_phong", "amount_vnd": monthly_reserve(),
     }  # fmt: skip
-    violations, _ = check_steps([{"phase_id": "tich_luy", "steps": [original]}], facts, rules)
+    phase = {"phase_id": "on_dinh", "start_date": facts.today.isoformat(), "steps": [original]}
+    violations, _ = check_steps([phase], facts, cached_rules())
     assert [rule for _, rule, _ in violations] == ["source_jar_covers"]
-
-    (stored,) = args_for(tools, "save_roadmap")
-    assert [phase["phase_id"] for phase in stored["phases"]] == ["on_dinh", "tich_luy"]
-    assert stored["phases"][1]["start_date"] > fixture("get_jar_balances.ok_goals.json")["app_date"]
-    assert check_steps(stored["phases"], facts, rules)[0] == []
     (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
-    assert rejected == {
-        "event": "roadmap_step_rejected",
-        "round": 0,
-        "phase_id": "tich_luy",
-        "step_id": "bu_du_phong",
-        "kind": "set_aside",
-        "action": "move_between_jars",
-        "reason": "suitability",
-        "rule_id": "source_jar_covers",
-        "funding_source": "jar",
-    }
+    assert rejected["phase_id"] == "on_dinh" and rejected["rule_id"] == "source_jar_covers"
+    assert rejected["funding_source"] == "jar"
+
+
+def test_future_step_over_monthly_income_is_still_blocked():
+    # Khoản hằng tháng vượt cả thu nhập tháng thì giai đoạn sau cũng không gánh được.
+    balances, facts = low_entertainment_balances(200_000)
+    poor = replace(facts, monthly_income_vnd=monthly_reserve() - 1)
+    tools = scripted_tools(get_jar_balances=balances, checks=suitability_from_engine(poor))
+    draft = outline(review())
+    draft["phases"].append({"phase_id": "tich_luy", "title": "Tích lũy dự phòng", "steps": [step()]})
+    fixed = outline(review())
+    result, client, _ = build(tools, draft, fixed)
+    assert result.outcome.ok
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert feedback["step_id"] == "bu_du_phong" and feedback["rule_id"] == "source_jar_covers"
+
+
+def test_agent_proposal_matches_ledger_save_check_in_later_phase():
+    # Hai bên dựng cùng một đề xuất cho bước của giai đoạn sau (có start_date của giai đoạn đó).
+    tools = scripted_tools(checks=("ok", "ok"))
+    draft = outline(review())
+    draft["phases"].append({"phase_id": "tich_luy", "title": "Tích lũy dự phòng", "steps": [step()]})
+    result, _, _ = build(tools, draft)
+    assert result.outcome.ok
+    (stored,) = args_for(tools, "save_roadmap")
+    expected = [
+        proposal_for_step(item, phase["start_date"]).model_dump(exclude_none=True)
+        for phase in stored["phases"]
+        for item in phase["steps"]
+    ]
+    assert [args["proposal"] for args in args_for(tools, "check_suitability")] == expected
+    assert expected[1]["start_date"] == stored["phases"][1]["start_date"]
 
 
 @pytest.mark.parametrize(
@@ -757,7 +788,9 @@ def test_agent_proposal_matches_ledger_save_check(draft_step):
     (stored,) = args_for(tools, "save_roadmap")
     (saved_step,) = stored["phases"][0]["steps"]
     (checked,) = [args["proposal"] for args in args_for(tools, "check_suitability")]
-    assert checked == proposal_for_step(saved_step).model_dump(exclude_none=True)
+    assert checked == proposal_for_step(
+        saved_step, stored["phases"][0]["start_date"]
+    ).model_dump(exclude_none=True)
 
 
 def test_ordinal_prefix_in_titles_is_not_a_grounding_failure():

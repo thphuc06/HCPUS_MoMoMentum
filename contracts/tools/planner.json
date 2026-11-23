@@ -44,6 +44,10 @@
             "origin": {
               "type": "string",
               "description": "recommendation nếu là phương án HỆ THỐNG đề xuất cho người dùng; user_request nếu người dùng tự đưa ra. Luật 'không khuyên vay để tiêu' chỉ áp cho recommendation."
+            },
+            "start_date": {
+              "type": "string",
+              "description": "Ngày (YYYY-MM-DD) khoản tiền bắt đầu rời hũ nguồn, ví dụ ngày bắt đầu giai đoạn của một bước lộ trình. Để trống nếu làm ngay. Chỉ có nghĩa với bước lộ trình (kind roadmap_*): khoản bắt đầu từ kỳ lương kế trở đi được so với thu nhập hằng tháng thay vì số dư hiện có của hũ. Đề xuất what-if luôn được kiểm như làm ngay."
             }
           },
           "required": [

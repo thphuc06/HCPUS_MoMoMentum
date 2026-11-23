@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, timedelta
 
 from yofina_core.blocks import RuleCheck
 from yofina_core.money import format_vnd
@@ -30,6 +30,8 @@ DISCRETIONARY_KINDS = frozenset({"one_time_purchase", "bnpl_purchase", "recurrin
 #: loại đề xuất làm tăng nghĩa vụ phải trả (tính vào tỷ lệ nghĩa vụ trên thu nhập).
 OBLIGATION_ADDING_KINDS = frozenset({"bnpl_purchase", "use_credit", "recurring_expense"})
 RISK_RANK = {"low": 0, "medium": 1, "high": 2}
+#: tiền tố `kind` của đề xuất dựng từ bước lộ trình (`yofina_ledger.roadmap_logic.proposal_for_step`)
+ROADMAP_KIND_PREFIX = "roadmap_"
 
 
 @dataclass(frozen=True)
@@ -69,10 +71,28 @@ def _threshold(rule: SuitabilityRule, name: str) -> float | int | str | bool:
     return rule.thresholds[name].value
 
 
+def _from_later_pay(proposal: Proposal, facts: SuitabilityFacts) -> bool:
+    """Khoản bắt đầu từ kỳ lương kế trở đi (`start_date` không trước `next_payday`): tiền lấy từ lương các kỳ sau, không từ số dư
+    hiện có. Chỉ bước lộ trình (`kind` `roadmap_*`, số tiền là mức hằng tháng) mới có thời điểm như vậy; đề xuất khác (what-if)
+    luôn là làm ngay dù có `start_date`. Chưa khai ngày lương hoặc đề xuất không nói ngày bắt đầu thì cũng coi là làm ngay."""
+    if (
+        proposal.start_date is None
+        or facts.next_payday is None
+        or not proposal.kind.startswith(ROADMAP_KIND_PREFIX)
+    ):
+        return False
+    return date.fromisoformat(proposal.start_date) >= facts.next_payday
+
+
+def _dm(value: date) -> str:
+    return f"{value.day:02d}/{value.month:02d}"
+
+
 def _essential_covered(
     rule: SuitabilityRule, proposal: Proposal, facts: SuitabilityFacts, ctx: Context
 ) -> Outcome:
-    """Nghĩa vụ thiết yếu đến hạn trước kỳ lương kế phải còn được phủ đủ sau khi trừ khoản đề xuất khỏi hũ nguồn."""
+    """Nghĩa vụ thiết yếu đến hạn trước kỳ lương kế phải còn được phủ đủ sau khi trừ khoản đề xuất khỏi hũ nguồn. Khoản bắt đầu
+    từ kỳ lương kế trở đi không chạm số dư trước kỳ lương nên không bị trừ."""
     if facts.next_payday is None:
         return Outcome("skipped", "Chưa khai ngày nhận lương nên chưa xét nghĩa vụ trước kỳ lương.")
     first = facts.today + timedelta(days=1)
@@ -85,7 +105,11 @@ def _essential_covered(
     if not need:
         return Outcome("pass", "Không có nghĩa vụ thiết yếu đến hạn trước kỳ lương kế.")
     cover = float(_threshold(rule, "cover_ratio"))
-    spent_from = proposal.jar_code if proposal.funding_source == "jar" else None
+    spent_from = (
+        proposal.jar_code
+        if proposal.funding_source == "jar" and not _from_later_pay(proposal, facts)
+        else None
+    )
     worst: tuple[float, str] | None = None
     for code, total in need.items():
         jar = facts.jar(code)
@@ -168,22 +192,41 @@ def _obligation_income_ratio(
 def _source_jar_covers(
     rule: SuitabilityRule, proposal: Proposal, facts: SuitabilityFacts, ctx: Context
 ) -> Outcome:
-    """Khoản lấy từ hũ nguồn (`funding_source` jar, `jar_code`) không vượt số dư hiện có của hũ trừ mức phải giữ lại."""
+    """Khoản lấy từ hũ nguồn (`funding_source` jar, `jar_code`) không vượt số dư hiện có của hũ trừ mức phải giữ lại.
+
+    Khoản bắt đầu từ kỳ lương kế trở đi (bước hằng tháng của giai đoạn sau trong lộ trình) được trả bằng lương các kỳ sau chảy vào
+    hũ, không bằng số dư hôm nay: so nó với thu nhập hằng tháng đã khai (trần của dòng tiền vào mọi hũ). Chưa khai thu nhập thì so
+    với số dư hiện có như khoản làm ngay."""
     if not proposal.amount_vnd or not proposal.jar_code:
         return Outcome("skipped", "Đề xuất không lấy một khoản tiền cụ thể từ hũ nào.")
     jar = facts.jar(proposal.jar_code)
     if jar is None:
         return Outcome("skipped", "Không thấy hũ nguồn trong ví để đối chiếu số dư.")
     keep = int(_threshold(rule, "min_remaining_vnd"))
-    left = jar.balance_vnd - proposal.amount_vnd
+    amount = proposal.amount_vnd
+    income = facts.monthly_income_vnd
+    if _from_later_pay(proposal, facts) and income:
+        assert facts.next_payday is not None
+        when = _dm(facts.next_payday)
+        if income - amount >= keep:
+            return Outcome(
+                "pass",
+                f"Khoản {format_vnd(amount)} mỗi tháng từ hũ {jar.name} bắt đầu từ kỳ lương {when}, nằm trong thu nhập"
+                f" {format_vnd(income)} mỗi tháng.",
+            )
+        return Outcome(
+            "fail",
+            f"Khoản {format_vnd(amount)} mỗi tháng từ hũ {jar.name} vượt thu nhập {format_vnd(income)} mỗi tháng.",
+        )
+    left = jar.balance_vnd - amount
     if left >= keep:
         return Outcome(
             "pass",
-            f"Hũ {jar.name} có {format_vnd(jar.balance_vnd)}, còn {format_vnd(left)} sau khi lấy {format_vnd(proposal.amount_vnd)}.",
+            f"Hũ {jar.name} có {format_vnd(jar.balance_vnd)}, còn {format_vnd(left)} sau khi lấy {format_vnd(amount)}.",
         )
     return Outcome(
         "fail",
-        f"Hũ {jar.name} chỉ có {format_vnd(jar.balance_vnd)}, thiếu {format_vnd(keep - left)} cho khoản {format_vnd(proposal.amount_vnd)}.",
+        f"Hũ {jar.name} chỉ có {format_vnd(jar.balance_vnd)}, thiếu {format_vnd(keep - left)} cho khoản {format_vnd(amount)}.",
     )
 
 

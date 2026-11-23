@@ -392,12 +392,13 @@ def _build_action(
     return None
 
 
-def _proposal(step: RoadmapDraftStep) -> Proposal:
-    """Đề xuất kiểm suitability của một bước, đúng như `yofina_ledger.roadmap_logic.proposal_for_step` mà `save_roadmap` dùng.
+def _proposal(step: RoadmapDraftStep, phase_start: date) -> Proposal:
+    """Đề xuất kiểm suitability của một bước, đúng như `yofina_ledger.roadmap_logic.proposal_for_step` mà `save_roadmap` dùng
+    (với ngày bắt đầu giai đoạn của bước).
 
     Chỉ bước kéo tiền khỏi một hũ (`set_aside`, `pay_obligation` có cả hũ nguồn `jar_code`, hũ nhận `to_jar_code` và số tiền)
-    mới có nguồn tiền là hũ đó. Luật `source_jar_covers` so số tiền ấy với số dư HIỆN CÓ của hũ nguồn ở mọi giai đoạn; agent
-    không nới riêng cho giai đoạn sau, vì lúc lưu ledger vẫn kiểm như vậy và sẽ từ chối cả bản nháp."""
+    mới có nguồn tiền là hũ đó, kèm `start_date` là ngày bắt đầu giai đoạn: số tiền là mức hằng tháng, nên luật chỉ so nó với số
+    dư HIỆN CÓ của hũ nguồn khi giai đoạn bắt đầu trước kỳ lương kế (planner biết ngày lương, agent không cần biết)."""
     moves = bool(
         step.kind in _MONEY_MOVING_KINDS and step.jar_code and step.to_jar_code and step.amount_vnd
     )
@@ -411,6 +412,7 @@ def _proposal(step: RoadmapDraftStep) -> Proposal:
         else (False if step.kind == "set_aside" else None),
         category=_STEP_CATEGORY.get(step.kind),  # type: ignore[arg-type]
         origin="recommendation",
+        start_date=phase_start.isoformat() if moves else None,
     )
 
 
@@ -418,9 +420,10 @@ def _build_step(
     outline: StepOutline,
     balances: list[B.JarBalance],
     lines: dict[str, AllocationLine],
-    phase_end: date,
+    phase: tuple[date, date],
     today: date,
 ) -> tuple[RoadmapDraftStep, Proposal]:
+    phase_start, phase_end = phase
     jars = {jar.code for jar in balances}
     jar, to_jar = outline.jar_code, outline.to_jar_code
     if {code for code in (jar, to_jar) if code is not None} - jars:
@@ -460,7 +463,7 @@ def _build_step(
         metrics=metrics,
         action=action,
     )
-    return step, _proposal(step)
+    return step, _proposal(step, phase_start)
 
 
 async def _verify_step(
@@ -619,7 +622,7 @@ async def _verify(
                 )
                 continue
             try:
-                step, proposal = _build_step(item, balances, lines, phase_end, today)
+                step, proposal = _build_step(item, balances, lines, (phase_start, phase_end), today)
             except ValueError as exc:
                 if isinstance(exc, ValidationError):
                     fields = sorted({".".join(map(str, e["loc"])) for e in exc.errors()})
@@ -649,7 +652,7 @@ async def _verify(
                     action=step.action.tool if step.action else None,
                     reason="suitability",
                     rule_id=issue.rule_id,
-                    funding_source=_proposal(step).funding_source,
+                    funding_source=_proposal(step, phase_start).funding_source,
                 )
             if not blocked:
                 steps.append(step)

@@ -1,10 +1,11 @@
-# Luật 6: hũ nguồn đủ tiền. Một đề xuất chi hoặc chuyển tiền từ một hũ không được vượt số dư hiện có của hũ đó.
+# Luật 6: hũ nguồn đủ tiền. Một đề xuất chi hoặc chuyển tiền từ một hũ không được vượt số tiền mà hũ đó có vào lúc lấy.
 id: source_jar_covers
-version: 1
+version: 2
 title: Hũ nguồn đủ tiền
 description: >-
   Đề xuất lấy tiền từ một hũ (dùng hũ khác, chuyển bù giữa hũ, bước để dành của lộ trình) phải nằm trong số dư hiện có của hũ đó,
-  sau khi giữ lại mức tối thiểu. Hũ không đủ thì phương án đó không thực hiện được, nên hệ thống không được đề xuất nó như một cách đủ tiền.
+  sau khi giữ lại mức tối thiểu. Khoản hằng tháng bắt đầu từ kỳ lương kế trở đi (start_date của đề xuất) lấy từ lương các kỳ sau
+  nên được so với thu nhập hằng tháng đã khai. Không đủ thì phương án đó không thực hiện được, nên hệ thống không được đề xuất nó.
 evaluator: source_jar_balance_covers
 severity: warn
 recommendation_severity: block
@@ -14,6 +15,6 @@ thresholds:
   min_remaining_vnd:
     value: 0
     unit: vnd
-    note: Số dư tối thiểu phải còn lại trong hũ nguồn sau khi lấy khoản đề xuất (0 là được lấy hết nhưng không âm).
+    note: Số tiền tối thiểu phải còn lại sau khi lấy khoản đề xuất, tính trên số dư hũ nguồn (khoản làm ngay) hoặc thu nhập tháng (khoản từ kỳ lương kế); 0 là được lấy hết nhưng không âm.
     source: Lựa chọn thiết kế của dự án mô phỏng (ví không cho số dư hũ âm khi chi bằng tiền hũ).
 message: Hũ nguồn không đủ tiền cho khoản này. Chọn hũ khác, giảm số tiền hoặc hoãn lại.

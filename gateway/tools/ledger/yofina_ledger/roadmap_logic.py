@@ -219,10 +219,14 @@ def validate_jar_refs(
             raise bad(f"Lựa chọn nhắc tới hũ '{code}' mà bạn không có.")
 
 
-def proposal_for_step(step: Mapping[str, Any]) -> Proposal:
+def proposal_for_step(step: Mapping[str, Any], start_date: str | None = None) -> Proposal:
     """Đổi một bước thành đề xuất cho `check_suitability`. Mọi bước là phương án do hệ thống đề xuất (`origin recommendation`, nên
     luật có thể nghiêm hơn lời người dùng tự nói). Chỉ bước kéo tiền khỏi một hũ (`set_aside`, `pay_obligation` có cả hũ nguồn
-    `jar_code` và hũ nhận `to_jar_code`) mới có nguồn tiền là hũ đó; bước trả nghĩa vụ là khoản thiết yếu, bước `set_aside` thì không."""
+    `jar_code` và hũ nhận `to_jar_code`) mới có nguồn tiền là hũ đó; bước trả nghĩa vụ là khoản thiết yếu, bước `set_aside` thì không.
+
+    `start_date` là ngày bắt đầu giai đoạn của bước, gắn vào đề xuất của bước kéo tiền: số tiền của bước là mức hằng tháng, nên bộ
+    đánh giá chỉ so nó với số dư HIỆN CÓ của hũ nguồn khi giai đoạn bắt đầu trước kỳ lương kế; giai đoạn từ kỳ lương kế trở đi
+    lấy tiền từ lương các kỳ sau. Ngày không có thật thì bỏ (đề xuất coi là làm ngay, kiểm chặt hơn)."""
     kind = str(step["kind"])
     moves = (
         kind in MONEY_MOVING_KINDS
@@ -240,8 +244,19 @@ def proposal_for_step(step: Mapping[str, Any]) -> Proposal:
         else (False if kind == "set_aside" else None),
         "category": STEP_CATEGORY.get(kind),
         "origin": "recommendation",
+        "start_date": _real_date(start_date) if moves else None,
     }
     return Proposal.model_validate({k: v for k, v in fields.items() if v is not None}, strict=False)
+
+
+def _real_date(value: Any) -> str | None:
+    """Chuỗi `YYYY-MM-DD` nếu là một ngày có thật, không thì None."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value).isoformat() if len(value) == 10 else None
+    except ValueError:
+        return None
 
 
 def check_steps(
@@ -251,14 +266,14 @@ def check_steps(
     *,
     only_step: str | None = None,
 ) -> tuple[list[tuple[str, str, str]], dict[str, list[str]]]:
-    """Chạy bộ đánh giá suitability cho từng bước (hoặc riêng `only_step`). Trả (vi phạm mức block `(step_id, rule_id, message)`,
-    luật đã thực sự kiểm theo từng bước: mọi luật không `skipped`)."""
+    """Chạy bộ đánh giá suitability cho từng bước (hoặc riêng `only_step`), với ngày bắt đầu giai đoạn của bước. Trả (vi phạm mức
+    block `(step_id, rule_id, message)`, luật đã thực sự kiểm theo từng bước: mọi luật không `skipped`)."""
     violations: list[tuple[str, str, str]] = []
     checked: dict[str, list[str]] = {}
-    for _ph, st in iter_steps(phases):
+    for ph, st in iter_steps(phases):
         if only_step is not None and st["step_id"] != only_step:
             continue
-        verdict = evaluate(proposal_for_step(st), facts, rules)
+        verdict = evaluate(proposal_for_step(st, ph.get("start_date")), facts, rules)
         checked[st["step_id"]] = [c.rule_id for c in verdict.checked if c.outcome != "skipped"]
         violations.extend(
             (st["step_id"], v.rule_id, v.message)

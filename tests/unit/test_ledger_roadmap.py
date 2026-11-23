@@ -355,6 +355,35 @@ def test_check_steps_obligations_first_chan_rut_tien_khoi_hu_gánh_nghia_vu():
     assert "và 1 bước khác" in two.message
 
 
+def test_proposal_for_step_gan_ngay_bat_dau_giai_doan_cho_buoc_keo_tien():
+    move = step("set_aside", amount_vnd=100_000, jar_code="giai_tri", to_jar_code="an_uong")
+    assert rl.proposal_for_step(move).start_date is None
+    assert rl.proposal_for_step(move, "2026-12-05").start_date == "2026-12-05"
+    # bước không kéo tiền khỏi hũ thì ngày không liên quan tới luật nào: không gắn
+    assert rl.proposal_for_step(step("remind", jar_code="du_lich"), "2026-12-05").start_date is None
+    # ngày không có thật thì bỏ: đề xuất coi là làm ngay (kiểm chặt hơn), không ném lỗi lúc lưu
+    for bad in ("2026-02-30", "2026-12-5", None):
+        assert rl.proposal_for_step(move, bad).start_date is None
+
+
+def test_check_steps_buoc_giai_doan_sau_ky_luong_ke_lay_tu_luong_khong_tu_so_du():
+    # hũ Giải trí 760.000 ₫, hũ Hóa đơn 450.000 ₫ gánh tiền điện trước kỳ lương 05/12, thu nhập 9.000.000 ₫ mỗi tháng.
+    rules = cached_rules()
+    over = step("set_aside", step_id="du_phong", amount_vnd=1_000_000, jar_code="giai_tri", to_jar_code="du_phong")
+    drain = step("set_aside", step_id="rut", amount_vnd=200_000, jar_code="hoa_don", to_jar_code="an_uong")
+    now = {"phase_id": "p1", "title": "G", "start_date": "2026-11-21", "end_date": "2026-12-05", "steps": [over, drain]}
+    later = {**now, "phase_id": "p2", "start_date": "2026-12-05", "end_date": "2027-01-05"}
+    v, _ = rl.check_steps([now], facts(), rules)
+    assert sorted((s, r) for s, r, _m in v) == [("du_phong", "source_jar_covers"), ("rut", "obligations_first")]
+    v, checked = rl.check_steps([later], facts(), rules)
+    assert v == [] and checked["du_phong"] == ["obligations_first", "source_jar_covers"]
+    # vượt cả thu nhập tháng thì giai đoạn sau vẫn bị chặn
+    huge = {**later, "steps": [{**over, "amount_vnd": 9_000_001}]}
+    assert [(s, r) for s, r, _m in rl.check_steps([huge], facts(), rules)[0]] == [("du_phong", "source_jar_covers")]
+    # sửa một bước sau này (only_step) cũng xét theo ngày giai đoạn của bước đó
+    assert rl.check_steps([now, {**later, "steps": [{**over, "step_id": "sau"}]}], facts(), rules, only_step="sau")[0] == []
+
+
 def test_validate_jar_refs_chan_hu_la_va_hanh_dong_lech_buoc():
     jars = {"giai_tri", "an_uong", "du_lich"}
     good = step(
