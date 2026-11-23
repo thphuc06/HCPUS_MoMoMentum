@@ -58,6 +58,13 @@ def test_moi_y_dinh_tao_duoc_intent_result(name):
     assert r.intent == name and r.clarify is None and not r.needs_clarification
 
 
+def test_router_doc_duoc_ma_cu_soc_la_de_handler_kiem():
+    r = s.IntentResult.model_validate(
+        intent(intent="stress", params='{"shock_id":"ma_khong_co_trong_cau_hinh"}')
+    )
+    assert r.params.shock_id == "ma_khong_co_trong_cau_hinh"
+
+
 def test_thieu_so_tien_thi_hoi_lai_dung_mot_cau_kem_chip():
     r = s.IntentResult.model_validate(
         intent(

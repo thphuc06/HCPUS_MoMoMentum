@@ -30,7 +30,7 @@ import contextlib
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -47,21 +47,25 @@ from yofina_agent.compact import (
     compact_forecast,
     compact_jars,
     compact_obligations,
+    compact_resilience,
+    compact_roadmap,
+    compact_stress,
     compact_transactions,
 )
 from yofina_agent.fallback import classify_by_rules
 from yofina_agent.guardrail import Guardrail, GuardrailResult
 from yofina_agent.identity import Identity
 from yofina_agent.jars import JarMatch, resolve_jar
+from yofina_agent.roadmap_agent import build_roadmap
 from yofina_agent.router import route
-from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, IntentParams, IntentResult, Verdict
+from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, Intent, IntentParams, IntentResult, Verdict
 from yofina_agent.settings import AgentSettings
 from yofina_agent.store import (
     TurnBlockStore,
     TurnRecordStore,
     UnconfiguredTurnRecordStore,
 )
-from yofina_agent.textutil import normalize
+from yofina_agent.textutil import match_shock_id, normalize
 from yofina_agent.tools import (
     ContractMismatch,
     GatewayTools,
@@ -72,16 +76,21 @@ from yofina_agent.tools import (
     confirm_block,
     forecast_block,
     jar_summary_block,
+    resilience_block,
+    roadmap_block,
+    stress_block,
 )
 from yofina_agent.verifier import Allowed, NumericGrounding
 from yofina_agent.whatif import WhatIfState, run_what_if
-from yofina_agent.writer import check_grounding, write_stream
+from yofina_agent.writer import PHASE4_TASKS, check_grounding, has_ungrounded_numbers, write_stream
 from yofina_core import blocks as B
 from yofina_core.clock import app_timezone
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
 from yofina_core.money import format_vnd
 from yofina_core.pii import mask_pii
+from yofina_core.resilience import load_shock_set
+from yofina_core.roadmap import JobStage, RoadmapReasonCode
 from yofina_core.suitability import SuitabilityVerdict
 
 log = logging.getLogger("yofina.agent.turn")
@@ -193,7 +202,7 @@ class Turn:
             self.emit_notice(
                 kind="low_data", code=None, title=t, message=m, degraded_reason="short_history", block_id=f"notice:{self.trace_id}:short_history"
             )
-        elif float(basis["coverage"]) < self.s.low_coverage_threshold:
+        elif (coverage := basis.get("coverage")) is not None and float(coverage) < self.s.low_coverage_threshold:
             t, m = notices.LOW_COVERAGE
             self.emit_notice(
                 kind="low_data", code=None, title=t, message=m, degraded_reason="low_coverage", block_id=f"notice:{self.trace_id}:low_coverage"
@@ -443,15 +452,19 @@ class Turn:
         self.emit(ev.tool_call_result(tcid, result_view))
         return CallResult(outcome, compact_view, built)
 
-    async def call_tool_retry(self, short_name: str, args: dict[str, Any], **kw: Any) -> CallResult:
+    async def call_tool_retry(
+        self, short_name: str, args: dict[str, Any], *, retry: bool = True, **kw: Any
+    ) -> CallResult:
         """`call_tool`, thử lại tối đa `tool_retry_attempts` lần khi lỗi tạm thời (hết giờ, dịch vụ chưa sẵn sàng)."""
         res = await self.call_tool(short_name, args, **kw)
+        if not retry:
+            return res
         for _ in range(self.s.tool_retry_attempts):
             o = res.outcome
             transient = o.kind is ToolKind.UNAVAILABLE or (
                 o.kind in (ToolKind.TOOL_ERROR, ToolKind.BAD_RESULT) and o.code in _TRANSIENT_CODES
             )
-            if o.ok or not transient:
+            if o.ok or not transient or self.tool_calls >= self.s.max_tool_calls_per_turn:
                 break
             log.info(json.dumps({"event": "tool_retry", "tool": o.name, "code": o.code}))
             res = await self.call_tool(short_name, args, **kw)
@@ -477,6 +490,11 @@ class Turn:
     async def write(self, task: str, question: str, compact: Mapping[str, Any]) -> None:
         if self.llm_down:
             return
+        if task in PHASE4_TASKS:
+            await self.write_buffered(
+                task, question, compact, timeout=None, max_tokens=self.s.writer_max_tokens
+            )
+            return
         try:
             text = await self.emit_text(
                 write_stream(
@@ -497,8 +515,10 @@ class Turn:
             log.warning(json.dumps({"event": "numeric_ungrounded", "values": bad[:5]}))
             self.degrade_code = self.degrade_code or "NUMERIC_UNVERIFIED"
 
-    async def write_buffered(self, task: str, question: str, compact: Mapping[str, Any], *, timeout: float, max_tokens: int) -> None:
-        """Như `write` nhưng chờ trọn câu trong `timeout` giây rồi mới phát (F3: quá hạn hoặc lỗi thì BỎ phần lời, thẻ số liệu đã hiện)."""
+    async def write_buffered(
+        self, task: str, question: str, compact: Mapping[str, Any], *, timeout: float | None, max_tokens: int
+    ) -> None:
+        """Kiểm trọn phần lời trước khi phát. Bỏ phần lời nếu quá hạn hoặc gặp lỗi."""
         if self.llm_down or self.model_calls_left() < 1:
             return
 
@@ -527,7 +547,9 @@ class Turn:
             return
         if not text.strip():
             return
-        if check_grounding(text, compact):  # số lạ: bỏ phần lời thay vì phát điều chưa kiểm chứng
+        if check_grounding(text, compact) or (
+            task in PHASE4_TASKS and has_ungrounded_numbers(text, compact)
+        ):
             log.warning(json.dumps({"event": "numeric_ungrounded", "task": task}))
             return
         gr = await self.check_output(text)
@@ -592,7 +614,8 @@ class Turn:
         outcome = self.outcome
         if self.intent == "out_of_scope" and outcome == "ok":
             outcome = "rejected"
-        return trace.build_record(
+        measured_bases = [b for b in self.bases if b.get("coverage") is not None]
+        record = trace.build_record(
             trace_id=self.trace_id,
             conversation_id=self.conversation_id,
             intent=self.intent,
@@ -601,7 +624,7 @@ class Turn:
             outcomes=self.tool_log,
             suitability=self.suitability,
             extra_rules=extra,
-            bases=self.bases,
+            bases=measured_bases,
             blocks=list(self.blocks.values()),
             usage_by_model=self.scope.usage_by_model(),
             model_calls=self.scope.calls,
@@ -609,6 +632,13 @@ class Turn:
             duration_ms=int((time.perf_counter() - self._t0) * 1000),
             verified=self.verified,
         )
+        if self.intent == "resilience" and self.bases and not measured_bases:
+            basis = self.bases[0]
+            record["confidence"] = B.ExplainConfidence(
+                band=basis["confidence_band"],
+                reasons=[f"Dự báo dựa trên {basis['history_days']} ngày dữ liệu."],
+            ).model_dump()
+        return record
 
     async def persist(self) -> None:
         """Lưu lượt (kể cả lượt suy giảm hoặc chỉ có chữ) và bản ghi lượt. Lỗi lưu không làm hỏng lượt."""
@@ -671,7 +701,17 @@ class Turn:
         self.intent = routed.intent
         if await self.answer_keep_previous(routed, question, index):
             return
-        handler = {
+        handler = self._intent_handlers()[routed.intent]
+        # Handler tự kiểm mã cú sốc và chọn thao tác với lộ trình.
+        if routed.intent not in ("stress", "roadmap") and (
+            req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed)
+        ):
+            await self.emit_clarify(req, routed)
+            return
+        await handler(routed, question)
+
+    def _intent_handlers(self) -> dict[Intent, Callable[[IntentResult, str], Awaitable[None]]]:
+        return {
             "lookup": self.on_lookup,
             "what_if": self.on_what_if,
             "affordability": self.on_affordability,
@@ -679,11 +719,10 @@ class Turn:
             "move": self.on_move,
             "out_of_scope": self.on_out_of_scope,
             "chitchat": self.on_chitchat,
-        }.get(routed.intent, self.on_out_of_scope)  # resilience, stress, roadmap (phase 4) chưa có bộ xử lý: luồng C thêm
-        if req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed):
-            await self.emit_clarify(req, routed)
-            return
-        await handler(routed, question)
+            "resilience": self.on_resilience,
+            "stress": self.on_stress,
+            "roadmap": self.on_roadmap,
+        }
 
     async def answer_keep_previous(self, routed: IntentResult, question: str, index: int) -> bool:
         """Người dùng trả lời câu "vẫn giữ khoản trước chứ" (lượt trước agent hỏi để gộp kịch bản). True nếu đã xử lý lượt.
@@ -752,7 +791,14 @@ class Turn:
             return await g.check(text, "INPUT")
 
     async def classify(self, question: str, history: str) -> IntentResult | None:
-        """Router bằng LLM; không gọi được thì bộ phân loại dự phòng bằng luật (suy giảm có kiểm soát)."""
+        """Khớp cú sốc theo cấu hình trước, sau đó dùng router LLM hoặc luật dự phòng."""
+        if (shock_id := match_shock_id(question)) is not None:
+            return IntentResult(
+                intent="stress",
+                params=IntentParams(shock_id=shock_id),
+                confidence=1.0,
+                needs_clarification=False,
+            )
         if not self.llm_down:
             try:
                 with self.step("router"):
@@ -876,6 +922,141 @@ class Turn:
         assert res.compact is not None
         self.note_basis(_forecast_basis(res.outcome.payload))
         await self.write("forecast", question, res.compact)
+
+    async def on_resilience(self, r: IntentResult, question: str) -> None:
+        res = await self.call_tool_retry(
+            "get_resilience_score",
+            {},
+            target="forecast",
+            compact=lambda o: compact_resilience(o.payload or {}),
+            block=resilience_block,
+        )
+        if not res.outcome.ok:
+            self.tool_failure(res.outcome)
+            return
+        assert res.compact is not None and isinstance(res.block, B.ResilienceScoreBlock)
+        self.note_basis(res.block.data.basis.model_dump())
+        await self.write("resilience", question, res.compact)
+
+    async def on_stress(self, r: IntentResult, question: str) -> None:
+        shocks = load_shock_set()
+        shock_id = r.params.shock_id
+        if shock_id is None or shocks.get(shock_id) is None:
+            await self.emit_clarify(
+                ClarifyRequest(
+                    slot="other",
+                    question=notices.STRESS_QUESTION,
+                    chips=[
+                        ClarifyChipIn(label=shock.label[:40], value=notices.STRESS_CHIP_VALUE.format(label=shock.label))
+                        for shock in shocks.shocks[:6]
+                    ],
+                ),
+                r,
+            )
+            return
+        res = await self.call_tool_retry(
+            "stress_test",
+            {"shock_id": shock_id},
+            target="forecast",
+            compact=lambda o: compact_stress(o.payload or {}),
+            block=stress_block,
+        )
+        if not res.outcome.ok:
+            self.tool_failure(res.outcome)
+            return
+        assert res.compact is not None
+        await self.write("stress", question, res.compact)
+
+    async def on_roadmap(self, r: IntentResult, question: str) -> None:
+        create = r.params.roadmap_action == "create"
+        which = "latest" if create else self.s.roadmap_default_which
+        res = await self.call_tool_retry(
+            "get_roadmap",
+            {"which": which},
+            target="planner",
+            compact=lambda o: compact_roadmap(o.payload or {}),
+            block=roadmap_block,
+            emit=not create,
+        )
+        if res.outcome.code == ErrorCode.ROADMAP_NOT_FOUND.value:
+            latest = res.outcome if which == "latest" else None
+            await self.on_roadmap_missing(r, question, latest_outcome=latest)
+            return
+        if not res.outcome.ok:
+            self.tool_failure(res.outcome)
+            return
+        if create:
+            await self.generate_roadmap("user_request", question, latest_outcome=res.outcome)
+            return
+        assert res.compact is not None
+        await self.write("roadmap", question, res.compact)
+
+    async def on_roadmap_missing(
+        self, r: IntentResult, question: str, *, latest_outcome: ToolOutcome | None = None
+    ) -> None:
+        await self.generate_roadmap("initial", question, latest_outcome=latest_outcome)
+
+    async def generate_roadmap(
+        self,
+        reason_code: RoadmapReasonCode,
+        question: str,
+        *,
+        behavior_flag_id: str | None = None,
+        shock_id: str | None = None,
+        latest_outcome: ToolOutcome | None = None,
+    ) -> None:
+        await self.ensure_llm()
+
+        async def call(short_name: str, args: dict[str, Any], target: str) -> ToolOutcome:
+            if self.tool_calls >= self.s.max_tool_calls_per_turn:
+                return ToolOutcome(
+                    self.s.tool(short_name, target=target), ToolKind.UNAVAILABLE,
+                    code=ErrorCode.RATE_LIMITED.value, message=notices.GENERIC_ERROR_MESSAGE,
+                )
+            # Lưu có thể đã commit khi mất kết nối. Chỉ lõi xử lý retry khi có xung đột rõ ràng.
+            res = await self.call_tool_retry(
+                short_name, args, target=target, retry=short_name != "save_roadmap"
+            )
+            return res.outcome
+
+        with contextlib.ExitStack() as spans:
+            def on_stage(stage: JobStage, _progress: int) -> None:
+                spans.close()
+                spans.enter_context(self.step(f"roadmap_{stage}"))
+
+            result = await build_roadmap(
+                call, None if self.llm_down else self.llm, self.s, self.scope,
+                reason_code=reason_code, behavior_flag_id=behavior_flag_id, shock_id=shock_id,
+                on_stage=on_stage, tool_calls_left=self.s.max_tool_calls_per_turn - self.tool_calls,
+                latest_outcome=latest_outcome,
+            )
+        self.suitability.extend(result.suitability)
+        if result.model_error is not None:
+            self.llm_failed(result.model_error)
+        if result.model_budget_exhausted:
+            self.degrade_if_no_model()
+        if result.outcome is None:
+            if self.degrade_code is not None:
+                self.flush_degraded_notice(message_override=notices.ROADMAP_UNBUILDABLE)
+            else:
+                self.outcome, self.outcome_code = "error", ErrorCode.ROADMAP_INVALID.value
+                title, message = notices.ROADMAP_UNBUILDABLE
+                self.emit_notice(kind="error", code=self.outcome_code, title=title, message=message)
+            return
+        if not result.outcome.ok:
+            self.tool_failure(result.outcome)
+            return
+        try:
+            block = roadmap_block(result.outcome, self.trace_id)
+        except ContractMismatch as exc:
+            self.tool_failure(ToolOutcome(
+                result.outcome.name, ToolKind.BAD_RESULT,
+                code=ErrorCode.INTERNAL_ERROR.value, detail=str(exc),
+            ))
+            return
+        self.verified = True
+        self.emit_block(block)
+        await self.write("roadmap", question, compact_roadmap(result.outcome.payload or {}))
 
     # --- what-if và kiểm tra trước khi quẹt -------------------------------------------------
     async def on_what_if(self, r: IntentResult, question: str) -> None:

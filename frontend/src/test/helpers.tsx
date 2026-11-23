@@ -3,6 +3,8 @@ import { vi } from 'vitest'
 import { ApiProvider } from '@/api/ApiProvider'
 import { OverviewProvider } from '@/api/OverviewProvider'
 import type { ApiClient } from '@/api/client'
+import type { ResilienceScoreResponse, ShocksResponse, StressResultResponse } from '@/api/resilienceSchemas'
+import type { RoadmapDiffResponse, RoadmapResponse, RoadmapVersionsResponse } from '@/api/roadmapSchemas'
 import type {
   AffordabilityResponse,
   CreditLineResponse,
@@ -61,6 +63,19 @@ export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
     getProfile: vi.fn(async () => fx<ProfileResponse>('ProfileResponse.minh')),
     getJar: vi.fn(async () => fx<JarDetailResponse>('JarDetailResponse.an_uong')),
     getForecast: vi.fn(async () => validBlock('forecast_timeline.short') as unknown as ForecastResponse),
+    getResilience: vi.fn(async () => fx<ResilienceScoreResponse>('ResilienceScoreResponse.minh')),
+    getShocks: vi.fn(async () => fx<ShocksResponse>('ShocksResponse.default')),
+    runStress: vi.fn(async () => fx<StressResultResponse>('StressResultResponse.mat_viec')),
+    getRoadmap: vi.fn(async () => fx<RoadmapResponse>('RoadmapResponse.minh_v3')),
+    listRoadmapVersions: vi.fn(async () => fx<RoadmapVersionsResponse>('RoadmapVersionsResponse.minh')),
+    getRoadmapDiff: vi.fn(async () => fx<RoadmapDiffResponse>('RoadmapDiffResponse.v2_v3')),
+    decideRoadmapStep: vi.fn(async () => { throw new Error('decideRoadmapStep chưa được giả') }),
+    editRoadmapStep: vi.fn(async () => { throw new Error('editRoadmapStep chưa được giả') }),
+    decideRoadmapVersion: vi.fn(async () => { throw new Error('decideRoadmapVersion chưa được giả') }),
+    regenerateRoadmap: vi.fn(async () => { throw new Error('regenerateRoadmap chưa được giả') }),
+    getRoadmapJob: vi.fn(async () => { throw new Error('getRoadmapJob chưa được giả') }),
+    getReview: vi.fn(async (mode) => fx<Awaited<ReturnType<ApiClient['getReview']>>>(`ReviewListResponse.${mode}`)),
+    skipReviewAsk: vi.fn(async () => { throw new Error('skipReviewAsk chưa được giả') }),
     listTransactions: vi.fn(async () => fx<TransactionsResponse>('TransactionsResponse.page')),
     listTxTypes: vi.fn(async () => fx<TxTypesResponse>('TxTypesResponse.default')),
     listPayees: vi.fn(async () => fx<PayeesResponse>('PayeesResponse.default')),

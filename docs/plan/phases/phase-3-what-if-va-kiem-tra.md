@@ -120,6 +120,20 @@ Chủ dự án quyết định đóng phase 3, để lại một việc kiểm s
 - Gốc của lỗi suitability nằm ở Lambda (`gateway/tools/ledger/yofina_ledger/phase3.py` cộng `added` cho mọi đề xuất có `scenario_id`); agent đã tránh, nên sửa luôn phía Lambda cho chắc.
 - What-if khối đầu p95 18 s ở một lượt có khoảng 5 s không thuộc bước nào (nghi chờ rate limiter), chưa xác nhận.
 
+**Kết quả đi cảnh 2 ngày 2026-11-23 (tối)**: Claude Code đi trên URL Amplify trong khung trình duyệt của app Claude, khổ 390x844, tài khoản `minh` (chủ dự án tự đăng nhập; Claude không nhập mật khẩu). Mục 1–7 Claude đi, bằng chứng đọc từ DOM; mục 8 Học tự kiểm trên điện thoại. Cửa sổ app ở nền nên hiệu ứng trượt của khung chat bị dừng; Claude cho hiệu ứng chạy xong bằng script để đi tiếp, không đổi logic. Chưa so Figma.
+
+| # | Mục | Kết quả | Ghi chú |
+|---|---|---|---|
+| 1 | What-if tai nghe 1,2 triệu bằng Trả sau | Đạt | `forecast_timeline` và `obligation_impact` hiện trước, rồi 3 phương án và lời giải thích; số trong lời khớp thẻ (hụt 750.000 ₫, đến hạn 05/12 phải trả 2.200.000 ₫). **Lệch**: thẻ dòng thời gian ghi "Sau: Đủ, khả năng hụt 0%" nhưng cùng thẻ ghi số dư thấp nhất −750.000 ₫, cạn 05/12 |
+| 2 | Mở "Vì sao" | Đạt | 4 nguồn dữ liệu kèm tên tool và giờ, 8 luật (11 con số có căn cứ), nhóm tin cậy "Vừa" kèm lý do; trace `eccac37dd75fe289b35b5230a2d3590f`; đóng được |
+| 3 | Chọn phương án → xác nhận → Hoàn tác | Đạt | "Chuyển bù 750.000 ₫ Dự phòng → Nghĩa vụ": số dư chỉ đổi sau khi bấm xác nhận (biên nhận `374A881A`); Hoàn tác lúc còn 27 giây tạo giao dịch ngược `D17C4C85`; màn Hũ sau đó đúng số ban đầu (tổng 7.730.000 ₫) |
+| 4 | "Chuyển 250 nghìn cho người nhận demo có ổn không?" | Đạt, có lỗi | Không bị chặn; hỏi hũ nguồn (chip là hũ thật) rồi ra `affordability_card` "Hụt" (hũ Hóa đơn hụt khoảng 207.389 ₫), có Trả sau và cách khác. **Lỗi**: sau khi chọn hũ lại hỏi số tiền dù câu đầu đã có 250 nghìn (router ghép câu cụt làm mất `amount_vnd`); chip gửi "250000" thay vì chữ; phương án "Hoãn tới kỳ lương" vẫn ghi "Hụt" |
+| 5 | Hỏi cổ phiếu | Đạt | Notice "Ngoài phạm vi" + khối `suggestions`, không có mã chứng khoán |
+| 6 | Thiếu số tiền ("Nếu mình mua cái laptop thì sao?") | Đạt | Hỏi lại đúng một câu kèm chip; trả lời "15 triệu" rồi hỏi tiếp cách trả và hũ (từng câu một), giữ được số tiền qua ba lượt, ra kết quả what-if. **Lệch**: phương án "Dùng hũ Dự phòng thay vì Du lịch" gắn "Đủ" dù Dự phòng chỉ có 2.700.000 ₫ cho khoản 15 triệu |
+| 7 | Giày rồi dép cùng hũ | Đạt | `minh` không có hũ Mua sắm nên dùng hũ Giải trí: câu dép hỏi giữ khoản giày để gộp; chọn giữ thì kịch bản "giày 800 nghìn + dép 300 nghìn", số dư thấp nhất giảm 1.100.000 ₫ |
+| 8 | Nạp ảnh chụp bằng máy ảnh | Đạt | Học tự thử trên điện thoại với `giamkhao3` (khung trình duyệt của app không đưa file lên được) và báo ổn |
+| — | Bố cục 390 px | Đạt | Tổng quan, Hũ, Nhìn trước, Chuyển tiền, Hồ sơ: không tràn ngang, không nút nào thấp dưới 32 px |
+
 Test cục bộ lúc đóng: pytest 2116 passed; vitest 558 passed. Integration cả bộ trên AWS **169/169**.
 
 ### Lịch sử: đóng có điều kiện ngày 2026-11-22

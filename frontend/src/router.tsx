@@ -54,7 +54,21 @@ export function appRoutes(): RouteObject[] {
             { path: 'jars', element: <JarsPage /> },
             { path: 'jars/edit', ...page(() => import('@/pages/JarsEditPage'), 'JarsEditPage') },
             { path: 'jars/:code', ...page(() => import('@/pages/JarDetailPage'), 'JarDetailPage') },
-            { path: 'foresight', element: <ForesightPage /> },
+            {
+              path: 'foresight',
+              children: [
+                { index: true, element: <ForesightPage /> },
+                { path: 'stress/:shockId', ...page(() => import('@/pages/StressPage'), 'StressPage') },
+                { path: 'resilience', ...page(() => import('@/pages/ResilienceDetailPage'), 'ResilienceDetailPage') },
+              ],
+            },
+            {
+              path: 'roadmap',
+              children: [
+                { index: true, ...page(() => import('@/pages/RoadmapPage'), 'RoadmapPage') },
+                { path: 'compare', ...page(() => import('@/pages/RoadmapComparePage'), 'RoadmapComparePage') },
+              ],
+            },
             {
               // Chuyển tiền T1 → T2 → T3 (kiểm tra) → T4 → T5; trạng thái nháp nằm trong TransferFlowProvider.
               path: 'transfer',
@@ -72,6 +86,7 @@ export function appRoutes(): RouteObject[] {
               ],
             },
             { path: 'activity', ...page(() => import('@/pages/ActivityPage'), 'ActivityPage') },
+            { path: 'review', ...page(() => import('@/pages/ReviewPage'), 'ReviewPage') },
             { path: 'obligations', ...page(() => import('@/pages/ObligationsPage'), 'ObligationsPage') },
             { path: 'obligations/new', ...page(() => import('@/pages/ObligationEditPage'), 'ObligationEditPage') },
             { path: 'obligations/:id', ...page(() => import('@/pages/ObligationEditPage'), 'ObligationEditPage') },
