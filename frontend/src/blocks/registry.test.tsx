@@ -53,6 +53,23 @@ describe('registry khối UI', () => {
     expect(screen.getByText('Đang ở chế độ rút gọn')).toBeInTheDocument()
   })
 
+  it('notice info (trạng thái trống): màu trung tính, role status, không phải lỗi', () => {
+    const { container } = renderBlock(validBlock('notice.info'))
+    const box = screen.getByRole('status')
+    expect(box).toHaveAttribute('data-notice', 'info')
+    expect(box).toHaveClass('bg-surface-2')
+    expect(box).not.toHaveClass('bg-bad-bg')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText('Chưa có lộ trình')).toBeInTheDocument()
+    expect(container.querySelector('[data-block="fallback"]')).toBeNull()
+  })
+
+  it('notice info sai schema (tiêu đề rỗng): rơi về fallback_text', () => {
+    const { container } = renderBlock(invalidBlock('notice.info_empty_title'))
+    expect(container.querySelector('[data-block="fallback"]')).not.toBeNull()
+    expect(container.querySelector('[data-notice]')).toBeNull()
+  })
+
   it('receipt: số tiền, hai hũ và mã giao dịch rút gọn', () => {
     renderBlock(validBlock('receipt.move'))
     expect(screen.getByText('Đã chuyển 100.000 ₫')).toBeInTheDocument()

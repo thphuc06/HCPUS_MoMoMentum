@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/blocks/notice.schema.json",
   "title": "NoticeBlock",
-  "description": "Thông báo trạng thái: ngoài phạm vi, chế độ rút gọn khi hệ thống chạm giới hạn, dữ liệu ít, lỗi (kèm 'Thử lại'). Không chứa số liệu tài chính. Phase 3 thêm các trường TÙY CHỌN `retryable`, `degraded_reason`, `missing`, `suggestions` (không tăng `v`).",
+  "description": "Thông báo trạng thái: ngoài phạm vi, chế độ rút gọn khi hệ thống chạm giới hạn, dữ liệu ít, lỗi (kèm 'Thử lại'), thông tin (trạng thái trống, không phải lỗi). Không chứa số liệu tài chính. Phase 3 thêm các trường TÙY CHỌN `retryable`, `degraded_reason`, `missing`, `suggestions`; phase 4 thêm giá trị `kind` `info` (cả hai không tăng `v`).",
   "type": "object",
   "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
   "additionalProperties": false,
@@ -22,9 +22,9 @@
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "description": "out_of_scope: ngoài phạm vi; degraded: chế độ rút gọn (hạn mức model, model lỗi); low_data: dữ liệu ít; error: lỗi.",
+          "description": "out_of_scope: ngoài phạm vi; degraded: chế độ rút gọn (hạn mức model, model lỗi); low_data: dữ liệu ít; error: lỗi; info (phase 4): chỉ mang thông tin hoặc trạng thái trống (chưa có lộ trình, chưa có điểm...), không phải lỗi, giao diện vẽ màu trung tính.",
           "type": "string",
-          "enum": ["out_of_scope", "degraded", "low_data", "error"]
+          "enum": ["out_of_scope", "degraded", "low_data", "error", "info"]
         },
         "title": { "type": "string", "minLength": 1, "maxLength": 80 },
         "message": { "type": "string", "minLength": 1, "maxLength": 280 },

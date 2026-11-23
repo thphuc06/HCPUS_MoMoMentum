@@ -155,13 +155,15 @@ def test_stress_routes_chip_or_full_label_without_model(monkeypatch, click_chip)
 
 
 @pytest.mark.parametrize(
-    "intent, tool, error_fixture",
+    "intent, tool, error_fixture, kind",
     [
-        ("resilience", "get_resilience_score", "get_resilience_score.error_profile_incomplete.json"),
-        ("stress", "stress_test", "stress_test.error_shock_not_found.json"),
+        # chưa khai lương là trạng thái trống, không phải lỗi: notice `info` (màu trung tính)
+        ("resilience", "get_resilience_score", "get_resilience_score.error_profile_incomplete.json", "info"),
+        # mã cú sốc không có là lỗi thật
+        ("stress", "stress_test", "stress_test.error_shock_not_found.json", "error"),
     ],
 )
-def test_phase4_tool_error(monkeypatch, intent, tool, error_fixture):
+def test_phase4_tool_error(monkeypatch, intent, tool, error_fixture, kind):
     params = {"shock_id": load_shock_set().shocks[0].shock_id} if intent == "stress" else {}
     payload = fixture(error_fixture)
     events, tools, writer = run_turn(
@@ -172,10 +174,23 @@ def test_phase4_tool_error(monkeypatch, intent, tool, error_fixture):
     )
     check_agui_order(events)
     (notice,) = blocks_of(events)
-    assert notice["type"] == "notice" and notice["data"]["kind"] == "error"
+    assert notice["type"] == "notice" and notice["data"]["kind"] == kind
     assert notice["data"]["code"] == payload["code"]
     assert notice["data"]["message"] == payload["message"]
     assert len(tools.calls) == 1 and not writer.calls
+
+
+def test_stress_chua_co_nen_du_bao_la_info(monkeypatch):
+    payload = {"status": "ERROR", "code": ErrorCode.FORECAST_UNAVAILABLE.value, "message": "Chưa có nền dự báo để chạy cú sốc, thử lại sau ít phút."}
+    shock_id = load_shock_set().shocks[0].shock_id
+    events, _, _ = run_turn(
+        "Thử cú sốc",
+        llm=make_llm([route_response(intent="stress", shock_id=shock_id)]),
+        tools=FakeTools({"stress_test": classify_result("stress_test", mcp_ok(payload))}),
+        monkeypatch=monkeypatch,
+    )
+    (notice,) = blocks_of(events)
+    assert notice["data"]["kind"] == "info" and notice["data"]["code"] == ErrorCode.FORECAST_UNAVAILABLE.value
 
 
 def test_resilience_basis_without_coverage_is_accepted(monkeypatch):

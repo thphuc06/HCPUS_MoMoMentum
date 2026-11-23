@@ -74,6 +74,7 @@ SlugKey = Annotated[
 ]  # id trong khối phase 3 (không có dấu gạch ngang)
 Summary = Annotated[str, Field(min_length=1, max_length=120)]
 ToolName = Literal["move_between_jars"]
+UserJarKind = Literal["spending", "saving", "obligation"]  # khớp wallet.USER_JAR_KINDS (test kiểm)
 
 
 class _Strict(BaseModel):
@@ -104,6 +105,16 @@ class JarBalance(_Strict):
     icon_key: KeyName
     balance_vnd: Vnd
     split_percent: Annotated[float, Field(ge=0, le=100)]
+    # Phase 4 (tùy chọn, tương thích ngược): loại hũ và mục tiêu GỐC đọc từ bảng `jars`, để lộ trình dựng được `save_jars`.
+    kind: UserJarKind | None = None
+    goal_vnd: VndPositive | None = None
+    goal_date: IsoDate | None = None
+
+    @model_validator(mode="after")
+    def _goal_pair(self) -> JarBalance:
+        if self.goal_date is not None and self.goal_vnd is None:
+            raise ValueError("goal_date cần goal_vnd")
+        return self
 
 
 class JarSummaryData(_Strict):
@@ -177,7 +188,8 @@ class ReceiptBlock(_BlockBase):
 
 
 # --- notice -------------------------------------------------------------------------------
-NoticeKind = Literal["out_of_scope", "degraded", "low_data", "error"]
+# `info` (phase 4, tương thích ngược): chỉ mang thông tin hoặc trạng thái trống, không phải lỗi.
+NoticeKind = Literal["out_of_scope", "degraded", "low_data", "error", "info"]
 
 
 DegradedReason = Literal[
@@ -1280,6 +1292,9 @@ def _percent(value: int | float | Decimal | str) -> float:
 
 
 def _jar_row(row: Mapping[str, Any]) -> JarBalance:
+    goal_vnd, goal_date = row.get("goal_vnd"), row.get("goal_date")
+    if isinstance(goal_date, date):
+        goal_date = goal_date.isoformat()
     return JarBalance(
         code=row["code"],
         name=row["name"],
@@ -1287,6 +1302,9 @@ def _jar_row(row: Mapping[str, Any]) -> JarBalance:
         icon_key=row["icon_key"],
         balance_vnd=to_vnd(row["balance_vnd"]),
         split_percent=_percent(row["split_percent"]),
+        kind=row.get("kind"),
+        goal_vnd=to_vnd(goal_vnd) if goal_vnd is not None else None,
+        goal_date=goal_date,
     )
 
 
@@ -1300,7 +1318,8 @@ def build_jar_summary(
     block_id: str | None = None,
 ) -> JarSummaryBlock:
     """Khối số dư các hũ. `jars` theo thứ tự hiển thị; mỗi dòng gồm code, name, color_key,
-    icon_key, balance_vnd, split_percent (giá trị đọc từ DB, tiền có thể là Decimal/chuỗi)."""
+    icon_key, balance_vnd, split_percent (giá trị đọc từ DB, tiền có thể là Decimal/chuỗi) và tùy chọn
+    kind, goal_vnd, goal_date (phase 4; vắng hoặc NULL thì bỏ). Không truyền hũ hệ thống vào đây."""
     rows = [_jar_row(r) for r in jars]
     total = sum(r.balance_vnd for r in rows)
     text = f"Số dư {len(rows)} hũ, tổng {format_vnd(total)}." if rows else "Bạn chưa có hũ nào."

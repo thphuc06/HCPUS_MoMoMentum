@@ -40,6 +40,19 @@
           "type": "number",
           "minimum": 0,
           "maximum": 100
+        },
+        "kind": {
+          "description": "Loại hũ người dùng (cột jars.kind), phase 4, tùy chọn: spending, saving hoặc obligation. Hũ hệ thống không bao giờ nằm trong danh sách này. Ledger luôn điền; vắng ở dữ liệu cũ.",
+          "type": "string",
+          "enum": ["spending", "saving", "obligation"]
+        },
+        "goal_vnd": {
+          "description": "Mục tiêu tiết kiệm GỐC người dùng đã khai (cột jars.goal_vnd), phase 4, tùy chọn. Vắng khi hũ không có mục tiêu.",
+          "$ref": "envelope.schema.json#/$defs/VndPositive"
+        },
+        "goal_date": {
+          "description": "Hạn mục tiêu GỐC (cột jars.goal_date, ngày mô phỏng), phase 4, tùy chọn. Chỉ có khi có goal_vnd (Pydantic kiểm). Không phải hạn đã nới của optimize_allocation.",
+          "$ref": "envelope.schema.json#/$defs/IsoDate"
         }
       }
     },

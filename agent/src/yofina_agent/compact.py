@@ -14,18 +14,28 @@ from yofina_agent.textutil import extract_amounts
 from yofina_core.money import format_vnd, to_vnd
 
 
+def _compact_jar(j: Mapping[str, Any]) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "code": j["code"],
+        "name": j["name"],
+        "balance_vnd": to_vnd(j["balance_vnd"]),
+        "balance_text": format_vnd(j["balance_vnd"]),
+    }
+    # Phase 4 (tùy chọn): loại hũ và mục tiêu GỐC; vắng thì không thêm khóa.
+    if j.get("kind") is not None:
+        row["kind"] = j["kind"]
+    if j.get("goal_vnd") is not None:
+        row["goal_vnd"] = to_vnd(j["goal_vnd"])
+        row["goal_text"] = format_vnd(j["goal_vnd"])
+        if j.get("goal_date") is not None:
+            row["goal_date"] = j["goal_date"]
+    return row
+
+
 def compact_jars(payload: Mapping[str, Any]) -> dict[str, Any]:
-    """`get_jar_balances` -> {app_date, total, jars[{code,name,balance_vnd,balance_text}]}."""
+    """`get_jar_balances` -> {app_date, total, jars[{code,name,balance_vnd,balance_text,kind?,goal_vnd?,goal_text?,goal_date?}]}."""
     data = payload["data"]
-    jars = [
-        {
-            "code": j["code"],
-            "name": j["name"],
-            "balance_vnd": to_vnd(j["balance_vnd"]),
-            "balance_text": format_vnd(j["balance_vnd"]),
-        }
-        for j in data["jars"]
-    ]
+    jars = [_compact_jar(j) for j in data["jars"]]
     total = sum(j["balance_vnd"] for j in jars)
     return {
         "app_date": payload["app_date"],

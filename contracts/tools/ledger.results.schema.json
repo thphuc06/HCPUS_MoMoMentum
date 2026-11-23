@@ -29,6 +29,7 @@
       }
     },
     "GetJarBalancesOk": {
+      "description": "`data` là đúng `JarSummaryData`. Phase 4 (tương thích ngược): mỗi hũ có thêm tùy chọn `kind`, `goal_vnd`, `goal_date` (mục tiêu GỐC từ bảng `jars`, vắng khi hũ không có mục tiêu), để Roadmap agent dựng `save_jars` không làm mất mục tiêu.",
       "type": "object",
       "required": [
         "status",

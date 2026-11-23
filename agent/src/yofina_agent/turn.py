@@ -103,6 +103,12 @@ _TRANSIENT_CODES = {
     ErrorCode.INTERNAL_ERROR.value,
     ErrorCode.RATE_LIMITED.value,
 }
+#: Lỗi nghiệp vụ của tool phase 4 (điểm, cú sốc) thực chất là trạng thái trống: khối `notice` kind `info`, không phải `error`.
+_EMPTY_STATE_CODES = frozenset(
+    {ErrorCode.PROFILE_INCOMPLETE.value, ErrorCode.FORECAST_UNAVAILABLE.value}
+)
+#: Lộ trình: chỉ chưa khai lương là trạng thái trống; FORECAST_UNAVAILABLE ở đây là lỗi gọi bộ tối ưu (forecast_client).
+_ROADMAP_EMPTY_CODES = frozenset({ErrorCode.PROFILE_INCOMPLETE.value})
 _DEGRADED_REASON = {
     ErrorCode.MODEL_BUDGET_EXCEEDED.value: "model_budget",
     ErrorCode.RATE_LIMITED.value: "model_error",
@@ -355,13 +361,21 @@ class Turn:
             )
             self.degrade_noticed = True
 
-    def tool_failure(self, outcome: ToolOutcome, *, retryable: bool | None = None) -> None:
-        """Lỗi tool -> khối `notice` (kind `error`), dùng đúng thông điệp an toàn của tool."""
+    def tool_failure(
+        self,
+        outcome: ToolOutcome,
+        *,
+        retryable: bool | None = None,
+        empty_codes: frozenset[str] = frozenset(),
+    ) -> None:
+        """Lỗi tool -> khối `notice`, dùng đúng thông điệp an toàn của tool. Kind `error`, trừ khi tool trả lỗi nghiệp vụ có mã trong
+        `empty_codes` (trạng thái trống như chưa khai lương, chưa có dự báo): kind `info`, vì đó không phải lỗi."""
         code = outcome.code or ErrorCode.INTERNAL_ERROR.value
         self.outcome, self.outcome_code = "error", code
         transient = outcome.kind is ToolKind.UNAVAILABLE or code in _TRANSIENT_CODES
+        empty = outcome.kind is ToolKind.TOOL_ERROR and code in empty_codes
         self.emit_notice(
-            kind="error",
+            kind="info" if empty else "error",
             code=code,
             title=notices.ERROR_TITLES.get(code, notices.DEFAULT_ERROR_TITLE),
             message=outcome.message or notices.GENERIC_ERROR_MESSAGE,
@@ -943,7 +957,7 @@ class Turn:
             block=resilience_block,
         )
         if not res.outcome.ok:
-            self.tool_failure(res.outcome)
+            self.tool_failure(res.outcome, empty_codes=_EMPTY_STATE_CODES)
             return
         assert res.compact is not None and isinstance(res.block, B.ResilienceScoreBlock)
         self.note_basis(res.block.data.basis.model_dump())
@@ -973,7 +987,7 @@ class Turn:
             block=stress_block,
         )
         if not res.outcome.ok:
-            self.tool_failure(res.outcome)
+            self.tool_failure(res.outcome, empty_codes=_EMPTY_STATE_CODES)
             return
         assert res.compact is not None
         await self.write("stress", question, res.compact)
@@ -1055,7 +1069,7 @@ class Turn:
                 self.emit_notice(kind="error", code=self.outcome_code, title=title, message=message)
             return
         if not result.outcome.ok:
-            self.tool_failure(result.outcome)
+            self.tool_failure(result.outcome, empty_codes=_ROADMAP_EMPTY_CODES)
             return
         try:
             block = roadmap_block(result.outcome, self.trace_id)

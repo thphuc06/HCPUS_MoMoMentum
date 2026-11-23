@@ -588,7 +588,8 @@ def test_notice_cu_cua_phase_1_van_hop_le_khong_tang_phien_ban():
 
 
 def test_notice_kind_co_du_bon_loai_va_loi_co_thu_lai():
-    assert set(b.NoticeKind.__args__) == {"out_of_scope", "degraded", "low_data", "error"}
+    # phase 4 thêm `info` (trạng thái trống, không phải lỗi), tương thích ngược
+    assert set(b.NoticeKind.__args__) == {"out_of_scope", "degraded", "low_data", "error", "info"}
     retry = block("notice.error_retry")["data"]
     assert retry["kind"] == "error" and retry["retryable"] is True
     assert block("notice.out_of_scope_suggestions")["data"]["suggestions"]

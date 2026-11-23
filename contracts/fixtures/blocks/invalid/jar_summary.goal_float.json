@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "id": "jar_summary:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "type": "jar_summary",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Số dư 1 hũ, tổng 1.800.000 ₫.",
+  "source": {
+    "tool": "ledger___get_jar_balances",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "data": {
+    "jars": [
+      {
+        "code": "du_lich",
+        "name": "Du lịch",
+        "color_key": "teal",
+        "icon_key": "plane",
+        "balance_vnd": 1800000,
+        "split_percent": 100,
+        "kind": "saving",
+        "goal_vnd": 6000000.5,
+        "goal_date": "2027-03-31"
+      }
+    ],
+    "jars_total_vnd": 1800000
+  }
+}

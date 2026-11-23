@@ -1,7 +1,7 @@
 [
   {
     "name": "get_jar_balances",
-    "description": "Lấy số dư hiện tại của từng hũ chi tiêu của người dùng (mã hũ, tên, số dư, tỷ lệ chia lương), theo thứ tự hiển thị. Không gồm hai hũ hệ thống Tiền vào khác và Chưa phân loại. Không cần tham số.",
+    "description": "Lấy số dư hiện tại của từng hũ chi tiêu của người dùng (mã hũ, tên, số dư, tỷ lệ chia lương, loại hũ, mục tiêu và hạn mục tiêu gốc nếu có), theo thứ tự hiển thị. Không gồm hai hũ hệ thống Tiền vào khác và Chưa phân loại. Không cần tham số.",
     "inputSchema": {
       "type": "object",
       "properties": {

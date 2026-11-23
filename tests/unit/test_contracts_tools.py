@@ -338,6 +338,37 @@ def test_ket_qua_tool_fixture_hop_le(registry, path):
         assert parsed.tool == tool
 
 
+TOOL_INVALID = sorted((CONTRACTS / "fixtures" / "tools" / "invalid").glob("*.json"))
+
+
+@pytest.mark.parametrize("path", TOOL_INVALID, ids=lambda p: p.name)
+def test_ket_qua_tool_fixture_sai_bi_ca_json_schema_lan_pydantic_tu_choi(registry, path):
+    from pydantic import ValidationError
+
+    tool = path.name.split(".")[0]
+    obj = load_json(path)
+    assert not result_validator(registry, tool).is_valid(obj), "JSON Schema lẽ ra phải từ chối"
+    if tool == "get_jar_balances":
+        with pytest.raises(ValidationError):
+            b.JarSummaryData.model_validate(obj["data"])
+
+
+def test_get_jar_balances_phase_4_co_loai_va_muc_tieu_goc():
+    """Phase 4 (tương thích ngược): mỗi hũ có thêm `kind`, `goal_vnd`, `goal_date` tùy chọn; fixture cũ vẫn hợp lệ."""
+    assert {p.name.split(".")[0] for p in TOOL_INVALID} == {"get_jar_balances"}
+    jars = load_json(CONTRACTS / "fixtures/tools/get_jar_balances.ok_goals.json")["data"]["jars"]
+    assert {j["kind"] for j in jars} <= set(wallet.USER_JAR_KINDS)
+    assert set(b.UserJarKind.__args__) == set(wallet.USER_JAR_KINDS)
+    with_goal = [j for j in jars if "goal_vnd" in j]
+    assert with_goal and all(isinstance(j["goal_vnd"], int) for j in with_goal)
+    assert any("goal_date" not in j for j in with_goal)  # mục tiêu không hạn
+    assert all("goal_vnd" in j for j in jars if "goal_date" in j)
+    with pytest.raises(ValueError):
+        b.JarBalance.model_validate({**jars[0], "goal_date": "2027-03-31"} | {"goal_vnd": None})
+    schema = load_json(CONTRACTS / "blocks/jar_summary.schema.json")["$defs"]["JarBalance"]
+    assert set(schema["required"]) == {"code", "name", "color_key", "icon_key", "balance_vnd", "split_percent"}
+
+
 def test_moi_tool_ghi_moi_co_fixture_can_xac_nhan_va_da_ghi():
     names = {p.name for p in fixture_files("tools")}
     for tool in ("update_profile", "record_transaction", "assign_jar"):

@@ -245,16 +245,17 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         block = self.jar_summary(
             user_id, trace_id=trace_id, source_tool=f"{TOOL_PREFIX}get_jar_balances"
         )
+        # exclude_none: trường tùy chọn của phase 4 (kind, goal_vnd, goal_date) vắng thì không phát `null`.
         return {
             "status": "OK",
             "as_of": block.source.as_of,
             "app_date": block.source.app_date,
-            "data": block.data.model_dump(mode="json"),
+            "data": block.data.model_dump(mode="json", exclude_none=True),
         }
 
     def jars_response(self, user_id: str, *, trace_id: str) -> dict[str, Any]:
         block = self.jar_summary(user_id, trace_id=trace_id, source_tool="rest:GET /jars")
-        data = block.data.model_dump(mode="json")
+        data = block.data.model_dump(mode="json", exclude_none=True)
         return {
             "app_date": block.source.app_date,
             "as_of": block.source.as_of,

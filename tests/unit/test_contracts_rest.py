@@ -447,11 +447,13 @@ def test_overview_tai_khoan_trang_khong_co_gi_de_tinh():
 
 
 def test_get_jars_cua_phase_1_khong_doi_hinh_dang():
-    # GET /jars và tool get_jar_balances không gồm hũ hệ thống: JarBalance không có kind
-    props = load_json(CONTRACTS / "blocks/jar_summary.schema.json")["$defs"]["JarBalance"][
-        "properties"
-    ]
-    assert set(props) == {"code", "name", "color_key", "icon_key", "balance_vnd", "split_percent"}
+    # GET /jars và tool get_jar_balances không gồm hũ hệ thống. Phase 4 thêm `kind` (chỉ loại hũ người dùng),
+    # `goal_vnd`, `goal_date` dạng TÙY CHỌN; sáu trường bắt buộc của phase 1 giữ nguyên.
+    jb = load_json(CONTRACTS / "blocks/jar_summary.schema.json")["$defs"]["JarBalance"]
+    phase1 = {"code", "name", "color_key", "icon_key", "balance_vnd", "split_percent"}
+    assert set(jb["required"]) == phase1
+    assert set(jb["properties"]) == phase1 | {"kind", "goal_vnd", "goal_date"}
+    assert "system" not in jb["properties"]["kind"]["enum"]
 
 
 def test_forecasts_tra_dung_khoi_forecast_timeline():

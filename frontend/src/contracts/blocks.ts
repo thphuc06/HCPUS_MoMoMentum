@@ -83,6 +83,9 @@ export const JarBalance = z.object({
   icon_key: z.string().regex(new RegExp("^[a-z][a-z0-9_-]{0,31}$")),
   balance_vnd: Vnd,
   split_percent: z.number().min(0).max(100),
+  kind: z.enum(["spending", "saving", "obligation"]).optional(),
+  goal_vnd: VndPositive.optional(),
+  goal_date: IsoDate.optional(),
 })
 export type JarBalance = z.infer<typeof JarBalance>
 
@@ -187,7 +190,7 @@ export const SuggestionItem = z.object({
 export type SuggestionItem = z.infer<typeof SuggestionItem>
 
 export const NoticeData = z.object({
-  kind: z.enum(["out_of_scope", "degraded", "low_data", "error"]),
+  kind: z.enum(["out_of_scope", "degraded", "low_data", "error", "info"]),
   title: z.string().min(1).max(80),
   message: z.string().min(1).max(280),
   code: z.string().regex(new RegExp("^[A-Z][A-Z0-9_]*$")).optional(),
@@ -198,7 +201,7 @@ export const NoticeData = z.object({
 })
 export type NoticeData = z.infer<typeof NoticeData>
 
-/** Thông báo trạng thái: ngoài phạm vi, chế độ rút gọn khi hệ thống chạm giới hạn, dữ liệu ít, lỗi (kèm 'Thử lại'). Không chứa số liệu tài chính. Phase 3 thêm các trường TÙY CHỌN `retryable`, `degraded_reason`, `missing`, `suggestions` (không tăng `v`). */
+/** Thông báo trạng thái: ngoài phạm vi, chế độ rút gọn khi hệ thống chạm giới hạn, dữ liệu ít, lỗi (kèm 'Thử lại'), thông tin (trạng thái trống, không phải lỗi). Không chứa số liệu tài chính. Phase 3 thêm các trường TÙY CHỌN `retryable`, `degraded_reason`, `missing`, `suggestions`; phase 4 thêm giá trị `kind` `info` (cả hai không tăng `v`). */
 export const NoticeBlock = z.object({
   v: SchemaVersion,
   id: BlockId,

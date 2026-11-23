@@ -66,6 +66,35 @@ def test_get_jar_balances_dung_so_va_dung_hop_dong(check):
     assert res["data"]["jars_total_vnd"] == 380_000 + 760_000 + 640_000
 
 
+def test_get_jar_balances_tra_loai_va_muc_tieu_goc_tu_bang_jars(check):
+    from datetime import date
+    from decimal import Decimal
+
+    svc, repo, _ = make_service()
+    jars = repo.users[MINH]["jars"]
+    # dạng hàng của app_get_jar_state: numeric -> Decimal, date -> date, NULL -> None
+    jars["an_uong"].update(kind="spending", goal_vnd=None, goal_date=None)
+    jars["giai_tri"].update(kind="saving", goal_vnd=Decimal(6_000_000), goal_date=date(2027, 3, 31))
+    jars["di_lai"].update(kind="saving", goal_vnd=Decimal(9_000_000), goal_date=None)
+    jars["tien_vao_khac"] = {
+        "code": "tien_vao_khac", "name": "Tiền vào khác", "color_key": "gray", "icon_key": "inbox",
+        "balance_vnd": Decimal(50_000), "split_percent": Decimal(0), "sort_order": 99,
+        "kind": "system", "goal_vnd": None, "goal_date": None,
+    }  # fmt: skip
+    res = call(svc, "get_jar_balances", {"user_id": MINH})
+    check("GetJarBalancesResult", res)
+    by_code = {j["code"]: j for j in res["data"]["jars"]}
+    assert list(by_code) == ["an_uong", "giai_tri", "di_lai"]  # không gồm hũ hệ thống
+    assert by_code["an_uong"] == {
+        "code": "an_uong", "name": "Ăn uống", "color_key": "violet", "icon_key": "utensils",
+        "balance_vnd": 380_000, "split_percent": 30, "kind": "spending",
+    }  # fmt: skip
+    assert (by_code["giai_tri"]["goal_vnd"], by_code["giai_tri"]["goal_date"]) == (6_000_000, "2027-03-31")
+    assert isinstance(by_code["giai_tri"]["goal_vnd"], int)
+    assert by_code["di_lai"]["goal_vnd"] == 9_000_000 and "goal_date" not in by_code["di_lai"]
+    assert res["data"]["jars_total_vnd"] == 380_000 + 760_000 + 640_000
+
+
 def test_nguoi_dung_chua_co_du_lieu_thi_khong_co_hu(check):
     svc, _, _ = make_service(users=())
     res = call(svc, "get_jar_balances", {"user_id": "sub-moi"})

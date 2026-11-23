@@ -4,14 +4,16 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 
 // Figma Notice (10:196): ngoài phạm vi (xanh dương), chế độ rút gọn (hổ phách), dữ liệu ít (hồng nhạt), lỗi (san hô).
+// `info` (phase 4): trạng thái trống hoặc chỉ mang thông tin, không phải lỗi, nên dùng màu trung tính (nền surface-2, chữ ink).
 // Mỗi loại có biểu tượng + tiêu đề + nội dung, không chỉ dựa vào màu.
-export type NoticeKind = 'out_of_scope' | 'degraded' | 'low_data' | 'error'
+export type NoticeKind = 'out_of_scope' | 'degraded' | 'low_data' | 'error' | 'info'
 
 const STYLE: Record<NoticeKind, { box: string; title: string; Icon: typeof Info }> = {
   out_of_scope: { box: 'bg-blue-tint', title: 'text-blue', Icon: Info },
   degraded: { box: 'bg-warn-bg', title: 'text-warn-fg', Icon: AlertTriangle },
   low_data: { box: 'bg-tint', title: 'text-brand-text', Icon: Info },
   error: { box: 'bg-bad-bg', title: 'text-bad-fg', Icon: XCircle },
+  info: { box: 'bg-surface-2', title: 'text-ink', Icon: Info },
 }
 
 export function Notice({

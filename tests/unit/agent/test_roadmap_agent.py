@@ -326,11 +326,56 @@ def test_model_cannot_send_money_as_a_structured_field():
 
 
 def test_split_advice_does_not_overwrite_existing_jar_configuration():
+    # get_jar_balances.ok.json là dữ liệu cũ (không có `kind`): không dựng được save_jars, bước giữ dạng hướng dẫn
     tools = scripted_tools()
     split = review(kind="adjust_split")
     result, client, _ = build(tools, outline({**split, "action": "save_jars"}), outline(split))
     assert result.outcome.ok
     assert "save_jars" in prompt(client, 1)["feedback"][0]["message"]
+    assert "action" not in args_for(tools, "save_roadmap")[0]["phases"][0]["steps"][0]
+
+
+def goal_balances():
+    return classify_result(
+        "get_jar_balances", mcp_ok(fixture("get_jar_balances.ok_goals.json"))
+    )
+
+
+def test_adjust_split_gan_save_jars_giu_loai_va_muc_tieu_goc():
+    tools = scripted_tools(get_jar_balances=goal_balances())
+    split = review(kind="adjust_split", action="save_jars")
+    result, _, scope = build(tools, outline(split))
+    assert result.outcome.ok and scope.calls == 1
+    (stored,) = args_for(tools, "save_roadmap")
+    action = stored["phases"][0]["steps"][0]["action"]
+    assert action["tool"] == "save_jars"
+    params = action["params"]
+    assert params == normalize_params("save_jars", params)
+    assert {"user_id", "confirm_token"}.isdisjoint(params)
+    balances = fixture("get_jar_balances.ok_goals.json")["data"]["jars"]
+    lines = {
+        line["jar"]["code"]: line
+        for line in fixture("optimize_allocation.ok.json")["data"]["lines"]
+    }
+    # thứ tự, tên, màu, biểu tượng, loại và mục tiêu GỐC lấy từ get_jar_balances; tỷ lệ từ bộ tối ưu
+    assert [j["code"] for j in params["jars"]] == [j["code"] for j in balances]
+    for got, jar in zip(params["jars"], balances, strict=True):
+        assert got["kind"] == jar["kind"]
+        assert got["name"] == jar["name"] and got["color_key"] == jar["color_key"]
+        assert got["split_percent"] == lines[jar["code"]]["split_percent_proposed"]
+        assert got.get("goal_vnd") == jar.get("goal_vnd")
+        assert got.get("goal_date") == jar.get("goal_date")
+    assert sum(j["split_percent"] for j in params["jars"]) == 100
+    (proposal,) = [args["proposal"] for args in args_for(tools, "check_suitability")]
+    assert proposal["kind"] == "split"
+
+
+def test_save_jars_chi_gan_cho_buoc_adjust_split():
+    tools = scripted_tools(get_jar_balances=goal_balances())
+    wrong = review(action="save_jars")  # review_goal
+    result, client, _ = build(tools, outline(wrong), outline(review()))
+    assert result.outcome.ok
+    assert "adjust_split" in prompt(client, 1)["feedback"][0]["message"]
     assert "action" not in args_for(tools, "save_roadmap")[0]["phases"][0]["steps"][0]
 
 
