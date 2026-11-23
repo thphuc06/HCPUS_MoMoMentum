@@ -121,6 +121,53 @@ Người điều phối (Claude Code trên máy Phúc) giao bốn gói cho bốn
 
 (Điền khi đóng phase.)
 
+### Tiêu chí 3 (24/11)
+
+Kiểm trên AWS thật (`ap-southeast-1`) ngày 24/11, 06:46 đến 06:56 (+07), worker Kiro (Claude Opus 5.5) do Claude Code điều phối, Phúc đồng ý ghi dữ liệu thử. Không deploy, không migration, không sửa code. Ghi dữ liệu chỉ qua `scripts/inject_behavior_shift.py` (luồng nạp CSV F6) và `POST /demo/reset` (`scripts/seed_demo.py`). Đọc qua REST (`/roadmap/versions`, `/roadmap?which=latest`, `/roadmap/jobs/{id}`), CloudWatch Logs và Data API bằng secret `yofina-db-app` có đặt `app.user_id` (chỉ SELECT).
+
+**Kết luận: đạt có điều kiện.** Ca đổi hành vi đạt trên `lan` (không chạy được trên `minh`) với `--factor 4` (không dùng mặc định 2). Ca khoản lớn đơn lẻ đạt.
+
+**Vì sao không dùng `minh`.** Sau khi đặt lại, `minh` có sẵn dấu hiệu `confirmed` (nguồn `persona_seed`) cho `an_uong`, mức 520.000 → 810.000 ₫, điểm gãy 2026-11-04. Mỗi (người dùng, hũ) chỉ có tối đa MỘT dấu hiệu mở, và `detect_and_store` bỏ qua hũ đã có dấu hiệu `confirmed` nên không thể có dòng mới, đúng như thiết kế. Script chạy thử cũng báo "Hai tuần cuối của hũ đã đạt 2.0 lần mức cũ (435,000 VND mỗi tuần)". Các hũ khác không dùng được: `giai_tri` bị bỏ qua vì `insufficient_history` (mức cũ 31.000 ₫, dưới `min_abs_change_vnd` 50.000 ₫), `di_lai` bị bỏ qua vì `sparse`. `giamkhao1` và `giamkhao2` cũng là persona `minh`. `giamkhao3` (persona `vy`) đã có dấu hiệu `applied` với điểm gãy 2026-10-31, nên điểm gãy mới trong hai tuần cuối trùng trong `dedupe_days` 14 ngày. Chọn `lan`: có hũ `an_uong` đủ điều kiện, không có dấu hiệu và không có lộ trình.
+
+**Ca đổi hành vi (`lan`, hũ `an_uong`)**
+
+Chuỗi chi theo tuần mà `detect_and_store` đọc (từ `app_get_forecast_context`, cũ tới mới, tuần cuối kết thúc 2026-11-20, ngày mô phỏng 2026-11-21) được dựng lại cục bộ bằng chính `yofina_forecast.change.spending_series` và `yofina_ml.change`, chỉ đọc:
+
+| Lần | Thêm (script) | Ghi được | 6 tuần (nghìn ₫) | PELT |
+|---|---|---|---|---|
+| Trước khi thêm (sau đặt lại) | | | 459, 471, 181, 336, 698, 694 | không xác nhận (batch 06:46 xác nhận lại) |
+| `--factor 2` (mặc định) | không thêm gì | | | script báo hai tuần cuối đã đạt 2 lần mức cũ 336.000 ₫ |
+| `--factor 3` | 18 dòng, 624.000 ₫ | 12 dòng, 431.000 ₫ (6 dòng bị khử trùng) | 459, 471, 181, 336, 973, 850 | không xác nhận (batch 06:47) |
+| Đặt lại rồi `--factor 4` | 18 dòng, 1.296.000 ₫ | 15 dòng, 1.071.000 ₫ (3 dòng bị khử trùng) | 459, 471, 181, 336, 1.119, 1.344 | **xác nhận** |
+
+Với `--factor 3`, hai tuần lệch tăng khoảng 550.000 ₫ so với mức cũ, nhưng với sigma khoảng 150.000 ₫ thì penalty `6 · sigma² · ln 52` cần khoảng 630.000 ₫. Với 6 tuần lịch sử và một tuần nền thấp (181.000 ₫), bộ phát hiện chỉ xác nhận khi mức mới gấp khoảng 3 lần mức cũ.
+
+Kết quả của lần `--factor 4`:
+
+- `behavior_flags`: một dòng mới `2dead1bf…`, `an_uong`, `pelt`, `up`, `old_weekly_vnd` 361.750, `new_weekly_vnd` 1.219.868, `change_point_date` 2026-11-07, `weeks_held` 2, `sigma_vnd` 149.915, `params_version` 2026-11-phase4-goi3-2. Dòng được tạo lúc 06:50:00, chuyển `applied` lúc 06:50:10, sau khi lộ trình được lưu.
+- Bước phát hiện chạy trong `run_user`, do API nạp dữ liệu gọi ngay sau `confirm_rows` (`trigger` `manual`, có trong `POST_STEP_TRIGGERS`). Log `yofina-forecast-batch` lúc 06:49:59–06:50:00 có `"confirmed": ["an_uong"]`, `"published": ["2dead1bf-…"]` và metric `BehaviorChangeConfirmed` 1, nghĩa là `behavior.changed` đã phát. Lần gọi `run_user` với `trigger` `nightly` theo lệnh script in ra (06:50:20) không tạo gì mới (dấu hiệu đã có, nằm trong `dedupe_days`), tức bước này chạy lại an toàn.
+- `yofina-roadmap-regen` chạy một lần lúc 06:50:00, 10,1 s. Job `fd116720…`: `trigger` `behavior_changed`, `behavior_flag_id` và `dedupe_key` bằng `2dead1bf…`, `requested_at` 06:50:00, `finished_at` 06:50:10 (9,6 s), `status` `done`, `stage` `save`, `progress` 100. `GET /roadmap/jobs/{id}` trả cùng số liệu.
+- `GET /roadmap/versions`: phiên bản 1 (`4f750c5c…`), `active`, `reason_code` `behavior_changed`, lý do "Chi Ăn uống mỗi tuần tăng từ 361.750 ₫ lên 1.219.868 ₫ và giữ mức đó 2 tuần.", `feasibility` `on_track`, 2 bước. Lộ trình mới là v1 vì `lan` chưa có lộ trình nào, nên được dùng ngay (`active`), không phải `proposed`. `GET /roadmap?which=latest` trả khối `roadmap` có `reason.detail` "Chi Ăn uống mỗi tuần" từ 361.750 ₫ lên 1.219.868 ₫, kèm `behavior_flag_id`.
+
+**Ca khoản lớn đơn lẻ (`lan` sau khi đặt lại, hũ `an_uong`)**
+
+- `--mode one-off --apply --consent`: một dòng 3.360.000 ₫ ngày 2026-11-17 (10 lần mức cũ 336.000 ₫), ghi được 1/1.
+- Chuỗi tuần thô là 459, 471, 181, 336, 698, 4.054 (nghìn ₫). Bước z bền MAD đánh dấu đúng ngày 2026-11-17 (`one_off_days`), tuần cuối sau khi làm sạch còn 939.716 ₫, PELT không xác nhận.
+- Lần chạy `run_user` sau nạp (06:52:17) và lần `nightly` (06:52:31) đều log `checked: ["an_uong"]`, không có `confirmed`. `behavior_flags` có 0 dòng (không có cả `suspected`). `roadmap_jobs` có 0 dòng, `GET /roadmap/versions` trả `[]`, log `yofina-roadmap-regen` trống từ 06:52 tới lúc kiểm (khoảng 06:54).
+
+**Hàng đợi, Aurora, đặt lại**
+
+- DLQ `yofina-roadmap-events-dlq` và `yofina-forecast-events-dlq`: 0 tin (`ApproximateNumberOfMessages` và `NotVisible` đều 0).
+- Aurora `yofina-db`: `MinCapacity` 0, `MaxCapacity` 2, tự ngủ sau 600 s.
+- Cuối buổi chạy `uv run scripts/seed_demo.py minh lan`. `lan` có 0 dấu hiệu và 0 lộ trình. `minh` trở lại seed: dấu hiệu `confirmed` cài sẵn cùng v1 `superseded`, v2 `active`, v3 `proposed` `behavior_changed`. `giamkhao1` đến `giamkhao3` chỉ được chạy thử (không ghi).
+
+**Phát hiện (chưa sửa)**
+
+1. Theo thiết kế, tiêu chí 3 không làm được trên `minh` sau khi đặt lại, vì seed đã có điểm gãy và dấu hiệu `confirmed` mở cho `an_uong`. Muốn kiểm trên `minh` thì cần một tài khoản persona `minh` không có dấu hiệu seed, hoặc chỉ ra hũ khác có đủ lịch sử.
+2. `--factor` mặc định 2 không đủ trên `lan`, và cả 3 cũng không đủ. Docstring của script ghi "đủ lớn để PELT xác nhận sau hai tuần giữ mức". Điều đó chỉ đúng với chuỗi ít nhiễu, còn với 6 tuần lịch sử của `lan` thì cần khoảng 3 lần mức cũ.
+3. Script lập kế hoạch rồi nạp, nhưng bước khử trùng của luồng nạp loại một phần dòng trùng (ngày, số tiền) với giao dịch có sẵn: lần `--factor 3` bỏ 6/18 dòng, lần `--factor 4` bỏ 3/18 dòng. Vì vậy tổng ghi được thấp hơn mức mục tiêu mà script in ra. Script có báo `rows_duplicate` nhưng không bù.
+4. `yofina-roadmap-regen` không ghi dòng log ứng dụng nào (chỉ có START, END, REPORT). Bằng chứng job phải đọc từ `roadmap_jobs` hoặc REST.
+
 ### Quyết định hợp đồng phase 4
 
 Viết ngày 2026-11-23 bởi subagent làm "Bước 0 — Hợp đồng" của phase 4 (Claude Sonnet 5.5). Bốn luồng sau đọc mục này cùng [contracts/README.md](../../../contracts/README.md#phase-4-chống-chịu-lộ-trình-phân-hũ-tự-động) và [db/README.md](../../../db/README.md#schema-phase-4-0052). Mọi mục dưới đây là lựa chọn tự quyết khi file phase chưa nói rõ hoặc cần chỉnh; **lệch so với file phase** được đánh dấu. Migration `0052`, tool và route mới **chưa chạy, chưa deploy**.
