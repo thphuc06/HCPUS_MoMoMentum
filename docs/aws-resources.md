@@ -157,7 +157,7 @@ Thuộc stack `YofinaTools` (construct `ClassifyPipeline`, `infra-cdk/lib/classi
 
 ### Phase 4 luồng C: sinh lại lộ trình chạy nền — **đã deploy 23/11 tối** (`YofinaTools` từ `main` 15e9bc7)
 
-Thuộc stack `YofinaTools` (construct `RoadmapRegen`, `infra-cdk/lib/roadmap-regen.ts`). Mã ở `pipelines/roadmap/`. Chỉ đã synth và chạy test CDK, chưa tạo trên AWS. Không có thứ nào tính tiền theo giờ.
+Thuộc stack `YofinaTools` (construct `RoadmapRegen`, `infra-cdk/lib/roadmap-regen.ts`). Mã ở `pipelines/roadmap/`. Đã tạo trên AWS ngày 23/11 tối (deploy `YofinaTools` từ `main` 15e9bc7). Không có thứ nào tính tiền theo giờ.
 
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
 |---|---|---|---|---|
