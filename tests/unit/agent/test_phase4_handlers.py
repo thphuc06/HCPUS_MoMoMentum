@@ -21,7 +21,8 @@ from agent_helpers import (
     types,
 )
 from yofina_agent import notices
-from yofina_agent.schemas import Intent, IntentParams
+from yofina_agent.schemas import Intent
+from yofina_agent.textutil import strip_accents
 from yofina_agent.tools import classify_result
 from yofina_agent.turn import Turn
 from yofina_agent.writer import build_writer_prompt
@@ -31,11 +32,6 @@ from yofina_core.resilience import load_shock_set
 
 def gateway(tool_name, payload):
     return FakeTools({tool_name: classify_result(tool_name, mcp_ok(payload))})
-
-
-def with_shock_id(monkeypatch, shock_id):
-    # C3 mới thêm trường này vào schema của router.
-    monkeypatch.setattr(IntentParams, "shock_id", property(lambda self: shock_id), raising=False)
 
 
 @pytest.mark.parametrize(
@@ -51,11 +47,12 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
     payload = fixture(f"{tool}.ok.json")
     data = payload["data"]
     args = {}
+    params = {}
     if intent == "stress":
-        args = {"shock_id": data["shock"]["shock_id"]}
-        with_shock_id(monkeypatch, args["shock_id"])
+        args = params = {"shock_id": data["shock"]["shock_id"]}
     elif intent == "roadmap":
         args = {"which": "latest"}
+        params = {"roadmap_action": "view"}
 
     if llm_down:
         classify = Turn.classify_guarded
@@ -69,7 +66,7 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
 
     events, tools, writer = run_turn(
         "Cho mình xem kết quả",
-        llm=make_llm([route_response(intent=intent)]),
+        llm=make_llm([route_response(intent=intent, **params)]),
         tools=gateway(tool, payload),
         monkeypatch=monkeypatch,
     )
@@ -118,12 +115,8 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
 
 @pytest.mark.parametrize("shock_id", [None, "unknown_shock"])
 def test_stress_clarify_uses_config(monkeypatch, shock_id):
-    routed = route_response(intent="stress")
-    if shock_id is not None:
-        with_shock_id(monkeypatch, shock_id)
-        routed = route_response(
-            intent="stress", clarify={"slot": "other", "question": "Router muốn hỏi gì?", "chips": []}
-        )
+    clarify = {"slot": "other", "question": "Router muốn hỏi gì?", "chips": []} if shock_id else None
+    routed = route_response(intent="stress", shock_id=shock_id, clarify=clarify)
     events, tools, writer = run_turn("Thử cú sốc", llm=make_llm([routed]), monkeypatch=monkeypatch)
     check_agui_order(events)
     (block,) = blocks_of(events)
@@ -137,6 +130,30 @@ def test_stress_clarify_uses_config(monkeypatch, shock_id):
     assert not tools.calls and not writer.calls
 
 
+@pytest.mark.parametrize("click_chip", [True, False])
+def test_stress_routes_chip_or_full_label_without_model(monkeypatch, click_chip):
+    payload = fixture("stress_test.ok.json")
+    shock_id = payload["data"]["shock"]["shock_id"]
+    label = payload["data"]["shock"]["label"]
+    if click_chip:
+        events, _, _ = run_turn(
+            "Thử cú sốc", llm=make_llm([route_response(intent="stress")]), monkeypatch=monkeypatch
+        )
+        (clarify,) = blocks_of(events)
+        question = next(chip["value"] for chip in clarify["data"]["chips"] if chip["label"] == label)
+    else:
+        question = f"Nếu {strip_accents(label)} thì sao?"
+
+    llm = make_llm([route_response(intent="lookup", lookup_kind="balance")])
+    events, tools, _ = run_turn(
+        question, llm=llm, tools=gateway("stress_test", payload), monkeypatch=monkeypatch
+    )
+    check_agui_order(events)
+    assert tools.calls == [("stress_test", {"shock_id": shock_id})]
+    assert [block["type"] for block in blocks_of(events)] == ["stress_result"]
+    assert not llm[1].calls
+
+
 @pytest.mark.parametrize(
     "intent, tool, error_fixture",
     [
@@ -145,12 +162,11 @@ def test_stress_clarify_uses_config(monkeypatch, shock_id):
     ],
 )
 def test_phase4_tool_error(monkeypatch, intent, tool, error_fixture):
-    if intent == "stress":
-        with_shock_id(monkeypatch, load_shock_set().shocks[0].shock_id)
+    params = {"shock_id": load_shock_set().shocks[0].shock_id} if intent == "stress" else {}
     payload = fixture(error_fixture)
     events, tools, writer = run_turn(
         "Cho mình xem kết quả",
-        llm=make_llm([route_response(intent=intent)]),
+        llm=make_llm([route_response(intent=intent, **params)]),
         tools=gateway(tool, payload),
         monkeypatch=monkeypatch,
     )

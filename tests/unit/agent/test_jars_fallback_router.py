@@ -1,12 +1,15 @@
 import json
 
 import pytest
+from agent_helpers import REPO, make_llm, route_response, run
 from yofina_agent.fallback import classify_by_rules
 from yofina_agent.jars import resolve_jar
-from yofina_agent.router import ROUTER_SYSTEM, build_router_prompt
-from yofina_agent.schemas import IntentResult
+from yofina_agent.router import ROUTER_SYSTEM, build_router_prompt, route
+from yofina_agent.schemas import IntentParams, IntentResult
+from yofina_agent.textutil import strip_accents
 
 from yofina_core.llm import bedrock_json_schema
+from yofina_core.resilience import load_shock_set
 
 # Danh sách hũ của "người dùng" trong test: dữ liệu đầu vào, không phải bảng nằm trong mã sản phẩm.
 JARS = [
@@ -107,6 +110,24 @@ def test_chuyen_thieu_thong_tin_van_ra_y_dinh_de_luong_chinh_hoi_lai():
     assert m.intent == "move" and m.params.amount_vnd is None and m.params.from_jar_text is None
 
 
+def test_bo_phan_loai_du_phong_nhan_ra_diem_chong_chiu_va_xem_lo_trinh():
+    assert classify_by_rules("Điểm chống chịu của mình còn bao nhiêu?").intent == "resilience"
+    routed = classify_by_rules("Cho mình xem lộ trình tiết kiệm")
+    assert (routed.intent, routed.params.roadmap_action) == ("roadmap", "view")
+    assert classify_by_rules("Tư vấn lộ trình đầu tư").intent == "out_of_scope"
+    assert classify_by_rules("Tư vấn lộ trình vay").intent == "out_of_scope"
+
+
+@pytest.mark.parametrize("shock", load_shock_set().shocks, ids=lambda shock: shock.shock_id)
+def test_bo_phan_loai_du_phong_khop_nguyen_nhan_cu_soc(shock):
+    label = strip_accents(shock.label)
+    routed = classify_by_rules(f"Nếu {label} thì sao?")
+    assert (routed.intent, routed.params.shock_id) == ("stress", shock.shock_id)
+
+    routed = classify_by_rules(f"Nếu {label} và phải chi thêm 500 nghìn thì sao?")
+    assert (routed.intent, routed.params.amount_vnd) == ("what_if", 500_000)
+
+
 def test_schema_router_phang_va_day_du():
     schema = bedrock_json_schema(IntentResult)
     text = json.dumps(schema)
@@ -124,6 +145,27 @@ def test_schema_router_phang_va_day_du():
         "roadmap",
     ]
     assert set(schema["required"]) == set(IntentResult.model_fields)
+    params = schema["properties"]["params"]
+    assert set(params["required"]) == set(IntentParams.model_fields)
+    assert params["properties"]["shock_id"] == {"type": ["string", "null"]}
+    assert params["properties"]["roadmap_action"] == {
+        "type": ["string", "null"],
+        "enum": ["view", "create", None],
+    }
+
+
+def test_prompt_router_gui_danh_sach_cu_soc_tu_file():
+    path = REPO / "libs" / "yofina_core" / "src" / "yofina_core" / "shocks.json"
+    shocks = json.loads(path.read_text(encoding="utf-8"))["shocks"]
+    llm, client, _ = make_llm([route_response(intent="stress")])
+    run(route(llm, "Thử cú sốc", "", max_attempts=1, max_tokens=400))
+
+    system = client.calls[0]["system"][0]["text"]
+    catalog = "\n".join(
+        f"- {shock['shock_id']}: {shock['label']} — {shock['description']}" for shock in shocks
+    )
+    assert system.endswith(catalog)
+    assert all(key not in system for shock in shocks for key in shock["params"])
 
 
 def test_prompt_router_khong_chua_cau_hoi_demo_va_boc_du_lieu_trong_the():

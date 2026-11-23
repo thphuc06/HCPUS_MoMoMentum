@@ -65,7 +65,7 @@ from yofina_agent.store import (
     TurnRecordStore,
     UnconfiguredTurnRecordStore,
 )
-from yofina_agent.textutil import normalize
+from yofina_agent.textutil import match_shock_id, normalize
 from yofina_agent.tools import (
     ContractMismatch,
     GatewayTools,
@@ -702,8 +702,10 @@ class Turn:
         if await self.answer_keep_previous(routed, question, index):
             return
         handler = self._intent_handlers()[routed.intent]
-        # Cú sốc được kiểm tra trong handler để chip luôn lấy từ cấu hình.
-        if routed.intent != "stress" and (req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed)):
+        # Handler tự kiểm mã cú sốc và chọn thao tác với lộ trình.
+        if routed.intent not in ("stress", "roadmap") and (
+            req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed)
+        ):
             await self.emit_clarify(req, routed)
             return
         await handler(routed, question)
@@ -789,7 +791,14 @@ class Turn:
             return await g.check(text, "INPUT")
 
     async def classify(self, question: str, history: str) -> IntentResult | None:
-        """Router bằng LLM; không gọi được thì bộ phân loại dự phòng bằng luật (suy giảm có kiểm soát)."""
+        """Khớp cú sốc theo cấu hình trước, sau đó dùng router LLM hoặc luật dự phòng."""
+        if (shock_id := match_shock_id(question)) is not None:
+            return IntentResult(
+                intent="stress",
+                params=IntentParams(shock_id=shock_id),
+                confidence=1.0,
+                needs_clarification=False,
+            )
         if not self.llm_down:
             try:
                 with self.step("router"):
@@ -930,16 +939,16 @@ class Turn:
         await self.write("resilience", question, res.compact)
 
     async def on_stress(self, r: IntentResult, question: str) -> None:
-        shocks = load_shock_set().shocks
-        shock_id = getattr(r.params, "shock_id", None)
-        if not any(shock.shock_id == shock_id for shock in shocks):
+        shocks = load_shock_set()
+        shock_id = r.params.shock_id
+        if shock_id is None or shocks.get(shock_id) is None:
             await self.emit_clarify(
                 ClarifyRequest(
                     slot="other",
                     question=notices.STRESS_QUESTION,
                     chips=[
                         ClarifyChipIn(label=shock.label[:40], value=notices.STRESS_CHIP_VALUE.format(label=shock.label))
-                        for shock in shocks[:6]
+                        for shock in shocks.shocks[:6]
                     ],
                 ),
                 r,
@@ -959,19 +968,25 @@ class Turn:
         await self.write("stress", question, res.compact)
 
     async def on_roadmap(self, r: IntentResult, question: str) -> None:
+        create = r.params.roadmap_action == "create"
+        which = "latest" if create else self.s.roadmap_default_which
         res = await self.call_tool_retry(
             "get_roadmap",
-            {"which": self.s.roadmap_default_which},
+            {"which": which},
             target="planner",
             compact=lambda o: compact_roadmap(o.payload or {}),
             block=roadmap_block,
+            emit=not create,
         )
         if res.outcome.code == ErrorCode.ROADMAP_NOT_FOUND.value:
-            latest = res.outcome if self.s.roadmap_default_which == "latest" else None
+            latest = res.outcome if which == "latest" else None
             await self.on_roadmap_missing(r, question, latest_outcome=latest)
             return
         if not res.outcome.ok:
             self.tool_failure(res.outcome)
+            return
+        if create:
+            await self.generate_roadmap("user_request", question, latest_outcome=res.outcome)
             return
         assert res.compact is not None
         await self.write("roadmap", question, res.compact)

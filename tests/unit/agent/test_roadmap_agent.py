@@ -450,6 +450,34 @@ def test_turn_missing_roadmap_generates_emits_and_records(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize("latest, reason", [("ok", "user_request"), ("error_not_found", "initial")])
+def test_turn_create_roadmap_uses_latest_as_base_or_creates_initial(monkeypatch, latest, reason):
+    tools = scripted_tools(latest=(latest,))
+    llm = make_llm(
+        [
+            route_response(intent="roadmap", roadmap_action="create"),
+            tool_response("draft_roadmap", outline(step())),
+        ]
+    )
+    events, _, _ = run_turn(
+        "Lập lộ trình tiết kiệm mới",
+        llm=llm,
+        tools=tools,
+        settings=agent_settings(roadmap_default_which="active"),
+        monkeypatch=monkeypatch,
+    )
+    check_agui_order(events)
+    assert args_for(tools, "get_roadmap") == [{"which": "latest"}]
+    (stored,) = args_for(tools, "save_roadmap")
+    assert stored["reason_code"] == reason
+    if latest == "ok":
+        assert stored["based_on_version"] == fixture("get_roadmap.ok.json")["data"]["version"]
+    else:
+        assert "based_on_version" not in stored
+    (block,) = blocks_of(events)
+    assert block["data"] == fixture("save_roadmap.ok.json")["data"]
+
+
 def test_turn_draft_failure_emits_degraded_notice(monkeypatch):
     events, tools, writer = run_turn(
         "Cho mình xem lộ trình",
