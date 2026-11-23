@@ -157,6 +157,8 @@ Thuộc stack `YofinaTools` (construct `ClassifyPipeline`, `infra-cdk/lib/classi
 
 ### Phase 4 luồng C: sinh lại lộ trình chạy nền — **đã deploy 23/11 tối** (`YofinaTools` từ `main` 15e9bc7)
 
+**Deploy 23/11 khuya (Claude Code)**: `YofinaTools` 4 lần, chỉ đổi code `yofina-roadmap-regen` (schema giữ field `title`, lọc `goals`, bỏ qua `profile.updated` có `onboarding`, log thông điệp lỗi); Runtime `yofina_agent` lên version 17 (`scripts/agent_deploy.py`). Không thêm tài nguyên.
+
 Thuộc stack `YofinaTools` (construct `RoadmapRegen`, `infra-cdk/lib/roadmap-regen.ts`). Mã ở `pipelines/roadmap/`. Đã tạo trên AWS ngày 23/11 tối (deploy `YofinaTools` từ `main` 15e9bc7). Không có thứ nào tính tiền theo giờ.
 
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
