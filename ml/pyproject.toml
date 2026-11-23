@@ -3,11 +3,15 @@ name = "yofina-ml"
 version = "0.1.0"
 description = "Mô hình dự báo, Monte Carlo và các kỹ thuật thống kê của Yofina Foresight (chỉ phụ thuộc numpy, scipy)."
 requires-python = ">=3.12,<3.14"
-# Chỉ numpy và scipy (master-plan mục 4). `ruptures` (PELT) thêm ở phase 4. Kiểu dữ liệu (types.py, serde.py) chỉ dùng
-# thư viện chuẩn: Lambda `yofina-forecast-batch` đóng zip numpy + scipy (không Docker, không StatsForecast).
+# numpy và scipy (master-plan mục 4); `ruptures` (PELT, `yofina_ml.change`) thêm ở phase 4 gói 3. Kiểu dữ liệu (types.py,
+# serde.py) chỉ dùng thư viện chuẩn: Lambda `yofina-forecast-batch` đóng zip numpy + scipy + ruptures (không Docker, không
+# StatsForecast). ruptures 1.1.10 có wheel `manylinux2014_aarch64` cho cp312 và cp313 (1,3 MB, chỉ phụ thuộc numpy và scipy), nên
+# `scripts/build_lambda.py ... --arch arm64` cài được; `yofina_ml.change` chỉ import ruptures khi chạy PELT (đường sự kiện
+# chỉ dùng CUSUM, không cần).
 dependencies = [
     "numpy>=2.0",
     "scipy>=1.13",
+    "ruptures>=1.1.10",
 ]
 
 [build-system]

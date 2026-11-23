@@ -1,0 +1,1474 @@
+{
+"verdicts": {
+"035cafd709a075ad5828f03d": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"04538f4882d51f6e940f38ff": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"06a76fabedd07fc9aa771970": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"06c8f0bbe2f70316e61372dc": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"07ae1a4a4681351514e33e43": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": null
+},
+"08755bd8b0dfceeedbc99078": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"0c68dc79e02b8469d8359c3c": {
+"jar": "di_lai",
+"conf": 0.8,
+"runner": "an_uong"
+},
+"0d288b4d0ab4096767edcecb": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"0e68256c13c38f4326f386ba": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"0ea9457661350c142c7e917f": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"0ffd961dcfd71a5c33a4cb22": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"1001517790ec3d8ca6ae0a77": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"13175e44ef9c3898e42a50ce": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"1347923176bba9d15c3b6ea9": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"134e191a5eb525222f9e70a8": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"1402701ef700326d4e862677": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"1458da3fcb465dcb38791cc3": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"1621b51b23e97f6f2c976258": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"168a527c96a38553bda00125": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"16fbefb0f11f7eac8cd9fdab": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"170da5b081c55933a2d92eb8": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"17120242202573bcbc9aca4e": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"17d1261960ac049d20566ec7": {
+"jar": "nghia_vu",
+"conf": 0.7,
+"runner": null
+},
+"1a005421ef26131e331b6b40": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"1a97e3794df9dd97c949bb2c": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"1aea1cde001cdf9e2f97f458": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"1d19bb5bd28cbb33793dfd21": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"1e972a6756d405c3fd0569c8": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"1fca225e0cd98c280c4fd0be": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"214c23bc309d1bb599312dc6": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"216c8322011069f6cf6a6746": {
+"jar": null,
+"conf": 0.0,
+"runner": "di_lai"
+},
+"2287abcdf7b11cdc7dd26dbe": {
+"jar": "di_lai",
+"conf": 0.8,
+"runner": null
+},
+"23c3c8c4f459ee6593164f1f": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"254f7b9f73a30388b2c26fa5": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"26062a7a7fc1c2d7e3bbe2c0": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"26952140352f27a2a57503af": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"27b1c0959d3ebcd518c0cf73": {
+"jar": "giai_tri",
+"conf": 0.9,
+"runner": null
+},
+"281b89e453327e2b21db7d08": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"28823c536b28b6ae97d04c4e": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"29683fb09ef7860cb3d115df": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"2acb42c40c8ccd77172e2349": {
+"jar": "giai_tri",
+"conf": 0.9,
+"runner": null
+},
+"2bc3e6474e9ad4e787ce3465": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"2bcdc6d8181fc7471c299f4b": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "hoa_don"
+},
+"2e8fb4f36b0fd192ce35053d": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"2edbac4d6c074817464ebf1a": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"2f6a8bc77397b23d896ee886": {
+"jar": "hoa_don",
+"conf": 0.6,
+"runner": null
+},
+"2f787c6950d7c9dc3871429e": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"2fd2eff7e056416bec367118": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"30971328d1f5f32231ac7752": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"30bbb989aa741755c2875cf5": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"3145662de3503a1bf87e0f6f": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"331e1b2b185d67b9ed4c6990": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"3347827e04a11087ee04b64f": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"339d5eead805b3b9e76b8001": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": "an_uong"
+},
+"33ba0685fa89752fcae71a23": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"34ae33aa46f67c22b6e17845": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"352f78261d931dcf1d2aeeac": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"35646af90ce71ebf92c329a3": {
+"jar": "di_lai",
+"conf": 0.8,
+"runner": null
+},
+"3604f4f2d207ef49bde899ad": {
+"jar": "giai_tri",
+"conf": 0.9,
+"runner": null
+},
+"3618cc504c2cd1a1e6c5365d": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"3675e6ef5c78747de2ba7faa": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"37efe0d8449ada1377495e96": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"3853a7dd318ee3ba747badc0": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"38b21450e283df764da01114": {
+"jar": "du_lich",
+"conf": 0.7,
+"runner": null
+},
+"391727a4f230ff65876c80ca": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"39e262d51f545bae77be02a9": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"3b1df5947953ea330bb76f09": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"3b55c4b88ecf65507592f585": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"3ba34af0d2e741c7c9690fb7": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": null
+},
+"3bfa62dd586ac791428ca6e7": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"3c3f886c6b142e961684547a": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"3cf201688263c9a5d0d6e44f": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"3e91e26218010e22c7d8311c": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"40036a20ca4058ac760265ff": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"40f0cf8dc646812279f721ea": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": null
+},
+"41291c24eeae2bf8c38b7c0f": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": null
+},
+"41986d05a0e8289f4377fa74": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": "di_lai"
+},
+"42475b51fc5d93aa8a9893e6": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": null
+},
+"4247e91fcf279d12bfb80342": {
+"jar": "du_lich",
+"conf": 0.7,
+"runner": "di_lai"
+},
+"4454df7427bff4c7ce437714": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"451d30048db40a45c2550850": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"469f61667e6dd74496afe634": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"474effde8649cac3ff53a642": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"47bbb096b8d54a9da44f94b3": {
+"jar": null,
+"conf": 0.0,
+"runner": "di_lai"
+},
+"4939f97cd918d00915fc0eeb": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"4a01eea94f03ed6593a40a35": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"4b178d4174cc5d8e5e1cb2df": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": null
+},
+"4c0978bb8cb989737837466c": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"4e685646e5746f82fb6f64ec": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"4e8a9c4534ec557600b28ae2": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"50426d4fb1e92800a208d7da": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": "di_lai"
+},
+"51c25e1a934514ff7b9db91e": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": null
+},
+"554c55512bab0bf62e889dbd": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": "hoa_don"
+},
+"55a1cecc46b8d4ba572a017d": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"5757cfb3c611136105482f56": {
+"jar": "di_lai",
+"conf": 0.8,
+"runner": null
+},
+"57dbebe64d5baa14d96b481a": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"58a6a3cadd8a805bcddeb8b1": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"59cbc2d1419ec64a815f6b69": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"5bb59ae6faa8d47a5f0570b6": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"5c43a03583f47755280beb8e": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"5c751af525e8d2a701d2624e": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"5d0b8a6218d369f4ede407a2": {
+"jar": "hoa_don",
+"conf": 0.9,
+"runner": null
+},
+"5d8633abc60a760e992c5292": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"5de1bc4a9da7ce5e09fca2a5": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"5e9b32c55f774de9801d763e": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"5f89f0a0324df26b9ef89551": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"60a2f97ec7f9495caa84e409": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"618e907db90b789ef1f41911": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"61e1c23a84c5ea714c0a4b83": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "hoa_don"
+},
+"625c63c1f0d8f64599b970db": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"627299b6a0fabe0d9dc8c923": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"627d6239bbd722c832095477": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"628bd29008127bb11e60e908": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"62d18574e99d5730eb4c4104": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"656662f8b333fa42bc7c4a41": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"667509bebb54319e2b6f0317": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"66965e6b5da7e68e6069c78e": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"672bc3f049f6b24cb5c29867": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": null
+},
+"6775b29e9861b1dedf0680bd": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"67c481461820650b34e17916": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"6800815ade3c2db6f9b5bb9a": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"691f8fe82a2651f9f66649e4": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"6acc7c954bdb30ff006d5fbb": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": "di_lai"
+},
+"6bfffe61071f3805ef9571b2": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"6c3594cc2a6d358dd7ceaef7": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"6c85e23af23a098fbcae280c": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"6ce2a2af029023395ccb68d0": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"6e5476766ddbdf9a9eb7024b": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"6e803eec8208e5c0c217a26c": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"6ea14f5b40b5abf82b39c769": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"6f16acb25a4c17c94ef9e73b": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"6f5c736dc40de44e7c9ccbf4": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"70d791ce34bcac5c20ddc206": {
+"jar": "hoa_don",
+"conf": 0.6,
+"runner": "an_uong"
+},
+"71c76619e98ca8dd85e2c9d3": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"71dfc823cf932137e62a9529": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"7201bfd6414084d6de6c9fa5": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"72758965b50ae9ce091a04eb": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"72e1c43c20073123ef113adc": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": "di_lai"
+},
+"73023d3a1bda03aa8a76a025": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"73d0fb4ec4838cea5fa8649d": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"73f5df5021f0929a7b0190d4": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"74364359a51d00d2738ee81b": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"74acc406d014996578cb2f4f": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"756797728f0fec1bc6ae4d9b": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": "an_uong"
+},
+"75a1d9dc2ca6c216cb40e5fd": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"783bab367d2098b3b3cbe850": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"78d477f661bef6e9eb5915ed": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"7980e836552c20a6de815ecb": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"7b7d11a38b9e1fb98da5ca3f": {
+"jar": "hoa_don",
+"conf": 0.5,
+"runner": null
+},
+"7d25291f6a357f9e8a7a2304": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"7ea35cac595a0226876232f3": {
+"jar": "an_uong",
+"conf": 0.85,
+"runner": "giai_tri"
+},
+"7eb130d5e808fca7049c6641": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"7eeab8eab0804010cfd344b7": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"8013e09858c4f7b7e481c15e": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": "di_lai"
+},
+"801a1ede5ea1980d6b5a2be9": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"826c1d8a2f05a46c4b303aad": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"82ec0d275896d1e609368e8e": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"83bf158669bb659d03126dc7": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"8446e3ff0597c50246ccbfe7": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"84b1d23fd5d18ef85d6f4091": {
+"jar": "nghia_vu",
+"conf": 0.7,
+"runner": null
+},
+"84c8562da6671ccda9aa19f4": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"84f7b9a36dd90ecdf7589b12": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"8501d7c6eadf9349a28c89a1": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"8599e19a0c86710f5404285d": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"85bf8cde4efd1da74fb59d38": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"884a19d9956086d8ffbe5a3b": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"8928a30b2c68df622deec9e3": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"8b03bf9849c2d4f3ae32732a": {
+"jar": "hoa_don",
+"conf": 0.6,
+"runner": null
+},
+"8b765046c86943a2d3d34a55": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"8d52228851f7905b468ea05e": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"8ed25d72fe90d41961890a76": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"8f715f34c7acc3f183087264": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"90a2d6d478ebe8251afbb9f4": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"92c857539710b41d115cc0a5": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"9327ca1c637049cbf4a89cb4": {
+"jar": "hoa_don",
+"conf": 0.9,
+"runner": null
+},
+"93b3fb713fef83b0b0c77165": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"93d3c35f1173889487ef726d": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"95e71e90d3fb0eeb083984bd": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"9616ee146bfa185798e4533b": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"97914f9a9ff041731cabe18d": {
+"jar": "hoa_don",
+"conf": 0.6,
+"runner": null
+},
+"98189339f9cb231a9a07a9af": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"9996cb1ed20c9a8fe51fb278": {
+"jar": "nghia_vu",
+"conf": 0.7,
+"runner": null
+},
+"99a2c462e188e5fb747ffec3": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"99c41c58f73c11048fa69260": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"9b450991e96dd8a9f7c7001e": {
+"jar": "du_phong",
+"conf": 0.7,
+"runner": null
+},
+"9bb2150a8cd4ec9be5b57ee8": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"9c002a990b7874bad69d5a96": {
+"jar": "hoa_don",
+"conf": 0.6,
+"runner": null
+},
+"9c622a44c9157180fdfdb062": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"9d27c57c7693d6a951f85a8b": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"a1a57d0cf3efc24052912e28": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"a2867233be7ab4ee3598ee06": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"a332fd2d7df93a05821a242e": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"a3ccb1fb40ded12ecf313829": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"a56ab336353fe158f243b37e": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"a607a4ebc177a02339b184db": {
+"jar": "di_lai",
+"conf": 0.8,
+"runner": null
+},
+"a639372488361edcb4f59926": {
+"jar": "an_uong",
+"conf": 0.95,
+"runner": null
+},
+"a8dceda0ecf4a7033c805d33": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"a8ee958e5cd0991a8724626c": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"a9df2aded946c13a0b3e9e94": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"aa9d2f81f372cbde0e76882f": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"ab6907ff7296507da86b6e97": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": "du_phong"
+},
+"ac21d2530211768c172a674d": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"ade1ae2fa89819a7ef41d9ac": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"ae0b1da754795cfc59aadb5e": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"aebdd573e9e9e11c271a4b56": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"af4d28787f12d78f6a798597": {
+"jar": "giai_tri",
+"conf": 0.9,
+"runner": null
+},
+"aff5ec1faea9c3644e92fde1": {
+"jar": "giai_tri",
+"conf": 0.7,
+"runner": null
+},
+"b03df600276b07850eff887e": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"b0ad76cf29abbdcf00436ffe": {
+"jar": "an_uong",
+"conf": 0.95,
+"runner": null
+},
+"b15243faa3c2bdaa6a9a19f1": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"b33fd213e6112466a6d658d9": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"b4214f0dc248e5ced62af002": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"b43a5b4fa58570272c795d86": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"b44d29d3211f8535da5bfb89": {
+"jar": "giai_tri",
+"conf": 0.7,
+"runner": null
+},
+"b62eb23fb997cb8872451923": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": null
+},
+"b992d6ebd5318b37ae0e15a0": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"b9e1dc53bf476ce3e978cc72": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"babb8dbc4b631c4c2deae002": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"bc83ee7088d2dc1fdcbb3f09": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"bde6bdb3f9059201582a39d7": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"bea5e09e682c4bb447a6d7ec": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"beebfdf100b05108aee7ff9f": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"bfc1ba17afccdaa437c1bc8e": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"bfccfc3bc9e17506de6e0feb": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": "an_uong"
+},
+"c043e6a292ee0be2c08790ce": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"c17350b260beac2e7b57e3f4": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"c29d1661d8616ad015abbc85": {
+"jar": "di_lai",
+"conf": 0.8,
+"runner": null
+},
+"c309fb878560ee15de4f646a": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"c31fb212eece284f3dc14b9c": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"c337dbe70090be27ae1bdf29": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"c4e840ca8ef86afe60168cd6": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"c572ab8a351c5c908e97c5a3": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"c974a61c9bfed1651e949000": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"ca44cffd718642de150e9e17": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"cad3a35667220585c1a28333": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"cae80c0fc431e558324b45d3": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"cbe028cd8a1ddd07ca110f46": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"ce5e249cdbc695d4d8a4e9df": {
+"jar": "hoa_don",
+"conf": 0.9,
+"runner": null
+},
+"cf2008665cef6870140acca9": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"cf2a0a58f495265c2c563c40": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"cf5050b538ca943da598c217": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"cfb99b92746f34decc65e13a": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"cfdaef1a9f56b62332bb825c": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"d13b651ad2d6b60d9c717bdd": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"d379ea2e5b5c574e279b9fe3": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"d3989ed7ee2c77b3b0fe1ba3": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"d6c4c96cdee6768fb2194e7b": {
+"jar": "hoa_don",
+"conf": 0.6,
+"runner": "an_uong"
+},
+"da05d4da05f1b1809ca27d65": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"db75dd702fb816282bf64e86": {
+"jar": "nghia_vu",
+"conf": 0.8,
+"runner": null
+},
+"dc4cb3f12925762edea4af24": {
+"jar": "an_uong",
+"conf": 0.95,
+"runner": null
+},
+"dc7e36d0af4445a6c057f22a": {
+"jar": "giai_tri",
+"conf": 0.9,
+"runner": null
+},
+"dcd51ed2fdb5a4189a1fd86f": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"de1e2a5a16ebec719ce334a4": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": "an_uong"
+},
+"de2850e12acd6f90809b64d5": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"de78a03cb09f0da55a21c763": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"dfa74f547266d6ff3ac0195b": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": "hoa_don"
+},
+"e1a5860d37a6ef4d5a13597d": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"e29fbe5a1f3fbea790cf477b": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": "di_lai"
+},
+"e2a2765c54dcf28ddc866b64": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"e30eea652cacbc55f3cf901c": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"e41dbed869d795da2a63d460": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"e4ae6092120451b9c9ea7abf": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"e5a54de605c95d20d4cbf397": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"e5e9cb07f0a9f8cad935956e": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": "hoa_don"
+},
+"e705df4ae27e0bfa810a1ec7": {
+"jar": "an_uong",
+"conf": 0.6,
+"runner": null
+},
+"e7ae913e9ec6f627dd8425a3": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"e7caae61899553fa376b42d3": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"e89178514c66003313db210d": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"e934a0d0dd4fe338db66a37f": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": null
+},
+"eaf55e3be87ed4d28048a424": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"ebc46f5960ff1d88fe6d2150": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"ebebaf5ec7a63740bcc2f9c8": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"ec95719abe08a0cf61fe53f9": {
+"jar": "an_uong",
+"conf": 0.95,
+"runner": null
+},
+"ed33f80603418bbd49b0344d": {
+"jar": null,
+"conf": 0.0,
+"runner": null
+},
+"edfc60c6f4ccb32f5e957ad1": {
+"jar": "du_phong",
+"conf": 0.35,
+"runner": "an_uong"
+},
+"ee42a6c5d7f0a7d39da52615": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"ee98fdf3b88c70b1657a6047": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"ef445e69896bbe48f7a283f9": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"f43022abc38c742d674ce15e": {
+"jar": "giai_tri",
+"conf": 0.8,
+"runner": null
+},
+"f55f2c95304ebe112b4e4c31": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"f718c35f17948d53b2094c8b": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": "di_lai"
+},
+"f7c20ff9baec5777d79c494d": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"f9072f670724390c3816be8a": {
+"jar": "an_uong",
+"conf": 0.9,
+"runner": null
+},
+"f9a6448b11893e7b36355a0c": {
+"jar": "hoa_don",
+"conf": 0.8,
+"runner": null
+},
+"fb15f5e1481a0fbdf6650d7f": {
+"jar": "di_lai",
+"conf": 0.7,
+"runner": "hoa_don"
+},
+"fb59b56d4151f893c43b320d": {
+"jar": "hoa_don",
+"conf": 0.6,
+"runner": null
+},
+"fc985807ac9b93a1b6f53776": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"fcb175a8e613d8e03c16aff9": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"fcc4e6e12a56319d408b20cb": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"fddf2eb20646cb2014166149": {
+"jar": "hoa_don",
+"conf": 0.7,
+"runner": "an_uong"
+},
+"fe62c413676154409c6e06b0": {
+"jar": "an_uong",
+"conf": 0.8,
+"runner": null
+},
+"feb10b68640d5af3b1186c51": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"fecee81e2c8dfe985284bf24": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+},
+"ff9f13bf39fc4101b0bcb28b": {
+"jar": "an_uong",
+"conf": 0.7,
+"runner": null
+}
+}
+}

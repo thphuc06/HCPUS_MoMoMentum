@@ -311,6 +311,7 @@ class FakeRepo:
         obligations=(),
         credit_line=None,
         salary_events=(),
+        app_date=None,  # phase 4: ngày neo cho lộ trình seed (repo thật dùng; bản giả chỉ nhận)
     ):
         self.resets.append(
             {

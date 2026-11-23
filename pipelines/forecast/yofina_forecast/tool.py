@@ -6,6 +6,10 @@ chat và màn Chi tiết hũ cùng số). Khác ledger ở chỗ Lambda này có
 
 Kết quả theo `contracts/tools/forecast.results.schema.json`: `{status, as_of, app_date, data}`, `data` = `ForecastTimelineData`.
 
+Phase 4 (luồng A): CŨNG phục vụ `forecast___get_resilience_score` và `forecast___stress_test` qua Gateway (`resilience.py`, `stress.py`)
+và REST `GET /resilience`, `GET /resilience/shocks`, `POST /resilience/stress` của HTTP API (cùng engine, cùng số với tool).
+`planner___optimize_allocation` KHÔNG đi qua đây: ledger gọi Invoke Lambda forecast-batch (op `optimize_allocation`, `batch.py`).
+
 Phase 3: Lambda này CŨNG phục vụ `forecast___run_scenario` và `forecast___list_scenarios` (`scenario.py`) và `forecast___affordability_check` (`afford.py`) qua Gateway,
 và đường REST `POST /affordability` của HTTP API (cùng engine, trả khối `affordability_card`). `GET /forecasts/{jar_code}` vẫn do
 Lambda ledger phục vụ.
@@ -25,13 +29,17 @@ from zoneinfo import ZoneInfo
 from yofina_core.blocks import (
     block_to_wire,
     build_affordability_card,
+    build_resilience_score,
+    build_stress_result,
     new_trace_id,
     trace_id_from_traceparent,
 )
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
 from yofina_forecast.afford import AffordabilityEngine
+from yofina_forecast.resilience import ResilienceEngine
 from yofina_forecast.runner import Pipeline
 from yofina_forecast.scenario import ScenarioEngine
+from yofina_forecast.stress import StressEngine, list_shocks
 from yofina_ledger.rest_api import _body, _claims, _header, error_response, response
 from yofina_ledger.wallet_reads import WalletReads
 
@@ -40,6 +48,7 @@ log = logging.getLogger("yofina.forecast.tool")
 TOOL_PREFIX = "forecast___"
 SOURCE_TOOL = "forecast___get_forecast"
 AFFORDABILITY_BODY_FIELDS = frozenset({"amount_vnd", "funding_source", "jar", "label", "date"})
+STRESS_BODY_FIELDS = frozenset({"shock_id"})
 
 
 @dataclass(frozen=True)
@@ -127,6 +136,8 @@ def handle_gateway(
     pipeline: Pipeline,
     scenario: ScenarioEngine | None = None,
     afford: AffordabilityEngine | None = None,
+    resilience: ResilienceEngine | None = None,
+    stress: StressEngine | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     tool = tool_name(context)
@@ -161,6 +172,10 @@ def handle_gateway(
                 label=event.get("label"),
                 pay_date=event.get("date"),
             )
+        elif tool == "get_resilience_score" and resilience is not None:
+            result = resilience.get(user_id, refresh=event.get("refresh"))
+        elif tool == "stress_test" and stress is not None:
+            result = stress.run(user_id, event.get("shock_id"))
         else:
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Tool không tồn tại.")
         outcome = str(result["status"])
@@ -186,10 +201,24 @@ def handle_gateway(
         )
 
 
-# --- REST: POST /affordability (HTTP API, JWT) -----------------------------------------------------------------
-def handle_http(event: Mapping[str, Any], afford: AffordabilityEngine) -> dict[str, Any]:
-    """Đường vào HTTP API (payload v2) của Lambda này: chỉ `POST /affordability` (x-lambda: forecast). Danh tính CHỈ lấy từ claim
-    `sub` của JWT authorizer; thân yêu cầu không có `user_id`. Trả khối `affordability_card` (cả phong bì), cùng số với tool."""
+# --- REST: POST /affordability, GET /resilience, GET /resilience/shocks, POST /resilience/stress (HTTP API, JWT) ----
+def _as_of(result: Mapping[str, Any]) -> tuple[datetime, date]:
+    return (
+        datetime.fromisoformat(result["as_of"].replace("Z", "+00:00")),
+        date.fromisoformat(result["app_date"]),
+    )
+
+
+def handle_http(
+    event: Mapping[str, Any],
+    afford: AffordabilityEngine,
+    resilience: ResilienceEngine | None = None,
+    stress: StressEngine | None = None,
+) -> dict[str, Any]:
+    """Đường vào HTTP API (payload v2) của Lambda này (x-lambda: forecast): `POST /affordability` (khối `affordability_card`),
+    `GET /resilience` (khối `resilience_score`), `GET /resilience/shocks` (danh sách cú sốc đọc từ `shocks.json`) và
+    `POST /resilience/stress` (khối `stress_result`). Danh tính CHỈ lấy từ claim `sub` của JWT authorizer; thân yêu cầu không có
+    `user_id`. Cùng engine, cùng số với tool tương ứng."""
     started = time.perf_counter()
     http = event.get("requestContext", {}).get("http", {})
     route = f"{str(http.get('method', '')).upper()} {str(event.get('rawPath') or http.get('path') or '').rstrip('/') or '/'}"
@@ -199,31 +228,67 @@ def handle_http(event: Mapping[str, Any], afford: AffordabilityEngine) -> dict[s
         sub = _claims(event).get("sub")
         if not isinstance(sub, str) or not sub:
             raise YofinaError(ErrorCode.UNAUTHENTICATED, "Thiếu hoặc sai thông tin đăng nhập.")
-        if route != "POST /affordability":
-            raise YofinaError(ErrorCode.PARAMS_INVALID, "Đường dẫn không tồn tại.")
-        body = _body(event)
-        extra = sorted(set(body) - AFFORDABILITY_BODY_FIELDS)
-        if extra:  # hợp đồng AffordabilityRequest không có trường lạ; danh tính chỉ đến từ JWT
-            raise YofinaError(
-                ErrorCode.PARAMS_INVALID, "Trường không hợp lệ: " + ", ".join(extra)[:80]
+        if route == "POST /affordability":
+            body = _body(event)
+            extra = sorted(set(body) - AFFORDABILITY_BODY_FIELDS)
+            if extra:  # hợp đồng AffordabilityRequest không có trường lạ; danh tính chỉ đến từ JWT
+                raise YofinaError(
+                    ErrorCode.PARAMS_INVALID, "Trường không hợp lệ: " + ", ".join(extra)[:80]
+                )
+            result = afford.check(
+                sub,
+                amount_vnd=body.get("amount_vnd"),
+                funding_source=body.get("funding_source"),
+                jar=body.get("jar"),
+                label=body.get("label"),
+                pay_date=body.get("date"),
             )
-        result = afford.check(
-            sub,
-            amount_vnd=body.get("amount_vnd"),
-            funding_source=body.get("funding_source"),
-            jar=body.get("jar"),
-            label=body.get("label"),
-            pay_date=body.get("date"),
-        )
-        block = build_affordability_card(
-            data=result["data"],
-            trace_id=trace_id,
-            source_tool="rest:POST /affordability",
-            as_of=datetime.fromisoformat(result["as_of"].replace("Z", "+00:00")),
-            app_date=date.fromisoformat(result["app_date"]),
-        )
+            as_of, app_date = _as_of(result)
+            wire = block_to_wire(
+                build_affordability_card(
+                    data=result["data"],
+                    trace_id=trace_id,
+                    source_tool="rest:POST /affordability",
+                    as_of=as_of,
+                    app_date=app_date,
+                )
+            )
+        elif route == "GET /resilience" and resilience is not None:
+            result = resilience.get(sub)
+            as_of, app_date = _as_of(result)
+            wire = block_to_wire(
+                build_resilience_score(
+                    data=result["data"],
+                    trace_id=trace_id,
+                    source_tool="rest:GET /resilience",
+                    as_of=as_of,
+                    app_date=app_date,
+                )
+            )
+        elif route == "GET /resilience/shocks" and resilience is not None:
+            wire = list_shocks()
+        elif route == "POST /resilience/stress" and stress is not None:
+            body = _body(event)
+            extra = sorted(set(body) - STRESS_BODY_FIELDS)
+            if extra:
+                raise YofinaError(
+                    ErrorCode.PARAMS_INVALID, "Trường không hợp lệ: " + ", ".join(extra)[:80]
+                )
+            result = stress.run(sub, body.get("shock_id"))
+            as_of, app_date = _as_of(result)
+            wire = block_to_wire(
+                build_stress_result(
+                    data=result["data"],
+                    trace_id=trace_id,
+                    source_tool="rest:POST /resilience/stress",
+                    as_of=as_of,
+                    app_date=app_date,
+                )
+            )
+        else:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Đường dẫn không tồn tại.")
         outcome = "200"
-        return response(200, block_to_wire(block))
+        return response(200, wire)
     except YofinaError as exc:
         outcome = str(exc.code)
         return error_response(exc.code, exc.message, trace_id)

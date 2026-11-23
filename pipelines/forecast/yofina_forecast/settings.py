@@ -6,10 +6,34 @@ Không có giá trị mặc định gắn với môi trường; thiếu thì `Co
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
 from zoneinfo import ZoneInfo
 
 from yofina_core.config import Config
+from yofina_ml.allocation import AllocationParams
+
+#: Tham số bộ tối ưu phân bổ (phase 4 luồng A). TẤT CẢ là giá trị mô phỏng, chưa hiệu chỉnh trên người dùng thật. Mỗi tham số đọc
+#: được từ biến `YOFINA_ALLOCATION_<TÊN>` (hoặc SSM) để chỉnh mà không sửa mã; thiếu thì dùng giá trị này.
+#: Nguồn: tỷ lệ mức phạt theo ưu tiên (nghĩa vụ 1e6 > thiết yếu 1e5 > mục tiêu) và trọng số dự phòng 3 > mục tiêu 2 > giải trí 1 lấy từ
+#: spike `spikes/ml-forecasting/s8_lp.py` (ca 2c); các tham số còn lại do dự án chọn.
+DEFAULT_ALLOCATION_PARAMS = AllocationParams(
+    month_days=30,  # quy ước tháng 30 ngày, cùng `yofina_planner.facts.MONTH_DAYS`
+    rounding_step_vnd=1000,  # làm tròn số tiền đề xuất tới nghìn đồng
+    relax_delay_months=6,  # vòng nới lùi hạn mục tiêu thêm từng này tháng
+    discretionary_max_cut_percent=50.0,  # vòng chặt: hũ không thiết yếu chỉ bị cắt tối đa từng này % mức hiện tại
+    essential_floor_percent=80.0,  # sàn của hũ chi tiêu thiết yếu: từng này % mức chi trung bình hằng tháng
+    weight_discretionary=1.0,
+    weight_goal=2.0,
+    weight_essential=2.5,
+    weight_emergency=3.0,
+    penalty_obligation_floor=1e6,
+    penalty_essential_floor=1e5,
+    penalty_goal_need=1e3,
+    stay_epsilon=1e-6,  # giữ phần tiền chưa ai cần ở trạng thái chưa phân bổ thay vì dồn bừa vào một hũ
+)
+#: hũ chi tiêu thiết yếu theo mẫu hũ mặc định (`db/seed/jar_templates.sql`: ăn uống, đi lại, hóa đơn); hũ người dùng tự thêm thì không
+#: thiết yếu. Đọc được từ `YOFINA_ESSENTIAL_JAR_CODES` (cách nhau bằng dấu phẩy).
+DEFAULT_ESSENTIAL_JAR_CODES = ("an_uong", "di_lai", "hoa_don")
 
 
 @dataclass(frozen=True)
@@ -55,6 +79,13 @@ class ForecastSettings:
     affordability_tight_p10_floor_vnd: int = 0
     #: giữ bảng tra (biểu phí) trong bộ nhớ bao lâu (giây)
     reference_cache_seconds: int = 300
+    #: điểm chống chịu: kỳ tính (ngày) của chi tiêu mỗi ngày, nghĩa vụ và tỷ lệ trên thu nhập; cũng là cửa sổ lịch sử lấy trung bình chi tiêu
+    resilience_window_days: int = 30
+    #: hũ chi tiêu được coi là thiết yếu khi tối ưu phân bổ (mã hũ)
+    essential_jar_codes: tuple[str, ...] = DEFAULT_ESSENTIAL_JAR_CODES
+    #: số tháng của lộ trình khi `optimize_allocation` không nói rõ
+    allocation_horizon_months: int = 3
+    allocation: AllocationParams = field(default=DEFAULT_ALLOCATION_PARAMS)
 
     @property
     def tz(self) -> ZoneInfo:
@@ -92,4 +123,24 @@ class ForecastSettings:
             affordability_short_p50_floor_vnd=cfg.get_int("affordability_short_p50_floor_vnd"),
             affordability_tight_p10_floor_vnd=cfg.get_int("affordability_tight_p10_floor_vnd"),
             reference_cache_seconds=cfg.get_int("reference_cache_seconds"),
+            resilience_window_days=cfg.get_int("resilience_window_days", default=30),
+            essential_jar_codes=tuple(
+                c.strip()
+                for c in str(
+                    cfg.get("essential_jar_codes", default=",".join(DEFAULT_ESSENTIAL_JAR_CODES))
+                ).split(",")
+                if c.strip()
+            ),
+            allocation_horizon_months=cfg.get_int("allocation_horizon_months", default=3),
+            allocation=_allocation_params(cfg),
         )
+
+
+def _allocation_params(cfg: Config) -> AllocationParams:
+    """`DEFAULT_ALLOCATION_PARAMS`, từng trường ghi đè được bằng `allocation_<tên>` (số nguyên hoặc số thực theo kiểu của trường)."""
+    values = {}
+    for f in fields(AllocationParams):
+        default = getattr(DEFAULT_ALLOCATION_PARAMS, f.name)
+        cast = int if isinstance(default, int) and not isinstance(default, bool) else float
+        values[f.name] = cfg.get(f"allocation_{f.name}", default=default, cast=cast)
+    return AllocationParams(**values)

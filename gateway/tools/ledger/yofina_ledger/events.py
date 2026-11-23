@@ -189,6 +189,40 @@ def profile_updated(
     )
 
 
+def roadmap_regeneration_requested(
+    *,
+    user_id: str,
+    trace_id: str | None,
+    job_id: str,
+    occurred_at: datetime,
+    app_date: date,
+    trigger: str,
+    based_on_version: int | None = None,
+    alternative_id: str | None = None,
+    behavior_flag_id: str | None = None,
+) -> Event:
+    """`roadmap.regeneration_requested`: một dòng `roadmap_jobs` vừa commit; `event_id` bằng `job_id` (phát lại cùng sự kiện thì
+    consumer thấy cùng khóa). Ghi chú tự do của người dùng ở lại job, KHÔNG đi vào sự kiện (tránh PII)."""
+    return Event(
+        "roadmap.regeneration_requested",
+        _put(
+            {
+                "v": EVENT_VERSION,
+                "event_id": job_id,
+                "user_id": user_id,
+                "occurred_at": format_instant(occurred_at),
+                "app_date": app_date.isoformat(),
+                "job_id": job_id,
+                "trigger": trigger,
+            },
+            trace_id=trace_id,
+            based_on_version=based_on_version,
+            alternative_id=alternative_id,
+            behavior_flag_id=behavior_flag_id,
+        ),
+    )
+
+
 def _emf(name: str, detail_type: str, **extra: Any) -> str:
     """Một dòng log theo Embedded Metric Format: CloudWatch tách thành metric `name` (không cần PutMetricData)."""
     return json.dumps(

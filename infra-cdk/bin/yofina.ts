@@ -2,6 +2,7 @@
 import { App, Tags } from 'aws-cdk-lib';
 import { loadConfig } from '../config/config';
 import { AgentStack, loadAgentConfig } from '../lib/agent-stack';
+import { loadClassifyConfig } from '../lib/classify';
 import { DataStack } from '../lib/data-stack';
 import { FoundationStack } from '../lib/foundation-stack';
 import { loadForecastConfig } from '../lib/forecast-pipeline';
@@ -21,7 +22,13 @@ new DataStack(app, 'YofinaData', { env, cfg, terminationProtection: true });
 new IdentityStack(app, 'YofinaIdentity', { env, cfg, terminationProtection: true });
 new FrontendStack(app, 'YofinaFrontend', { env, cfg });
 const toolsCfg = loadToolsConfig(app);
-new ToolsStack(app, 'YofinaTools', { env, cfg, tools: toolsCfg, forecast: loadForecastConfig(app) });
+new ToolsStack(app, 'YofinaTools', {
+  env,
+  cfg,
+  tools: toolsCfg,
+  forecast: loadForecastConfig(app),
+  classify: loadClassifyConfig(app),
+});
 new AgentStack(app, 'YofinaAgent', { env, cfg, tools: toolsCfg, agent: loadAgentConfig(app) });
 new IngestStack(app, 'YofinaIngest', { env, cfg, tools: toolsCfg, ingest: loadIngestConfig(app) });
 

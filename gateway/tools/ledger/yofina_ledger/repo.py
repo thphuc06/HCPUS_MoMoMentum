@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from yofina_core.clock import app_today
@@ -152,16 +152,27 @@ RESOLUTIONS_PER_CONVERSATION = 300  # trần của app_get_confirm_resolutions
 # Phase 5 (migration 0050): ingest_rows rồi ingest_jobs TRƯỚC transactions (dòng nạp trỏ tới giao dịch đã ghi, không khóa
 # ngoại cứng), nên đặt lại xóa sạch cả dòng external lẫn lịch sử nạp. consents cũng xóa: đặt lại đưa tài khoản demo về
 # trạng thái chưa từng nạp, nên lần nạp kế tiếp hỏi đồng ý lại (bằng chứng đã đồng ý vẫn nằm ở audit_events, bảng chỉ thêm).
+# Phase 4 (migration 0052, quyết định N5): TẤT CẢ bảng mới của 0052. resilience_scores, roadmaps, roadmap_jobs, review_asks chỉ có khóa
+# ngoại tới users nên xóa ở đầu; tx_embeddings (khóa ngoại tới transactions, ON DELETE CASCADE), tx_embeddings_labeled và behavior_flags
+# (khóa ngoại tới jars) xóa TRƯỚC transactions và jars (không dựa vào CASCADE: thứ tự tường minh, một nơi đọc là thấy). `payees` chỉ thêm
+# cột nên đi theo dòng người nhận. Lộ trình seed của persona được nạp lại ở cuối `reset_user` (`roadmap_seed`).
 RESET_DELETES = (
     "DELETE FROM scenarios WHERE user_id = :uid",
     "DELETE FROM nudges WHERE user_id = :uid",
     "DELETE FROM feedback WHERE user_id = :uid",
+    "DELETE FROM roadmap_jobs WHERE user_id = :uid",
+    "DELETE FROM roadmaps WHERE user_id = :uid",
+    "DELETE FROM resilience_scores WHERE user_id = :uid",
+    "DELETE FROM review_asks WHERE user_id = :uid",
     "DELETE FROM forecast_runs WHERE user_id = :uid",
     "DELETE FROM salary_events WHERE user_id = :uid",
     "DELETE FROM category_rules WHERE user_id = :uid",
     "DELETE FROM ingest_rows WHERE user_id = :uid",
     "DELETE FROM ingest_jobs WHERE user_id = :uid",
     "DELETE FROM consents WHERE user_id = :uid",
+    "DELETE FROM tx_embeddings WHERE user_id = :uid",
+    "DELETE FROM tx_embeddings_labeled WHERE user_id = :uid",
+    "DELETE FROM behavior_flags WHERE user_id = :uid",
     "DELETE FROM transactions WHERE user_id = :uid",
     "DELETE FROM obligations WHERE user_id = :uid",
     "DELETE FROM payees WHERE user_id = :uid",
@@ -456,11 +467,15 @@ class LedgerRepo(WalletRepo, Phase3Repo):
         salary_events: Sequence[dict[str, Any]],
         trace_id: str,
         details: dict[str, Any],
+        app_date: date | None = None,
     ) -> ResetCounts:
         """Xóa dữ liệu của chính người gọi rồi nạp lại (một transaction). `audit_events` chỉ thêm.
 
         Thứ tự nạp theo khóa ngoại: người dùng, hũ (cộng hai hũ hệ thống), người nhận, nghĩa vụ, hạn mức, sổ cái, sự kiện
-        lương; cuối cùng số dư hũ được dựng lại từ sổ cái."""
+        lương; số dư hũ được dựng lại từ sổ cái; cuối cùng nạp lộ trình seed của persona nếu có (`details["persona"]`, phase 4 N4).
+
+        `app_date` là ngày mô phỏng sau khi đặt lại (ngày neo) để dựng ngày của lộ trình seed. Vắng thì lấy ngày sau giao dịch mới nhất của
+        persona (bộ sinh persona không tạo giao dịch ở ngày neo: giao dịch gần nhất là hôm trước)."""
         with self.db.transaction(user_id) as tx:
             for sql in RESET_DELETES:
                 tx.execute(sql, {"uid": user_id})
@@ -474,6 +489,7 @@ class LedgerRepo(WalletRepo, Phase3Repo):
             tx.batch(SQL_INSERT_TX, [{"uid": user_id, **t} for t in transactions])
             tx.batch(SQL_INSERT_SALARY_EVENT, [{"uid": user_id, **e} for e in salary_events])
             tx.execute(SQL_RECOMPUTE_BALANCES, {"uid": user_id})
+            seeded = self._seed_roadmaps(tx, user_id, jars, transactions, details, app_date)
             tx.execute(
                 SQL_AUDIT,
                 {
@@ -484,7 +500,7 @@ class LedgerRepo(WalletRepo, Phase3Repo):
                     "outcome": "ok",
                     "code": None,
                     "params": None,
-                    "details": details,
+                    "details": {**details, "roadmaps_seeded": seeded} if seeded else details,
                 },
             )
         return ResetCounts(
@@ -492,4 +508,28 @@ class LedgerRepo(WalletRepo, Phase3Repo):
             transactions=len(transactions),
             obligations=len(obligations),
             payees=len(payees),
+        )
+
+    @staticmethod
+    def _seed_roadmaps(
+        tx: Any,
+        user_id: str,
+        jars: Sequence[dict[str, Any]],
+        transactions: Sequence[dict[str, Any]],
+        details: Mapping[str, Any],
+        app_date: date | None,
+    ) -> int:
+        """Nạp lộ trình seed của persona (số phiên bản đã nạp; 0 nếu persona không có file seed). Nhập `roadmap_seed` ở đây (không ở đầu
+        file) vì nó kéo theo bộ luật suitability, thứ mà các Lambda chỉ dùng `repo` không cần."""
+        from yofina_ledger import roadmap_seed
+
+        persona = details.get("persona")
+        if roadmap_seed.load_seed(persona) is None:
+            return 0
+        if app_date is None:
+            if not transactions:
+                return 0
+            app_date = max(t["app_date"] for t in transactions) + timedelta(days=1)
+        return roadmap_seed.seed_roadmaps(
+            tx, user_id, persona=persona, app_date=app_date, jars=list(jars)
         )
