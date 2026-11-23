@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -142,6 +143,25 @@ class RoadmapRunner:
                 str(result.model_error)[:500],  # đường dẫn field lỗi, không chứa dữ liệu người dùng
             )
             raise YofinaError(ErrorCode.INTERNAL_ERROR, notices.GENERIC_ERROR_MESSAGE)
+        if result.outcome is None or result.outcome.code == ErrorCode.ROADMAP_INVALID.value:
+            # Lý do từng bước đã ghi ở `roadmap_step_rejected`/`roadmap_invalid` của Roadmap agent; dòng này gắn job và trigger.
+            log.warning(
+                json.dumps(
+                    {
+                        "event": "roadmap_job_invalid",
+                        "job": job["id"],
+                        "trigger": job["trigger"],
+                        "stage": "verify" if result.outcome is None else "save",
+                        "suitability_blocks": sum(
+                            1
+                            for verdict in result.suitability
+                            for violation in verdict.violations
+                            if violation.severity == "block"
+                        ),
+                    },
+                    ensure_ascii=False,
+                )
+            )
         if result.outcome is None:
             raise YofinaError(ErrorCode.ROADMAP_INVALID, "Chưa tạo được bản nháp lộ trình hợp lệ.")
         if result.outcome.kind is not ToolKind.OK:
