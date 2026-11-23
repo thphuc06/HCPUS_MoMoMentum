@@ -232,7 +232,7 @@ export function OverviewPage() {
           {data.needs_review_count > 0 && (
             <LinkCard
               to="/review"
-              title="Xem lại cách xếp hũ"
+              title={`Cần xem lại (${data.needs_review_count})`}
               subtitle="Kiểm tra các hũ Yofina đã tự chọn"
               icon={<ListChecks className="size-5" aria-hidden />}
             />

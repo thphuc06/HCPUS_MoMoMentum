@@ -132,7 +132,20 @@ describe('Tổng quan', () => {
     const due = screen.getByTestId('obligations-due')
     expect(within(due).getByText('Tiền điện')).toBeInTheDocument()
     expect(within(due).getByText('Trả sau (mô phỏng)')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Xem lại cách xếp hũ/ })).toHaveAttribute('href', '/review')
+    expect(screen.getByRole('link', { name: /^Cần xem lại \(3\)/ })).toHaveAttribute('href', '/review')
+  })
+
+  it('thẻ "Cần xem lại" hiện số N lấy từ needs_review_count của server', async () => {
+    mountApp(backend({ 'GET /overview': overview((o) => { o.needs_review_count = 7 }) }))
+    const card = await screen.findByRole('link', { name: /^Cần xem lại \(7\)/ })
+    expect(card).toHaveAttribute('href', '/review')
+    expect(within(card).getByText('Cần xem lại (7)')).toBeInTheDocument()
+  })
+
+  it('thẻ "Cần xem lại" ẩn khi needs_review_count bằng 0', async () => {
+    mountApp(backend({ 'GET /overview': overview((o) => { o.needs_review_count = 0 }) }))
+    expect(await screen.findByTestId('balance-total')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Cần xem lại/ })).toBeNull()
   })
 
   it('hiện tổng chưa phân loại của cả tập từ daily_ask dù đã để sau câu hỏi', async () => {
