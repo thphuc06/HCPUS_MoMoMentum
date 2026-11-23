@@ -29,10 +29,7 @@ describe('registry khối UI', () => {
   })
 
   describe('fixture hợp lệ', () => {
-    // Phase 4 thêm năm khối vào hợp đồng (resilience_score, stress_result, roadmap, roadmap_diff, review_list) nhưng CHƯA có view: bỏ qua
-    // cho tới khi luồng frontend phase 4 đăng ký chúng (khi đó bỏ dòng lọc này).
-    const registered = new Set<string>(REGISTERED_TYPES)
-    for (const [name, block] of validBlockEntries().filter(([, b]) => registered.has(String(b.type)))) {
+    for (const [name, block] of validBlockEntries()) {
       it(`${name}: vẽ khối, không rơi về fallback`, () => {
         const { container } = renderBlock(block)
         expect(container.querySelector('[data-block="fallback"]')).toBeNull()
