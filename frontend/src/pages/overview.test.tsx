@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ReviewListResponse } from '@/api/reviewSchemas'
 import { restFixture, validBlock } from '@/test/fixtures'
 import { backend, bodyOf, callsTo, json, mountApp, runCalls } from '@/test/mountApp'
 import { runFinished, runStarted, sseResponse, textMessage } from '@/test/sse'
@@ -78,7 +79,8 @@ describe('Tổng quan', () => {
     )
     await screen.findByTestId('balance-total')
     await userEvent.setup().click(screen.getByRole('button', { name: 'Hỏi vì sao' }))
-    expect(await screen.findByTestId('chat-sheet')).toBeInTheDocument()
+    // ChatSheet tải lazy, lần đầu chạy Vitest runner có thể cần thêm thời gian để nạp module.
+    expect(await screen.findByTestId('chat-sheet', {}, { timeout: 10_000 })).toBeInTheDocument()
     await waitFor(() => expect(runCalls(calls)).toHaveLength(1))
     const msgs = bodyOf(runCalls(calls)[0]!).messages as Array<{ role: string; content: string }>
     expect(msgs.at(-1)).toMatchObject({ role: 'user', content: 'Vì sao hũ Ăn uống sắp cạn?' })
@@ -122,7 +124,7 @@ describe('Tổng quan', () => {
     expect(screen.queryByRole('region', { name: 'Việc cần làm hôm nay' })).toBeNull()
   })
 
-  it('Gần đây, nghĩa vụ sắp đến hạn và "Cần xem lại" lấy từ server', async () => {
+  it('Gần đây, nghĩa vụ sắp đến hạn và lối vào Xem lại lấy từ server', async () => {
     mountApp(backend())
     const recent = await screen.findByTestId('recent-transactions')
     expect(within(recent).getByText('Quán cơm')).toBeInTheDocument()
@@ -130,7 +132,37 @@ describe('Tổng quan', () => {
     const due = screen.getByTestId('obligations-due')
     expect(within(due).getByText('Tiền điện')).toBeInTheDocument()
     expect(within(due).getByText('Trả sau (mô phỏng)')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Cần xem lại \(3\)/ })).toHaveAttribute('href', '/activity?review=1')
+    expect(screen.getByRole('link', { name: /Xem lại cách xếp hũ/ })).toHaveAttribute('href', '/review')
+  })
+
+  it('hiện tổng chưa phân loại của cả tập từ daily_ask dù đã để sau câu hỏi', async () => {
+    const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
+    daily.data.count += 1
+    daily.data.pending_total_vnd += daily.data.items[0]!.amount_vnd
+    daily.data.ask!.status = 'skipped'
+    const { calls, router } = mountApp(backend({
+      'GET /review': (_init, url) => url.searchParams.get('mode') === 'daily_ask' ? daily : restFixture('ReviewListResponse.review'),
+    }))
+    const summary = await screen.findByRole('link', { name: /^3 giao dịch chưa phân loại · 240\.000\s₫$/ })
+    expect(summary).toHaveAttribute('href', '/review')
+    expect(screen.queryByRole('region', { name: 'Chọn hũ cho giao dịch hôm nay' })).toBeNull()
+    expect(callsTo(calls, 'GET', '/review').map(({ url }) => new URL(url).search)).toEqual(['?mode=daily_ask'])
+    await userEvent.setup().click(summary)
+    expect(await screen.findByRole('heading', { name: 'Xem lại' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/review')
+  })
+
+  it.each(['zero', 'error'])('giữ Tổng quan và ẩn dòng chưa phân loại khi review trả %s', async (state) => {
+    const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
+    daily.data.ask!.status = 'answered'
+    const empty = { ...daily, data: { ...daily.data, items: [], count: 0, pending_total_vnd: 0 } }
+    const { calls } = mountApp(backend({ 'GET /review': state === 'zero' ? empty : json(503, { error: { code: 'UNAVAILABLE' } }) }))
+    await waitFor(() => expect(callsTo(calls, 'GET', '/review')).toHaveLength(1))
+    expect(await screen.findByTestId('balance-total')).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Danh sách hũ' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /giao dịch chưa phân loại/ })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Chọn hũ cho giao dịch hôm nay' })).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('lương về chờ xác nhận: lối vào xác nhận một chạm khi thẻ chủ động không phải thẻ lương', async () => {

@@ -7,6 +7,8 @@ import { EmptyState, ErrorState, ListSkeleton } from '@/components/StateViews'
 import { useOverview } from '@/api/OverviewProvider'
 import type { JarFull } from '@/api/schemas'
 import { ResilienceSection } from '@/features/resilience/ResilienceSection'
+import { UnclassifiedSummary } from '@/features/review/UnclassifiedSummary'
+import { useReview } from '@/features/review/useReview'
 import { CONFIDENCE_LABEL } from '@/lib/jar'
 import { formatDayMonth } from '@/lib/dates'
 import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd } from '@/lib/format'
@@ -26,6 +28,7 @@ export function sortByRisk(jars: readonly JarFull[]): JarFull[] {
 
 export function ForesightPage() {
   const ov = useOverview()
+  const review = useReview('daily_ask')
   const data = ov.data
   const f = data?.forecast
   return (
@@ -42,6 +45,7 @@ export function ForesightPage() {
 
       {data && (
         <div className="space-y-3 px-4 pb-8">
+          {review.status === 'ready' && <UnclassifiedSummary data={review.data.data} />}
           {data.next_payday && (
             <section className="rounded-card bg-surface p-4 shadow-card" aria-label="Kỳ lương kế tiếp" data-testid="next-payday">
               <p className="text-small text-ink-2">Kỳ lương kế tiếp</p>

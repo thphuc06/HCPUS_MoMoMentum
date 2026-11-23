@@ -86,6 +86,7 @@ export function appRoutes(): RouteObject[] {
               ],
             },
             { path: 'activity', ...page(() => import('@/pages/ActivityPage'), 'ActivityPage') },
+            { path: 'review', ...page(() => import('@/pages/ReviewPage'), 'ReviewPage') },
             { path: 'obligations', ...page(() => import('@/pages/ObligationsPage'), 'ObligationsPage') },
             { path: 'obligations/new', ...page(() => import('@/pages/ObligationEditPage'), 'ObligationEditPage') },
             { path: 'obligations/:id', ...page(() => import('@/pages/ObligationEditPage'), 'ObligationEditPage') },

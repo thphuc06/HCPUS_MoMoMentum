@@ -14,6 +14,9 @@ import { useOverview } from '@/api/OverviewProvider'
 import { parseProactiveCard, type OverviewResponse } from '@/api/schemas'
 import { useProactiveActions } from '@/features/overview/useProactiveActions'
 import { useJarLookup } from '@/features/common/useJarLookup'
+import { DailyAskCard } from '@/features/review/DailyAskCard'
+import { UnclassifiedSummary } from '@/features/review/UnclassifiedSummary'
+import { useReview } from '@/features/review/useReview'
 import { formatDayMonth } from '@/lib/dates'
 import { formatRatioPercent, formatVnd, greetingNow } from '@/lib/format'
 import { jarForecastLevel, jarLevel } from '@/lib/jar'
@@ -143,6 +146,20 @@ function ForecastNotes({ data }: { data: OverviewResponse }) {
   )
 }
 
+function PendingReviewSection() {
+  const review = useReview('daily_ask')
+  if (review.status !== 'ready') return null
+  const { data } = review.data
+  if (data.count === 0 && data.ask?.status !== 'open') return null
+
+  return (
+    <div className="mx-4 mt-3 space-y-3">
+      <UnclassifiedSummary data={data} />
+      <DailyAskCard data={data} refreshing={review.refreshing} />
+    </div>
+  )
+}
+
 function LoadingState() {
   return (
     <div aria-busy="true" aria-label="Đang tải số dư" role="status" data-testid="overview-skeleton">
@@ -195,6 +212,7 @@ export function OverviewPage() {
           )}
           <ProactiveSection data={data} />
           <ForecastNotes data={data} />
+          <PendingReviewSection />
 
           <SectionTitle to="/jars">Hũ của bạn</SectionTitle>
           {data.jars.length === 0 ? (
@@ -213,9 +231,9 @@ export function OverviewPage() {
 
           {data.needs_review_count > 0 && (
             <LinkCard
-              to="/activity?review=1"
-              title={`Cần xem lại (${data.needs_review_count})`}
-              subtitle={`${data.needs_review_count} giao dịch cần bạn xem lại hũ`}
+              to="/review"
+              title="Xem lại cách xếp hũ"
+              subtitle="Kiểm tra các hũ Yofina đã tự chọn"
               icon={<ListChecks className="size-5" aria-hidden />}
             />
           )}

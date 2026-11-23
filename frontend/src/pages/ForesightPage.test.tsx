@@ -1,14 +1,32 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ERROR_MESSAGES } from '@/api/errors'
 import { ResilienceScoreResponse, ShocksResponse } from '@/api/resilienceSchemas'
+import { ReviewListResponse } from '@/api/reviewSchemas'
 import { restFixture } from '@/test/fixtures'
-import { backend, json, mountApp } from '@/test/mountApp'
+import { backend, callsTo, json, mountApp } from '@/test/mountApp'
 
 describe('tab Nhìn trước', () => {
   const score = ResilienceScoreResponse.parse(restFixture('ResilienceScoreResponse.minh')).data
   const { shocks } = ShocksResponse.parse(restFixture('ShocksResponse.default'))
+
+  it('dẫn đến Xem lại với số giao dịch và tiền chưa phân loại từ daily_ask', async () => {
+    const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
+    const { calls } = mountApp(backend({ 'GET /review': daily }), '/foresight')
+    expect(await screen.findByRole('link', { name: /^2 giao dịch chưa phân loại · 180\.000\s₫$/ })).toHaveAttribute('href', '/review')
+    expect(callsTo(calls, 'GET', '/review').map(({ url }) => new URL(url).search)).toEqual(['?mode=daily_ask'])
+    expect(screen.queryByRole('region', { name: 'Chọn hũ cho giao dịch hôm nay' })).toBeNull()
+  })
+
+  it('ẩn dòng chưa phân loại khi count bằng 0', async () => {
+    const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
+    const empty = { ...daily, data: { ...daily.data, items: [], count: 0, pending_total_vnd: 0 } }
+    const { calls } = mountApp(backend({ 'GET /review': empty }), '/foresight')
+    await waitFor(() => expect(callsTo(calls, 'GET', '/review')).toHaveLength(1))
+    expect(await screen.findByRole('list', { name: 'Hũ theo mức cần chú ý' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /giao dịch chưa phân loại/ })).toBeNull()
+  })
 
   it('hiện điểm, nhãn nhóm và các cú sốc từ REST trước phần hũ', async () => {
     const user = userEvent.setup()
