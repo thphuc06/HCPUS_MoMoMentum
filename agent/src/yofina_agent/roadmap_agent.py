@@ -82,6 +82,15 @@ class RoadmapResult:
     suitability: tuple[SuitabilityVerdict, ...] = ()
 
 
+@dataclass(frozen=True)
+class RegenerationContext:
+    """Thông tin từ job đã ghi trong DB, dùng khi chạy ngoài Turn."""
+
+    based_on_version: int | None = None
+    alternative_id: str | None = None
+    note: str | None = None
+
+
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -469,6 +478,7 @@ async def build_roadmap(
     on_stage: StageCallback | None = None,
     tool_calls_left: int | None = None,
     latest_outcome: ToolOutcome | None = None,
+    regeneration: RegenerationContext | None = None,
 ) -> RoadmapResult:
     """Sinh lộ trình, chỉ ghi bản nháp sau khi grounding và suitability đạt."""
 
@@ -478,10 +488,14 @@ async def build_roadmap(
             if isawaitable(notification):
                 await notification
 
-    async def latest() -> ToolOutcome:
+    base_args: dict[str, Any] = {"which": "latest" if regeneration is None else "active"}
+    if regeneration is not None and regeneration.based_on_version is not None:
+        base_args = {"version": regeneration.based_on_version}
+
+    async def read_base() -> ToolOutcome:
         if latest_outcome is not None:
             return latest_outcome
-        return await tools("get_roadmap", {"which": "latest"}, "planner")
+        return await tools("get_roadmap", base_args, "planner")
 
     def model_left() -> bool:
         return scope.max_calls is None or scope.calls < scope.max_calls
@@ -504,13 +518,31 @@ async def build_roadmap(
         tools("get_jar_balances", {}, "ledger"),
         tools("get_obligations", {}, "ledger"),
         tools("get_resilience_score", {}, "forecast"),
-        latest(),
+        read_base(),
     )
     if _parse(balances, B.JarSummaryData) is None:
         return RoadmapResult(outcome=_tool_error(balances))
     if _data(obligations) is None:
         return RoadmapResult(outcome=_tool_error(obligations))
     previous = _parse(old, Roadmap)
+    if regeneration is not None:
+        if previous is None and (
+            "version" in base_args or old.code != ErrorCode.ROADMAP_NOT_FOUND.value
+        ):
+            return RoadmapResult(outcome=_tool_error(old))
+        if previous is not None and "version" in base_args:
+            if previous.version != base_args["version"] or previous.status not in (
+                "active", "proposed"
+            ):
+                return RoadmapResult(
+                    outcome=ToolOutcome(
+                        "get_roadmap",
+                        ToolKind.TOOL_ERROR,
+                        code=ErrorCode.ROADMAP_VERSION_CONFLICT.value,
+                    )
+                )
+        if previous is not None and "version" not in base_args and previous.status != "active":
+            previous = None  # get_roadmap(which=active) có thể trả bản dự phòng
     if previous is not None and reason_code == "initial":
         return RoadmapResult(outcome=old)
     version = previous.version if previous is not None else None
@@ -540,6 +572,23 @@ async def build_roadmap(
     if llm is None or not model_left():
         return RoadmapResult(model_budget_exhausted=True)
     model_context = {"context": compact, "reason_code": reason_code, "max_steps": step_limit}
+    if regeneration is not None:
+        preferences: dict[str, Any] = {}
+        if regeneration.alternative_id is not None:
+            preferences["alternative_id"] = regeneration.alternative_id
+            alternatives = previous.alternatives if previous is not None else ()
+            for option in alternatives:
+                if option.option_id == regeneration.alternative_id:
+                    preferences["alternative"] = {
+                        "kind": option.kind,
+                        "jar_code": option.jar_code,
+                        "summary": _clean_text(option.summary),
+                    }
+                    break
+        if regeneration.note is not None:
+            preferences["note"] = _clean_text(regeneration.note)
+        if preferences:
+            model_context["regeneration_preferences"] = preferences
     try:
         sketch = await _ask(
             llm, scope, RoadmapSketch, model_context, settings.roadmap_draft_max_tokens
@@ -626,16 +675,24 @@ async def build_roadmap(
         assert allocation_data is not None
         args.update(goals=allocation_data["goals"], alternatives=allocation_data["alternatives"])
         result = await tools("save_roadmap", args, "planner")
-        if result.code == ErrorCode.ROADMAP_VERSION_CONFLICT.value and not conflict_retried:
+        if (
+            result.code == ErrorCode.ROADMAP_VERSION_CONFLICT.value
+            and not conflict_retried
+            and "version" not in base_args
+        ):
             conflict_retried = True
-            fresh = await tools("get_roadmap", {"which": "latest"}, "planner")
+            fresh = await tools("get_roadmap", base_args, "planner")
             fresh_roadmap = _parse(fresh, Roadmap)
             if fresh_roadmap is not None and reason_code == "initial":
                 # Hai chat có thể cùng lập bản đầu. DB chỉ cho một bản initial.
                 return fresh
             if fresh_roadmap is None and fresh.code != ErrorCode.ROADMAP_NOT_FOUND.value:
                 return result
-            version = fresh_roadmap.version if fresh_roadmap is not None else None
+            version = None
+            if fresh_roadmap is not None and (
+                regeneration is None or fresh_roadmap.status == "active"
+            ):
+                version = fresh_roadmap.version
             if version is None:
                 args.pop("based_on_version", None)
             else:
@@ -652,6 +709,8 @@ async def build_roadmap(
         if issues and (revised := await repair(issues)) is not None:
             outline = revised
             continue
+        if regeneration is not None and model_error is not None:
+            return RoadmapResult(model_error=model_error, suitability=tuple(verdicts))
         if not phases:
             return RoadmapResult(model_error=model_error, suitability=tuple(verdicts))
         if not saving:
