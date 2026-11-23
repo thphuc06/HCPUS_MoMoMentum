@@ -103,7 +103,19 @@ def collect(lines: list[str]) -> dict[str, Any]:
     }
 
 
-def invoke(url: str, token: str, question: str, timeout: float) -> list[str]:
+def build_messages(question: str, history: list[dict[str, str]] | None = None) -> list[dict[str, str]]:
+    """Tin nhắn gửi Runtime: các lượt trước của ca (field `history`, mỗi phần tử {role, content}) rồi câu hỏi."""
+    msgs = [
+        {"id": f"h{i}", "role": h["role"], "content": h["content"]}
+        for i, h in enumerate(history or [], start=1)
+    ]
+    msgs.append({"id": "m1", "role": "user", "content": question})
+    return msgs
+
+
+def invoke(
+    url: str, token: str, question: str, timeout: float, history: list[dict[str, str]] | None = None
+) -> list[str]:
     import urllib.request
 
     sid = f"eval-{uuid.uuid4().hex}-{uuid.uuid4().hex[:8]}"  # session id 33 ký tự trở lên
@@ -114,7 +126,7 @@ def invoke(url: str, token: str, question: str, timeout: float) -> list[str]:
         "tools": [],
         "context": [],
         "forwardedProps": {},
-        "messages": [{"id": "m1", "role": "user", "content": question}],
+        "messages": build_messages(question, history),
     }
     req = urllib.request.Request(
         url,
@@ -359,7 +371,7 @@ def main() -> int:
             last = time.monotonic()
             t0 = time.perf_counter()
             try:
-                run = collect(invoke(url, token, c["question"], args.timeout))
+                run = collect(invoke(url, token, c["question"], args.timeout, c.get("history")))
             except Exception as exc:
                 run = {
                     "blocks": [],

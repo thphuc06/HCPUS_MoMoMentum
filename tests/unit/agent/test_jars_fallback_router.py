@@ -128,3 +128,10 @@ def test_prompt_router_khong_chua_cau_hoi_demo_va_boc_du_lieu_trong_the():
     p = build_router_prompt("hỏi gì đó", "Người dùng: a" + chr(10) + "Yofina: b")
     assert p.startswith("<lich_su>") and p.rstrip().endswith("</cau_moi>")
     assert "<lich_su>" not in build_router_prompt("x", "")
+
+
+def test_prompt_router_chi_ghep_cau_cut_cau_moi_du_nghia_khong_mang_tham_so_cu():
+    # Lỗi thật 23/11: sau chuỗi câu "mua tai nghe bằng Trả sau", câu mới "đi du lịch 5 triệu" bị ghép nhầm rồi thành out_of_scope.
+    assert "câu CỤT" in ROUTER_SYSTEM
+    assert "KHÔNG lấy số tiền, cách trả (funding)" in ROUTER_SYSTEM
+    assert "không làm câu mới thành out_of_scope" in ROUTER_SYSTEM

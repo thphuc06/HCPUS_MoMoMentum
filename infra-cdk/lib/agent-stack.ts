@@ -318,7 +318,8 @@ export class AgentStack extends Stack {
       new iam.PolicyStatement({
         sid: 'ApplyGuardrail',
         actions: ['bedrock:ApplyGuardrail'],
-        resources: [guardrail.guardrailArn, guardrail.profileArn],
+        // Hồ sơ liên vùng có thể chuyển lời gọi sang vùng khác trong APAC: phải cho phép hồ sơ ở mọi vùng đích.
+        resources: [guardrail.guardrailArn, ...guardrail.profileDestinationArns],
       }),
     );
     runtimeRole.addToPolicy(

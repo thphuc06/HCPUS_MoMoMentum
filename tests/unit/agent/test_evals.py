@@ -44,6 +44,18 @@ def test_bo_cau_hoi_du_so_luong_va_loai():
     assert len({c["id"] for c in golden}) == len(golden) and len({c["id"] for c in adv}) == len(adv)
 
 
+def test_ca_nhieu_luot_gui_lich_su_truoc_cau_hoi():
+    golden = evals_run.load(ROOT / "evals" / "golden" / "phase3.jsonl")
+    multi = [c for c in golden if c.get("history")]
+    assert {c["id"] for c in multi} >= {"multiturn-new-question", "multiturn-fragment"}
+    for c in multi:
+        msgs = evals_run.build_messages(c["question"], c["history"])
+        assert [m["content"] for m in msgs[:-1]] == [h["content"] for h in c["history"]]
+        assert msgs[-1] == {"id": "m1", "role": "user", "content": c["question"]}
+        assert len({m["id"] for m in msgs}) == len(msgs)
+    assert evals_run.build_messages("x") == [{"id": "m1", "role": "user", "content": "x"}]
+
+
 def test_cham_offline_mot_luot_what_if(monkeypatch):
     llm = make_llm(
         [

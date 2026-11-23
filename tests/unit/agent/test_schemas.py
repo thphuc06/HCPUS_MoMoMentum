@@ -71,6 +71,55 @@ def test_thieu_so_tien_thi_hoi_lai_dung_mot_cau_kem_chip():
     assert r.clarify.slot == "amount" and r.params.amount_vnd is None
 
 
+def test_doi_luong_model_dat_so_vao_salary_vnd_thi_chuyen_sang_amount_vnd():
+    r = s.IntentResult.model_validate(
+        intent(intent="what_if", params={"scenario_kind": "income_change", "salary_vnd": 12_000_000})
+    )
+    assert r.params.amount_vnd == 12_000_000 and r.params.salary_vnd is None
+    # có sẵn amount_vnd thì giữ nguyên; khai báo hồ sơ thì salary_vnd không bị đụng tới
+    r2 = s.IntentResult.model_validate(
+        intent(
+            intent="what_if",
+            params={"scenario_kind": "income_change", "amount_vnd": 9_000_000, "salary_vnd": 12_000_000},
+        )
+    )
+    assert r2.params.amount_vnd == 9_000_000
+    r3 = s.IntentResult.model_validate(intent(intent="profile_update", params={"salary_vnd": 12_000_000}))
+    assert r3.params.salary_vnd == 12_000_000 and r3.params.amount_vnd is None
+
+
+def test_hu_tra_tien_dat_nham_from_jar_text_thi_doi_sang_jar_text():
+    # Router thật 23/11: "Chuyển 250 nghìn từ hũ Hóa đơn cho người nhận demo có ổn không" ra from/to thay vì jar_text.
+    r = s.IntentResult.model_validate(
+        intent(
+            intent="affordability",
+            params={"from_jar_text": "Hóa đơn", "to_jar_text": "người nhận demo", "amount_vnd": 250_000},
+        )
+    )
+    p = r.params
+    assert (p.jar_text, p.label, p.from_jar_text, p.to_jar_text) == ("Hóa đơn", "người nhận demo", None, None)
+    r2 = s.IntentResult.model_validate(
+        intent(
+            intent="what_if",
+            params={"scenario_kind": "one_time_purchase", "from_jar_text": "hũ giải trí", "amount_vnd": 600_000, "label": "bàn phím"},
+        )
+    )
+    assert (r2.params.jar_text, r2.params.label, r2.params.from_jar_text) == ("hũ giải trí", "bàn phím", None)
+
+
+@pytest.mark.parametrize(
+    "name,params",
+    [
+        ("move", {"from_jar_text": "Ăn uống", "to_jar_text": "Tiết kiệm", "amount_vnd": 100_000}),
+        ("what_if", {"scenario_kind": "jar_transfer", "from_jar_text": "Ăn uống", "to_jar_text": "Tiết kiệm", "amount_vnd": 100_000}),
+        ("what_if", {"from_jar_text": "Ăn uống", "to_jar_text": "Tiết kiệm", "amount_vnd": 100_000}),
+    ],
+)
+def test_chuyen_giua_hai_hu_giu_nguyen_from_to(name, params):
+    r = s.IntentResult.model_validate(intent(intent=name, params=params))
+    assert (r.params.from_jar_text, r.params.to_jar_text, r.params.jar_text) == ("Ăn uống", "Tiết kiệm", None)
+
+
 def test_needs_clarification_phai_di_voi_clarify_va_nguoc_lai():
     with pytest.raises(ValidationError):
         s.IntentResult.model_validate(intent(needs_clarification=True))

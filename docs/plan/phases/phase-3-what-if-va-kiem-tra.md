@@ -127,6 +127,8 @@ Chưa chạy lại để xác nhận (chủ dự án tạm dừng). Không có c
 | `whatif-bnpl2` (điện thoại 15 triệu Trả sau) | `CREDIT_LIMIT_EXCEEDED` (hạn mức còn 4.033.000 ₫) | Lỗi bộ câu hỏi: hành vi agent đúng; nên đổi số tiền xuống dưới hạn mức |
 | `whatif-onetime2` ("600 nghìn từ hũ giải trí") | Agent hỏi lại nguồn tiền dù câu đã nêu hũ | Giới hạn model (router không lấy `jar_text`) hoặc lỗi mã `clarify` |
 
+**Cập nhật 23/11 sáng (Runtime v9)**: golden 29 ca (thêm 2 ca nhiều lượt) đạt **27/29, quỹ đạo 93,1%** (tiêu chí 7 đạt phần golden); đối kháng 16/16; grounding, schema, suitability 100%. `whatif-income` và `whatif-onetime2` đã đạt (router đặt số lương vào `salary_vnd`, hũ vào `from_jar_text`: chuẩn hóa ở `schemas.py`), nên BNPL là loại duy nhất chưa có ca golden đạt (tiêu chí 10). Cùng đợt: Guardrail trước đó chưa từng chạy trên Runtime (AccessDenied hồ sơ liên vùng), nay chạy; router không còn ghép câu mới với lịch sử chat. Chi tiết: ai-log 2026-11-23 07:40.
+
 ### Chưa kiểm
 
 - Đi cảnh 2 trên trình duyệt 390x844 (URL Amplify hoặc localhost nối backend thật) và so với frame Figma.

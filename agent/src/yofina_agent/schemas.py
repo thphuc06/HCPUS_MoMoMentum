@@ -135,8 +135,38 @@ class IntentResult(_Model):
             return parsed if isinstance(parsed, dict) else value
         return value
 
+    def _pays_from_one_jar(self) -> bool:
+        """Ý định mà tiền đi ra từ MỘT hũ (không phải chuyển giữa hai hũ): kiểm tra chi tiêu và what-if mua hàng hay khoản lặp lại.
+        what-if chưa rõ loại thì chỉ tính khi không có hũ đích (có thể là chuyển hũ)."""
+        p = self.params
+        if self.intent == "affordability":
+            return True
+        if self.intent != "what_if":
+            return False
+        if p.scenario_kind in ("one_time_purchase", "bnpl_purchase", "recurring_expense"):
+            return True
+        return p.scenario_kind is None and p.to_jar_text is None
+
     @model_validator(mode="after")
     def _consistent(self) -> IntentResult:
+        p = self.params
+        if (
+            self.intent == "what_if"
+            and p.scenario_kind == "income_change"
+            and p.amount_vnd is None
+            and p.salary_vnd is not None
+        ):
+            # Model nhỏ hay đặt "lương mới" vào salary_vnd (ô của profile_update). Cùng một con số người dùng đã nói,
+            # chỉ sai ô: chuyển sang amount_vnd thay vì hỏi lại số tiền họ vừa nói.
+            p.amount_vnd, p.salary_vnd = p.salary_vnd, None
+        if self._pays_from_one_jar() and (p.from_jar_text or p.to_jar_text):
+            # Khoản mua hoặc khoản chi trả từ MỘT hũ (mã đọc jar_text). Model nhỏ hay đặt "từ hũ X" vào from_jar_text và người nhận
+            # vào to_jar_text, khiến mã hỏi lại hũ dù người dùng đã nói, hoặc coi tên người nhận là hũ lạ. Dời đúng chữ họ gõ sang ô đúng.
+            if p.jar_text is None and p.from_jar_text:
+                p.jar_text = p.from_jar_text
+            if p.label is None and p.to_jar_text:
+                p.label = p.to_jar_text[:80]
+            p.from_jar_text = p.to_jar_text = None
         if self.needs_clarification != (self.clarify is not None):
             raise ValueError("needs_clarification đúng khi và chỉ khi có `clarify`")
         if self.needs_clarification and self.intent in ("out_of_scope", "chitchat"):
