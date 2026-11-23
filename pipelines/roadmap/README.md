@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `roadmap.regeneration_requested` | `yofina.ledger` | `event_id = job_id`. Ledger phát sau khi commit. Lambda đọc job theo `job_id` và người dùng của sự kiện, lấy trigger, `alternative_id`, `note` và phiên bản gốc nếu đã ghi trong job. |
 | `behavior.changed` | `yofina.forecast` | Chỉ nhận xác nhận từ PELT. `event_id = flag_id`. Tạo job `behavior_changed` với `behavior_flag_id` và `dedupe_key = event_id`. |
-| `profile.updated` | `yofina.ledger` | `salary` tạo job `income_changed`, `jars` tạo job `goal_changed`. Khi cả hai thay đổi, ưu tiên `income_changed`. Bỏ qua các trường còn lại. `dedupe_key = event_id`. |
+| `profile.updated` | `yofina.ledger` | Có `onboarding` (khai hồ sơ lần đầu, đặt lại tài khoản demo) thì bỏ qua để không loại lộ trình seed. Còn lại: `salary` tạo job `income_changed`, `jars` tạo job `goal_changed`. Khi cả hai thay đổi, ưu tiên `income_changed`. Bỏ qua các trường còn lại. `dedupe_key = event_id`. |
 
 Lambda dùng secret của role `yofina_app` và transaction của `DataApi` để đặt `app.user_id` cho RLS. Khi job chưa chỉ định phiên bản gốc, agent dùng bản `active` nếu có. Ghi chú được che PII trước khi vào ngữ cảnh model. Tool `save_roadmap` quyết định trạng thái phiên bản theo `status_for_new_version` và trả ID, phiên bản đã lưu để chốt job `done`.
 

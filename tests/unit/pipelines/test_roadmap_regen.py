@@ -337,6 +337,8 @@ def test_behavior_change_dedupes_after_redelivery(pipeline):
         (["jars"], "goal_changed"),
         (["jars", "salary"], "income_changed"),
         (["risk"], None),
+        # đặt lại demo và onboarding: không sinh lại (giữ lộ trình seed)
+        (["onboarding", "salary", "payday", "jars"], None),
     ],
 )
 def test_profile_updated_fields(pipeline, fields, trigger):
@@ -352,9 +354,9 @@ def test_profile_updated_fields(pipeline, fields, trigger):
 
 def test_sqs_reports_busy_and_transient_records_only(pipeline):
     handle, db, tools, _, event = pipeline
-    busy = event("profile.updated", "onboarding", user_id="busy")
+    busy = event("profile.updated", "onboarding", user_id="busy", fields=["salary"])
     db.seed("busy", status="running")
-    unavailable = event("profile.updated", "onboarding", user_id="unavailable")
+    unavailable = event("profile.updated", "onboarding", user_id="unavailable", fields=["salary"])
     db.fail_claims.add("unavailable")
     eligible = event("behavior.changed", "confirmed", user_id="eligible")
     assert handle(

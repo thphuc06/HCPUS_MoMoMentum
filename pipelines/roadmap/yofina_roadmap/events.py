@@ -76,6 +76,11 @@ def parse_event(body: Any) -> RoadmapEvent:
     if not isinstance(fields, list) or not fields or not all(isinstance(f, str) for f in fields):
         raise BadEvent("Thiếu danh sách fields")
     trigger: JobTrigger | None = None
+    # `onboarding` đi kèm lần khai hồ sơ đầu và lần đặt lại tài khoản demo (ledger `reset_demo`): chưa có gì "đổi" so với một lộ
+    # trình đang có, và sinh lại lúc đó sẽ loại bản lộ trình seed (v3 "hành vi thay đổi" của minh). Bỏ qua; lộ trình đầu tiên do
+    # người dùng tự yêu cầu.
+    if "onboarding" in fields:
+        return RoadmapEvent(user_id, event_id, None)
     if "salary" in fields:
         trigger = "income_changed"
     elif "jars" in fields:
