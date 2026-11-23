@@ -155,7 +155,7 @@ Thuộc stack `YofinaTools` (construct `ClassifyPipeline`, `infra-cdk/lib/classi
 
 **Deploy 23/11 chiều (phase 4, phần Phúc)**: migration `0052`; `YofinaTools` ba lần (lần đầu: 13 route, `yofina-classify` + SQS + DLQ + rule + bảng idempotency, code ledger và forecast mới kèm `ruptures`; lần hai: sửa thông điệp lỗi hỏng dấu của `ROADMAP_VERSION_CONFLICT`; lần ba: ngưỡng phân loại đã hiệu chỉnh và nhãn seed trong zip ledger và classify); `YofinaAgent` qua `scripts/agent_deploy.py` (5 tool và 5 policy) -> Runtime `yofina_agent` version 14. Frontend không đổi.
 
-### Phase 4 luồng C: sinh lại lộ trình chạy nền — **chưa deploy**
+### Phase 4 luồng C: sinh lại lộ trình chạy nền — **đã deploy 23/11 tối** (`YofinaTools` từ `main` 15e9bc7)
 
 Thuộc stack `YofinaTools` (construct `RoadmapRegen`, `infra-cdk/lib/roadmap-regen.ts`). Mã ở `pipelines/roadmap/`. Chỉ đã synth và chạy test CDK, chưa tạo trên AWS. Không có thứ nào tính tiền theo giờ.
 
