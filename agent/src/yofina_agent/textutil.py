@@ -1,4 +1,4 @@
-"""Xử lý chuỗi tiếng Việt dùng chung: bỏ dấu, đọc số tiền, tách số tiền để kiểm căn cứ.
+"""Xử lý chuỗi tiếng Việt dùng chung: bỏ dấu, đọc số tiền, tách số tiền để kiểm căn cứ, đọc hạn mục tiêu.
 
 Đây là mã ngôn ngữ chung chung (không chứa câu hỏi hay số của persona).
 """
@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from datetime import date, timedelta
 from decimal import Decimal
 
 from yofina_agent.notices import STRESS_CHIP_VALUE
+from yofina_core.clock import payday_in_month
 from yofina_core.resilience import load_shock_set
 
 _UNITS: dict[str, int] = {
@@ -143,3 +145,155 @@ def ungrounded_amounts(text: str, allowed: Iterable[int]) -> list[int]:
         for value, tol in extract_amounts(text)
         if not any(abs(value - a) <= max(tol, 0.5) for a in allowed)
     ]
+
+
+# --- hạn mục tiêu người dùng nói ("cuối tháng này", "31/12", "6 tháng nữa") ---------------------------------
+_ISO_DATE_RE = re.compile(r"(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)")
+#: dd/mm[/yyyy]; không nhận số theo sau là đơn vị tiền ("1.5 triệu" là số tiền, không phải 1/5)
+_DMY_RE = re.compile(
+    rf"(?<![\d/.\-])(\d{{1,2}})[/.\-](\d{{1,2}})(?:[/.\-](\d{{4}}|\d{{2}}))?(?![\d/.\-])"
+    rf"(?!\s*(?:{_UNIT_RE})(?![a-z]))"
+)
+_YEAR = r"(?: nam (\d{4}|nay|sau|toi))?"
+_DAY_MONTH_RE = re.compile(rf"\bngay (\d{{1,2}}) thang (\d{{1,2}}){_YEAR}\b")
+_OFFSET_RE = re.compile(r"(?<!thang )(?<!ngay )\b(\d{1,3}) (ngay|tuan|thang|nam) (?:nua|toi|sau)\b")
+_END_OF_MONTH_N_RE = re.compile(rf"\b(?:cuoi|het) thang (\d{{1,2}}){_YEAR}\b")
+_MONTH_N_RE = re.compile(rf"\bthang (\d{{1,2}}){_YEAR}\b")
+_NEXT_MONTH_RE = re.compile(r"\b(?:cuoi|het) thang (?:sau|toi)\b|\bthang (?:sau|toi)\b")
+_END_OF_MONTH_RE = re.compile(r"\b(?:cuoi|het) thang(?: nay)?\b")
+_NEXT_YEAR_RE = re.compile(r"\b(?:cuoi|het) nam (?:sau|toi)\b|\bnam (?:sau|toi)\b")
+_END_OF_YEAR_RE = re.compile(r"\b(?:cuoi|het) nam(?: nay)?\b")
+_ALNUM = re.compile(r"[a-z0-9₫]")
+
+
+def _mapped(text: str, *, collapse: bool) -> tuple[str, list[int]]:
+    """`strip_accents(text)` (collapse=False) hoặc `normalize(text)` (collapse=True), kèm vị trí trong `text` của từng ký tự.
+
+    Để cắt lại đúng cụm chữ người dùng gõ (còn dấu) từ chỗ khớp trên chuỗi đã bỏ dấu.
+    """
+    out: list[str] = []
+    pos: list[int] = []
+    gap = False
+    for i, ch in enumerate(text):
+        for c in strip_accents(ch):
+            if not collapse:
+                out.append(c)
+                pos.append(i)
+            elif _ALNUM.match(c):
+                if gap and out:
+                    out.append(" ")
+                    pos.append(i)
+                gap = False
+                out.append(c)
+                pos.append(i)
+            else:
+                gap = True
+    return "".join(out), pos
+
+
+def _add_months(day: date, months: int) -> date:
+    year, month = divmod(day.year * 12 + day.month - 1 + months, 12)
+    return payday_in_month(day.day, year, month + 1)
+
+
+def _month_end(year: int, month: int) -> date:
+    return payday_in_month(31, year, month)
+
+
+def _year_of(token: str | None, today: date) -> int | None:
+    if token is None:
+        return None
+    if token == "nay":
+        return today.year
+    if token in ("sau", "toi"):
+        return today.year + 1
+    return int(token) + (2000 if len(token) == 2 else 0)
+
+
+def _on_or_next_year(today: date, make: Callable[[int], date], year: int | None) -> date:
+    """Ngày trong năm `year`; không nói năm mà ngày đó đã qua (hoặc là hôm nay) thì lấy năm sau."""
+    found = make(year if year is not None else today.year)
+    return make(today.year + 1) if year is None and found <= today else found
+
+
+def _goal_date_match(text: str) -> tuple[Callable[[date], date], tuple[int, int]] | None:
+    """Cách nói hạn đầu tiên nhận ra: (hàm đổi ra ngày theo hôm nay, vị trí [đầu, cuối) của cụm trong `text`). None nếu không có.
+
+    Hàm đổi ngày ném `ValueError` với ngày không có thật (31/02, tháng 13).
+    """
+    raw, raw_pos = _mapped(text, collapse=False)
+    words, word_pos = _mapped(text, collapse=True)
+
+    def span(pos: list[int], m: re.Match[str]) -> tuple[int, int]:
+        return pos[m.start()], pos[m.end() - 1] + 1
+
+    if m := _ISO_DATE_RE.search(raw):
+        y, mo, d = int(m[1]), int(m[2]), int(m[3])
+        return (lambda _today: date(y, mo, d)), span(raw_pos, m)
+    m, pos = _DMY_RE.search(raw), raw_pos
+    if m is None:
+        m, pos = _DAY_MONTH_RE.search(words), word_pos
+    if m is not None:
+        d, mo, year_token = int(m[1]), int(m[2]), m[3]
+        return (
+            lambda today: _on_or_next_year(today, lambda y: date(y, mo, d), _year_of(year_token, today))
+        ), span(pos, m)
+    if m := _OFFSET_RE.search(words):
+        n, unit = int(m[1]), m[2]
+        if unit in ("ngay", "tuan"):
+            days = n * (7 if unit == "tuan" else 1)
+            return (lambda today: today + timedelta(days=days)), span(word_pos, m)
+        months = n * (12 if unit == "nam" else 1)
+        return (lambda today: _add_months(today, months)), span(word_pos, m)
+    if m := _END_OF_MONTH_N_RE.search(words) or _MONTH_N_RE.search(words):
+        mo, year_token = int(m[1]), m[2]
+        return (
+            lambda today: _on_or_next_year(today, lambda y: _month_end(y, mo), _year_of(year_token, today))
+        ), span(word_pos, m)
+
+    def next_month_end(today: date) -> date:
+        year, month = divmod(today.year * 12 + today.month, 12)  # tháng kế tiếp (0-based)
+        return _month_end(year, month + 1)
+
+    keyword_rules: tuple[tuple[re.Pattern[str], Callable[[date], date]], ...] = (
+        (_NEXT_MONTH_RE, next_month_end),
+        (_END_OF_MONTH_RE, lambda today: _month_end(today.year, today.month)),
+        (_NEXT_YEAR_RE, lambda today: date(today.year + 1, 12, 31)),
+        (_END_OF_YEAR_RE, lambda today: date(today.year, 12, 31)),
+    )
+    for pattern, resolve in keyword_rules:
+        if m := pattern.search(words):
+            return resolve, span(word_pos, m)
+    return None
+
+
+def parse_goal_date(text: str, today: date) -> date | None:
+    """Hạn mục tiêu người dùng nói ("cuối tháng này", "31/12", "6 tháng nữa", "tháng 3 năm sau") -> ngày, tính theo ngày mô phỏng `today`.
+
+    Chỉ nhận cách nói rõ ràng; không đọc được hoặc ngày không sau hôm nay thì None (người gọi nói rõ, không đoán).
+
+    >>> parse_goal_date("cuối tháng sau", date(2026, 11, 21))
+    datetime.date(2026, 12, 31)
+    """
+    found = _goal_date_match(text)
+    if found is None:
+        return None
+    resolve, _ = found
+    try:
+        when = resolve(today)
+    except ValueError:  # 31/02, tháng 13...
+        return None
+    return when if when > today else None
+
+
+def goal_date_phrase(text: str) -> str | None:
+    """Cụm chữ chỉ hạn trong câu, giữ nguyên chữ người dùng gõ ("Lập lộ trình ... trước cuối tháng này" -> "cuối tháng này").
+
+    Cùng luật với `parse_goal_date` nên `parse_goal_date(goal_date_phrase(câu), hôm_nay)` cho cùng ngày với cả câu. Chưa đổi ra ngày
+    (cần ngày mô phỏng); None nếu câu không có cách nói hạn nào nhận ra được.
+    """
+    found = _goal_date_match(text)
+    if found is None:
+        return None
+    start, end = found[1]
+    return text[start:end].strip() or None
