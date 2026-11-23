@@ -137,8 +137,49 @@ class ForecastEventPublisher:
             detail["parent_event_id"] = parent_event_id
         if trace_id:
             detail["trace_id"] = trace_id
+        return self._put("forecast.updated", detail, "ForecastEventPublishFailed")
+
+    def behavior_changed(
+        self,
+        *,
+        user_id: str,
+        flag_id: str,
+        occurred_at: datetime,
+        app_date: Any,
+        jar_code: str,
+        direction: str,
+        old_weekly_vnd: int,
+        new_weekly_vnd: int,
+        weeks_held: int,
+        change_point_date: Any = None,
+        trace_id: str | None = None,
+    ) -> bool:
+        """Phát `behavior.changed` (contracts/events/behavior.changed.schema.json): điểm gãy hành vi của MỘT hũ đã được PELT XÁC
+        NHẬN. `event_id` bằng `flag_id` nên phát lại cùng một dấu hiệu cho cùng event_id (consumer dedupe). Dấu hiệu "nghi" (CUSUM)
+        KHÔNG phát sự kiện này. Không PII."""
+        detail: dict[str, Any] = {
+            "v": EVENT_VERSION,
+            "event_id": flag_id,
+            "user_id": user_id,
+            "occurred_at": format_instant(occurred_at),
+            "app_date": app_date.isoformat(),
+            "flag_id": flag_id,
+            "jar_code": jar_code,
+            "direction": direction,
+            "old_weekly_vnd": int(old_weekly_vnd),
+            "new_weekly_vnd": int(new_weekly_vnd),
+            "method": "pelt",
+            "weeks_held": int(weeks_held),
+        }
+        if change_point_date is not None:
+            detail["change_point_date"] = change_point_date.isoformat()
+        if trace_id:
+            detail["trace_id"] = trace_id
+        return self._put("behavior.changed", detail, "BehaviorEventPublishFailed")
+
+    def _put(self, detail_type: str, detail: Mapping[str, Any], failure_metric: str) -> bool:
         if not self.bus_name:
-            log.warning(json.dumps({"msg": "event_bus_not_configured", "type": "forecast.updated"}))
+            log.warning(json.dumps({"msg": "event_bus_not_configured", "type": detail_type}))
             return False
         try:
             resp = self.client.put_events(
@@ -146,15 +187,15 @@ class ForecastEventPublisher:
                     {
                         "EventBusName": self.bus_name,
                         "Source": SOURCE,
-                        "DetailType": "forecast.updated",
+                        "DetailType": detail_type,
                         "Detail": json.dumps(detail, ensure_ascii=False),
                     }
                 ]
             )
             ok = int(resp.get("FailedEntryCount", 0)) == 0
         except Exception as exc:
-            log.error(emf("ForecastEventPublishFailed", 1, error=type(exc).__name__))
+            log.error(emf(failure_metric, 1, error=type(exc).__name__))
             return False
         if not ok:
-            log.error(emf("ForecastEventPublishFailed", 1, error="EntryRejected"))
+            log.error(emf(failure_metric, 1, error="EntryRejected"))
         return ok

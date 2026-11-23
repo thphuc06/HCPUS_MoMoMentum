@@ -57,6 +57,18 @@ Việc phase 2 chuyển sang, chưa chắc đã làm: preview cho sửa hồ sơ
 
 **Git**: `main` đã push. Nhánh `feat/ingest` đã xóa sau khi merge. `origin/wip/phase3-streams` và `origin/r1-merge-phase3` đã nằm trọn trong `main`, xóa được khi đồng đội đồng ý. `evals/results/` không vào git (chứa dữ liệu persona; đã có trong `.gitignore`).
 
+### B0. Phase 4 phần Phúc (luồng A, B): mã xong cục bộ 23/11, CHƯA deploy
+
+Bốn gói (subagent Sonnet, effort high) theo mục "Kế hoạch thực hiện phần của Phúc" của file phase 4: (1) điểm chống chịu, ba cú sốc, LP phía forecast; (2) lộ trình phía ledger, 8 REST `/roadmap*`, seed `minh` v1–v3; (3) phát hiện đổi hành vi (CUSUM nghi, PELT `ruptures` xác nhận); (4) phân hũ tự động (Lambda `yofina-classify`, embedding Cohere, k-NN, hỏi gộp, bộ kiểm 334 dòng). Người điều phối đã nối: batch đêm `batch.after_forecast` (dự báo → điểm → đổi hành vi, bọc lỗi từng bước), `wallet.PHASE4_TOOLS` rỗng, 13 route trong `tools-stack.ts`, `ClassifyPipeline` vào `YofinaTools`, `reset_demo` truyền ngày neo và nạp nhãn k-NN seed, `ruptures` vào zip forecast. Cục bộ: pytest 2648, local_pg 205, infra 31.
+
+**Việc tối 23/11 (cần đăng nhập AWS, theo thứ tự)**:
+1. `aws login --remote` (phiên 12 giờ; cân nhắc IAM user có phiên 7–14 ngày).
+2. `uv run scripts/migrate.py` (0052: pgvector + bảy bảng; trước đó chưa chạy được vì hết phiên).
+3. Hiệu chỉnh phân loại bằng Bedrock thật (lệnh ở `pipelines/classify/README.md` / báo cáo gói 4: `evals/classification/run_eval.py warm` khoảng 20 phút, `calibrate --write-config`, `run`, `build_seed_labels.py`); ghi độ đúng và tỷ lệ hỏi (tiêu chí 6).
+4. Build zip (ledger, forecast có `ruptures`, classify), `cdk deploy YofinaTools`, `agent_deploy.py` (đăng ký 5 tool mới trên Gateway; nếu Gateway từ chối độ sâu bảy cấp của `save_roadmap` thì làm phẳng `action` như quyết định 23).
+5. Đặt lại `minh`, chạy integration cả bộ + viết test tích hợp phase 4 (điểm, cú sốc, lộ trình v3 `proposed`, phân loại một giao dịch mới trong 1 phút).
+6. Còn mở: hũ "Khác" chưa có trong mẫu hũ (khoản nhỏ không rõ đang vào hỏi gộp); `vy` (giamkhao3) sẽ bị xác nhận đổi hành vi ở Ăn uống khi chạy batch (do bộ sinh dồn chi cuối kỳ); số điểm `minh` theo engine 33 (Figma 58).
+
 ### B. Phase 4: bước 0 xong, chia hai nhánh
 
 Hợp đồng: mục "Quyết định hợp đồng phase 4" (25 quyết định) và "Cho các luồng sau" trong [file phase 4](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md), `contracts/README.md` mục Phase 4, `db/README.md`. Kiểm lúc chốt: pytest 2352, local_pg 132, vitest 588, infra 19/19, Zod khớp.

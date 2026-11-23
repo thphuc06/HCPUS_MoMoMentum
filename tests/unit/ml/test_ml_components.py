@@ -418,6 +418,9 @@ PRODUCT_FILES = sorted(
     p for p in ML.rglob("*.py") if not {"backtest", "synth"} & set(p.relative_to(ML).parts)
 )
 ALLOWED = {"numpy", "scipy", "yofina_ml"}
+#: ngoại lệ có lý do (phase 4, gói 3): PELT của `yofina_ml.change` dùng `ruptures` (wheel manylinux2014_aarch64 cho cp312/cp313,
+#: chỉ phụ thuộc numpy và scipy; đã khai ở ml/pyproject.toml). Chỉ được import MUỘN, trong hàm (đường sự kiện chỉ dùng CUSUM).
+LAZY_ALLOWED = {"change.py": {"ruptures"}}
 
 
 def _imports(path: Path) -> set[str]:
@@ -435,8 +438,14 @@ def test_ma_san_pham_chi_phu_thuoc_numpy_scipy_va_thu_vien_chuan(path):
     import sys
 
     stdlib = set(sys.stdlib_module_names) | {"__future__"}
-    extra = _imports(path) - stdlib - ALLOWED
+    allowed = ALLOWED | LAZY_ALLOWED.get(path.name, set())
+    extra = _imports(path) - stdlib - allowed
     assert not extra, f"{path.name} import ngoài numpy/scipy: {extra}"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    top = {a.name.split(".")[0] for n in tree.body if isinstance(n, ast.Import) for a in n.names}
+    top |= {n.module.split(".")[0] for n in tree.body if isinstance(n, ast.ImportFrom) and n.module}
+    for mod in LAZY_ALLOWED.get(path.name, set()):  # không được import ở cấp module
+        assert mod not in top, f"{path.name} phải import {mod} muộn (trong hàm)"
     text = path.read_text(encoding="utf-8")
     assert not re.search(
         r"\b(date\.today|datetime\.now|datetime\.utcnow|time\.time)\(", text

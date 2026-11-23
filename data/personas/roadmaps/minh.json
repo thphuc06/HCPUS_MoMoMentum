@@ -1,0 +1,235 @@
+{
+  "persona": "minh",
+  "nguon": "DỮ LIỆU SEED, không phải kết quả của engine hay agent. Số của persona (số dư hũ, mục tiêu Du lịch, hạn mức, nghĩa vụ) đọc từ chính persona minh lúc nạp: mục tiêu và hạn của hũ lấy từ spec, số dư hũ lấy từ sổ cái vừa nạp, các mục tiêu được chiếu theo `goal_monthly_plan_vnd` (mức dành mỗi tháng cho hũ, là tham số seed). Số tiền của từng bước và các con số mức chi hằng tuần (520.000 và 810.000 đồng mỗi tuần của Ăn uống, 300.000 và 250.000 đồng của Giải trí) là dữ liệu seed theo bảng số Figma L1, KHÔNG tính từ sổ cái. Mọi ngày là số ngày kể từ ngày neo (ngày mô phỏng lúc đặt lại). Mỗi phiên bản được nạp bằng đúng đường của tool và REST (chạy luật suitability cho từng bước, hàm app_save_roadmap, quyết định bước, sửa bước): lộ trình seed không hợp lệ thì đặt lại demo báo lỗi thay vì lưu.",
+  "basis": {
+    "confidence_band": "medium",
+    "is_initial_estimate": false,
+    "history_days": 47,
+    "coverage": 1.0,
+    "stale": false
+  },
+  "behavior_flag": {
+    "jar": "an_uong",
+    "method": "pelt",
+    "direction": "up",
+    "old_weekly_vnd": 520000,
+    "new_weekly_vnd": 810000,
+    "weeks_held": 2,
+    "suspected_days_ago": 21,
+    "change_point_days_ago": 17,
+    "confirmed_days_ago": 1
+  },
+  "versions": [
+    {
+      "version": 1,
+      "reason_code": "initial",
+      "feasibility": "on_track",
+      "goal_monthly_plan_vnd": {"du_lich": 1000000},
+      "phases": [
+        {
+          "phase_id": "on_dinh_thang_nay",
+          "title": "Ổn định tháng này",
+          "summary": "Giữ nghĩa vụ và bù hũ Ăn uống tới kỳ lương.",
+          "start_day": 0,
+          "end_day": 14,
+          "steps": [
+            {
+              "step_id": "giu_san_com_van_phong",
+              "kind": "pay_obligation",
+              "title": "Giữ sẵn tiền cơm văn phòng đến hạn",
+              "reason": "Tiền cơm văn phòng 300.000 ₫ đến hạn ngày 23 và hũ Ăn uống chỉ còn 380.000 ₫; giữ sẵn từ Giải trí để hũ không cạn sớm.",
+              "amount_vnd": 300000,
+              "jar_code": "giai_tri",
+              "to_jar_code": "an_uong",
+              "due_day": 2,
+              "metrics": [{"label": "Hũ Ăn uống", "before": "380.000 ₫", "after": "680.000 ₫"}],
+              "action": {
+                "tool": "move_between_jars",
+                "params": {"from_jar": "giai_tri", "to_jar": "an_uong", "amount_vnd": 300000}
+              }
+            },
+            {
+              "step_id": "bu_an_uong",
+              "kind": "set_aside",
+              "title": "Bù 150.000 ₫ mỗi tuần cho Ăn uống",
+              "reason": "Chi Ăn uống mỗi tuần khoảng 520.000 ₫; bù từ Giải trí để hũ Ăn uống không cạn trước kỳ lương.",
+              "ai_generated": true,
+              "amount_vnd": 150000,
+              "jar_code": "giai_tri",
+              "to_jar_code": "an_uong",
+              "metrics": [{"label": "Chi Ăn uống mỗi tuần", "before": "450.000 ₫", "after": "520.000 ₫"}],
+              "action": {
+                "tool": "move_between_jars",
+                "params": {"from_jar": "giai_tri", "to_jar": "an_uong", "amount_vnd": 150000}
+              }
+            },
+            {
+              "step_id": "cat_giai_tri",
+              "kind": "cut_spending",
+              "title": "Cắt 50.000 ₫ mỗi tuần hũ Giải trí",
+              "reason": "Giảm chi hũ không thiết yếu để có thêm tiền cho Ăn uống.",
+              "amount_vnd": 50000,
+              "jar_code": "giai_tri",
+              "metrics": [{"label": "Chi Giải trí mỗi tuần", "before": "300.000 ₫", "after": "250.000 ₫"}]
+            }
+          ]
+        },
+        {
+          "phase_id": "xay_quy_du_phong",
+          "title": "Xây quỹ dự phòng",
+          "start_day": 15,
+          "end_day": 70,
+          "steps": [
+            {
+              "step_id": "nhac_du_lich",
+              "kind": "remind",
+              "title": "Nhắc xem lại tiến độ Du lịch",
+              "reason": "Kiểm tra hũ Du lịch sau khi đã bù Ăn uống.",
+              "due_day": 45,
+              "jar_code": "du_lich",
+              "action": {
+                "tool": "schedule_nudge",
+                "params": {
+                  "op": "create",
+                  "kind": "review_needed",
+                  "fire_on_day": 45,
+                  "jar_code": "du_lich",
+                  "note": "xem lai tien do du lich"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "phase_id": "ve_dich_du_lich",
+          "title": "Về đích Du lịch",
+          "start_day": 71,
+          "end_day": 92,
+          "steps": [
+            {
+              "step_id": "ve_dich_du_lich",
+              "kind": "review_goal",
+              "title": "Lùi hạn Du lịch nếu chưa đủ",
+              "reason": "Nếu hũ Du lịch chưa đủ khi tới hạn, lùi hạn thay vì vay để đi.",
+              "due_day": 92,
+              "jar_code": "du_lich"
+            }
+          ]
+        }
+      ],
+      "decisions": {
+        "giu_san_com_van_phong": "accepted",
+        "bu_an_uong": "accepted",
+        "cat_giai_tri": "rejected"
+      }
+    },
+    {
+      "version": 2,
+      "reason_code": "step_edited",
+      "edit": {"step_id": "bu_an_uong", "amount_vnd": 100000}
+    },
+    {
+      "version": 3,
+      "reason_code": "behavior_changed",
+      "feasibility": "relaxed",
+      "goal_monthly_plan_vnd": {"du_lich": 1000000},
+      "phases": [
+        {
+          "phase_id": "on_dinh_thang_nay",
+          "title": "Ổn định tháng này",
+          "summary": "Giữ nghĩa vụ và bù hũ Ăn uống tới kỳ lương.",
+          "start_day": 0,
+          "end_day": 14,
+          "steps": [
+            {
+              "step_id": "giu_san_com_van_phong",
+              "kind": "pay_obligation",
+              "title": "Giữ sẵn tiền cơm văn phòng đến hạn",
+              "reason": "Tiền cơm văn phòng 300.000 ₫ đến hạn ngày 23 và hũ Ăn uống chỉ còn 380.000 ₫; giữ sẵn từ Giải trí để hũ không cạn sớm.",
+              "amount_vnd": 300000,
+              "jar_code": "giai_tri",
+              "to_jar_code": "an_uong",
+              "due_day": 2,
+              "metrics": [{"label": "Hũ Ăn uống", "before": "380.000 ₫", "after": "680.000 ₫"}],
+              "action": {
+                "tool": "move_between_jars",
+                "params": {"from_jar": "giai_tri", "to_jar": "an_uong", "amount_vnd": 300000}
+              }
+            },
+            {
+              "step_id": "bu_an_uong",
+              "kind": "set_aside",
+              "title": "Bù 150.000 ₫ mỗi tuần cho Ăn uống",
+              "reason": "Chi Ăn uống mỗi tuần tăng từ 520.000 ₫ lên 810.000 ₫; bù từ Giải trí để hũ Ăn uống không cạn trước kỳ lương.",
+              "ai_generated": true,
+              "amount_vnd": 150000,
+              "jar_code": "giai_tri",
+              "to_jar_code": "an_uong",
+              "metrics": [{"label": "Chi Ăn uống mỗi tuần", "before": "520.000 ₫", "after": "810.000 ₫"}],
+              "action": {
+                "tool": "move_between_jars",
+                "params": {"from_jar": "giai_tri", "to_jar": "an_uong", "amount_vnd": 150000}
+              }
+            }
+          ]
+        },
+        {
+          "phase_id": "xay_quy_du_phong",
+          "title": "Xây quỹ dự phòng",
+          "start_day": 15,
+          "end_day": 70,
+          "steps": [
+            {
+              "step_id": "danh_cho_du_phong",
+              "kind": "set_aside",
+              "title": "Dành 200.000 ₫ mỗi tuần cho Dự phòng",
+              "reason": "Hũ Dự phòng 2.700.000 ₫ mới đủ khoảng 1 tháng chi tiêu thiết yếu; ưu tiên trước các mục tiêu khác.",
+              "ai_generated": true,
+              "amount_vnd": 200000,
+              "jar_code": "giai_tri",
+              "to_jar_code": "du_phong",
+              "action": {
+                "tool": "move_between_jars",
+                "params": {"from_jar": "giai_tri", "to_jar": "du_phong", "amount_vnd": 200000}
+              }
+            },
+            {
+              "step_id": "nhac_du_lich",
+              "kind": "remind",
+              "title": "Nhắc xem lại tiến độ Du lịch",
+              "reason": "Kiểm tra hũ Du lịch sau khi đã bù Ăn uống.",
+              "due_day": 45,
+              "jar_code": "du_lich",
+              "action": {
+                "tool": "schedule_nudge",
+                "params": {
+                  "op": "create",
+                  "kind": "review_needed",
+                  "fire_on_day": 45,
+                  "jar_code": "du_lich",
+                  "note": "xem lai tien do du lich"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "phase_id": "ve_dich_du_lich",
+          "title": "Về đích Du lịch",
+          "start_day": 71,
+          "end_day": 92,
+          "steps": [
+            {
+              "step_id": "ve_dich_du_lich",
+              "kind": "review_goal",
+              "title": "Lùi hạn Du lịch nếu chưa đủ",
+              "reason": "Nếu hũ Du lịch chưa đủ khi tới hạn, lùi hạn thay vì vay để đi.",
+              "due_day": 92,
+              "jar_code": "du_lich"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

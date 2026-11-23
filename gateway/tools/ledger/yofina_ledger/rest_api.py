@@ -179,6 +179,18 @@ def _dispatch(
         jar = _path_param(event, "jar_code", "/forecasts/")
         return 200, service.forecast_response(sub, jar, trace_id=trace_id)
 
+    # --- danh sách "Xem lại" và hỏi gộp (F2, phase 4): `review_rest` ----------------------------------------------
+    if route.startswith(("GET /review", "POST /review")):
+        from yofina_ledger import review_rest
+
+        return review_rest.dispatch(route, event, sub, trace_id, service)
+
+    # --- lộ trình (F5, phase 4): `roadmap_rest` (tám route /roadmap*) ---------------------------------------------
+    if route.startswith(("GET /roadmap", "POST /roadmap")):
+        from yofina_ledger import roadmap_rest
+
+        return roadmap_rest.dispatch(route, event, sub, trace_id, service)
+
     # --- ghi: một đường duy nhất (xác nhận rồi thực hiện) ------------------------------------------------
     if route == "POST /confirmations/cancel":
         body = _body(event)

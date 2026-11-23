@@ -43,7 +43,8 @@ from yofina_core.wallet import (
     UPDATE_PROFILE,
     split_amount,
 )
-from yofina_ledger import convert, events
+from yofina_ledger import classify_write, convert, events
+from yofina_ledger.classify_config import load_thresholds as classify_thresholds
 from yofina_ledger.repo_wallet import ClaimSpec, WriteResult
 
 log = logging.getLogger("yofina.ledger.writes")
@@ -495,13 +496,18 @@ class WalletWrites:
         if dst["kind"] == "system":
             raise YofinaError(ErrorCode.JAR_PROTECTED, "Không gán vào hũ hệ thống.")
         source = st.jars.get(tx["jar_code"]) if tx["jar_code"] else None
-        if tx["jar_code"] == norm["jar"]:
+        # "Đúng rồi" với mục "Xem lại": gán CHÍNH hũ hiện tại (xóa cờ cần xem lại, không chuyển tiền). Gán cùng hũ một dòng
+        # không chờ xem lại vẫn là không làm gì nên vẫn bị từ chối.
+        confirm_same = classify_write.is_confirm_same_jar(tx, norm)
+        if tx["jar_code"] == norm["jar"] and not confirm_same:
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Giao dịch đã nằm ở hũ này rồi.")
         signed = convert.vnd(tx["amount_vnd"])
-        moves = tx["funding_source"] == "jar"
+        moves = tx["funding_source"] == "jar" and not confirm_same
         who = tx.get("payee_name") or tx.get("merchant") or "Giao dịch"
         changes = [_change("Giao dịch", f"{who}, {format_vnd(signed)}")]
-        if source is not None:
+        if confirm_same:
+            changes.append(_change("Xác nhận", f"Đúng, giữ ở hũ {dst['name']}"))
+        elif source is not None:
             changes.append(_change("Hũ", dst["name"], source["name"]))
         if moves:
             dst_bal = convert.vnd(dst["balance_vnd"])
@@ -529,7 +535,10 @@ class WalletWrites:
                     "Giao dịch này không có người nhận hay đối tác để nhớ thành luật.",
                 )
             changes.append(_change("Nhớ cho lần sau", f"luôn xếp {who} vào hũ {dst['name']}"))
-        summary = f"Xếp {who} ({format_vnd(abs(signed))}) vào hũ {dst['name']}"
+        if confirm_same:
+            summary = f"Xác nhận {who} ({format_vnd(abs(signed))}) ở hũ {dst['name']}"
+        else:
+            summary = f"Xếp {who} ({format_vnd(abs(signed))}) vào hũ {dst['name']}"
         return Prepared(ASSIGN_JAR, norm, summary, changes, warnings, st, {"tx": tx})
 
     def _prep_profile(
@@ -826,8 +835,37 @@ class WalletWrites:
         if tool == RECORD_TRANSACTION:
             result = self._write_record(user_id, prep, now, app_date, audit, claim)
         elif tool == ASSIGN_JAR:
-            result = self.repo.write_assign_jar(
-                user_id, norm=norm, now=now, app_date=app_date, audit=audit, claim=claim, tool=tool
+            tx_before = prep.extra.get("tx") or {}
+            before = classify_write.assign_context(self.repo.db, user_id, norm["transaction_id"])
+            if classify_write.is_confirm_same_jar(tx_before, norm):
+                result = classify_write.write_confirm_same_jar(
+                    self.repo,
+                    user_id,
+                    norm=norm,
+                    now=now,
+                    app_date=app_date,
+                    audit=audit,
+                    claim=claim,
+                    tool=tool,
+                )
+            else:
+                result = self.repo.write_assign_jar(
+                    user_id,
+                    norm=norm,
+                    now=now,
+                    app_date=app_date,
+                    audit=audit,
+                    claim=claim,
+                    tool=tool,
+                )
+            # nhãn k-NN, đếm lần sửa, ngưỡng riêng của người nhận, đóng câu hỏi gộp (không bao giờ làm hỏng thao tác đã commit)
+            classify_write.record_assignment_feedback(
+                self.repo.db,
+                user_id,
+                transaction_id=norm["transaction_id"],
+                target_jar=norm["jar"],
+                before=before,
+                thresholds=classify_thresholds(),
             )
         elif tool == CONFIRM_SALARY:
             result = self.repo.write_confirm_salary(
@@ -1065,9 +1103,13 @@ class WalletWrites:
                     }
         elif tool == ASSIGN_JAR:
             amount = f["amount_vnd"]
-            summary = f"Đã xếp giao dịch vào hũ {f['to_jar_name']}"
-            details.append({"label": "Từ hũ", "value": f["from_jar_name"]})
-            details.append({"label": "Sang hũ", "value": f["to_jar_name"]})
+            if f.get("confirmed_same_jar"):
+                summary = f"Đã xác nhận giao dịch ở hũ {f['to_jar_name']}"
+                details.append({"label": "Hũ", "value": f["to_jar_name"]})
+            else:
+                summary = f"Đã xếp giao dịch vào hũ {f['to_jar_name']}"
+                details.append({"label": "Từ hũ", "value": f["from_jar_name"]})
+                details.append({"label": "Sang hũ", "value": f["to_jar_name"]})
             if f.get("rule_saved"):
                 details.append({"label": "Luật đã nhớ", "value": "luôn xếp vào hũ này"})
         elif tool == CONFIRM_SALARY:

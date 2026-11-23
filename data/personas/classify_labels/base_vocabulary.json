@@ -1,0 +1,11 @@
+{
+  "note": "Từ vựng gốc của nhãn k-NN seed (F2): tên cửa hàng, dịch vụ phổ biến ở Việt Nam và hũ thường gặp của chúng, dùng chung cho mọi persona (nhãn của hũ mà persona không có thì bị bỏ). Dữ liệu seed do dự án soạn, hư cấu ở mức 'ví dụ phổ biến', không phải dữ liệu người dùng. `evals/classification/build_seed_labels.py` chuẩn hóa, nhúng bằng Bedrock thật và ghi `<persona>.json` cạnh file này. Bộ kiểm KHÔNG dùng lại tên nào ở đây cho nhóm cửa hàng 'chưa từng thấy' (test kiểm).",
+  "labels": {
+    "an_uong": ["highlands coffee", "phuc long", "the coffee house", "starbucks", "kfc", "lotteria", "jollibee", "pho 24", "com tam", "bun bo hue", "banh mi", "tra sua gong cha", "tocotoco", "grabfood", "shopeefood", "baemin", "winmart", "bach hoa xanh", "co.opmart", "circle k", "familymart", "gs25"],
+    "di_lai": ["grab", "be", "gojek", "xanh sm", "vinasun", "mai linh", "xe buyt", "metro", "petrolimex", "gui xe", "ve tau", "grab bike"],
+    "hoa_don": ["evn", "tien dien", "tien nuoc", "fpt telecom", "viettel", "vnpt", "mobifone", "vinaphone", "tien internet", "tien tro", "tien nha", "nap dien thoai"],
+    "giai_tri": ["netflix", "spotify", "youtube premium", "cgv", "lotte cinema", "galaxy cinema", "steam", "garena", "karaoke", "bowling"],
+    "du_lich": ["vietjet", "vietnam airlines", "bamboo airways", "agoda", "booking", "traveloka", "khach san", "homestay"],
+    "nghia_vu": ["tra gop", "tra no", "tra the tin dung", "phi tra sau"]
+  }
+}

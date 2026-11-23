@@ -11,11 +11,19 @@
 | `yofina_forecast/repo.py` | Truy cập Aurora qua `yofina_core.db.DataApi` (role `yofina_app`): đọc bằng hàm `app_*`, ghi MỘT transaction cho cả lần chạy |
 | `yofina_forecast/runner.py` | `Pipeline.run_user(user_id, trigger, ...)`: chọn đường nhanh hay đầy đủ, `contract.check_result` trước khi ghi, ghi, phát `forecast.updated` |
 | `yofina_forecast/consumer.py`, `idempotency.py`, `events.py` | Đường sự kiện: luật sự kiện -> việc, gộp theo người dùng, idempotency DynamoDB, đọc phong bì EventBridge, phát `forecast.updated` |
-| `yofina_forecast/batch.py` | Các `op` của Lambda batch: `list_users`, `run_user`, `run_users`, `summarize` |
-| `yofina_forecast/tool.py` | Tool `forecast___get_forecast` (dùng `WalletReads.forecast_block_or_none` của ledger: cùng mã dựng khối với REST); chuyển `forecast___run_scenario` (kèm `conversation_id`, `with_scenarios`) và `forecast___list_scenarios` cho `scenario.py` |
+| `yofina_forecast/batch.py` | Các `op` của Lambda batch: `list_users`, `run_user`, `run_users`, `optimize_allocation` (N1), `summarize` |
+| `yofina_forecast/tool.py` | Tool `forecast___get_resilience_score`, `forecast___stress_test` và REST `GET /resilience`, `GET /resilience/shocks`, `POST /resilience/stress` (cùng `POST /affordability`); tool `forecast___get_forecast` (dùng `WalletReads.forecast_block_or_none` của ledger: cùng mã dựng khối với REST); chuyển `forecast___run_scenario` (kèm `conversation_id`, `with_scenarios`) và `forecast___list_scenarios` cho `scenario.py` |
 | `yofina_forecast/scenario.py` | `ScenarioEngine`: `run` (what-if; gộp bó kịch bản bằng `apply_bundle`) và `list_scenarios` (các kịch bản đã chạy trong một cuộc chat) |
+| `yofina_forecast/resilience.py`, `stress.py`, `allocation.py` | **Phase 4 luồng A.** `ResilienceEngine` (điểm chống chịu bốn thành phần; `get` cho tool `get_resilience_score` và `GET /resilience`; `compute_and_store(pipeline, user_id, now)` là hàm **N2** cho batch đêm, ghi `resilience_scores`), `StressEngine` (`stress_test`, `POST /resilience/stress`: Monte Carlo cùng dãy số ngẫu nhiên với nền), `AllocationEngine` (`optimize_allocation`, op batch **N1**: LP `linprog` HiGHS). Công thức ở `ml/yofina_ml/{resilience,stress,allocation}.py`; trọng số, ngưỡng, nhãn, câu giải thích đọc từ `yofina_core/resilience_defaults.json`, cú sốc từ `shocks.json`, tham số LP từ `ForecastSettings.allocation` (mặc định mô phỏng ở `settings.py`, ghi đè bằng `YOFINA_ALLOCATION_<TÊN>`) |
 | `yofina_forecast/bootstrap.py`, `handler_batch.py`, `handler_event.py`, `handler_tool.py` | Vỏ Lambda: dựng thành phần một lần mỗi môi trường thực thi |
 | `requirements.txt` | numpy, scipy (cùng `pydantic`, `tzdata` của `yofina_core`) |
+
+## Điểm chống chịu, cú sốc, tối ưu phân bổ (phase 4, luồng A)
+
+- **Điểm** (`resilience.py`): đọc ngữ cảnh dự báo, hũ kèm mục tiêu (`app_get_jar_state`), nghĩa vụ đang hoạt động, số khoản đã trả; kỳ tính `resilience_window_days` (30). Save = số dư khả dụng / chi mỗi ngày không thu nhập; Spend = chi trên thu trộn với tỷ lệ trả đúng hạn; Borrow = nghĩa vụ trong kỳ trên thu nhập; Plan = tiến độ mục tiêu (bị bỏ khi chưa có mục tiêu, trọng số chuẩn hóa lại). Ghi `resilience_scores` bằng upsert theo (người dùng, ngày mô phỏng). Đọc lại bản đã lưu; tính lại khi sang ngày khác, đổi phiên bản cấu hình, quá `freshness_seconds` hoặc `refresh`.
+- **Hàm N2** `yofina_forecast.resilience.compute_and_store(pipeline, user_id, now)`: KHÔNG tự nối vào `Pipeline.run_user`; người điều phối nối sau bước dự báo (lỗi bước này không được làm hỏng bước khác).
+- **Cú sốc** (`stress.py`): chỉ nhận `shock_id`; điểm trước/sau cùng công thức; lịch lương, nghĩa vụ, khoản chi một lần của `ForecastInputs` đổi theo cú sốc; số dư TỔNG mô phỏng trên cùng dãy số ngẫu nhiên với nền (hạt theo (seed, ngày gốc, mã hũ)); không ghi gì.
+- **Tối ưu phân bổ** (`allocation.py`, op `optimize_allocation`): ledger gọi `Invoke` đồng bộ `{"op": "optimize_allocation", "user_id", "args"}` và nhận NGUYÊN phong bì tool (vô nghiệm là `data.status = infeasible`, không phải lỗi). Chi tiết bài toán ở docstring `ml/yofina_ml/allocation.py`.
 
 ## Dòng chảy của một lần chạy (`Pipeline.run_user`)
 
@@ -50,6 +58,7 @@
 
 ## Kiểm
 
+- Phase 4 luồng A: `tests/unit/pipeline/test_resilience.py`, `test_stress.py`, `test_allocation.py` (engine ML và solver thật, kho trong bộ nhớ, kiểm JSON Schema) và `tests/local_pg/test_resilience_minh.py` (PostgreSQL thật, persona `minh`; chạy riêng với `-s` để in số thật).
 - Unit (không cần AWS): `uv run pytest tests/unit/pipeline` (dựng đầu vào, mở rộng nghĩa vụ, chọn đường nhanh hay đầy đủ và các lý do rơi về, idempotency, consumer, batch, tool, sự kiện phát đi theo schema).
 - PostgreSQL thật cục bộ (SQL thật của migration 0009, RLS thật, engine thật, sổ cái thật; cả ledger gọi pipeline): `uv run --python 3.12 --no-project --with pgserver --with "psycopg[binary]" --with pydantic --with pytest --with jsonschema --with pyyaml --with referencing --with numpy --with scipy pytest tests/local_pg -p no:cacheprovider` (59 ca; đã gồm `test_forecast_pipeline.py`).
 - Môi trường thật: `uv run pytest tests/integration/test_forecast_pipeline.py tests/integration/test_forecast_chat.py -m integration` (cảnh 1 sau đặt lại, giao dịch 200.000 ₫ trong 60 giây, chạy tay `yofina-nightly`, gửi trùng một `event_id`, Trả sau thành mốc, tool qua Gateway cùng số với REST, p95 `GET /overview`, chat qua Runtime).

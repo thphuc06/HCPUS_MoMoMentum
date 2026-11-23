@@ -22,6 +22,8 @@ Việc module làm (docs/plan/master-plan.md, mục "Model và giới hạn"):
    `yofina.llm`).
 6. **JSON có cấu trúc bằng ép tool** (Nova không hỗ trợ `outputConfig`): `structured_json`, có
    giới hạn số lần thử; mỗi lần thử là một lượt gọi model và được đếm.
+7. **Embedding** (`embed`, vai `embedding` = Cohere Embed v3, `InvokeModel`): gom lô tối đa 96 chuỗi, mỗi lô là một lời gọi được
+   đếm và giới hạn như mọi lời gọi khác; mọi lô của một lần gọi dùng cùng một model.
 
 Strands dùng chung các lớp kiểm này qua `LlmGateway.chain/reserve*/record`; lớp bọc `Model` của
 Strands nằm ở `yofina_agent.metered_model` (để `yofina_core` không phụ thuộc Strands).
@@ -468,6 +470,26 @@ class StructuredResult[T: BaseModel]:
     attempts: int  # số lần gọi model đã dùng (>= 1)
 
 
+#: Giới hạn của Cohere Embed v3 trên Bedrock (https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-embed-v3.html):
+#: tối đa 96 chuỗi mỗi lời gọi, mỗi chuỗi tối đa 2.048 ký tự.
+EMBED_MAX_BATCH = 96
+EMBED_MAX_CHARS = 2048
+EMBED_INPUT_DOCUMENT = "search_document"
+EMBED_INPUT_QUERY = "search_query"
+EMBED_INPUT_TYPES = (EMBED_INPUT_DOCUMENT, EMBED_INPUT_QUERY)
+
+
+@dataclass
+class EmbedResult:
+    role: str
+    model_id: str
+    vectors: list[list[float]]
+    latency_ms: int
+    input_tokens: int
+    calls: int  # số lời gọi InvokeModel đã gửi (mỗi lô tối đa 96 chuỗi là một lời gọi)
+    attempts: list[tuple[str, str]] = field(default_factory=list)  # (model, lý do bỏ qua)
+
+
 def user_message(text: str) -> dict[str, Any]:
     return {"role": "user", "content": [{"text": text}]}
 
@@ -872,6 +894,90 @@ class LlmGateway:
 
     async def astructured_json(self, role: str, **kwargs: Any) -> StructuredResult[Any]:
         return await asyncio.to_thread(self.structured_json, role, **kwargs)
+
+    # -- embedding (Cohere Embed v3 qua InvokeModel) -----------------------------------------
+    def embed(
+        self,
+        role: str,
+        texts: Sequence[str],
+        *,
+        input_type: str = EMBED_INPUT_DOCUMENT,
+        scope: TurnScope | None = None,
+    ) -> EmbedResult:
+        """Nhúng danh sách chuỗi bằng `InvokeModel` theo chuỗi dự phòng của `role` (đồng bộ).
+
+        Theo tài liệu Bedrock (Cohere Embed v3): tối đa `EMBED_MAX_BATCH` (96) chuỗi mỗi lời gọi nên danh sách dài được cắt thành nhiều
+        lô; mỗi chuỗi tối đa `EMBED_MAX_CHARS` ký tự (dài hơn thì bị cắt đuôi ở phía client, để không phụ thuộc `truncate`).
+        `input_type` là `search_document` (nhãn lưu vào kho) hoặc `search_query` (chuỗi cần tra). Mỗi LÔ là MỘT lời gọi: được giữ chỗ,
+        đếm vào trần ngày và vào `scope` như mọi lời gọi khác, nên gom lô là cách giữ trần. Một lô lỗi tạm thời thì thử model kế
+        tiếp của vai (mỗi lô tự chọn model, nhưng mọi lô của MỘT lần gọi phải cùng model để vector so sánh được: lô sau đi lại
+        đúng model của lô đầu, không dự phòng sang model khác). Thứ tự vector khớp thứ tự `texts`.
+        """
+        if input_type not in EMBED_INPUT_TYPES:
+            raise ValueError(f"input_type phải thuộc {EMBED_INPUT_TYPES}")
+        clipped = [str(t)[:EMBED_MAX_CHARS] for t in texts]
+        if not clipped:
+            return EmbedResult(role, "", [], 0, 0, 0, [])
+        batches = [clipped[i : i + EMBED_MAX_BATCH] for i in range(0, len(clipped), EMBED_MAX_BATCH)]
+        skipped: list[tuple[str, str]] = []
+        chain = self.chain(role)
+        vectors: list[list[float]] = []
+        used: ModelSpec | None = None
+        tin_total, latency_total, calls = 0, 0, 0
+        for batch in batches:
+            candidates = (used,) if used is not None else chain
+            done = False
+            for spec in candidates:
+                try:
+                    self.reserve(role, spec, scope)
+                except RateLimitWaitTooLong as exc:
+                    skipped.append((spec.id, "RateLimitWaitTooLong"))
+                    logger.warning(json.dumps({"event": "llm_skip", "model": spec.id, "why": str(exc)}))
+                    continue
+                started = time.perf_counter()
+                try:
+                    response = self.client.invoke_model(
+                        modelId=spec.id,
+                        body=json.dumps({"texts": batch, "input_type": input_type, "truncate": "END"}),
+                        contentType="application/json",
+                        accept="application/json",
+                    )
+                    payload = json.loads(response["body"].read())
+                    vecs = payload["embeddings"]
+                    if len(vecs) != len(batch) or any(len(v) != len(vecs[0]) for v in vecs):
+                        raise LlmError(
+                            f"{spec.id}: trả {len(vecs)} vector cho {len(batch)} chuỗi hoặc vector lệch chiều"
+                        )
+                except Exception as exc:
+                    latency = int((time.perf_counter() - started) * 1000)
+                    code = self.error_code(exc) or type(exc).__name__
+                    self.record(
+                        role, spec.id, input_tokens=0, output_tokens=0, latency_ms=latency, outcome=code, scope=scope
+                    )
+                    if used is None and self.is_fallback_error(exc):
+                        skipped.append((spec.id, code))
+                        continue
+                    raise
+                latency = int((time.perf_counter() - started) * 1000)
+                headers = response.get("ResponseMetadata", {}).get("HTTPHeaders", {})
+                tin = int(headers.get("x-amzn-bedrock-input-token-count", 0) or 0)
+                self.record(
+                    role, spec.id, input_tokens=tin, output_tokens=0, latency_ms=latency, outcome="ok", scope=scope
+                )
+                used = spec
+                vectors.extend([float(x) for x in v] for v in vecs)
+                tin_total += tin
+                latency_total += latency
+                calls += 1
+                done = True
+                break
+            if not done:
+                raise AllModelsFailed(role, skipped)
+        assert used is not None
+        return EmbedResult(role, used.id, vectors, latency_total, tin_total, calls, skipped)
+
+    async def aembed(self, role: str, texts: Sequence[str], **kwargs: Any) -> EmbedResult:
+        return await asyncio.to_thread(self.embed, role, texts, **kwargs)
 
 
 _gateway: LlmGateway | None = None

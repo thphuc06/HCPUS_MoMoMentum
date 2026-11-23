@@ -39,6 +39,44 @@ Dùng chung `yofina_core`: `db` (Data API), `confirm` (token), `params` (chuẩn
 | `POST /confirmations/cancel` | Ghi việc người dùng bấm "Không" (`cancelled`) | |
 | `GET /conversations`, `GET /conversations/{id}`, `POST /demo/reset` | Hội thoại đã lưu (kèm `resolutions`), đặt lại demo | `save_turn` |
 
+## Lộ trình (phase 4, F5): `roadmap_*.py`
+
+Lambda này CŨNG phục vụ ba tool của target `planner` về lộ trình và tám REST `/roadmap*`. Hợp đồng và lý do: [phase 4, "Quyết định hợp đồng phase 4"](../../../docs/plan/phases/phase-4-chong-chiu-lo-trinh.md#quyết-định-hợp-đồng-phase-4) (mục 3 đến 5, 14 đến 17, 19 đến 23).
+
+```
+yofina_ledger/
+  roadmap_logic.py     logic THUẦN: bản nháp -> kiểm -> plan, dòng bảng -> RoadmapData (gộp trạng thái bước), so phiên bản, sửa một bước, lý do bằng chữ, lỗi từ DB
+  roadmap_repo.py      SQL của roadmaps, roadmap_jobs, behavior_flags (đọc), audit_events và feedback; `save_in_tx` và `set_step_in_tx` dùng chung với seed
+  roadmap_service.py   RoadmapOps: ba tool và logic tám REST; đứng cạnh LedgerService (`roadmap_ops(service)`), không sửa service.py
+  roadmap_rest.py      phân tuyến và kiểm đầu vào tám REST (trường lạ trong thân bị từ chối, không có user_id)
+  roadmap_seed.py      nạp lộ trình seed của persona khi đặt lại demo (`data/personas/roadmaps/<persona>.json`)
+```
+
+| Tool Gateway (`planner___*`) | Việc |
+|---|---|
+| `optimize_allocation` | Proxy mỏng (N1): `Invoke` ĐỒNG BỘ Lambda `yofina-forecast-batch` với `{"op": "optimize_allocation", "user_id", "args"}` (scipy nằm ở đó, không nằm ở zip ledger) và trả NGUYÊN VĂN phong bì của nó (kể cả phong bì lỗi nghiệp vụ). Lỗi gọi (hết giờ, Lambda lỗi, phản hồi lạ) hoặc chưa cấu hình `YOFINA_FORECAST_FUNCTION_NAME`: `FORECAST_UNAVAILABLE`, không đoán số. `ForecastClient.optimize_allocation` |
+| `save_roadmap` | GHI không đổi số dư, KHÔNG qua token. Nhận `RoadmapDraft`; Lambda điền phiên bản, trạng thái (`status_for_new_version`: bản đầu và `step_edited` là `active`, còn lại `proposed`), `reason.text` (dựng từ sự kiện), `headline`, `counts`, `basis` (lần dự báo mới nhất; chưa có thì `FORECAST_UNAVAILABLE`), `rules_version`, `checked_rules` (luật đã kiểm thật, thay giá trị agent khai). Chạy lại `check_suitability` cho TỪNG bước bằng `yofina_planner`: vi phạm mức block thì `ROADMAP_INVALID` kèm mã luật, không lưu. Từ chối thêm: mã hũ không phải hũ của người dùng, `action` chuyển hũ lệch bước, lý do `step_edited` (chỉ người dùng tự sửa mới có), `behavior_flag_id` không phải dấu hiệu ĐÃ XÁC NHẬN của chính người gọi. `behavior_changed` đánh dấu dấu hiệu `confirmed` thành `applied` cùng transaction |
+| `get_roadmap` | Đọc một phiên bản (`version` hoặc `which` active, proposed, latest) đã gộp trạng thái từng bước. `ROADMAP_NOT_FOUND` |
+
+| REST | Luồng |
+|---|---|
+| `GET /roadmap` | Khối `roadmap` (`version` hoặc `which`; mặc định bản đang dùng) |
+| `GET /roadmap/versions` | Danh sách gọn, `active_version`, `proposed_version`, `current_job` (job queued hoặc running) |
+| `GET /roadmap/diff` | Khối `roadmap_diff`: vắng `to_version` thì bản chờ (không có thì bản đang dùng), vắng `from_version` thì bản gốc của bản `to`; hai bản trùng nhau là 400 |
+| `POST /roadmap/steps/{step_id}/decision` | `accepted`, `rejected` (kèm `reason`), `pending` (hoàn tác) cho bước của bản `active` hoặc `proposed`; bản đã bị thay là 409. Idempotent: quyết định trùng không ghi gì. Ghi `audit_events` (`roadmap_step_decided`) và một dòng `feedback` (`block_id` là id khối `roadmap`, `option_id` là `step_id`) |
+| `POST /roadmap/steps/{step_id}/edit` | Đổi số tiền hoặc ngày: lưu bản MỚI `active` (lý do `step_edited`), bước đã sửa `accepted` và `edited`, bước khác giữ trạng thái; bản gốc `superseded`, bản chờ bị bỏ. Số cũ trong tiêu đề và `action.params` đổi theo; chạy lại suitability cho bước đã sửa (422 `ROADMAP_INVALID`, không lưu). Không gọi model, không sinh lại toàn bộ. Feedback `accepted` lý do `edited` |
+| `POST /roadmap/versions/{version}/decision` | `adopt` ("Dùng bản mới") hoặc `keep_previous` ("Giữ bản cũ") với bản chờ; idempotent; trả khối của bản được chọn. Feedback `version_adopt` hoặc `version_keep_previous` |
+| `POST /roadmap/regenerate` | Ghi `roadmap_jobs` (`user_request`, `queued`), phát `roadmap.regeneration_requested` SAU commit (`event_id` bằng `job_id`; ghi chú tự do ở lại job, không vào sự kiện), trả job (HTTP 200). Đang có job chạy thì trả CHÍNH job đó, không ghi và không phát thêm |
+| `GET /roadmap/jobs/{job_id}` | Tiến độ một job; của người khác, không tồn tại hay sai dạng đều 404 `ROADMAP_NOT_FOUND` |
+
+Không có đường ghi tiền mới: lưu và đổi trạng thái lộ trình không ghi sổ cái; hành động trong một bước (`action`) vẫn đi qua `POST /confirmations` rồi `POST /actions`. Lỗi: `ROADMAP_NOT_FOUND` (404), `ROADMAP_INVALID` (422), `ROADMAP_VERSION_CONFLICT` (409); lỗi nghiệp vụ trong hàm SQL (`RAISE EXCEPTION 'MÃ: ...'`) được `roadmap_logic.db_business_error` đổi về đúng mã.
+
+**Seed persona** (`data/personas/roadmaps/minh.json`, đọc README cùng thư mục): đặt lại `minh` ra v1 `superseded`, v2 `active` (sửa bước `bu_an_uong`), v3 `proposed` lý do `behavior_changed` có `behavior_flag_id` trỏ MỘT dòng `behavior_flags` `confirmed` cũng seed. Nạp TRONG transaction đặt lại (`LedgerRepo.reset_user` gọi `roadmap_seed`), mỗi phiên bản đi qua đúng đường thật; lộ trình seed vi phạm suitability thì đặt lại báo lỗi thay vì lưu. `reset_user` nhận thêm `app_date` tùy chọn (ngày neo); `LedgerService.reset_demo` chưa truyền nó nên hiện lấy ngày sau giao dịch mới nhất của persona (đúng với mọi persona hiện có).
+
+**`RESET_DELETES`** có đủ bảng mới của 0052 (`roadmap_jobs`, `roadmaps`, `resilience_scores`, `review_asks`, `tx_embeddings`, `tx_embeddings_labeled`, `behavior_flags`) theo thứ tự khóa ngoại.
+
+Test: `tests/unit/test_ledger_roadmap.py` (logic thuần, proxy, sự kiện, phân tuyến, `RoadmapOps` trên kho giả) và `tests/local_pg/test_roadmap_flow.py` (SQL, RLS, seed, REST, tool trên PostgreSQL thật; lệnh ở docstring của `tests/local_pg/conftest.py`).
+
 ## Luồng ghi (mọi tool)
 
 1. `normalize_params(tool, params, ctx)` ([yofina_core/params.py](../../../libs/yofina_core/src/yofina_core/params.py)): bản chuẩn hóa tất định và idempotent; điền mặc định phụ thuộc trạng thái (hũ từ `tx_type_map`, hũ trả của nghĩa vụ, `due_date` từ `due_day`, mã hũ mới) bằng `NormContext` dựng từ DB và bảng tra. Thứ ký là thứ hiển thị.

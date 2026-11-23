@@ -1,0 +1,138 @@
+{
+  "version": "2026-11-nhan-chua-hieu-chinh",
+  "note": "Ngưỡng và hệ số của phân hũ tự động (F2). Mọi số ở đây là CẤU HÌNH, không phải hằng số của thuật toán: hiệu chỉnh trên evals/classification (script calibrate.py, xem evals/classification/README.md) rồi ghi lại nguồn và tăng `version`. Ghi đè từng số bằng biến môi trường YOFINA_CLASSIFY_<TÊN HOA> (CDK đặt). Spike Bedrock §6 đã bác ngưỡng 0,97 của proposal: cosine của Cohere v3 bị khuôn câu chi phối, nên ngưỡng embedding ở đây là xác suất đúng đã hiệu chỉnh chứ không phải cosine thô.",
+  "thresholds": {
+    "auto_min_confidence": {
+      "value": 0.9,
+      "unit": "probability",
+      "note": "Từ ngưỡng này trở lên: tự gán hũ, không hỏi, không vào 'Xem lại'. Mỗi người nhận có thể nâng riêng bằng payees.auto_min_confidence (sau nhiều lần bị sửa).",
+      "source": "Giá trị khởi đầu theo mục tiêu độ đúng 90% của phase 4; chờ hiệu chỉnh."
+    },
+    "review_min_confidence": {
+      "value": 0.6,
+      "unit": "probability",
+      "note": "Từ ngưỡng này tới auto_min_confidence: tự gán và vào 'Xem lại' (needs_review). Dưới ngưỡng: ở lại Chưa phân loại và hỏi gộp kèm tối đa 2 gợi ý.",
+      "source": "Giá trị khởi đầu; chờ hiệu chỉnh."
+    },
+    "type_map_confidence": {
+      "value": 0.95,
+      "unit": "probability",
+      "note": "Độ tin cậy của hũ lấy từ bảng tx_type_map (bước 0). Cùng giá trị với yofina_ingest.context.TYPE_MAP_CONFIDENCE.",
+      "source": "Theo luồng nạp dữ liệu (phase 5)."
+    },
+    "rule_confidence": {
+      "value": 0.99,
+      "unit": "probability",
+      "note": "Độ tin cậy của luật 'luôn luôn' do người dùng đặt (bước 1). Cùng giá trị với yofina_ingest.context.RULE_CONFIDENCE.",
+      "source": "Theo luồng nạp dữ liệu (phase 5)."
+    },
+    "exact_match_confidence": {
+      "value": 0.95,
+      "unit": "probability",
+      "note": "Chuỗi đã chuẩn hóa trùng đúng một nhãn trong tx_embeddings_labeled (bước 2, trước k-NN). Nhãn do người dùng sửa được cộng exact_match_user_bonus.",
+      "source": "Giá trị khởi đầu; chờ hiệu chỉnh."
+    },
+    "exact_match_user_bonus": {
+      "value": 0.03,
+      "unit": "probability",
+      "note": "Cộng thêm khi nhãn khớp chính xác có nguồn 'user' (người dùng đã sửa).",
+      "source": "Giá trị khởi đầu."
+    },
+    "knn_k": {
+      "value": 5,
+      "unit": "count",
+      "note": "Số nhãn gần nhất lấy từ app_knn_labeled (tối đa 20).",
+      "source": "Giá trị khởi đầu."
+    },
+    "knn_min_similarity": {
+      "value": 0.7,
+      "unit": "cosine",
+      "note": "Nhãn có độ giống (1 trừ khoảng cách cosine) dưới mức này bị bỏ. Thang cosine của Cohere Embed Multilingual v3 (khác hũ trung bình 0,71, spike Bedrock §6), KHÔNG dùng chung với model khác.",
+      "source": "Spike Bedrock §6; chờ hiệu chỉnh."
+    },
+    "knn_cal_intercept": {
+      "value": -6.0,
+      "unit": "logit",
+      "note": "Hồi quy logistic (Platt) từ (độ giống tốt nhất, biên so với hũ thứ hai) sang xác suất đúng.",
+      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+    },
+    "knn_cal_w_sim": {
+      "value": 8.0,
+      "unit": "logit",
+      "note": "Hệ số của độ giống tốt nhất.",
+      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+    },
+    "knn_cal_w_margin": {
+      "value": 4.0,
+      "unit": "logit",
+      "note": "Hệ số của biên giữa hũ tốt nhất và hũ thứ hai.",
+      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+    },
+    "llm_cal_intercept": {
+      "value": -1.0,
+      "unit": "logit",
+      "note": "Platt cho độ chắc model nhỏ tự báo (0..1) sang xác suất đúng (model hay tự tin quá mức).",
+      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+    },
+    "llm_cal_slope": {
+      "value": 3.0,
+      "unit": "logit",
+      "note": "Hệ số của độ chắc model báo.",
+      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+    },
+    "history_min_count": {
+      "value": 3,
+      "unit": "count",
+      "note": "Cần ít nhất từng này giao dịch trước cùng người nhận (hoặc cùng đối tác) đã có hũ thì tín hiệu lặp lại mới được tính.",
+      "source": "Giá trị khởi đầu; chờ hiệu chỉnh."
+    },
+    "history_max_confidence": {
+      "value": 0.8,
+      "unit": "probability",
+      "note": "Trần của tín hiệu lặp lại một mình: một mình nó không bao giờ tới mức tự gán, chỉ cùng bằng chứng khác (embedding, model) mới vượt.",
+      "source": "Giá trị khởi đầu."
+    },
+    "conflict_weight": {
+      "value": 0.5,
+      "unit": "ratio",
+      "note": "Bằng chứng cho hũ khác kéo tụt độ tin cậy của hũ đang dẫn đầu: tin cậy = điểm hũ × (1 trừ conflict_weight × điểm cao nhất của hũ khác).",
+      "source": "Giá trị khởi đầu; chờ hiệu chỉnh."
+    },
+    "small_one_off_max_vnd": {
+      "value": 50000,
+      "unit": "vnd",
+      "note": "Khoản chi một lần không rõ, nhỏ hơn hoặc bằng số này, vào hũ small_one_off_jar_code và không hỏi.",
+      "source": "Giá trị mô phỏng do dự án chọn."
+    },
+    "small_one_off_jar_code": {
+      "value": "khac",
+      "unit": "jar_code",
+      "note": "Mã hũ 'Khác'. jar_templates và persona hiện KHÔNG có hũ này: người dùng không có hũ đó thì khoản nhỏ không rõ vẫn ở Chưa phân loại và vào hỏi gộp.",
+      "source": "Phase 4 luồng B."
+    },
+    "correction_min_count": {
+      "value": 2,
+      "unit": "count",
+      "note": "Từ lần sửa thứ này của MỘT người nhận (hoặc đối tác), ngưỡng tự gán riêng của người đó được nâng.",
+      "source": "Giá trị khởi đầu."
+    },
+    "auto_min_confidence_step": {
+      "value": 0.03,
+      "unit": "probability",
+      "note": "Mỗi lần sửa (từ correction_min_count) nâng payees.auto_min_confidence thêm từng này.",
+      "source": "Giá trị khởi đầu."
+    },
+    "auto_min_confidence_cap": {
+      "value": 0.99,
+      "unit": "probability",
+      "note": "Trần của ngưỡng tự gán riêng. Luật 'luôn luôn' của người dùng (rule_confidence) luôn vượt trần này nên không bị chặn.",
+      "source": "Giá trị khởi đầu."
+    },
+    "suggestions_max": {
+      "value": 2,
+      "unit": "count",
+      "note": "Số hũ gợi ý tối đa cho mục hỏi gộp (khớp CHECK cardinality(suggested_jars) <= 2).",
+      "source": "Hợp đồng khối review_list."
+    }
+  }
+}

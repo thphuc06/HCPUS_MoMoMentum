@@ -23,7 +23,7 @@ from yofina_core.clock import latest_payday, next_payday
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.params import JAR_CODE_RE, UUID_RE
 from yofina_core.schedule import build_timeline_events
-from yofina_ledger import convert
+from yofina_ledger import convert, review_reads
 from yofina_ledger.proactive import choose_proactive_card
 
 CURSOR_MAX = 200
@@ -500,13 +500,19 @@ class WalletReads:
         }
 
     def unclassified_result(self, user_id: str, *, limit: Any = None) -> dict[str, Any]:
+        """Tool `get_unclassified`. Phase 4 mở rộng KẾT QUẢ (đầu vào không đổi): mỗi mục có `tier` (`ask` khi đang ở Chưa phân loại,
+        `review` khi đã được tự gán và chờ xem lại), `classified_by`, `confidence`; mỗi gợi ý có `reason` do code dựng (và `confidence`
+        ở gợi ý đầu). Mọi trường mới đều tùy chọn (tương thích ngược)."""
         now = self.now()
         n = _opt_limit(limit, 20, 50)
         rows = self.repo.unclassified(user_id, n)
         view = self.repo.jar_view(user_id)
         names = {j["code"]: j["name"] for j in view.jars if j.get("kind") != "system"}
+        unclassified_codes = {j["code"] for j in view.jars if j.get("system_role") == "unclassified"}
         tx_types = self.ref.tx_types()
-        items = []
+        type_defaults = {code: info.default_jar_code for code, info in tx_types.items()}
+        chosen: list[tuple[Any, list[str]]] = []
+        entries: list[dict[str, Any]] = []
         for r in rows:
             suggested = list(r.get("suggested_jars") or [])
             if (
@@ -515,14 +521,44 @@ class WalletReads:
                 info = tx_types.get(r.get("tx_type") or "")
                 if info and info.default_jar_code in names:
                     suggested = [info.default_jar_code]
-            items.append(
+            suggested = [c for c in suggested[:2] if c in names]
+            chosen.append((r, suggested))
+            entries.extend(
                 {
-                    "transaction": convert.tx_json(r),
-                    "suggested_jars": [
-                        {"code": c, "name": names[c]} for c in suggested[:2] if c in names
-                    ],
+                    "tx_id": r["id"],
+                    "jar_code": c,
+                    "payee_id": r.get("payee_id"),
+                    "merchant": r.get("merchant"),
                 }
+                for c in suggested
             )
+        counts = review_reads.history_counts(self.repo.db, user_id, entries)
+        items = []
+        for r, suggested in chosen:
+            item: dict[str, Any] = {
+                "transaction": convert.tx_json(r),
+                "suggested_jars": [
+                    {"code": s["code"], "name": names[s["code"]], **{k: v for k, v in s.items() if k != "code"}}
+                    for s in review_reads.suggestion_entries(
+                        str(r["id"]),
+                        suggested,
+                        jar_names=names,
+                        payee_id=r.get("payee_id"),
+                        merchant=r.get("merchant"),
+                        tx_type=r.get("tx_type"),
+                        note=r.get("note"),
+                        type_defaults=type_defaults,
+                        counts=counts,
+                        confidence=r.get("classification_confidence"),
+                    )
+                ],
+                "tier": "ask" if r.get("jar_code") in unclassified_codes else "review",
+            }
+            if r.get("classified_by"):
+                item["classified_by"] = r["classified_by"]
+            if r.get("classification_confidence") is not None:
+                item["confidence"] = round(float(r["classification_confidence"]), 3)
+            items.append(item)
         stats = self.repo.review_stats(user_id)
         return {
             "status": "OK",

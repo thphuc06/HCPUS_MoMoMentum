@@ -6,16 +6,22 @@ khởi động nguội của ledger và phình zip. Tách ra thì ledger chỉ t
 
 - `compute`: đồng bộ (`RequestResponse`) cho `POST /demo/reset` (mở app là có số) và `GET /forecasts/{jar}` khi dự báo cũ.
 - `request`: bắn rồi quên (`Event`) cho `GET /overview` khi dự báo cũ (Tổng quan không được chờ).
-Lỗi KHÔNG BAO GIỜ làm hỏng thao tác của người dùng: ghi log và trả False.
+Lỗi của `compute` và `request` KHÔNG BAO GIỜ làm hỏng thao tác của người dùng: ghi log và trả False.
+- `optimize_allocation`: đồng bộ, giải LP (`planner___optimize_allocation`, phase 4 N1); lỗi gọi là `FORECAST_UNAVAILABLE`.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from typing import Any
 
+from yofina_core.errors import ErrorCode, YofinaError
+
 log = logging.getLogger("yofina.ledger.forecast")
+
+_OPTIMIZE_UNAVAILABLE = "Chưa tính được phân bổ lúc này, thử lại sau ít phút."
 
 
 class ForecastClient:
@@ -69,6 +75,36 @@ class ForecastClient:
         except Exception as exc:
             log.warning(json.dumps({"msg": "forecast_compute_error", "error": type(exc).__name__}))
             return False
+
+    def optimize_allocation(self, user_id: str, args: Mapping[str, Any]) -> dict[str, Any]:
+        """`planner___optimize_allocation` (N1): giải LP ở Lambda forecast (có numpy và scipy) bằng `Invoke` ĐỒNG BỘ, trả NGUYÊN VĂN
+        phong bì tool của nó: `{"status": "OK", "as_of", "app_date", "data": OptimizeAllocationData}` hoặc phong bì lỗi
+        `{"status": "ERROR", "code", "message"}` (lỗi nghiệp vụ như PROFILE_INCOMPLETE là kết quả thành công của Lambda, giữ nguyên).
+        Lỗi GỌI (hết giờ, Lambda lỗi, phản hồi không phải phong bì) thì `FORECAST_UNAVAILABLE` (lỗi tạm thời): không đoán số,
+        không tự tính lại ở đây. Khác `compute` và `request`, lỗi KHÔNG bị nuốt vì người gọi cần biết để báo người dùng."""
+        payload = json.dumps(
+            {"op": "optimize_allocation", "user_id": user_id, "args": dict(args)},
+            ensure_ascii=False,
+        ).encode()
+        try:
+            resp = self.client.invoke(
+                FunctionName=self.function_name,
+                InvocationType="RequestResponse",
+                Payload=payload,
+            )
+            if resp.get("FunctionError"):
+                log.warning(json.dumps({"msg": "forecast_optimize_failed"}))
+                raise YofinaError(ErrorCode.FORECAST_UNAVAILABLE, _OPTIMIZE_UNAVAILABLE)
+            body = json.loads(resp["Payload"].read() or b"{}")
+        except YofinaError:
+            raise
+        except Exception as exc:
+            log.warning(json.dumps({"msg": "forecast_optimize_error", "error": type(exc).__name__}))
+            raise YofinaError(ErrorCode.FORECAST_UNAVAILABLE, _OPTIMIZE_UNAVAILABLE) from exc
+        if not isinstance(body, dict) or body.get("status") not in ("OK", "ERROR"):
+            log.warning(json.dumps({"msg": "forecast_optimize_bad_envelope"}))
+            raise YofinaError(ErrorCode.FORECAST_UNAVAILABLE, _OPTIMIZE_UNAVAILABLE)
+        return body
 
     def request(self, user_id: str, trigger: str = "read") -> bool:
         """Kích hoạt tính nền (không chờ). True nếu Lambda nhận yêu cầu."""

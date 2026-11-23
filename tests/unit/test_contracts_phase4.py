@@ -510,7 +510,9 @@ def test_hop_dong_phase_4_khong_dung_nhan_cam_va_khong_co_thong_tin_nhay_cam():
 def test_tool_phase_4_nam_o_dung_target_va_khop_hang_so():
     assert wallet.FORECAST_TOOLS[-2:] == ("get_resilience_score", "stress_test")
     assert wallet.PLANNER_TOOLS[-3:] == ("optimize_allocation", "save_roadmap", "get_roadmap")
-    assert set(wallet.PHASE4_TOOLS) == set(NEW_TOOLS)
+    # năm tool đã cài xong (23/11) nên không còn tên nào "chưa cài"
+    assert wallet.PHASE4_TOOLS == ()
+    assert set(NEW_TOOLS) <= set(wallet.FORECAST_TOOLS) | set(wallet.PLANNER_TOOLS)
     for name in ("get_resilience_score", "stress_test"):
         assert len(f"forecast___{name}") <= 64
     for name in ("optimize_allocation", "save_roadmap", "get_roadmap"):

@@ -11,6 +11,8 @@
   (`get_fee_schedule`) và `audit` (`get_trace`, `record_turn`) theo quyết định của người điều phối (không có Lambda riêng). Tên tool của các
   target đó là duy nhất trong Gateway nên phân biệt theo tên (phần sau `___`). `schedule_nudge` là tool GHI qua token như các
   tool ghi khác.
+- Phase 4: target `planner` thêm `optimize_allocation` (proxy sang Lambda forecast), `save_roadmap` (ghi, KHÔNG qua token, chạy lại
+  suitability cho từng bước), `get_roadmap`; logic ở `roadmap_service.py`.
 """
 
 from __future__ import annotations
@@ -25,9 +27,14 @@ from yofina_core.blocks import block_to_wire, new_trace_id
 from yofina_core.confirm import MOVE_BETWEEN_JARS
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
 from yofina_core.wallet import AGENT_WRITE_TOOLS, PLANNER_WRITE_TOOLS
+from yofina_ledger.roadmap_service import roadmap_ops
 from yofina_ledger.service import PLANNER_PREFIX, TOOL_PREFIX, LedgerService
 
 log = logging.getLogger("yofina.ledger.gateway")
+
+#: phase 4: ba tool của target `planner` về lộ trình. `optimize_allocation` là proxy sang Lambda forecast (N1), `save_roadmap` ghi KHÔNG
+#: qua token (không đổi số dư; chạy lại suitability cho từng bước), `get_roadmap` đọc.
+ROADMAP_TOOLS = ("optimize_allocation", "save_roadmap", "get_roadmap")
 
 _ARG_KEYS: dict[str, tuple[str, ...]] = {
     "get_jar_balances": (),
@@ -72,6 +79,18 @@ _ARG_KEYS: dict[str, tuple[str, ...]] = {
         "confirm_token",
     ),
     "get_fee_schedule": ("fee_type", "product"),
+    # --- phase 4: target planner (lộ trình; chạy chung Lambda này) ---
+    "optimize_allocation": ("horizon_months", "goals", "shock_id", "allow_relaxation"),
+    "save_roadmap": (
+        "reason_code",
+        "based_on_version",
+        "behavior_flag_id",
+        "feasibility",
+        "goals",
+        "phases",
+        "alternatives",
+    ),
+    "get_roadmap": ("version", "which"),
     "get_trace": ("trace_id",),
     "record_turn": (
         "trace_id",
@@ -173,6 +192,13 @@ def _run(
         )
     if tool == "get_trace":
         return service.trace_result(user_id, args.get("trace_id"))
+    if tool in ROADMAP_TOOLS:
+        ops = roadmap_ops(service)
+        if tool == "optimize_allocation":
+            return ops.optimize_allocation_result(user_id, **args)
+        if tool == "save_roadmap":
+            return ops.save_roadmap_result(user_id, trace_id=trace_id, **args)
+        return ops.get_roadmap_result(user_id, **args)
     if tool == "record_turn":
         return service.record_turn_result(user_id, **args)
     # tool ghi: move_between_jars, update_profile, record_transaction, assign_jar, schedule_nudge

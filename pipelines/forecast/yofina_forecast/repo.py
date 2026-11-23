@@ -56,6 +56,25 @@ SQL_LIST_CONVERSATION_SCENARIOS = "SELECT * FROM app_list_conversation_scenarios
 SQL_PRUNE_SCENARIOS = (
     "SELECT app_prune_scenarios(CAST(:uid AS text), CAST(:keep AS integer)) AS removed"
 )
+SQL_JAR_STATE = "SELECT * FROM app_get_jar_state(CAST(:uid AS text))"
+SQL_OBLIGATIONS = "SELECT * FROM app_list_obligations(CAST(:uid AS text), CAST(:status AS text), CAST(:due AS date), CAST(:lim AS integer))"
+SQL_GET_RESILIENCE = (
+    "SELECT * FROM app_get_resilience_score(CAST(:uid AS text), CAST(:app_date AS date))"
+)
+#: số khoản nghĩa vụ ĐÃ TRẢ (dòng chi gắn `obligation_id`) từ ngày `:since`; RLS lọc theo người dùng của transaction
+SQL_PAID_OBLIGATIONS = (
+    "SELECT count(*) AS paid FROM transactions "
+    "WHERE obligation_id IS NOT NULL AND kind = 'expense' AND app_date >= CAST(:since AS date)"
+)
+SQL_UPSERT_RESILIENCE = (
+    "INSERT INTO resilience_scores (user_id, app_date, score, band, weakest, headline, components, inputs, basis, "
+    "config_version, source, computed_at) "
+    "VALUES (:uid, CAST(:app_date AS date), :score, :band, :weakest, :headline, CAST(:components AS jsonb), "
+    "CAST(:inputs AS jsonb), CAST(:basis AS jsonb), :config_version, :source, CAST(:computed_at AS timestamptz)) "
+    "ON CONFLICT (user_id, app_date) DO UPDATE SET score = EXCLUDED.score, band = EXCLUDED.band, weakest = EXCLUDED.weakest, "
+    "headline = EXCLUDED.headline, components = EXCLUDED.components, inputs = EXCLUDED.inputs, basis = EXCLUDED.basis, "
+    "config_version = EXCLUDED.config_version, source = EXCLUDED.source, computed_at = EXCLUDED.computed_at"
+)
 BATCH_CHUNK = 400  # Data API cho tối đa 1.000 bộ tham số mỗi lần; chừa dư
 
 
@@ -87,6 +106,68 @@ class ForecastRepo:
             max_rows=1,
         )
         return rows[0] if rows else None
+
+    # --- điểm chống chịu, tối ưu phân bổ (phase 4) -------------------------------------------------
+    def jar_state(self, user_id: str) -> list[Row]:
+        """Mọi hũ (kể cả hũ hệ thống) kèm mục tiêu (`goal_vnd`, `goal_date`); không có hàng nào nếu chưa có hồ sơ."""
+        return [r for r in self.db.query(SQL_JAR_STATE, {"uid": user_id}, max_rows=40) if r["code"]]
+
+    def obligations(self, user_id: str, status: str = "active") -> list[Row]:
+        return self.db.query(
+            SQL_OBLIGATIONS,
+            {"uid": user_id, "status": status, "due": None, "lim": 100},
+            max_rows=100,
+        )
+
+    def paid_obligation_count(self, user_id: str, since: date) -> int:
+        with self.db.transaction(user_id) as tx:
+            rows = tx.execute(SQL_PAID_OBLIGATIONS, {"since": since})
+        return int(rows[0]["paid"]) if rows else 0
+
+    def resilience(self, user_id: str, app_date: date | None = None) -> Row | None:
+        """Điểm chống chịu đã lưu mới nhất không sau `app_date` (None là mới nhất), kèm `previous_score`."""
+        rows = self.db.query(SQL_GET_RESILIENCE, {"uid": user_id, "app_date": app_date}, max_rows=1)
+        return rows[0] if rows else None
+
+    def save_resilience(
+        self,
+        user_id: str,
+        *,
+        app_date: date,
+        score: int,
+        band: str,
+        weakest: str,
+        headline: str,
+        components: Sequence[Mapping[str, Any]],
+        inputs: Mapping[str, Any],
+        basis: Mapping[str, Any],
+        config_version: str,
+        source: str,
+        computed_at: datetime,
+    ) -> None:
+        """Ghi đè điểm của ngày mô phỏng `app_date` (một dòng mỗi người dùng và ngày)."""
+
+        def dump(obj: Any) -> str:
+            return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+
+        with self.db.transaction(user_id) as tx:
+            tx.execute(
+                SQL_UPSERT_RESILIENCE,
+                {
+                    "uid": user_id,
+                    "app_date": app_date,
+                    "score": score,
+                    "band": band,
+                    "weakest": weakest,
+                    "headline": headline,
+                    "components": dump(list(components)),
+                    "inputs": dump(inputs),
+                    "basis": dump(basis),
+                    "config_version": config_version,
+                    "source": source,
+                    "computed_at": computed_at,
+                },
+            )
 
     def users(self, limit: int) -> list[str]:
         return [r["user_id"] for r in self.db.query(SQL_USERS, {"lim": limit}, max_rows=500)]
