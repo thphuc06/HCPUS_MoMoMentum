@@ -121,7 +121,13 @@ def prompt(client, index=0):
 
 
 def test_save_grounded_roadmap_and_report_stages():
-    tools, stages = scripted_tools(checks=("ok", "ok")), []
+    tools = scripted_tools(
+        checks=("ok", "ok"),
+        get_jar_balances=lambda _args: classify_result(
+            "get_jar_balances", mcp_ok(fixture("get_jar_balances.ok_goals.json"))
+        ),
+    )
+    stages = []
     draft = outline(step())
     draft["phases"].extend(
         [
@@ -134,7 +140,13 @@ def test_save_grounded_roadmap_and_report_stages():
         ]
     )
     draft["horizon_months"] = 6
-    draft["goals"] = [{"jar": "du_lich", "weight": 2}, {"jar": "khong_co", "weight": 3}]
+    # chỉ hũ tiết kiệm đã có mục tiêu được gửi trọng số: bỏ hũ không có, hũ nghĩa vụ, hũ chi tiêu (tool trả PARAMS_INVALID)
+    draft["goals"] = [
+        {"jar": "du_lich", "weight": 2},
+        {"jar": "khong_co", "weight": 3},
+        {"jar": "nghia_vu", "weight": 5},
+        {"jar": "an_uong", "weight": 1},
+    ]
     result, client, scope = build(tools, draft, stages=stages)
     assert result.outcome.payload == fixture("save_roadmap.ok.json")
     assert len(result.suitability) == 2

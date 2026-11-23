@@ -47,7 +47,8 @@ ROADMAP_SYSTEM = """Bạn là Yofina, trợ lý lập lộ trình quản lý chi
 - Chỉ dùng mã hũ có trong dữ liệu. Muốn gắn số tiền, chọn amount_ref trỏ tới hũ liên quan và trường phân bổ.
   proposed_increase là phần đề xuất tăng so với hiện tại, proposed_decrease là phần giảm. Chỉ tham chiếu khoản dương.
   Không điền số tiền, ngày hay số liệu vào câu chữ. Chương trình điền tiền, ngày và tham số hành động.
-- Chỉ chọn horizon_months hoặc trọng số khi cần. Khi sửa, trả lại danh sách giai đoạn với các bước đã đạt và các bước
+- Chỉ chọn horizon_months hoặc trọng số khi cần. goals chỉ gồm hũ có kind saving và đã có goal_vnd; không có hũ nào như vậy
+  thì để goals rỗng. Khi sửa, trả lại danh sách giai đoạn với các bước đã đạt và các bước
   đã sửa. Có thể đổi việc, đổi tham chiếu hoặc bỏ bước theo phản hồi. Không tự thay đổi phương án tối ưu.
 - Chỉ gắn move_between_jars khi có hũ nguồn, hũ đích khác nhau và có amount_ref. Có thể gắn schedule_nudge cho bước
   nhắc xem lại. Có thể gắn save_jars cho MỘT bước adjust_split để áp tỷ lệ chia đề xuất của bộ tối ưu cho mọi hũ;
@@ -642,8 +643,11 @@ async def build_roadmap(
         return RoadmapResult()
 
     await stage("allocate")
-    jar_codes = {j["code"] for j in compact["jars"]}
-    goals = {goal.jar: goal.weight for goal in sketch.goals if goal.jar in jar_codes}
+    # optimize_allocation chỉ nhận trọng số cho hũ tiết kiệm đã có mục tiêu (hũ khác trả PARAMS_INVALID): lọc bằng mã, không tin model.
+    goal_jars = {
+        j["code"] for j in compact["jars"] if j.get("kind") == "saving" and "goal_vnd" in j
+    }
+    goals = {goal.jar: goal.weight for goal in sketch.goals if goal.jar in goal_jars}
     args: dict[str, Any] = {}
     if sketch.horizon_months is not None:
         args["horizon_months"] = sketch.horizon_months
