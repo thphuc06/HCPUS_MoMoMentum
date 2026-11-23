@@ -70,7 +70,7 @@ def by(verdict):
 # --- nạp luật -------------------------------------------------------------------------------------------
 def test_sau_luat_nap_tu_yaml_theo_thu_tu_va_phien_ban():
     assert [r.id for r in RULES] == RULE_IDS
-    assert rules_version(RULES) == "v1.1.1.1.1.1"
+    assert rules_version(RULES) == "v1.1.1.1.1.2"  # source_jar_covers v2: khoản từ kỳ lương kế so với thu nhập tháng
     assert all(p.stem in RULE_IDS for p in default_rules_dir().glob("*.yaml"))
 
 
@@ -221,3 +221,62 @@ def test_nguong_hu_nguon_la_du_lieu(tmp_path: Path):
     assert by(check(prop))["source_jar_covers"].outcome == "pass"
     v = evaluate(Proposal.model_validate(prop, strict=False), facts(), load_rules(tmp_path / "r"))
     assert by(v)["source_jar_covers"].outcome == "fail"  # phải giữ lại 500.000 ₫
+
+
+# --- khoản bắt đầu từ kỳ lương kế (bước hằng tháng của giai đoạn sau trong lộ trình) ---------------------------
+STEP = {"kind": "roadmap_set_aside", "amount_vnd": 3_000_000, "funding_source": "jar", "jar_code": "du_phong",
+        "is_essential": False, "category": "saving", "origin": "recommendation"}  # fmt: skip
+
+
+@pytest.mark.parametrize(("start", "outcome"), [(None, "fail"), ("2026-11-21", "fail"), ("2026-12-04", "fail"),
+                                                ("2026-12-05", "pass"), ("2027-01-20", "pass")])  # fmt: skip
+def test_hu_nguon_khoan_tu_ky_luong_ke_so_voi_thu_nhap_thang(start, outcome):
+    # hũ Dự phòng có 2.700.000 ₫, khoản 3.000.000 ₫ mỗi tháng, kỳ lương kế 05/12, thu nhập 9.000.000 ₫ mỗi tháng.
+    # Làm ngay hoặc bắt đầu trước kỳ lương kế: so với số dư nên chặn. Từ kỳ lương kế trở đi: so với thu nhập tháng nên qua.
+    v = check({**STEP, "start_date": start})
+    c = by(v)["source_jar_covers"]
+    assert c.outcome == outcome and v.ok is (outcome == "pass")
+    if outcome == "pass":
+        assert "05/12" in c.detail and "9.000.000" in c.detail
+    else:
+        assert "2.700.000" in c.detail
+
+
+def test_hu_nguon_khoan_tu_ky_luong_ke_van_chan_khi_vuot_thu_nhap_hoac_chua_khai():
+    later = {**STEP, "start_date": "2027-01-20", "amount_vnd": 9_000_001}
+    v = check(later)
+    assert by(v)["source_jar_covers"].outcome == "fail" and not v.ok and "9.000.000" in by(v)["source_jar_covers"].detail
+    assert by(check({**later, "amount_vnd": 9_000_000}))["source_jar_covers"].outcome == "pass"
+    # chưa khai thu nhập hoặc ngày lương: không biết dòng tiền vào nên so với số dư như khoản làm ngay
+    for f in (facts(monthly_income_vnd=None), facts(next_payday=None)):
+        assert by(check({**STEP, "start_date": "2027-01-20"}, f))["source_jar_covers"].outcome == "fail"
+
+
+def test_nghia_vu_truoc_khong_tru_khoan_bat_dau_tu_ky_luong_ke():
+    # hũ Hóa đơn 450.000 ₫ gánh tiền điện 375.000 ₫ trước kỳ lương 05/12: lấy 200.000 ₫ ngay thì thiếu, từ 05/12 thì không chạm.
+    prop = {**STEP, "amount_vnd": 200_000, "jar_code": "hoa_don"}
+    assert by(check(prop))["obligations_first"].outcome == "fail"
+    assert by(check({**prop, "start_date": "2026-12-01"}))["obligations_first"].outcome == "fail"
+    assert by(check({**prop, "start_date": "2026-12-05"}))["obligations_first"].outcome == "pass"
+
+
+def test_de_xuat_start_date_phai_la_ngay_co_that():
+    with pytest.raises(ValueError, match="start_date"):
+        Proposal.model_validate({**STEP, "start_date": "2026-02-30"}, strict=False)
+    with pytest.raises(ValueError):
+        Proposal.model_validate({**STEP, "start_date": "05/12/2026"}, strict=False)
+
+
+def test_what_if_luon_kiem_nhu_lam_ngay_va_model_khong_thay_start_date():
+    # hũ Dự phòng 2.700.000 ₫: phương án what-if dùng hũ này cho 3.000.000 ₫ vẫn bị chặn dù có ngày sau kỳ lương
+    whatif = {"kind": "switch_jar", "amount_vnd": 3_000_000, "funding_source": "jar", "jar_code": "du_phong",
+              "origin": "recommendation", "start_date": "2027-01-20"}  # fmt: skip
+    v = check(whatif)
+    assert by(v)["source_jar_covers"].outcome == "fail" and not v.ok
+    # Proposal là một phần output có cấu trúc của model what-if: start_date không có trong JSON Schema gửi model
+    from yofina_agent.schemas import AnalysisOption
+    from yofina_core.llm import bedrock_json_schema
+
+    assert "start_date" not in Proposal.model_json_schema()["properties"]
+    assert "start_date" not in str(bedrock_json_schema(AnalysisOption))
+    assert Proposal.model_validate(whatif, strict=False).model_dump(exclude_none=True)["start_date"] == "2027-01-20"
