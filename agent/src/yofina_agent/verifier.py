@@ -6,7 +6,8 @@ model tự tính ra (tổng, hiệu) không có trong tool nên bị bắt: Anal
 Không kiểm ngày tháng và số đếm nhỏ (< 1.000 không đơn vị): chúng không phải số tiền và bản gọn đã cho sẵn ngày dạng `dd/mm`.
 
 `assemble_verdict` ghép grounding và suitability thành `schemas.Verdict` kèm phản hồi có cấu trúc để Analyst sửa. Số vòng sửa tối đa là
-cấu hình của harness (`verifier_max_rounds`), không nằm ở đây.
+cấu hình của harness (`verifier_max_rounds`), không nằm ở đây. Hết vòng thì `salvage_options` chỉ giữ những phương án tự qua cả hai
+kiểm tra (đường suy giảm: khối số liệu + phương án đã kiểm + notice, không có lời giải thích).
 """
 
 from __future__ import annotations
@@ -105,6 +106,42 @@ class NumericGrounding:
                     UngroundedNumber(text=format_vnd(amount)[:60], value_vnd=amount, context=_snippet(f"tham số hành động của {where}"))
                 )
         return GroundingResult(ok=not bad, checked_count=checked, ungrounded=bad)
+
+
+def option_texts(o: Any) -> tuple[dict[str, str], dict[str, int]]:
+    """Chữ của một phương án (nhãn, tóm tắt) và số tiền trong tham số hành động, theo nơi, để đưa vào `NumericGrounding.check`."""
+    texts = {f"phương án {o.option_id} (nhãn)": o.label, f"phương án {o.option_id}": o.summary}
+    extra: dict[str, int] = {}
+    if o.action is not None and isinstance(amount := o.action.params.get("amount_vnd"), int) and not isinstance(amount, bool):
+        extra[f"phương án {o.option_id}"] = amount
+    return texts, extra
+
+
+def salvage_options(
+    rounds: Sequence[Sequence[tuple[Any, SuitabilityVerdict]]],
+    allowed: Allowed,
+    *,
+    limit: int = 3,
+) -> list[tuple[Any, SuitabilityVerdict]]:
+    """Phương án dùng được khi Verifier hết vòng sửa: mỗi phương án phải TỰ qua cả hai kiểm tra (luật không có vi phạm `block`,
+    nhãn, tóm tắt và số tiền hành động đều có căn cứ). Lời giải thích hỏng không kéo theo phương án đúng; phương án sai thì không cứu.
+    Vòng mới nhất trước (đã sửa theo phản hồi); mỗi loại phương án và mỗi `option_id` lấy một lần."""
+    out: list[tuple[Any, SuitabilityVerdict]] = []
+    kinds: set[str] = set()
+    ids: set[str] = set()
+    for checked in reversed(rounds):
+        for o, v in checked:
+            if len(out) >= limit:
+                return out
+            if not v.ok or o.kind in kinds or o.option_id in ids:
+                continue
+            texts, extra = option_texts(o)
+            if not NumericGrounding.check(texts, allowed, extra_amounts=extra).ok:
+                continue
+            out.append((o, v))
+            kinds.add(o.kind)
+            ids.add(o.option_id)
+    return out
 
 
 def suitability_status(v: SuitabilityVerdict) -> str:
