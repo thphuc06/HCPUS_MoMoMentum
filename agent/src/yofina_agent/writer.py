@@ -10,6 +10,7 @@ so lại để biết có con số lạ hay không (không chặn được phầ
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
@@ -17,6 +18,9 @@ from yofina_agent.compact import allowed_amounts
 from yofina_agent.metered_model import MeteredModel
 from yofina_agent.textutil import ungrounded_amounts
 from yofina_core.llm import LlmGateway, TurnScope
+
+PHASE4_TASKS = frozenset({"resilience", "stress", "roadmap"})
+_NUMBER_RE = re.compile(r"-?\d+(?:[.,/\-]\d+)*(?:\s*%)?")
 
 WRITER_SYSTEM = """Bạn là Yofina, trợ lý quản lý chi tiêu theo hũ cho người dùng Việt Nam. \
 Trả lời bằng tiếng Việt, 1 đến 2 câu ngắn, giọng thân thiện. Chỉ viết văn bản thuần: tuyệt đối không dùng markdown (không dấu *, #, gạch đầu dòng), không emoji.
@@ -57,6 +61,23 @@ TASKS: dict[str, str] = {
         "Viết ĐÚNG 2 câu ngắn nhận xét kết quả kiểm tra trước khi chi (thẻ đủ, sát, hụt từng hũ đã hiện cho người dùng rồi, đừng liệt kê hết). "
         "Câu 1 nêu kết luận (verdict, headline). Câu 2 nêu điều cần chú ý nhất: hũ nào sát hoặc hụt, hoặc phần Trả sau (credit). "
         "Chép nguyên văn các chuỗi *_text; không tự tính."
+    ),
+    "resilience": (
+        "Viết 1 đến 2 câu ngắn về điểm chống chịu. Nêu điểm và nhóm (weak là yếu, fair là vừa, strong là tốt), "
+        "rồi nói thành phần yếu nhất và lý do từ weakest. Khi nêu điểm, nói rõ đây không phải điểm tín dụng. "
+        "Chép nguyên dạng các số trong dữ liệu. Không khuyên đầu tư hay vay tiền."
+    ),
+    "stress": (
+        "Viết 1 đến 2 câu ngắn về cú sốc đã chọn. Nêu điểm chống chịu trước và sau, số ngày trụ được "
+        "và khoản thiếu. Nói rõ đây không phải điểm tín dụng. Nếu runway_days_total là null thì nói tiền trụ hết "
+        "khoảng dự báo. Nếu runway_days_emergency là null thì bỏ số ngày của hũ Dự phòng. "
+        "Chép nguyên dạng các số và chuỗi shortfall_text. Không khuyên đầu tư hay vay tiền."
+    ),
+    "roadmap": (
+        "Viết 1 đến 2 câu ngắn về phiên bản lộ trình đã lưu, lý do có phiên bản này và khả năng kịp mục tiêu "
+        "(on_track là kịp, relaxed là kịp sau khi điều chỉnh, infeasible là chưa khả thi). "
+        "Có thể nhắc số bước theo trạng thái hoặc tên bước từ dữ liệu nếu phù hợp. "
+        "Chép nguyên dạng các số đã có. Không tự tính tổng, đề xuất bước mới, khuyên đầu tư hay vay tiền."
     ),
     "confirm_action": (
         "Một thay đổi đã được chuẩn bị và hiện thành thẻ xác nhận cho người dùng (xem summary và changes). Viết 1 đến 2 câu: nêu thay đổi, "
@@ -117,3 +138,9 @@ async def write_stream(
 def check_grounding(text: str, compact: Mapping[str, Any]) -> list[int]:
     """Số tiền trong `text` không có căn cứ trong bản gọn (rỗng nếu mọi số đều khớp)."""
     return ungrounded_amounts(text, allowed_amounts(compact))
+
+
+def has_ungrounded_numbers(text: str, compact: Mapping[str, Any]) -> bool:
+    """Kiểm cả điểm, số ngày, ngày tháng và số đếm theo đúng dạng có trong bản gọn."""
+    allowed = set(_NUMBER_RE.findall(json.dumps(compact, ensure_ascii=False)))
+    return not allowed.issuperset(_NUMBER_RE.findall(text))

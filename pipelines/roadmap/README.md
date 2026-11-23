@@ -1,0 +1,49 @@
+# Lambda sinh lại lộ trình
+
+`yofina-roadmap-regen` chạy lõi Roadmap agent và cập nhật `roadmap_jobs` cho frontend polling. Điểm vào là `handler.lambda_handler`. Handler nhận phong bì EventBridge trực tiếp hoặc nhận JSON của cùng phong bì trong `Records[].body` của SQS.
+
+| `detail-type` | `source` | Cách xử lý |
+| --- | --- | --- |
+| `roadmap.regeneration_requested` | `yofina.ledger` | `event_id = job_id`. Ledger phát sau khi commit. Lambda đọc job theo `job_id` và người dùng của sự kiện, lấy trigger, `alternative_id`, `note` và phiên bản gốc nếu đã ghi trong job. |
+| `behavior.changed` | `yofina.forecast` | Chỉ nhận xác nhận từ PELT. `event_id = flag_id`. Tạo job `behavior_changed` với `behavior_flag_id` và `dedupe_key = event_id`. |
+| `profile.updated` | `yofina.ledger` | `salary` tạo job `income_changed`, `jars` tạo job `goal_changed`. Khi cả hai thay đổi, ưu tiên `income_changed`. Bỏ qua các trường còn lại. `dedupe_key = event_id`. |
+
+Lambda dùng secret của role `yofina_app` và transaction của `DataApi` để đặt `app.user_id` cho RLS. Khi job chưa chỉ định phiên bản gốc, agent dùng bản `active` nếu có. Ghi chú được che PII trước khi vào ngữ cảnh model. Tool `save_roadmap` quyết định trạng thái phiên bản theo `status_for_new_version` và trả ID, phiên bản đã lưu để chốt job `done`.
+
+Chỉ mục duy nhất trong migration `0052` giới hạn một job `queued` hoặc `running` cho mỗi người dùng. Một lần giao chỉ chạy khi nhận chuyển được job từ `queued` sang `running`. Giao lại job đã kết thúc được xác nhận ngay. Sự kiện gặp job còn sống hoặc Data API lỗi trong lúc nhận hay chốt job được trả về trong `batchItemFailures` để SQS giao lại. Tin sai định dạng đi DLQ theo chính sách redrive. Lỗi nghiệp vụ, model hoặc tool được ghi vào job `failed` với `finished_at`, rồi xác nhận tin đã xử lý.
+
+Khi Lambda bị dừng cứng hoặc không ghi được trạng thái cuối, lần giao tiếp theo sau khi hết lease chốt job cũ thành `failed`. `save_roadmap` và ghi trạng thái job là hai thao tác riêng. Một lần Invoke mất phản hồi vẫn có thể đã lưu bản mới, nên pipeline tránh gọi lưu lại cho cùng job. Đường EventBridge trực tiếp chuyển ngoại lệ cho cơ chế retry của đích. Cấu hình production dùng SQS để bảo đảm lần giao phục hồi sau lease.
+
+## Gọi tool và quyền IAM
+
+AgentCore Runtime chọn một cơ chế inbound auth. Runtime `yofina_agent` và Gateway hiện cấu hình JWT Cognito, còn Lambda chạy nền có danh tính dịch vụ IAM. Lambda chạy cùng mã Roadmap agent và gọi đồng bộ hai Lambda tool đích bằng `lambda:InvokeFunction`. `ledger` và `planner` trỏ đến `yofina-ledger`. `forecast` trỏ đến `yofina-forecast` phục vụ tool.
+
+Payload gồm tham số tool và `user_id` của sự kiện hệ thống. `ClientContext` là base64 của JSON `{"custom":{"bedrockAgentCoreToolName":"planner___save_roadmap"}}`. Đường này bỏ qua Cedar của Gateway. Chỉ cấp quyền phát sự kiện, gửi vào SQS và gọi handler cho các thành phần hệ thống được phép. Danh sách tool trong `settings.py` chỉ gồm các lượt đọc, `check_suitability`, `optimize_allocation` và `save_roadmap`. Mọi tham số `confirm_token` bị từ chối.
+
+- `lambda:InvokeFunction` giới hạn đúng hai Lambda tool trên.
+- `bedrock:InvokeModel` cho các model và inference profile trong chuỗi `planner` của `llm_defaults.json` hoặc cấu hình ghi đè. Cấp `dynamodb:UpdateItem` trên bảng usage mà `LlmGateway` dùng để giữ trần gọi model.
+- `rds-data:ExecuteStatement`, `rds-data:BeginTransaction`, `rds-data:CommitTransaction` và `rds-data:RollbackTransaction` trên cluster Aurora. Cấp `secretsmanager:GetSecretValue` trên secret DB app.
+- Nếu dùng SSM, cấp `ssm:GetParameter` trên các khóa cấu hình cần đọc và quyền giải mã tương ứng khi dùng khóa KMS do dự án quản lý. Cấp quyền đọc, xóa tin và lấy thuộc tính của hàng đợi nguồn cho event source mapping, cùng quyền ghi CloudWatch Logs.
+
+## Cấu hình và đóng gói
+
+| Biến môi trường | Giá trị |
+| --- | --- |
+| `YOFINA_ROADMAP_LEDGER_FUNCTION_NAME` | Tên Lambda tool của target `ledger` và `planner`. |
+| `YOFINA_ROADMAP_FORECAST_FUNCTION_NAME` | Tên Lambda tool của target `forecast`. |
+| `YOFINA_EVENT_BUS_NAME` | Tên bus dùng cho các rule, hiện là `yofina-bus`. |
+| `YOFINA_ROADMAP_INVOKE_CONNECT_TIMEOUT_SECONDS`, `YOFINA_ROADMAP_INVOKE_READ_TIMEOUT_SECONDS` | Timeout kết nối và đọc kết quả Invoke, tính bằng giây. |
+| `YOFINA_ROADMAP_RUNNING_LEASE_SECONDS` | Số giây tối đa job ở trạng thái `running`. Đặt lớn hơn timeout thực thi Lambda và nhỏ hơn SQS visibility timeout để lần giao lại có thể dọn job bị dừng. |
+| `YOFINA_ROADMAP_STAGE_PROGRESS` | Năm số nguyên phần trăm phân tách bằng dấu phẩy, tăng dần và nhỏ hơn 100. Thứ tự là `context,draft,allocate,suitability,save`. |
+| `YOFINA_DB_CLUSTER_ARN`, `YOFINA_DB_APP_SECRET_ARN`, `YOFINA_DB_NAME` | Cấu hình Data API theo `yofina_core.db`. |
+| `YOFINA_USAGE_TABLE` | Bảng đếm lượt gọi model, hoặc dùng SSM `dynamodb/usage-table`. |
+| `YOFINA_REGION` hoặc `AWS_REGION` | Region của client AWS. |
+| `YOFINA_SSM_PREFIX` | Tùy chọn. Cho phép `Config` tìm khóa SSM chữ thường khi thiếu biến môi trường. |
+
+Giới hạn model, tool và số vòng sửa lấy từ `yofina_agent/defaults.json` và có thể ghi đè bằng env như trong agent. Đóng gói `handler.py`, cả gói `yofina_roadmap`, cả gói `yofina_core` kèm các tệp dữ liệu JSON/YAML theo gói, và cài `requirements.txt` theo runtime/kiến trúc Lambda. Chép các module `yofina_agent` gồm `__init__.py`, `roadmap_agent.py`, `settings.py`, `compact.py`, `textutil.py`, `tools.py`, `identity.py`, `notices.py`, `verifier.py`, `schemas.py`, `writer.py`, `metered_model.py` và `defaults.json`. `writer.py` nạp `metered_model.py` nên cần Strands. boto3 và botocore có sẵn trong Lambda runtime.
+
+## Bàn giao cho Phúc
+
+1. Áp dụng migration `0052` và triển khai các tool Phase 4 trước. Checkout C4 hiện chưa có nhánh dispatch thực tế cho `get_roadmap`, `optimize_allocation`, `save_roadmap` trong ledger hoặc `get_resilience_score` trong forecast. Các bên phát `roadmap.regeneration_requested` và `behavior.changed` cũng phải sẵn sàng.
+2. Thêm construct CDK cho Lambda và ba rule EventBridge trên bus, lọc cả `source` và `detail-type`. Gửi phong bì nguyên vẹn vào SQS với DLQ. Bật `ReportBatchItemFailures` cho event source mapping và cấu hình redrive đủ thời gian để thử lại lúc job khác cùng người dùng đang chạy.
+3. Đặt timeout Lambda theo ngân sách Bedrock, Data API và Invoke tool. Dùng batch size một khi deploy vì mỗi job có thể chạy lâu. Đặt visibility timeout và lease theo bảng cấu hình, và theo dõi DLQ cùng số job `failed` trước khi bật nguồn sự kiện.

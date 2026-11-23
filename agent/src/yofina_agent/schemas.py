@@ -26,9 +26,7 @@ from yofina_core.scenario import SCENARIO_ADAPTER, ScenarioSpec
 from yofina_core.suitability import Proposal, SuitabilityVerdict
 from yofina_core.wallet import INTENTS
 
-# Phase 3 có bảy ý định; phase 4 thêm `resilience`, `stress`, `roadmap` (hợp đồng chỉ khai báo: router, bộ xử lý và tool nằm ở luồng C,
-# xem "Quyết định hợp đồng phase 4" số 24). Router CHƯA được mời chọn ba ý định này (ROUTER_SYSTEM không liệt kê) và `turn.py`
-# CHƯA có bộ xử lý: luồng C thêm bộ xử lý trước khi sửa lời nhắc của router.
+# Phase 3 có bảy ý định; phase 4 thêm `resilience`, `stress`, `roadmap`.
 Intent = Literal[
     "lookup", "what_if", "affordability", "profile_update", "move", "out_of_scope", "chitchat",
     "resilience", "stress", "roadmap",
@@ -113,6 +111,8 @@ class IntentParams(_Model):
     due_day: Annotated[int, Field(ge=1, le=31)] | None = None
     # what_if: người dùng vừa trả lời câu "vẫn giữ khoản trước để tính gộp không": true giữ, false bỏ, null khi không có câu hỏi đó
     keep_previous: bool | None = None
+    shock_id: str | None = None  # stress: handler kiểm mã theo cấu hình cú sốc
+    roadmap_action: Literal["view", "create"] | None = None  # roadmap: xem hoặc lập/lập lại
 
 
 class IntentResult(_Model):

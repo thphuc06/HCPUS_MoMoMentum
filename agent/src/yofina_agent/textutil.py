@@ -10,6 +10,9 @@ import unicodedata
 from collections.abc import Iterable
 from decimal import Decimal
 
+from yofina_agent.notices import STRESS_CHIP_VALUE
+from yofina_core.resilience import load_shock_set
+
 _UNITS: dict[str, int] = {
     "k": 1_000,
     "nghin": 1_000,
@@ -117,6 +120,19 @@ def parse_amount_vnd(text: str) -> int | None:
     """
     amounts = extract_amounts(text)
     return amounts[0][0] if amounts else None
+
+
+def match_shock_id(text: str) -> str | None:
+    """Khớp value chip hoặc nguyên nhãn cú sốc. Khoản tiền do người dùng nhập dành cho what-if."""
+    norm = normalize(text)
+    shocks = load_shock_set().shocks
+    for shock in shocks:
+        if norm == normalize(STRESS_CHIP_VALUE.format(label=shock.label)):
+            return shock.shock_id
+    matches = [shock for shock in shocks if f" {normalize(shock.label)} " in f" {norm} "]
+    if len(matches) == 1 and parse_amount_vnd(text) is None:
+        return matches[0].shock_id
+    return None
 
 
 def ungrounded_amounts(text: str, allowed: Iterable[int]) -> list[int]:

@@ -1,9 +1,9 @@
 """Bộ phân loại dự phòng dựa trên luật (SUY GIẢM CÓ KIỂM SOÁT, không phải đường chính).
 
 Chỉ dùng khi router bằng LLM không gọi được (chạm trần lượt gọi, mọi model lỗi, JSON hỏng).
-Mục đích duy nhất: vẫn nhận ra mấy ý định mà agent có tool tất định cho (số dư, giao dịch, dự báo một hũ, chuyển hũ, what-if và kiểm tra trước khi chi), để người dùng nhận được
+Mục đích duy nhất: vẫn nhận ra mấy ý định mà agent có tool tất định cho, để người dùng nhận được
 thẻ số liệu thật từ tool thay vì luồng rỗng. Không phải nhánh riêng cho câu nào: luật chỉ dựa trên
-từ khóa chung về số dư / giao dịch / dự báo (cạn, trụ được, bao lâu) / chuyển tiền, và tên hũ vẫn được ánh xạ bằng dữ liệu tool.
+từ khóa chung và nhãn cú sốc trong cấu hình. Tên hũ vẫn được ánh xạ bằng dữ liệu tool.
 Câu không khớp luật nào trả `None`: agent hiện thông báo "chưa xử lý được" chứ không đoán.
 
 What-if và kiểm tra trước khi chi còn cần hũ nguồn và cách trả để dựng kịch bản bằng mã (`whatif.deterministic_spec`) và để thẻ
@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 
 from yofina_agent.schemas import IntentParams, IntentResult
-from yofina_agent.textutil import normalize, parse_amount_vnd
+from yofina_agent.textutil import match_shock_id, normalize, parse_amount_vnd
 
 _BALANCE = ("so du", "con bao nhieu", "con lai bao nhieu", "cac hu", "hu cua minh", "tong tien")
 _TRANSACTIONS = ("giao dich", "lich su", "da tieu", "chi tieu gan day", "chi gan day", "vua tieu")
@@ -37,6 +37,9 @@ _WHAT_IF = re.compile(
 _AFFORD = ("co on khong", "du tien", "kiem tra", "tra duoc khong", "co nen chi", "quet")
 _CREDIT = ("tra sau", "bnpl", "mua truoc tra sau")
 _MOVE_VERB = ("chuyen", "dieu chuyen", "rut tu", "doi tien")
+_RESILIENCE = ("diem chong chiu",)
+_ROADMAP = ("lo trinh",)
+_ROADMAP_OUT_OF_SCOPE = ("dau tu", "lo trinh vay", "tu van vay", "nen vay", "vay tien")
 _AMOUNT_TOKEN = re.compile(r"\d[\d.,]*\s*(?:k|nghin|ngan|trieu|tr|ty|ti|d|dong|vnd)?\b")
 _INVEST = (  # ngoài phạm vi sản phẩm: không dựng kịch bản hay thẻ kiểm tra cho khoản đầu tư
     "co phieu",
@@ -187,10 +190,15 @@ def classify_by_rules(text: str) -> IntentResult | None:
     norm = normalize(text)
     if not norm:
         return None
+    if (shock_id := match_shock_id(text)) is not None:
+        return _result("stress", shock_id=shock_id)
     amount = parse_amount_vnd(text)
     credit = _has(norm, _CREDIT)
     invest = _has(norm, _INVEST)
     moves = _has(norm, _MOVE_VERB)
+    roadmap = _has(norm, _ROADMAP)
+    if roadmap and (invest or _has(norm, _ROADMAP_OUT_OF_SCOPE)):
+        return _result("out_of_scope")
     if _WHAT_IF.search(norm) and not invest:
         if moves and amount is not None and (m := _FROM_TO.search(norm) or _TO_FROM.search(norm)):
             src, dst = (" ".join(_take_words(m[k].split(), 4)) or None for k in ("src", "dst"))
@@ -224,6 +232,10 @@ def classify_by_rules(text: str) -> IntentResult | None:
         return _result("move")
     if _has(norm, _AFFORD) and amount is not None and not invest:
         return _result("affordability", **_spend_params(text, norm, amount, credit, ("mua", "cho")))
+    if _has(norm, _RESILIENCE):
+        return _result("resilience")
+    if roadmap:
+        return _result("roadmap", roadmap_action="view")
     if _has(norm, _FORECAST) or _FORECAST_WHEN.search(norm):
         return _result("lookup", lookup_kind="forecast")
     if _has(norm, _TRANSACTIONS):
