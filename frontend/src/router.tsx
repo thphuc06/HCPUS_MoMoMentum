@@ -63,6 +63,13 @@ export function appRoutes(): RouteObject[] {
               ],
             },
             {
+              path: 'roadmap',
+              children: [
+                { index: true, ...page(() => import('@/pages/RoadmapPage'), 'RoadmapPage') },
+                { path: 'compare', ...page(() => import('@/pages/RoadmapComparePage'), 'RoadmapComparePage') },
+              ],
+            },
+            {
               // Chuyển tiền T1 → T2 → T3 (kiểm tra) → T4 → T5; trạng thái nháp nằm trong TransferFlowProvider.
               path: 'transfer',
               element: (

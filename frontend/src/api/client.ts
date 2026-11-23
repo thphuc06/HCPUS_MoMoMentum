@@ -39,6 +39,7 @@ import {
   type IngestUploadRequest,
 } from './ingestSchemas'
 import { ResilienceScoreResponse, ShocksResponse, StressRequest, StressResultResponse } from './resilienceSchemas'
+import { createRoadmapApi } from './roadmapSchemas'
 
 /** Thời gian chờ mỗi lời gọi: dài hơn trần 30 giây của HTTP API nên lỗi hết giờ ở server luôn tới trước. */
 export const REQUEST_TIMEOUT_MS = 40_000
@@ -52,7 +53,7 @@ export type ApiClientDeps = {
   fetchImpl?: typeof fetch
 }
 
-export type ApiClient = {
+export type ApiClient = ReturnType<typeof createRoadmapApi> & {
   getJars(): Promise<JarsResponse>
   getOverview(): Promise<OverviewResponse>
   getProfile(): Promise<ProfileResponse>
@@ -161,6 +162,7 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
 
   const enc = encodeURIComponent
   return {
+    ...createRoadmapApi(call),
     getJars: () => call('GET', '/jars', JarsResponse),
     getOverview: () => call('GET', '/overview', OverviewResponse),
     getProfile: () => call('GET', '/profile', ProfileResponse),

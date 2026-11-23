@@ -44,6 +44,9 @@ export function buildRuntimeUrl(arn: string, region: string, qualifier = 'DEFAUL
 
 export const DEFAULT_UNDO_SECONDS = 30
 
+/** Nhịp hỏi trạng thái sinh lộ trình, tính bằng mili giây. */
+export const ROADMAP_JOB_POLL = { delayMs: 1_500, timeoutMs: 90_000 }
+
 function parseUndoSeconds(v: string | undefined): number {
   const n = v ? Number(v) : Number.NaN
   return Number.isFinite(n) ? Math.min(300, Math.max(5, Math.round(n))) : DEFAULT_UNDO_SECONDS
