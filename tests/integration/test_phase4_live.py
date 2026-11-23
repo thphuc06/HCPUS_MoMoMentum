@@ -311,6 +311,23 @@ def test_11_yeu_cau_sinh_lai_tra_job_goi_lai_tra_dung_job_do(api, schema_validat
     status, body = api("lan", "GET", f"/roadmap/jobs/{job['job_id']}")
     assert (status, code(body)) == (404, "ROADMAP_NOT_FOUND")  # job của người khác cũng như không có
 
+    # Lambda yofina-roadmap-regen chạy job trong nền (Sonnet + Data API + Invoke tool): chờ tới khi xong, job phải `done` và có
+    # phiên bản mới. Xong thì đặt lại minh: bản mới đã loại bản v3 `proposed` mà các test sau cần.
+    t0 = time.monotonic()
+    while polled["status"] not in {"done", "failed"} and time.monotonic() - t0 < 240:
+        time.sleep(5)
+        status, polled = api("minh", "GET", f"/roadmap/jobs/{job['job_id']}")
+        assert status == 200, polled
+    MEASURES["regenerate_job_status"] = polled["status"]
+    MEASURES["regenerate_job_seconds"] = round(time.monotonic() - t0, 1)
+    assert polled["status"] == "done", polled
+    schema_validator.openapi("RoadmapJob", polled)
+    status, latest = api("minh", "GET", "/roadmap?which=latest")
+    assert status == 200 and latest["data"]["reason"]["code"] == "user_request", latest
+    from conftest import reset_account
+
+    reset_account(api, "minh")
+
 
 def test_12_dung_ban_moi_roi_sua_mot_buoc_ra_ban_active_moi(api, schema_validator):
     status, adopted = api("minh", "POST", "/roadmap/versions/3/decision", {"decision": "adopt"})
