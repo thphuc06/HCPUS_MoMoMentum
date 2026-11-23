@@ -120,7 +120,7 @@ Chủ dự án quyết định đóng phase 3, để lại một việc kiểm s
 - Gốc của lỗi suitability nằm ở Lambda (`gateway/tools/ledger/yofina_ledger/phase3.py` cộng `added` cho mọi đề xuất có `scenario_id`); agent đã tránh, nên sửa luôn phía Lambda cho chắc.
 - What-if khối đầu p95 18 s ở một lượt có khoảng 5 s không thuộc bước nào (nghi chờ rate limiter), chưa xác nhận.
 
-**Kết quả đi cảnh 2 ngày 2026-11-23 (tối)**: Claude Code đi trên URL Amplify trong khung trình duyệt của app Claude, khổ 390x844, tài khoản `minh` (chủ dự án tự đăng nhập; Claude không nhập mật khẩu). Bằng chứng đọc từ DOM. Cửa sổ app ở nền nên hiệu ứng trượt của khung chat bị dừng; Claude cho hiệu ứng chạy xong bằng script để đi tiếp, không đổi logic. Chưa so Figma.
+**Kết quả đi cảnh 2 ngày 2026-11-23 (tối)**: Claude Code đi trên URL Amplify trong khung trình duyệt của app Claude, khổ 390x844, tài khoản `minh` (chủ dự án tự đăng nhập; Claude không nhập mật khẩu). Mục 1–7 Claude đi, bằng chứng đọc từ DOM; mục 8 Học tự kiểm trên điện thoại. Cửa sổ app ở nền nên hiệu ứng trượt của khung chat bị dừng; Claude cho hiệu ứng chạy xong bằng script để đi tiếp, không đổi logic. Chưa so Figma.
 
 | # | Mục | Kết quả | Ghi chú |
 |---|---|---|---|
@@ -131,7 +131,7 @@ Chủ dự án quyết định đóng phase 3, để lại một việc kiểm s
 | 5 | Hỏi cổ phiếu | Đạt | Notice "Ngoài phạm vi" + khối `suggestions`, không có mã chứng khoán |
 | 6 | Thiếu số tiền ("Nếu mình mua cái laptop thì sao?") | Đạt | Hỏi lại đúng một câu kèm chip; trả lời "15 triệu" rồi hỏi tiếp cách trả và hũ (từng câu một), giữ được số tiền qua ba lượt, ra kết quả what-if. **Lệch**: phương án "Dùng hũ Dự phòng thay vì Du lịch" gắn "Đủ" dù Dự phòng chỉ có 2.700.000 ₫ cho khoản 15 triệu |
 | 7 | Giày rồi dép cùng hũ | Đạt | `minh` không có hũ Mua sắm nên dùng hũ Giải trí: câu dép hỏi giữ khoản giày để gộp; chọn giữ thì kịch bản "giày 800 nghìn + dép 300 nghìn", số dư thấp nhất giảm 1.100.000 ₫ |
-| 8 | Nạp ảnh chụp bằng máy ảnh | Chưa kiểm | Khung trình duyệt của app không đưa file lên được; cần chủ dự án thử trên điện thoại với `giamkhao3` |
+| 8 | Nạp ảnh chụp bằng máy ảnh | Đạt | Học tự thử trên điện thoại với `giamkhao3` (khung trình duyệt của app không đưa file lên được) và báo ổn |
 | — | Bố cục 390 px | Đạt | Tổng quan, Hũ, Nhìn trước, Chuyển tiền, Hồ sơ: không tràn ngang, không nút nào thấp dưới 32 px |
 
 Test cục bộ lúc đóng: pytest 2116 passed; vitest 558 passed. Integration cả bộ trên AWS **169/169**.
