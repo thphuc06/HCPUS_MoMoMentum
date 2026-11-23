@@ -3,6 +3,7 @@ import { vi } from 'vitest'
 import { ApiProvider } from '@/api/ApiProvider'
 import { OverviewProvider } from '@/api/OverviewProvider'
 import type { ApiClient } from '@/api/client'
+import type { ResilienceScoreResponse, ShocksResponse, StressResultResponse } from '@/api/resilienceSchemas'
 import type {
   AffordabilityResponse,
   CreditLineResponse,
@@ -61,6 +62,9 @@ export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
     getProfile: vi.fn(async () => fx<ProfileResponse>('ProfileResponse.minh')),
     getJar: vi.fn(async () => fx<JarDetailResponse>('JarDetailResponse.an_uong')),
     getForecast: vi.fn(async () => validBlock('forecast_timeline.short') as unknown as ForecastResponse),
+    getResilience: vi.fn(async () => fx<ResilienceScoreResponse>('ResilienceScoreResponse.minh')),
+    getShocks: vi.fn(async () => fx<ShocksResponse>('ShocksResponse.default')),
+    runStress: vi.fn(async () => fx<StressResultResponse>('StressResultResponse.mat_viec')),
     listTransactions: vi.fn(async () => fx<TransactionsResponse>('TransactionsResponse.page')),
     listTxTypes: vi.fn(async () => fx<TxTypesResponse>('TxTypesResponse.default')),
     listPayees: vi.fn(async () => fx<PayeesResponse>('PayeesResponse.default')),

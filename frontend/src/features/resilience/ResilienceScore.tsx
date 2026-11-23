@@ -2,10 +2,10 @@ import type { ResilienceScoreData } from '@/contracts/blocks'
 import { ResilienceGauge } from './ResilienceGauge'
 import { ScoreRow } from './ScoreRow'
 
-export function ResilienceScore({ data }: { data: ResilienceScoreData }) {
+export function ResilienceScore({ data, heading: Heading = 'h3' }: { data: ResilienceScoreData; heading?: 'h2' | 'h3' }) {
   return (
     <section data-block="resilience_score" className="rounded-card bg-surface p-4 shadow-card">
-      <h3 className="text-subtitle font-semibold text-ink">Điểm chống chịu</h3>
+      <Heading className="text-subtitle font-semibold text-ink">Điểm chống chịu</Heading>
       <div className="mt-3 text-center">
         <ResilienceGauge score={data.score} band={data.band} />
         {data.previous_score !== undefined && <p className="text-note text-ink-2">Điểm lần trước {data.previous_score}/100</p>}

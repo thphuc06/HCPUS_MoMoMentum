@@ -38,6 +38,7 @@ import {
   type IngestRowJarRequest,
   type IngestUploadRequest,
 } from './ingestSchemas'
+import { ResilienceScoreResponse, ShocksResponse, StressRequest, StressResultResponse } from './resilienceSchemas'
 
 /** Thời gian chờ mỗi lời gọi: dài hơn trần 30 giây của HTTP API nên lỗi hết giờ ở server luôn tới trước. */
 export const REQUEST_TIMEOUT_MS = 40_000
@@ -57,6 +58,9 @@ export type ApiClient = {
   getProfile(): Promise<ProfileResponse>
   getJar(jarCode: string): Promise<JarDetailResponse>
   getForecast(jarCode: string): Promise<ForecastResponse>
+  getResilience(): Promise<ResilienceScoreResponse>
+  getShocks(): Promise<ShocksResponse>
+  runStress(req: StressRequest): Promise<StressResultResponse>
   listTransactions(query?: TransactionQuery): Promise<TransactionsResponse>
   listTxTypes(): Promise<TxTypesResponse>
   listPayees(): Promise<PayeesResponse>
@@ -162,6 +166,13 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     getProfile: () => call('GET', '/profile', ProfileResponse),
     getJar: (code) => call('GET', `/jars/${enc(code)}`, JarDetailResponse),
     getForecast: (code) => call('GET', `/forecasts/${enc(code)}`, ForecastResponse),
+    getResilience: () => call('GET', '/resilience', ResilienceScoreResponse),
+    getShocks: () => call('GET', '/resilience/shocks', ShocksResponse),
+    runStress: async (req) => {
+      const parsed = StressRequest.safeParse(req)
+      if (!parsed.success) throw new ApiError('PARAMS_INVALID', 0)
+      return call('POST', '/resilience/stress', StressResultResponse, parsed.data)
+    },
     listTransactions: (q = {}) => {
       const qs = new URLSearchParams()
       if (q.jar) qs.set('jar', q.jar)

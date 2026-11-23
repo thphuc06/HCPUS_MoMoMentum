@@ -1,6 +1,6 @@
 import type { ResilienceScoreData } from '@/contracts/blocks'
 
-const BAND_STYLE = {
+export const RESILIENCE_BANDS = {
   weak: { label: 'Yếu', color: 'text-bad-fg' },
   fair: { label: 'Vừa', color: 'text-warn-fg' },
   strong: { label: 'Tốt', color: 'text-ok-fg' },
@@ -9,7 +9,7 @@ const BAND_STYLE = {
 const ARC = 'M 16 92 A 76 76 0 0 1 168 92'
 
 export function ResilienceGauge({ score, band }: Pick<ResilienceScoreData, 'score' | 'band'>) {
-  const { label, color } = BAND_STYLE[band]
+  const { label, color } = RESILIENCE_BANDS[band]
   return (
     <svg
       role="img"

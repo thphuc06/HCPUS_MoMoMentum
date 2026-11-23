@@ -3,22 +3,46 @@ import { StatusChip } from '@/components/StatusChip'
 import type { StressResultData } from '@/contracts/blocks'
 import { formatAppDate, formatVnd } from '@/lib/format'
 import { statusShortChip } from '@/lib/jar'
+import { AnimatedNumber } from './AnimatedNumber'
+import { RESILIENCE_BANDS } from './ResilienceGauge'
 
-export function StressResult({ data }: { data: StressResultData }) {
+export function StressResult({
+  data,
+  heading: Heading = 'h3',
+  animateScore = false,
+}: {
+  data: StressResultData
+  heading?: 'h2' | 'h3'
+  animateScore?: boolean
+}) {
   const status = statusShortChip(data.status)
   const emergencyJar = data.emergency_jar
 
   return (
     <section data-block="stress_result" className="space-y-3 rounded-card bg-surface p-4 shadow-card">
       <header className="flex flex-wrap items-start justify-between gap-2">
-        <h3 className="text-subtitle font-semibold text-ink">{data.shock.label}</h3>
+        <Heading className="text-subtitle font-semibold text-ink">{data.shock.label}</Heading>
         <StatusChip kind={status.kind}>{status.label}</StatusChip>
       </header>
       <p className="text-small text-ink-2">{data.headline}</p>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl bg-surface-2 px-3 py-2">
         <span className="text-small text-ink-2">Điểm trước và sau</span>
-        <strong className="num text-section text-ink">{data.score_before} → {data.score_after}</strong>
+        <strong className="num text-section text-ink">
+          {animateScore ? (
+            <>
+              <span className="sr-only">{data.score_before} → {data.score_after}</span>
+              <span aria-hidden>
+                {data.score_before} → <AnimatedNumber key={`${data.score_before}:${data.score_after}`} from={data.score_before} to={data.score_after} />
+              </span>
+            </>
+          ) : (
+            `${data.score_before} → ${data.score_after}`
+          )}
+        </strong>
         <span className="num text-small text-ink-2">{data.score_delta} điểm</span>
+        <p className="basis-full text-small text-ink-2">
+          Nhóm điểm {RESILIENCE_BANDS[data.band_before].label} → {RESILIENCE_BANDS[data.band_after].label}
+        </p>
       </div>
       <dl className="space-y-2 text-small">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3">

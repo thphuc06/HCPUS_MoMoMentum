@@ -62,6 +62,8 @@ const REST_FIXTURES: Record<string, string> = {
   '/credit-line': 'CreditLineResponse.default',
   '/salary-events': 'SalaryEventsResponse.pending',
   '/jar-templates': 'JarTemplatesResponse.default',
+  '/resilience': 'ResilienceScoreResponse.minh',
+  '/resilience/shocks': 'ShocksResponse.default',
 }
 
 export function restDefault(url: string): Response {
