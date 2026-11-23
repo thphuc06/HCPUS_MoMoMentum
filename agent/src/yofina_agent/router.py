@@ -7,9 +7,16 @@ trò chuyện hoặc câu hỏi lại, một câu ngắn. Kiểm tra bằng mã 
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from functools import cache
+from typing import Any
 
+from pydantic import ValidationError
+
+from yofina_agent.clarify import missing_slot
+from yofina_agent.fallback import _CREDIT, _has, _jar_phrase, classify_by_rules
 from yofina_agent.schemas import IntentResult
+from yofina_agent.textutil import normalize, parse_amount_vnd
 from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
 from yofina_core.resilience import load_shock_set
 
@@ -86,6 +93,132 @@ def build_router_prompt(question: str, history: str) -> str:
         parts.append(f"<lich_su>\n{history}\n</lich_su>")
     parts.append(f"<cau_moi>\n{question}\n</cau_moi>")
     return "\n".join(parts)
+
+
+# --- ghép câu trả lời cụt với câu đang chờ (bằng mã) -------------------------------------------
+#: Ý định có thể đang chờ đủ tham số qua khối `clarify` (cùng tập với `pending_intent` của hợp đồng).
+PENDING_INTENTS = frozenset({"what_if", "affordability", "move", "profile_update"})
+#: Tham số mang qua lượt trả lời câu hỏi lại. Chỉ điền vào ô router để trống; giá trị mới (khác None) luôn thắng.
+_CARRY_KEYS = (
+    "amount_vnd",
+    "jar_text",
+    "from_jar_text",
+    "to_jar_text",
+    "funding",
+    "label",
+    "scenario_kind",
+)
+
+
+#: Câu cụt (câu trả lời cho một câu hỏi lại) ngắn: chip dài nhất hiện có là "Trả bằng Trả sau (mô phỏng)" (6 từ).
+_FRAGMENT_MAX_WORDS = 6
+
+
+def is_fragment(text: str) -> bool:
+    """Câu CỤT (tự nó không thành yêu cầu: "250 nghìn", "Hũ Hóa đơn", "Trả sau"): ngắn và luật chung không nhận ra ý định nào.
+
+    Câu dài hơn coi là yêu cầu mới (quy tắc của router: không lấy số tiền, hũ, cách trả từ câu trước cho câu tự đủ nghĩa).
+    """
+    norm = normalize(text)
+    return (
+        bool(norm) and len(norm.split()) <= _FRAGMENT_MAX_WORDS and classify_by_rules(text) is None
+    )
+
+
+def _code_params(text: str) -> dict[str, Any]:
+    """Tham số đọc được bằng mã từ một câu (số tiền, hũ, cách trả, món/người nhận). Chỉ trả khóa có giá trị."""
+    r = classify_by_rules(text)
+    out: dict[str, Any] = {}
+    if r is not None and r.intent in PENDING_INTENTS:
+        out = {k: v for k, v in r.params.model_dump().items() if k in _CARRY_KEYS and v is not None}
+        out["_intent"] = r.intent
+    norm = normalize(text)
+    if "amount_vnd" not in out and (amount := parse_amount_vnd(text)) is not None:
+        out["amount_vnd"] = amount
+    if "jar_text" not in out and "from_jar_text" not in out and (jar := _jar_phrase(norm)):
+        out["jar_text"] = jar
+    if "funding" not in out and _has(norm, _CREDIT):
+        out["funding"] = "credit"
+    return out
+
+
+def pending_params(
+    messages: Sequence[tuple[str, str]], *, marker_excluded: str | None = None
+) -> dict[str, Any] | None:
+    """Tham số của câu đang chờ trả lời, đọc bằng mã từ lịch sử (không trông vào model nhớ).
+
+    `messages`: (vai, chữ) theo thứ tự, KẾT THÚC ngay trước câu mới; dòng hệ thống đã bỏ. Câu đang chờ khi tin gần nhất là câu HỎI
+    của Yofina (có "?", ví dụ `fallback_text` của khối `clarify`). Đi lùi qua chuỗi hỏi lại: câu người dùng trước câu hỏi; nếu câu đó
+    cũng cụt và trước nó lại là câu hỏi của Yofina thì gộp tiếp. Câu sau ghi đè câu trước khi có giá trị. None nếu không có câu đang chờ.
+    """
+    i = len(messages) - 1
+    chain: list[str] = []
+    while i >= 1 and messages[i][0] == "assistant" and "?" in messages[i][1]:
+        if marker_excluded and marker_excluded in messages[i][1]:
+            break
+        user_i = next((j for j in range(i - 1, -1, -1) if messages[j][0] == "user"), None)
+        if user_i is None or user_i != i - 1:
+            break
+        chain.append(messages[user_i][1])
+        if not is_fragment(messages[user_i][1]):
+            break
+        i = user_i - 1
+    if not chain:
+        return None
+    merged: dict[str, Any] = {}
+    for text in reversed(chain):  # cũ trước, mới sau
+        merged.update(_code_params(text))
+    return merged or None
+
+
+def merge_pending(
+    routed: IntentResult, question: str, pending: dict[str, Any] | None
+) -> IntentResult:
+    """Ghép câu trả lời cụt với câu đang chờ: giữ tham số đã có (số tiền, người nhận, hũ...) qua lượt hỏi lại.
+
+    Chỉ áp khi `question` là câu cụt và router đã xếp nó vào một ý định đang chờ được (không đổi ý định router chọn: câu cụt kiểu
+    "Không cần đâu, cảm ơn" vẫn là chitchat). Thứ tự ưu tiên mỗi ô: router (câu mới) > mã đọc câu mới > mã đọc câu đang chờ.
+    Câu hỏi lại router đặt chỉ giữ khi đúng ô vẫn còn thiếu sau khi ghép; còn lại để `clarify.resolve_clarify` hỏi đúng ô còn thiếu.
+    """
+    if not pending or not is_fragment(question):
+        return routed
+    intent = routed.intent
+    if intent == "lookup" and pending.get("_intent") in PENDING_INTENTS:
+        # "Hũ Hóa đơn" đứng riêng dễ bị xếp là tra số dư; đang có câu chờ trả lời thì đó là câu trả lời cho câu chờ.
+        intent = pending["_intent"]
+    if intent not in PENDING_INTENTS:
+        return routed
+    new = _code_params(question)
+    params = routed.params.model_dump() if intent == routed.intent else {}
+    filled = False
+    for key in _CARRY_KEYS:
+        if params.get(key) is not None:
+            continue
+        value = new.get(key, pending.get(key))
+        if value is not None:
+            params[key] = value
+            filled = True
+    if not filled:
+        return routed
+    try:
+        merged = IntentResult.model_validate(
+            {
+                "intent": intent,
+                "params": {k: v for k, v in params.items() if v is not None},
+                "confidence": routed.confidence,
+                "needs_clarification": False,
+            }
+        )
+    except ValidationError:
+        return routed
+    slot = missing_slot(merged)
+    if (
+        intent == routed.intent
+        and routed.clarify is not None
+        and routed.clarify.slot == ("jar" if slot == "pay_jar" else slot)
+    ):
+        merged = merged.model_copy(update={"clarify": routed.clarify, "needs_clarification": True})
+    return merged
 
 
 async def route(

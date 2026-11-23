@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { AffordCard } from '@/features/affordability/AffordCard'
 import { ObligationImpactBody } from '@/features/affordability/ObligationImpactBody'
 import { ExplainBody } from '@/features/explain/ExplainBody'
+import { readableChipText } from '@/features/clarify/chipText'
 import { useExplain } from '@/features/explain/context'
 import { statusShortChip } from '@/lib/jar'
 import type { AffordabilityCardBlock, ClarifyBlock, ExplainBlock, ObligationImpactBlock, OptionItem, OptionsBlock, SuggestionsBlock } from '@/contracts/blocks'
@@ -226,7 +227,11 @@ export function ClarifyView({ block, stale }: BlockViewProps<ClarifyBlock>) {
           label="Câu trả lời nhanh"
           className="mt-3"
           disabled={stale || !actions}
-          items={d.chips.map((c) => ({ id: c.id, label: c.label, prompt: c.value ?? c.label }))}
+          items={d.chips.map((c) => ({
+            id: c.id,
+            label: readableChipText(c.label, d.slot),
+            prompt: readableChipText(c.value ?? c.label, d.slot),
+          }))}
           onPick={(prompt) => actions?.ask(prompt)}
         />
       )}

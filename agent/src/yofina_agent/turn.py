@@ -57,7 +57,7 @@ from yofina_agent.guardrail import Guardrail, GuardrailResult
 from yofina_agent.identity import Identity
 from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import build_roadmap
-from yofina_agent.router import route
+from yofina_agent.router import merge_pending, pending_params, route
 from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, Intent, IntentParams, IntentResult, Verdict
 from yofina_agent.settings import AgentSettings
 from yofina_agent.store import (
@@ -65,7 +65,7 @@ from yofina_agent.store import (
     TurnRecordStore,
     UnconfiguredTurnRecordStore,
 )
-from yofina_agent.textutil import match_shock_id, normalize
+from yofina_agent.textutil import match_shock_id, normalize, parse_amount_vnd
 from yofina_agent.tools import (
     ContractMismatch,
     GatewayTools,
@@ -87,7 +87,7 @@ from yofina_core import blocks as B
 from yofina_core.clock import app_timezone
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
-from yofina_core.money import format_vnd
+from yofina_core.money import format_vnd, format_vnd_short
 from yofina_core.pii import mask_pii
 from yofina_core.resilience import load_shock_set
 from yofina_core.roadmap import JobStage, RoadmapReasonCode
@@ -701,6 +701,8 @@ class Turn:
         self.intent = routed.intent
         if await self.answer_keep_previous(routed, question, index):
             return
+        # Câu trả lời cụt cho khối `clarify`: giữ tham số của câu đang chờ (số tiền, người nhận, hũ...) bằng mã, không trông vào model nhớ.
+        routed = merge_pending(routed, question, self.pending_params_before(index))
         handler = self._intent_handlers()[routed.intent]
         # Handler tự kiểm mã cú sốc và chọn thao tác với lộ trình.
         if routed.intent not in ("stress", "roadmap") and (
@@ -723,6 +725,15 @@ class Turn:
             "stress": self.on_stress,
             "roadmap": self.on_roadmap,
         }
+
+    def pending_params_before(self, index: int) -> dict[str, Any] | None:
+        """Tham số (đọc bằng mã) của câu đang chờ trả lời câu hỏi lại, từ các tin trước `index` (bỏ dòng hệ thống, đã che PII)."""
+        msgs = [
+            (m.role, mask_pii(ev.message_text(m)).text)
+            for m in self.run_input.messages[:index]
+            if m.role in ("user", "assistant") and ev.message_text(m)
+        ]
+        return pending_params(msgs, marker_excluded=notices.KEEP_PREVIOUS_MARKER)
 
     async def answer_keep_previous(self, routed: IntentResult, question: str, index: int) -> bool:
         """Người dùng trả lời câu "vẫn giữ khoản trước chứ" (lượt trước agent hỏi để gộp kịch bản). True nếu đã xử lý lượt.
@@ -1258,7 +1269,7 @@ class Turn:
 
     async def emit_clarify(self, req: ClarifyRequest, r: IntentResult) -> None:
         """Khối `clarify` đúng một câu hỏi kèm chip; kết thúc lượt (lượt sau người dùng trả lời, router ghép với câu trước)."""
-        chips = list(req.chips)
+        chips = [_readable_amount_chip(c) for c in req.chips]
         if req.slot == "jar" and not chips:
             chips = await self.jar_chips()  # hỏi hũ nào thì chip là các hũ thật
         self.emit_block(
@@ -1314,6 +1325,24 @@ def _match_obligation(name: str, payload: Mapping[str, Any] | None) -> Mapping[s
         if want and (want == have or want in have or have in want):
             return o
     return None
+
+
+def _readable_amount_chip(chip: ClarifyChipIn) -> ClarifyChipIn:
+    """Chip số tiền mà router để dạng số trần ("250000"): đổi nhãn và chữ gửi đi sang chữ người đọc được ("250 nghìn").
+
+    Câu trả lời đó quay lại router như người dùng gõ; `parse_amount_vnd` đọc được cả hai dạng. Chip đã là chữ thì giữ nguyên.
+    """
+
+    def readable(text: str | None) -> str | None:
+        if text is None or not text.strip().isdigit():
+            return text
+        amount = parse_amount_vnd(text)
+        if not amount:
+            return text
+        short = format_vnd_short(amount)  # làm tròn một chữ số thập phân: chỉ dùng khi không đổi số tiền
+        return short if parse_amount_vnd(short) == amount else format_vnd(amount)
+
+    return ClarifyChipIn(label=readable(chip.label) or chip.label, value=readable(chip.value))
 
 
 def _kind_question() -> ClarifyRequest:
