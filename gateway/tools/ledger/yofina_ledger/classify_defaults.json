@@ -1,18 +1,18 @@
 {
-  "version": "2026-11-nhan-chua-hieu-chinh",
+  "version": "2026-11-23-hieu-chinh-bedrock",
   "note": "Ngưỡng và hệ số của phân hũ tự động (F2). Mọi số ở đây là CẤU HÌNH, không phải hằng số của thuật toán: hiệu chỉnh trên evals/classification (script calibrate.py, xem evals/classification/README.md) rồi ghi lại nguồn và tăng `version`. Ghi đè từng số bằng biến môi trường YOFINA_CLASSIFY_<TÊN HOA> (CDK đặt). Spike Bedrock §6 đã bác ngưỡng 0,97 của proposal: cosine của Cohere v3 bị khuôn câu chi phối, nên ngưỡng embedding ở đây là xác suất đúng đã hiệu chỉnh chứ không phải cosine thô.",
   "thresholds": {
     "auto_min_confidence": {
-      "value": 0.9,
+      "value": 0.91,
       "unit": "probability",
       "note": "Từ ngưỡng này trở lên: tự gán hũ, không hỏi, không vào 'Xem lại'. Mỗi người nhận có thể nâng riêng bằng payees.auto_min_confidence (sau nhiều lần bị sửa).",
-      "source": "Giá trị khởi đầu theo mục tiêu độ đúng 90% của phase 4; chờ hiệu chỉnh."
+      "source": "hiệu chỉnh 2026-11-23 trên evals/classification/dataset.jsonl (nửa đầu theo thời gian), embedding cohere.embed-multilingual-v3. Thủ tục `choose_thresholds` đòi độ đúng của mục tự gán >= 95% nhưng tập hiệu chỉnh chỉ đạt tối đa 92,2%, nên nó rơi về ngưỡng cao nhất của lưới (0,99); 0,99 cao hơn type_map_confidence và exact_match_confidence (0,95) nên bước 0 và khớp chính xác không bao giờ tự gán được (mọi khoản vào 'Xem lại', 66%) và vi phạm bất biến thiết kế. Đã chọn tay 0,91 = ngưỡng THẤP NHẤT mà độ đúng của mục đã gán trên TẬP HIỆU CHỈNH đạt 90% (review_min 0,65) và không vượt type_map_confidence; không chọn trên tập kiểm. Đo trên nửa sau: đúng 0.9203, hỏi 0.1737."
     },
     "review_min_confidence": {
-      "value": 0.6,
+      "value": 0.65,
       "unit": "probability",
       "note": "Từ ngưỡng này tới auto_min_confidence: tự gán và vào 'Xem lại' (needs_review). Dưới ngưỡng: ở lại Chưa phân loại và hỏi gộp kèm tối đa 2 gợi ý.",
-      "source": "Giá trị khởi đầu; chờ hiệu chỉnh."
+      "source": "hiệu chỉnh 2026-11-23 trên evals/classification/dataset.jsonl (nửa đầu theo thời gian), embedding cohere.embed-multilingual-v3; đo trên nửa sau: đúng 0.9203, hỏi 0.1737"
     },
     "type_map_confidence": {
       "value": 0.95,
@@ -51,34 +51,34 @@
       "source": "Spike Bedrock §6; chờ hiệu chỉnh."
     },
     "knn_cal_intercept": {
-      "value": -6.0,
+      "value": -4.9682,
       "unit": "logit",
       "note": "Hồi quy logistic (Platt) từ (độ giống tốt nhất, biên so với hũ thứ hai) sang xác suất đúng.",
-      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+      "source": "hiệu chỉnh 2026-11-23 trên evals/classification/dataset.jsonl (nửa đầu theo thời gian), embedding cohere.embed-multilingual-v3; đo trên nửa sau: đúng 0.9203, hỏi 0.1737"
     },
     "knn_cal_w_sim": {
-      "value": 8.0,
+      "value": 5.3092,
       "unit": "logit",
       "note": "Hệ số của độ giống tốt nhất.",
-      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+      "source": "hiệu chỉnh 2026-11-23 trên evals/classification/dataset.jsonl (nửa đầu theo thời gian), embedding cohere.embed-multilingual-v3; đo trên nửa sau: đúng 0.9203, hỏi 0.1737"
     },
     "knn_cal_w_margin": {
-      "value": 4.0,
+      "value": 15.0724,
       "unit": "logit",
       "note": "Hệ số của biên giữa hũ tốt nhất và hũ thứ hai.",
-      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+      "source": "hiệu chỉnh 2026-11-23 trên evals/classification/dataset.jsonl (nửa đầu theo thời gian), embedding cohere.embed-multilingual-v3; đo trên nửa sau: đúng 0.9203, hỏi 0.1737"
     },
     "llm_cal_intercept": {
-      "value": -1.0,
+      "value": -9.0416,
       "unit": "logit",
       "note": "Platt cho độ chắc model nhỏ tự báo (0..1) sang xác suất đúng (model hay tự tin quá mức).",
-      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+      "source": "hiệu chỉnh 2026-11-23 trên evals/classification/dataset.jsonl (nửa đầu theo thời gian), embedding cohere.embed-multilingual-v3; đo trên nửa sau: đúng 0.9203, hỏi 0.1737"
     },
     "llm_cal_slope": {
-      "value": 3.0,
+      "value": 14.9482,
       "unit": "logit",
       "note": "Hệ số của độ chắc model báo.",
-      "source": "Giá trị khởi đầu; calibrate.py ghi đè."
+      "source": "hiệu chỉnh 2026-11-23 trên evals/classification/dataset.jsonl (nửa đầu theo thời gian), embedding cohere.embed-multilingual-v3; đo trên nửa sau: đúng 0.9203, hỏi 0.1737"
     },
     "history_min_count": {
       "value": 3,

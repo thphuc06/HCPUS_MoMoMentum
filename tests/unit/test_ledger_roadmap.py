@@ -108,6 +108,24 @@ def test_db_business_error_doc_ma_tu_thong_diep_va_nguyen_nhan():
     assert rl.db_business_error(wrapped.__class__(ErrorCode.INTERNAL_ERROR, "x")) is None
 
 
+def test_db_business_error_thong_diep_hong_dau_thi_dung_cau_chuan_cua_ma():
+    """Data API trả chữ có dấu trong thông điệp RAISE bị hỏng từng byte (U+FFFD): đã thấy trên Aurora thật (`ROADMAP_VERSION_CONFLICT`)."""
+
+    class Pg(Exception):
+        pass
+
+    broken = "ROADMAP_VERSION_CONFLICT: b���n n��y kh��ng c��n; SQLState: P0001"
+    err = rl.db_business_error(Pg(broken))
+    assert err is not None and err.code == ErrorCode.ROADMAP_VERSION_CONFLICT
+    assert "�" not in err.message and err.message == rl.DB_ERROR_FALLBACK["ROADMAP_VERSION_CONFLICT"]
+    assert set(rl.DB_ERROR_FALLBACK) == {
+        "ROADMAP_NOT_FOUND",
+        "ROADMAP_INVALID",
+        "ROADMAP_VERSION_CONFLICT",
+        "PROFILE_INCOMPLETE",
+    }
+
+
 # =====================================================================================================
 # Bản nháp, lý do, tiêu đề
 # =====================================================================================================

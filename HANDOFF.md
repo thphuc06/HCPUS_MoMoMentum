@@ -57,7 +57,24 @@ Việc phase 2 chuyển sang, chưa chắc đã làm: preview cho sửa hồ sơ
 
 **Git**: `main` đã push. Nhánh `feat/ingest` đã xóa sau khi merge. `origin/wip/phase3-streams` và `origin/r1-merge-phase3` đã nằm trọn trong `main`, xóa được khi đồng đội đồng ý. `evals/results/` không vào git (chứa dữ liệu persona; đã có trong `.gitignore`).
 
-### B0. Phase 4 phần Phúc (luồng A, B): mã xong cục bộ 23/11, CHƯA deploy
+### B0. Phase 4 phần Phúc (luồng A, B): ĐÃ deploy 23/11 chiều
+
+**Trạng thái mới nhất**:
+- Migration 0052 đã chạy trên Aurora.
+- `YofinaTools` có 13 route, `yofina-classify` + SQS + DLQ; ngưỡng phân loại đã hiệu chỉnh bằng Bedrock.
+- `YofinaAgent`: 5 tool mới trên Gateway (kể cả `save_roadmap` lồng bảy cấp, không phải làm phẳng); Runtime v14.
+- Integration cả bộ 191: 190 passed lần đầu, 1 đỏ vì AWS `ThrottlingException`, chạy lại xanh. Gồm `tests/integration/test_phase4_live.py` (22 test).
+- `minh` trên môi trường thật: điểm 33; mất việc 2 tháng 33 → 13, trụ 31 ngày.
+- Phân loại một giao dịch mới mất khoảng 4–7 giây. "Luôn luôn cho người này" làm giao dịch kế tiếp tự đúng hũ (tiêu chí 7 đạt).
+- Phân loại trên bộ kiểm: đúng 92% (đạt), phải hỏi 17,4% (KHÔNG đạt < 10%; xem ai-log 14:40).
+- Tham số phát hiện đổi hành vi chọn lại: c=6, đổi tối thiểu 50% (ai-log 15:10).
+
+**Còn mở**:
+- `POST /review/daily-ask/skip` trả 400 khi chưa có dòng `review_asks` (nút "Để sau" của Học sẽ gặp).
+- `check_suitability` không kiểm số dư hũ nguồn của bước `set_aside`.
+- Job sinh lại đứng `queued` cho tới khi Lambda sinh lại của Học lên.
+
+Phần dưới là bản ghi lúc mã xong cục bộ.
 
 Bốn gói (subagent Sonnet, effort high) theo mục "Kế hoạch thực hiện phần của Phúc" của file phase 4: (1) điểm chống chịu, ba cú sốc, LP phía forecast; (2) lộ trình phía ledger, 8 REST `/roadmap*`, seed `minh` v1–v3; (3) phát hiện đổi hành vi (CUSUM nghi, PELT `ruptures` xác nhận); (4) phân hũ tự động (Lambda `yofina-classify`, embedding Cohere, k-NN, hỏi gộp, bộ kiểm 334 dòng). Người điều phối đã nối: batch đêm `batch.after_forecast` (dự báo → điểm → đổi hành vi, bọc lỗi từng bước), `wallet.PHASE4_TOOLS` rỗng, 13 route trong `tools-stack.ts`, `ClassifyPipeline` vào `YofinaTools`, `reset_demo` truyền ngày neo và nạp nhãn k-NN seed, `ruptures` vào zip forecast. Cục bộ: pytest 2648, local_pg 205, infra 31.
 

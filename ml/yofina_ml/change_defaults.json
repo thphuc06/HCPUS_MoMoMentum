@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-phase4-goi3-1",
+  "version": "2026-11-phase4-goi3-2",
   "note": "Tham số của bộ phát hiện đổi hành vi chi tiêu (`yofina_ml.change`). Mỗi tham số có `value`, `unit`, `note`, `source`. Giá trị đã hiệu chỉnh trên ba persona (data/personas) VÀ bộ sinh khác họ (yofina_ml.synth: hurdle_lognormal, shopping_sessions) bằng `python -m yofina_ml.backtest.change_calibration`; số đo (tỷ lệ báo nhầm, độ trễ) nằm ở mục `calibration` bên dưới và được test khóa. Đổi số ở đây thì chạy lại hiệu chỉnh, cập nhật `calibration` rồi tăng `version`.",
   "params": {
     "min_weeks_total": {
@@ -11,14 +11,14 @@
     "pelt_min_size_weeks": {
       "value": 2,
       "unit": "weeks",
-      "note": "Độ dài tối thiểu của một đoạn trong PELT, cũng là số tuần mức mới phải giữ để xác nhận ('mức mới giữ khoảng 2 tuần').",
+      "note": "Độ dài tối thiểu của một đoạn trong PELT, cũng là số tuần mức mới phải giữ để xác nhận ('mức mới giữ khoảng 2 tuần'). Giữ 2 tuần (không 3) dù 3 tuần bớt báo nhầm thêm (0,15 mỗi hũ-năm trên seed chưa thấy): 3 tuần làm hỏng tiêu chí 3 của phase 4 (hai tuần lệch mức phải được xác nhận) và trễ thêm.",
       "source": "Proposal §11 và spike ML §7: min_size=2 tuần, jump=1."
     },
     "pelt_penalty_c": {
-      "value": 5.0,
+      "value": 6.0,
       "unit": "multiplier",
       "note": "Hệ số c của penalty PELT: penalty = c * sigma^2 * ln(n), sigma là độ lệch chuẩn bền của nhiễu theo tuần (MAD của sai phân bậc một, chia căn 2). Chi phí l2.",
-      "source": "Spike ML §7: cửa sổ tốt c trong [2; 3] trên 52 tuần của một bộ sinh. Giá trị này đã hiệu chỉnh lại trên sáu cấu hình của hai họ bộ sinh (xem `calibration`)."
+      "source": "Chọn 23/11 (người điều phối) sau khi quét c ∈ {3,4,5,6,8} × đổi tối thiểu {0,3; 0,4; 0,5} × giữ {2; 3} tuần, chọn trên seed 101–108 và đo lại trên seed 201–208 chưa thấy (ml/yofina_ml/backtest/change_holdout.py). Trên seed chưa thấy, c=6 cùng min_relative_change=0,5 bắt được đúng ngần ấy thay đổi ≥ 50% như c=5 (37,5%) mà báo nhầm 0,26 thay vì 0,40 mỗi hũ-năm; kiểm áp lực nhịp kỳ lương (change_payday_stress.py) báo nhầm giảm từ 0,26/0,53 xuống 0,13/0,32 ở nhịp mạnh/rất mạnh. Lần trước (gói 3) c=5 trên một bộ seed. Spike ML §7: c trong [2; 3] trên 52 tuần của một bộ sinh."
     },
     "pelt_penalty_n_ref": {
       "value": 52,
@@ -33,10 +33,10 @@
       "source": "Chọn khi hiệu chỉnh: giá trị nhỏ nhất cho báo nhầm ở chuỗi ngắn xuống mức chấp nhận được mà vẫn bắt được bước nhảy của persona minh."
     },
     "min_relative_change": {
-      "value": 0.4,
+      "value": 0.5,
       "unit": "ratio",
       "note": "Mức mới phải lệch ít nhất tỷ lệ này so với mức cũ (|mới - cũ| / cũ) mới được xác nhận hoặc nghi.",
-      "source": "Đổi hành vi dưới 30% mỗi tuần nằm trong dải dao động bình thường của hũ chi đều (spike ML §3: hệ số biến thiên theo tuần cỡ 0,2 đến 0,5); chọn khi hiệu chỉnh."
+      "source": "Chọn 23/11 cùng pelt_penalty_c (xem nguồn ở đó): đổi dưới 50% mỗi tuần nằm trong dải dao động tự nhiên của hũ chi đều (hệ số biến thiên theo tuần 0,3 đến 0,5, spike ML §3) nên xác nhận trong 2 tuần không đáng tin; 0,5 bớt báo nhầm mà không mất thay đổi lớn. Lần trước 0,4."
     },
     "min_abs_change_vnd": {
       "value": 50000,
@@ -129,10 +129,10 @@
     "params_snapshot": {
       "min_weeks_total": 6,
       "pelt_min_size_weeks": 2,
-      "pelt_penalty_c": 5.0,
+      "pelt_penalty_c": 6.0,
       "pelt_penalty_n_ref": 52,
       "sigma_floor_ratio": 0.25,
-      "min_relative_change": 0.4,
+      "min_relative_change": 0.5,
       "min_abs_change_vnd": 50000,
       "hold_midpoint_fraction": 0.65,
       "max_weeks_since_break": 8,
@@ -167,21 +167,21 @@
     ],
     "note": "Số đo trên bộ sinh tổng hợp khác họ, mô phỏng mỗi đêm một lần. fa_per_jar_year là số dấu hiệu sai mỗi hũ-năm; delay_days là số ngày từ điểm gãy thật tới đêm đầu tiên có dấu hiệu đúng. Đo trên dữ liệu TỔNG HỢP, chưa có dữ liệu thật.",
     "confirm_pelt": {
-      "tp": 21,
-      "fa": 23,
+      "tp": 16,
+      "fa": 16,
       "ambiguous": 0,
       "series_eligible": 86,
       "series_total": 240,
       "series_with_true_shift": 59,
       "series_with_big_shift": 41,
       "obs_jar_years": 64.65,
-      "fa_per_jar_year": 0.3558,
-      "fa_series_share": 0.2326,
-      "recall_any": 0.322,
-      "recall_8w": 0.3051,
-      "recall_big_shift": 0.4146,
-      "delay_days_median": 24.0,
-      "delay_days_p90": 54.4
+      "fa_per_jar_year": 0.2475,
+      "fa_series_share": 0.1744,
+      "recall_any": 0.2542,
+      "recall_8w": 0.2373,
+      "recall_big_shift": 0.3171,
+      "delay_days_median": 21.0,
+      "delay_days_p90": 46.39999999999999
     },
     "suspect_cusum": {
       "tp": 29,

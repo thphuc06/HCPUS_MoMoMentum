@@ -34,6 +34,14 @@ REASON_TEXT_MAX = 160
 DB_ERROR_RE = re.compile(
     r"(ROADMAP_NOT_FOUND|ROADMAP_INVALID|ROADMAP_VERSION_CONFLICT|PROFILE_INCOMPLETE): ([^\r\n]*)"
 )
+#: câu tiếng Việt thay cho thông điệp DB khi Data API làm hỏng dấu (ký tự thay thế U+FFFD thay từng byte của chữ có dấu); chỉ dùng khi
+#: thông điệp gốc không đọc được, nên nói chung cho cả mã
+DB_ERROR_FALLBACK = {
+    "ROADMAP_NOT_FOUND": "Không tìm thấy lộ trình hoặc phiên bản này.",
+    "ROADMAP_INVALID": "Yêu cầu về lộ trình không hợp lệ.",
+    "ROADMAP_VERSION_CONFLICT": "Lộ trình đã thay đổi hoặc bản này không còn ở trạng thái chờ chọn. Hãy đọc lại lộ trình rồi thử lại.",
+    "PROFILE_INCOMPLETE": "Bạn chưa có hồ sơ để lập lộ trình.",
+}
 #: các loại bước kéo tiền khỏi `jar_code` sang `to_jar_code` (đối tượng của luật nghĩa vụ trước)
 MONEY_MOVING_KINDS = ("set_aside", "pay_obligation")
 STEP_CATEGORY = {
@@ -56,7 +64,10 @@ def db_business_error(exc: BaseException) -> YofinaError | None:
         seen.add(id(cur))
         m = DB_ERROR_RE.search(str(cur))
         if m:
-            return YofinaError(ErrorCode(m.group(1)), m.group(2).strip())
+            code, text = m.group(1), m.group(2).strip()
+            if "�" in text:  # Data API trả thông điệp có dấu bị hỏng mã hóa từng byte: dùng câu chuẩn của mã
+                text = DB_ERROR_FALLBACK[code]
+            return YofinaError(ErrorCode(code), text)
         cur = cur.__cause__ or cur.__context__
     return None
 
