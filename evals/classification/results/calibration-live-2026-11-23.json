@@ -1,0 +1,1269 @@
+{
+ "fitted": {
+  "knn_examples": 112,
+  "llm_examples": 125,
+  "knn": {
+   "intercept": -4.968232723517456,
+   "w_sim": 5.309241187702998,
+   "w_margin": 15.072361092199472,
+   "base_rate": 0.49107142857142855
+  },
+  "llm": {
+   "intercept": -9.041623939028518,
+   "slope": 14.94816066798626,
+   "base_rate": 0.84
+  }
+ },
+ "grid": [
+  {
+   "review_min": 0.3,
+   "auto_min": 0.7,
+   "accuracy_assigned": 0.8385,
+   "accuracy_auto": 0.8819,
+   "ask_rate": 0.0359,
+   "review_rate": 0.2036,
+   "auto": 127,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.73,
+   "accuracy_assigned": 0.8385,
+   "accuracy_auto": 0.9068,
+   "ask_rate": 0.0359,
+   "review_rate": 0.2575,
+   "auto": 118,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.8323,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.0359,
+   "review_rate": 0.3174,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.8323,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.0359,
+   "review_rate": 0.3653,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.8385,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.0359,
+   "review_rate": 0.4371,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.8385,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.0359,
+   "review_rate": 0.503,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.8385,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.0359,
+   "review_rate": 0.5329,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.8447,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.0359,
+   "review_rate": 0.5928,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.8509,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.0359,
+   "review_rate": 0.6587,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.8509,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.0359,
+   "review_rate": 0.7844,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.3,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.8509,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.0359,
+   "review_rate": 0.8683,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.7,
+   "accuracy_assigned": 0.8438,
+   "accuracy_auto": 0.8819,
+   "ask_rate": 0.0419,
+   "review_rate": 0.1976,
+   "auto": 127,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.73,
+   "accuracy_assigned": 0.8438,
+   "accuracy_auto": 0.9068,
+   "ask_rate": 0.0419,
+   "review_rate": 0.2515,
+   "auto": 118,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.8375,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.0419,
+   "review_rate": 0.3114,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.8375,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.0419,
+   "review_rate": 0.3593,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.8438,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.0419,
+   "review_rate": 0.4311,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.8438,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.0419,
+   "review_rate": 0.497,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.8438,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.0419,
+   "review_rate": 0.5269,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.85,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.0419,
+   "review_rate": 0.5868,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.8562,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.0419,
+   "review_rate": 0.6527,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.8562,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.0419,
+   "review_rate": 0.7784,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.35,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.8562,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.0419,
+   "review_rate": 0.8623,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.7,
+   "accuracy_assigned": 0.8544,
+   "accuracy_auto": 0.8819,
+   "ask_rate": 0.0539,
+   "review_rate": 0.1856,
+   "auto": 127,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.73,
+   "accuracy_assigned": 0.8544,
+   "accuracy_auto": 0.8992,
+   "ask_rate": 0.0539,
+   "review_rate": 0.2335,
+   "auto": 119,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.8481,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.0539,
+   "review_rate": 0.2994,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.8481,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.0539,
+   "review_rate": 0.3473,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.8544,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.0539,
+   "review_rate": 0.4192,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.8544,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.0539,
+   "review_rate": 0.485,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.8544,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.0539,
+   "review_rate": 0.515,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.8608,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.0539,
+   "review_rate": 0.5749,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.8671,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.0539,
+   "review_rate": 0.6407,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.8671,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.0539,
+   "review_rate": 0.7665,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.4,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.8671,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.0539,
+   "review_rate": 0.8503,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.7,
+   "accuracy_assigned": 0.8516,
+   "accuracy_auto": 0.8819,
+   "ask_rate": 0.0719,
+   "review_rate": 0.1677,
+   "auto": 127,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.73,
+   "accuracy_assigned": 0.8516,
+   "accuracy_auto": 0.8992,
+   "ask_rate": 0.0719,
+   "review_rate": 0.2156,
+   "auto": 119,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.8452,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.0719,
+   "review_rate": 0.2814,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.8452,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.0719,
+   "review_rate": 0.3293,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.8516,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.0719,
+   "review_rate": 0.4012,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.8516,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.0719,
+   "review_rate": 0.4671,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.8516,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.0719,
+   "review_rate": 0.497,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.8581,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.0719,
+   "review_rate": 0.5569,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.8645,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.0719,
+   "review_rate": 0.6228,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.8645,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.0719,
+   "review_rate": 0.7485,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.45,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.8645,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.0719,
+   "review_rate": 0.8323,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.7,
+   "accuracy_assigned": 0.8487,
+   "accuracy_auto": 0.8819,
+   "ask_rate": 0.0898,
+   "review_rate": 0.1497,
+   "auto": 127,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.73,
+   "accuracy_assigned": 0.8487,
+   "accuracy_auto": 0.8992,
+   "ask_rate": 0.0898,
+   "review_rate": 0.1976,
+   "auto": 119,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.8477,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.0958,
+   "review_rate": 0.2575,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.8477,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.0958,
+   "review_rate": 0.3054,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.8543,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.0958,
+   "review_rate": 0.3772,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.86,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.1018,
+   "review_rate": 0.4371,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.86,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.1018,
+   "review_rate": 0.4671,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.8667,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.1018,
+   "review_rate": 0.5269,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.8675,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.0958,
+   "review_rate": 0.5988,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.8675,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.0958,
+   "review_rate": 0.7246,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.5,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.8675,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.0958,
+   "review_rate": 0.8084,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.7,
+   "accuracy_assigned": 0.8533,
+   "accuracy_auto": 0.8819,
+   "ask_rate": 0.1018,
+   "review_rate": 0.1377,
+   "auto": 127,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.73,
+   "accuracy_assigned": 0.86,
+   "accuracy_auto": 0.8992,
+   "ask_rate": 0.1018,
+   "review_rate": 0.1856,
+   "auto": 119,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.8591,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.1078,
+   "review_rate": 0.2455,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.8591,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.1078,
+   "review_rate": 0.2934,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.8658,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.1078,
+   "review_rate": 0.3653,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.8716,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.1138,
+   "review_rate": 0.4251,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.8716,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.1138,
+   "review_rate": 0.4551,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.8776,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.1198,
+   "review_rate": 0.509,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.8776,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.1198,
+   "review_rate": 0.5749,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.8776,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.1198,
+   "review_rate": 0.7006,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.55,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.8776,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.1198,
+   "review_rate": 0.7844,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.7,
+   "accuracy_assigned": 0.8652,
+   "accuracy_auto": 0.8819,
+   "ask_rate": 0.1557,
+   "review_rate": 0.0838,
+   "auto": 127,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.73,
+   "accuracy_assigned": 0.8705,
+   "accuracy_auto": 0.8992,
+   "ask_rate": 0.1677,
+   "review_rate": 0.1198,
+   "auto": 119,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.8696,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.1737,
+   "review_rate": 0.1796,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.8696,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.1737,
+   "review_rate": 0.2275,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.8768,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.1737,
+   "review_rate": 0.2994,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.8841,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.1737,
+   "review_rate": 0.3653,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.8841,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.1737,
+   "review_rate": 0.3952,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.8905,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.1796,
+   "review_rate": 0.4491,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.8905,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.1796,
+   "review_rate": 0.515,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.8905,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.1796,
+   "review_rate": 0.6407,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.6,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.8897,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.1856,
+   "review_rate": 0.7186,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.7,
+   "accuracy_assigned": 0.8731,
+   "accuracy_auto": 0.8819,
+   "ask_rate": 0.1976,
+   "review_rate": 0.0419,
+   "auto": 127,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.73,
+   "accuracy_assigned": 0.8779,
+   "accuracy_auto": 0.8992,
+   "ask_rate": 0.2156,
+   "review_rate": 0.0719,
+   "auto": 119,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.8779,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.2156,
+   "review_rate": 0.1377,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.8779,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.2156,
+   "review_rate": 0.1856,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.8855,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.2156,
+   "review_rate": 0.2575,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.8931,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.2156,
+   "review_rate": 0.3234,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.8931,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.2156,
+   "review_rate": 0.3533,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.9,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.2216,
+   "review_rate": 0.4072,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.9,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.2216,
+   "review_rate": 0.4731,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.9,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.2216,
+   "review_rate": 0.5988,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.65,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.8984,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.2335,
+   "review_rate": 0.6707,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.7,
+   "accuracy_assigned": 0.8819,
+   "accuracy_auto": 0.8819,
+   "ask_rate": 0.2395,
+   "review_rate": 0.0,
+   "auto": 127,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.73,
+   "accuracy_assigned": 0.8871,
+   "accuracy_auto": 0.8992,
+   "ask_rate": 0.2575,
+   "review_rate": 0.0299,
+   "auto": 119,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.8862,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.2635,
+   "review_rate": 0.0898,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.8862,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.2635,
+   "review_rate": 0.1377,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.8934,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.2695,
+   "review_rate": 0.2036,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.8943,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.2635,
+   "review_rate": 0.2754,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.8934,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.2695,
+   "review_rate": 0.2994,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.9008,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.2754,
+   "review_rate": 0.3533,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.9016,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.2695,
+   "review_rate": 0.4251,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.9016,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.2695,
+   "review_rate": 0.5509,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.7,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.9,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.2814,
+   "review_rate": 0.6228,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.75,
+   "auto_min": 0.76,
+   "accuracy_assigned": 0.9123,
+   "accuracy_auto": 0.9074,
+   "ask_rate": 0.3174,
+   "review_rate": 0.0359,
+   "auto": 108,
+   "n": 167
+  },
+  {
+   "review_min": 0.75,
+   "auto_min": 0.79,
+   "accuracy_assigned": 0.9043,
+   "accuracy_auto": 0.91,
+   "ask_rate": 0.3114,
+   "review_rate": 0.0898,
+   "auto": 100,
+   "n": 167
+  },
+  {
+   "review_min": 0.75,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.9123,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.3174,
+   "review_rate": 0.1557,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.75,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.913,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.3114,
+   "review_rate": 0.2275,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.75,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.9052,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.3054,
+   "review_rate": 0.2635,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.75,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.913,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.3114,
+   "review_rate": 0.3174,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.75,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.913,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.3114,
+   "review_rate": 0.3832,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.75,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.913,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.3114,
+   "review_rate": 0.509,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.75,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.9115,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.3234,
+   "review_rate": 0.5808,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.8,
+   "auto_min": 0.82,
+   "accuracy_assigned": 0.9032,
+   "accuracy_auto": 0.9091,
+   "ask_rate": 0.4431,
+   "review_rate": 0.0299,
+   "auto": 88,
+   "n": 167
+  },
+  {
+   "review_min": 0.8,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.9149,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.4371,
+   "review_rate": 0.1018,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.8,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.914,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.4431,
+   "review_rate": 0.1257,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.8,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.9231,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.4551,
+   "review_rate": 0.1737,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.8,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.9231,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.4551,
+   "review_rate": 0.2395,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.8,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.9231,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.4551,
+   "review_rate": 0.3653,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.8,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.9213,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.4671,
+   "review_rate": 0.4371,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.85,
+   "auto_min": 0.85,
+   "accuracy_assigned": 0.9221,
+   "accuracy_auto": 0.9221,
+   "ask_rate": 0.5389,
+   "review_rate": 0.0,
+   "auto": 77,
+   "n": 167
+  },
+  {
+   "review_min": 0.85,
+   "auto_min": 0.88,
+   "accuracy_assigned": 0.9231,
+   "accuracy_auto": 0.9167,
+   "ask_rate": 0.5329,
+   "review_rate": 0.0359,
+   "auto": 72,
+   "n": 167
+  },
+  {
+   "review_min": 0.85,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.9221,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.5389,
+   "review_rate": 0.0898,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.85,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.9221,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.5389,
+   "review_rate": 0.1557,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.85,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.9221,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.5389,
+   "review_rate": 0.2814,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.85,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.92,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.5509,
+   "review_rate": 0.3533,
+   "auto": 16,
+   "n": 167
+  },
+  {
+   "review_min": 0.9,
+   "auto_min": 0.91,
+   "accuracy_assigned": 0.9231,
+   "accuracy_auto": 0.9194,
+   "ask_rate": 0.6108,
+   "review_rate": 0.018,
+   "auto": 62,
+   "n": 167
+  },
+  {
+   "review_min": 0.9,
+   "auto_min": 0.94,
+   "accuracy_assigned": 0.9231,
+   "accuracy_auto": 0.9216,
+   "ask_rate": 0.6108,
+   "review_rate": 0.0838,
+   "auto": 51,
+   "n": 167
+  },
+  {
+   "review_min": 0.9,
+   "auto_min": 0.97,
+   "accuracy_assigned": 0.9219,
+   "accuracy_auto": 0.8667,
+   "ask_rate": 0.6168,
+   "review_rate": 0.2036,
+   "auto": 30,
+   "n": 167
+  },
+  {
+   "review_min": 0.9,
+   "auto_min": 0.99,
+   "accuracy_assigned": 0.9194,
+   "accuracy_auto": 0.75,
+   "ask_rate": 0.6287,
+   "review_rate": 0.2754,
+   "auto": 16,
+   "n": 167
+  }
+ ]
+}

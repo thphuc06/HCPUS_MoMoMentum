@@ -1,0 +1,19 @@
+{
+  "note": "Từ điển viết tắt tiếng Việt thường gặp trong nội dung chuyển khoản, đã bỏ dấu và chữ thường, mở rộng trước khi nhúng (bước chuẩn hóa của spike Bedrock §6: bỏ dấu, chữ thường và mở rộng viết tắt đưa 1-NN từ 81 và 84 phần trăm lên 93 phần trăm). Chỉ có viết tắt MỘT nghĩa; từ nhiều nghĩa (ví dụ ts, nf, dt) cố ý không đưa vào để khỏi biến thành nhầm lẫn.",
+  "source": "Bộ viết tắt ck, tt, hd, cf của spike Bedrock §6 cộng các viết tắt ngân hàng phổ biến do dự án tổng hợp; mở rộng bằng cách thêm dòng, không sửa mã.",
+  "words": {
+    "ck": "chuyen khoan",
+    "tt": "thanh toan",
+    "hd": "hoa don",
+    "cf": "ca phe",
+    "cafe": "ca phe",
+    "tk": "tai khoan",
+    "gd": "giao dich",
+    "nd": "noi dung",
+    "sdt": "so dien thoai",
+    "bhx": "bach hoa xanh",
+    "ktx": "ky tuc xa",
+    "vp": "van phong",
+    "sv": "sinh vien"
+  }
+}

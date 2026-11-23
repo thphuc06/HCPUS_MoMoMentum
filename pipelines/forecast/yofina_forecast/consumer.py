@@ -7,6 +7,10 @@ Luật xử lý (contracts/README.md, mục "Sự kiện"):
 | `transaction.recorded` | chỉnh NHANH các hũ trong `jar_codes` (`update_forecast`); khoản mua bằng hạn mức (`funding_source` credit) không đổi số dư hũ nên bỏ qua (nghĩa vụ mới đã có sự kiện `obligation.changed`); dòng gắn nghĩa vụ (`obligation_id`) làm đổi lịch nên chạy ĐẦY ĐỦ; dòng ngoài ví (`funding_source` external, nạp từ tệp) không đổi số dư nhưng đổi lịch sử chi nên chạy ĐẦY ĐỦ |
 | `salary.confirmed`, `obligation.changed`, `profile.updated` | chạy ĐẦY ĐỦ mọi hũ |
 
+Sau bước dự báo, mỗi người dùng có thêm bước "nghi đổi hành vi" (`change.suspect_and_store`: CUSUM trên chuỗi chi theo tuần, ghi
+`behavior_flags` trạng thái suspected, KHÔNG phát sự kiện; PELT xác nhận là việc của batch đêm). Lỗi của bước này không làm hỏng việc
+cập nhật dự báo đã xong: ghi log và metric `ChangeSuspectFailed`, sự kiện vẫn `done`.
+
 Nhiều sự kiện của cùng một người dùng trong một lô được gộp thành MỘT lần chạy (hợp các hũ; chỉ cần một sự kiện đòi chạy đầy đủ là
 chạy đầy đủ). Idempotency theo `event_id` (DynamoDB, `idempotency.py`): sự kiện đã `done` thì bỏ qua; lỗi thì nhả khóa và báo lỗi từng mục
 (partial batch response) để SQS giao lại; quá `maxReceiveCount` thì vào DLQ (có alarm).
@@ -22,6 +26,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from yofina_core.errors import ErrorCode, YofinaError
+from yofina_forecast import change
 from yofina_forecast.events import BadEvent, LedgerEvent, emf, parse_envelope
 from yofina_forecast.idempotency import Claim, IdempotencyStore
 from yofina_forecast.runner import Pipeline
@@ -83,6 +88,8 @@ class BatchReport:
     duplicates: int = 0
     skipped: int = 0
     runs: list[dict[str, Any]] = field(default_factory=list)
+    #: kết quả bước "nghi đổi hành vi" của từng người dùng (`ChangeReport.to_dict`)
+    changes: list[dict[str, Any]] = field(default_factory=list)
 
     def sqs_response(self) -> dict[str, Any]:
         return {"batchItemFailures": [{"itemIdentifier": i} for i in self.failures]}
@@ -94,8 +101,11 @@ def process_records(
     idem: IdempotencyStore,
     *,
     now: datetime | None = None,
+    change_store: change.FlagStore | None = None,
 ) -> BatchReport:
-    """Xử lý một lô tin nhắn SQS. Không ném ngoại lệ: lỗi từng mục vào `failures` (partial batch response)."""
+    """Xử lý một lô tin nhắn SQS. Không ném ngoại lệ: lỗi từng mục vào `failures` (partial batch response).
+
+    `change_store` thay kho `behavior_flags` mặc định (kho Aurora của `pipeline.repo`); chỉ test dùng."""
     report = BatchReport()
     parsed: list[_Item] = []
     seen: set[str] = set()
@@ -118,7 +128,9 @@ def process_records(
         by_user.setdefault(item.event.user_id, []).append(item)
 
     for user_id, items in by_user.items():
-        _process_user(user_id, items, pipeline, idem, report, now or datetime.now(UTC))
+        _process_user(
+            user_id, items, pipeline, idem, report, now or datetime.now(UTC), change_store
+        )
     return report
 
 
@@ -129,6 +141,7 @@ def _process_user(
     idem: IdempotencyStore,
     report: BatchReport,
     now: datetime,
+    change_store: change.FlagStore | None = None,
 ) -> None:
     claimed: list[_Item] = []
     for item in items:
@@ -188,6 +201,8 @@ def _process_user(
     except Exception as exc:
         _fail(claimed, idem, report, exc)
         return
+    if not plan.nothing:
+        _suspect_changes(user_id, plan, pipeline, report, change_store)
     for item in claimed:
         try:
             idem.complete(item.event.event_id, run_id=run_id)
@@ -200,6 +215,29 @@ def _process_user(
             report.failures.append(item.record_id)
             continue
         report.processed += 1
+
+
+def _suspect_changes(
+    user_id: str,
+    plan: Plan,
+    pipeline: Pipeline,
+    report: BatchReport,
+    store: change.FlagStore | None,
+) -> None:
+    """Bước "nghi đổi hành vi" sau dự báo. KHÔNG BAO GIỜ ném ra: dự báo đã ghi xong, một lỗi ở đây không được làm sự kiện bị giao lại."""
+    try:
+        out = change.suspect_and_store(
+            pipeline, user_id, pipeline.now(), plan.jars or None, store=store
+        )
+        if out.checked or out.suspected or out.errors:
+            report.changes.append(out.to_dict())
+    except Exception as exc:
+        log.error(
+            json.dumps(
+                {"msg": "change_suspect_failed", "error": f"{type(exc).__name__}: {exc}"[:300]}
+            )
+        )
+        log.error(emf("ChangeSuspectFailed", 1, error=type(exc).__name__))
 
 
 def _fail(items: list[_Item], idem: IdempotencyStore, report: BatchReport, exc: Exception) -> None:

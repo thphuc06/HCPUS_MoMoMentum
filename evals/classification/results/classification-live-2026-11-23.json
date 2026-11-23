@@ -1,0 +1,345 @@
+{
+ "mode": "live",
+ "representative": true,
+ "date": "2026-11-23",
+ "embedding_model": "cohere.embed-multilingual-v3",
+ "thresholds": {
+  "version": "2026-11-23-hieu-chinh-bedrock",
+  "auto_min_confidence": 0.91,
+  "review_min_confidence": 0.65,
+  "type_map_confidence": 0.95,
+  "rule_confidence": 0.99,
+  "exact_match_confidence": 0.95,
+  "exact_match_user_bonus": 0.03,
+  "knn_k": 5,
+  "knn_min_similarity": 0.7,
+  "knn_cal_intercept": -4.9682,
+  "knn_cal_w_sim": 5.3092,
+  "knn_cal_w_margin": 15.0724,
+  "llm_cal_intercept": -9.0416,
+  "llm_cal_slope": 14.9482,
+  "history_min_count": 3,
+  "history_max_confidence": 0.8,
+  "conflict_weight": 0.5,
+  "small_one_off_max_vnd": 50000,
+  "small_one_off_jar_code": "khac",
+  "correction_min_count": 2,
+  "auto_min_confidence_step": 0.03,
+  "auto_min_confidence_cap": 0.99,
+  "suggestions_max": 2
+ },
+ "n_rows": 334,
+ "all": {
+  "n": 334,
+  "assigned": 268,
+  "auto": 128,
+  "review": 140,
+  "ask": 66,
+  "accuracy_assigned": 0.9104,
+  "accuracy_auto": 0.9375,
+  "accuracy_review": 0.8857,
+  "ask_rate": 0.1976,
+  "review_rate": 0.4192,
+  "correct_end_to_end": 0.7305,
+  "silent_error_rate": 0.024,
+  "by_category": {
+   "informal": {
+    "n": 40,
+    "accuracy_assigned": 0.8824,
+    "ask_rate": 0.15
+   },
+   "injection": {
+    "n": 10,
+    "accuracy_assigned": 1.0,
+    "ask_rate": 0.4
+   },
+   "known_qr": {
+    "n": 47,
+    "accuracy_assigned": 0.9535,
+    "ask_rate": 0.0851
+   },
+   "mapped_type": {
+    "n": 40,
+    "accuracy_assigned": 1.0,
+    "ask_rate": 0.0
+   },
+   "note_only": {
+    "n": 47,
+    "accuracy_assigned": 0.8788,
+    "ask_rate": 0.2979
+   },
+   "person_no_note": {
+    "n": 37,
+    "accuracy_assigned": 0.6818,
+    "ask_rate": 0.4054
+   },
+   "unseen_qr": {
+    "n": 113,
+    "accuracy_assigned": 0.9222,
+    "ask_rate": 0.2035
+   }
+  }
+ },
+ "calibration_split": {
+  "n": 167,
+  "assigned": 130,
+  "auto": 62,
+  "review": 68,
+  "ask": 37,
+  "accuracy_assigned": 0.9,
+  "accuracy_auto": 0.9194,
+  "accuracy_review": 0.8824,
+  "ask_rate": 0.2216,
+  "review_rate": 0.4072,
+  "correct_end_to_end": 0.7006,
+  "silent_error_rate": 0.0299,
+  "by_category": {
+   "informal": {
+    "n": 22,
+    "accuracy_assigned": 0.8889,
+    "ask_rate": 0.1818
+   },
+   "injection": {
+    "n": 7,
+    "accuracy_assigned": 1.0,
+    "ask_rate": 0.4286
+   },
+   "known_qr": {
+    "n": 18,
+    "accuracy_assigned": 1.0,
+    "ask_rate": 0.1667
+   },
+   "mapped_type": {
+    "n": 22,
+    "accuracy_assigned": 1.0,
+    "ask_rate": 0.0
+   },
+   "note_only": {
+    "n": 19,
+    "accuracy_assigned": 0.7692,
+    "ask_rate": 0.3158
+   },
+   "person_no_note": {
+    "n": 20,
+    "accuracy_assigned": 0.7,
+    "ask_rate": 0.5
+   },
+   "unseen_qr": {
+    "n": 59,
+    "accuracy_assigned": 0.8958,
+    "ask_rate": 0.1864
+   }
+  }
+ },
+ "test_split": {
+  "n": 167,
+  "assigned": 138,
+  "auto": 66,
+  "review": 72,
+  "ask": 29,
+  "accuracy_assigned": 0.9203,
+  "accuracy_auto": 0.9545,
+  "accuracy_review": 0.8889,
+  "ask_rate": 0.1737,
+  "review_rate": 0.4311,
+  "correct_end_to_end": 0.7605,
+  "silent_error_rate": 0.018,
+  "by_category": {
+   "informal": {
+    "n": 18,
+    "accuracy_assigned": 0.875,
+    "ask_rate": 0.1111
+   },
+   "injection": {
+    "n": 3,
+    "accuracy_assigned": 1.0,
+    "ask_rate": 0.3333
+   },
+   "known_qr": {
+    "n": 29,
+    "accuracy_assigned": 0.9286,
+    "ask_rate": 0.0345
+   },
+   "mapped_type": {
+    "n": 18,
+    "accuracy_assigned": 1.0,
+    "ask_rate": 0.0
+   },
+   "note_only": {
+    "n": 28,
+    "accuracy_assigned": 0.95,
+    "ask_rate": 0.2857
+   },
+   "person_no_note": {
+    "n": 17,
+    "accuracy_assigned": 0.6667,
+    "ask_rate": 0.2941
+   },
+   "unseen_qr": {
+    "n": 54,
+    "accuracy_assigned": 0.9524,
+    "ask_rate": 0.2222
+   }
+  }
+ },
+ "targets": {
+  "accuracy_assigned": 0.9,
+  "ask_rate_below": 0.1,
+  "test_meets_accuracy": true,
+  "test_meets_ask_rate": false
+ },
+ "confusion_test": {
+  "an_uong": {
+   "an_uong": 69,
+   "HOI": 6
+  },
+  "di_lai": {
+   "HOI": 8,
+   "di_lai": 12,
+   "an_uong": 2,
+   "hoa_don": 1
+  },
+  "du_lich": {
+   "HOI": 2
+  },
+  "giai_tri": {
+   "giai_tri": 21,
+   "HOI": 7,
+   "an_uong": 4,
+   "hoa_don": 1
+  },
+  "hoa_don": {
+   "hoa_don": 23,
+   "HOI": 6,
+   "an_uong": 2
+  },
+  "nghia_vu": {
+   "an_uong": 1,
+   "nghia_vu": 2
+  }
+ },
+ "top_errors_test": [
+  {
+   "id": "minh-078",
+   "category": "note_only",
+   "counterparty": "Mẹ",
+   "note": "mua sach",
+   "truth": "giai_tri",
+   "predicted": "an_uong",
+   "tier": "auto",
+   "confidence": 0.99,
+   "stage": "rule"
+  },
+  {
+   "id": "minh-103",
+   "category": "person_no_note",
+   "counterparty": "Mẹ",
+   "note": null,
+   "truth": "nghia_vu",
+   "predicted": "an_uong",
+   "tier": "auto",
+   "confidence": 0.99,
+   "stage": "rule"
+  },
+  {
+   "id": "lan-060",
+   "category": "person_no_note",
+   "counterparty": "Phạm Thanh Mai",
+   "note": null,
+   "truth": "giai_tri",
+   "predicted": "an_uong",
+   "tier": "auto",
+   "confidence": 0.935,
+   "stage": "llm"
+  },
+  {
+   "id": "minh-098",
+   "category": "known_qr",
+   "counterparty": "THANH TOAN QR Grab",
+   "note": null,
+   "truth": "di_lai",
+   "predicted": "an_uong",
+   "tier": "review",
+   "confidence": 0.822,
+   "stage": "llm"
+  },
+  {
+   "id": "lan-089",
+   "category": "informal",
+   "counterparty": "xang 50k",
+   "note": null,
+   "truth": "di_lai",
+   "predicted": "an_uong",
+   "tier": "review",
+   "confidence": 0.763,
+   "stage": "llm"
+  },
+  {
+   "id": "lan-082",
+   "category": "unseen_qr",
+   "counterparty": "THANH TOAN QR cuoc cap quang cmc",
+   "note": null,
+   "truth": "hoa_don",
+   "predicted": "an_uong",
+   "tier": "review",
+   "confidence": 0.742,
+   "stage": "llm"
+  },
+  {
+   "id": "khoa-066",
+   "category": "informal",
+   "counterparty": null,
+   "note": "ve cgv t6",
+   "truth": "giai_tri",
+   "predicted": "an_uong",
+   "tier": "review",
+   "confidence": 0.734,
+   "stage": "llm"
+  },
+  {
+   "id": "minh-081",
+   "category": "unseen_qr",
+   "counterparty": "THANH TOAN QR Phí gửi xe chung cư CN 8",
+   "note": null,
+   "truth": "di_lai",
+   "predicted": "hoa_don",
+   "tier": "review",
+   "confidence": 0.721,
+   "stage": "llm"
+  },
+  {
+   "id": "minh-064",
+   "category": "person_no_note",
+   "counterparty": "Lê Minh Châu",
+   "note": null,
+   "truth": "giai_tri",
+   "predicted": "an_uong",
+   "tier": "review",
+   "confidence": 0.708,
+   "stage": "llm"
+  },
+  {
+   "id": "khoa-089",
+   "category": "person_no_note",
+   "counterparty": "Võ Thị Lan",
+   "note": null,
+   "truth": "hoa_don",
+   "predicted": "an_uong",
+   "tier": "review",
+   "confidence": 0.681,
+   "stage": "llm"
+  },
+  {
+   "id": "lan-075",
+   "category": "known_qr",
+   "counterparty": "THANH TOAN QR sach fahasa",
+   "note": null,
+   "truth": "giai_tri",
+   "predicted": "hoa_don",
+   "tier": "review",
+   "confidence": 0.655,
+   "stage": "llm"
+  }
+ ],
+ "llm_calls_this_run": 0
+}

@@ -828,7 +828,16 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
             salary_events=mat.salary_events,
             trace_id=trace_id,
             details={"persona": persona, "clock_offset_days": mat.clock_offset_days},
+            app_date=mat.app_date,  # ngày neo cho lộ trình seed (phase 4), không suy từ giao dịch
         )
+        # Phase 4 luồng B: nhãn k-NN seed của persona (0 nếu persona chưa có file nhãn). Lỗi nạp nhãn không làm hỏng việc đặt lại:
+        # thiếu nhãn thì phân loại rơi sang bước model nhỏ, vẫn đúng hợp đồng.
+        try:
+            from yofina_ledger.classify_seed import apply_seed_labels
+
+            apply_seed_labels(self.repo.db, user_id, persona)
+        except Exception:
+            log.exception("reset_seed_labels_failed persona=%s", persona)
         forecast_ready = (
             self.forecast.compute(user_id, "reset") if self.forecast is not None else False
         )

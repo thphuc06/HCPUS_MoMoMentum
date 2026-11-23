@@ -137,6 +137,24 @@ Code ở `infra-cdk/lib/ingest-stack.ts`. Không có thứ tính tiền theo gi�
 | `/yofina/ingest/bucket-name`, `/yofina/ingest/api-function-name`, `/yofina/ingest/worker-function-name`, `/yofina/ingest/queue-url` | SSM Parameter | 5 | Không | |
 | Lambda tạm của CDK cho `Custom::S3BucketNotifications` + role | Lambda | 5 | Không | CDK tự sinh để gắn notification vào bucket |
 
+### Phase 4 (chống chịu, lộ trình, phân hũ tự động) — đã deploy 23/11 chiều
+
+Thuộc stack `YofinaTools` (construct `ClassifyPipeline`, `infra-cdk/lib/classify.ts`) và `YofinaAgent`. Migration `0052_resilience_roadmap_classify` đã chạy trên Aurora (pgvector, bảy bảng, hàm `app_*`). Không thêm tài nguyên tính tiền theo giờ (không NAT, không endpoint SageMaker, không OpenSearch); Aurora giữ min 0 ACU.
+
+| Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
+|---|---|---|---|---|
+| `yofina-classify` | Lambda (Python 3.13, arm64, 512 MB, timeout 90 s) + IAM role + log group `/aws/lambda/yofina-classify` | 4 | Không | Phân hũ tự động: luật người dùng, bảng tra loại, embedding Cohere, k-NN pgvector, model nhỏ. Zip `classify-arm64` (4,0 MB, nhúng `yofina_ledger` kèm `classify_defaults.json`). IAM: Data API và secret `yofina-db-app`, Bedrock cho model của vai `small`, `embedding` (có `cohere.embed-multilingual-v3`), `yofina-usage`, bảng idempotency riêng |
+| `yofina-classify-events` | SQS (visibility 540 s) | 4 | Không | Nhận `transaction.recorded` có `needs_classification`; event source cho `yofina-classify` (batch 5, `ReportBatchItemFailures`, `maxConcurrency` 3) |
+| `yofina-classify-events-dlq` | SQS | 4 | Không | Sau 3 lần giao không thành |
+| `yofina-classify-needs-classification` | EventBridge rule trên `yofina-bus` | 4 | Không | `source yofina.ledger`, `detail-type transaction.recorded`, `needs_classification` = true -> `yofina-classify-events` |
+| `yofina-classify-idempotency` | DynamoDB (on-demand) | 4 | Không | Khóa `event_id`, TTL 3 ngày |
+| `yofina-classify-events-dlq-not-empty` | CloudWatch alarm | 4 | Không đáng kể (khoảng 0,10 USD/tháng nếu vượt 10 alarm miễn phí) | -> SNS `yofina-alerts` |
+| 10 route ledger: `GET /roadmap`, `GET /roadmap/versions`, `GET /roadmap/diff`, `POST /roadmap/steps/{step_id}/decision`, `POST /roadmap/steps/{step_id}/edit`, `POST /roadmap/versions/{version}/decision`, `POST /roadmap/regenerate`, `GET /roadmap/jobs/{job_id}`, `GET /review`, `POST /review/daily-ask/skip` | Route trên HTTP API `yofina-api` | 4 | Không | Tích hợp Lambda `yofina-ledger` |
+| 3 route forecast: `GET /resilience`, `GET /resilience/shocks`, `POST /resilience/stress` | Route trên `yofina-api` | 4 | Không | Tích hợp Lambda `yofina-forecast` |
+| 5 tool Gateway: `forecast___get_resilience_score`, `forecast___stress_test`, `planner___optimize_allocation`, `planner___save_roadmap`, `planner___get_roadmap` + 5 policy Cedar `<target>_<tool>_own_user` | Tool trên target `forecast` và `planner` | 4 | Không | Gateway nhận schema `save_roadmap` lồng bảy cấp, không phải làm phẳng `action`. `optimize_allocation` ở ledger gọi `Invoke` sang `yofina-forecast-batch` để giải LP (scipy) |
+
+**Deploy 23/11 chiều (phase 4, phần Phúc)**: migration `0052`; `YofinaTools` ba lần (lần đầu: 13 route, `yofina-classify` + SQS + DLQ + rule + bảng idempotency, code ledger và forecast mới kèm `ruptures`; lần hai: sửa thông điệp lỗi hỏng dấu của `ROADMAP_VERSION_CONFLICT`; lần ba: ngưỡng phân loại đã hiệu chỉnh và nhãn seed trong zip ledger và classify); `YofinaAgent` qua `scripts/agent_deploy.py` (5 tool và 5 policy) -> Runtime `yofina_agent` version 14. Frontend không đổi.
+
 ## Không do CDK tạo
 
 | Tên | Loại | Cách tạo | Phase | Tính tiền khi nhàn rỗi | Ghi chú |

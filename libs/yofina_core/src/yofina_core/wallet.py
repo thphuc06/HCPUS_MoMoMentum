@@ -122,15 +122,10 @@ PLANNER_TOOLS = (
     "save_roadmap",
     "get_roadmap",
 )
-#: Tool mới của phase 4 mà hợp đồng đã khai báo nhưng Lambda chưa cài (luồng A cài; test `test_ledger_wallet` dùng tập này để
-#: khỏi đòi `_ARG_KEYS` có chúng; luồng A xóa từng tên khi cài xong).
-PHASE4_TOOLS = (
-    "get_resilience_score",
-    "stress_test",
-    "optimize_allocation",
-    "save_roadmap",
-    "get_roadmap",
-)
+#: Tool mới của phase 4 mà hợp đồng đã khai báo nhưng Lambda chưa cài (test `test_ledger_wallet` dùng tập này để khỏi đòi
+#: `_ARG_KEYS` có chúng). Rỗng từ 23/11: năm tool đã cài (forecast: get_resilience_score, stress_test; ledger: optimize_allocation
+#: proxy sang forecast, save_roadmap, get_roadmap).
+PHASE4_TOOLS: tuple[str, ...] = ()
 AUDIT_TOOLS = ("get_trace", "record_turn")
 
 # --- phase 3: kịch bản, nhắc, phản hồi, ý định ---------------------------------------------------

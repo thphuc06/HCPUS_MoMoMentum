@@ -14,6 +14,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { YofinaConfig } from '../config/config';
+import { ClassifyConfig, ClassifyPipeline } from './classify';
 import { ForecastPipeline, ForecastPipelineConfig } from './forecast-pipeline';
 import { publishParams } from './ssm-outputs';
 
@@ -116,6 +117,8 @@ export interface ToolsProps extends StackProps {
   readonly cfg: YofinaConfig;
   readonly tools: ToolsConfig;
   readonly forecast: ForecastPipelineConfig;
+  /** Phase 4 (luồng B): Lambda phân loại `yofina-classify`. Vắng thì không dựng (test cũ của stack giữ nguyên). */
+  readonly classify?: ClassifyConfig;
 }
 
 /**
@@ -171,6 +174,22 @@ export class ToolsStack extends Stack {
       dbResumeMaxWaitSeconds: tools.dbResumeMaxWaitSeconds,
       region: cfg.region,
     });
+
+    // --- Phase 4 luồng B: phân hũ tự động (EventBridge transaction.recorded → SQS + DLQ → Lambda yofina-classify) ----------
+    if (props.classify) {
+      new ClassifyPipeline(this, 'Classify', {
+        cfg,
+        classify: props.classify,
+        bus: this.bus,
+        alertTopic,
+        appTimezone: tools.appTimezone,
+        clusterArn,
+        appSecretArn,
+        dbName: param('db/name'),
+        dbResumeMaxWaitSeconds: tools.dbResumeMaxWaitSeconds,
+        usageTableName: param('dynamodb/usage-table'),
+      });
+    }
 
     // --- Lambda ledger ---------------------------------------------------------------------
     this.ledger = new lambda.Function(this, 'Ledger', {
@@ -304,16 +323,33 @@ export class ToolsStack extends Stack {
       ['/conversations/{conversation_id}', apigwv2.HttpMethod.GET],
       ['/traces/{trace_id}', apigwv2.HttpMethod.GET],
       ['/feedback', apigwv2.HttpMethod.POST],
+      // phase 4 (x-lambda: ledger): lộ trình (gói 2) và "Xem lại" / hỏi gộp (gói 4)
+      ['/roadmap', apigwv2.HttpMethod.GET],
+      ['/roadmap/versions', apigwv2.HttpMethod.GET],
+      ['/roadmap/diff', apigwv2.HttpMethod.GET],
+      ['/roadmap/steps/{step_id}/decision', apigwv2.HttpMethod.POST],
+      ['/roadmap/steps/{step_id}/edit', apigwv2.HttpMethod.POST],
+      ['/roadmap/versions/{version}/decision', apigwv2.HttpMethod.POST],
+      ['/roadmap/regenerate', apigwv2.HttpMethod.POST],
+      ['/roadmap/jobs/{job_id}', apigwv2.HttpMethod.GET],
+      ['/review', apigwv2.HttpMethod.GET],
+      ['/review/daily-ask/skip', apigwv2.HttpMethod.POST],
     ];
     for (const [routePath, method] of routes) {
       this.api.addRoutes({ path: routePath, methods: [method], integration });
     }
-    // `POST /affordability` (x-lambda: forecast): Lambda yofina-forecast (có engine), cùng JWT authorizer.
-    this.api.addRoutes({
-      path: '/affordability',
-      methods: [apigwv2.HttpMethod.POST],
-      integration: new HttpLambdaIntegration('AffordIntegration', this.forecast.tool),
-    });
+    // x-lambda: forecast: Lambda yofina-forecast (có engine), cùng JWT authorizer.
+    // `POST /affordability` (phase 3); `/resilience*` (phase 4, gói 1: điểm chống chịu và cú sốc).
+    const forecastIntegration = new HttpLambdaIntegration('AffordIntegration', this.forecast.tool);
+    const forecastRoutes: Array<[string, apigwv2.HttpMethod]> = [
+      ['/affordability', apigwv2.HttpMethod.POST],
+      ['/resilience', apigwv2.HttpMethod.GET],
+      ['/resilience/shocks', apigwv2.HttpMethod.GET],
+      ['/resilience/stress', apigwv2.HttpMethod.POST],
+    ];
+    for (const [routePath, method] of forecastRoutes) {
+      this.api.addRoutes({ path: routePath, methods: [method], integration: forecastIntegration });
+    }
     const stage = this.api.defaultStage?.node.defaultChild as apigwv2.CfnStage | undefined;
     if (stage) {
       stage.defaultRouteSettings = {

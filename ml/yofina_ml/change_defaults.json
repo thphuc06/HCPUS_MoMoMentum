@@ -1,0 +1,294 @@
+{
+  "version": "2026-11-phase4-goi3-2",
+  "note": "Tham số của bộ phát hiện đổi hành vi chi tiêu (`yofina_ml.change`). Mỗi tham số có `value`, `unit`, `note`, `source`. Giá trị đã hiệu chỉnh trên ba persona (data/personas) VÀ bộ sinh khác họ (yofina_ml.synth: hurdle_lognormal, shopping_sessions) bằng `python -m yofina_ml.backtest.change_calibration`; số đo (tỷ lệ báo nhầm, độ trễ) nằm ở mục `calibration` bên dưới và được test khóa. Đổi số ở đây thì chạy lại hiệu chỉnh, cập nhật `calibration` rồi tăng `version`.",
+  "params": {
+    "min_weeks_total": {
+      "value": 6,
+      "unit": "weeks",
+      "note": "Số tuần đầy đủ tối thiểu (sau khi bỏ các tuần đầu chưa có chi) để chạy bất kỳ bộ phát hiện nào: dưới mức này không đủ nền để tách điểm gãy khỏi nhiễu (hũ dưới ngần này tuần được bỏ qua với lý do insufficient_history).",
+      "source": "PELT cần đoạn cũ và đoạn mới mỗi đoạn tối thiểu min_size tuần, cộng thêm nền; 6 tuần là độ dài lịch sử của persona minh (47 ngày) nên là mức thấp nhất mà demo còn phát hiện được. Chọn thấp nhất có thể, không lấy từ tài liệu ngoài."
+    },
+    "pelt_min_size_weeks": {
+      "value": 2,
+      "unit": "weeks",
+      "note": "Độ dài tối thiểu của một đoạn trong PELT, cũng là số tuần mức mới phải giữ để xác nhận ('mức mới giữ khoảng 2 tuần'). Giữ 2 tuần (không 3) dù 3 tuần bớt báo nhầm thêm (0,15 mỗi hũ-năm trên seed chưa thấy): 3 tuần làm hỏng tiêu chí 3 của phase 4 (hai tuần lệch mức phải được xác nhận) và trễ thêm.",
+      "source": "Proposal §11 và spike ML §7: min_size=2 tuần, jump=1."
+    },
+    "pelt_penalty_c": {
+      "value": 6.0,
+      "unit": "multiplier",
+      "note": "Hệ số c của penalty PELT: penalty = c * sigma^2 * ln(n), sigma là độ lệch chuẩn bền của nhiễu theo tuần (MAD của sai phân bậc một, chia căn 2). Chi phí l2.",
+      "source": "Chọn 23/11 (người điều phối) sau khi quét c ∈ {3,4,5,6,8} × đổi tối thiểu {0,3; 0,4; 0,5} × giữ {2; 3} tuần, chọn trên seed 101–108 và đo lại trên seed 201–208 chưa thấy (ml/yofina_ml/backtest/change_holdout.py). Trên seed chưa thấy, c=6 cùng min_relative_change=0,5 bắt được đúng ngần ấy thay đổi ≥ 50% như c=5 (37,5%) mà báo nhầm 0,26 thay vì 0,40 mỗi hũ-năm; kiểm áp lực nhịp kỳ lương (change_payday_stress.py) báo nhầm giảm từ 0,26/0,53 xuống 0,13/0,32 ở nhịp mạnh/rất mạnh. Lần trước (gói 3) c=5 trên một bộ seed. Spike ML §7: c trong [2; 3] trên 52 tuần của một bộ sinh."
+    },
+    "pelt_penalty_n_ref": {
+      "value": 52,
+      "unit": "weeks",
+      "note": "Độ dài chuỗi dùng trong ln(n) của penalty: penalty = c * sigma^2 * ln(n_ref) CỐ ĐỊNH theo n_ref, không theo độ dài chuỗi hiện có. Batch đêm kiểm lại mỗi đêm trên chuỗi mỗi lúc một dài nên số phép thử tích lũy theo năm, không theo n; ln(n) của chuỗi 6 tuần quá nhỏ làm báo nhầm dồn ở đầu lịch sử.",
+      "source": "Spike ML §7 dùng ln(n) với n = 52 tuần (đúng bằng n_ref); chọn cố định n_ref sau khi đo báo nhầm theo độ dài chuỗi ở bước hiệu chỉnh."
+    },
+    "sigma_floor_ratio": {
+      "value": 0.25,
+      "unit": "ratio",
+      "note": "Sàn của sigma theo tỷ lệ với mức trung vị theo tuần (hệ số biến thiên tối thiểu giả định): ước lượng sigma từ ít sai phân quá thấp một cách ngẫu nhiên, nhất là chuỗi 6 đến 10 tuần.",
+      "source": "Chọn khi hiệu chỉnh: giá trị nhỏ nhất cho báo nhầm ở chuỗi ngắn xuống mức chấp nhận được mà vẫn bắt được bước nhảy của persona minh."
+    },
+    "min_relative_change": {
+      "value": 0.5,
+      "unit": "ratio",
+      "note": "Mức mới phải lệch ít nhất tỷ lệ này so với mức cũ (|mới - cũ| / cũ) mới được xác nhận hoặc nghi.",
+      "source": "Chọn 23/11 cùng pelt_penalty_c (xem nguồn ở đó): đổi dưới 50% mỗi tuần nằm trong dải dao động tự nhiên của hũ chi đều (hệ số biến thiên theo tuần 0,3 đến 0,5, spike ML §3) nên xác nhận trong 2 tuần không đáng tin; 0,5 bớt báo nhầm mà không mất thay đổi lớn. Lần trước 0,4."
+    },
+    "min_abs_change_vnd": {
+      "value": 50000,
+      "unit": "vnd_per_week",
+      "note": "Chênh lệch tuyệt đối tối thiểu của mức chi tuần (VND): đổi hành vi nhỏ hơn mức này không đáng sinh lại lộ trình.",
+      "source": "Giá trị mô phỏng (khoảng 0,5% lương tháng của persona minh), chưa hiệu chỉnh cho người dùng thật."
+    },
+    "hold_midpoint_fraction": {
+      "value": 0.65,
+      "unit": "ratio",
+      "note": "Mỗi tuần của đoạn mới phải nằm phía mức mới của điểm có tỷ lệ này giữa mức cũ và mức mới (0,5 là trung điểm): một tuần vọt cao đi kèm một tuần bình thường KHÔNG được coi là mức mới giữ.",
+      "source": "Quy tắc bảo vệ chống khoản lớn một lần lọt qua bước cắt (spike ML §7: khoản lớn một lần không phải đổi hành vi); chọn khi hiệu chỉnh."
+    },
+    "max_weeks_since_break": {
+      "value": 8,
+      "unit": "weeks",
+      "note": "Chỉ xác nhận điểm gãy gần nhất khi đoạn mới dài không quá ngần này tuần: điểm gãy cũ hơn đã nằm trong lịch sử mà mô hình dự báo thích nghi, không phải tin mới.",
+      "source": "Giá trị mô phỏng: cửa sổ khoảng hai tháng; mô hình dự báo dùng nửa đời 180 ngày."
+    },
+    "min_active_day_share": {
+      "value": 0.5,
+      "unit": "ratio",
+      "note": "Hũ có tỷ lệ ngày CÓ CHI (tính từ ngày có chi đầu tiên) dưới ngưỡng này là hũ thưa: chi theo tuần chỉ còn vài khoản lớn nên điểm gãy không đáng tin, hũ bị bỏ qua (lý do sparse).",
+      "source": "Cùng ngưỡng `MLParams.sparse_zero_share` = 0,5 của mô hình dự báo phân hũ dày/thưa (ml/yofina_ml/params.py); spike ML §3 và §6: hũ thưa phải mô phỏng riêng."
+    },
+    "one_off_z": {
+      "value": 10.0,
+      "unit": "robust_z",
+      "note": "Một ngày chi có z bền MAD (so với trung vị các ngày có chi của hũ, thang 1,4826*MAD) lớn hơn ngưỡng này được đánh dấu là khoản lớn một lần. Chỉ đánh dấu, không phải đổi hành vi.",
+      "source": "Spike ML §7: z bền MAD > 10 gắn 8 cờ trong đó đủ 3 khoản có nhãn, ngang ECOD."
+    },
+    "one_off_max_share": {
+      "value": 0.15,
+      "unit": "ratio",
+      "note": "Nếu hơn tỷ lệ này số ngày có chi cùng vượt ngưỡng z thì đó là một MỨC chi mới (mọi khoản đều to hơn), không phải khoản lớn một lần: không đánh dấu và không cắt, để PELT còn thấy bước nhảy.",
+      "source": "Chọn khi hiệu chỉnh (quét 0,05 / 0,10 / 0,15): 0,05 làm báo nhầm tăng gấp ba vì hũ có MAD nhỏ (đi lại) có hơn 5% ngày vượt z mà vẫn là nhiễu thường; 0,15 giữ báo nhầm ngang mức không có quy tắc này mà vẫn nhận ra một mức mới kéo dài từ khoảng 2 tuần (14 ngày trên 70 ngày có chi là 20%)."
+    },
+    "winsor_z": {
+      "value": 5.0,
+      "unit": "robust_z",
+      "note": "Trước PELT và CUSUM, mỗi ngày chi bị cắt ở trung vị + winsor_z * 1,4826 * MAD của hũ (chuỗi đã cắt khoản lớn).",
+      "source": "Spike ML §7 bước winsorize: trung vị + 5 * MAD."
+    },
+    "cusum_k": {
+      "value": 1.0,
+      "unit": "sigma",
+      "note": "Độ nới (slack) của CUSUM hai phía trên z theo tuần: mỗi tuần trừ k sigma trước khi cộng dồn.",
+      "source": "NIST/SEMATECH e-Handbook of Statistical Methods, mục 6.3.2.3 (CUSUM): k bằng nửa bước nhảy cần phát hiện, tức 0,5 sigma cho bước nhảy 1 sigma. Spike ML §7 dùng k=0,5."
+    },
+    "cusum_h": {
+      "value": 4.0,
+      "unit": "sigma",
+      "note": "Ngưỡng báo của CUSUM: tổng cộng dồn vượt h thì nghi có đổi hành vi.",
+      "source": "NIST/SEMATECH e-Handbook mục 6.3.2.3: h quanh 4 hoặc 5. Spike ML §7: k=0,5, h=4 báo giả 3, trễ 1 tuần trên chuỗi dài 52 tuần; hiệu chỉnh lại ở `calibration`."
+    },
+    "cusum_monitor_weeks": {
+      "value": 4,
+      "unit": "weeks",
+      "note": "CUSUM chỉ chạy trên ngần này tuần gần nhất; các tuần trước đó làm mức nền (trung vị và MAD).",
+      "source": "Giá trị mô phỏng chọn khi hiệu chỉnh: đủ dài để thấy bước nhảy giữ 2 tuần, đủ ngắn để mức nền chưa bị nhiễm mức mới."
+    },
+    "cusum_min_reference_weeks": {
+      "value": 4,
+      "unit": "weeks",
+      "note": "Số tuần nền tối thiểu trước đoạn theo dõi của CUSUM; thiếu thì đoạn theo dõi ngắn lại.",
+      "source": "Cần tối thiểu vài điểm để ước lượng trung vị và MAD."
+    },
+    "cusum_sigma_floor_ratio": {
+      "value": 0.3,
+      "unit": "ratio",
+      "note": "Sàn của sigma nền của CUSUM theo tỷ lệ với trung vị nền: nền quá ít tuần cho MAD nhỏ giả tạo sẽ làm z phình ra.",
+      "source": "Giá trị kỹ thuật chọn khi hiệu chỉnh."
+    },
+    "suspect_expire_weeks": {
+      "value": 4,
+      "unit": "weeks",
+      "note": "Dấu hiệu 'nghi' không được xác nhận sau ngần này tuần thì chuyển thành báo nhầm (dismissed).",
+      "source": "Giá trị mô phỏng: gấp đôi số tuần mức mới phải giữ để PELT xác nhận."
+    },
+    "dedupe_days": {
+      "value": 14,
+      "unit": "days",
+      "note": "Một điểm gãy mới trùng với dấu hiệu cũ của cùng hũ nếu lệch ngày không quá ngần này ngày: không tạo dấu hiệu thứ hai.",
+      "source": "Hai tuần là sai số định vị điểm gãy của PELT theo tuần (hiệu chỉnh)."
+    }
+  },
+  "calibration": {
+    "status": "da_hieu_chinh",
+    "tool": "python -m yofina_ml.backtest.change_calibration --write",
+    "params_snapshot": {
+      "min_weeks_total": 6,
+      "pelt_min_size_weeks": 2,
+      "pelt_penalty_c": 6.0,
+      "pelt_penalty_n_ref": 52,
+      "sigma_floor_ratio": 0.25,
+      "min_relative_change": 0.5,
+      "min_abs_change_vnd": 50000,
+      "hold_midpoint_fraction": 0.65,
+      "max_weeks_since_break": 8,
+      "min_active_day_share": 0.5,
+      "one_off_z": 10.0,
+      "one_off_max_share": 0.15,
+      "winsor_z": 5.0,
+      "cusum_k": 1.0,
+      "cusum_h": 4.0,
+      "cusum_monitor_weeks": 4,
+      "cusum_min_reference_weeks": 4,
+      "cusum_sigma_floor_ratio": 0.3,
+      "suspect_expire_weeks": 4,
+      "dedupe_days": 14
+    },
+    "seeds": [
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108
+    ],
+    "n_days": 330,
+    "tolerance_days": 21,
+    "truth_shift": 0.3,
+    "families": [
+      "hurdle_lognormal",
+      "shopping_sessions"
+    ],
+    "note": "Số đo trên bộ sinh tổng hợp khác họ, mô phỏng mỗi đêm một lần. fa_per_jar_year là số dấu hiệu sai mỗi hũ-năm; delay_days là số ngày từ điểm gãy thật tới đêm đầu tiên có dấu hiệu đúng. Đo trên dữ liệu TỔNG HỢP, chưa có dữ liệu thật.",
+    "confirm_pelt": {
+      "tp": 16,
+      "fa": 16,
+      "ambiguous": 0,
+      "series_eligible": 86,
+      "series_total": 240,
+      "series_with_true_shift": 59,
+      "series_with_big_shift": 41,
+      "obs_jar_years": 64.65,
+      "fa_per_jar_year": 0.2475,
+      "fa_series_share": 0.1744,
+      "recall_any": 0.2542,
+      "recall_8w": 0.2373,
+      "recall_big_shift": 0.3171,
+      "delay_days_median": 21.0,
+      "delay_days_p90": 46.39999999999999
+    },
+    "suspect_cusum": {
+      "tp": 29,
+      "fa": 88,
+      "ambiguous": 1,
+      "series_eligible": 86,
+      "series_total": 240,
+      "series_with_true_shift": 59,
+      "series_with_big_shift": 41,
+      "obs_jar_years": 64.65,
+      "fa_per_jar_year": 1.3611,
+      "fa_series_share": 0.5233,
+      "recall_any": 0.3729,
+      "recall_8w": 0.3729,
+      "recall_big_shift": 0.439,
+      "delay_days_median": 23.5,
+      "delay_days_p90": 42.60000000000001
+    },
+    "personas": {
+      "minh": {
+        "an_uong": {
+          "confirmed": true,
+          "suspect": true,
+          "skipped": null
+        },
+        "di_lai": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "sparse"
+        },
+        "hoa_don": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "insufficient_history"
+        },
+        "giai_tri": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "insufficient_history"
+        }
+      },
+      "lan": {
+        "an_uong": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": null
+        },
+        "di_lai": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "sparse"
+        },
+        "hoa_don": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "insufficient_history"
+        },
+        "giai_tri": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "sparse"
+        }
+      },
+      "khoa": {
+        "an_uong": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "insufficient_history"
+        },
+        "di_lai": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "insufficient_history"
+        },
+        "hoa_don": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "insufficient_history"
+        },
+        "giai_tri": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "insufficient_history"
+        }
+      },
+      "vy": {
+        "an_uong": {
+          "confirmed": true,
+          "suspect": true,
+          "skipped": null
+        },
+        "di_lai": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "sparse"
+        },
+        "hoa_don": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "insufficient_history"
+        },
+        "giai_tri": {
+          "confirmed": false,
+          "suspect": false,
+          "skipped": "sparse"
+        }
+      }
+    }
+  }
+}
