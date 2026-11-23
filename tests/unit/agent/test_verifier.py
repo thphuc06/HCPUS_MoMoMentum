@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 from yofina_agent.clarify import missing_slot, resolve_clarify
-from yofina_agent.schemas import IntentParams, IntentResult, OptionSuitability
+from yofina_agent.schemas import AnalysisOption, IntentParams, IntentResult, OptionSuitability
 from yofina_agent.trace import build_record, confidence, data_used, merge_rules, step_timings
 from yofina_agent.tools import ToolKind, ToolOutcome
-from yofina_agent.verifier import Allowed, NumericGrounding, assemble_verdict, suitability_status
+from yofina_agent.verifier import Allowed, NumericGrounding, assemble_verdict, salvage_options, suitability_status
 
 from yofina_core.suitability import SuitabilityVerdict
 
@@ -127,6 +127,33 @@ def test_trang_thai_phuong_an_theo_luat():
     assert suitability_status(verdict()) == "ok"
     assert suitability_status(verdict([WARN])) == "tight"
     assert suitability_status(verdict([BLOCK], ok=False)) == "short"
+
+
+def _opt(option_id: str, kind: str, summary: str = "Giữ hũ Nghĩa vụ không hụt.", amount: int | None = None) -> AnalysisOption:
+    action = None if amount is None else {"tool": "move_between_jars", "params": {"from_jar": "du_phong", "to_jar": "nghia_vu", "amount_vnd": amount}}
+    return AnalysisOption.model_validate(
+        {"option_id": option_id, "kind": kind, "label": f"Phương án {option_id}", "summary": summary, "proposal": {"kind": kind}, "action": action}
+    )
+
+
+def test_cuu_phuong_an_khi_het_vong_chi_lay_phuong_an_tu_qua_ca_hai_kiem_tra():
+    allowed = Allowed.from_payloads([PAYLOAD])
+    r1 = [
+        (_opt("skip", "skip"), verdict()),
+        (_opt("pay", "pay_now"), verdict([BLOCK], ok=False)),  # vi phạm luật block: không cứu
+        (_opt("remind", "remind_later"), verdict([WARN])),  # chỉ warn: vẫn dùng được (trạng thái sát)
+    ]
+    r2 = [
+        (_opt("skip2", "skip"), verdict()),  # cùng loại với vòng trước: lấy bản của vòng mới nhất
+        (_opt("defer", "defer", summary="Hoãn để đỡ hụt 9 triệu."), verdict()),  # số không căn cứ: không cứu
+        (_opt("cover", "move_between_jars", amount=777_000), verdict()),  # số tiền hành động không căn cứ: không cứu
+    ]
+    picked = salvage_options([r1, r2], allowed)
+    assert [o.option_id for o, _ in picked] == ["skip2", "remind"]
+    ok_cover = [(_opt("cover", "move_between_jars", amount=1_150_000), verdict())]
+    assert [o.option_id for o, _ in salvage_options([r1, ok_cover], allowed)] == ["cover", "skip", "remind"]
+    assert len(salvage_options([r1, r2, ok_cover], allowed, limit=2)) == 2
+    assert salvage_options([], allowed) == []
 
 
 # --- hỏi lại --------------------------------------------------------------------------------
