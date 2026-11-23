@@ -419,6 +419,48 @@ def affordability_block(outcome: ToolOutcome, trace_id: str) -> B.AffordabilityC
         raise ContractMismatch(f"affordability_check sai hợp đồng: {exc}") from exc
 
 
+def resilience_block(outcome: ToolOutcome, trace_id: str) -> B.ResilienceScoreBlock:
+    payload = outcome.payload or {}
+    try:
+        return B.build_resilience_score(
+            data=payload["data"],
+            trace_id=trace_id,
+            source_tool=outcome.name,
+            as_of=_parse_instant(payload["as_of"]),
+            app_date=date.fromisoformat(payload["app_date"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ContractMismatch(f"get_resilience_score sai hợp đồng: {exc}") from exc
+
+
+def stress_block(outcome: ToolOutcome, trace_id: str) -> B.StressResultBlock:
+    payload = outcome.payload or {}
+    try:
+        return B.build_stress_result(
+            data=payload["data"],
+            trace_id=trace_id,
+            source_tool=outcome.name,
+            as_of=_parse_instant(payload["as_of"]),
+            app_date=date.fromisoformat(payload["app_date"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ContractMismatch(f"stress_test sai hợp đồng: {exc}") from exc
+
+
+def roadmap_block(outcome: ToolOutcome, trace_id: str) -> B.RoadmapBlock:
+    payload = outcome.payload or {}
+    try:
+        return B.build_roadmap(
+            data=payload["data"],
+            trace_id=trace_id,
+            source_tool=outcome.name,
+            as_of=_parse_instant(payload["as_of"]),
+            app_date=date.fromisoformat(payload["app_date"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ContractMismatch(f"get_roadmap sai hợp đồng: {exc}") from exc
+
+
 def scenario_blocks(outcome: ToolOutcome, trace_id: str) -> list[B.ForecastTimelineBlock | B.ObligationImpactBlock]:
     """Các khối số liệu của `forecast___run_scenario`: `forecast_timeline` trước-sau (hũ bị tác động nhiều nhất trước) rồi `obligation_impact`."""
     payload = outcome.payload or {}

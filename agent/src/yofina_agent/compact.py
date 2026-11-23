@@ -345,3 +345,37 @@ def compact_confirm_action(data: Mapping[str, Any]) -> dict[str, Any]:
     if data.get("warnings"):
         out["warnings"] = list(data["warnings"])
     return out
+
+
+def compact_resilience(payload: Mapping[str, Any]) -> dict[str, Any]:
+    data = payload["data"]
+    weakest = next(c for c in data["components"] if c["key"] == data["weakest"])
+    return {
+        "score": data["score"],
+        "band": data["band"],
+        "weakest": {"label": weakest["label"], "explanation": weakest["explanation"]},
+    }
+
+
+def compact_stress(payload: Mapping[str, Any]) -> dict[str, Any]:
+    data = payload["data"]
+    return {
+        "shock_label": data["shock"]["label"],
+        "score_before": data["score_before"],
+        "score_after": data["score_after"],
+        "runway_days_total": data.get("runway_days_total"),
+        "runway_days_emergency": data.get("runway_days_emergency"),
+        "shortfall_vnd": data["shortfall_vnd"],
+        "shortfall_text": format_vnd(data["shortfall_vnd"]),
+    }
+
+
+def compact_roadmap(payload: Mapping[str, Any]) -> dict[str, Any]:
+    data = payload["data"]
+    return {
+        "version": data["version"],
+        "reason": data["reason"]["text"],
+        "feasibility": data["feasibility"],
+        "counts": data["counts"],
+        "step_titles": [step["title"] for phase in data["phases"] for step in phase["steps"]][:3],
+    }

@@ -128,6 +128,13 @@ GUARDRAIL_OUTPUT_BLOCKED: tuple[str, str] = (
 UNKNOWN_JAR_QUESTION = "Mình chưa thấy hũ “{name}” trong ví của bạn. Bạn muốn dùng hũ nào?"
 UNKNOWN_JAR_QUESTION_NO_NAME = "Mình chưa xác định được hũ bạn nói. Bạn muốn dùng hũ nào?"
 
+STRESS_QUESTION = "Bạn muốn thử cú sốc nào?"
+STRESS_CHIP_VALUE = "Thử cú sốc {label}"
+ROADMAP_MISSING: tuple[str, str] = (
+    "Chưa có lộ trình",
+    "Bạn chưa có lộ trình nào. Bạn có thể nhờ Yofina lập lộ trình cho mình nhé.",
+)
+
 # Gộp kịch bản trong một cuộc trò chuyện: khoản mới cùng hũ với khoản người dùng đã hỏi trước đó.
 # {previous}: nhãn các khoản trước (do engine dựng, ví dụ "mua giày 800k"); {jar}: tên hũ; {new}: nhãn khoản mới.
 # Router xếp "ngoài phạm vi" nhưng câu có dấu hiệu chi tiêu của chính người dùng (số tiền, món mua): hỏi xác nhận thay vì từ chối cứng.
