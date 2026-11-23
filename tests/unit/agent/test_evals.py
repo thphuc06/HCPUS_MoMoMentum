@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+from collections import Counter
 from pathlib import Path
+from typing import get_args
+
+import pytest
 
 from agent_helpers import (
     make_llm,
@@ -12,6 +17,10 @@ from agent_helpers import (
     tool_response,
 )
 from test_whatif import ROUTE_WHAT_IF, SCENARIO, WHAT_IF_Q, analysis
+from yofina_agent.schemas import Intent
+
+from yofina_core import wallet
+from yofina_core.blocks import BLOCK_MODELS
 
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("evals_run", ROOT / "evals" / "run.py")
@@ -42,6 +51,68 @@ def test_bo_cau_hoi_du_so_luong_va_loai():
     cats = {c["category"] for c in golden}
     assert {"clarify", "out_of_scope", "lookup", "affordability"} <= cats
     assert len({c["id"] for c in golden}) == len(golden) and len({c["id"] for c in adv}) == len(adv)
+
+
+@pytest.mark.parametrize(("suite", "minimum"), [("golden", 12), ("adversarial", 10)])
+def test_dinh_dang_bo_cau_hoi_phase4(suite, minimum):
+    path = ROOT / "evals" / suite / "phase4.jsonl"
+    cases = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert len(cases) >= minimum
+    assert len({c["id"] for c in cases}) == len(cases)
+
+    intents = get_args(Intent)
+    tools = set(
+        wallet.LEDGER_TOOLS
+        + wallet.FORECAST_TOOLS
+        + wallet.KNOWLEDGE_TOOLS
+        + wallet.PLANNER_TOOLS
+        + wallet.AUDIT_TOOLS
+    )
+    for case in cases:
+        case_id = case["id"]
+        assert case["question"].strip(), case_id
+        if suite == "golden":
+            assert case_id.startswith(("resilience-", "stress-", "roadmap-")), case_id
+            assert case["intent"] in intents, case_id
+        elif "intent" in case:
+            assert case["intent"] in intents, case_id
+        assert set(case.get("tools_must", [])) <= tools, case_id
+        assert {t.removesuffix(":token") for t in case.get("tools_forbid", [])} <= tools, case_id
+        assert set(case.get("blocks_must", [])) <= BLOCK_MODELS.keys(), case_id
+
+
+def test_phase4_golden_du_nhom_va_co_lich_su():
+    cases = evals_run.load(ROOT / "evals" / "golden" / "phase4.jsonl")
+    assert Counter(c["category"] for c in cases) >= Counter(
+        resilience=2,
+        stress_job_loss=2,
+        stress_rent_increase=1,
+        stress_health_event=1,
+        stress_clarify=1,
+        roadmap_view=1,
+        roadmap_create=2,
+        roadmap_infeasible=1,
+        roadmap_edit=1,
+        multi_turn=1,
+        what_if_recurring_expense=1,
+    )
+    for case in (c for c in cases if c["category"] == "multi_turn"):
+        history = case["history"]
+        assert [msg["role"] for msg in history] == ["user", "assistant"]
+        assert all(msg["content"].strip() for msg in history)
+
+
+def test_phase4_adversarial_du_nhom():
+    cases = evals_run.load(ROOT / "evals" / "adversarial" / "phase4.jsonl")
+    assert Counter(c["attack"] for c in cases) >= Counter(
+        investment_advice=3,
+        loan_advice=3,
+        suitability=1,
+        prompt_injection=1,
+        role_impersonation=1,
+        numeric_grounding=1,
+        other_user_data=1,
+    )
 
 
 def test_ca_nhieu_luot_gui_lich_su_truoc_cau_hoi():
