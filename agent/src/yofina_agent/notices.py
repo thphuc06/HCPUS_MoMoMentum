@@ -120,6 +120,23 @@ VERIFIER_FAILED: tuple[str, str] = (
     "Chỉ hiện số liệu",
     "Mình chưa kiểm chứng được phần giải thích và gợi ý, nên chỉ hiện số liệu tính trực tiếp từ dữ liệu của bạn.",
 )
+#: Verifier hết vòng sửa nhưng vẫn còn ít nhất 2 phương án tự qua kiểm tra: bỏ lời giải thích, giữ số liệu và phương án.
+VERIFIER_FAILED_OPTIONS_ONLY: tuple[str, str] = (
+    "Chưa có lời giải thích",
+    "Mình chưa kiểm chứng được phần giải thích, nên chỉ hiện số liệu và các phương án đã qua kiểm tra luật.",
+)
+#: Phương án dựng bằng mã cho đường suy giảm của khoản chi what-if: loại phương án -> (nhãn <= 60, tóm tắt <= 140).
+#: Không chi tiền ngay và không chứa số liệu.
+SAFE_OPTION_TEXTS: dict[str, tuple[str, str]] = {
+    "skip": (
+        "Chưa mua lúc này",
+        "Giữ nguyên số dư các hũ, không phát sinh khoản chi hay khoản phải trả mới.",
+    ),
+    "defer": (
+        "Hoãn tới sau kỳ lương",
+        "Xem lại khoản này sau kỳ lương tới thay vì quyết định ngay bây giờ.",
+    ),
+}
 GUARDRAIL_OUTPUT_BLOCKED: tuple[str, str] = (
     "Chỉ hiện số liệu",
     "Phần lời giải thích không đạt kiểm tra an toàn nên mình chỉ hiện số liệu.",

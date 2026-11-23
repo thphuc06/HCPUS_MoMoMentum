@@ -29,7 +29,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -66,7 +65,7 @@ from yofina_agent.store import (
     TurnRecordStore,
     UnconfiguredTurnRecordStore,
 )
-from yofina_agent.textutil import match_shock_id, normalize, parse_amount_vnd, strip_accents
+from yofina_agent.textutil import match_shock_id, normalize, parse_amount_vnd, parse_goal_date
 from yofina_agent.tools import (
     ContractMismatch,
     GatewayTools,
@@ -85,7 +84,7 @@ from yofina_agent.verifier import Allowed, NumericGrounding
 from yofina_agent.whatif import WhatIfState, run_what_if
 from yofina_agent.writer import PHASE4_TASKS, check_grounding, has_ungrounded_numbers, write_stream
 from yofina_core import blocks as B
-from yofina_core.clock import app_timezone, payday_in_month
+from yofina_core.clock import app_timezone
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
 from yofina_core.money import format_vnd, format_vnd_short
@@ -613,7 +612,8 @@ class Turn:
                     result={
                         "trace_id": self.trace_id,
                         "intent": self.intent,
-                        "degraded": self.degrade_code is not None,
+                        # suy giảm: model lỗi (degrade_code) hoặc Verifier rơi vào đường dự phòng (verified=False, như bản ghi lượt)
+                        "degraded": self.degrade_code is not None or self.verified is False,
                         "model_calls": self.scope.calls,
                         "tool_calls": self.tool_calls,
                         "verifier_rounds": self.whatif.attempts if self.whatif else 0,
@@ -1048,7 +1048,7 @@ class Turn:
         target_date: date | None = None
         if p.date_text:
             today = self.app_date or self.block_app_date()
-            target_date = _roadmap_goal_date(p.date_text, today)
+            target_date = parse_goal_date(p.date_text, today)
             if target_date is None:
                 await self.emit_fixed_text(
                     _GOAL_BAD_DATE.format(typed=p.date_text[:40], name=name)
@@ -1403,80 +1403,6 @@ _GOAL_NOT_SAVING = (
 )
 _GOAL_BAD_DATE = "Mình chưa đọc được hạn “{typed}” nên dùng hạn đã khai ở hũ {name}, nếu có."
 _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa đặt hạn này. Bạn cho mình biết số tiền muốn gom nhé."
-
-_ISO_DATE_RE = re.compile(r"(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)")
-_DMY_RE = re.compile(r"(?<![\d/.\-])(\d{1,2})[/.\-](\d{1,2})(?:[/.\-](\d{4}|\d{2}))?(?![\d/.\-])")
-_YEAR = r"(?: nam (\d{4}|nay|sau|toi))?"
-_DAY_MONTH_RE = re.compile(rf"\bngay (\d{{1,2}}) thang (\d{{1,2}}){_YEAR}\b")
-_OFFSET_RE = re.compile(r"(?<!thang )(?<!ngay )\b(\d{1,3}) (ngay|tuan|thang|nam) (?:nua|toi|sau)\b")
-_END_OF_MONTH_N_RE = re.compile(rf"\b(?:cuoi|het) thang (\d{{1,2}}){_YEAR}\b")
-_MONTH_N_RE = re.compile(rf"\bthang (\d{{1,2}}){_YEAR}\b")
-
-
-def _add_months(day: date, months: int) -> date:
-    year, month = divmod(day.year * 12 + day.month - 1 + months, 12)
-    return payday_in_month(day.day, year, month + 1)
-
-
-def _month_end(year: int, month: int) -> date:
-    return payday_in_month(31, year, month)
-
-
-def _roadmap_goal_date(text: str, today: date) -> date | None:
-    """Hạn mục tiêu người dùng nói ("cuối tháng này", "31/12", "6 tháng nữa", "tháng 3 năm sau") -> ngày, tính theo ngày mô phỏng `today`.
-
-    Chỉ nhận cách nói rõ ràng; không đọc được hoặc ngày không sau hôm nay thì None (handler nói rõ, không đoán).
-    """
-    raw, words = strip_accents(text), normalize(text)
-
-    def year_of(token: str | None) -> int | None:
-        if token is None:
-            return None
-        if token == "nay":
-            return today.year
-        if token in ("sau", "toi"):
-            return today.year + 1
-        return int(token) + (2000 if len(token) == 2 else 0)
-
-    def on_or_next_year(make: Callable[[int], date], year: int | None) -> date:
-        found = make(year if year is not None else today.year)
-        return make(today.year + 1) if year is None and found <= today else found
-
-    try:
-        if m := _ISO_DATE_RE.search(raw):
-            found = date(int(m[1]), int(m[2]), int(m[3]))
-        elif m := _DMY_RE.search(raw) or _DAY_MONTH_RE.search(words):
-            d, mo = int(m[1]), int(m[2])
-            found = on_or_next_year(lambda y: date(y, mo, d), year_of(m[3]))
-        elif m := _OFFSET_RE.search(words):
-            n, unit = int(m[1]), m[2]
-            found = (
-                today + timedelta(days=n * (7 if unit == "tuan" else 1))
-                if unit in ("ngay", "tuan")
-                else _add_months(today, n * (12 if unit == "nam" else 1))
-            )
-        elif m := _END_OF_MONTH_N_RE.search(words) or _MONTH_N_RE.search(words):
-            mo = int(m[1])
-            found = on_or_next_year(lambda y: _month_end(y, mo), year_of(m[2]))
-        elif re.search(r"\b(?:cuoi|het) thang (?:sau|toi)\b", words) or re.search(
-            r"\bthang (?:sau|toi)\b", words
-        ):
-            year, month = divmod(today.year * 12 + today.month, 12)  # tháng kế tiếp (0-based)
-            found = _month_end(year, month + 1)
-        elif re.search(r"\b(?:cuoi|het) thang\b", words):
-            found = _month_end(today.year, today.month)
-        elif re.search(r"\b(?:cuoi|het) nam (?:sau|toi)\b", words) or re.search(
-            r"\bnam (?:sau|toi)\b", words
-        ):
-            found = date(today.year + 1, 12, 31)
-        elif re.search(r"\b(?:cuoi|het) nam\b", words):
-            found = date(today.year, 12, 31)
-        else:
-            return None
-    except ValueError:  # 31/02, tháng 13...
-        return None
-    return found if found > today else None
-
 
 def _user_goal_compact(goal: UserGoal, jar_rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Mục tiêu người dùng nói, cho model viết câu trả lời (số và ngày đúng dạng để kiểm căn cứ)."""

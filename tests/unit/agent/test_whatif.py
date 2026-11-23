@@ -29,6 +29,7 @@ from agent_helpers import (
     tool_response,
     types,
 )
+from yofina_agent import notices
 from yofina_agent.tools import ToolKind, ToolOutcome, classify_result
 from yofina_agent.whatif import adds_scenario_obligation
 
@@ -154,6 +155,7 @@ def test_verifier_so_khong_co_can_cu_thi_tra_loi_loi_cho_analyst_sua_mot_vong(mo
     assert block_types(events)[-2:] == ["options", "confirm"] and text_of(events).startswith("Nếu mua")
     r = result_of(events)
     assert r["model_calls"] == 4 and r["verifier_rounds"] == 2  # vẫn không quá 4
+    assert r["degraded"] is False  # vòng sửa qua kiểm tra: không suy giảm
     retry_prompt = llm[1].calls[3]["messages"][0]["content"][0]["text"]
     assert "<phan_hoi_kiem_tra>" in retry_prompt and "1.350.000" in retry_prompt
 
@@ -162,18 +164,24 @@ def test_het_vong_sua_thi_bo_loi_giai_thich_nhung_giu_phuong_an_da_kiem(monkeypa
     """Lời giải thích hai vòng đều có số không căn cứ: không phát lời; hai phương án tự qua luật và có căn cứ vẫn được phát."""
     bad = analysis(narrative="Bạn sẽ cần 1.350.000 ₫ nữa.")
     llm = what_if_llm(tool_response("analyze", bad), tool_response("analyze", bad))
-    events, tools, _ = run_turn(WHAT_IF_Q, llm=llm, monkeypatch=monkeypatch)
+    records = FakeRecords()
+    events, tools, _ = run_turn(WHAT_IF_Q, llm=llm, monkeypatch=monkeypatch, records=records)
     check_agui_order(events)
     assert block_types(events) == ["forecast_timeline", "obligation_impact", "options", "confirm", "notice"]
     blocks = blocks_of(events)
     assert [o["option_id"] for o in blocks[2]["data"]["options"]] == ["defer", "cover"]
     n = blocks[-1]["data"]
     assert n["kind"] == "degraded" and n["degraded_reason"] == "verifier_failed" and "phương án" in n["message"]
+    assert (n["title"], n["message"]) == notices.VERIFIER_FAILED_OPTIONS_ONLY
     assert text_of(events) == ""  # lời giải thích chưa kiểm chứng không bao giờ được phát
     assert [a["amount_vnd"] for n_, a in tools.calls if n_ == "move_between_jars"] == [1_150_000]
     assert all("confirm_token" not in a for n_, a in tools.calls if n_ == "move_between_jars")
     r = result_of(events)
     assert r["model_calls"] == 4 and r["verifier_rounds"] == 2
+    # Verifier rơi vào đường dự phòng: lượt suy giảm, cùng dấu hiệu với bản ghi lượt (lời giải thích chưa kiểm chứng)
+    assert r["degraded"] is True
+    (rec,) = records.saved
+    assert "Phần lời giải thích chưa qua kiểm chứng nên không được hiển thị." in rec["confidence"]["reasons"]
 
 
 def test_het_vong_ma_phuong_an_cung_khong_co_can_cu_thi_chi_con_khoi_so_lieu_va_notice(monkeypatch):
@@ -186,7 +194,9 @@ def test_het_vong_ma_phuong_an_cung_khong_co_can_cu_thi_chi_con_khoi_so_lieu_va_
     n = blocks_of(events)[-1]["data"]
     assert n["kind"] == "degraded" and n["degraded_reason"] == "verifier_failed"
     assert text_of(events) == "" and "move_between_jars" not in call_names(tools)  # không phương án, không gọi tool ghi
+    assert (n["title"], n["message"]) == notices.VERIFIER_FAILED
     assert result_of(events)["model_calls"] == 4
+    assert result_of(events)["degraded"] is True
 
 
 def test_phuong_an_vi_pham_luat_khong_duoc_phat(monkeypatch):

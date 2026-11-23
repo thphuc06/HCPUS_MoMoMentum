@@ -7,10 +7,13 @@ Danh sách hũ là dữ liệu đầu vào của test, không nằm trong mã s�
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from yofina_agent.clarify import missing_slot, resolve_clarify
 from yofina_agent.fallback import classify_by_rules
 from yofina_agent.jars import resolve_jar
+from yofina_agent.textutil import parse_goal_date
 from yofina_agent.whatif import deterministic_spec, validate_spec
 
 JARS = [
@@ -160,3 +163,67 @@ def test_thieu_du_kien_thi_de_luong_chinh_hoi_lai_khong_doan():
 )
 def test_cau_ngoai_pham_vi_hoac_chao_hoi_khong_bi_nhan_nham(text):
     assert classify_by_rules(text) is None
+
+# --- lộ trình có mục tiêu (số tiền + tên hũ + hạn) -------------------------------------------------------------
+TODAY = date(2026, 11, 21)  # ngày mô phỏng của test
+
+
+@pytest.mark.parametrize(
+    ("text", "amount", "jar", "date_text", "target_date"),
+    [
+        (
+            "Lập giúp mình lộ trình gom đủ 1 tỷ đồng trong hũ Du lịch trước cuối tháng này",
+            1_000_000_000,
+            "du_lich",
+            "cuối tháng này",
+            date(2026, 11, 30),
+        ),
+        (
+            "Lộ trình để dành 20 triệu cho hũ Du lịch trong 6 tháng nữa",
+            20_000_000,
+            "du_lich",
+            "6 tháng nữa",
+            date(2027, 5, 21),
+        ),
+        ("lộ trình gom 5tr từ Dự phòng tới 31/12", 5_000_000, "du_phong", "31/12", date(2026, 12, 31)),
+        (
+            "lập lộ trình hũ Du lịch cuối tháng sau đủ 3 triệu",
+            3_000_000,
+            "du_lich",
+            "cuối tháng sau",
+            date(2026, 12, 31),
+        ),
+    ],
+)
+def test_lo_trinh_co_muc_tieu_trich_nhu_router(text, amount, jar, date_text, target_date):
+    r = classify_by_rules(text)
+    assert r is not None and r.intent == "roadmap", (text, r)
+    p = r.params
+    assert (p.roadmap_action, p.amount_vnd, p.date_text) == ("create", amount, date_text)
+    assert p.from_jar_text is None and p.to_jar_text is None
+    # tên hũ vẫn ánh xạ bằng dữ liệu; cụm hạn đổi ra ngày bằng đúng tiện ích handler dùng
+    assert resolve_jar(p.jar_text, JARS).code == jar
+    assert parse_goal_date(p.date_text, TODAY) == target_date
+    assert resolve_clarify(r) is None  # lộ trình không bao giờ hỏi lại
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Lộ trình gom 5 triệu hũ Du lịch",  # thiếu hạn
+        "lập lộ trình hũ Du lịch cuối tháng sau",  # thiếu số tiền
+        "lộ trình gom 5 triệu trước cuối năm",  # thiếu hũ
+        "lộ trình gom 1.5 triệu ở hũ Du lịch",  # 1.5 là số tiền, không phải ngày 1/5
+        "xem lộ trình của mình",
+    ],
+)
+def test_lo_trinh_thieu_du_kien_muc_tieu_thi_chi_xem(text):
+    r = classify_by_rules(text)
+    assert r is not None and r.intent == "roadmap"
+    assert r.params.roadmap_action == "view"
+    assert (r.params.amount_vnd, r.params.jar_text, r.params.date_text) == (None, None, None)
+
+
+def test_lo_trinh_vay_van_ngoai_pham_vi_du_co_muc_tieu():
+    r = classify_by_rules("lộ trình vay 5 triệu cho hũ Du lịch trước cuối tháng này")
+    assert r is not None and r.intent == "out_of_scope"

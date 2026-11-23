@@ -764,18 +764,12 @@ async def _emit_options(turn: Turn, checked: list[tuple[Any, SuitabilityVerdict]
         turn.emit_block(b)
 
 
-#: Notice của đường suy giảm khi vẫn còn phương án đã kiểm (chưa có trong `notices` vì việc này chỉ được sửa whatif.py).
-VERIFIER_FAILED_OPTIONS_ONLY: tuple[str, str] = (
-    "Chưa có lời giải thích",
-    "Mình chưa kiểm chứng được phần giải thích, nên chỉ hiện số liệu và các phương án đã qua kiểm tra luật.",
+#: Phương án dựng bằng mã cho đường suy giảm của khoản chi (không chi tiền ngay, không số liệu trong chữ; chữ ở
+#: `notices.SAFE_OPTION_TEXTS`). Vẫn phải qua `check_suitability` như phương án của Analyst; bị chặn thì không phát.
+SAFE_OPTIONS: tuple[dict[str, str], ...] = tuple(
+    {"option_id": f"safe_{kind}", "kind": kind, "label": label, "summary": summary}
+    for kind, (label, summary) in notices.SAFE_OPTION_TEXTS.items()
 )
-
-#: Phương án dựng bằng mã cho đường suy giảm của khoản chi (không chi tiền ngay, không số liệu trong chữ). Vẫn phải qua
-#: `check_suitability` như phương án của Analyst; bị chặn thì không phát.
-SAFE_OPTIONS: tuple[dict[str, str], ...] = (
-    {"option_id": "safe_skip", "kind": "skip", "label": "Chưa mua lúc này", "summary": "Giữ nguyên số dư các hũ, không phát sinh khoản chi hay khoản phải trả mới."},
-    {"option_id": "safe_defer", "kind": "defer", "label": "Hoãn tới sau kỳ lương", "summary": "Xem lại khoản này sau kỳ lương tới thay vì quyết định ngay bây giờ."},
-)  # fmt: skip
 
 
 def safe_option_candidates(taken_kinds: set[str]) -> list[AnalysisOption]:
@@ -815,7 +809,7 @@ async def _compose_degraded(
         if not await _output_allowed(turn, [f"{o.label}. {o.summary}" for o, _ in picked], st):
             return
         await _emit_options(turn, picked, st)
-        t, m = VERIFIER_FAILED_OPTIONS_ONLY
+        t, m = notices.VERIFIER_FAILED_OPTIONS_ONLY
         turn.emit_notice(kind="degraded", code=None, title=t, message=m, retryable=False, degraded_reason="verifier_failed")
 
 

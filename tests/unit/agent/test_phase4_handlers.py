@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import date
 from typing import get_args
 
 import pytest
@@ -12,6 +11,7 @@ from agent_helpers import (
     FakeRecords,
     FakeTools,
     FakeWriter,
+    agent_settings,
     blocks_of,
     check_agui_order,
     fixture,
@@ -31,7 +31,6 @@ from yofina_agent.turn import (
     _GOAL_NOT_SAVING,
     _GOAL_UNKNOWN_JAR,
     Turn,
-    _roadmap_goal_date,
 )
 from yofina_agent.writer import build_writer_prompt
 
@@ -306,32 +305,6 @@ def texts_of(events):
 
 
 @pytest.mark.parametrize(
-    "text, expected",
-    [
-        ("cuối tháng này", date(2026, 11, 30)),
-        ("trước cuối tháng này", date(2026, 11, 30)),
-        ("cuối tháng sau", date(2026, 12, 31)),
-        ("31/12", date(2026, 12, 31)),
-        ("15/3", date(2027, 3, 15)),
-        ("20/11", date(2027, 11, 20)),  # không có năm và đã qua: năm sau
-        ("15/01/2027", date(2027, 1, 15)),
-        ("ngày 5 tháng 1 năm 2027", date(2027, 1, 5)),
-        ("6 tháng nữa", date(2027, 5, 21)),
-        ("2 tuần nữa", date(2026, 12, 5)),
-        ("tháng 3 năm sau", date(2027, 3, 31)),
-        ("cuối tháng 12 năm sau", date(2027, 12, 31)),
-        ("cuối năm", date(2026, 12, 31)),
-        ("2027-02-28", date(2027, 2, 28)),
-        ("20/11/2026", None),  # đã qua
-        ("31/02", None),
-        ("sớm nhất có thể", None),
-    ],
-)
-def test_doi_han_muc_tieu_theo_ngay_mo_phong(text, expected):
-    assert _roadmap_goal_date(text, date(2026, 11, 21)) == expected
-
-
-@pytest.mark.parametrize(
     "action, latest, reason",
     [("create", "error_not_found", "initial"), (None, "ok", "user_request")],
 )
@@ -374,6 +347,23 @@ def test_lo_trinh_nhan_muc_tieu_trong_cau_va_khoi_infeasible(monkeypatch, action
         "target_day_month_text": "30/11",
     }
     assert texts_of(events) == ["Mục tiêu 1 tỷ cho hũ Du lịch trước 30/11/2026 chưa khả thi."]
+
+
+def test_router_hong_luat_du_phong_van_nhan_muc_tieu_lo_trinh(monkeypatch):
+    """Router trả JSON sai schema: luật dự phòng trích số tiền, hũ, hạn của câu như router nên `optimize_allocation` nhận đúng mục tiêu."""
+    tools = roadmap_tools(allocation="ok_infeasible")
+    llm = make_llm(
+        [tool_response("route", {"intent": "khong_co"}), tool_response("draft_roadmap", review_outline())]
+    )
+    events, _, _ = run_turn(
+        GOAL_QUESTION, llm=llm, tools=tools, monkeypatch=monkeypatch,
+        settings=agent_settings(router_max_attempts=1),
+    )  # fmt: skip
+    check_agui_order(events)
+    assert calls_of(tools, "optimize_allocation") == [
+        {"goals": [{"jar": "du_lich", "target_vnd": 1_000_000_000, "target_date": "2026-11-30"}]}
+    ]
+    assert blocks_of(events)[0]["type"] == "roadmap"
 
 
 @pytest.mark.parametrize(

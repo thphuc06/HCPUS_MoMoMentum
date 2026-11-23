@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 
 from yofina_agent.schemas import IntentParams, IntentResult
-from yofina_agent.textutil import match_shock_id, normalize, parse_amount_vnd
+from yofina_agent.textutil import goal_date_phrase, match_shock_id, normalize, parse_amount_vnd
 
 _BALANCE = ("so du", "con bao nhieu", "con lai bao nhieu", "cac hu", "hu cua minh", "tong tien")
 _TRANSACTIONS = ("giao dich", "lich su", "da tieu", "chi tieu gan day", "chi gan day", "vua tieu")
@@ -176,6 +176,20 @@ def _spend_params(
     }
 
 
+def _roadmap_goal(text: str, amount: int | None) -> dict[str, object] | None:
+    """Mục tiêu lộ trình người dùng nói, trích như router: số tiền (amount_vnd), tên hũ (jar_text), cụm chỉ hạn giữ nguyên chữ gõ
+    (date_text, đọc bằng `textutil.goal_date_phrase`; handler đổi ra ngày theo ngày mô phỏng). Thiếu một trong ba thì None (không đoán).
+
+    Tên hũ tìm trong câu đã bỏ cụm chỉ hạn, để "hũ Du lịch cuối tháng" không thành hũ "du lich cuoi".
+    """
+    if amount is None or (date_text := goal_date_phrase(text)) is None:
+        return None
+    jar = _jar_phrase(normalize(text.replace(date_text, " ", 1)))
+    if jar is None:
+        return None
+    return {"roadmap_action": "create", "amount_vnd": amount, "jar_text": jar, "date_text": date_text}
+
+
 def _result(intent: str, **params: object) -> IntentResult:
     return IntentResult(
         intent=intent,  # type: ignore[arg-type]
@@ -199,6 +213,9 @@ def classify_by_rules(text: str) -> IntentResult | None:
     roadmap = _has(norm, _ROADMAP)
     if roadmap and (invest or _has(norm, _ROADMAP_OUT_OF_SCOPE)):
         return _result("out_of_scope")
+    # lộ trình có mục tiêu ("gom đủ 1 tỷ trong hũ Du lịch trước cuối tháng này"): xét trước kiểm tra chi tiêu, vì "đủ tiền" cũng khớp luật đó
+    if roadmap and not _WHAT_IF.search(norm) and (goal := _roadmap_goal(text, amount)) is not None:
+        return _result("roadmap", **goal)
     if _WHAT_IF.search(norm) and not invest:
         if moves and amount is not None and (m := _FROM_TO.search(norm) or _TO_FROM.search(norm)):
             src, dst = (" ".join(_take_words(m[k].split(), 4)) or None for k in ("src", "dst"))

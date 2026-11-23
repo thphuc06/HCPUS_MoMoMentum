@@ -26,6 +26,7 @@ from agent_helpers import (
     tool_response,
 )
 from test_whatif import ROUTE_WHAT_IF, block_types, call_names, result_of, text_of
+from yofina_agent import notices
 from yofina_agent.schemas import AnalysisOption
 from yofina_agent.tools import classify_result
 from yofina_agent.whatif import analyst_prompt, normalize_proposal
@@ -214,6 +215,7 @@ def test_phuong_an_chi_tien_tu_hu_khong_du_van_bi_chan(monkeypatch):
     opts = next(b for b in blocks if b["type"] == "options")["data"]["options"]
     # đường suy giảm: không phương án nào của model qua luật nên chỉ còn phương án dựng bằng mã (bỏ qua, hoãn), đã qua luật thật
     assert [o["kind"] for o in opts] == ["skip", "defer"] and all(o["status"] != "short" for o in opts)
+    assert [(o["label"], o["summary"]) for o in opts] == [notices.SAFE_OPTION_TEXTS["skip"], notices.SAFE_OPTION_TEXTS["defer"]]
     assert "move_between_jars" not in call_names(tools)
     model_props = [c["proposal"] for c in calls if c["proposal"]["kind"] in ("reduce_amount", "pay_now", "move_between_jars")]
     assert {p["jar_code"] for p in model_props} == {"giai_tri"}
@@ -237,3 +239,4 @@ def test_verifier_van_hong_thi_luot_van_co_options_tu_phuong_an_da_kiem(monkeypa
     assert text_of(events) == ""
     r = result_of(events)
     assert r["verifier_rounds"] == 2 and r["model_calls"] == 4
+    assert r["degraded"] is True  # đường dự phòng của Verifier là lượt suy giảm
