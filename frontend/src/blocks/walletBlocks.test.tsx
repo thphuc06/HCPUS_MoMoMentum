@@ -16,19 +16,14 @@ import { receiptNote } from './useConfirmFlow'
 
 type Json = Record<string, any>
 
-const PHASE4_UNREGISTERED: string[] = ['resilience_score', 'stress_result', 'roadmap', 'roadmap_diff', 'review_list']
-
-describe('registry: đủ mười sáu khối của hợp đồng', () => {
-  it('bốn khối phase 2, sáu khối phase 3 và hai khối phase 5 đã đăng ký, có schema; BLOCK_TYPES khớp ALL_BLOCK_TYPES', () => {
-    for (const t of ['forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action', 'affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions', 'ingest_review', 'coverage_change'] as const) {
+describe('registry: đủ hai mươi mốt khối của hợp đồng', () => {
+  it('tất cả khối đã đăng ký và có schema', () => {
+    for (const t of ALL_BLOCK_TYPES) {
       expect(REGISTERED_TYPES).toContain(t)
       expect(blockSchemas[t]).toBeDefined()
     }
-    // Phase 4 thêm năm khối vào hợp đồng (resilience_score, stress_result, roadmap, roadmap_diff, review_list) nhưng CHƯA có view:
-    // luồng D phase 4 đăng ký chúng rồi đưa hai con số dưới đây về 21 và đổi lại phép so sánh thành bằng nhau.
     expect(ALL_BLOCK_TYPES).toHaveLength(21)
-    expect(BLOCK_TYPES).toHaveLength(16)
-    expect([...BLOCK_TYPES].sort()).toEqual([...ALL_BLOCK_TYPES].filter((t) => !PHASE4_UNREGISTERED.includes(t)).sort())
+    expect(BLOCK_TYPES).toEqual(ALL_BLOCK_TYPES)
   })
 })
 

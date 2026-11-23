@@ -6,6 +6,9 @@ import { SimNote } from '@/components/SimNote'
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/StateViews'
 import { useOverview } from '@/api/OverviewProvider'
 import type { JarFull } from '@/api/schemas'
+import { ResilienceSection } from '@/features/resilience/ResilienceSection'
+import { UnclassifiedSummary } from '@/features/review/UnclassifiedSummary'
+import { useReview } from '@/features/review/useReview'
 import { CONFIDENCE_LABEL } from '@/lib/jar'
 import { formatDayMonth } from '@/lib/dates'
 import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd } from '@/lib/format'
@@ -23,9 +26,9 @@ export function sortByRisk(jars: readonly JarFull[]): JarFull[] {
   })
 }
 
-// Tab "Nhìn trước" (phase 2): hũ nào cạn trước, kèm chất lượng dự báo. Điểm chống chịu và kịch bản "nếu" là các phase sau.
 export function ForesightPage() {
   const ov = useOverview()
+  const review = useReview('daily_ask')
   const data = ov.data
   const f = data?.forecast
   return (
@@ -35,11 +38,14 @@ export function ForesightPage() {
         <p className="text-small text-ink-2">Hũ nào dự kiến cạn trước kỳ lương</p>
       </header>
 
+      <ResilienceSection />
+
       {ov.status === 'loading' && <ListSkeleton rows={4} label="Đang tải dự báo" />}
       {ov.status === 'error' && <ErrorState className="px-4" error={ov.error} title="Chưa tải được dự báo" onRetry={() => void ov.reload()} />}
 
       {data && (
         <div className="space-y-3 px-4 pb-8">
+          {review.status === 'ready' && <UnclassifiedSummary data={review.data.data} />}
           {data.next_payday && (
             <section className="rounded-card bg-surface p-4 shadow-card" aria-label="Kỳ lương kế tiếp" data-testid="next-payday">
               <p className="text-small text-ink-2">Kỳ lương kế tiếp</p>
@@ -100,8 +106,7 @@ export function ForesightPage() {
             </ul>
           )}
 
-          <p className="rounded-card bg-surface-2 px-4 py-3 text-small text-ink-2">Điểm chống chịu và kịch bản “nếu thì” sẽ có ở các phiên bản sau.</p>
-      <SimNote />
+          <SimNote />
         </div>
       )}
     </>
