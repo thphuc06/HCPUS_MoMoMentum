@@ -29,6 +29,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -56,7 +57,7 @@ from yofina_agent.fallback import classify_by_rules
 from yofina_agent.guardrail import Guardrail, GuardrailResult
 from yofina_agent.identity import Identity
 from yofina_agent.jars import JarMatch, resolve_jar
-from yofina_agent.roadmap_agent import build_roadmap
+from yofina_agent.roadmap_agent import UserGoal, build_roadmap
 from yofina_agent.router import merge_pending, pending_params, route
 from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, Intent, IntentParams, IntentResult, Verdict
 from yofina_agent.settings import AgentSettings
@@ -65,7 +66,7 @@ from yofina_agent.store import (
     TurnRecordStore,
     UnconfiguredTurnRecordStore,
 )
-from yofina_agent.textutil import match_shock_id, normalize, parse_amount_vnd
+from yofina_agent.textutil import match_shock_id, normalize, parse_amount_vnd, strip_accents
 from yofina_agent.tools import (
     ContractMismatch,
     GatewayTools,
@@ -84,7 +85,7 @@ from yofina_agent.verifier import Allowed, NumericGrounding
 from yofina_agent.whatif import WhatIfState, run_what_if
 from yofina_agent.writer import PHASE4_TASKS, check_grounding, has_ungrounded_numbers, write_stream
 from yofina_core import blocks as B
-from yofina_core.clock import app_timezone
+from yofina_core.clock import app_timezone, payday_in_month
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
 from yofina_core.money import format_vnd, format_vnd_short
@@ -993,7 +994,9 @@ class Turn:
         await self.write("stress", question, res.compact)
 
     async def on_roadmap(self, r: IntentResult, question: str) -> None:
-        create = r.params.roadmap_action == "create"
+        # Người dùng nói mục tiêu trong câu: lập lộ trình theo mục tiêu đó (roadmap không bao giờ hỏi lại).
+        goal = await self.roadmap_user_goal(r.params)
+        create = r.params.roadmap_action == "create" or goal is not None
         which = "latest" if create else self.s.roadmap_default_which
         res = await self.call_tool_retry(
             "get_roadmap",
@@ -1005,21 +1008,73 @@ class Turn:
         )
         if res.outcome.code == ErrorCode.ROADMAP_NOT_FOUND.value:
             latest = res.outcome if which == "latest" else None
-            await self.on_roadmap_missing(r, question, latest_outcome=latest)
+            await self.on_roadmap_missing(r, question, latest_outcome=latest, user_goal=goal)
             return
         if not res.outcome.ok:
             self.tool_failure(res.outcome)
             return
         if create:
-            await self.generate_roadmap("user_request", question, latest_outcome=res.outcome)
+            await self.generate_roadmap(
+                "user_request", question, latest_outcome=res.outcome, user_goal=goal
+            )
             return
         assert res.compact is not None
         await self.write("roadmap", question, res.compact)
 
+    async def roadmap_user_goal(self, p: IntentParams) -> UserGoal | None:
+        """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text) ra mã hũ và ngày ISO bằng mã. Chỉ nhận hũ kind `saving`.
+
+        Không dùng được thì bỏ mục tiêu và nói rõ bằng một câu cố định (không hỏi lại). Không lưu gì vào hũ.
+        """
+        if p.amount_vnd is None and not p.date_text:
+            return None
+        jars = await self.ensure_jars()
+        if not jars.outcome.ok:
+            return None  # build_roadmap đọc lại hũ và báo lỗi của tool
+        match = resolve_jar(p.jar_text, self._jar_rows)
+        if match.status != "ok":
+            note = (
+                _GOAL_NO_JAR
+                if match.status == "empty"
+                else _GOAL_UNKNOWN_JAR.format(typed=(p.jar_text or "")[:40])
+            )
+            await self.emit_fixed_text(note)
+            return None
+        row = next(j for j in self._jar_rows if j["code"] == match.code)
+        name = str(row["name"])
+        if row.get("kind") != "saving":
+            await self.emit_fixed_text(_GOAL_NOT_SAVING.format(name=name))
+            return None
+        target_date: date | None = None
+        if p.date_text:
+            today = self.app_date or self.block_app_date()
+            target_date = _roadmap_goal_date(p.date_text, today)
+            if target_date is None:
+                await self.emit_fixed_text(
+                    _GOAL_BAD_DATE.format(typed=p.date_text[:40], name=name)
+                )
+                if p.amount_vnd is None:
+                    return None
+        if p.amount_vnd is None and row.get("goal_vnd") is None:
+            await self.emit_fixed_text(_GOAL_NO_AMOUNT.format(name=name))
+            return None
+        return UserGoal(
+            jar=str(match.code),
+            target_vnd=p.amount_vnd,
+            target_date=target_date.isoformat() if target_date else None,
+        )
+
     async def on_roadmap_missing(
-        self, r: IntentResult, question: str, *, latest_outcome: ToolOutcome | None = None
+        self,
+        r: IntentResult,
+        question: str,
+        *,
+        latest_outcome: ToolOutcome | None = None,
+        user_goal: UserGoal | None = None,
     ) -> None:
-        await self.generate_roadmap("initial", question, latest_outcome=latest_outcome)
+        await self.generate_roadmap(
+            "initial", question, latest_outcome=latest_outcome, user_goal=user_goal
+        )
 
     async def generate_roadmap(
         self,
@@ -1029,10 +1084,15 @@ class Turn:
         behavior_flag_id: str | None = None,
         shock_id: str | None = None,
         latest_outcome: ToolOutcome | None = None,
+        user_goal: UserGoal | None = None,
     ) -> None:
         await self.ensure_llm()
+        # Lượt đã đọc hũ (đổi mục tiêu sang mã hũ): build_roadmap dùng lại lần đọc đó, không tốn thêm tool call.
+        cached_jars = self._jars.outcome if self._jars is not None and self._jars.outcome.ok else None
 
         async def call(short_name: str, args: dict[str, Any], target: str) -> ToolOutcome:
+            if short_name == "get_jar_balances" and cached_jars is not None:
+                return cached_jars
             if self.tool_calls >= self.s.max_tool_calls_per_turn:
                 return ToolOutcome(
                     self.s.tool(short_name, target=target), ToolKind.UNAVAILABLE,
@@ -1052,8 +1112,10 @@ class Turn:
             result = await build_roadmap(
                 call, None if self.llm_down else self.llm, self.s, self.scope,
                 reason_code=reason_code, behavior_flag_id=behavior_flag_id, shock_id=shock_id,
-                on_stage=on_stage, tool_calls_left=self.s.max_tool_calls_per_turn - self.tool_calls,
-                latest_outcome=latest_outcome,
+                on_stage=on_stage,
+                # lần đọc hũ dùng lại không tính vào trần, nên ngân sách bước bằng lượt không đọc hũ trước
+                tool_calls_left=self.s.max_tool_calls_per_turn - self.tool_calls + int(cached_jars is not None),
+                latest_outcome=latest_outcome, user_goal=user_goal,
             )
         self.suitability.extend(result.suitability)
         if result.model_error is not None:
@@ -1081,7 +1143,10 @@ class Turn:
             return
         self.verified = True
         self.emit_block(block)
-        await self.write("roadmap", question, compact_roadmap(result.outcome.payload or {}))
+        compact = compact_roadmap(result.outcome.payload or {})
+        if user_goal is not None:
+            compact["user_goal"] = _user_goal_compact(user_goal, self._jar_rows)
+        await self.write("roadmap", question, compact)
 
     # --- what-if và kiểm tra trước khi quẹt -------------------------------------------------
     async def on_what_if(self, r: IntentResult, question: str) -> None:
@@ -1327,6 +1392,104 @@ def _forecast_basis(payload: Mapping[str, Any] | None) -> dict[str, Any] | None:
         "coverage": d["coverage"],
         "stale": d["stale"],
     }
+
+
+# --- mục tiêu người dùng nói khi lập lộ trình (chỉ handler roadmap dùng) -----------------------------
+_GOAL_NO_JAR = "Bạn chưa nói mục tiêu này thuộc hũ nào nên mình lập lộ trình theo các mục tiêu đã khai ở hũ."
+_GOAL_UNKNOWN_JAR = "Mình chưa tìm thấy hũ “{typed}” nên lập lộ trình theo các mục tiêu đã khai ở hũ."
+_GOAL_NOT_SAVING = (
+    "Hũ {name} không phải hũ tiết kiệm nên mình không đặt mục tiêu này cho hũ đó. "
+    "Lộ trình bên dưới dùng các mục tiêu đã khai ở hũ tiết kiệm."
+)
+_GOAL_BAD_DATE = "Mình chưa đọc được hạn “{typed}” nên dùng hạn đã khai ở hũ {name}, nếu có."
+_GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa đặt hạn này. Bạn cho mình biết số tiền muốn gom nhé."
+
+_ISO_DATE_RE = re.compile(r"(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)")
+_DMY_RE = re.compile(r"(?<![\d/.\-])(\d{1,2})[/.\-](\d{1,2})(?:[/.\-](\d{4}|\d{2}))?(?![\d/.\-])")
+_YEAR = r"(?: nam (\d{4}|nay|sau|toi))?"
+_DAY_MONTH_RE = re.compile(rf"\bngay (\d{{1,2}}) thang (\d{{1,2}}){_YEAR}\b")
+_OFFSET_RE = re.compile(r"(?<!thang )(?<!ngay )\b(\d{1,3}) (ngay|tuan|thang|nam) (?:nua|toi|sau)\b")
+_END_OF_MONTH_N_RE = re.compile(rf"\b(?:cuoi|het) thang (\d{{1,2}}){_YEAR}\b")
+_MONTH_N_RE = re.compile(rf"\bthang (\d{{1,2}}){_YEAR}\b")
+
+
+def _add_months(day: date, months: int) -> date:
+    year, month = divmod(day.year * 12 + day.month - 1 + months, 12)
+    return payday_in_month(day.day, year, month + 1)
+
+
+def _month_end(year: int, month: int) -> date:
+    return payday_in_month(31, year, month)
+
+
+def _roadmap_goal_date(text: str, today: date) -> date | None:
+    """Hạn mục tiêu người dùng nói ("cuối tháng này", "31/12", "6 tháng nữa", "tháng 3 năm sau") -> ngày, tính theo ngày mô phỏng `today`.
+
+    Chỉ nhận cách nói rõ ràng; không đọc được hoặc ngày không sau hôm nay thì None (handler nói rõ, không đoán).
+    """
+    raw, words = strip_accents(text), normalize(text)
+
+    def year_of(token: str | None) -> int | None:
+        if token is None:
+            return None
+        if token == "nay":
+            return today.year
+        if token in ("sau", "toi"):
+            return today.year + 1
+        return int(token) + (2000 if len(token) == 2 else 0)
+
+    def on_or_next_year(make: Callable[[int], date], year: int | None) -> date:
+        found = make(year if year is not None else today.year)
+        return make(today.year + 1) if year is None and found <= today else found
+
+    try:
+        if m := _ISO_DATE_RE.search(raw):
+            found = date(int(m[1]), int(m[2]), int(m[3]))
+        elif m := _DMY_RE.search(raw) or _DAY_MONTH_RE.search(words):
+            d, mo = int(m[1]), int(m[2])
+            found = on_or_next_year(lambda y: date(y, mo, d), year_of(m[3]))
+        elif m := _OFFSET_RE.search(words):
+            n, unit = int(m[1]), m[2]
+            found = (
+                today + timedelta(days=n * (7 if unit == "tuan" else 1))
+                if unit in ("ngay", "tuan")
+                else _add_months(today, n * (12 if unit == "nam" else 1))
+            )
+        elif m := _END_OF_MONTH_N_RE.search(words) or _MONTH_N_RE.search(words):
+            mo = int(m[1])
+            found = on_or_next_year(lambda y: _month_end(y, mo), year_of(m[2]))
+        elif re.search(r"\b(?:cuoi|het) thang (?:sau|toi)\b", words) or re.search(
+            r"\bthang (?:sau|toi)\b", words
+        ):
+            year, month = divmod(today.year * 12 + today.month, 12)  # tháng kế tiếp (0-based)
+            found = _month_end(year, month + 1)
+        elif re.search(r"\b(?:cuoi|het) thang\b", words):
+            found = _month_end(today.year, today.month)
+        elif re.search(r"\b(?:cuoi|het) nam (?:sau|toi)\b", words) or re.search(
+            r"\bnam (?:sau|toi)\b", words
+        ):
+            found = date(today.year + 1, 12, 31)
+        elif re.search(r"\b(?:cuoi|het) nam\b", words):
+            found = date(today.year, 12, 31)
+        else:
+            return None
+    except ValueError:  # 31/02, tháng 13...
+        return None
+    return found if found > today else None
+
+
+def _user_goal_compact(goal: UserGoal, jar_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mục tiêu người dùng nói, cho model viết câu trả lời (số và ngày đúng dạng để kiểm căn cứ)."""
+    name = next((str(j["name"]) for j in jar_rows if j["code"] == goal.jar), goal.jar)
+    out: dict[str, Any] = {"jar": name}
+    if goal.target_vnd is not None:
+        out["target_text"] = format_vnd(goal.target_vnd)
+        out["target_short_text"] = format_vnd_short(goal.target_vnd)
+    if goal.target_date is not None:
+        when = date.fromisoformat(goal.target_date)
+        out["target_date_text"] = f"{when.day:02d}/{when.month:02d}/{when.year}"
+        out["target_day_month_text"] = f"{when.day:02d}/{when.month:02d}"
+    return out
 
 
 def _match_obligation(name: str, payload: Mapping[str, Any] | None) -> Mapping[str, Any] | None:

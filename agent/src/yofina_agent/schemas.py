@@ -112,7 +112,9 @@ class IntentParams(_Model):
     # what_if: người dùng vừa trả lời câu "vẫn giữ khoản trước để tính gộp không": true giữ, false bỏ, null khi không có câu hỏi đó
     keep_previous: bool | None = None
     shock_id: str | None = None  # stress: handler kiểm mã theo cấu hình cú sốc
-    roadmap_action: Literal["view", "create"] | None = None  # roadmap: xem hoặc lập/lập lại
+    # roadmap: xem hoặc lập/lập lại. Mục tiêu người dùng nói dùng lại amount_vnd (số tiền mục tiêu), jar_text (hũ, giữ chữ họ gõ)
+    # và date_text (cụm chỉ hạn họ nói, ví dụ "cuối tháng này"); handler đổi hũ và ngày bằng mã.
+    roadmap_action: Literal["view", "create"] | None = None
 
 
 class IntentResult(_Model):
@@ -172,6 +174,11 @@ class IntentResult(_Model):
                 p.jar_text = p.from_jar_text
             if p.label is None and p.to_jar_text:
                 p.label = p.to_jar_text[:80]
+            p.from_jar_text = p.to_jar_text = None
+        if self.intent == "roadmap" and (p.from_jar_text or p.to_jar_text):
+            # "gom đủ 1 tỷ trong hũ Du lịch": model nhỏ hay coi hũ mục tiêu là hũ đích. Lộ trình chỉ có MỘT hũ mục tiêu (jar_text).
+            if p.jar_text is None:
+                p.jar_text = p.to_jar_text or p.from_jar_text
             p.from_jar_text = p.to_jar_text = None
         if self.needs_clarification != (self.clarify is not None):
             raise ValueError("needs_clarification đúng khi và chỉ khi có `clarify`")
