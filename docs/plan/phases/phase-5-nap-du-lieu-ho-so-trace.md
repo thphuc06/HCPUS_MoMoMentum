@@ -175,20 +175,33 @@ Có 0 ảnh `needs_human`. Các chỗ lệch đã xem lại và giữ nhãn cũ:
 
 **Lượt eval** (`uv run scripts/eval_ingest.py --set real`, 24/11 14:26, `AWS_REGION=ap-southeast-1`, `YOFINA_USAGE_TABLE=yofina-usage`, 25 mục, 0 lỗi chạy). Lần gọi đầu thiếu biến Region nên dừng ở bước tạo client Bedrock (0,01 giây mỗi mục, chưa gọi model). Kết quả rỗng của lần đó đã xóa và lượt trên là lượt Bedrock duy nhất. Lượt 22/11 không còn file kết quả nên không so được từng ảnh.
 
-| Chỉ số (ảnh thật) | 22/11, nhãn agent chưa duyệt | 24/11, sau kiểm mù |
-|---|---|---|
-| Số tiền đúng | 22/25 (88%) | 18/25 (72%) |
-| Ngày đúng | 16/21 (76%) | 12/21 (57%) |
-| Đối tác đúng | không ghi | 9/10 (90%) |
-| Nội dung đúng | không ghi | 3/11 (27%) |
-| **Đủ 4 trường trên ảnh đọc được** | **7/12 (58%)** | **7/12 (58%)**, chưa đạt 9/10 |
-| Tỷ lệ dòng vào hàng chờ duyệt | 22/23 (96%) | 16/18 (89%) |
-| Màn chưa thực hiện không tự thêm | 8/8 | 8/8 |
-| Không lộ PII | 10/10 | 10/10 (bộ đo có lỗ hổng, xem bên dưới) |
-| Báo `not_financial` đúng | 1/5 | 1/5 |
-| Trùng lặp được đánh dấu | 0% | 0/1 (eval không DB) |
+| Chỉ số (ảnh thật) | 22/11, nhãn agent chưa duyệt | 24/11, sau kiểm mù | 24/11 tối, sau `p5/fix-ingest2` (prompt ảnh, bộ đo leaks, chấm mã lỗi) |
+|---|---|---|---|
+| Số tiền đúng | 22/25 (88%) | 18/25 (72%) | 22/25 (88%) |
+| Ngày đúng | 16/21 (76%) | 12/21 (57%) | 15/21 (71%) |
+| Đối tác đúng | không ghi | 9/10 (90%) | 9/10 (90%) |
+| Nội dung đúng | không ghi | 3/11 (27%) | 9/11 (82%) |
+| Chiều tiền đúng | không ghi | 17/25 (68%) | 22/25 (88%) |
+| **Đủ 4 trường trên ảnh đọc được** | **7/12 (58%)** | **7/12 (58%)**, chưa đạt 9/10 | **7/12 (58%)**, vẫn chưa đạt 9/10 |
+| Tỷ lệ dòng vào hàng chờ duyệt | 22/23 (96%) | 16/18 (89%) | 23/23 (100%) |
+| Màn chưa thực hiện không tự thêm | 8/8 | 8/8 | 8/8 |
+| Không lộ PII | 10/10 | 10/10 (bộ đo có lỗ hổng, xem bên dưới) | 10/10 (bộ đo đã tách theo token) |
+| Báo `not_financial` đúng | 1/5 | 1/5 | 5/5 (chấm theo mã API: `no_transactions` và `not_financial` cùng ra `INGEST_NOT_FINANCIAL`) |
+| Trùng lặp được đánh dấu | 0% | 0/1 (eval không DB) | 0/1 (eval không DB; khử trùng thật đo trên `giamkhao3`, xem "Kiểm lại sau sửa lần 2") |
 
-Đạt đủ bốn trường: r01, r02, r03, r07, r10, r13, r20. Năm ảnh trượt:
+**Đo lại 24/11 tối** (`uv run scripts/eval_ingest.py --set real`, 16:43 giờ Việt Nam, `AWS_REGION=ap-southeast-1`, `YOFINA_USAGE_TABLE=yofina-usage`, backend import cục bộ `yofina_ingest.extract` như lượt 14:26, một lượt Bedrock, 25 mục, 0 lỗi chạy, không throttling). Lượt này in 14 dòng `embedding_degraded: AllModelsFailed` (embedding Cohere của bước gắn hũ, chạy trong tiến trình cục bộ; không ảnh hưởng bốn trường). So từng ảnh với file kết quả 14:26 (hai file chỉ có cờ đúng/sai, không có giá trị):
+
+| Ảnh | 14:26 | Tối 24/11 | Ghi chú |
+|---|---|---|---|
+| r08 | 0/1 dòng, `no_transactions` | 0/1 dòng, `no_transactions` | Luật mới của prompt (màn có số tham chiếu là đã thực hiện) chưa đổi được kết quả |
+| r12 | dòng 2 sai ngày, dòng 3 sai nội dung | dòng 2 sai ngày; nội dung dòng 3 nay đúng | Vẫn trượt đủ 4 trường vì ngày dòng 2 trên ảnh mờ |
+| r14 | 0/1 dòng, `no_transactions` | như cũ | Nhãn chưa chốt (câu hỏi 1) |
+| r15 | 5/10 dòng, 2 dòng sai chiều | 10/10 dòng; ngày 8/10, số tiền 9/10, chiều 9/10, nội dung 8/9 | Rút ATM nay được trích đủ. Dòng 9 sai cả bốn giá trị (có thể ghép nhầm dòng), dòng 8 sai ngày |
+| r24 | sai ngày dòng Gojek | như cũ | |
+
+Đạt đủ bốn trường vẫn là bảy ảnh cũ (r01, r02, r03, r07, r10, r13, r20). Các chỉ số từng trường tăng chủ yếu nhờ r15, nhưng tiêu chí 3 (9/10) chưa đạt.
+
+Lượt 14:26 (phân tích dưới đây là của lượt này): đạt đủ bốn trường: r01, r02, r03, r07, r10, r13, r20. Năm ảnh trượt:
 
 | Ảnh | Trượt ở | Nguyên nhân |
 |---|---|---|
@@ -239,7 +252,7 @@ Cả ba lượt lập mới đều xong trong 30 giây với một lượt plann
 |---|---|---|
 | 1 | Đạt (REST) | Làm trên `giamkhao3` (persona `vy`, như `test_ingest_live`), không làm trên `minh`. Nạp ảnh `s02_vcb_rent.png`. Tiến độ: `awaiting_upload` 0 lúc 0,4 giây, `processing` 15 lúc 4,6 giây, `review` 100 lúc 9,0 giây. Ra 1 dòng 1.500.000 ₫, độ tin cậy 0,98, `pending`, không có hũ đề xuất (manifest mong `hoa_don`); script chọn `an_uong`. Xin token qua `/ingest/confirmations` (xem trước: "Thêm 1 dòng ngoài ví vào lịch sử, số dư hũ không đổi") rồi chốt qua `/ingest/actions` (200). Độ phủ 0,664 lên 0,723 (Figma vẽ 62% lên 81%). Dự báo hũ Ăn uống được tính lại: `computed_at` từ 07:32:32Z sang 07:32:44Z, `coverage` từ 0,664 lên 0,723, `p_shortfall` từ 0,9942 lên 0,9957. Số dư hũ không đổi. Trên `minh`, ba ca golden `ingest-status`, `ingest-start`, `ingest-coverage` đạt 3/3. Màn Chi tiết hũ chưa xem trên trình duyệt |
 | 2 | Đạt (REST) | Nạp lại cùng ảnh: `rejected` sau 2,5 giây, `INGEST_DUPLICATE_FILE` ("Tệp này đã được nạp rồi (cùng nội dung)."). Ảnh mèo `s25` và ảnh ghi chú `s26`: `rejected` sau 4,5 giây, `INGEST_NOT_FINANCIAL` ("Ảnh này không giống biên lai, tin nhắn hay lịch sử giao dịch nên mình không đọc được khoản nào.") |
-| 3 | Đang đánh giá lại nhãn (worker khác làm, xem mục "Tiêu chí 3" ở trên) | Phần CSV: `c01_vcb_50.csv` cho `rows_total` 50, đúng 50/50 dòng; tập số tiền khớp manifest 50/50. Trạng thái: 36 `auto_added`, 7 `pending`, 7 `duplicate`. Một dòng trùng là khoản tiền phòng 1.500.000 ₫ của ảnh `s02` vừa chốt. Sáu dòng trùng với giao dịch ví sẵn có của `vy` (Circle K, Grab, Highlands, Phúc Long, Be): cần xem có phải trùng giả không |
+| 3 | **Chưa đạt** (đo lại 24/11 tối: đủ 4 trường 7/12, cần 9/10; xem mục "Tiêu chí 3"). Lần đầu: đang đánh giá lại nhãn | Phần CSV: `c01_vcb_50.csv` cho `rows_total` 50, đúng 50/50 dòng; tập số tiền khớp manifest 50/50. Trạng thái: 36 `auto_added`, 7 `pending`, 7 `duplicate`. Một dòng trùng là khoản tiền phòng 1.500.000 ₫ của ảnh `s02` vừa chốt. Sáu dòng trùng với giao dịch ví sẵn có của `vy` (Circle K, Grab, Highlands, Phúc Long, Be): cần xem có phải trùng giả không |
 | 4 | Đạt ở DB và log Lambda; không có log model để đối chiếu | Adversarial 14/14: không tool ghi nào chạy từ nội dung tệp, `confirm_rows` không ra OK, không dòng nào tự thêm sai, PII của manifest (so bằng băm) không có trong câu trả lời, khối, tool hay dòng nạp. Ảnh `s19` có tên và số tài khoản người khác: dòng lưu có đối tác "P***", nội dung "chuyen tien hoc phi cho em", không còn số tài khoản. Log `/aws/lambda/yofina-ingest` của lượt nạp (35 sự kiện): chỉ có START/END/REPORT và `ingest_done`, 0 dãy số từ 8 chữ số, không có văn bản trích. Giới hạn: prompt không được ghi log và Bedrock model invocation logging đang tắt, nên việc văn bản đã che trước lời gọi model thứ hai (CSV: ánh xạ cột, gắn nhãn) chỉ thấy trong mã (`extract.py`: `_masked`, `mask_row_text`), không thấy trong log. Ảnh gốc gửi nguyên cho Sonnet vì không che được trước khi đọc |
 | 5 | **Đạt sau sửa** (kiểm lại chiều 24/11, Runtime v22, xem "Kiểm lại sau sửa"). Lần đầu: Không đạt | Lưu sở thích đạt: ca `memory-state-preference` OK, `GET /memory` có 2 bản ghi `preference` ("Không nhắc người dùng vào buổi sáng.", "… ưu tiên để dành tiền cho hũ Du lịch."). Dùng lại ở phiên mới trượt (`memory-reuse-new-session`, xem bảng evals). Xóa: `DELETE /memory/{record_id}` trả 200. `DELETE /memory` xóa hết bản ghi (sau 30 giây `GET /memory` còn 0) nhưng trả 500 (lỗi 2 bên dưới). Chưa kiểm bản tin có tôn trọng "đừng nhắc buổi sáng" không |
 | 6 | Đạt | `GET /profile/behavior` của `minh`: `ready`, 3 nhận xét. (a) "47 ngày qua bạn dùng Trả sau 2 lần, tổng 967.000 ₫, chiếm 14% chi tiêu." `GET /transactions` có đúng 2 dòng `funding_source = credit` trong cửa sổ 05/10–20/11: 520.000 ₫ ngày 09/11 và 447.000 ₫ ngày 16/11, tổng 967.000 ₫. Tỷ lệ 14% đối chiếu bằng SQL (app secret, RLS theo `minh`): 967.000 / 6.755.000 = 14,3%, mẫu số là chi không gắn nghĩa vụ, đúng định nghĩa của `ml/yofina_ml/behavior.py`. (b) "Cuối tuần bạn chi 37% tổng chi, dù cuối tuần chỉ chiếm 26% số ngày.": SQL ra 36,9% và 25,5%. (c) "7 ngày đầu sau ngày lương bạn chi 40% …". Golden behavior 4/4. `GET /nudges/today` trả đúng một việc: `runout_warning` hũ Ăn uống, hạng 1, điểm 2,714 trên ngưỡng 1,0, 5 ứng viên; 3 loại bị chặn (`obligation_due` dưới ngưỡng; `roadmap_proposed`, `behavior_insight` hạng thấp hơn) |
@@ -276,6 +289,28 @@ Worker Kiro (Claude Opus 5.5) do Claude Code điều phối, sau khi merge `p5/f
 Ghi nhận thêm (chưa chắc là lỗi): một bản tóm tắt phiên mới của `minh` hiện ở `GET /memory` vẫn có "Vào thời điểm [STK] (ước tính khoảng 2026-11-24, 08:43 UTC)", tức bộ che vẫn đổi một dãy số dấu thời gian thành `[STK]` ở dạng này; một bản sự thật được strategy viết bằng tiếng Anh. Bản ghi tạo sau `DELETE /memory` vài chục giây là do trích xuất bất đồng bộ của phiên vừa chạy (đã xóa lại sau khi trích xong).
 
 Sau kiểm lại: đã đặt lại `minh`, `khoa`, `giamkhao3`; bộ nhớ của cả 6 tài khoản demo còn 0 bản ghi. Aurora `yofina-db` min 0 / max 2 ACU, tự ngủ sau 600 giây. Bốn DLQ 0 tin. Log `yofina-ledger` và `yofina-ingest` không có dòng `ERROR` trong 50 phút kiểm.
+
+#### Kiểm lại sau sửa lần 2 (24/11 tối)
+
+Worker Kiro (Claude Opus 5.5) do Claude Code điều phối, sau khi merge `p5/fix-ingest2` và `p5/fix-agent2` (`main` c3016a2). Đã deploy lại: build lại zip ledger (`LEDGER_BUILD_COMMAND`), ingest, forecast, roadmap, classify (mỗi bản build đều có `yofina_core/pii.py` mới, kiểm bằng hàm `is_epoch_at`); `YofinaIngest` (diff chỉ đổi `Code.S3Key` hai Lambda); `YofinaTools` (diff chỉ đổi code 6 Lambda); `cdk diff YofinaAgent` không có khác biệt trước khi chạy `scripts/agent_deploy.py`; Runtime `yofina_agent` **v23** `READY` (kiểm bằng `get-agent-runtime`, 16:30). Không deploy frontend, không migration, không sửa code sản phẩm. Kiểm từ 16:31 tới 16:45 qua Runtime và REST bằng script tạm (không commit). Không lượt nào gặp `MODEL_BUDGET_EXCEEDED` hay throttling.
+
+| Mục kiểm | Kết quả | Dẫn chứng |
+|---|---|---|
+| What-if "Nếu mua tai nghe 1,2 triệu bằng Trả sau thì sao?" (`minh` vừa đặt lại, Runtime) | Nhãn "Đủ" sai không còn. Chưa thấy phương án hũ Giải trí trên màn ở cả hai lượt, nên chưa kiểm được nhãn hụt của nó | Câu trả lời cả hai lượt: hũ Nghĩa vụ chuyển từ đủ sang hụt, ngày 05/12 phải trả 2.200.000 ₫ mà hũ dự kiến có 1.450.000 ₫, thiếu 750.000 ₫; tỷ lệ nghĩa vụ trên thu nhập 60% so với ngưỡng 36%. **Lượt 1** (29,2 giây), ba phương án: "Mua bằng hũ Dự phòng" (`switch_jar`, `ok`, gợi ý; tóm tắt "Trả 1.200.000 ₫ bằng tiền hũ Dự phòng; hũ đang có 2.700.000 ₫, đủ cho khoản này."; `check_suitability` nhận `amount_vnd` 1.200.000); "Hoãn mua, nhắc lại sau ngày 05/12" (`ok`, kèm xác nhận `schedule_nudge` ngày 06/12); "Bù hụt từ hũ Dự phòng sang Nghĩa vụ" (`ok`, chuyển 750.000 ₫, Dự phòng 2.700.000 → 1.950.000 ₫, Nghĩa vụ 1.000.000 → 1.750.000 ₫). **Lượt 2** (23,9 giây, chạy thêm vì lượt 1 không có phương án hũ Giải trí): Analyst đề xuất `pay_now` 1.200.000 ₫ bằng hũ Giải trí (số dư 760.000 ₫); log Runtime ghi `verifier_retry` với `failed_rules: ["source_jar_covers"]`, lượt thử lại bỏ phương án đó. Ba phương án cuối: "Hoãn mua tai nghe" (`ok`, gợi ý; "Không mua lúc này, tránh hụt hũ Nghĩa vụ 750.000 ₫ vào ngày 05/12 và giữ tỷ lệ nghĩa vụ an toàn."), "Chuyển bù từ hũ Dự phòng sang Nghĩa vụ" (`ok`; "Chuyển 750.000 ₫ từ Dự phòng sang Nghĩa vụ để bù phần hụt 750.000 ₫ vào ngày 05/12, thay vì dùng Trả sau."), "Nhắc lại sau khi qua kỳ thanh toán" (`ok`) |
+| Golden `memory-reuse-new-session`, `memory-recall` (`--redo --min-interval 25`, một lần) | 1/2 | `memory-recall` OK (34,4 giây): NumericGrounding đạt, liệt kê ba mục không lặp ("Ưu tiên để dành tiền cho hũ Du lịch", "Không nhắc mình vào buổi sáng", "Người dùng đang cân nhắc mua tai nghe với giá [số tiền] bằng hình thức Trả sau."); mục thứ ba là bản ghi từ lượt what-if ở trên, viết ở ngôi thứ ba. `memory-reuse-new-session` **trượt** (42,6 giây, `khong_dung_so_thich:du_lich`): "Bạn đang có tổng số dư là 7.730.000 ₫ trên 7 hũ. Theo điều bạn đã dặn, hãy cân nhắc đưa vào hũ Dự phòng." Người dùng chưa từng dặn hũ Dự phòng. Bộ chờ của runner dừng khi có bản ghi mới đầu tiên (`new_records: 1` sau 31,2 giây); bản ghi trích bất đồng bộ từ hai lượt what-if (16:33, 16:34) có thể là bản ghi đó, tức lúc hỏi sở thích Du lịch có thể chưa trích xong. Lượt trả lời dùng Nova 2 Lite (`role: small`) sau `ledger___get_jar_balances` |
+| `GET /memory` của `minh` sau golden | `[STK]` không còn; còn lặp ý ở danh sách REST | 8 bản ghi: 3 tóm tắt phiên, 3 sự thật, 2 sở thích. Không bản nào còn `[STK]`. Dấu thời gian đã bị bỏ nhưng để lại mảnh câu rỗng: "Thời điểm: , ước tính khoảng 24/11/2026 (UTC)." và "Thời điểm: (mili giây).". Hai sở thích ("Ưu tiên để dành tiền cho hũ Du lịch", "Không nhắc mình vào buổi sáng") lặp ý với hai sự thật ("Người dùng muốn ưu tiên để dành tiền cho hũ Du lịch.", "Người dùng yêu cầu không nhắc nhở người dùng vào buổi sáng."). Khử trùng của `p5/fix-agent2` chỉ chạy khi agent đọc (câu kể ở trên không lặp); `GET /memory` của ledger chưa khử, như entry ai-log của nhánh đó đã ghi. `DELETE /memory`: 200, `deleted_records: 14`, `failed: 0`; sau 10 và 20 giây còn 0 |
+| Ingest `giamkhao3` vừa đặt lại: ảnh `s02` rồi CSV `c01` | Đạt | `s02` (14,3 giây): 1 dòng 1.500.000 ₫, đối tác "N***", hũ đề xuất Hóa đơn, chốt qua `/ingest/confirmations` và `/ingest/actions`, job `done`. `c01` (15,8 giây): 50/50 dòng, 37 `auto_added`, 12 `pending`, 1 `duplicate`. Dòng `duplicate` duy nhất là dòng 15 (1.500.000 ₫, "MBVCB.3765569.CK tien phong T11", đối tác "TIEN PHONG"), `duplicate_of` trỏ tới giao dịch vừa chốt của `s02`. Dòng 12 Highlands Coffee 45.000 ₫ là `auto_added`, không còn `duplicate` |
+| Eval OCR bộ real (một lượt) | Chưa đạt 9/10: đủ 4 trường 7/12 | Số tiền 22/25, ngày 15/21, đối tác 9/10, nội dung 9/11 (trước: 18/25, 12/21, 9/10, 3/11). r15 lên 10/10 dòng; r08, r14 vẫn `no_transactions`; r12, r24 vẫn sai ngày. Bảng đầy đủ ở mục "Tiêu chí 3" |
+| Vận hành sau kiểm | Đạt | Đã đặt lại `minh`, `giamkhao3`; bộ nhớ `minh` 0 bản ghi. Aurora `yofina-db` min 0 / max 2 ACU, tự ngủ sau 600 giây. Bốn DLQ 0 tin (kể cả đang xử lý). Log từ 16:31: `yofina-ledger` 284 sự kiện, 0 `ERROR`; `yofina-ingest` 14, `yofina-ingest-api` 58, đều 0 `ERROR`. Một lần `yofina-ledger` hết giờ 30 giây lúc 16:31 là lần gọi đầu của `seed_demo.py minh` khi Aurora đang ngủ (503, chạy lại được) |
+
+**Lỗi còn lại** (chưa sửa, theo luật của đợt kiểm)
+
+1. **Agent gán cho người dùng một lời dặn không có** (`memory-reuse-new-session`): "Theo điều bạn đã dặn, hãy cân nhắc đưa vào hũ Dự phòng." Dù bản ghi Du lịch có thể chưa trích xong, câu trả lời không được nói "theo điều bạn đã dặn" khi bộ nhớ không có lời dặn đó. Cần xem prompt của nhánh trả lời ngắn (Nova 2 Lite) khi có `PROMPT_NOTICE` bộ nhớ. Runner cũng nên chờ tới khi có bản ghi của chính phiên trước (hoặc xóa bộ nhớ trước ca) thay vì dừng ở bản ghi mới đầu tiên.
+2. **Gợi ý mua món tùy ý bằng hũ Dự phòng** (what-if lượt 1): phương án "Mua bằng hũ Dự phòng" được đánh gợi ý, không luật nào chặn việc tiêu quỹ dự phòng cho khoản không thiết yếu. `option_id` là `pay_giai_tri` trong khi nhãn và đề xuất là Dự phòng (người dùng không thấy id).
+3. **Phương án hũ không đủ bị bỏ thay vì hiện "Hụt"** (what-if lượt 2): `source_jar_covers` trượt thì verifier cho Analyst làm lại và phương án biến mất. Không sai với người dùng, nhưng nhánh "hiện phương án hũ Giải trí với trạng thái hụt" chưa thấy trên Runtime.
+4. Mảnh câu rỗng "Thời điểm: ," trong tóm tắt phiên sau khi bỏ dấu thời gian; `GET /memory` còn liệt kê sở thích và sự thật trùng ý; câu hỏi what-if được lưu thành sự thật "Người dùng đang cân nhắc mua tai nghe với giá [số tiền] …".
+5. OCR ảnh thật: r08 (màn chi tiết VPBank có số tham chiếu) vẫn `no_transactions` sau luật prompt mới; ngày ở r12 dòng 2, r15 dòng 8, r24; r15 dòng 9 sai cả bốn giá trị.
+6. Ghi nhận nhỏ: log Runtime có `turn_persist_timeout` ở lượt `memory-recall` (16:35), `yofina-ledger` không có lỗi cùng lúc. Lượt eval OCR cục bộ in `embedding_degraded: AllModelsFailed` (bước gắn hũ trong tiến trình cục bộ).
 
 ### Quyết định hợp đồng phase 5
 
