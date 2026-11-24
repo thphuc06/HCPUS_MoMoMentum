@@ -163,6 +163,8 @@ Thuộc stack `YofinaTools` (construct `ClassifyPipeline`, `infra-cdk/lib/classi
 
 **Deploy 24/11 sáng (Kiro, `main` 32f22f0)**: `scripts/agent_deploy.py` -> Runtime `yofina_agent` version 19 (chip gợi ý khi từ chối ngoài phạm vi); frontend Amplify job 11 (tên hũ trên bước lộ trình). Không deploy `YofinaTools`/`YofinaData`, không migration, không thêm hay xóa tài nguyên.
 
+**Deploy 24/11 sáng muộn (Kiro, `main` d0e4856)**: `YofinaTools` một lần, chỉ đổi code `yofina-roadmap-regen` (zip `ROADMAP_BUILD_COMMAND`, dùng chung mã agent); `scripts/agent_deploy.py` -> Runtime `yofina_agent` version 20 (lộ trình trong chat đủ giai đoạn, notice bản đề xuất bị thay); frontend Amplify job 12. Không migration (0053 chưa chạy), không thêm hay xóa tài nguyên.
+
 Thuộc stack `YofinaTools` (construct `RoadmapRegen`, `infra-cdk/lib/roadmap-regen.ts`). Mã ở `pipelines/roadmap/`. Đã tạo trên AWS ngày 23/11 tối (deploy `YofinaTools` từ `main` 15e9bc7). Không có thứ nào tính tiền theo giờ.
 
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
