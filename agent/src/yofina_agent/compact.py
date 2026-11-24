@@ -384,8 +384,10 @@ def compact_roadmap(payload: Mapping[str, Any]) -> dict[str, Any]:
     data = payload["data"]
     return {
         "version": data["version"],
+        "status": data["status"],
         "reason": data["reason"]["text"],
         "feasibility": data["feasibility"],
         "counts": data["counts"],
+        "phase_count": len(data["phases"]),
         "step_titles": [step["title"] for phase in data["phases"] for step in phase["steps"]][:3],
     }

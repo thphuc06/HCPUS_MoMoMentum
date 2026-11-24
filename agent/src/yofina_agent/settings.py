@@ -47,6 +47,7 @@ class AgentSettings:
     roadmap_default_which: str
     roadmap_fix_max_rounds: int
     roadmap_max_steps: int
+    roadmap_max_tool_calls_per_turn: int
     roadmap_draft_max_tokens: int
     knowledge_tool_prefix: str
     audit_tool_prefix: str
@@ -106,6 +107,7 @@ class AgentSettings:
             roadmap_default_which=get("roadmap_default_which"),
             roadmap_fix_max_rounds=get("roadmap_fix_max_rounds", int),
             roadmap_max_steps=get("roadmap_max_steps", int),
+            roadmap_max_tool_calls_per_turn=get("roadmap_max_tool_calls_per_turn", int),
             roadmap_draft_max_tokens=get("roadmap_draft_max_tokens", int),
             knowledge_tool_prefix=get("knowledge_tool_prefix"),
             audit_tool_prefix=get("audit_tool_prefix"),
