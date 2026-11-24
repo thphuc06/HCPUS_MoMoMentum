@@ -736,7 +736,12 @@ JARS_RESULT = {
 
 def test_phien_truoc_chay_voi_session_id_khac_roi_cho_bo_nho_truoc_cau_hoi_chinh():
     case = case5("golden", "memory-reuse-new-session")
-    api = FakeApi({("GET", "/memory"): [{"records": []}, {"records": []}, {"records": [MEM_PREF]}]})
+    api = FakeApi(
+        {
+            ("DELETE", "/memory"): {"deleted_records": 3, "deleted_events": 0, "failed": 0},
+            ("GET", "/memory"): [{"records": []}, {"records": []}, {"records": [MEM_PREF]}],
+        }
+    )
     replies = [
         sse("Mình đã ghi nhớ.", intent="memory"),
         sse(
@@ -758,15 +763,63 @@ def test_phien_truoc_chay_voi_session_id_khac_roi_cho_bo_nho_truoc_cau_hoi_chinh
             "runs": [{"question": prior_q, "text": "Mình đã ghi nhớ.", "error": None, "tools": []}],
         }
     ]
-    # chờ tới khi GET /memory có bản ghi mới (đọc lại sau 10 giây)
+    # chờ tới khi GET /memory có bản ghi SỞ THÍCH nhắc hũ mong đợi (đọc lại sau 10 giây), sau khi đã xóa bộ nhớ trước ca
+    assert run["memory_clear"] == {"deleted_records": 3, "failed": 0, "error": None}
+    assert api.calls[0][:2] == ("DELETE", "/memory")
     assert (
-        run["memory_wait"] == {"new_records": 1, "waited_s": 10.0, "error": None}
+        run["memory_wait"]
+        == {
+            "waiting_for": "preference:du_lich",
+            "outcome": "seen",
+            "new_records": 1,
+            "waited_s": 10.0,
+            "error": None,
+        }
         and clock.t == 10.0
     )
 
     s = evals_run.score(run, case, "golden")
     assert s["memory_reuse"]["ok"] and s["memory_reuse"]["used"] == {"du_lich": True}
+    assert s["memory_reuse"]["memory_wait"]["outcome"] == "seen"
     assert s["trajectory"]["ok"] and s["ok"], s
+
+
+def test_cho_dung_so_thich_mong_doi_khong_dung_o_ban_ghi_moi_dau_tien():
+    """Kiểm lại Runtime v23: runner dừng ở bản ghi mới đầu tiên (`new_records: 1` sau 31,2 giây), có thể là bản ghi của lượt what-if
+    hay một sự thật, không phải sở thích Du lịch. Nay chờ tới khi có bản ghi sở thích nhắc đúng hũ, hoặc hết giờ (ghi `timeout`)."""
+    case = case5("golden", "memory-reuse-new-session")
+    other = {**MEM_PREF, "record_id": "mem-2", "kind": "fact", "text": "Đang cân nhắc mua tai nghe."}
+    morning = {**MEM_PREF, "record_id": "mem-3", "text": "Không nhắc mình vào buổi sáng."}
+    api = FakeApi(
+        {
+            ("DELETE", "/memory"): {"deleted_records": 0, "deleted_events": 0, "failed": 0},
+            ("GET", "/memory"): [
+                {"records": []},
+                {"records": [other]},
+                {"records": [other, morning]},
+                {"records": [other, morning, MEM_PREF]},
+            ],
+        }
+    )
+    replies = [sse("Mình đã ghi nhớ.", intent="memory"), sse("x", tools=[("ledger___get_jar_balances", {}, JARS_RESULT)])]
+    run, _, clock = execute(case, api=api, replies=replies)
+    assert run["memory_wait"]["outcome"] == "seen" and run["memory_wait"]["new_records"] == 3 and clock.t == 20.0
+
+    api = FakeApi({("DELETE", "/memory"): {"deleted_records": 0, "deleted_events": 0, "failed": 0}, ("GET", "/memory"): [{"records": []}, {"records": [other]}]})
+    run, _, clock = execute(case, api=api, replies=replies, memory_wait=30.0)
+    assert run["memory_wait"]["outcome"] == "timeout" and run["memory_wait"]["new_records"] == 1
+    assert clock.t <= 30.0
+    # tiêu chí chấm không đổi: hết giờ chờ không làm ca đạt hay trượt thay cho câu trả lời
+    s = evals_run.score(run, case, "golden")
+    assert s["memory_reuse"]["fails"] == ["khong_dung_so_thich:du_lich"]
+
+
+def test_expected_preference_seen_chi_tinh_ban_ghi_so_thich_nhac_dung_hu():
+    snap = {"records": [{"kind": "fact", "text": "Đi Du lịch Đà Lạt"}, {"kind": "preference", "text": "Ưu tiên hũ Ăn uống"}]}
+    assert not evals_run.expected_preference_seen(snap, ["du_lich"])
+    snap["records"].append({"kind": "preference", "text": "Ưu tiên để dành tiền cho hũ Du lịch"})
+    assert evals_run.expected_preference_seen(snap, ["du_lich"])
+    assert not evals_run.expected_preference_seen(snap, ["du_lich", "giai_tri"])
 
 
 def test_phien_truoc_nhieu_tin_gui_lich_su_trong_phien_va_het_gio_van_hoi():

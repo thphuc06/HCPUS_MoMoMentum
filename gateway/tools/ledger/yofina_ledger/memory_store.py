@@ -44,6 +44,7 @@ from yofina_core.memory import (
     namespace_for,
     user_root,
 )
+from yofina_core.memory_text import dedupe_by_meaning, drop_empty_labels, record_text
 from yofina_core.pii import fold, mask_names, mask_pii, strip_epoch_timestamps
 
 log = logging.getLogger("yofina.ledger.memory")
@@ -103,30 +104,20 @@ def record_type(rec: Mapping[str, Any]) -> str | None:
 
 def display_text(content: Any) -> str:
     """Chữ hiển thị của một bản ghi, đã che PII và tên người khác: sở thích (JSON `{context, preference, categories}`) lấy
-    `preference`; tóm tắt phiên (XML `<topic name="...">`) đổi thành "chủ đề: nội dung", tóm tắt cả phiên (markdown) bỏ dấu `#`, `**`;
-    bỏ dấu thời gian Unix mà bước tóm tắt chép vào ("timestamp 1795505552861"); cắt `MEMORY_TEXT_MAX_CHARS`."""
-    raw = content.get("text") if isinstance(content, Mapping) else None
-    if not isinstance(raw, str):
+    `preference` (`yofina_core.memory_text.record_text`, cùng hàm với agent); tóm tắt phiên (XML `<topic name="...">`) đổi thành "chủ
+    đề: nội dung", tóm tắt cả phiên (markdown) bỏ dấu `#`, `**`; bỏ dấu thời gian Unix mà bước tóm tắt chép vào ("timestamp
+    1795505552861") và mẩu nhãn rỗng nó để lại ("Thời điểm: ,"); cắt `MEMORY_TEXT_MAX_CHARS`.
+
+    Bỏ dấu markdown TRƯỚC khi bỏ dấu thời gian: "**Thời điểm:** 1795505552861" chỉ được nhận là dấu thời gian khi cụm dẫn "Thời
+    điểm:" đứng liền trước con số."""
+    raw = record_text(content)
+    if not raw:
         return ""
-    raw = raw.strip()
-    if raw.startswith("{"):
-        try:
-            obj = json.loads(raw)
-        except ValueError:
-            obj = None
-        if isinstance(obj, Mapping):
-            raw = next(
-                (
-                    obj[k].strip()
-                    for k in ("preference", "fact", "text", "context")
-                    if isinstance(obj.get(k), str) and obj[k].strip()
-                ),
-                raw,
-            )
-    text = strip_epoch_timestamps(raw)
-    text = _MD_EMPHASIS_RE.sub("", _MD_HEADING_RE.sub(lambda m: f"{m.group(1)}:", text))
+    text = _MD_EMPHASIS_RE.sub("", _MD_HEADING_RE.sub(lambda m: f"{m.group(1)}:", raw))
+    text = strip_epoch_timestamps(text)
     text = _TAG_RE.sub(lambda m: f" {m.group(1)}: " if m.group(1) else " ", text)
-    text = " ".join(mask_names(mask_pii(text).text).split())
+    text = drop_empty_labels(mask_names(mask_pii(text).text))
+    text = " ".join(text.split())
     if len(text) > MEMORY_TEXT_MAX_CHARS:
         text = text[: MEMORY_TEXT_MAX_CHARS - 1].rstrip() + "…"
     return text
@@ -310,6 +301,10 @@ class MemoryStore:
                 )
             )
         records.sort(key=lambda r: r.created_at, reverse=True)
+        # Sở thích và sự thật trùng ý (hai strategy cùng trích một câu) chỉ hiện một lần, giữ bản sở thích: cùng hàm khử trùng với agent
+        # (`yofina_core.memory_text.dedupe_by_meaning`), nên màn Bộ nhớ của tôi và câu kể "bạn nhớ gì về mình" khớp nhau. Bản bị ẩn vẫn
+        # bị xóa khi "Xóa hết" (`clear` liệt kê thẳng, không khử trùng); xóa từng bản đang hiện thì bản ẩn (nếu có) hiện ra ở lần sau.
+        records = dedupe_by_meaning(records, text=lambda r: r.text, kind=lambda r: r.kind)
         token = resp.get("nextToken")
         return MemoryListResponse(
             records=records,

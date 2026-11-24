@@ -31,8 +31,10 @@ Phase 4 (trường kỳ vọng tùy chọn, ca cũ không có thì không chấm
 - roadmap_suitability: lượt có khối `roadmap` (hoặc ca có `max_roadmap_violations`) đếm bước vi phạm luật mức block
   (cách xác định ở `roadmap_suitability`); tổng của bộ in ở phần tóm tắt; bộ adversarial có bước vi phạm thì thoát mã 1 (tiêu chí 5).
 Phase 5 (cách chạy thêm và cách chấm ở docstring từng hàm):
-- `prior_sessions`: trước câu hỏi chính, chạy từng phiên trước với session id KHÁC (mỗi phiên một id), chờ bộ nhớ dài hạn trích xong
-  (`GET /memory` có bản ghi mới, tối đa `--memory-wait` giây), rồi hỏi câu chính ở một session id mới không kèm lịch sử.
+- `prior_sessions`: xóa bộ nhớ của tài khoản (`DELETE /memory`), chạy từng phiên trước với session id KHÁC (mỗi phiên một id), chờ
+  bộ nhớ dài hạn trích xong (có bản ghi SỞ THÍCH nhắc mọi hũ của `expect_memory_used`; ca không có trường đó thì bản ghi mới bất kỳ;
+  tối đa `--memory-wait` giây, kết quả ghi `memory_wait.outcome` là `seen` hay `timeout`), rồi hỏi câu chính ở một session id mới
+  không kèm lịch sử.
   memory_reuse (`expect_memory_used`, `forbid_reask`): câu trả lời dùng sở thích (nhắc hũ đã nói) mà không hỏi lại.
 - `upload_manifest_id`: trước câu hỏi, tải tệp mẫu của `evals/ingest/manifest.json` lên qua `POST /ingest/uploads` + presigned POST rồi
   chờ job xong; sau câu hỏi đọc lại job. upload_state: trạng thái job khớp manifest (`expected_error`), khối `ingest_review` đúng job.
@@ -448,27 +450,57 @@ def memory_snapshot(api: Api, *, max_pages: int = 5) -> dict[str, Any]:
     return {"records": records}
 
 
+def clear_memory(api: Api) -> dict[str, Any]:
+    """Xóa bộ nhớ dài hạn của chính tài khoản chạy eval (`DELETE /memory`) trước ca dùng lại bộ nhớ, để bản ghi của ca trước hay của lượt
+    what-if không lẫn vào ca này (kiểm lại Runtime v23: runner dừng ở bản ghi mới đầu tiên, có thể không phải sở thích của phiên trước)."""
+    status, body = api.call("DELETE", "/memory")
+    if status != 200 or not isinstance(body, Mapping):
+        return {"error": f"DELETE /memory {status} {_err_code(body)}"}
+    return {"deleted_records": body.get("deleted_records"), "failed": body.get("failed"), "error": None}
+
+
+def expected_preference_seen(snap: Mapping[str, Any], jar_codes: list[str]) -> bool:
+    """Bộ nhớ đã có bản ghi SỞ THÍCH nhắc từng hũ mong đợi (`expect_memory_used`, mã hũ đọc như chữ: `du_lich` -> "du lich", so không
+    dấu theo nguyên cụm)."""
+    prefs = [_fold(str(r.get("text") or "")) for r in snap.get("records") or [] if r.get("kind") == "preference"]
+    return all(any(_has_phrase(p, code.replace("_", " ")) for p in prefs) for code in jar_codes)
+
+
 def wait_for_memory(
     api: Api,
     before: Mapping[str, Any] | None,
     timeout: float,
     *,
     interval: float = 10.0,
+    until: Callable[[Mapping[str, Any]], bool] | None = None,
     sleep=time.sleep,
     clock=time.monotonic,
 ) -> dict[str, Any]:
-    """Bộ nhớ dài hạn trích BẤT ĐỒNG BỘ sau khi sự kiện được ghi (tài liệu AgentCore Memory, "Memory types"), không có mốc thời
-    gian: đọc `GET /memory` mỗi `interval` giây tới khi có bản ghi mới so với `before`, tối đa `timeout` giây."""
+    """Bộ nhớ dài hạn trích BẤT ĐỒNG BỘ sau khi sự kiện được ghi (tài liệu AgentCore Memory, "Ingest content into long-term memory":
+    "records typically appear within seconds to minutes"), không có mốc thời gian: đọc `GET /memory` mỗi `interval` giây tới khi
+    `until(snap)` đúng (mặc định: có bản ghi mới so với `before`), tối đa `timeout` giây. Kết quả ghi rõ `outcome`: `seen` (điều kiện
+    đã đúng) hay `timeout` (hết giờ mà chưa thấy)."""
     seen = {r.get("record_id") for r in (before or {}).get("records") or []}
+
+    def has_new(snap: Mapping[str, Any]) -> bool:
+        return any(r.get("record_id") not in seen for r in snap.get("records") or [])
+
+    done = until or has_new
     start = clock()
     snap = memory_snapshot(api)
-    while not any(r.get("record_id") not in seen for r in snap.get("records") or []):
+    while not done(snap):
         if clock() - start + interval > timeout:
             break
         sleep(interval)
         snap = memory_snapshot(api)
     new = [r for r in snap.get("records") or [] if r.get("record_id") not in seen]
-    return {**snap, "new_records": len(new), "waited_s": round(clock() - start, 1)}
+    ok = done(snap)
+    return {
+        **snap,
+        "new_records": len(new),
+        "waited_s": round(clock() - start, 1),
+        "outcome": "seen" if ok else "timeout",
+    }
 
 
 def run_prior_sessions(
@@ -548,12 +580,20 @@ def execute_case(
             else {"manifest_id": mid, "error": "không có trong manifest"}
         )
     mem_before = None
+    if case.get("prior_sessions"):
+        # Ca dùng lại bộ nhớ: bắt đầu từ bộ nhớ rỗng, rồi chờ đúng sở thích mong đợi (không phải bản ghi mới bất kỳ).
+        ctx["memory_clear"] = clear_memory(api)
     if case.get("prior_sessions") or case.get("expect_memory_without_pii"):
         mem_before = memory_snapshot(api)
     if case.get("prior_sessions"):
         ctx["prior"] = run_prior_sessions(case["prior_sessions"], invoke_fn, pace)
-        waited = wait_for_memory(api, mem_before, memory_wait, sleep=sleep, clock=clock)
-        ctx["memory_wait"] = {k: waited.get(k) for k in ("new_records", "waited_s", "error")}
+        expect = list(case.get("expect_memory_used") or [])
+        until = (lambda snap: expected_preference_seen(snap, expect)) if expect else None
+        waited = wait_for_memory(api, mem_before, memory_wait, until=until, sleep=sleep, clock=clock)
+        ctx["memory_wait"] = {
+            "waiting_for": f"preference:{','.join(expect)}" if expect else "any_new_record",
+            **{k: waited.get(k) for k in ("outcome", "new_records", "waited_s", "error")},
+        }
     sid = new_session_id()
     pace()
     try:
