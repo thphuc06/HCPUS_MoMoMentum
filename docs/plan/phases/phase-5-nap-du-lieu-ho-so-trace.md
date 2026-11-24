@@ -195,8 +195,8 @@ Có 0 ảnh `needs_human`. Các chỗ lệch đã xem lại và giữ nhãn cũ:
 |---|---|---|---|
 | r08 | 0/1 dòng, `no_transactions` | 0/1 dòng, `no_transactions` | Luật mới của prompt (màn có số tham chiếu là đã thực hiện) chưa đổi được kết quả |
 | r12 | dòng 2 sai ngày, dòng 3 sai nội dung | dòng 2 sai ngày; nội dung dòng 3 nay đúng | Vẫn trượt đủ 4 trường vì ngày dòng 2 trên ảnh mờ |
-| r14 | 0/1 dòng, `no_transactions` | như cũ | Nhãn chưa chốt (câu hỏi 1) |
-| r15 | 5/10 dòng, 2 dòng sai chiều | 10/10 dòng; ngày 8/10, số tiền 9/10, chiều 9/10, nội dung 8/9 | Rút ATM nay được trích đủ. Dòng 9 sai cả bốn giá trị (có thể ghép nhầm dòng), dòng 8 sai ngày |
+| r14 | 0/1 dòng, `no_transactions` | như cũ | Nhãn lúc đo chưa chốt (câu hỏi 1). Sau quyết định 24/11, nhãn không còn dòng nào nên kết quả này là đúng |
+| r15 | 5/10 dòng, 2 dòng sai chiều | 10/10 dòng; ngày 8/10, số tiền 9/10, chiều 9/10, nội dung 8/9 | Rút ATM nay được trích đủ. Dòng 9 sai cả bốn giá trị (có thể ghép nhầm dòng), dòng 8 sai ngày. Theo thứ tự nhãn, dòng 8 và 9 đều là dòng rút ATM, mà sau quyết định 24/11 không còn được chấm; chưa đo lại nên chưa biết r15 có đạt đủ bốn trường không |
 | r24 | sai ngày dòng Gojek | như cũ | |
 
 Đạt đủ bốn trường vẫn là bảy ảnh cũ (r01, r02, r03, r07, r10, r13, r20). Các chỉ số từng trường tăng chủ yếu nhờ r15, nhưng tiêu chí 3 (9/10) chưa đạt.
@@ -219,9 +219,19 @@ Có 4 ảnh lỗi do model đọc (r08, r12, r15, r24) và 2 ảnh có quy ướ
 3. **`not_financial` 1/5 là lệch mã chứ không phải lỗi người dùng thấy.** Bảng phí, menu và màn ATM được trả `no_transactions`, mà `ERROR_CODE_OF` đổi cả `no_transactions` lẫn `not_financial` thành `INGEST_NOT_FINANCIAL`. Có hai cách sửa: eval chấp nhận cả hai mã khi nhãn là `not_financial`, hoặc backend trả `not_financial` khi `document_type = other_financial` và không có dòng nào.
 4. **Prompt ảnh** (`pipelines/ingest/yofina_ingest/prompts.py`): ghi rõ màn có số tham chiếu hoặc mã giao dịch (FT..., "Số tham chiếu") là giao dịch đã xong dù không có chữ "thành công" (r08). Ghi rõ quy ước rút ATM sau khi chủ dự án chốt (r15). Với sao kê có cột Ghi nợ/Ghi có/Số dư, kiểm chiều bằng số dư chạy hoặc yêu cầu model trả tên cột chứa số tiền (r15).
 
-**Câu hỏi cho chủ dự án** (nhãn hiện giữ như cũ):
+**Câu hỏi cho chủ dự án** (đã trả lời 24/11, xem đoạn ngay dưới):
 1. Hộp tra soát của một giao dịch đã thực hiện (r14) có tính là chứng từ giao dịch không? Nhãn hiện nói có, model nói không.
 2. Rút tiền mặt ở ATM (r15, 5 dòng) là khoản chi (`out`, như nhãn) hay chuyển nội bộ sang tiền mặt (không ghi)?
+
+**Quyết định của chủ dự án (24/11) và cách áp dụng** (nhánh `p5/ocr-labels`, chưa chạy lại eval Bedrock):
+1. **Rút tiền mặt (ATM, tại quầy) ngoài phạm vi.** Tiền đã thành tiền mặt, ứng dụng không theo dõi được, nên không ghi thành khoản chi. Dòng rút tiền mặt được đánh như chuyển sang tài khoản của chính mình, và đi cùng đường với "nạp/chuyển giữa tài khoản của chính mình". Đọc mã: `finalize_rows` (`pipelines/ingest/yofina_ingest/extract.py`) bỏ mọi dòng có `own_account_transfer=true` hoặc khớp `looks_like_self_topup`, ghi lý do `own_account_transfer` vào `dropped`. Worker chỉ lưu `candidates` vào `ingest_rows`, nên dòng bị bỏ không vào sổ cái và cũng không vào hàng chờ duyệt. Tệp chỉ có dòng loại này thì job bị từ chối (`no_transactions`, API `INGEST_NOT_FINANCIAL`). Đã đổi:
+   - Lời nhắc ảnh (`prompts.image_system`): luật cũ của `p5/fix-ingest2` ("rút ATM là khoản chi, `own_account_transfer=false`") nay thành "vẫn trích dòng, đặt `own_account_transfer=true`". Dòng phí rút tiền tách riêng vẫn là khoản chi. Luật "trích MỌI dòng" giữ nguyên, để model không lệch hàng khi đọc bảng.
+   - Lời nhắc gắn nhãn CSV (`prompts.labels_system`) và mô tả trường `own_account_transfer` của hai schema gửi model (`ExtractedRow`, `CsvRowLabel`) cùng nói như vậy.
+   - Luật tất định `looks_like_self_topup` (`normalize.py`) nhận thêm "rút tiền mặt", "rút tiền (tại) ATM/quầy", "ATM/cash withdrawal". Model quên cờ, hay lượt gắn nhãn CSV hỏng, thì dòng vẫn bị bỏ. Không khớp với phí rút tiền ("phí", "fee", "charge") hay "thanh toán thẻ ATM".
+   - Nhãn r15: 5 dòng "RUT TIEN TAI ATM" chuyển từ `transactions` sang `excluded_rows` (lý do `cash_withdrawal`), còn 5 dòng được chấm. Câu ghi chú cũ có số tài khoản 8 chữ số trong "Transfer Debit-…" nay đã thay bằng `<số tài khoản>`. Eval không phạt dòng trích thừa, nên dòng ATM model còn trả về không làm trượt điểm (cùng cách với dòng nạp ví của r24).
+2. **Hộp tra soát, khiếu nại của một giao dịch đã có (r14) không phải chứng từ giao dịch mới.** Đó là đơn hỏi về giao dịch đã ghi, và nạp vào sẽ ghi trùng r13. Lời nhắc ảnh thêm một luật: màn tra soát, khiếu nại, yêu cầu hoàn tiền không tạo dòng giao dịch (`document_type=other_financial`, rows rỗng); khoản hoàn tiền đã về tài khoản thì vẫn là giao dịch. Nhãn r14 theo quy ước của bảng phí (r06) và màn ATM (r27): `transactions` rỗng, `expected_error: not_financial` (backend trả `no_transactions`, cùng mã API), `kind_of_image: other`, bỏ `duplicate_of`. Dòng 680.000 ₫ cũ giữ ở `excluded_rows` (lý do `dispute_of_existing`). `pii` giữ nguyên để vẫn kiểm lộ tên và số tài khoản.
+
+Ảnh hưởng tới số đo: mẫu số "đủ 4 trường trên ảnh đọc được" giảm từ 12 xuống 11 (r14 không còn dòng chấm), còn mẫu số "báo `not_financial` đúng" tăng từ 5 lên 6. Hai số này chưa đo lại; lượt Bedrock kế tiếp sẽ cho số mới. Test: `tests/unit/ingest/test_extract.py` (r15 qua backend với model giả, cả khi model đặt và quên cờ; r14; CSV rút tiền mặt và phí; lời nhắc), `tests/unit/ingest/test_normalize.py` (mẫu rút tiền mặt và mẫu không được khớp).
 
 ### Nghiệm thu 24/11
 
