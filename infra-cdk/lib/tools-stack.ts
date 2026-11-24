@@ -23,6 +23,16 @@ import { RoadmapRegen, RoadmapRegenConfig } from './roadmap-regen';
 import { publishParams } from './ssm-outputs';
 
 /**
+ * Lệnh đóng zip Lambda ledger (`build/lambda/ledger-arm64.zip`). `--keep-boto`: giữ boto3/botocore ghim trong
+ * `gateway/tools/ledger/requirements.txt` thay vì dùng bản có sẵn của runtime Lambda (bản đó tùy phiên bản runtime và Region,
+ * có thể chưa có `namespacePath` của AgentCore Memory mà REST `/memory*` và "Xóa dữ liệu của tôi" cần).
+ */
+export const LEDGER_BUILD_COMMAND =
+  'uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --keep-boto --extra data/personas:personas ' +
+  '--extra gateway/tools/planner/yofina_planner:yofina_planner --extra gateway/tools/planner/rules:rules ' +
+  '--extra gateway/tools/knowledge/yofina_knowledge:yofina_knowledge --extra gateway/tools/audit/yofina_audit:yofina_audit';
+
+/**
  * Cấu hình riêng của stack công cụ (Lambda ledger + HTTP API). Mọi giá trị đổi được bằng context
  * (`-c khóa=giá trị`); không giá trị nào phụ thuộc tài khoản. Các giá trị nghiệp vụ được truyền vào Lambda
  * dưới dạng biến môi trường `YOFINA_*` (xem libs/yofina_core/src/yofina_core/config.py), không gắn cứng trong mã.
@@ -150,9 +160,7 @@ export class ToolsStack extends Stack {
     const param = (name: string) => ssm.StringParameter.valueForStringParameter(this, `/${p}/${name}`);
 
     if (!fs.existsSync(tools.ledgerZip)) {
-      throw new Error(
-        `Chưa có ${tools.ledgerZip}. Chạy: uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas --extra gateway/tools/planner/yofina_planner:yofina_planner --extra gateway/tools/planner/rules:rules --extra gateway/tools/knowledge/yofina_knowledge:yofina_knowledge --extra gateway/tools/audit/yofina_audit:yofina_audit`,
-      );
+      throw new Error(`Chưa có ${tools.ledgerZip}. Chạy: ${LEDGER_BUILD_COMMAND}`);
     }
 
     const clusterArn = param('db/cluster-arn');
