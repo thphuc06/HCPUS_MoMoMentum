@@ -41,5 +41,15 @@
   "low_coverage_threshold": 0.7,
   "router_min_confidence": 0.35,
   "turn_record_tool": "",
-  "turn_record_timeout_seconds": 3.0
+  "turn_record_timeout_seconds": 3.0,
+  "memory_enabled": true,
+  "memory_retrieve_timeout_seconds": 1.2,
+  "memory_preferences_top_k": 4,
+  "memory_facts_top_k": 3,
+  "memory_min_score": 0.0,
+  "memory_record_max_chars": 300,
+  "memory_prompt_max_chars": 1200,
+  "memory_query_max_chars": 1000,
+  "memory_message_max_chars": 2000,
+  "memory_write_timeout_seconds": 5.0
 }

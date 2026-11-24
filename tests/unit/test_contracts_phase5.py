@@ -118,9 +118,11 @@ def test_tap_gia_tri_rest_khop_hang_so():
 
 
 def test_y_dinh_phase5_chua_vao_router_nhung_ban_ghi_luot_nhan():
-    assert wallet.PHASE5_INTENTS == ("behavior", "knowledge", "ingest", "memory")
+    # `memory` đã có bộ xử lý (luồng p5-memory) nên đã chuyển vào INTENTS; ba ý định còn lại chờ luồng của chúng.
+    assert wallet.PHASE5_INTENTS == ("behavior", "knowledge", "ingest")
     assert not set(wallet.PHASE5_INTENTS) & set(wallet.INTENTS)  # agent Intent khớp INTENTS, luồng cài thì chuyển sang
-    assert (*wallet.INTENTS, *wallet.PHASE5_INTENTS) == wallet.AUDIT_INTENTS
+    assert set(wallet.INTENTS) | set(wallet.PHASE5_INTENTS) == set(wallet.AUDIT_INTENTS)
+    assert wallet.AUDIT_INTENTS == (*wallet.INTENTS_PHASE4, "behavior", "knowledge", "ingest", "memory")  # thứ tự của 0053
     desc = AUDIT["record_turn"]["inputSchema"]["properties"]["intent"]["description"]
     assert all(i in desc for i in wallet.AUDIT_INTENTS)
 

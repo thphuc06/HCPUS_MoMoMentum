@@ -38,6 +38,7 @@ from typing import Any
 from ag_ui.core import BaseEvent, RunAgentInput
 
 from yofina_agent import events as ev
+from yofina_agent import memory as agent_memory
 from yofina_agent import notices, trace
 from yofina_agent.clarify import resolve_clarify
 from yofina_agent.compact import (
@@ -129,6 +130,7 @@ class TurnDeps:
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     guardrail: Guardrail | None = None  # None: không lọc (test hoặc chưa cấu hình)
     records: TurnRecordStore = field(default_factory=UnconfiguredTurnRecordStore)
+    memory: agent_memory.AgentMemory | None = None  # None: cấu hình từ môi trường (`YOFINA_MEMORY_ID`; vắng thì tắt)
 
 
 @dataclass
@@ -188,6 +190,8 @@ class Turn:
         self.outcome_code: str | None = None
         self.whatif: WhatIfState | None = None
         self.guardrail_reason: str | None = None
+        self.guardrail_input: GuardrailResult | None = None  # kết quả Guardrail đầu vào (bộ nhớ chỉ ghi lượt đã qua)
+        self.memory = agent_memory.TurnMemory.for_deps(deps)
 
     # --- dấu vết ----------------------------------------------------------------------------
     @contextlib.contextmanager
@@ -622,6 +626,7 @@ class Turn:
                 )
             )
             self.queue.put_nowait(_DONE)
+            agent_memory.schedule_remember(self)  # sau RUN_FINISHED, chạy nền: không làm chậm lượt
 
     def turn_record(self) -> dict[str, Any]:
         """Bản ghi lượt (`agent_turn`): một lần mỗi lượt, do mã dựng từ dấu vết, không do LLM viết."""
@@ -708,6 +713,7 @@ class Turn:
                 max_chars=self.s.history_chars_per_message,
             )
         ).text
+        agent_memory.start_recall(self, question)  # đọc bộ nhớ song song với router và Guardrail
 
         await self.ensure_llm()
         routed = await self.classify_guarded(question, self.history)
@@ -739,6 +745,7 @@ class Turn:
             "resilience": self.on_resilience,
             "stress": self.on_stress,
             "roadmap": self.on_roadmap,
+            "memory": lambda r, q: agent_memory.on_memory(self, r, q),
         }
 
     def pending_params_before(self, index: int) -> dict[str, Any] | None:
@@ -800,6 +807,7 @@ class Turn:
         routed = await self.classify(question, history)
         if gtask is not None:
             gr = await gtask
+            self.guardrail_input = gr
             self.extra_rules["guardrail_input"] = B.RuleCheck(
                 rule_id="guardrail_input",
                 label="Lọc nội dung đầu vào",
