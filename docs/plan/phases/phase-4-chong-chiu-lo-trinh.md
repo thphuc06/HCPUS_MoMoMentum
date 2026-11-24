@@ -140,7 +140,7 @@ Số cuối cùng trên Runtime v18: golden phase 4 14/14, adversarial phase 4 1
 Sửa trong đợt đóng (23–24/11): schema gửi model mất field `title`; goals sai hũ; Lambda sinh lại bỏ qua `profile.updated` có `onboarding`; phác thảo lộ trình thử lại khi sai schema, bỏ nhãn thứ tự khỏi grounding, đề xuất suitability khớp ledger, log bước bị loại; mục tiêu người dùng nói trong câu (`target_vnd`, `target_date`); luật `source_jar_covers` v2 (bước từ kỳ lương kế so với thu nhập tháng); Verifier what-if gửi proposal đúng hũ nguồn và giữ phương án khi rơi vào dự phòng.
 
 Lệch và việc để sau:
-- Đi cảnh 4 thấy: bước lộ trình hiện mã hũ thô ("giai_tri → an_uong"); chip gợi ý sau lời từ chối chưa có lối về chống chịu/lộ trình (đang giao sửa). "Vì sao" mở tại chỗ thay vì bảng riêng như Figma; trang lộ trình mở bản đang dùng (v2) kèm dải "Có phiên bản mới" thay vì mở thẳng v3.
+- Đi cảnh 4 thấy: bước lộ trình hiện mã hũ thô; chip gợi ý sau lời từ chối chưa có lối về chống chịu/lộ trình. Đã sửa cả hai (merge 32f22f0, Runtime v19, Amplify job 11; kiểm lại trên Amplify: "Hũ Giải trí → Ăn uống"). Còn lại: màn So với bản cũ (L3) ghi "Loại bước" và "Giai đoạn" bằng mã thô (sửa ở `roadmap_logic.py`). "Vì sao" mở tại chỗ thay vì bảng riêng như Figma; trang lộ trình mở bản đang dùng (v2) kèm dải "Có phiên bản mới" thay vì mở thẳng v3.
 - `period_end` của lộ trình tính theo ngày hôm nay, chưa theo ngày lương (agent chưa có ngày lương từ tool).
 - Model đôi khi đề bước có phân bổ 0 ₫ (bị loại, lộ trình vẫn lưu các bước còn lại).
 - Golden `roadmap-edit-one-step` ra `infeasible`: có thể router đọc câu sửa bước thành mục tiêu mới; xem lại.
