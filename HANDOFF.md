@@ -2,7 +2,16 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: **2026-11-24 khuya** (Claude Code điều phối các worker `kiro-cli`). Phase 5 đã code xong, đã deploy, đã đo; **chưa đóng chính thức** (còn tiêu chí 3 OCR và đi lại 6 cảnh trên giao diện mới, xem mục B).
+Cập nhật lần cuối: **2026-11-25 rạng sáng** (Claude Code điều phối các worker `kiro-cli`). Phase 5 đã code xong, đã deploy, đã đo; **chưa đóng chính thức** (còn tiêu chí 3 OCR và đi lại 6 cảnh trên giao diện mới, xem mục B).
+
+## Cập nhật rạng sáng 25/11 (sau khi viết bản trên)
+
+- **Bộ nhớ đã sửa gốc** (nhánh p5/mem-extract, ac2a4fe): bước hợp nhất mặc định của AWS bỏ sở thích có thời hạn ("temporary states") và Nova Lite không theo chỉ dẫn; nay override cả hợp nhất, đổi sang Haiku 4.5. `memory-state-preference` và `memory-knowledge-update` đạt (mỗi ca một lần). Mục A.2 bên dưới coi như xong; chi tiết ở file phase 5 và agentcore-memory-design.md mục 2.2a.
+- **Phase 6 đã có kế hoạch** ([phase-6](docs/plan/phases/phase-6-danh-gia-dong-goi.md)), chủ dự án chốt Q1–Q9 theo đề xuất; Q10–Q15 còn chờ. Đợt 7 kiểm toán prompt (chip mang ý định có cấu trúc) hoãn tới sau cuộc thi.
+- **Luồng K (agent như người tư vấn) K1–K3 đã deploy** (589eb1c, Runtime v27, Amplify job 21): khối mới `reasoning` hiện 2–5 bước lập luận và một câu kết luận trong what-if và lộ trình, thu gọn "Xem cách mình cân nhắc". Còn mở:
+  - Độ trễ tăng khoảng 6 s mỗi lượt có lập luận (what-if trọn câu 37,9 s); lập luận hiện sau khi Analyst xong chứ chưa hiện trong lúc chờ (cần stream có cấu trúc, làm cùng D2).
+  - Lập luận có thể nói khác bản đã lưu (ca lộ trình: lập luận nói chuyển từ hũ Giải trí, bản lưu chuyển từ Đi lại) — cần kiểm nhất quán giữa lập luận và kết quả đã lưu trước demo.
+  - "Kiểm tra trước khi chi" chưa có lập luận (đường này không có Analyst); bộ chấm eval chưa kiểm số trong khối `reasoning`.
 
 ## Đang ở đâu trong kế hoạch
 
@@ -28,8 +37,8 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 ## Đang chạy trên AWS (`ap-southeast-1`)
 
 - Bảy stack đều `*_COMPLETE`. Danh sách tài nguyên: [docs/aws-resources.md](docs/aws-resources.md).
-- **Runtime `yofina_agent` v26**, **Amplify job 19**, migration tới **0054**. App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
-- Memory `yofina_memory` (id không đổi) với hai strategy override `preferences_vi`, `facts_vi` (Nova Lite trích xuất, tính theo lượt). Lambda nạp gọi ra API tỷ giá Vietcombank (không VPC, không NAT).
+- **Runtime `yofina_agent` v27**, **Amplify job 21**, migration tới **0054**. App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
+- Memory `yofina_memory` (id không đổi) với hai strategy override `preferences_vi`, `facts_vi`: override cả trích xuất lẫn hợp nhất, model **Claude Haiku 4.5** (khoảng $0,007–0,0125 mỗi lượt được ghi; quota 10 RPM dùng chung với model dự phòng của vai `small`). Lambda nạp gọi ra API tỷ giá Vietcombank (không VPC, không NAT).
 - Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. **Mật khẩu đã lộ trong lịch sử chat 23/11: đổi trước buổi chấm.** `minh`, `giamkhao1` thuộc nhóm `ops`.
 - Aurora `yofina-db` min 0 ACU (lần gọi đầu chậm 15–20 giây). **Trước buổi demo** lên 0,5 ACU: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`, xong trả về `-c dbMinAcu=0`.
 
