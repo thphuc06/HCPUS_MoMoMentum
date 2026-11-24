@@ -61,7 +61,9 @@ TASKS: dict[str, str] = {
     "affordability": (
         "Thẻ kiểm tra trước khi chi đã hiện kết quả từng hũ. verdict và headline là kết luận của hệ thống; jar_checks là trạng thái "
         "từng hũ sau khoản chi (đủ, sát, hụt); credit (nếu có) là phần Trả sau mô phỏng: tổng phải trả ngày đến hạn và hũ bị hụt. "
-        "Kết luận là câu trả lời; chỉ nói thêm khi có điều người dùng cần chú ý."
+        "Kết luận là câu trả lời; chỉ nói thêm khi có điều người dùng cần chú ý. exchange_rate (nếu có) nghĩa là người dùng nói "
+        "khoản chi bằng ngoại tệ (amount_original_text) và số VND đã được quy đổi theo tỷ giá bán rate_text của source ngày "
+        "rate_date_text; số VND đó là ước tính vì thanh toán thẻ thường thêm phí chuyển đổi ngoại tệ."
     ),
     "resilience": (
         "Thẻ điểm chống chịu đã hiện. score là điểm, band là nhóm (weak yếu, fair vừa, strong tốt), weakest là thành phần yếu nhất "

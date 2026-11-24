@@ -94,6 +94,8 @@ def describe_tool(outcome: ToolOutcome) -> tuple[str, str | None]:
         value = f"{len(d.get('scenarios', []))} kịch bản"
     elif name == "get_fee_schedule":
         value = d.get("product_label")
+    elif name == "get_exchange_rate":
+        value = d.get("currency")
     elif name == "affordability_check":
         value = d.get("label")
     elif name == "query_transactions":
