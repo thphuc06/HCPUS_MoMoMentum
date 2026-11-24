@@ -337,9 +337,9 @@ Theo năm năng lực của LongMemEval và nhóm adversarial của LoCoMo, áp 
 
 | Ưu tiên | Đổi gì | Tác động cho demo | Chi phí AWS (theo lượt) | Rủi ro |
 |---|---|---|---|---|
-| P0-1 | Viết lại `MEMORY_GUIDE` và phần bộ nhớ của `ANALYST_SYSTEM` theo mục 3.4: mục đích và lý do, bỏ cụm trong ngoặc kép, ví dụ (nếu giữ) đa dạng trong `<example>` | Ca reuse và abstain là cảnh F7 chính; lỗi v23 nằm đúng chỗ này | 0 | Model nhỏ có thể dùng bộ nhớ ít hơn; đo bằng ca reuse |
-| P0-2 | Bộ ca bộ nhớ mới (mục 5) và nạp bản ghi bằng `BatchCreateMemoryRecords` cho ca dùng | Biết chắc cảnh demo ổn định trước khi trình bày; hết đua bất đồng bộ | Mỗi lượt eval: lượt chat như thường, vài lời gọi Batch API, bản ghi lưu vài phút rồi xóa (không đáng kể) | Bản ghi nạp tay phải giống bản strategy tạo, nếu không ca dùng đo sai; đối chiếu một bản thật trước |
-| P0-3 | Chỉ dẫn trích xuất: giữ chữ phạm vi thời gian; câu rút lại thành sở thích phủ định; lý do từ chối là lời khẳng định | Câu demo "tháng này ưu tiên hũ Du lịch" giữ được nghĩa; ca đổi sở thích chạy được | 0 thêm (cùng số lời gọi trích xuất, khoảng $0,0003 mỗi strategy mỗi lượt được ghi) | Cập nhật Memory tại chỗ (No interruption); chỉ dẫn dài hơn vài trăm ký tự |
+| P0-1 (đã làm, `p5/mem-p0`) | Viết lại `MEMORY_GUIDE` và phần bộ nhớ của `ANALYST_SYSTEM` theo mục 3.4: mục đích và lý do, bỏ cụm trong ngoặc kép, ví dụ (nếu giữ) đa dạng trong `<example>` | Ca reuse và abstain là cảnh F7 chính; lỗi v23 nằm đúng chỗ này | 0 | Model nhỏ có thể dùng bộ nhớ ít hơn; đo bằng ca reuse |
+| P0-2 (đã làm, `p5/mem-p0`) | Bộ ca bộ nhớ mới (mục 5) và nạp bản ghi bằng `BatchCreateMemoryRecords` cho ca dùng | Biết chắc cảnh demo ổn định trước khi trình bày; hết đua bất đồng bộ | Mỗi lượt eval: lượt chat như thường, vài lời gọi Batch API, bản ghi lưu vài phút rồi xóa (không đáng kể) | Bản ghi nạp tay phải giống bản strategy tạo, nếu không ca dùng đo sai; đối chiếu một bản thật trước |
+| P0-3 (đã làm, `p5/mem-p0`) | Chỉ dẫn trích xuất: giữ chữ phạm vi thời gian; câu rút lại thành sở thích phủ định; lý do từ chối là lời khẳng định | Câu demo "tháng này ưu tiên hũ Du lịch" giữ được nghĩa; ca đổi sở thích chạy được | 0 thêm (cùng số lời gọi trích xuất, khoảng $0,0003 mỗi strategy mỗi lượt được ghi) | Cập nhật Memory tại chỗ (No interruption); chỉ dẫn dài hơn vài trăm ký tự |
 | P1-4 | Sự thật: liệt kê hết khi ≤ 20 bản, quay về truy xuất ngữ nghĩa khi nhiều hơn | Analyst thấy hoàn cảnh ("thu nhập không đều") cả khi câu hỏi không gần nghĩa | Giảm $0,0005 mỗi lượt chat (bỏ một `RetrieveMemoryRecords`) | Prompt dài thêm tới giới hạn 1.200 ký tự; mục không liên quan vào prompt (đã có chỉ dẫn bỏ qua) |
 | P1-5 | Khối `lich_su_lua_chon` từ `feedback` cho Analyst (mục 4 cách A) | Cảnh "agent học từ lần bạn từ chối" thấy rõ trên màn what-if | Một truy vấn Aurora mỗi lượt what-if; nếu là tool Gateway mới thì thêm một lượt gọi Gateway và Lambda | Analyst bám lịch sử quá mức; luật suitability vẫn phủ quyết; ca `memory-reject-history` đo |
 | P1-6 | Override bước hợp nhất của `preferences_vi` (chỉ khi ca P0-2 cho thấy hợp nhất bỏ sở thích có thời hạn hoặc không thay bản cũ) | Đổi sở thích đúng ngay lần đầu thử trên sân khấu | Lời gọi Nova Lite cho bước hợp nhất, cỡ như trích xuất (dưới $0,0005 mỗi bản ghi mới) | Viết sai làm hỏng pipeline (không đổi tên thao tác, không đổi schema); theo dõi `FailedExtraction` |
@@ -362,15 +362,23 @@ Theo năm năng lực của LongMemEval và nhóm adversarial của LoCoMo, áp 
 
 Mỗi việc là một nhánh nhỏ; làm theo thứ tự. Không việc nào cần thêm dịch vụ AWS.
 
-1. **Viết lại chỉ dẫn dùng bộ nhớ** (P0-1). File: `agent/src/yofina_agent/writer.py` (`MEMORY_GUIDE`, câu về bộ nhớ trong `WRITER_SYSTEM`),
+1. **Viết lại chỉ dẫn dùng bộ nhớ** (P0-1). **Đã làm** (nhánh `p5/mem-p0`, 24/11): `writer.MEMORY_GUIDE`, `whatif.ANALYST_MEMORY_GUIDE`
+   (mới, tách khỏi `ANALYST_SYSTEM`), `memory.PROMPT_NOTICE`; chỉ dẫn chỉ đi kèm khi khối khác rỗng; test đọc prompt trong
+   `test_memory_wiring.py`. File: `agent/src/yofina_agent/writer.py` (`MEMORY_GUIDE`, câu về bộ nhớ trong `WRITER_SYSTEM`),
    `agent/src/yofina_agent/whatif.py` (phần bộ nhớ của `ANALYST_SYSTEM`), `agent/src/yofina_agent/memory.py` (`PROMPT_NOTICE` nếu cần),
    `tests/unit/agent/test_memory_wiring.py`. Xong khi: chỉ dẫn nêu mục đích và lý do; không còn cụm "đã dặn", "theo sở thích" trong ngoặc
    kép ở bất kỳ prompt nào (test đọc prompt); test hiện có vẫn qua.
-2. **Bộ ca eval bộ nhớ và nạp bản ghi trước** (P0-2). File: `evals/golden/phase5.jsonl` (các ca mới mục 5.1), `evals/run.py` (khóa ca mới
+2. **Bộ ca eval bộ nhớ và nạp bản ghi trước** (P0-2). **Đã làm** (`p5/mem-p0`, 24/11), theo chủ dự án: ít ca, mỗi ca chạy MỘT lần (không
+   chạy lặp 3 lần). Ba ca mới `memory-knowledge-update`, `memory-forget-no-invent` (gộp quên và abstention), `memory-whatif-protect-jar`
+   (gộp multi-session và what-if); `memory-state-preference` thành ca GHI có kỳ vọng bản ghi (giữ chữ giới hạn thời gian, thay cho ca
+   temporal riêng); `memory-recall` nạp sẵn. Tổng 6 ca bộ nhớ. Judge chỉ ở `memory-forget-no-invent`. Ca phủ định dùng câu mốc
+   (`memory-question-not-stored`) chưa làm; `evals/README.md` chưa ghi quyền (ngoài phạm vi nhánh, ghi ở `run.py` và thiết kế mục 2.14).
+   Chưa chạy trên Runtime. File: `evals/golden/phase5.jsonl` (các ca mới mục 5.1), `evals/run.py` (khóa ca mới
    `seed_memory` gọi `BatchCreateMemoryRecords`, câu mốc cho ca phủ định, chạy lặp 3 lần, rubric judge), `evals/README.md`,
    `tests/unit/test_evals.py`. Xong khi: runner nạp và xóa bản ghi theo namespace của `sub` thử; ca phủ định báo "không thấy trong N giây sau
    mốc"; test runner với client giả qua; README ghi quyền cần cho danh tính chạy eval.
-3. **Chỉ dẫn trích xuất: phạm vi thời gian, rút lại, lý do từ chối** (P0-3). File: `infra-cdk/lib/memory.ts`
+3. **Chỉ dẫn trích xuất: phạm vi thời gian, rút lại, lý do từ chối** (P0-3). **Đã làm** (`p5/mem-p0`, 24/11): `CHANGE_AND_SCOPE_RULES`
+   chung cho hai strategy, test CDK, `cdk synth` chỉ đổi `MemoryStrategies`; điều kiện "sau deploy" chờ lần chạy eval. File: `infra-cdk/lib/memory.ts`
    (`USER_PREFERENCE_EXTRACTION_PROMPT`, `SEMANTIC_EXTRACTION_PROMPT`), `infra-cdk/test/memory.test.ts`,
    `docs/research/agentcore-memory-design.md` mục 2.2. Xong khi: `npm test` qua; `appendToPrompt` dưới 30.000 ký tự; template chỉ đổi
    `MemoryStrategies`; sau deploy, ca `memory-state-preference` với câu "tháng này" có bản ghi giữ chữ "tháng này".

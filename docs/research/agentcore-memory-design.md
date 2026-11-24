@@ -11,7 +11,7 @@ nhãn rỗng), 2.12, 2.13, mục 3. Chủ dự án yêu cầu không chặn câu
 sửa ở thiết kế bộ nhớ và prompt.
 
 Mã: `agent/src/yofina_agent/memory.py` (đọc, ghi, chính sách, ý định `memory`, khối prompt), `writer.py` (`MEMORY_GUIDE`), `whatif.py`
-(phần bộ nhớ của `ANALYST_SYSTEM`), `turn.py` (`Turn.memory_block`), `gateway/tools/ledger/yofina_ledger/memory_store.py` (xem, xóa,
+(`ANALYST_MEMORY_GUIDE`), `turn.py` (`Turn.memory_block`), `gateway/tools/ledger/yofina_ledger/memory_store.py` (xem, xóa,
 `quiet_hours`), `gateway/tools/ledger/yofina_ledger/privacy_rest.py` (REST `/memory*`, `/me/delete-data*`), `infra-cdk/lib/memory.ts`
 (Memory, strategy, chỉ dẫn trích xuất, alarm, IAM, route). Hàm chữ dùng chung: `libs/yofina_core/src/yofina_core/memory_text.py`. Hợp
 đồng: `libs/yofina_core/src/yofina_core/memory.py`, `privacy.py`, `contracts/rest/openapi.yaml`, migration `0053`.
@@ -21,10 +21,11 @@ Mã: `agent/src/yofina_agent/memory.py` (đọc, ghi, chính sách, ý định `
 | Bước | Làm gì | Ở đâu | Vì sao |
 |---|---|---|---|
 | Ghi gì | Chỉ câu của người dùng, đã che PII, tên người khác, số tiền; chỉ lượt đã qua Guardrail đầu vào; không ghi lượt hỏi đáp thuần (tra cứu, what-if, kiểm tra trước khi chi, chống chịu, cú sốc, thói quen, biểu phí), ngoài phạm vi, nạp tệp, chuyển tiền, câu "bạn nhớ gì về mình", câu có dấu hiệu tấn công prompt | `memory.skip_reason`, `AgentMemory.ingest_request` (sau `RUN_FINISHED`, `IngestData`) | 2.4 |
-| Trích gì | Strategy sở thích và strategy sự thật, "built-in with overrides" cho bước trích xuất: chỉ điều người dùng KHẲNG ĐỊNH về bản thân (sở thích; hoàn cảnh, kế hoạch), bỏ câu hỏi và what-if, không số tiền hay số tài khoản, không tên người khác, sự thật không lặp sở thích, viết tiếng Việt. Hợp nhất giữ mặc định. Không còn tóm tắt phiên | `infra-cdk/lib/memory.ts` (`USER_PREFERENCE_EXTRACTION_PROMPT`, `SEMANTIC_EXTRACTION_PROMPT`) | 2.2 |
+| Trích gì | Strategy sở thích và strategy sự thật, "built-in with overrides" cho bước trích xuất: chỉ điều người dùng KHẲNG ĐỊNH về bản thân (sở thích; hoàn cảnh, kế hoạch), bỏ câu hỏi và what-if, không số tiền hay số tài khoản, không tên người khác, sự thật không lặp sở thích, viết tiếng Việt; giữ chữ giới hạn thời gian của người dùng, câu đổi ý hay rút lại viết thành lời khẳng định đầy đủ về cùng một điều, lý do từ chối đề xuất là lời khẳng định (P0-3). Hợp nhất giữ mặc định. Không còn tóm tắt phiên | `infra-cdk/lib/memory.ts` (`USER_PREFERENCE_EXTRACTION_PROMPT`, `SEMANTIC_EXTRACTION_PROMPT`, `CHANGE_AND_SCOPE_RULES`) | 2.2 |
 | Đọc gì | Mọi sở thích (`ListMemoryRecords`) và tối đa 3 sự thật liên quan tới câu hỏi (`RetrieveMemoryRecords`), song song với router, hạn 1,2 giây; khử trùng sở thích với sự thật | `AgentMemory.recall` | 2.5 |
-| Dùng ở bước nào | Người viết câu trả lời (các việc trong `MEMORY_TASKS`) và Analyst của what-if, dưới dạng khối JSON có cấu trúc (`so_thich[{noi_dung, hu, ngay_ghi}]`, `dieu_da_ke[{noi_dung, ngay_ghi}]`); `hu` là hũ thật do mã đối chiếu tên. Không vào router (đọc song song), không vào bản gọn (không thành căn cứ số tiền). Ý định `memory` kể lại bản ghi; bản tin đọc `quiet_hours` | `MemoryContext.prompt_block`, `Turn.memory_block`, `writer.MEMORY_GUIDE`, `whatif.ANALYST_SYSTEM` | 2.5 |
+| Dùng ở bước nào | Người viết câu trả lời (các việc trong `MEMORY_TASKS`) và Analyst của what-if, dưới dạng khối JSON có cấu trúc (`so_thich[{noi_dung, hu, ngay_ghi}]`, `dieu_da_ke[{noi_dung, ngay_ghi}]`); `hu` là hũ thật do mã đối chiếu tên. Chỉ dẫn cách dùng nêu mục đích, lý do, giới hạn, không câu mẫu, và chỉ đi kèm khi khối khác rỗng (system prompt không nói về bộ nhớ). Không vào router (đọc song song), không vào bản gọn (không thành căn cứ số tiền). Ý định `memory` kể lại bản ghi; bản tin đọc `quiet_hours` | `MemoryContext.prompt_block` (`PROMPT_NOTICE`), `Turn.memory_block`, `writer.MEMORY_GUIDE`, `whatif.ANALYST_MEMORY_GUIDE` | 2.5 |
 | Hiển thị, xóa | `GET /memory` cùng hàm khử trùng với agent, bỏ mẩu nhãn rỗng; `DELETE /memory*`, "Xóa dữ liệu của tôi" | `memory_store.py` | 2.10 |
+| Đánh giá | Ca DÙNG nạp bản ghi trước bằng `BatchCreateMemoryRecords`, ca GHI chờ đúng bản ghi mong đợi; chấm hành vi (trạng thái `GET /memory`, hũ của phương án, judge cho việc gán điều không có) | `evals/run.py`, `evals/golden/phase5.jsonl` | 2.14 |
 
 ## 1. Nguồn đã tra (24/11/2026; tra lại và bổ sung 25/11/2026)
 
@@ -100,7 +101,17 @@ information". Nay (`infra-cdk/lib/memory.ts`):
     best practice);
   - luôn viết tiếng Việt có dấu, khai `language` là "Vietnamese", câu ngắn không chủ ngữ ("Làm giáo viên ở Đà Nẵng"), giữ nguyên tên
     riêng và tên hũ. Với strategy sự thật, khối `<language_requirement>` nằm trong phần chỉ dẫn nên được thay hẳn; với strategy sở thích,
-    khối đó nằm trong output schema (không sửa được), luật ngôn ngữ chỉ nói thêm và không mâu thuẫn vì hội thoại là tiếng Việt.
+    khối đó nằm trong output schema (không sửa được), luật ngôn ngữ chỉ nói thêm và không mâu thuẫn vì hội thoại là tiếng Việt;
+  - (P0-3, `CHANGE_AND_SCOPE_RULES`, chung cho hai strategy; theo [long-term-memory-research.md](long-term-memory-research.md) mục 2.4)
+    hợp nhất mặc định chỉ có Add, Update, Skip và bỏ "trạng thái tạm thời", nên bước trích xuất phải: giữ nguyên chữ giới hạn thời gian
+    của người dùng (một khoảng, một hạn, một sự kiện sắp tới, một tình trạng tạm), không bỏ, không rút gọn, không đổi thành ngày (ngày và
+    số bị che khi đọc), và vẫn trích câu chỉ đúng trong một thời gian; câu đổi ý hay rút lại viết thành MỘT lời khẳng định hoặc phủ định
+    đầy đủ về đúng điều cũ (cùng hũ, cùng giờ nhắc, cùng hoàn cảnh), không trả danh sách rỗng chỉ vì câu bỏ đi một điều, vì bước hợp
+    nhất chỉ thay được bản cũ khi bản mới nói rõ trạng thái hiện tại của cùng một điều; lý do từ chối một đề xuất là lời khẳng định về
+    bản thân (sự thật giữ phần hoàn cảnh, sở thích giữ phần muốn giữ hay ưu tiên), còn việc từ chối thì ứng dụng tự lưu (`feedback`).
+    Chỉ nêu nguyên tắc và lý do, không ví dụ (test CDK: không chứa chữ của bộ đánh giá). `cdk synth YofinaAgent` trước và sau: cùng
+    logical id của Memory, chỉ `MemoryStrategies` đổi, tên strategy và namespace giữ nguyên, nên lần cập nhật là `modifyMemoryStrategies`
+    tại chỗ.
 - **Model**: `apac.amazon.nova-lite-v1:0` (`EXTRACTION_MODEL_ID`, đổi được qua prop `extractionModelId`). Lý do: (1) override gọi model
   TRONG tài khoản và ăn quota Bedrock của tài khoản; throttle thì lượt trích xuất thất bại ("Amazon Bedrock capacity for built-in with
   overrides strategies"). Model nhỏ của agent là Nova 2 Lite `global.` (20 RPM ở Singapore, agent tự giới hạn 18) và Claude chỉ khoảng
@@ -220,14 +231,17 @@ Vẫn ghi: `memory`, `profile_update` (hoàn cảnh: đổi việc, chuyển nh�
     ngày thật hôm nay, theo múi giờ ứng dụng); câu báo nói nó chỉ để biết mục cũ hay mới, không phải số liệu để nhắc lại.
   `PROMPT_NOTICE` nói rõ các mục là điều CHÍNH người dùng tự nói, không bao giờ là căn cứ cho con số hay ngày. Khối không vào bản gọn nên
   không thành căn cứ số tiền (`allowed_amounts`), và NumericGrounding của Verifier không lấy số từ bộ nhớ.
-- **Chỉ dẫn dùng bộ nhớ trung tính, không câu mẫu.** Người viết (`writer.MEMORY_GUIDE`, chỉ thêm cho `MEMORY_TASKS`): chỉ dùng một mục khi
-  nó trực tiếp trả lời câu hỏi; khi đó áp dụng và có thể nêu lại đúng nội dung mục như điều người dùng đã nói, hũ nêu theo mục phải nằm
-  trong `hu` của mục đó, được thêm tối đa một câu ngoài khuôn của nhiệm vụ; không mục nào trả lời trực tiếp thì trả lời như bình thường và
-  không nhắc tới bộ nhớ; một ví dụ âm (hỏi nên để tiền vào hũ nào mà không `so_thich` nào có `hu` khác rỗng thì không viết "bạn đã dặn",
-  không tự chọn hũ rồi gán cho người dùng); không lấy số hay ngày từ bộ nhớ. `WRITER_SYSTEM` bỏ câu dẫn dắt cũ ("họ muốn ưu tiên một hũ thì
-  gợi ý hũ đó..."). Analyst (`whatif.ANALYST_SYSTEM`): cùng nguyên tắc cho việc chọn phương án (người dùng nói muốn dồn tiền cho hay giữ
-  một hũ thì không chọn hũ đó làm hũ bị lấy tiền khi còn hũ khác phù hợp, nói rõ trong summary hoặc narrative), bỏ tên hũ mẫu "(ví dụ hũ Du
-  lịch)".
+- **Chỉ dẫn dùng bộ nhớ: mục đích, lý do, giới hạn; không câu mẫu (P0-1, [long-term-memory-research.md](long-term-memory-research.md)
+  mục 3.4).** Hai chỉ dẫn chỉ đi kèm khi khối khác rỗng, đặt ngay sau khối; `WRITER_SYSTEM` và `ANALYST_SYSTEM` không còn câu nào về bộ
+  nhớ, nên lượt không có bộ nhớ không mang chỉ dẫn thừa (test). Người viết (`writer.MEMORY_GUIDE`, chỉ cho `MEMORY_TASKS`): mục đích của
+  khối (người dùng không phải nhắc lại), khi nào một mục đáng dùng (nó làm câu trả lời cho câu hỏi đang hỏi khác đi), hũ nêu theo mục
+  phải nằm trong `hu` của mục, được thêm tối đa một câu ngoài khuôn; lý do (gán điều chưa nói hay nhắc mục không liên quan làm mất niềm
+  tin, nên điều gì trình bày là của người dùng phải có trong khối, gợi ý tự rút từ dữ liệu là gợi ý của trợ lý); mục có thời hạn xét cùng
+  `ngay_ghi`; không căn cứ số. Analyst (`whatif.ANALYST_MEMORY_GUIDE`): cân mục liên quan khi chọn phương án, chọn hũ, chọn phương án gợi
+  ý và cho người dùng thấy điều đó; bỏ kết luận đặt sẵn của bản cũ (hũ nào không được chọn) để model tự cân; mục có thời hạn so `ngay_ghi`
+  với `<ngay_hom_nay>`; luật số liệu và luật phù hợp vẫn thắng. `PROMPT_NOTICE` (trong khối) mô tả nguồn, các trường, chỗ số đã bỏ. Bỏ ví
+  dụ âm có cụm trong ngoặc kép của bản trước: với model nhỏ, cụm bị trích là một mẫu để chép (Runtime v23). Test: không prompt nào chứa
+  cụm gán lời cho người dùng; chỉ dẫn bộ nhớ không ví dụ, không ngoặc kép, không tên hũ mẫu.
 - **Bước quyết định.** Bộ nhớ vào Analyst (what-if: chọn phương án, hũ bị lấy tiền) và người viết. Không đưa vào router: đọc song song với
   router là để không chậm thêm tới 1,2 giây mỗi lượt, và sở thích không đổi ý định của câu. Không đưa vào bản gọn (`compact`) của tool: bản
   gọn là căn cứ số tiền. Câu "nên để vào hũ nào?" là ý định tra cứu số dư, không có bước quyết định nào khác ngoài người viết; dữ liệu có
@@ -336,12 +350,36 @@ dùng `ListMemoryRecords`.
 `new_records`, `waited_s`. Bản cũ dừng ở bản ghi mới đầu tiên, có thể là bản ghi của lượt what-if chạy trước. Tiêu chí chấm không đổi:
 hết giờ chờ không làm ca đạt hay trượt thay cho câu trả lời.
 
+**Bộ ca bộ nhớ (P0-2, theo [long-term-memory-research.md](long-term-memory-research.md) mục 5).** Sáu ca golden phase 5 (ba ca cũ, ba ca
+mới), mỗi ca chạy một lần. Mọi ca có `seed_memory`, `prior_sessions` hay `expect_memory_records` bắt đầu bằng `DELETE /memory`.
+
+| Ca | Loại | Năng lực | Chấm (hành vi) |
+|---|---|---|---|
+| `memory-state-preference` | GHI | Ghi sở thích, giữ chữ giới hạn thời gian (P0-3) | Không gọi tool ghi; `expect_memory_records`: có sở thích nhắc hũ Du lịch và giữ chữ giới hạn của câu, có sở thích về giờ nhắc (`memory_after.outcome` `seen` hay `timeout`) |
+| `memory-reuse-new-session` | GHI rồi DÙNG | Tiêu chí 5, đầu cuối | Như trước: phiên mới nhắc hũ, không hỏi lại |
+| `memory-recall` | DÙNG (nạp sẵn) | Kể lại | Câu trả lời nhắc hũ của bản đã nạp; nạp hỏng thì trượt |
+| `memory-knowledge-update` | Nạp bản cũ, GHI đổi ý, DÙNG | Knowledge update, rút lại | Bản đã nạp bị bước hợp nhất thay (`expect_seed_superseded`: không còn hoặc đã đổi nội dung); phiên mới dùng hũ mới, không hỏi lại |
+| `memory-forget-no-invent` | DÙNG (nạp, xóa qua REST) | Quên, abstention | Bản đã xóa không còn trước câu hỏi; judge (model khác, `--judge-role`, mặc định `planner`) không thấy câu trả lời gán cho người dùng điều không có trong bộ nhớ hay điều đã xóa |
+| `memory-whatif-protect-jar` | DÙNG (nạp sẵn) | Nhiều phiên, đường Analyst | Không phương án nào lấy tiền hũ người dùng muốn giữ (`option_id` dựng theo hũ, `from_jar` của khối xác nhận); NumericGrounding như mọi ca |
+
+- Nạp: `MemorySeeder` gọi `BatchCreateMemoryRecords` vào namespace của `sub` tài khoản chạy eval (đọc từ access token), nội dung giống bản
+  strategy tạo (sở thích là JSON `{context, preference, categories}`, đối chiếu một bản thật 24/11; sự thật là chữ thường), kèm id
+  strategy đọc bằng `GetMemory` để bước hợp nhất của strategy đó coi bản ghi là của mình, `recordExpirySpecification` 1 ngày; chờ bản
+  ghi hiện ở `GET /memory` (`memory_ready`); dọn bằng `DELETE /memory` sau ca. Danh tính chạy eval cần
+  `bedrock-agentcore:BatchCreateMemoryRecords` và `bedrock-agentcore-control:GetMemory` trên Memory; Runtime và Lambda không có quyền
+  ghi bản ghi.
+- Judge chỉ ở ca cần phân biệt "gợi ý của trợ lý" với "gán cho người dùng" (không làm được bằng mã mà không so câu chữ); một lời gọi qua
+  `yofina_core.llm` (giới hạn tốc độ, trần ngày), verdict lưu trong kết quả để `--score-only` chấm lại. Ca còn lại chấm bằng mã.
+- Chưa chạy trên Runtime: người điều phối chạy một lần sau deploy. Chưa biết bản ghi tạo bằng Batch API kèm `memoryStrategyId` có được
+  bước hợp nhất xét cùng bản ghi mới không (mục 7 của ghi chú nghiên cứu); `memory_state.with_strategy_id` ghi bản đã nạp có kèm id
+  hay không, để đọc kết quả `ban_cu_con_nguyen` cho đúng.
+
 ## 3. Chưa kiểm, rủi ro, việc cho người khác
 
 1. **Chưa deploy, chưa chạy thật** (theo luật của đợt): override ở ap-southeast-1 với `apac.amazon.nova-lite-v1:0`; chất lượng trích xuất
    của Nova Lite v1 với chỉ dẫn dài (đúng JSON schema, đúng luật "bỏ câu hỏi", tiếng Việt có dấu); độ trễ trích xuất. Sau deploy cần: xem
    `FailedExtraction` và `ListMemoryExtractionJobs`, nói một sở thích rồi đọc `GET /memory` (tiếng Việt, không có bản sự thật trùng), hỏi
-   một câu what-if (không ra bản ghi), rồi chạy hai ca golden bộ nhớ. Nếu Nova Lite v1 không giữ được JSON schema thì đổi
+   một câu what-if (không ra bản ghi), rồi chạy các ca golden bộ nhớ (mục 2.14). Nếu Nova Lite v1 không giữ được JSON schema thì đổi
    `extractionModelId` (ví dụ Nova Pro `apac.`) và chấp nhận chi phí cao hơn.
 2. **Bản ghi của strategy cũ**: lần cập nhật xóa ba strategy cũ và thêm hai strategy mới. Tài liệu không nói bản ghi của strategy đã xóa
    còn hay mất; namespace giữ nguyên nên nếu còn, agent và REST vẫn đọc, xóa được. Theo file phase 5, sau các lần kiểm 24/11 bộ nhớ của các tài khoản
