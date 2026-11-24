@@ -1,90 +1,316 @@
 # Phase 6 — Đánh giá, cứng hóa, đóng gói
 
-Ngày dự kiến: 9–10/12/2026 (nộp trước 11/12). Kế hoạch tổng: [master-plan.md](../master-plan.md). Điều kiện vào: phase 5 đạt, hoặc đã hết thời gian cho phase 5: khi đó phase này chạy trên những gì đã xong và ghi rõ phần thiếu.
+Kế hoạch tổng: [master-plan.md](../master-plan.md). Bản đầu viết 21/11; **viết lại 24/11 khuya** (worker Kiro, Claude Opus 5.5, do Claude Code điều phối) theo hiện trạng sau Runtime v26.
 
-## Mục tiêu
+**Ngày: 25/11–10/12/2026, nộp chậm nhất 10/12 (hạn giả định 11/12).** [đổi 24/11: bản cũ là 9–10/12; phase 5 xong code sớm hai tuần nên phase 6 có 16 ngày.] Điều kiện vào: phase 5 đóng (mục A dưới đây), hoặc tới 26/11 tối chưa đóng thì phase 6 vẫn chạy và ghi rõ phần thiếu.
 
-Có số đo cho các NFR, bộ đánh giá chạy lại được trong giới hạn quota, không còn lỗi chặn demo, và bộ tài liệu nộp bài. Giám khảo tự dùng tài khoản demo đi được cả 6 cảnh; nếu model hoặc mạng trục trặc thì app vẫn trả thẻ số liệu.
+Ký hiệu trong file: **[giữ]** là phần của bản 21/11 còn đúng; **[đổi 24/11]** là phần đã sửa; **[mới 24/11]** là phần thêm; **[cắt 24/11]** là phần bỏ (đề xuất, chờ chủ dự án duyệt ở mục 7).
 
-## Phạm vi
+## 0. Hiện trạng khi vào phase 6 (24/11 khuya)
 
-Batch tuần, bộ 50 câu chuẩn và 50 câu đối kháng, đo NFR, kiểm bảo mật và chi phí, hoàn thiện giao diện (tối, điện thoại thật, a11y), tài liệu nộp. Không thêm tính năng mới.
+| Mảng | Hiện trạng | Nguồn |
+|---|---|---|
+| Hạ tầng | Bảy stack `*_COMPLETE`; Runtime `yofina_agent` v26; Amplify job 19; migration tới 0054; Aurora min 0 / max 2 ACU, tự ngủ sau 600 giây | [HANDOFF](../../../HANDOFF.md), [aws-resources.md](../../aws-resources.md) |
+| Test | Unit 3871, CDK 77/77, vitest 978. Không có CI (chưa có `.github/`) | HANDOFF |
+| Eval (v25, một lần) | Golden phase 3 31/31, phase 4 14/14, phase 5 11/15 (bốn ca trượt do lỗi runner đã sửa; ở v26 đã đo lại hai ca: `memory-forget-no-invent` đạt, `memory-state-preference` trượt); adversarial 16/16, 12/12, 14/14; router diễn đạt lại 18/18; OCR ảnh thật 9/11, r08 đạt lại ở v26 | [phase 5](phase-5-nap-du-lieu-ho-so-trace.md) |
+| Bộ eval | 60 câu golden (31 + 14 + 15), 42 ca đối kháng (16 + 12 + 14), 18 câu diễn đạt lại, 25 ảnh thật + 33 mục dựng cho OCR | `evals/` |
+| Chi phí eval | Khoảng **$2,2–2,5 một lượt đầy đủ** (đo 24/11), khoảng 80% là Sonnet 4.6 | HANDOFF |
+| Độ trễ đã đo | Event đầu phiên ấm 0,34 s, phiên lạnh 2,04 s; `POST /affordability` p95 328 ms; what-if (23/11, 10 lượt) khối đầu p50 6,9 s / p95 18,2 s, trọn câu p50 16,7 s / p95 28,2 s; what-if v21–v25 từ 16,9 đến 29,2 s mỗi lượt; lập lộ trình 20–26 s; `ApplyGuardrail` p50 446 / p95 531 ms | [phase 3](phase-3-what-if-va-kiem-tra.md), phase 5 |
+| Chi phí một lượt | Một lượt what-if đọc từ trace: 3 lượt gọi model, 12.477 token vào, 1.549 token ra, ước 1.578 ₫ (khoảng $0,06). Chưa có số trung bình theo ý định | phase 5, tiêu chí 8 |
+| Phase 4 còn lệch | Tỷ lệ phải hỏi khi phân loại 17,4% (mục tiêu < 10%); `period_end` của lộ trình chưa theo ngày lương; màn So với bản cũ ghi mã thô | [phase 4](phase-4-chong-chiu-lo-trinh.md) |
+| Phase 5 còn mở | Tiêu chí 3 (OCR) chưa chốt; tiêu chí 10 (6 cảnh trên giao diện mới) chưa đi; bộ nhớ trích xuất còn lệch (`memory-state-preference`); `turn_persist_timeout` mỗi ca eval | phase 5, HANDOFF mục C |
+| Video | Dự án Remotion ở `C:\moMo\video` (máy của Phúc, **chưa vào git**): phần dựng mở đầu 4 cảnh (`Story.tsx`) và một ô chờ đoạn quay app thật (`demoClip`); bản nháp `out/yofina-story-draft.mp4` dựng 22/11 | thư mục `video/` |
+| Tài liệu nộp | `README.md` gốc còn ghi trạng thái 21/11 ("chưa có code sản phẩm"); cột trạng thái ở [requirements.md](../../requirements/requirements.md) và AC ở [ba/05](../../ba/05-acceptance-criteria.md) chưa cập nhật từ 22/11 | đọc file |
 
-## Đọc trước
+## 1. Mục tiêu
 
-| Luồng | Đọc |
-|---|---|
-| Mọi luồng | "Kết quả thực hiện" của phase 1–5; [requirements.md](../../requirements/requirements.md); bảng NFR ở [proposal-summary.md §5](../../proposal/proposal-summary.md); §6 (KPI), §13 (rủi ro) |
-| A | [agentcore.md](../../research/agentcore.md) §3.6; [spike-bedrock-models.md](../../research/spike-bedrock-models.md) §2a, §9 |
-| B | [spike-ml-forecasting.md](../../research/spike-ml-forecasting.md) §3, §5 |
-| C | [spike-agentcore-gateway-identity.md](../../research/spike-agentcore-gateway-identity.md) §8; skill `aws-core:aws-billing-and-cost-management`, `/security-review` |
-| D | [figma-ui-design.md](../../research/figma-ui-design.md) §7, node giao diện tối `28:2742`, `28:2967`, `28:3074`; [demo-script.md](../demo-script.md) |
+[đổi 24/11] Đưa bản đang chạy tới mức giám khảo tự dùng được và tin được, với số đo để chứng minh. Cụ thể:
 
-## Luồng A — Bộ đánh giá agent
+1. Đóng phase 5 và không còn lỗi chặn 6 cảnh demo.
+2. Cứng hóa bốn mặt: bảo mật (IAM, secret, CORS, giới hạn tốc độ), độ bền (lỗi ghi lượt, Aurora ngủ, retry, throttling), hiệu năng (độ trễ lượt, Guardrail), và các việc để sau của phase 4–5 có hiện trên đường demo.
+3. Một lượt đánh giá đầy đủ duy nhất trên bản ứng viên cuối (RC), kèm bảng NFR "mục tiêu / đo được" và chi phí mỗi lượt.
+4. Bộ nộp bài: README cho giám khảo, sơ đồ kiến trúc, video demo, kịch bản thuyết trình, tài liệu chi phí AWS.
+5. Buổi chấm chạy được: tài khoản và mật khẩu mới, Aurora thức, kiểm trước giờ, phương án dự phòng khi Bedrock throttle hoặc chạm trần.
 
-Sở hữu: `evals/`.
+Không thêm tính năng mới. [giữ]
 
-- Gộp và bổ sung cho đủ: 50 câu chuẩn có quỹ đạo tool mong đợi (phủ F1–F7, sáu loại kịch bản, câu thiếu tham số, tra cứu) và 50 câu đối kháng (prompt injection trực tiếp và qua tệp, đòi dữ liệu người khác, ép ghi không xác nhận, khuyên chứng khoán, khuyên vay để tiêu, moi system prompt).
-- Evaluator viết bằng code: `NumericGrounding`, `SchemaValidity`, `SuitabilityCompliance`, khớp quỹ đạo tool, có trace cho 100% lượt. Điểm hữu ích của lời giải thích chấm bằng LLM judge trên mẫu 20 câu (Sonnet 4.6, giãn nhịp).
-- Runner: tuần tự, giãn nhịp dưới quota (mặc định 8 request/phút mỗi model), lưu kết quả từng câu, chạy tiếp khi đứt, tôn trọng trần lượt gọi mỗi ngày (ước tính số lượt trước khi chạy; nếu vượt trần thì chia hai ngày hoặc nâng trần tạm có ghi lại). Chạy trên tài khoản `giamkhao3` đã đặt lại.
-- AgentCore Evaluations online (nếu còn thời gian): lấy mẫu thấp, evaluator dựng sẵn; ghi chi phí. Không bắt buộc.
-- Báo cáo `docs/research/eval-report.md`: tỷ lệ đạt theo nhóm, từng câu trượt và nguyên nhân, chi phí và số lượt gọi.
+## 2. Tiêu chí hoàn thành đo được
 
-## Luồng B — Batch tuần và chất lượng dự báo
+[đổi 24/11] Tiêu chí chấm chính thức và trọng số chưa có (câu hỏi mở trong [open-questions.md](../../requirements/open-questions.md)). Bảng dưới gắn mỗi tiêu chí với thứ BA ghi là giám khảo sẽ nhìn: [ba/08 mục 5](../../ba/08-kpi-kinh-doanh.md#5-ma-trận-kpi-theo-bên-hưởng-lợi) (K2, K5, cộng NFR độ trễ, độ đúng của số, an toàn) và [ba/10 mục 7](../../ba/10-tac-dong-stakeholder.md#7-tác-động-theo-mốc-thời-gian) (mốc M0: dự báo đúng và sớm, token chặn 13 ca tấn công, trace 100% lượt, chi phí mỗi lượt). Chỉ tiêu NFR lấy từ [ba/04](../../ba/04-non-functional-requirements.md).
 
-Sở hữu: `pipelines/weekly/`.
+| # | Nhóm chấm | Tiêu chí | Chỉ tiêu | Nguồn số | Hiện trạng 24/11 |
+|---|---|---|---|---|---|
+| 1 | Độ đúng, AI có kiểm soát | Golden 60 câu trên RC | Mục tiêu 60/60; chấp nhận từ 57/60 khi mỗi ca trượt có nguyên nhân ghi lại và không thuộc nhóm an toàn. `NumericGrounding` 100% trên câu đã phát, `SchemaValidity` 100%, quỹ đạo tool từ 85% (NFR-07) | `evals/run.py`, `evals/results/` | 56/60 ở v25 (bốn ca do runner) |
+| 2 | An toàn | Đối kháng trên RC | 100% đạt: 0 gợi ý vi phạm luật lọt ra, 0 lượt ghi không có token, 0 rò dữ liệu người khác, 0 PII trong câu trả lời và bộ nhớ (NFR-20, 22, 25, 26, 33) | như trên | 42/42 ở v25 |
+| 3 | Độ đúng | Router diễn đạt lại | Từ 17/18 | `evals/paraphrase/run_router.py` | 18/18 |
+| 4 | F6 | OCR ảnh thật (tiêu chí 3 phase 5) | Đủ 4 trường từ 90% trên ảnh đọc được, đo ở lượt RC | `scripts/eval_ingest.py --set real` | 9/11 ở v25; r08 đạt ở v26 nên dự kiến 10/11 |
+| 5 | Độ trễ | Event đầu (NFR-01) | Phiên ấm < 1,5 s; phiên lạnh ≤ 3 s nếu chủ dự án nới (Q2) | `scripts/measure_latency.py`, 10 lượt mỗi loại | 0,34 s / 2,04 s |
+| 6 | Độ trễ | Kiểm tra trước khi chi (NFR-02) | p95 < 2 s | `scripts/measure_phase3.py` hoặc integration test | 328 ms |
+| 7 | Độ trễ | What-if (NFR-03) | Theo Q1. Đề xuất: khối số liệu đầu tiên p95 ≤ 8 s, trọn câu p95 ≤ 20 s, ghi rõ trọn câu chưa đạt 8 s của proposal kèm phân rã thời gian | `step_timings` trong `audit_events` của lượt RC | khối đầu p95 18,2 s, trọn câu p95 28,2 s: **chưa đạt** |
+| 8 | Chi phí | Chi phí mỗi lượt (NFR-37, KPI §6, E-04) | Có số trung bình và p95 theo từng ý định. Ngưỡng cảnh báo đề xuất: what-if ≤ 2.500 ₫, lượt tra cứu ≤ 300 ₫ | `audit_events` (token, chi phí ước tính), bảng `yofina-usage`, Cost Explorer | chỉ có một lượt what-if (1.578 ₫) |
+| 9 | Độ bền | Tỷ lệ lỗi tool | < 1% lần gọi tool có `status: error` trong lượt RC (không tính `denied` của ca đối kháng); 0 `verifier_fallback`; 0 `turn_persist_timeout` | `/ops/summary`, log Runtime | `turn_persist_timeout` có ở mọi ca eval |
+| 10 | Giải thích | Trace 100% lượt (NFR-31) | Số lượt của runner bằng số dòng `audit_events` của lượt RC | đếm `audit_events` theo khoảng giờ chạy | chưa đếm; bị `turn_persist_timeout` đe dọa |
+| 11 | Độ bền | Ép lỗi (NFR-15, 17) | Bốn bài: model bị chặn (trần về 0 qua SSM), tool quá thời gian, Gateway từ chối, luồng SSE đứt. Mỗi bài ra thẻ số liệu hoặc thông báo rõ, không màn trắng, không treo | test tay + `tests/integration/` | đã có ở phase 3 (trần về 0), chưa làm lại trên v26 |
+| 12 | Bảo mật | Rà cấu hình (NFR-21, 23, 24) | IAM không có `*` thừa ở hành động và tài nguyên (ngoại lệ ghi lý do); quét repo và lịch sử git không ra account ID, ARN có account, khóa, mật khẩu, email; Gateway `ENFORCE`; mọi bảng có `user_id` bật RLS `FORCE`; S3 chặn public | mục B | chưa làm |
+| 13 | Quyền riêng tư | Xóa và công bố (NFR-28, 29, 30) | "Xóa dữ liệu của tôi" < 1 phút; màn Giới thiệu và README nói model có thể xử lý ngoài Singapore; 100% câu trả lời có nhãn AI | test tay, soát giao diện | xóa 991 ms; công bố và nhãn chưa soát |
+| 14 | Dự báo (K5) | Báo trước khi hũ cạn | Trung vị số ngày báo trước và tỷ lệ báo đúng trên 3 persona có trong báo cáo (mục tiêu K5: ≥ 7 ngày, ≥ 70%) | backtest chạy máy, không gọi model | chưa đo |
+| 15 | Demo | Tổng duyệt | 6 cảnh, 3 lần liên tiếp, mỗi lần ≤ 3 phút 30 giây, tài khoản vừa đặt lại, không lỗi; chủ dự án chạy được một lần trên Safari iPhone [giữ] | bấm giờ, ảnh chụp | chưa đi trên giao diện mới |
+| 16 | Trình bày | Bộ nộp bài | README giám khảo, sơ đồ, video ≤ 3 phút, slide outline, demo-runbook, tài liệu chi phí có trong repo (video ở link ngoài nếu Q13 chọn vậy); tài liệu trạng thái (HANDOFF, requirements, AC, open-questions, aws-resources) khớp bản RC | soát | chưa làm |
+| 17 | Vận hành | Sẵn sàng buổi chấm (NFR-18, 43) | Checklist trước giờ chạy xanh; 3 phiên song song không lỗi; mật khẩu demo đã đổi; tài nguyên khớp `aws-resources.md`; chi phí thực đã ghi | mục J | chưa làm |
 
-- Step Functions `yofina-weekly` (Chủ nhật): backtest rolling-origin trên dữ liệu trong DB, hiệu chỉnh lại ACI và hệ số khoảng tổng 30 ngày, ghi kết quả; đồng bộ kho tri thức; chạy bộ đánh giá rút gọn (10 câu).
-- Báo cáo cuối `docs/research/backtest-final.md`: pinball so với seasonal naive, độ phủ khoảng 80% (theo ngày và tổng 30 ngày), số ngày cảnh báo trước khi hũ cạn và tỷ lệ cảnh báo đúng trên ba persona (KPI §6), mô phỏng có và không có trợ lý (số lần trễ hạn, phí phát sinh).
+## 3. Phạm vi
 
-## Luồng C — Cứng hóa: độ trễ, tin cậy, bảo mật, chi phí
+**Làm**: đóng phase 5, cứng hóa, việc để sau có hiện trên demo, đợt 5 của kiểm toán prompt, một lượt eval cuối, đo NFR, tài liệu nộp, video, vận hành buổi chấm.
 
-Sở hữu: `tests/`, `scripts/`, sửa lỗi ở mọi thư mục theo phân công của người điều phối.
+**Cắt hoặc hoãn** [cắt 24/11, chờ duyệt ở mục 7]:
 
-- Đo NFR độ trễ (30 lượt mỗi loại, phiên ấm và phiên lạnh, từ trình duyệt): ký tự đầu, kiểm tra trước khi quẹt p95, what-if p95. Ghi bảng "mục tiêu / đo được"; mục không đạt thì ghi nguyên nhân và biện pháp đã áp (làm nóng phiên, khối đến trước).
-- Tin cậy: ép lỗi từng thành phần (model bị chặn, tool quá thời gian, Aurora chậm, Gateway từ chối, luồng SSE đứt) và xác nhận app trả thẻ số liệu hoặc thông báo rõ; sự kiện gửi trùng; DLQ rỗng sau các bài thử.
-- Bảo mật: chạy `/security-review` trên repo; test CI (GitHub Actions, chỉ phần không cần AWS, cộng test cấu hình chạy bằng tay) khẳng định Gateway có interceptor và Policy ở `ENFORCE`, mọi bảng có RLS, Lambda tool không đọc được secret master; quét repo tìm account ID, ARN, secret, email; kiểm IAM của từng Lambda không có wildcard thừa; S3 chặn public.
-- Chi phí: đối chiếu Cost Explorer với ước tính, kiểm Budgets đã gửi được cảnh báo thử, ghi chi phí mỗi lượt hội thoại từ trace; trần lượt gọi mỗi ngày đặt lại cho ngày chấm.
-- Aurora không tự pause; làm nóng Lambda và phiên trước giờ demo bằng script `scripts/warmup.py`.
-- Dọn: xóa tài nguyên thử còn sót, đối chiếu `docs/aws-resources.md` với tài khoản; viết `scripts/teardown.md` (thứ tự hủy stack sau cuộc thi; không chạy).
+| Mục trong bản 21/11 | Đề xuất | Lý do |
+|---|---|---|
+| Step Functions `yofina-weekly` (backtest, hiệu chỉnh ACI, eval rút gọn hằng tuần) | Cắt (Q11). Thay bằng backtest chạy tay trên máy cho báo cáo K5 | Không nằm trên đường demo nào; eval hằng tuần tốn tiền model mà không ai đọc trong thời gian chấm |
+| Đồng bộ kho tri thức | Bỏ | RAG đã cắt 24/11 |
+| AgentCore Evaluations online | Cắt | Tốn tiền theo lượt chấm; màn trace tự làm và evaluator bằng code đã đủ |
+| Viết bộ eval tới 50 golden + 50 đối kháng | Golden giữ 60. Đối kháng thêm 8 ca để đủ 50 như KPI proposal §6 (Q10) | Golden đã vượt 50 |
+| Đo độ trễ 30 lượt mỗi loại từ trình duyệt | Lấy độ trễ phía server từ lượt RC; trình duyệt chỉ đo event đầu (10 lượt mỗi loại) | Mỗi lượt what-if tốn khoảng $0,06; 30 lượt mỗi loại là thêm vài USD mà không thêm thông tin |
+| Giao diện tối theo frame Figma | Chỉ soát các màn đã có chế độ tối, không làm frame mới | Đã có chế độ tối từ đợt UI round 1 |
+| WAF (proposal §8) | Không thêm, ghi lệch | Có phí theo tháng; JWT, throttle của HTTP API, trần lượt gọi và trần theo người dùng (B4) đủ cho bản demo |
+| Kiểm toán prompt đợt 7, 8 | Hoãn tới sau cuộc thi (Q7) | Xem mục F |
 
-## Luồng D — Hoàn thiện giao diện và tổng duyệt
+## 4. Các luồng việc
 
-Sở hữu: `frontend/`.
+Mỗi luồng sở hữu một tập file riêng để chạy song song; mỗi việc một worker trong worktree `C:\moMo-wt\p6-<việc>`, nhánh `p6/<việc>`, chỉ chạy unit test trong lúc làm. Người điều phối review, merge, chạy unit cả bộ. **Một luồng deploy tại một thời điểm**, gom theo ba đợt (mục 8): đợt 1 ngày 28/11, đợt 2 ngày 2/12, RC ngày 4/12. Sau mỗi đợt deploy chỉ chạy vài ca `--only` của phần vừa đổi, mỗi ca một lần. [mới 24/11]
 
-- So từng màn với frame Figma ở 390×844; sửa lệch khoảng cách, chữ, màu. Giao diện tối cho các màn có frame tối và kiểm biểu đồ, hũ thủy tinh ở chế độ tối (cắt được nếu thiếu thời gian).
-- A11y: tương phản, vùng chạm tối thiểu 44 px, nhãn cho nút biểu tượng, `prefers-reduced-motion`.
-- Điện thoại thật: bàn phím ảo che ô nhập, vuốt sheet, vùng an toàn; cài như PWA (manifest, icon chữ "Yofina"). Chủ dự án thử trên Safari iPhone, agent sửa theo lỗi báo về.
-- Kích thước bundle: tách chunk biểu đồ và chat; ghi số.
-- Kiểm không còn chữ "MoMo", "Ví Trả Sau" hay "FinHealth" trên giao diện; mọi màn có nhãn "Ví mô phỏng"; nội dung AI có nhãn.
-- Tổng duyệt: đi 6 cảnh ba lần liên tiếp từ tài khoản vừa đặt lại, bấm giờ; chụp ảnh từng cảnh vào `docs/plan/assets/demo/` để làm slide và làm phương án dự phòng.
+Chỗ hai luồng chạm cùng file: `agent/src/yofina_agent/turn.py` (C1 sửa phần ghi lượt, D2 sửa phần what-if, E3 sửa đọc số), `router.py` (E3, E4, F1). Gom E3, E4, F1 cho cùng một worker `p6-agent-polish`; C1 và D2 sửa khác hàm, người điều phối gỡ xung đột khi merge.
 
-## Luồng E — Tài liệu nộp
+Ước công tính bằng giờ làm của một worker hoặc một người, chưa gồm thời gian deploy.
 
-Sở hữu: `README.md`, `docs/`.
+### Luồng A — Đóng phase 5 [mới 24/11]
 
-- README: sản phẩm làm gì, kiến trúc (sơ đồ cập nhật theo thực tế), cách chạy lại (deploy từ đầu), tài khoản demo lấy ở đâu (không ghi mật khẩu), giới hạn đã biết.
-- Cập nhật [overview.md](../../architecture/overview.md): đổi nhãn [đề xuất] thành [đã chạy thử] ở những chỗ đã làm, ghi các chỗ lệch cuối cùng. Cập nhật cột trạng thái trong [requirements.md](../../requirements/requirements.md) và tick [open-questions.md](../../requirements/open-questions.md).
-- `docs/plan/demo-runbook.md`: kịch bản bấm cho video 3 phút theo app thật, việc cần làm trước khi quay (đặt lại, làm nóng), phương án khi lỗi.
-- Dàn ý slide 10 trang với số đo thật (`docs/plan/slide-outline.md`). Quay video và dựng slide là việc của chủ dự án.
+| ID | Việc | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|
+| A1 | Học đi lại 6 cảnh trên giao diện mới với `giamkhao1` vừa đặt lại, bấm giờ từng cảnh; làm luôn việc 2–5 của HANDOFF mục B (chứng từ ngoại tệ, hỏi tỷ giá, bộ nhớ hai phiên, biểu đồ chi tiêu) | app trên Amplify; ghi vào mục "Kiểm sau" của file phase 5 | Bảng đạt/lỗi kèm ảnh và giờ; danh sách chỗ khó tìm, chữ dài, thông tin lặp | Người điều phối đọc bảng và tự đi lại cảnh có lỗi | 3 |
+| A2 | Sửa lỗi chặn cảnh do A1 tìm ra (nếu có) | theo lỗi | Nhánh sửa, vào đợt deploy 1 | Đi lại đúng cảnh đó | 2–6 |
+| A3 | Bộ nhớ `memory-state-preference`: đo 3 lượt `IngestData` trực tiếp (không qua eval) với câu có sở thích kèm "tháng này"; nếu vẫn mất chữ thời hạn hoặc sự thật chép nguyên câu thì làm theo Q8 (đổi model trích xuất của `facts_vi`, hoặc override bước hợp nhất P1-6) | `infra-cdk/lib/memory.ts`, `agent/src/yofina_agent/memory.py`, script tạm ngoài repo | Bảng 3 lượt trước và sau; Memory cập nhật tại chỗ, giữ id | Ca `memory-state-preference` `--only` một lần sau đợt deploy 1 | 4 |
+| A4 | Chốt tiêu chí 3 OCR theo Q9: ghi r12 (ảnh mờ) là giới hạn đã biết, số chính thức lấy ở lượt RC | file phase 5 | Dòng tiêu chí 3 có quyết định | — | 0,5 |
+| A5 | Điền bảng đóng phase 5 (10 tiêu chí), tick open-questions, ghi HANDOFF | `docs/plan/phases/phase-5-*.md`, HANDOFF | Phase 5 đóng | Người điều phối soát | 1 |
 
-## Tiêu chí hoàn thành
+### Luồng B — Bảo mật [đổi 24/11, gộp từ luồng C cũ]
 
-1. Bộ 50 câu chuẩn: quỹ đạo tool đúng từ 85%, `SchemaValidity` 100%, `NumericGrounding` 100% trên câu trả lời đã phát, 100% lượt có trace. Bộ 50 câu đối kháng: 0 gợi ý vi phạm luật lọt ra, 0 lượt ghi không xác nhận, 0 rò dữ liệu người khác. Báo cáo có trong repo.
-2. Bảng NFR "mục tiêu / đo được" đầy đủ; mục không đạt có giải thích.
-3. Báo cáo backtest cuối có trong repo; batch tuần chạy tay thành công.
-4. Mọi bài ép lỗi ở luồng C cho kết quả suy giảm có kiểm soát; không có màn trắng hay luồng treo.
-5. `/security-review` không còn phát hiện mức cao chưa xử lý; quét repo sạch; test cấu hình đạt.
-6. Tổng duyệt 6 cảnh ba lần liên tiếp không lỗi, mỗi lần trong 3 phút rưỡi; chủ dự án xác nhận chạy được trên iPhone.
-7. Tài nguyên trên tài khoản khớp `docs/aws-resources.md`; chi phí thực đã ghi.
-8. README, demo-runbook, slide-outline, overview, requirements, open-questions, HANDOFF đã cập nhật; đã commit và push.
+| ID | Việc | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|
+| B1 | Rà IAM tối thiểu: đọc template sau `cdk synth` của bảy stack, liệt kê mọi statement có `*` ở `Action` hoặc `Resource`; chạy IAM Access Analyzer `ValidatePolicy` (API chỉ đọc, không cần tạo analyzer) trên từng policy; sửa chỗ thừa, chỗ nào phải giữ `*` (X-Ray, `PutMetricData`, log) thì ghi lý do | `infra-cdk/lib/*.ts`, `docs/research/security-review.md` (mới) | Bảng role → quyền → lý do; diff CDK chỉ thu hẹp quyền | `cdk diff` không có replace; unit CDK; gọi lại vài ca `--only` sau deploy | 4 |
+| B2 | Quét bí mật: script quét cây làm việc và `git log -p` tìm dãy 12 chữ số dạng account ID, `arn:aws:` có account, `AKIA`, `aws_secret`, mẫu mật khẩu, email; chạy trước mỗi commit nộp bài. Báo cáo kết quả lịch sử git cho Q5 | `scripts/scan_repo.py` (mới), `tests/unit/` | Danh sách phát hiện (không in giá trị, chỉ file và dòng) | Chạy trên `main`; thêm một chuỗi giả vào test để chắc script bắt được | 3 |
+| B3 | CORS: HTTP API bỏ `http://localhost:5173` khỏi bản deploy cuối (chuyển vào context dev `extraCorsOrigins`); bucket nạp chỉ cho origin Amplify; ghi rằng Runtime trả `Access-Control-Allow-Origin: *` (AgentCore quản, lượt gọi vẫn cần JWT) | `infra-cdk/lib/tools-stack.ts`, `ingest-stack.ts`, `infra-cdk/README.md` | Diff CORS; ghi chú ở security-review | `curl` preflight từ origin lạ bị từ chối ở HTTP API và S3 | 1,5 |
+| B4 | Giới hạn theo người dùng: trần lượt chat mỗi tài khoản mỗi ngày và trần lượt nạp tệp mỗi ngày (đếm ở `yofina-usage` với khóa riêng theo băm `sub`); chạm trần thì báo rõ và vẫn cho xem số liệu. Throttle riêng cho route nặng (`POST /demo/reset`, `POST /ingest/uploads`). Số trần trong SSM/cấu hình (Q6) | `agent/src/yofina_agent/quota.py` (mới, một dòng gọi ở `turn.py`), `pipelines/ingest/`, `infra-cdk/lib/tools-stack.ts` | Một tài khoản không làm cạn trần chung 400 lượt Sonnet của mọi người | Unit test; integration: đặt trần 2 cho tài khoản thử, lượt thứ 3 nhận thông báo | 4 |
+| B5 | Guardrail lỗi phải có người thấy: metric và alarm `guardrail_error` về SNS (giữ fail-open theo Q3) | `agent/src/yofina_agent/` (log EMF), `infra-cdk/lib/agent-stack.ts` | Alarm `yofina-guardrail-error` | Ép lỗi bằng guardrail id sai trên tài khoản thử, alarm chuyển `ALARM` | 2 |
+| B6 | Test cấu hình chạy tay (không vào CI vì cần AWS): Gateway có interceptor và policy engine `ENFORCE`; mọi bảng `public` có `user_id` bật RLS `ENABLE` + `FORCE`; Lambda tool không đọc được secret master; hai bucket chặn public; Cognito tắt tự đăng ký | `tests/config/` (mới) | Test đỏ khi cấu hình lệch | Chạy một lần sau RC, ghi kết quả | 3 |
+| B7 | Đọc lại mã theo checklist bảo mật (nhập liệu ở biên tin cậy, SQL có tham số, nội dung tệp chỉ là dữ liệu, không log PII), ghi phát hiện mức cao/vừa/thấp; mức cao sửa trước đợt 2 | toàn repo, `docs/research/security-review.md` | Bảng phát hiện và trạng thái | Người điều phối duyệt từng phát hiện mức cao | 4 |
 
-## Cách kiểm (người điều phối)
+### Luồng C — Lỗi và độ bền [đổi 24/11]
 
-- Tự chạy lại runner đánh giá trên một mẫu 15 câu ngẫu nhiên và so với báo cáo.
-- Tự làm ba bài ép lỗi; tự đi tổng duyệt một lần bằng trình duyệt trong app ở khổ điện thoại.
-- `git grep` các mẫu account ID, `arn:aws`, `AKIA`, mật khẩu; liệt kê tài nguyên theo tag.
-- Làm theo README từ đầu ở mức đọc khô để chắc không thiếu bước.
+| ID | Việc | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|
+| C1 | `turn_persist_timeout`: ghi thời lượng từng việc ghi (lưu hội thoại qua `save_turn`, bản ghi lượt qua `audit___record_turn`) vào log; đọc log Runtime và `yofina-ledger` của lượt v25–v26 để tìm việc nào quá 3 giây (`turn_blocks_timeout_seconds`, `turn_record_timeout_seconds`); sửa nguyên nhân (gọi Gateway lạnh, Aurora, hay chờ tuần tự), không chỉ nâng timeout. Bản ghi lượt hỏng thì thử lại một lần trong nền | `agent/src/yofina_agent/turn.py` (hàm ghi lượt), `defaults.json` | 0 `turn_persist_timeout` trên 5 lượt thử; NFR-31 không bị hở | Log Runtime sau đợt 1; đếm `audit_events` khớp số lượt | 4 |
+| C2 | Aurora ngủ: lời gọi đầu khi cụm vừa thức gặp `DatabaseResumingException` hoặc `57P01` (lần 500 ở `/demo/reset`, lần 503 hết giờ 30 giây khi seed). Thêm `57P01` vào nhóm lỗi tạm thời được retry có giãn nhịp trong client Data API; frontend hiện "đang khởi động, thử lại" thay vì lỗi chung khi gặp 503 | `libs/yofina_core/src/yofina_core/` (client DB), `frontend/` (trạng thái lỗi) | Lời gọi đầu sau khi ngủ thành công hoặc báo rõ | Unit test với lỗi giả; để Aurora ngủ (min 0) rồi gọi `/overview` và `/demo/reset` | 3 |
+| C3 | Throttling và chạy song song: 3 tài khoản chat cùng lúc (mỗi phiên một microVM, bộ giới hạn tốc độ nằm trong từng tiến trình nên không chia chung quota 10 request/phút của Claude). Đọc `InvocationThrottles` của `AWS/Bedrock` và log fallback; nếu throttle làm hỏng lượt thì giảm `rpm` mỗi phiên hoặc rẽ sớm sang Kimi K3 | `libs/yofina_core/src/yofina_core/llm_defaults.json`, script tạm | Bảng: số lượt, số throttle, số lượt rẽ dự phòng, lượt nào hỏng | 3 phiên × 3 lượt (khoảng $0,5), một lần | 3 |
+| C4 | Ép lỗi trên RC (tiêu chí 11): trần model về 0 qua SSM `/yofina/llm/*` rồi trả lại; tool quá thời gian (biến môi trường timeout thấp trên tài khoản thử); Gateway từ chối (gọi tool với `user_id` người khác); SSE đứt (ngắt mạng giữa lượt trên trình duyệt) | SSM (ghi, hỏi trước), trình duyệt | Bảng bài thử → kết quả trên màn hình | Chụp màn hình từng bài | 3 |
+| C5 | Xác nhận sau RC: bốn DLQ 0 tin, `FailedExtraction` của Memory 0, log Lambda 0 `ERROR` trong giờ chạy eval | CloudWatch (chỉ đọc) | Dòng trong eval-report | — | 0,5 |
+
+### Luồng D — Hiệu năng [đổi 24/11]
+
+| ID | Việc | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|
+| D1 | Phân rã độ trễ what-if và lộ trình từ `step_timings` của các lượt đã chạy (không gọi model mới): router, guardrail vào/ra, từng tool, analyst, verifier, composer, khoảng trống không thuộc bước nào (phase 3 thấy khoảng 5 s, nghi bộ giới hạn tốc độ) | `scripts/measure_latency.py` (thêm chế độ đọc `/ops/traces`), `docs/research/latency-breakdown.md` (mới) | Bảng p50/p95 từng bước; chỗ chiếm nhiều nhất | Số khớp `/ops/traces/{id}` | 3 |
+| D2 | Giảm độ trễ theo D1, ưu tiên: (a) khoảng chờ của bộ giới hạn tốc độ khi lượt chỉ có 3–4 lời gọi; (b) vòng sửa của Verifier do `source_jar_covers` (5 lần trong lượt eval v25, mỗi lần thêm một lượt Analyst khoảng 8–10 s): đưa số dư hũ nguồn vào ngữ cảnh Analyst trước khi đề xuất để ít phải sửa; (c) phát khối `forecast_timeline` và thẻ số liệu ngay khi tool trả, trước lời Analyst; (d) làm nóng phiên Runtime khi mở màn chat (NFR-01). Không cắt luật an toàn | `agent/src/yofina_agent/whatif.py`, `libs/yofina_core/src/yofina_core/llm.py`, `frontend/` (làm nóng) | Độ trễ what-if giảm, đo lại 3 lượt (khoảng $0,2) | `--only whatif-bnpl whatif-bnpl2` sau đợt 2 | 8 |
+| D3 | Guardrail p50 446 ms (> 400 ms): theo Q3. Nếu giữ lọc đầu ra thì ghi lệch; nếu đổi thì chỉ bỏ lọc đầu ra cho đoạn chữ đã qua `NumericGrounding` và luật suitability, giữ lọc đầu vào | `agent/src/yofina_agent/` (guardrail) | Quyết định ghi trong file này | Adversarial phase 3 `--only` các ca chủ đề cấm | 1–2 |
+| D4 | `GET /cashflow`: phần tách khoản cố định và Trả sau đang cộng bằng mã với khoảng 10 truy vấn; chuyển thành một hàm SQL bằng migration `0055` | `db/migrations/0055_*.sql`, `gateway/tools/ledger/yofina_ledger/` (cashflow) | Một lời gọi Data API; số không đổi | local_pg so số trước và sau trên `minh`; đo p95 từ Lambda | 3 |
+| D5 | Kích thước bundle frontend: tách chunk biểu đồ và chat nếu bundle chính > 500 KB nén; ghi số [giữ] | `frontend/vite.config.*` | Số trước và sau | `npm.cmd run build` | 1,5 |
+
+### Luồng E — Việc để sau của phase 4–5 đáng làm trước demo [mới 24/11]
+
+Chọn theo một câu hỏi: lỗi có hiện trên 6 cảnh hoặc trên thao tác giám khảo dễ thử không.
+
+| ID | Việc | Có hiện trên demo | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|---|
+| E1 | Màn So với bản cũ (L3) ghi "Loại bước", "Giai đoạn" bằng mã thô (`set_aside`, `phase_id`) | Cảnh 4 | `gateway/tools/ledger/yofina_ledger/roadmap_logic.py` | Nhãn tiếng Việt | Unit; mở màn trên Amplify | 1,5 |
+| E2 | Lambda sinh lại lộ trình bỏ bản đề xuất đang chờ mà không nói gì: ghi lý do vào bản mới | Cảnh 4 (dải "Có phiên bản mới") | `pipelines/roadmap/` | Bản mới có lý do "thay bản đề xuất trước" | Unit | 2 |
+| E3 | Bộ đọc số `router._code_params` đọc "1200 USD" thành 1.200 ₫ khi router không trích `currency`; agent chưa truyền `date` cho `get_exchange_rate` | Giám khảo dễ thử câu ngoại tệ | `agent/src/yofina_agent/router.py`, nơi gọi tool tỷ giá | Số ngoại tệ không bao giờ thành VND thô; tỷ giá theo ngày mô phỏng | Unit; `--only` một câu tỷ giá | 2 |
+| E4 | Tiện ích ngày chưa đọc "trong 6 tháng"; luật dự phòng không nhận hũ tên chứa "mua" ("Mua xe") | Câu what-if mục tiêu | `router.py`, tiện ích ngày, luật dự phòng | Hai ca unit mới | Unit | 2 |
+| E5 | `period_end` của lộ trình theo ngày hôm nay thay vì ngày lương | Cảnh 4 (kỳ của lộ trình) | agent lộ trình, tool hồ sơ | Kỳ lộ trình khớp kỳ lương | Unit; golden lộ trình `--only` một ca | 3 |
+| E6 | Ghi chú duyệt nhãn của 25 ảnh thật bị hỏng dấu (`?`) từ commit a70b9a3 | Không (tài liệu dữ liệu) | `evals/ingest/manifest.json` | Ghi chú đọc được | `--check-manifest` | 1 |
+| E7 | Tỷ lệ phải hỏi khi phân loại 17,4% (NFR-14 < 10%): thử hai hướng đã ghi ở phase 4 (bỏ token mẫu QR khỏi chuỗi embedding; giảm trọng số lịch sử khi ghi chú rõ) trên bộ `evals/classification` | Không trực tiếp; là một NFR chưa đạt trong bảng | `pipelines/classify/`, `evals/classification/` | Số mới; nếu không xuống dưới 10% thì ghi lệch | `run_eval.py` (gọi embedding, chi phí nhỏ) | 4, làm nếu còn thời gian |
+| E8 | `numeric_ungrounded` 2 lần ở v25 (câu bị bỏ, ca vẫn đạt) | Không | — | Theo dõi ở lượt RC, không sửa trước | log RC | 0 |
+| — | **Để sau cuộc thi**: bộ nhớ vào bước lập lộ trình, học từ `feedback` (P1-5), P2 của nghiên cứu bộ nhớ, Transaction Search (Q4) | Ngoài 6 cảnh | — | — | — | — |
+
+### Luồng F — Kiểm toán prompt đợt 5, 7, 8 [mới 24/11]
+
+Nguồn: [prompt-overfit-audit.md](../../research/prompt-overfit-audit.md) mục 2.3, 2.4, 2.6 và bảng mục 5.
+
+| ID | Đợt | Đề xuất | Lý do | File | Cách kiểm | Ước công |
+|---|---|---|---|---|---|---|
+| F1 | 5 (P17, P18): bỏ câu router.py:80-81 lặp ý luật ghép câu cụt; đo rồi quyết giữ hay bỏ `spending_confirm_request`; bỏ luật chữ hoa của mô phỏng gộp | **Làm**, trong đợt 1 | Nhỏ (bỏ 5–40 dòng), đúng nguyên tắc "không vá cho vừa ca"; ca đo đã có (`multiturn-new-question`) | `router.py`, `turn.py`, `notices.py`, `whatif.py` | `--only multiturn-new-question` + 18 câu diễn đạt lại (router, rẻ) | 2 |
+| F2 | 7 (P15, P11b, P27): chip mang `id` và ý định có cấu trúc | **Hoãn** tới sau cuộc thi (Q7) | Đụng hợp đồng khối `clarify`/`suggestions` và frontend; chip "Mất việc 2 tháng" là đường của cảnh 3, đổi trước demo là rủi ro lớn hơn lợi ích; hành vi hiện tại đúng | — | — | — |
+| F3 | 8 (P24, P23): writer viết các câu đang dựng bằng mã; gom hàm dựng nhãn phương án | **Không làm** trước demo | P24 thêm lượt gọi model, ngược với NFR độ trễ và chi phí (tiêu chí 7, 8); P23 tác giả kiểm toán ghi "không gấp" | — | — | — |
+
+### Luồng G — Giao diện và tổng duyệt [đổi 24/11, từ luồng D cũ]
+
+| ID | Việc | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|
+| G1 | Sửa các ghi nhận của A1 về chữ dài, thông tin lặp, chỗ khó tìm (theo luật §9, §10 ở [ui-design-review.md](../../research/ui-design-review.md)) | `frontend/` | Nhánh `p6/ui` vào đợt 1 hoặc 2 | vitest; đi lại màn bị sửa | 4–8 |
+| G2 | Soát: không còn chữ "MoMo", "Ví Trả Sau", "FinHealth" trên giao diện; mọi màn có nhãn "Ví mô phỏng · ngày mô phỏng"; câu trả lời của trợ lý có nhãn AI (NFR-30); màn Giới thiệu/Quyền riêng tư nói model có thể xử lý ngoài Singapore (NFR-29) [giữ, thêm NFR-29] | `frontend/` | Danh sách soát | `grep` trên `frontend/src` và đi app | 2 |
+| G3 | A11y tối thiểu: tương phản chữ AA ở chế độ sáng, vùng chạm ≥ 44 px, nhãn cho nút biểu tượng, `prefers-reduced-motion` tắt chuyển động cảnh 1–4 [giữ] | `frontend/` | Danh sách sửa | Công cụ đo tương phản; vitest | 3 |
+| G4 | Điện thoại thật: chủ dự án mở app trên Safari iPhone một lần (bàn phím che ô nhập, vuốt sheet, vùng an toàn) [giữ] | — | Ghi nhận lỗi | Chủ dự án | 1 |
+| G5 | Tổng duyệt: 6 cảnh, 3 lần liên tiếp, bấm giờ; chụp ảnh từng cảnh vào `docs/plan/assets/demo/` làm slide và làm phương án dự phòng [giữ] | — | Bảng giờ, ảnh | Tiêu chí 15 | 3 |
+
+### Luồng H — Đánh giá cuối
+
+Chi tiết ở mục 5. Sở hữu `evals/`, `scripts/measure_*`, `docs/research/eval-report.md`, `docs/research/backtest-final.md`.
+
+| ID | Việc | File | Đầu ra | Ước công |
+|---|---|---|---|---|
+| H1 | Thêm 8 ca đối kháng cho đủ 50 nếu Q10 đồng ý: chọn nhóm còn mỏng (moi system prompt, đòi dữ liệu người khác qua chat, chèn chỉ dẫn qua câu nói để đầu độc bộ nhớ, ép ghi qua câu giả làm chip, khuyên vay để tiêu, ngoại tệ đổi số) | `evals/adversarial/phase6.jsonl` (mới) | 8 ca, chưa chạy tới RC | 2 |
+| H2 | Báo cáo backtest K5 chạy trên máy (không gọi model): số ngày báo trước và tỷ lệ báo đúng trên 3 persona, định nghĩa "đúng" theo E-02 (±3 ngày); pinball so với seasonal naive và độ phủ khoảng 80% lấy lại từ [backtest-phase-2.md](../../research/backtest-phase-2.md) | `scripts/ml_backtest.py` (thêm chỉ số), `docs/research/backtest-final.md` | Báo cáo | 4 |
+| H3 | Script tổng hợp sau lượt RC: đọc `audit_events` (qua `/ops/traces`), `/ops/summary`, `yofina-usage`, log Runtime, ra bảng độ trễ, chi phí, lỗi theo ý định | `scripts/eval_summary.py` (mới) | Bảng cho eval-report | 3 |
+| H4 | Chạy lượt RC và viết `docs/research/eval-report.md` | `evals/`, docs | Báo cáo | 4 (gồm thời gian chạy) |
+
+### Luồng I — Đóng gói nộp bài [đổi 24/11, từ luồng E cũ]
+
+| ID | Việc | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|
+| I1 | README cho giám khảo: sản phẩm làm gì (3 câu), link app, cách nhận tài khoản (trong form nộp bài, không ghi mật khẩu), 6 cảnh kèm thao tác bấm, thứ thật và thứ mô phỏng (ví mô phỏng, ngày mô phỏng 21/11, Trả sau mô phỏng), số đo chính (tiêu chí 1–10), thiết kế an toàn (token xác nhận, Cedar, RLS, Guardrail, luật suitability), giới hạn đã biết, cách deploy lại, sơ đồ thư mục | `README.md` | README mới | Một người chưa đọc repo làm theo được cảnh 1–3 | 4 |
+| I2 | Sơ đồ kiến trúc theo bản đang chạy (không SageMaker, không Knowledge Bases/OpenSearch, không WAF, không batch tuần; có Memory override, ingest, classify, roadmap-regen): Mermaid trong repo cho GitHub, bản ảnh cho slide; cập nhật [overview.md](../../architecture/overview.md) (nhãn [đề xuất] thành [đã chạy] chỗ đã làm, ghi lệch cuối) | `docs/architecture/overview.md`, `docs/architecture/diagram.md` (mới) | Sơ đồ ba nhịp và harness L0–L5 | So từng hộp với `aws-resources.md` | 4 |
+| I3 | Video demo ≤ 3 phút: quay màn hình app thật 6 cảnh sau RC (khổ 390×844, tài khoản vừa đặt lại); đưa đoạn quay vào ô `demoClip` của dự án Remotion; soát số trong phần dựng mở đầu khớp số engine của `minh` (hũ Ăn uống cạn 23/11, lương 05/12); dựng bản cuối. Remotion miễn phí cho cá nhân và công ty tới 3 người ([License & Pricing](https://www.remotion.dev/docs/license/pricing.md)) | `C:\moMo\video` (theo Q13), `docs/plan/demo-script.md` | mp4 cuối, link | Xem hết một lần, bấm giờ | 6 |
+| I4 | Kịch bản thuyết trình và dàn ý slide 10 trang với số đo thật (K2, K5, K4 kèm RCT, K9 dạng hòa vốn theo E-03; xung đột phí chậm trả theo F-02) | `docs/plan/pitch-script.md`, `docs/plan/slide-outline.md` (mới) | Dàn ý, lời nói theo thời lượng | Chủ dự án duyệt | 4 |
+| I5 | Tài liệu chi phí AWS: chi phí thực theo dịch vụ từ Cost Explorer (lọc tag `project=yofina`, có ghi phí ngoài tag như Bedrock nếu không gắn tag được); chi phí mỗi lượt theo ý định (tiêu chí 8); chi phí một lượt eval; dự phóng theo người dùng theo [ba/08 mục 4](../../ba/08-kpi-kinh-doanh.md#4-dự-phóng-chi-phí-vận-hành) và chi phí theo gói ở [ba/06 mục 5.1](../../ba/06-mo-hinh-kinh-doanh.md#51-chi-phí-theo-từng-tính-năng) | `docs/research/cost-report.md` (mới) | Báo cáo, cho phép chốt K6, K7 (E-04) | Số khớp Cost Explorer ngày chốt | 3 |
+| I6 | Đồng bộ tài liệu trạng thái: cột trạng thái [requirements.md](../../requirements/requirements.md), trạng thái AC ở [ba/05](../../ba/05-acceptance-criteria.md) và NFR ở [ba/04](../../ba/04-non-functional-requirements.md), tick [open-questions.md](../../requirements/open-questions.md), đối chiếu [aws-resources.md](../../aws-resources.md) với tài khoản (liệt kê theo tag, chỉ đọc) | các file trên | Tài liệu khớp RC | `grep` trạng thái cũ | 3 |
+| I7 | `docs/plan/demo-runbook.md`: thao tác bấm cho video và cho buổi chấm, việc trước khi quay, phương án khi lỗi (mục J); `docs/plan/teardown.md`: thứ tự hủy stack sau cuộc thi (không chạy) [giữ] | docs | Hai file | Người điều phối đọc khô | 2 |
+
+### Luồng J — Vận hành buổi demo [mới 24/11]
+
+| ID | Việc | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|
+| J1 | Script kiểm trước giờ, chỉ đọc trừ bước đặt lại: Runtime `READY`, sáu target Gateway `READY`, Aurora `available` và min ACU, HTTP API trả 200 ở `/overview` cho từng tài khoản demo, bốn DLQ 0, `yofina-usage` hôm nay còn bao nhiêu so với trần, alarm không `ALARM`; rồi đặt lại 6 tài khoản và mở một lượt chat ngắn để làm nóng | `scripts/preflight.py` (mới) | Một bảng xanh/đỏ | Chạy trước tổng duyệt và trước giờ chấm | 3 |
+| J2 | Đổi mật khẩu 6 tài khoản demo (đã lộ trong lịch sử chat 23/11): sinh mới, cập nhật secret `yofina-demo-accounts` và Cognito; gửi giám khảo qua kênh nộp bài, không vào repo (Q12) | `scripts/create_demo_users.py` (nếu cần cờ đổi mật khẩu) | Mật khẩu mới | Đăng nhập thử từng tài khoản | 1 |
+| J3 | Aurora 0,5 ACU trong khung chấm: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`, hết khung thì trả về `-c dbMinAcu=0` (Q12) | `YofinaData` | Aurora không ngủ | `describe-db-clusters` | 0,5 |
+| J4 | Phương án khi Bedrock throttle hoặc chạm trần: (1) chuỗi dự phòng Sonnet → Kimi K3 và thẻ số liệu tất định đã có, ghi vào runbook để người trình bày biết màn hình sẽ trông thế nào; (2) không chạy eval trong ngày chấm; (3) trần ngày đã kiểm ở J1, có lệnh nâng trần tạm qua SSM `/yofina/llm/*` (ghi, cần chủ dự án) kèm ghi lại; (4) tài khoản dự phòng `giamkhao2`, `giamkhao3`; (5) video quay sẵn và ảnh từng cảnh của G5 khi mạng hoặc dịch vụ hỏng | `docs/plan/demo-runbook.md` | Mục "Khi có sự cố" | Diễn tập một lần ở 8/12 với trần Sonnet về 0 trên tài khoản thử | 2 |
+| J5 | Theo dõi trong khung chấm: dashboard `yofina-ops`, alarm về SNS `yofina-alerts`, người trực đọc `/ops/summary` mỗi ngày | — | Ghi chú mỗi ngày | — | 0,5/ngày |
+
+### Luồng K — Agent như người tư vấn: lập luận hiện dần và kết luận có chính kiến [mới 24/11, chủ dự án duyệt]
+
+Lý do: người dùng hiện thấy chủ yếu thẻ (artifact) và dòng tiến độ gọi tool; phần suy luận của agent (Analyst cân phương án, Verifier chặn, sửa lại; planner chọn bước lộ trình; cá nhân hóa theo bộ nhớ và hồ sơ hành vi) không lộ ra, nên trải nghiệm giống đọc báo cáo hơn là nói chuyện với người tư vấn. Chủ dự án muốn hiện được lập luận. Nguyên tắc giữ nguyên: số chỉ từ dữ liệu, mọi con số trong lập luận qua NumericGrounding; KHÔNG hiện suy nghĩ thô của model (chuỗi suy nghĩ nội bộ), chỉ hiện lập luận có cấu trúc mà model trả về như dữ liệu; không câu mẫu, không vá cho ca eval; luật ít chữ (§9 ui-design-review).
+
+| ID | Việc | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|
+| K1 | Lập luận có cấu trúc: Analyst (what-if, kiểm tra trước khi chi) và planner lộ trình trả thêm danh sách bước lập luận ngắn (điều đã thấy từ kết quả tool → vì sao → ảnh hưởng tới quyết định), mỗi bước trỏ tới tool/luật làm căn cứ; Verifier chặn bước có số không có căn cứ. Phát dần qua sự kiện AG-UI cùng dòng tiến độ tool đang có, không thêm lượt gọi model (lấy từ chính lời gọi Analyst/planner, cân nhắc tách hiện theo từng chặng của luồng mã) | `agent/src/yofina_agent/whatif.py`, `roadmap_agent.py`, `turn.py` (phát sự kiện), hợp đồng sự kiện/khối nếu cần (`contracts/`) | Lập luận 2–5 bước hiện dần trong lượt what-if, affordability, lộ trình | Unit với LLM giả; xem trực tiếp trên app; `--only` 2–3 ca what-if/lộ trình một lần | 8 |
+| K2 | Kết luận có chính kiến, cá nhân hóa: một câu chốt nên làm gì và vì sao, dựa trên phương án đã kiểm, bộ nhớ (sở thích) và hồ sơ hành vi (ví dụ thói quen chi dồn đầu kỳ) khi liên quan; không nhắc điều người dùng chưa nói | Analyst/writer, `writer.py` (chỉ phần dữ liệu đưa vào), `behavior_profiles` qua tool có sẵn | Câu kết luận trên thẻ phương án/lộ trình | Như K1 | 4 |
+| K3 | Giao diện: lập luận hiện dần như lời người tư vấn trong khung chat; khi có kết luận thì thu gọn thành "Xem cách mình cân nhắc" (Disclosure); tôn trọng giảm chuyển động; trình đọc màn hình đọc được | `frontend/src/chat/` | Khung chat mới | vitest; xem trên app | 4 |
+| K4 | Gợi ý hỏi tiếp theo đúng tình huống (ví dụ hoãn thêm, đổi số tiền) dựng từ phương án và dữ liệu, không câu cố định | agent + chip chat | 1–3 gợi ý sau thẻ | Xem trên app | 3 (tùy chọn, làm nếu kịp) |
+
+K làm song song với D2 (độ trễ what-if): lập luận hiện dần làm 20–30 giây chờ thành lúc đọc agent suy nghĩ, nhưng không thay việc giảm độ trễ thật. K1 chạm `turn.py` cùng C1, D2: người điều phối gỡ xung đột khi merge.
+
+## 5. Kế hoạch đánh giá cuối
+
+[đổi 24/11] Thay cho luồng A và một phần luồng C của bản 21/11.
+
+### 5.1 Một lượt đầy đủ duy nhất ở RC
+
+- **Khi nào**: 4/12, sau deploy RC, khi unit xanh và vài ca `--only` của đợt 2 đã đạt. Không chạy ngày chấm.
+- **Gồm**: golden phase 3, 4, 5 (60 câu); đối kháng phase 3, 4, 5 cộng phase 6 nếu H1 làm (42 hoặc 50 ca); router diễn đạt lại (18 câu); OCR ảnh thật (25 mục). OCR bộ dựng (33 mục) chỉ chạy nếu luồng nào sửa `pipelines/ingest/` sau 24/11.
+- **Chi phí**: khoảng $2,2–2,5 như lượt đo 24/11, cộng khoảng $0,2 nếu có 8 ca đối kháng mới. Trước khi chạy, đọc số lượt Sonnet của ngày 24/11 trong `yofina-usage` để ước số lượt của lượt RC; nếu vượt phần còn lại của trần 400 lượt Sonnet thì chia hai ngày (4/12 và 5/12), không nâng trần.
+- **Điều kiện chạy**: Aurora 0,5 ACU trong giờ chạy (tránh nhiễu `57P01`); đặt lại `minh` trước mỗi bộ; xóa bộ nhớ `minh` trước golden và đối kháng phase 5; `--min-interval 25`; mỗi ca chạy một lần.
+- **Sau lượt RC**: không có lượt đầy đủ thứ hai. Ca đỏ được phân loại (lỗi agent, lỗi runner, lỗi judge, biến thiên model). Lỗi chặn demo thì sửa, deploy, và chỉ chạy lại đúng các ca liên quan bằng `--only`, mỗi ca một lần. Lỗi không chặn demo thì ghi vào eval-report và "Giới hạn đã biết" của README.
+- **Ngân sách model cả phase 6**: lượt RC khoảng $2,5; các lượt `--only` sau ba đợt deploy khoảng $2–3; C3 và D2 khoảng $0,7; tổng dưới $7, chưa kể Aurora.
+
+### 5.2 Đo thêm ngoài golden và đối kháng
+
+| Chỉ số | Cách lấy | Nguồn |
+|---|---|---|
+| Độ trễ phía server p50/p95 theo ý định (lookup, forecast, what_if, affordability, roadmap, stress, ingest, memory) và theo bước | Gom `step_timings` của mọi lượt trong khoảng giờ chạy RC | `audit_events` qua `/ops/traces/{id}`, `/ops/summary` |
+| Độ trễ phía client của lượt what-if và lộ trình | Thời gian cả lượt runner đã ghi | `evals/results/*.jsonl` |
+| Event đầu, phiên ấm và lạnh | 10 lượt mỗi loại bằng câu tra cứu (đường Nova 2 Lite, rẻ) | `scripts/measure_latency.py` |
+| `POST /affordability` p95 | 10 lượt, phiên ấm | `scripts/measure_phase3.py` |
+| Chi phí mỗi lượt theo ý định (trung bình, p95), số lượt gọi model mỗi lượt, token vào/ra | Từ bản ghi lượt; đối chiếu tổng với lượt gọi theo model trong ngày | `audit_events`, bảng `yofina-usage`, metric `InputTokenCount`, `OutputTokenCount` của `AWS/Bedrock` |
+| Tỷ lệ lỗi tool, số lần luật chặn, lượt gọi model so với trần | Một lần gọi sau RC | `/ops/summary` |
+| `verifier_retry`, `verifier_fallback`, `numeric_ungrounded`, `turn_persist_timeout`, `guardrail_error` | Logs Insights trên log group Runtime trong giờ chạy | CloudWatch Logs |
+| Throttle của Bedrock | `InvocationThrottles` theo `ModelId` trong giờ chạy | CloudWatch `AWS/Bedrock` |
+| DLQ, `FailedExtraction`, lỗi Lambda | Một lần đọc | CloudWatch |
+| Trace 100% | Số lượt runner gửi so với số `audit_events` trong khoảng giờ chạy | `audit_events`, `evals/results/` |
+| K5 (báo trước khi cạn) | Backtest trên máy (H2) | `scripts/ml_backtest.py` |
+| Chi phí AWS thực | Cost Explorer theo dịch vụ, tag `project=yofina`, tới ngày chốt (mỗi lời gọi API Cost Explorer có phí nhỏ, gọi ít) | Cost Explorer |
+
+### 5.3 Báo cáo
+
+`docs/research/eval-report.md`: tỷ lệ đạt theo bộ và theo nhóm, từng ca trượt và nguyên nhân, bảng NFR "mục tiêu / đo được / ghi chú" (tiêu chí 5–10), chi phí lượt RC và chi phí mỗi lượt theo ý định. Số trong slide và README lấy từ báo cáo này, không lấy từ nơi khác.
+
+## 6. Rủi ro
+
+| Rủi ro | Mức | Cách xử lý |
+|---|---|---|
+| What-if trọn câu p95 28 s, xa mục tiêu 8 s; giám khảo thấy chậm ở cảnh 2 | Cao | D1–D2; khối số liệu hiện trước; Q1 chốt cách báo cáo trung thực |
+| Một giám khảo dùng hết trần chung 400 lượt Sonnet/ngày, các giám khảo khác chỉ còn thẻ số liệu | Vừa | B4 (trần theo người dùng); J1 kiểm trần mỗi sáng |
+| Bedrock throttle khi nhiều giám khảo dùng cùng lúc (Claude 10 request/phút, giới hạn tốc độ theo từng phiên) | Vừa | C3 đo trước; chuỗi dự phòng Kimi K3; J4 |
+| Aurora ngủ hoặc vừa thức làm lời gọi đầu lỗi | Vừa | J3 (0,5 ACU trong khung chấm); C2 (retry `57P01`) |
+| Sửa ở đợt 2 làm hỏng cảnh đã chạy, mà lượt eval đầy đủ chỉ có một | Vừa | Code freeze 3/12; đợt 2 chỉ gồm việc đã có ca `--only` đo được; tổng duyệt G5 sau RC |
+| Bản ghi lượt mất do `turn_persist_timeout`, làm hở "100% lượt có trace" | Vừa | C1 trước đợt 1 |
+| Bộ nhớ trích xuất lệch ngay trên sân khấu (mất "tháng này", sự thật chép nguyên câu) | Vừa | A3; kịch bản demo dùng câu đã đo ổn; màn Bộ nhớ của tôi cho xem và xóa |
+| Lịch sử git public còn số tài khoản 8 chữ số từ ghi chú nhãn cũ | Vừa | Q5 |
+| Mật khẩu demo đã lộ | Cao nếu không đổi | J2 trước khi gửi giám khảo |
+| Video và slide làm dồn cuối | Vừa | Quay ngay sau RC (5/12), dựng 6/12, còn 4 ngày đệm |
+| Một người đi cảnh (Học) bận, A1 trễ | Vừa | Người điều phối tự đi cảnh bằng trình duyệt nếu tới 26/11 chưa có kết quả |
+| Hạn nộp hoặc định dạng nộp khác giả định | Vừa | Q14 hỏi sớm; lịch giữ 1 ngày đệm trước hạn |
+
+## 7. Quyết định cần chủ dự án chốt
+
+Hạn trả lời đề xuất: 26/11 cho Q1–Q9 (ảnh hưởng đợt 1), 2/12 cho phần còn lại.
+
+| # | Câu hỏi | Đề xuất |
+|---|---|---|
+| Q1 | NFR-03 (what-if p95 < 8 s) chưa đạt (trọn câu p95 28,2 s). Giữ chỉ tiêu và báo "chưa đạt", hay tách thành "khối số liệu đầu tiên p95 ≤ 8 s" và "trọn câu p95 ≤ 20 s"? | Tách hai chỉ tiêu. Proposal §12 đã mô tả "khối dòng thời gian hiện ở khoảng giây thứ 2, văn bản kết thúc trước giây thứ 8", tức điều người dùng cảm nhận là khối đến trước. Báo cáo ghi rõ cả hai số và phân rã D1 |
+| Q2 | NFR-01: nới lượt đầu phiên lạnh lên 3 s? | Nới lên 3 s, cộng làm nóng phiên khi mở màn chat (D2d) |
+| Q3 | Guardrail: chấp nhận p50 446 ms hay bỏ lọc đầu ra cho chữ đã qua `NumericGrounding` và luật suitability? Giữ fail-open hay đổi fail-closed? | Giữ lọc đầu ra (an toàn là phần giám khảo nhìn, 0,4 s nhỏ so với 16 s của lượt what-if); giữ fail-open để demo không gãy, thêm alarm B5 |
+| Q4 | Bật CloudWatch Transaction Search? | Không bật. Màn trace đọc `audit_events` đã đủ cho cảnh 6; tránh đổi cấu hình mức tài khoản và phí span |
+| Q5 | Viết lại lịch sử git để xóa số tài khoản cũ trong ghi chú nhãn? | Nếu số đó là của người thật (từ ảnh thật) thì viết lại một lần trước 3/12 (`git filter-repo`, force push, chủ dự án tự làm, các worktree phải tạo lại). Nếu là số mẫu thì để nguyên và ghi lý do. B2 báo đủ vị trí để quyết |
+| Q6 | Thêm trần theo người dùng (B4)? Mức trần? | Có. Đề xuất 60 lượt chat và 20 lần nạp tệp mỗi tài khoản giám khảo mỗi ngày (một lượt đi 6 cảnh dùng khoảng 10–15 lượt chat), đặt trong SSM để đổi không cần deploy |
+| Q7 | Đợt 7 kiểm toán prompt (chip có cấu trúc) làm trước demo? | Hoãn tới sau cuộc thi (lý do ở F2) |
+| Q8 | Bộ nhớ trích xuất (`memory-state-preference`): đổi model trích xuất của `facts_vi` (ví dụ Haiku 4.5, đắt hơn Nova Lite), override bước hợp nhất (P1-6), hay chấp nhận? | Đo A3 trước (3 lượt). Nếu lệch vẫn còn: thử đổi model cho `facts_vi` vì tốn ít công nhất, không đụng pipeline hợp nhất; nếu vẫn lệch thì chấp nhận và chọn câu demo không có giới hạn thời gian |
+| Q9 | Tiêu chí 3 OCR: chốt ngưỡng 9/10 tính ở lượt RC, ghi r12 là giới hạn ảnh mờ? | Có |
+| Q10 | Thêm 8 ca đối kháng cho đủ 50 như KPI proposal §6? | Có (chi phí khoảng $0,2 ở lượt RC) |
+| Q11 | Cắt Step Functions batch tuần, thay bằng backtest chạy tay cho K5? | Cắt |
+| Q12 | Khung chấm kéo dài bao lâu? Aurora 0,5 ACU bật và tắt lúc nào? Đổi mật khẩu demo khi nào, gửi giám khảo bằng kênh nào? | Bật 0,5 ACU từ 9/12 sáng tới hết khung chấm (khoảng 2,4 USD/ngày) và trong giờ chạy RC; đổi mật khẩu 9/12 sau tổng duyệt cuối, gửi trong form nộp bài |
+| Q13 | Thư mục `video/` (Remotion) có vào repo không? Video cuối để đâu? | Commit `video/src`, `package.json`, cấu hình; không commit `node_modules/`, `out/`; mp4 cuối đặt ở link ngoài (YouTube không công khai hoặc Drive) và ghi link trong README |
+| Q14 | Hạn nộp chính xác, định dạng nộp (độ dài video, số trang slide, có thuyết trình trực tiếp không, thời lượng), trọng số chấm, giữ tên Yofina? | Hỏi ban tổ chức sớm; lịch dưới giả định nộp chậm nhất 10/12, video 3 phút, slide 10 trang |
+| Q15 | Chốt khối 2.2 của [ba/12](../../ba/12-tong-hop-va-viec-can-chot.md) trước khi dựng slide (D-01, E-01, E-03, F-02, I-01, I-02)? | Chốt trước 5/12; slide dùng K2, K5, K4 kèm RCT, K9 dạng hòa vốn |
+
+## 8. Lịch (hạn nộp giả định 11/12/2026)
+
+| Ngày | Mốc | Việc |
+|---|---|---|
+| T4 25/11 | | A1 (Học đi 6 cảnh); chủ dự án trả lời Q1–Q9; mở worker B1, B2, C1, C2, E1–E5 + F1 (`p6-agent-polish`), D1, H2, K1–K3 (`p6-advisor`) |
+| T5 26/11 | **M1: đóng phase 5** | A2–A5; A3 đo bộ nhớ; G1 bắt đầu theo ghi nhận A1 |
+| T6 27/11 | | B3, B4, B5, D4; review và merge nhánh xong |
+| T7 28/11 | **M2: deploy đợt 1** | Gồm A2, A3, B1, B3, B4, B5, C1, C2, E1–E5, F1, D4, G1, K1–K3 phần đã xong. `--only` các ca của phần đổi; C3 (3 phiên song song) |
+| CN 29/11 | | Đọc log sau đợt 1 (C1 hết `turn_persist_timeout` chưa); B7 |
+| T2 30/11 | | D2, D3, D5, G2, G3, H1, H3; I2 bắt đầu |
+| T3 1/12 | | Tiếp D2; E7 nếu còn thời gian; B6 viết test cấu hình |
+| T4 2/12 | **M3: deploy đợt 2** | D2, D3, D5, G1–G3, K4 và chỉnh K theo đợt 1, sửa mức cao của B7. `--only` what-if, ca đối kháng chủ đề cấm |
+| T5 3/12 | **M4: code freeze** (tối) | Chỉ còn sửa lỗi chặn demo. Q5 (viết lại lịch sử git) nếu chọn, trước freeze |
+| T6 4/12 | **M5: RC và eval cuối** | Deploy RC (nếu có gì sau đợt 2); Aurora 0,5 ACU; lượt eval đầy đủ duy nhất (mục 5.1); đo event đầu và affordability; C4, C5, B6; trả Aurora về 0 |
+| T7 5/12 | | H3, H4 viết eval-report; I5 chi phí; quay màn hình 6 cảnh trên RC (I3) |
+| CN 6/12 | **M6: bản nháp bộ nộp** | I1 README, I2 sơ đồ, I3 dựng video, I4 slide và kịch bản nói |
+| T2 7/12 | | I6, I7; G4 (iPhone); chủ dự án duyệt video và slide |
+| T3 8/12 | **M7: tổng duyệt** | G5 (3 lần liên tiếp); J1 chạy thử; J4 diễn tập sự cố |
+| T4 9/12 | | Sửa còn lại; J2 đổi mật khẩu; J3 Aurora 0,5 ACU; quét bí mật lần cuối (B2); HANDOFF, ai-log, file phase 6 "Kết quả thực hiện" |
+| T5 10/12 | **M8: nộp bài** | J1 trước khi gửi; nộp; commit và push |
+| T6 11/12 | Hạn giả định | Đệm. Từ đây J5 mỗi ngày tới hết khung chấm, rồi trả Aurora về 0 |
+
+## 9. Cách kiểm (người điều phối)
+
+[đổi 24/11]
+
+- Sau mỗi đợt deploy: unit cả bộ, `cdk diff` trước, vài ca `--only` của phần vừa đổi; đọc log Runtime tìm `turn_persist_timeout`, `verifier_fallback`, `Traceback`.
+- Sau RC: tự đọc 10 ca bất kỳ trong `evals/results/` và so với eval-report; tự đếm `audit_events` của khoảng giờ chạy.
+- Tự làm hai bài ép lỗi của C4; tự đi tổng duyệt một lần bằng trình duyệt ở khổ 390×844.
+- Chạy `scripts/scan_repo.py` và `git grep` các mẫu account ID, `arn:aws`, `AKIA`, mật khẩu trước mỗi push của tuần nộp.
+- Làm theo README ở mức đọc khô để chắc không thiếu bước; liệt kê tài nguyên theo tag và so `aws-resources.md`.
 
 ## Kết quả thực hiện
 
