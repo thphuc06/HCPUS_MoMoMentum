@@ -1,0 +1,11 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "query": "lãi suất tiết kiệm ngân hàng",
+    "on_date": "2026-11-21",
+    "method": "hybrid_rrf",
+    "hits": []
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "from": "2026-12-03T03:00:00Z",
+  "to": "2026-12-10T03:00:00Z",
+  "turns": 0,
+  "turns_rejected": 0,
+  "turns_error": 0,
+  "tool_calls": 0,
+  "tool_errors": 0,
+  "tool_error_rate": 0,
+  "rule_fails": 0,
+  "model_calls_by_day": [],
+  "est_cost_vnd": 0
+}

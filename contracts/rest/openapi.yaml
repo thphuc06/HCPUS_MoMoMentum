@@ -52,6 +52,19 @@ info:
     `POST /review/daily-ask/skip`, `x-lambda: ledger`): sửa hũ dùng lại `assign_jar` qua `POST /confirmations` và `POST /actions` (đừng
     tạo đường ghi thứ hai); `remember` once hoặc always chọn phạm vi luật.
 
+    **Phase 5** (hồ sơ hành vi, bản tin, bộ nhớ, quyền riêng tư, trace): 11 endpoint mới. `GET /profile/behavior` (`x-lambda: forecast`,
+    cùng `data` với tool `forecast___get_behavior_profile`, chỉ đọc). Bản tin của cổng giá trị: `GET /nudges/today` (tối đa MỘT việc mỗi
+    ngày mô phỏng, dựng thành khối `proactive_card`) và `POST /nudges/{nudge_id}/feedback` (đã làm, bỏ qua, để sau, "Ít nhắc loại này";
+    không đụng tiền nên không qua token, như `POST /feedback`). Bộ nhớ dài hạn (AgentCore Memory): `GET /memory`, `DELETE /memory/{record_id}`,
+    `DELETE /memory` (xóa bộ nhớ là quyền của người dùng trên dữ liệu của chính họ, không đổi số dư nên không qua token; giao diện hỏi lại
+    trước khi gọi). "Xóa dữ liệu của tôi" là thao tác KHÔNG hoàn tác được nên ĐI QUA token xác nhận như mọi thao tác ghi:
+    `POST /me/delete-data/confirmations` cấp token cho tool `delete_my_data`, `POST /me/delete-data` kèm token thì xóa Aurora, S3 và Memory
+    của người gọi. Bảng vận hành (`GET /ops/traces`, `GET /ops/traces/{trace_id}`, `GET /ops/summary`): CHỈ tài khoản thuộc nhóm Cognito
+    `ops` (`x-required-group: ops`; Lambda đọc claim `cognito:groups` của access token, không thuộc nhóm thì 403 `FORBIDDEN`), đọc
+    `audit_events` của MỌI người dùng qua hàm `SECURITY DEFINER` chỉ trả cột đã chọn: người dùng hiện bằng mã giả danh `user_ref`
+    (không phải `sub`), không có câu hỏi, câu trả lời hay tên người nhận. `DELETE` là method mới của hợp đồng: CORS của HTTP API phải cho
+    thêm `DELETE` (luồng hạ tầng).
+
     Mã lỗi (`ErrorCode`) dùng chung với kết quả tool và `notice.data.code`; ánh xạ HTTP status ở
     `x-http-status`. Schema khối UI và tham số được tham chiếu tới `../blocks/*.schema.json` và
     `../tools/*.results.schema.json`.
@@ -89,6 +102,16 @@ tags:
     description: Lộ trình theo giai đoạn có phiên bản (F5). Đọc, đổi trạng thái từng bước, so phiên bản, yêu cầu sinh lại (chạy nền, hỏi tiến độ bằng polling). Không đổi số dư, không qua token.
   - name: review
     description: Danh sách "Xem lại" và hỏi gộp một lần mỗi ngày của phân hũ tự động (F2). Sửa hũ đi qua `assign_jar` ở `POST /confirmations` và `POST /actions`.
+  - name: behavior
+    description: Hồ sơ hành vi chi tiêu do batch đêm tính, nhận xét kèm bằng chứng số và một việc cần làm (F7). Chỉ đọc.
+  - name: nudges
+    description: Bản tin chủ động của cổng giá trị (FR13), tối đa một việc mỗi ngày, và phản hồi của người dùng. Không đụng tiền.
+  - name: memory
+    description: Bộ nhớ dài hạn của trợ lý (AgentCore Memory) của chính người dùng; xem và xóa.
+  - name: privacy
+    description: Xóa dữ liệu của tôi (Aurora, S3, Memory), qua token xác nhận.
+  - name: ops
+    description: Bảng vận hành và màn trace (FR15). Chỉ nhóm Cognito `ops`; dữ liệu người dùng đã che PII.
 paths:
   /jars:
     get:
@@ -1579,6 +1602,439 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '500':
           $ref: '#/components/responses/InternalError'
+  /profile/behavior:
+    get:
+      tags: [behavior]
+      operationId: getBehaviorProfile
+      summary: Hồ sơ hành vi chi tiêu (nhận xét kèm bằng chứng số và một việc cần làm)
+      x-lambda: forecast
+      description: |
+        Đọc bản mới nhất của `behavior_profiles` không sau hôm nay mô phỏng (batch đêm ghi; đặt lại dữ liệu demo tính lại). CÙNG `data`
+        với tool `forecast___get_behavior_profile`. Mỗi nhận xét có bằng chứng số đọc từ sổ cái (số trong câu nhận xét đều có trong
+        `evidence`). Chưa đủ lịch sử hoặc batch chưa chạy thì 200 với `ready` sai và không có nhận xét (không phải lỗi). Màn Hồ sơ dựng
+        từng nhận xét thành khối `behavior_insight` bằng cùng dữ liệu. Không qua model, không ghi gì. Chưa khai lương thì 422
+        `PROFILE_INCOMPLETE`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Hồ sơ hành vi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BehaviorProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /nudges/today:
+    get:
+      tags: [nudges]
+      operationId: getTodayNudge
+      summary: Bản tin chủ động của hôm nay (tối đa một việc)
+      x-lambda: ledger
+      description: |
+        Bản tin mà cổng giá trị của batch đêm đã chọn cho ngày mô phỏng hôm nay (dòng `nudges` có `source = system`, tối đa MỘT mỗi ngày,
+        DB bảo đảm), dựng thành khối `proactive_card` có `nudge_id`. Thứ tự ưu tiên của cổng (`yofina_core.wallet.NUDGE_GATE_ORDER`): hũ
+        thiết yếu sắp cạn, nghĩa vụ trong 3 ngày, lộ trình mới chờ chọn, hỏi gộp, điểm chống chịu tụt nhóm, nhận xét hành vi; chỉ chọn khi
+        giá trị ước tính vượt ngưỡng; loại người dùng đã bấm "Ít nhắc loại này" bị hạ một bậc; sở thích trong bộ nhớ ("đừng nhắc buổi
+        sáng") được tôn trọng. Không có bản tin (chưa vượt ngưỡng, đã bỏ qua, batch chưa chạy) thì `nudge` và `card` vắng; `suppressed`
+        nói loại nào bị bỏ và vì sao (để giải thích, không hiện như cảnh báo). Không ghi gì, không qua model. Thẻ tất định của
+        `GET /overview` (phase 2) vẫn còn; giao diện ưu tiên bản tin này khi có.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Bản tin hôm nay (có thể trống).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NudgeTodayResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /nudges/{nudge_id}/feedback:
+    post:
+      tags: [nudges]
+      operationId: submitNudgeFeedback
+      summary: Phản hồi một bản tin (đã làm, bỏ qua, để sau, ít nhắc loại này)
+      x-lambda: ledger
+      description: |
+        Ghi `outcome` của một bản tin (`acted`, `dismissed`, `snoozed`, `less_like_this`) vào dòng `nudges` và một dòng `feedback`
+        (`block_id` là id thẻ, `option_id` là loại bản tin). `less_like_this` làm cổng hạ loại đó một bậc ở các ngày sau. Không đụng tiền
+        nên KHÔNG qua token (như `POST /feedback`). Idempotent: gửi lại cùng outcome không đổi gì; outcome khác thì ghi đè (người dùng đổi
+        ý). Bản tin của người khác hoặc không tồn tại đều 404 `NUDGE_NOT_FOUND`; chỉ phản hồi được bản tin `source = system`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/NudgeIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NudgeFeedbackRequest'
+      responses:
+        '200':
+          description: Đã ghi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NudgeFeedbackResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /memory:
+    get:
+      tags: [memory]
+      operationId: listMemory
+      summary: Bộ nhớ dài hạn của tôi
+      x-lambda: ledger
+      description: |
+        Liệt kê bản ghi AgentCore Memory dưới gốc namespace của người gọi (`/yofina/users/{sub}/`, `yofina_core.memory`): sở thích, sự thật
+        về người dùng, tóm tắt phiên (trích từ hội thoại), hồ sơ hành vi và bài học của agent (hệ thống tự tạo). Mới nhất trước. Bản ghi
+        không có số dư, giao dịch thô hay PII (đã che trước khi ghi). Server bỏ mọi bản ghi có namespace không thuộc người gọi
+        (`kind_of_namespace`). `cursor` là `next_cursor` của trang trước (mờ). Memory không trả lời thì 503 `MEMORY_UNAVAILABLE`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: kind
+          in: query
+          required: false
+          description: Chỉ một loại bản ghi.
+          schema:
+            $ref: '#/components/schemas/MemoryKind'
+        - name: limit
+          in: query
+          required: false
+          description: Số bản ghi tối đa mỗi trang (1 đến 100, mặc định 50).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+      responses:
+        '200':
+          description: Các bản ghi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [memory]
+      operationId: clearMemory
+      summary: Xóa toàn bộ bộ nhớ dài hạn của tôi
+      x-lambda: ledger
+      description: |
+        Xóa MỌI bản ghi dài hạn dưới gốc namespace của người gọi (liệt kê theo `namespacePath` rồi `BatchDeleteMemoryRecords` từng 100 bản
+        ghi; AgentCore không có API xóa theo người dùng) và mọi sự kiện ngắn hạn của `actorId` = `sub` (`ListSessions`, `ListEvents`,
+        `DeleteEvent`). Không đụng Aurora hay S3. Không qua token (không đổi số dư; giao diện hỏi lại trước khi gọi). Idempotent: không còn
+        gì thì trả 0. Xóa dở (một phần lỗi) thì 200 với `failed` lớn hơn 0; gọi lại để xóa nốt.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Số bản ghi và sự kiện đã xóa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryClearResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /memory/{record_id}:
+    delete:
+      tags: [memory]
+      operationId: deleteMemoryRecord
+      summary: Xóa một bản ghi bộ nhớ
+      x-lambda: ledger
+      description: |
+        Server đọc bản ghi (`GetMemoryRecord`), kiểm namespace thuộc người gọi rồi mới xóa (`DeleteMemoryRecord` kèm namespace cho điều
+        kiện IAM). Bản ghi của người khác hoặc không tồn tại đều 404 `MEMORY_RECORD_NOT_FOUND` như nhau. Không qua token.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/MemoryRecordIdPath'
+      responses:
+        '200':
+          description: Đã xóa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryRecordDeleteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /me/delete-data/confirmations:
+    post:
+      tags: [privacy]
+      operationId: createDeleteDataConfirmation
+      summary: Cấp token xác nhận cho "Xóa dữ liệu của tôi"
+      x-lambda: ledger
+      description: |
+        Gọi khi người dùng bấm nút xác nhận cuối ở màn Hồ sơ. Như `POST /confirmations` nhưng CHỈ nhận `tool` = `delete_my_data` và
+        `params` = `{scope: all}` (`PrivacyToolName`, `DeleteMyDataParams`); cùng khóa HMAC, cùng bảng `jti`, cùng thời gian sống token.
+        Trả `ConfirmationResponse` có `preview` (tóm tắt những gì sẽ bị xóa: hồ sơ, hũ, sổ cái, hội thoại, tệp đã nạp, bộ nhớ; cảnh báo
+        không hoàn tác được). Không ghi gì. Đang có một lần xóa chạy dở thì vẫn cấp (lần xóa sau làm tiếp phần còn lại).
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteDataConfirmationRequest'
+      responses:
+        '200':
+          description: Token đã cấp (`tool` là `delete_my_data`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /me/delete-data:
+    post:
+      tags: [privacy]
+      operationId: deleteMyData
+      summary: Xóa dữ liệu của tôi (Aurora, S3, Memory) với token xác nhận
+      x-lambda: ledger
+      description: |
+        Kiểm token (chữ ký, hạn, tool `delete_my_data`, sub, hash tham số, `jti` chưa dùng; lỗi như `POST /actions`: 403 `TOKEN_INVALID`
+        hoặc `TOKEN_EXPIRED`, 409 `TOKEN_REUSED` hoặc `PARAMS_MISMATCH`). Thiếu `confirm_token` thì không xóa gì, trả 428
+        `NEEDS_CONFIRMATION`. Có token hợp lệ: ghi một dòng `data_deletions` (`running`), xóa S3 (mọi object dưới tiền tố `{sub}/` của bucket
+        nạp), Memory (như `DELETE /memory`), rồi Aurora (hàm `app_delete_user_data`: mọi bảng của người dùng kể cả `audit_events` và
+        `users`, một transaction) và trả `DataDeletion`: `done` khi cả ba bước xong, `partial` khi S3 hoặc Memory lỗi (Aurora đã xóa;
+        gọi lại với token mới để làm tiếp), `failed` khi Aurora lỗi. Nhật ký `data_deletions` không chứa dữ liệu đã xóa. Sau đó tài khoản
+        Cognito vẫn còn và đăng nhập lại là tài khoản trắng. Đang có lần xóa `running` của chính người gọi thì trả lần đó, không chạy
+        song song.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteDataRequest'
+      responses:
+        '200':
+          description: Kết quả lần xóa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataDeletion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '428':
+          $ref: '#/components/responses/NeedsConfirmation'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /ops/traces:
+    get:
+      tags: [ops]
+      operationId: listOpsTraces
+      summary: Danh sách lượt của mọi người dùng (màn trace, chỉ nhóm ops)
+      x-lambda: ledger
+      x-required-group: ops
+      description: |
+        Bản ghi lượt (`audit_events`, `event_type = agent_turn`) của MỌI người dùng, mới nhất trước, lọc theo khoảng thời gian thật, ý
+        định, kết quả, độ trễ tối thiểu. Đọc qua hàm `SECURITY DEFINER` `app_ops_list_traces` (migration 0053) chỉ trả cột đã chọn;
+        người dùng hiện bằng `user_ref` (12 ký tự đầu của sha256 của `sub`, không đảo ngược được), không có câu hỏi hay câu trả lời.
+        Không thuộc nhóm Cognito `ops` thì 403 `FORBIDDEN`. Không đọc CloudWatch Transaction Search.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: from
+          in: query
+          required: false
+          description: Thời điểm thật bắt đầu (RFC 3339, UTC). Mặc định 7 ngày trước.
+          schema:
+            $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        - name: to
+          in: query
+          required: false
+          description: Thời điểm thật kết thúc (RFC 3339, UTC). Mặc định bây giờ.
+          schema:
+            $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        - name: intent
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[a-z][a-z_]{0,31}$'
+        - name: outcome
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ok, rejected, error]
+        - name: min_duration_ms
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          description: Số lượt tối đa (1 đến 100, mặc định 50).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      responses:
+        '200':
+          description: Danh sách lượt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsTraceListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /ops/traces/{trace_id}:
+    get:
+      tags: [ops]
+      operationId: getOpsTrace
+      summary: Chi tiết một lượt (màn trace X1, chỉ nhóm ops)
+      x-lambda: ledger
+      x-required-group: ops
+      description: |
+        Mọi bước của một lượt: router (ý định), kế hoạch và từng lần gọi tool kèm thời lượng và trạng thái (`step_timings` có `step` là tên
+        đầy đủ của tool), verifier, luật đã kiểm, dữ liệu đã dùng (nhãn đã che PII bằng `yofina_core.pii`), độ tin cậy, khối đã phát (chỉ id
+        và loại), token và chi phí ước tính (`est_cost_vnd`, số nguyên VND theo bảng giá trong cấu hình). Mở từ hàng "Mã trace" của bảng
+        "Vì sao". Không thuộc nhóm `ops` thì 403 `FORBIDDEN`; không có trace thì 404 `TRACE_NOT_FOUND`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/TraceIdPath'
+      responses:
+        '200':
+          description: Chi tiết lượt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsTraceDetail'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /ops/summary:
+    get:
+      tags: [ops]
+      operationId: getOpsSummary
+      summary: Tổng hợp vận hành (chỉ nhóm ops)
+      x-lambda: ledger
+      x-required-group: ops
+      description: |
+        Trong khoảng `from`..`to` (thời điểm thật, mặc định 7 ngày gần nhất, tối đa 31 ngày): số lượt, độ trễ p50 và p95 của lượt, số lần
+        gọi tool và tỷ lệ lỗi tool (từ `step_timings`), số lần luật chặn (luật `fail` trong `rules_checked`), lượt bị từ chối và lỗi, số
+        lượt gọi model theo ngày so với trần trong cấu hình (`llm_defaults.json`). Hàm `app_ops_summary` (SECURITY DEFINER) chỉ trả số
+        tổng hợp. Không thuộc nhóm `ops` thì 403 `FORBIDDEN`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - name: from
+          in: query
+          required: false
+          schema:
+            $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        - name: to
+          in: query
+          required: false
+          schema:
+            $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+      responses:
+        '200':
+          description: Số tổng hợp.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsSummaryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     bearerAuth:
@@ -1645,6 +2101,20 @@ components:
       description: Id lần sinh lại lộ trình (UUID).
       schema:
         $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+    NudgeIdPath:
+      name: nudge_id
+      in: path
+      required: true
+      description: Id bản tin (`nudge_id` của thẻ chủ động, UUID).
+      schema:
+        $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+    MemoryRecordIdPath:
+      name: record_id
+      in: path
+      required: true
+      description: Id bản ghi AgentCore Memory (`mem-...`, 40 đến 50 ký tự).
+      schema:
+        $ref: '#/components/schemas/MemoryRecordId'
   schemas:
     ErrorCode:
       type: string
@@ -1692,6 +2162,8 @@ components:
         - ROADMAP_INVALID
         - ROADMAP_VERSION_CONFLICT
         - SHOCK_NOT_FOUND
+        - MEMORY_RECORD_NOT_FOUND
+        - MEMORY_UNAVAILABLE
       x-http-status:
         UNAUTHENTICATED: 401
         FORBIDDEN: 403
@@ -1735,6 +2207,8 @@ components:
         ROADMAP_INVALID: 422
         ROADMAP_VERSION_CONFLICT: 409
         SHOCK_NOT_FOUND: 404
+        MEMORY_RECORD_NOT_FOUND: 404
+        MEMORY_UNAVAILABLE: 503
       x-meaning:
         UNAUTHENTICATED: Thiếu hoặc sai access token.
         FORBIDDEN: Không được phép (token xác nhận không thuộc người dùng này, v.v.).
@@ -1778,6 +2252,8 @@ components:
         ROADMAP_INVALID: Lộ trình hoặc bước sai cấu trúc, hoặc vi phạm luật suitability mức block (thông điệp nêu mã luật để sửa); không lưu gì.
         ROADMAP_VERSION_CONFLICT: Phiên bản gốc đã bị thay hoặc bỏ, hoặc bản này không còn ở trạng thái làm được việc này (ví dụ không còn chờ chọn); hãy đọc lại lộ trình.
         SHOCK_NOT_FOUND: Mã cú sốc không có trong danh sách cú sốc mẫu.
+        MEMORY_RECORD_NOT_FOUND: Không có bản ghi bộ nhớ này với người dùng (đã xóa, không tồn tại hoặc của người khác; không phân biệt).
+        MEMORY_UNAVAILABLE: AgentCore Memory không trả lời hoặc từ chối (giới hạn tần suất); thử lại sau ít phút. Dữ liệu khác không bị ảnh hưởng.
     ErrorResponse:
       type: object
       required: [error]
@@ -2919,10 +3395,11 @@ components:
           minimum: 1
           description: Thời gian sống của token, từ cấu hình; frontend đếm ngược theo đây.
         tool:
-          description: Tool đã ký; `confirm_rows` khi do `POST /ingest/confirmations` cấp.
+          description: Tool đã ký; `confirm_rows` khi do `POST /ingest/confirmations` cấp, `delete_my_data` khi do `POST /me/delete-data/confirmations` cấp.
           anyOf:
             - $ref: '#/components/schemas/ToolName'
             - $ref: '#/components/schemas/IngestToolName'
+            - $ref: '#/components/schemas/PrivacyToolName'
         params:
           description: Bản tham số đã chuẩn hóa mà token đã ký.
           type: object
@@ -3292,6 +3769,479 @@ components:
     ReviewAskResponse:
       description: Trạng thái câu hỏi gộp của ngày (cùng `ReviewAsk` của khối `review_list`).
       $ref: '../blocks/review_list.schema.json#/$defs/ReviewAsk'
+    BehaviorProfileResponse:
+      description: Hồ sơ hành vi (cùng `data` của tool `forecast___get_behavior_profile`).
+      $ref: '../blocks/behavior_insight.schema.json#/$defs/BehaviorProfileData'
+    NudgeKind:
+      type: string
+      description: |
+        Loại của một dòng `nudges` (`yofina_core.wallet.ALL_NUDGE_KINDS`): sáu loại lên lịch được bằng `schedule_nudge` (phase 3) và ba
+        loại chỉ cổng giá trị sinh (`roadmap_proposed`, `resilience_drop`, `behavior_insight`).
+      enum: [runout_warning, obligation_due, salary_pending, review_needed, low_data, purchase_review, roadmap_proposed, resilience_drop, behavior_insight]
+    NudgeOutcome:
+      type: string
+      description: Phản hồi với bản tin (`yofina_core.wallet.NUDGE_OUTCOMES`).
+      enum: [acted, dismissed, snoozed, less_like_this]
+    NudgeGate:
+      description: |
+        Lý do cổng giá trị chọn bản tin (cột `nudges.gate_reason`, để giải thích và truy vết): hạng của loại trong thứ tự ưu tiên (1 là
+        cao nhất, sau khi hạ bậc vì "Ít nhắc loại này"), điểm giá trị và ngưỡng (cùng đơn vị, do cấu hình), số ứng viên đã xét.
+      type: object
+      required: [rank, score, threshold, candidates]
+      additionalProperties: false
+      properties:
+        rank:
+          type: integer
+          minimum: 1
+          maximum: 20
+        score:
+          type: number
+          minimum: 0
+        threshold:
+          type: number
+          minimum: 0
+        candidates:
+          type: integer
+          minimum: 1
+          maximum: 20
+        demoted:
+          description: Loại này đã bị hạ một bậc vì người dùng bấm "Ít nhắc loại này".
+          type: boolean
+    Nudge:
+      description: |
+        Bản tin của hôm nay (một dòng `nudges`, `source = system`). `value_vnd` là giá trị ước tính bằng tiền (ví dụ khoản hụt tránh
+        được, tổng chưa phân loại); vắng khi loại đó không đo bằng tiền. `outcome` vắng khi người dùng chưa phản hồi.
+      type: object
+      required: [nudge_id, kind, app_date, title, reason, gate]
+      additionalProperties: false
+      properties:
+        nudge_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        kind:
+          $ref: '#/components/schemas/NudgeKind'
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        title:
+          type: string
+          minLength: 1
+          maxLength: 80
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+        jar_code:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        value_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        gate:
+          $ref: '#/components/schemas/NudgeGate'
+        outcome:
+          $ref: '#/components/schemas/NudgeOutcome'
+    NudgeSuppressed:
+      type: object
+      required: [kind, reason]
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: '#/components/schemas/NudgeKind'
+        reason:
+          description: below_threshold (chưa vượt ngưỡng), demoted (đã hạ bậc vì "Ít nhắc loại này"), quiet_hours (sở thích trong bộ nhớ, ví dụ không nhắc buổi sáng), lower_rank (đã có việc ưu tiên cao hơn).
+          type: string
+          enum: [below_threshold, demoted, quiet_hours, lower_rank]
+    NudgeTodayResponse:
+      description: |
+        `nudge` và `card` đi cùng nhau (cùng có hoặc cùng vắng): `card` là khối `proactive_card` dựng từ `nudge` (có `nudge_id`, cùng
+        `kind`, `title`, `reason`).
+      type: object
+      required: [app_date, suppressed]
+      additionalProperties: false
+      properties:
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        nudge:
+          $ref: '#/components/schemas/Nudge'
+        card:
+          $ref: '../blocks/proactive_card.schema.json'
+        suppressed:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/NudgeSuppressed'
+    NudgeFeedbackRequest:
+      type: object
+      required: [outcome]
+      additionalProperties: false
+      properties:
+        outcome:
+          $ref: '#/components/schemas/NudgeOutcome'
+        reason:
+          description: Lý do ngắn người dùng nêu (tùy chọn, không chứa PII).
+          type: string
+          minLength: 1
+          maxLength: 200
+    NudgeFeedbackResponse:
+      type: object
+      required: [nudge_id, outcome, recorded_at]
+      additionalProperties: false
+      properties:
+        nudge_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        outcome:
+          $ref: '#/components/schemas/NudgeOutcome'
+        recorded_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+    MemoryRecordId:
+      type: string
+      pattern: '^mem-[A-Za-z0-9_-]{36,46}$'
+    MemoryKind:
+      type: string
+      description: |
+        Loại bản ghi (`yofina_core.memory.MEMORY_KINDS`, suy từ namespace): preference (sở thích), fact (sự thật về người dùng),
+        session_summary (tóm tắt phiên), behavior (hồ sơ hành vi do batch đêm ghi), lesson (bài học của agent từ phản hồi).
+      enum: [preference, fact, session_summary, behavior, lesson]
+    MemoryRecord:
+      description: Một bản ghi bộ nhớ (không có namespace, strategy id hay `sub`).
+      type: object
+      required: [record_id, kind, source, text, created_at]
+      additionalProperties: false
+      properties:
+        record_id:
+          $ref: '#/components/schemas/MemoryRecordId'
+        kind:
+          $ref: '#/components/schemas/MemoryKind'
+        source:
+          description: conversation (trích tự động từ hội thoại bằng chiến lược có sẵn) hoặc system (bản ghi do hệ thống tự tạo).
+          type: string
+          enum: [conversation, system]
+        text:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        created_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+    MemoryListResponse:
+      type: object
+      required: [records]
+      additionalProperties: false
+      properties:
+        records:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/MemoryRecord'
+        next_cursor:
+          type: string
+          minLength: 1
+          maxLength: 2048
+    MemoryRecordDeleteResponse:
+      type: object
+      required: [record_id, deleted]
+      additionalProperties: false
+      properties:
+        record_id:
+          $ref: '#/components/schemas/MemoryRecordId'
+        deleted:
+          const: true
+    MemoryClearResponse:
+      type: object
+      required: [deleted_records, deleted_events, failed]
+      additionalProperties: false
+      properties:
+        deleted_records:
+          type: integer
+          minimum: 0
+        deleted_events:
+          type: integer
+          minimum: 0
+        failed:
+          description: Số bản ghi hoặc sự kiện xóa lỗi (gọi lại để xóa nốt).
+          type: integer
+          minimum: 0
+    PrivacyToolName:
+      type: string
+      description: Tool ghi của nhóm quyền riêng tư, chỉ đi qua `/me/delete-data/*` (không thuộc `ToolName`, không phải tool Gateway).
+      enum: [delete_my_data]
+    DeleteMyDataParams:
+      description: Phạm vi xóa; chỉ có `all` (bản chuẩn hóa luôn có `scope`).
+      type: object
+      additionalProperties: false
+      properties:
+        scope:
+          type: string
+          enum: [all]
+    DeleteDataConfirmationRequest:
+      type: object
+      required: [tool, params]
+      additionalProperties: false
+      properties:
+        tool:
+          $ref: '#/components/schemas/PrivacyToolName'
+        params:
+          $ref: '#/components/schemas/DeleteMyDataParams'
+        params_hash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Như `ConfirmationRequest.params_hash` (màn hình không có khối thì bỏ).
+    DeleteDataRequest:
+      type: object
+      required: [tool, params]
+      additionalProperties: false
+      properties:
+        tool:
+          $ref: '#/components/schemas/PrivacyToolName'
+        params:
+          $ref: '#/components/schemas/DeleteMyDataParams'
+        confirm_token:
+          description: Token từ `POST /me/delete-data/confirmations`. Vắng thì không xóa gì, trả 428 NEEDS_CONFIRMATION.
+          type: string
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+          maxLength: 1024
+    DeletionStep:
+      description: Một bước của lần xóa. `deleted` là số object (S3), bản ghi và sự kiện (Memory) hoặc dòng (Aurora) đã xóa.
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [pending, done, failed, skipped]
+        deleted:
+          type: integer
+          minimum: 0
+        error_code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]*$'
+          maxLength: 40
+    DataDeletion:
+      description: |
+        Một lần "Xóa dữ liệu của tôi" (dòng `data_deletions`; `yofina_core.privacy.DataDeletion` kiểm trạng thái khớp các bước).
+      type: object
+      required: [deletion_id, status, scope, requested_at, steps]
+      additionalProperties: false
+      properties:
+        deletion_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        status:
+          type: string
+          enum: [running, done, partial, failed]
+        scope:
+          type: string
+          enum: [all]
+        requested_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        finished_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        steps:
+          type: object
+          required: [s3, memory, aurora]
+          additionalProperties: false
+          properties:
+            s3:
+              $ref: '#/components/schemas/DeletionStep'
+            memory:
+              $ref: '#/components/schemas/DeletionStep'
+            aurora:
+              $ref: '#/components/schemas/DeletionStep'
+    UserRef:
+      description: Mã giả danh của người dùng trên màn vận hành (12 ký tự hex đầu của sha256 của `sub`), không phải `sub`.
+      type: string
+      pattern: '^[0-9a-f]{12}$'
+    OpsTraceSummary:
+      type: object
+      required: [trace_id, created_at, user_ref, outcome, duration_ms, model_calls, input_tokens, output_tokens, est_cost_vnd, tool_calls, tool_errors, rules_failed]
+      additionalProperties: false
+      properties:
+        trace_id:
+          $ref: '../blocks/envelope.schema.json#/$defs/TraceId'
+        created_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        user_ref:
+          $ref: '#/components/schemas/UserRef'
+        intent:
+          type: string
+          pattern: '^[a-z][a-z_]{0,31}$'
+        outcome:
+          type: string
+          enum: [ok, rejected, error]
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        duration_ms:
+          type: integer
+          minimum: 0
+        model_calls:
+          type: integer
+          minimum: 0
+        input_tokens:
+          type: integer
+          minimum: 0
+        output_tokens:
+          type: integer
+          minimum: 0
+        est_cost_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        tool_calls:
+          type: integer
+          minimum: 0
+        tool_errors:
+          type: integer
+          minimum: 0
+        rules_failed:
+          type: integer
+          minimum: 0
+    OpsTraceListResponse:
+      type: object
+      required: [traces]
+      additionalProperties: false
+      properties:
+        traces:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/OpsTraceSummary'
+        next_cursor:
+          type: string
+          minLength: 1
+          maxLength: 200
+    OpsToolCall:
+      description: Một lần gọi tool trong lượt (từ `step_timings` có `step` là tên đầy đủ `<target>___<tool>`).
+      type: object
+      required: [target, tool, ms, status]
+      additionalProperties: false
+      properties:
+        target:
+          type: string
+          enum: [ledger, forecast, knowledge, planner, audit, ingest]
+        tool:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,39}$'
+        ms:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum: [ok, error, denied]
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+    OpsTraceDetail:
+      description: |
+        Mọi bước của một lượt cho màn trace X1. `steps` là `step_timings` nguyên thứ tự; `tool_calls` là phần của nó ứng với lần gọi tool.
+        `data_used` đã che PII (`pii_masked` luôn đúng); không có câu hỏi, câu trả lời hay nội dung khối.
+      type: object
+      required: [trace_id, created_at, user_ref, outcome, duration_ms, steps, tool_calls, rules_checked, data_used, blocks_emitted, token_usage, est_cost_vnd, pii_masked]
+      additionalProperties: false
+      properties:
+        trace_id:
+          $ref: '../blocks/envelope.schema.json#/$defs/TraceId'
+        created_at:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        user_ref:
+          $ref: '#/components/schemas/UserRef'
+        intent:
+          type: string
+          pattern: '^[a-z][a-z_]{0,31}$'
+        outcome:
+          type: string
+          enum: [ok, rejected, error]
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        duration_ms:
+          type: integer
+          minimum: 0
+        steps:
+          type: array
+          maxItems: 30
+          items:
+            $ref: '../tools/audit.results.schema.json#/$defs/TraceStep'
+        tool_calls:
+          type: array
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/OpsToolCall'
+        rules_checked:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '../blocks/explain.schema.json#/$defs/RuleCheck'
+        data_used:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '../blocks/explain.schema.json#/$defs/DataUsed'
+        confidence:
+          $ref: '../blocks/explain.schema.json#/$defs/ExplainConfidence'
+        blocks_emitted:
+          type: array
+          maxItems: 40
+          items:
+            $ref: '../tools/audit.results.schema.json#/$defs/TraceBlockRef'
+        token_usage:
+          $ref: '../tools/audit.results.schema.json#/$defs/TokenUsage'
+        est_cost_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        pii_masked:
+          const: true
+    OpsDayModelCalls:
+      type: object
+      required: [day, model_calls, cap]
+      additionalProperties: false
+      properties:
+        day:
+          description: Ngày theo UTC của thời điểm thật (trần gọi model tính theo ngày thật, không theo ngày mô phỏng).
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        model_calls:
+          type: integer
+          minimum: 0
+        cap:
+          type: integer
+          minimum: 1
+    OpsSummaryResponse:
+      description: Số tổng hợp trong `from`..`to`. `latency_ms` vắng khi không có lượt nào.
+      type: object
+      required: [from, to, turns, turns_rejected, turns_error, tool_calls, tool_errors, tool_error_rate, rule_fails, model_calls_by_day, est_cost_vnd]
+      additionalProperties: false
+      properties:
+        from:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        to:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        turns:
+          type: integer
+          minimum: 0
+        turns_rejected:
+          type: integer
+          minimum: 0
+        turns_error:
+          type: integer
+          minimum: 0
+        latency_ms:
+          type: object
+          required: [p50, p95]
+          additionalProperties: false
+          properties:
+            p50:
+              type: integer
+              minimum: 0
+            p95:
+              type: integer
+              minimum: 0
+        tool_calls:
+          type: integer
+          minimum: 0
+        tool_errors:
+          type: integer
+          minimum: 0
+        tool_error_rate:
+          $ref: '../blocks/envelope.schema.json#/$defs/Ratio'
+        rule_fails:
+          type: integer
+          minimum: 0
+        model_calls_by_day:
+          type: array
+          maxItems: 31
+          items:
+            $ref: '#/components/schemas/OpsDayModelCalls'
+        est_cost_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
   responses:
     BadRequest:
       description: PARAMS_INVALID (tham số sai định dạng hoặc vô lý).
@@ -3312,7 +4262,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: JAR_NOT_FOUND, TRANSACTION_NOT_FOUND, OBLIGATION_NOT_FOUND, PAYEE_NOT_FOUND, SALARY_EVENT_NOT_FOUND, TRACE_NOT_FOUND, NUDGE_NOT_FOUND, FEE_SCHEDULE_NOT_FOUND, FORECAST_NOT_APPLICABLE, INGEST_JOB_NOT_FOUND, ROADMAP_NOT_FOUND hoặc SHOCK_NOT_FOUND.
+      description: JAR_NOT_FOUND, TRANSACTION_NOT_FOUND, OBLIGATION_NOT_FOUND, PAYEE_NOT_FOUND, SALARY_EVENT_NOT_FOUND, TRACE_NOT_FOUND, NUDGE_NOT_FOUND, FEE_SCHEDULE_NOT_FOUND, FORECAST_NOT_APPLICABLE, INGEST_JOB_NOT_FOUND, ROADMAP_NOT_FOUND, SHOCK_NOT_FOUND hoặc MEMORY_RECORD_NOT_FOUND.
       content:
         application/json:
           schema:
@@ -3360,7 +4310,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Unavailable:
-      description: DATABASE_UNAVAILABLE hoặc FORECAST_UNAVAILABLE. Thử lại sau vài giây (Aurora có thể đang thức dậy).
+      description: DATABASE_UNAVAILABLE, FORECAST_UNAVAILABLE hoặc MEMORY_UNAVAILABLE. Thử lại sau vài giây (Aurora có thể đang thức dậy).
       content:
         application/json:
           schema:

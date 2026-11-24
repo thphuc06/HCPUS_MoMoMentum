@@ -1,0 +1,6 @@
+{
+  "tool": "delete_my_data",
+  "params": {
+    "scope": "all"
+  }
+}

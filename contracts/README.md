@@ -1,6 +1,6 @@
 # contracts/
 
-Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, REST, sự kiện và ML. Mọi bên đọc từ đây; muốn đổi hợp đồng thì sửa ở đây trước, rồi sinh lại và chạy test. Kế hoạch: [phase 1 mục "Bước 0"](../docs/plan/phases/phase-1-nen-va-lat-doc.md), [phase 2 mục "Bước 0"](../docs/plan/phases/phase-2-vi-va-du-bao.md), [phase 3 mục "Bước 0"](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md), [phase 4 mục "Bước 0"](../docs/plan/phases/phase-4-chong-chiu-lo-trinh.md); quyết định liên quan: [ADR-0002](../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md) (xác nhận trước khi ghi), [ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md) (đồng hồ mô phỏng); các lựa chọn thiết kế của phase 2 (hũ hệ thống, nguồn trả, tổng số dư...) ở mục "Quyết định hợp đồng phase 2" cuối [file phase 2](../docs/plan/phases/phase-2-vi-va-du-bao.md); của phase 3 (what-if, kiểm tra trước khi quẹt, luật suitability) ở "Quyết định hợp đồng phase 3" cuối [file phase 3](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md); của phase 4 (điểm chống chịu, cú sốc, lộ trình, phân hũ tự động) ở "Quyết định hợp đồng phase 4" cuối [file phase 4](../docs/plan/phases/phase-4-chong-chiu-lo-trinh.md).
+Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, REST, sự kiện và ML. Mọi bên đọc từ đây; muốn đổi hợp đồng thì sửa ở đây trước, rồi sinh lại và chạy test. Kế hoạch: [phase 1 mục "Bước 0"](../docs/plan/phases/phase-1-nen-va-lat-doc.md), [phase 2 mục "Bước 0"](../docs/plan/phases/phase-2-vi-va-du-bao.md), [phase 3 mục "Bước 0"](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md), [phase 4 mục "Bước 0"](../docs/plan/phases/phase-4-chong-chiu-lo-trinh.md); quyết định liên quan: [ADR-0002](../docs/decisions/0002-xac-nhan-truoc-khi-ghi.md) (xác nhận trước khi ghi), [ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md) (đồng hồ mô phỏng); các lựa chọn thiết kế của phase 2 (hũ hệ thống, nguồn trả, tổng số dư...) ở mục "Quyết định hợp đồng phase 2" cuối [file phase 2](../docs/plan/phases/phase-2-vi-va-du-bao.md); của phase 3 (what-if, kiểm tra trước khi quẹt, luật suitability) ở "Quyết định hợp đồng phase 3" cuối [file phase 3](../docs/plan/phases/phase-3-what-if-va-kiem-tra.md); của phase 4 (điểm chống chịu, cú sốc, lộ trình, phân hũ tự động) ở "Quyết định hợp đồng phase 4" cuối [file phase 4](../docs/plan/phases/phase-4-chong-chiu-lo-trinh.md); của phase 5 (hồ sơ hành vi, bản tin, bộ nhớ, RAG, xóa dữ liệu, trace) ở "Quyết định hợp đồng phase 5" trong [file phase 5](../docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md).
 
 | Thư mục / file | Nội dung | Ai dùng |
 |---|---|---|
@@ -12,20 +12,21 @@ Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, RE
 | `blocks/{affordability_card,obligation_impact,options,explain,clarify,suggestions}.schema.json` | Sáu khối phase 3 (xem mục "Phase 3"); `notice` và `forecast_timeline` được mở rộng tương thích ngược | luồng A (dựng số), agent, C (vẽ) |
 | `blocks/{ingest_review,coverage_change}.schema.json` | Bảng duyệt một lần nạp ảnh hoặc CSV và độ phủ dữ liệu trước/sau (phase 5) | luồng A phase 5 (dựng), frontend (vẽ) |
 | `blocks/{resilience_score,stress_result,roadmap,roadmap_diff,review_list}.schema.json` | Năm khối phase 4 (xem mục "Phase 4") | luồng A, B (dựng số), agent, D (vẽ) |
-| `blocks/block.schema.json` | Hợp của hai mươi mốt khối, phân biệt theo `type` | kiểm tra |
+| `blocks/{behavior_insight,citation}.schema.json` | Hai khối phase 5: nhận xét hành vi kèm bằng chứng số và một việc cần làm (`$defs` cũng là hình dạng hồ sơ hành vi), trích dẫn nguồn RAG; `proactive_card` mở rộng cho bản tin (xem mục "Phase 5 (F7, RAG, quyền riêng tư, trace)") | luồng p5-behavior, p5-rag, agent (dựng), p5-frontend (vẽ) |
+| `blocks/block.schema.json` | Hợp của hai mươi ba khối, phân biệt theo `type` | kiểm tra |
 | `tools/ledger.json` | Mười tool của target `ledger` (chín tool của overview và `save_turn`) đúng định dạng `inlinePayload` của AgentCore Gateway (Lambda target) | luồng A (cài), agent |
-| `tools/forecast.json` | Sáu tool của target `forecast`: `get_forecast` (phase 2), `run_scenario`, `list_scenarios` (gộp kịch bản trong một cuộc chat), `affordability_check` (phase 3), `get_resilience_score`, `stress_test` (phase 4) | luồng C phase 2, A phase 3 và 4 (cài), agent |
-| `tools/{knowledge,planner,audit}.json` | Target mới của phase 3: `get_fee_schedule`; `check_suitability`, `schedule_nudge` (tool GHI qua token); `get_trace`, `record_turn` (ghi bản ghi lượt, không qua token). Phase 4 thêm vào `planner`: `optimize_allocation`, `save_roadmap` (GHI không qua token), `get_roadmap` | luồng A (cài), agent |
+| `tools/forecast.json` | Bảy tool của target `forecast`: `get_forecast` (phase 2), `run_scenario`, `list_scenarios` (gộp kịch bản trong một cuộc chat), `affordability_check` (phase 3), `get_resilience_score`, `stress_test` (phase 4), `get_behavior_profile` (phase 5) | luồng C phase 2, A phase 3 và 4, p5-behavior (cài), agent |
+| `tools/{knowledge,planner,audit}.json` | Target mới của phase 3: `get_fee_schedule`; `check_suitability`, `schedule_nudge` (tool GHI qua token); `get_trace`, `record_turn` (ghi bản ghi lượt, không qua token). Phase 4 thêm vào `planner`: `optimize_allocation`, `save_roadmap` (GHI không qua token), `get_roadmap`. Phase 5 thêm vào `knowledge`: `search` (RAG, trả đoạn trích kèm nguồn) | luồng A, p5-rag (cài), agent |
 | `tools/ingest.json`, `tools/ingest.results.schema.json` | Ba tool của target `ingest` (phase 5) và kết quả | luồng A phase 5 (cài), agent |
 | `scenario/scenario_spec.schema.json` | `ScenarioSpec`: sáu loại kịch bản what-if (FR5), nguồn chung cho `run_scenario`, bảng `scenarios`, `yofina_core.scenario` | agent (dựng), luồng A (kiểm, chạy) |
 | `tools/{ledger,forecast,knowledge,planner,audit}.results.schema.json` | Kết quả JSON Lambda trả về cho từng tool; `ledger.results` còn chứa các $defs dùng chung với REST (`Transaction`, `Obligation`, `CreditLine`, `Payee`, `SalaryEvent`) | luồng A, C (trả), agent (đọc) |
-| `rest/openapi.yaml` | OpenAPI 3.1: 40 endpoint (xem mục "REST", "Phase 3", "Phase 5" và "Phase 4") | luồng A, C (cài), D (gọi) |
+| `rest/openapi.yaml` | OpenAPI 3.1: 51 thao tác (xem mục "REST", "Phase 3", "Phase 5" và "Phase 4") | luồng A, C (cài), D (gọi) |
 | `events/*.schema.json` | `detail` của sự kiện trên EventBridge bus `yofina-bus`: `transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`, `forecast.updated`; phase 4 thêm `behavior.changed`, `roadmap.regeneration_requested` | luồng A (phát), C (nghe) |
 | `ml/forecast_io.schema.json` | Dạng JSON của đầu vào và đầu ra `yofina_ml.forecast_user` | luồng B, C |
 | `ml/{resilience_config,shock_set}.schema.json` | Định dạng của `resilience_defaults.json` (trọng số, ngưỡng điểm chống chịu) và `shocks.json` (ba cú sốc mẫu), hai file dữ liệu nằm trong `libs/yofina_core/src/yofina_core/` | luồng A (đọc) |
 | `fixtures/` | Ví dụ JSON dùng chung cho test Python và TypeScript (`blocks/`, `tools/`, `rest/`, `events/`, `ml/`, `scenario/`) | test |
 
-Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã tương ứng: Pydantic ở [libs/yofina_core](../libs/yofina_core/README.md) (`blocks.py`, `wallet.py`, `errors.py`, `clock.py`, `scenario.py`, `suitability.py`, `resilience.py`, `roadmap.py`), Zod ở `frontend/src/contracts/blocks.ts` (file sinh ra, không sửa tay), kiểu ML ở [ml/yofina_ml](../ml/README.md).
+Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã tương ứng: Pydantic ở [libs/yofina_core](../libs/yofina_core/README.md) (`blocks.py`, `wallet.py`, `errors.py`, `clock.py`, `scenario.py`, `suitability.py`, `resilience.py`, `roadmap.py`; phase 5 thêm `knowledge.py`, `memory.py`, `privacy.py`), Zod ở `frontend/src/contracts/blocks.ts` (file sinh ra, không sửa tay), kiểu ML ở [ml/yofina_ml](../ml/README.md).
 
 ## Quy ước
 
@@ -50,7 +51,7 @@ Sinh và kiểm: [scripts/gen_contracts.mjs](../scripts/gen_contracts.mjs). Mã 
 - **`receipt`**: `transaction_id` (UUID; với chuyển hũ là `transfer_id` chung của hai dòng sổ cái), `occurred_at`, `app_date`, số dư sau của hai hũ.
 - **`notice`**: `kind` ∈ `out_of_scope` | `degraded` | `low_data` | `error` | `info` (phase 4: trạng thái trống hoặc chỉ mang thông tin, không phải lỗi; giao diện vẽ màu trung tính); không chứa số liệu tài chính.
 - **Thêm một loại khối**: tạo `blocks/<type>.schema.json` (theo mẫu: phong bì + `data`), thêm vào `block.schema.json` và `FILES` trong `scripts/gen_contracts.mjs`, viết model Pydantic và `build_*` trong `blocks.py`, thêm fixture hợp lệ và không hợp lệ, chạy `uv run pytest` và `node scripts/gen_contracts.mjs`.
-- **`BLOCK_TYPES` của Zod chỉ gồm khối mà registry frontend đã đăng ký.** `frontend/src/contracts/blocks.ts` xuất `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` cho MỌI khối trong `block.schema.json` (hai mươi mốt khối sau phase 3, 4 và 5), nhưng `BLOCK_TYPES` và kiểu `BlockType` chỉ liệt kê khối đã có view (nay là cả mười sáu khối) (hằng `REGISTERED_BY_FRONTEND` trong `scripts/gen_contracts.mjs`), vì `registry.tsx` dùng `Record<BlockType, Entry>` phải đủ khóa. Khối chưa đăng ký hiện `fallback_text` (không vỡ trang). **Luồng frontend thêm khối mới vào `REGISTERED_BY_FRONTEND` cùng lúc với việc đăng ký view trong `registry.tsx`** (phase 2 đã làm cho `forecast_timeline`, `proactive_card`, `confirm_action`, `receipt_action`; phase 3 làm cho `affordability_card`, `obligation_impact`, `options`, `explain`, `clarify`, `suggestions`; phase 5 làm cho `ingest_review`, `coverage_change`; năm khối phase 4 CHƯA có view nên chưa vào danh sách, luồng D thêm khi đăng ký).
+- **`BLOCK_TYPES` của Zod chỉ gồm khối mà registry frontend đã đăng ký.** `frontend/src/contracts/blocks.ts` xuất `blockSchemas`, `ALL_BLOCK_TYPES` và `Block` cho MỌI khối trong `block.schema.json` (hai mươi ba khối sau bước 0 của phase 5), nhưng `BLOCK_TYPES` và kiểu `BlockType` chỉ liệt kê khối đã có view (nay hai mươi mốt; `behavior_insight` và `citation` chưa có view) (hằng `REGISTERED_BY_FRONTEND` trong `scripts/gen_contracts.mjs`), vì `registry.tsx` dùng `Record<BlockType, Entry>` phải đủ khóa. Khối chưa đăng ký hiện `fallback_text` (không vỡ trang). **Luồng frontend thêm khối mới vào `REGISTERED_BY_FRONTEND` cùng lúc với việc đăng ký view trong `registry.tsx`** (phase 2 đã làm cho `forecast_timeline`, `proactive_card`, `confirm_action`, `receipt_action`; phase 3 làm cho `affordability_card`, `obligation_impact`, `options`, `explain`, `clarify`, `suggestions`; phase 5 làm cho `ingest_review`, `coverage_change`; năm khối phase 4 CHƯA có view nên chưa vào danh sách, luồng D thêm khi đăng ký).
 
 ### Tool `ledger` (AgentCore Gateway)
 
@@ -487,6 +488,55 @@ cd tests/local_pg && uv run --python 3.12 --no-project --with pgserver --with "p
 ```
 
 Test cũ đã sửa cho phase 4: `test_contracts_blocks.py` (hai mươi mốt khối), `test_contracts_rest.py` (tập endpoint, ghi không qua token, `x-lambda`), `test_contracts_tools.py` (bảng kết quả), `test_contracts_events.py` (hai sự kiện), `test_contracts_ingest.py` (mã lỗi liền nhau, không còn là bốn mã cuối), `test_migration_0010.py` (`INTENTS_PHASE3`), `test_ledger_wallet.py` (`PHASE4_TOOLS`), `tests/unit/agent/test_schemas.py` và `test_jars_fallback_router.py` (mười ý định), `tests/unit/ts/blocks.fixtures.test.mjs`, `tests/integration/test_gateway_config.py` (sáu tool forecast; không chạy ở bước 0). Frontend: `errors.ts` thêm bốn mã; `registry.test.tsx` lọc fixture hợp lệ theo khối đã đăng ký; `walletBlocks.test.tsx` đổi số đếm.
+
+## Phase 5 (F7, RAG, quyền riêng tư, trace): hồ sơ hành vi, bản tin, bộ nhớ, trích dẫn, xóa dữ liệu, bảng vận hành
+
+Hợp đồng bước 0 cho sáu luồng song song của [phase 5](../docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) (kế hoạch "Kế hoạch thực hiện"). Lý do từng lựa chọn: "Quyết định hợp đồng phase 5" trong file phase. Migration [0053](../db/migrations/0053_phase5.sql), tool, REST **chưa chạy, chưa deploy**. Kiểm: `uv run pytest tests/unit/test_contracts_phase5.py`.
+
+### Khối mới (hai khối, `block.schema.json` nay có hai mươi ba)
+
+| Khối | Việc | Id | Do ai dựng |
+|---|---|---|---|
+| `behavior_insight` | MỘT nhận xét hành vi (`insight`: loại, câu, bằng chứng số `evidence` có đơn vị, độ tin cậy, `ai_generated`) và MỘT việc cần làm (`next_step`, `action` tùy chọn cùng hình dạng hành động của bước lộ trình) | `behavior_insight:{trace_id}:{insight_id}` | Agent hoặc màn Hồ sơ, bằng `blocks.behavior_insight_data(profile)` rồi `build_behavior_insight` |
+| `citation` | 1 đến 5 đoạn trích NGUYÊN VĂN của kho tri thức: tài liệu, điều khoản, kho, ngày hiệu lực, nguồn `https://` | `citation:{trace_id}` | Agent, `build_citation(items=hits[].citation)` |
+
+`proactive_card` mở rộng tương thích ngược (không tăng `v`): `kind` thêm `roadmap_proposed`, `resilience_drop`, `behavior_insight`; `actions[].kind` thêm `open_roadmap`, `open_resilience`, `open_profile`; `nudge_id` tùy chọn (thẻ là bản tin của cổng giá trị thì "Để sau" và "Ít nhắc loại này" gửi `POST /nudges/{nudge_id}/feedback`). Hai khối mới có Zod nhưng CHƯA ở `REGISTERED_BY_FRONTEND` (luồng p5-frontend thêm khi đăng ký view). Bất biến mà JSON Schema không diễn đạt được (Pydantic quyết định): bằng chứng `vnd`, `count`, `hour`, `weekday` là số nguyên, `percent` 0..100, `ratio` 0..1, `hour` 0..23, `weekday` 1..7, khóa bằng chứng duy nhất; hồ sơ `ready` thì có `computed_at`, `config_version`, `features`, `next_step` và ít nhất một nhận xét, chưa `ready` thì không nhận xét và có `min_history_days`; trích dẫn `effective_to` không trước `effective_from`, mỗi `chunk_id` một lần.
+
+### Tool (hai tool; `wallet.PHASE5_TOOLS` liệt kê tên chưa cài)
+
+| Tool | Loại | Bắt buộc | Kết quả |
+|---|---|---|---|
+| `forecast___get_behavior_profile` | ĐỌC bảng `behavior_profiles` | không (`insight_kind`, `jar` để lọc) | `GetBehaviorProfileResult`: `data` = `BehaviorProfileData`; chưa sẵn sàng là OK với `ready` sai |
+| `knowledge___search` | ĐỌC, truy xuất lai trên Aurora (`app_kb_search`) | `query` (`corpus`, `product`, `k` 1..8, mặc định 4) | `KnowledgeSearchResult`: `data.hits[]` = `{rank, score (RRF chuẩn hóa 0..1), match (vector, text, both), citation}`; rỗng không phải lỗi; `degraded` khi chỉ còn từ khóa |
+
+Ba tool `ingest___*` giữ nguyên hợp đồng (đã rà). **Cedar**: CDK đòi `gateway/policies/<tool>.cedar` cho mọi tool trong `forecast.json` và `knowledge.json` khi deploy `YofinaAgent`; hợp đồng không viết hai file này (luồng p5-behavior và p5-rag thêm khi cài, chỉ ép `user_id`). Bản ghi lượt: bước của `step_timings` có `step` là tên đầy đủ `<target>___<tool>` là MỘT lần gọi tool, kèm `status` (`ok`, `error`, `denied`) và `code` tùy chọn (`TraceStep`, `record_turn`); không thêm cột.
+
+### REST (mười một thao tác mới)
+
+| Endpoint | `x-lambda` | Việc |
+|---|---|---|
+| `GET /profile/behavior` | `forecast` | `BehaviorProfileData` (cùng `data` với tool) |
+| `GET /nudges/today` | `ledger` | Bản tin của cổng giá trị hôm nay (tối đa một), kèm khối `proactive_card` có `nudge_id`, và `suppressed` |
+| `POST /nudges/{nudge_id}/feedback` | `ledger` | `outcome` acted, dismissed, snoozed, less_like_this; không qua token |
+| `GET /memory` | `ledger` | Bản ghi AgentCore Memory của chính người gọi (`MemoryRecord`: `record_id`, `kind`, `source`, `text`, `created_at`), phân trang `cursor` |
+| `DELETE /memory/{record_id}`, `DELETE /memory` | `ledger` | Xóa một hoặc toàn bộ (cả sự kiện ngắn hạn); không qua token |
+| `POST /me/delete-data/confirmations` | `ledger` | Cấp token cho `tool` = `delete_my_data`, `params` = `{scope: all}` (`PrivacyToolName`); trả `ConfirmationResponse` |
+| `POST /me/delete-data` | `ledger` | Kèm token thì xóa S3, Memory, Aurora (`app_delete_user_data`), trả `DataDeletion`; thiếu token 428 |
+| `GET /ops/traces`, `GET /ops/traces/{trace_id}`, `GET /ops/summary` | `ledger` | Chỉ nhóm Cognito `ops` (`x-required-group: ops`, 403 `FORBIDDEN`); người dùng hiện bằng `user_ref` |
+
+`DELETE` là method mới: CORS của HTTP API `yofina-api` phải thêm `DELETE` (luồng hạ tầng). `delete_my_data` KHÔNG thuộc `wallet.ACTION_TOOLS` hay `ToolName` (như `confirm_rows`), chuẩn hóa ở `params.normalize_delete_my_data`. Mã lỗi mới (thêm cuối): `MEMORY_RECORD_NOT_FOUND` (404), `MEMORY_UNAVAILABLE` (503); `frontend/src/api/errors.ts` chưa có hai mã này (luồng p5-frontend thêm).
+
+### Bộ nhớ (`yofina_core.memory`)
+
+Gốc namespace của một người dùng `/yofina/users/{actorId}/` (`actorId` = `sub`); theo loại: `preferences/`, `facts/`, `sessions/{sessionId}/`, `behavior/`, `lessons/`. Ba loại đầu do chiến lược có sẵn của AgentCore trích từ hội thoại (user preference, semantic, summarization), hai loại sau là bản ghi tự tạo (`BatchCreateMemoryRecords`). `kind_of_namespace(ns, sub)` trả None cho namespace không thuộc người gọi: Lambda bỏ bản ghi đó. Xóa: không có API xóa theo người dùng, nên liệt kê `ListMemoryRecords` với `namespacePath` = gốc (tối đa 100 mỗi trang) rồi `BatchDeleteMemoryRecords` (tối đa 100), và `ListSessions`, `ListEvents`, `DeleteEvent` cho sự kiện ngắn hạn.
+
+### Migration 0053
+
+Bảng `behavior_profiles` (RLS FORCE, một dòng mỗi người dùng và ngày mô phỏng), `kb_documents` + `kb_chunks` (dùng chung, không RLS, `yofina_app` chỉ SELECT, nạp bằng secret MASTER; `vector(1024)` HNSW cosine, `tsv` tsvector simple trên `app_fold_text` có chỉ mục GIN), `data_deletions` (RLS FORCE, không khóa ngoại tới `users`, không DELETE); `nudges` thêm `value_vnd`, `gate_reason`, `title`, `body`, `outcome`, `outcome_at`, nới `kind` (`wallet.ALL_NUDGE_KINDS`) và CHECK ngày (bản tin của cổng hiện trong ngày tạo), tối đa một bản tin của cổng mỗi ngày; `audit_events.intent` nới thành `wallet.AUDIT_INTENTS`. Hàm SECURITY INVOKER `app_get_behavior_profile`, `app_get_today_nudge`, `app_nudge_outcome_stats`, `app_set_nudge_outcome`, `app_kb_search`; SECURITY DEFINER `app_delete_user_data`, `app_ops_list_traces`, `app_ops_get_trace`, `app_ops_summary`, `app_ops_model_calls_by_day`. Đã chạy thật trên PostgreSQL 16 cục bộ (pgserver, pgvector 0.6.2): chạy lại được, RLS, quyền chỉ đọc của kho tri thức, truy xuất lai (lọc ngày, kho, sản phẩm, bỏ dấu, chỉ từ khóa), bản tin một mỗi ngày, ops không lộ `user_id`, xóa dữ liệu không còn dòng nào của người đó và không đụng người khác. `RESET_DELETES` (ledger) cần thêm `behavior_profiles`.
+
+### Bộ đánh giá
+
+`evals/golden/phase5.jsonl` (14 câu) và `evals/adversarial/phase5.jsonl` (14 ca), cùng định dạng phase 4. Trường mới mà `evals/run.py` CHƯA chấm (luồng deploy cài trước khi chạy): `prior_sessions` (các phiên trước, chạy với session id khác), `expect_memory_used`, `forbid_reask`, `expect_insight_kind`, `expect_citation_corpus`, `upload_manifest_id` (id trong `evals/ingest/manifest.json`, tải lên trước câu hỏi), `forbid_auto_add_from_file`, `forbid_pii_from_manifest`, `expect_memory_without_pii`, `forbid_unretrieved_citation`.
 
 ## Cách chọn công cụ sinh
 

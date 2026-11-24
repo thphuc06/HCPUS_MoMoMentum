@@ -1,0 +1,51 @@
+{
+  "v": 1,
+  "id": "behavior_insight:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:tra_sau_5_lan",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "60 ngày qua bạn dùng Trả sau 5 lần, chiếm 12% chi tiêu. Việc nên làm: Xem lại các khoản Trả sau trước ngày 05/12.",
+  "source": {
+    "tool": "forecast___get_behavior_profile",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "behavior_insight",
+  "data": {
+    "insight": {
+      "insight_id": "tra_sau_5_lan",
+      "kind": "bnpl_usage",
+      "headline": "60 ngày qua bạn dùng Trả sau 5 lần, chiếm 12% chi tiêu.",
+      "evidence": [
+        {
+          "key": "window_days",
+          "label": "Số ngày đã xét",
+          "value": 60,
+          "unit": "days"
+        },
+        {
+          "key": "bnpl_count",
+          "label": "Số lần dùng Trả sau",
+          "value": 5.0,
+          "unit": "count",
+          "period_from": "2026-09-22",
+          "period_to": "2026-11-21"
+        },
+        {
+          "key": "bnpl_share",
+          "label": "Phần chi bằng Trả sau",
+          "value": 12.0,
+          "unit": "percent"
+        }
+      ],
+      "confidence": "high",
+      "ai_generated": false
+    },
+    "next_step": {
+      "label": "Xem lại các khoản Trả sau trước ngày 05/12",
+      "reason": "Ngày đến hạn đã gần."
+    },
+    "app_date": "2026-11-21",
+    "computed_at": "2026-12-09T19:10:00Z",
+    "history_days": 60,
+    "config_version": "behavior-2026-12"
+  }
+}

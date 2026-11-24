@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/tools/knowledge.results.schema.json",
   "title": "KnowledgeToolResults",
-  "description": "Kết quả JSON mà Lambda `knowledge` trả cho Gateway. `get_fee_schedule` đọc bảng có cấu trúc `fee_schedules`, KHÔNG đi qua RAG: số để tính không lấy từ văn bản tự do. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "description": "Kết quả JSON mà Lambda `knowledge` trả cho Gateway. `get_fee_schedule` đọc bảng có cấu trúc `fee_schedules`, KHÔNG đi qua RAG: số để tính không lấy từ văn bản tự do. `search` (phase 5) là RAG: đoạn trích nguyên văn kèm nguồn để agent dựng khối `citation`, chỉ để giải thích. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
   "$defs": {
     "FeeLine": {
       "description": "Một dòng biểu phí có cấu trúc (bảng fee_schedules), đang hiệu lực tại ngày mô phỏng. Cùng hình dạng `FeeLine` của OpenAPI (`GET /credit-line`); test kiểm hai nơi khớp nhau.",
@@ -55,6 +55,51 @@
       "description": "Mã lỗi có thể gặp: FEE_SCHEDULE_NOT_FOUND (loại phí hoặc sản phẩm không có), PARAMS_INVALID.",
       "oneOf": [
         { "$ref": "#/$defs/GetFeeScheduleOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
+    "KnowledgeHit": {
+      "description": "Một kết quả của truy xuất lai: hạng (1 là tốt nhất), điểm hợp nhất RRF (Reciprocal Rank Fusion, không phải xác suất), đoạn được tìm thấy bằng đường nào (vector, text hoặc both) và đoạn trích dạng `CitationItem` để agent đưa thẳng vào khối `citation`.",
+      "type": "object",
+      "required": ["rank", "score", "match", "citation"],
+      "additionalProperties": false,
+      "properties": {
+        "rank": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "match": { "type": "string", "enum": ["vector", "text", "both"] },
+        "citation": { "$ref": "../blocks/citation.schema.json#/$defs/CitationItem" }
+      }
+    },
+    "KnowledgeSearchData": {
+      "description": "`hits` theo hạng (rỗng khi không tìm thấy gì, không phải lỗi: agent nói không có nguồn thay vì bịa). `on_date` là hôm nay mô phỏng dùng để lọc ngày hiệu lực. `degraded` đúng khi không tính được embedding của câu hỏi và chỉ còn tìm theo từ khóa.",
+      "type": "object",
+      "required": ["query", "on_date", "hits", "method"],
+      "additionalProperties": false,
+      "properties": {
+        "query": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "corpus": { "$ref": "../blocks/citation.schema.json#/$defs/KnowledgeCorpus" },
+        "product": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "on_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "method": { "const": "hybrid_rrf" },
+        "degraded": { "type": "boolean" },
+        "hits": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/KnowledgeHit" } }
+      }
+    },
+    "KnowledgeSearchOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "#/$defs/KnowledgeSearchData" }
+      }
+    },
+    "KnowledgeSearchResult": {
+      "description": "Truy xuất lai trên Aurora (pgvector cosine + tsvector, hợp nhất RRF; hàm `app_kb_search` của migration 0053). Mã lỗi có thể gặp: PARAMS_INVALID (query rỗng hoặc quá 200 ký tự, corpus lạ, k ngoài 1..8), MODEL_BUDGET_EXCEEDED (hết trần gọi model; nếu chỉ embedding lỗi thì vẫn OK với `degraded`), DATABASE_UNAVAILABLE.",
+      "oneOf": [
+        { "$ref": "#/$defs/KnowledgeSearchOk" },
         { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
       ]
     }

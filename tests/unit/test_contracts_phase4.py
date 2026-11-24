@@ -126,7 +126,8 @@ def test_loi_roadmap_va_cu_soc_khop_ba_noi():
     for code, status in NEW_ERRORS.items():
         assert HTTP_STATUS[ErrorCode(code)] == status == schema["x-http-status"][code]
         assert schema["x-meaning"][code]
-    assert schema["enum"][-len(NEW_ERRORS) :] == list(NEW_ERRORS)  # thêm cuối, không đổi thứ tự mã cũ
+    i = schema["enum"].index(next(iter(NEW_ERRORS)))
+    assert schema["enum"][i : i + len(NEW_ERRORS)] == list(NEW_ERRORS)  # liền nhau, thêm sau mã cũ (phase 5 thêm sau nữa)
     front = (REPO / "frontend/src/api/errors.ts").read_text(encoding="utf-8")
     for code, status in NEW_ERRORS.items():
         assert f"'{code}'," in front and f"{code}: {status}," in front
@@ -508,10 +509,10 @@ def test_hop_dong_phase_4_khong_dung_nhan_cam_va_khong_co_thong_tin_nhay_cam():
 # Tool
 # =====================================================================================
 def test_tool_phase_4_nam_o_dung_target_va_khop_hang_so():
-    assert wallet.FORECAST_TOOLS[-2:] == ("get_resilience_score", "stress_test")
+    assert wallet.FORECAST_TOOLS[4:6] == ("get_resilience_score", "stress_test")  # phase 5 thêm get_behavior_profile ở sau
     assert wallet.PLANNER_TOOLS[-3:] == ("optimize_allocation", "save_roadmap", "get_roadmap")
-    # năm tool đã cài xong (23/11) nên không còn tên nào "chưa cài"
-    assert wallet.PHASE4_TOOLS == ()
+    # năm tool đã cài xong (23/11) nên không còn tên nào của phase 4 trong tập "chưa cài" (nay là tool phase 5)
+    assert not set(NEW_TOOLS) & set(wallet.PHASE4_TOOLS)
     assert set(NEW_TOOLS) <= set(wallet.FORECAST_TOOLS) | set(wallet.PLANNER_TOOLS)
     for name in ("get_resilience_score", "stress_test"):
         assert len(f"forecast___{name}") <= 64
@@ -665,7 +666,9 @@ def test_cedar_cua_tool_moi_dung_dang_va_save_roadmap_khong_chan_theo_token():
     contract_tools = set()
     for target in ("ledger", "forecast", "knowledge", "planner", "audit"):
         contract_tools |= {t["name"] for t in load_json(CONTRACTS / "tools" / f"{target}.json")}
-    assert {p.stem for p in policies.glob("*.cedar")} == contract_tools  # mỗi tool đúng một policy (CDK bắt buộc)
+    # mỗi tool đúng một policy (CDK bắt buộc); tool phase 5 chưa cài có Cedar do luồng cài nó thêm (xem test_contracts_phase5)
+    pending = {t for t in wallet.PHASE5_TOOLS if not (policies / f"{t}.cedar").exists()}
+    assert {p.stem for p in policies.glob("*.cedar")} == contract_tools - pending
 
 
 def test_get_unclassified_mo_rong_tuong_thich_nguoc():

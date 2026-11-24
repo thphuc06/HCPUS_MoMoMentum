@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "PARAMS_INVALID",
+  "message": "Câu tìm kiếm không được trống và tối đa 200 ký tự."
+}

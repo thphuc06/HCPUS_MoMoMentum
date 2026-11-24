@@ -261,6 +261,25 @@
           "items": { "$ref": "../blocks/stress_result.schema.json#/$defs/ShockSummary" }
         }
       }
+    },
+    "GetBehaviorProfileOk": {
+      "description": "`data` là đúng `BehaviorProfileData` (cùng `data` của `GET /profile/behavior`); agent dựng khối `behavior_insight` bằng `behavior_insight_data` rồi `build_behavior_insight`. Lọc `insight_kind` hoặc `jar` chỉ bớt `insights`, không đổi phần còn lại. Hồ sơ chưa sẵn sàng (`ready` sai) là kết quả OK, không phải lỗi.",
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "../blocks/behavior_insight.schema.json#/$defs/BehaviorProfileData" }
+      }
+    },
+    "GetBehaviorProfileResult": {
+      "description": "Đọc bản mới nhất của `behavior_profiles` không sau hôm nay mô phỏng. Mã lỗi có thể gặp: PROFILE_INCOMPLETE (chưa khai lương và ngày nhận), JAR_NOT_FOUND (`jar` không phải hũ của người dùng), PARAMS_INVALID.",
+      "oneOf": [
+        { "$ref": "#/$defs/GetBehaviorProfileOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
     }
   }
 }

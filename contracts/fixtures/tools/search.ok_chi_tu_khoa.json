@@ -1,0 +1,51 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "query": "phí trễ hạn",
+    "corpus": "fees",
+    "product": "bnpl_sim",
+    "on_date": "2026-11-21",
+    "method": "hybrid_rrf",
+    "degraded": true,
+    "hits": [
+      {
+        "rank": 1,
+        "score": 0.5,
+        "match": "text",
+        "citation": {
+          "chunk_id": "6b1f0d2e-3c4a-4b5d-9e6f-7a8b9c0d1e30",
+          "doc_key": "bieu-phi-tra-sau-mo-phong",
+          "title": "Biểu phí Trả sau (mô phỏng)",
+          "corpus": "fees",
+          "clause_ref": "Điều 4",
+          "heading": "Thanh toán trễ hạn",
+          "excerpt": "Bản mô phỏng không tính phí phạt trễ hạn; khoản đến hạn chưa trả vẫn được cộng vào nghĩa vụ của kỳ sau.",
+          "product_code": "bnpl_sim",
+          "effective_from": "2026-03-31",
+          "source_name": "Biểu phí công khai của sản phẩm trả sau, dùng làm ví dụ cho sản phẩm mô phỏng",
+          "source_url": "https://www.momo.vn/vi-tra-sau"
+        }
+      },
+      {
+        "rank": 2,
+        "score": 0.491935,
+        "match": "text",
+        "citation": {
+          "chunk_id": "6b1f0d2e-3c4a-4b5d-9e6f-7a8b9c0d1e2f",
+          "doc_key": "bieu-phi-tra-sau-mo-phong",
+          "title": "Biểu phí Trả sau (mô phỏng)",
+          "corpus": "fees",
+          "clause_ref": "Điều 3.2",
+          "heading": "Phí dịch vụ hằng tháng",
+          "excerpt": "Phí dịch vụ 33.000 đồng được tính một lần cho mỗi tháng có ít nhất một giao dịch bằng hạn mức Trả sau; tháng không có giao dịch thì không tính phí.",
+          "product_code": "bnpl_sim",
+          "effective_from": "2026-03-31",
+          "source_name": "Biểu phí công khai của sản phẩm trả sau, dùng làm ví dụ cho sản phẩm mô phỏng",
+          "source_url": "https://www.momo.vn/vi-tra-sau"
+        }
+      }
+    ]
+  }
+}

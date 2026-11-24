@@ -39,7 +39,7 @@
         },
         "intent": {
           "type": "string",
-          "description": "Ý định router đã nhận ra: lookup, what_if, affordability, profile_update, move, out_of_scope hoặc chitchat. Bỏ trống nếu lượt không qua router."
+          "description": "Ý định router đã nhận ra: lookup, what_if, affordability, profile_update, move, out_of_scope, chitchat, resilience, stress, roadmap, behavior, knowledge, ingest hoặc memory. Bỏ trống nếu lượt không qua router."
         },
         "outcome": {
           "type": "string",
@@ -183,7 +183,7 @@
         },
         "step_timings": {
           "type": "array",
-          "description": "Thời lượng từng bước (tối đa 30).",
+          "description": "Thời lượng từng bước (tối đa 30). Mỗi lần gọi tool là một bước có step là tên đầy đủ của tool qua Gateway (ví dụ ledger___get_jar_balances) kèm status và code khi lỗi.",
           "items": {
             "type": "object",
             "description": "Một bước.",
@@ -195,6 +195,14 @@
               "ms": {
                 "type": "integer",
                 "description": "Mili giây."
+              },
+              "status": {
+                "type": "string",
+                "description": "Chỉ với bước là một lần gọi tool: ok, error hoặc denied (Cedar từ chối)."
+              },
+              "code": {
+                "type": "string",
+                "description": "Mã lỗi (ErrorCode) khi status là error."
               }
             },
             "required": [

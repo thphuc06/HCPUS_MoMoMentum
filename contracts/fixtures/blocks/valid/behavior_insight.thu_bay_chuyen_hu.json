@@ -1,0 +1,54 @@
+{
+  "v": 1,
+  "id": "behavior_insight:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:thu_bay_an_uong",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Thứ Bảy là ngày bạn chi nhiều nhất cho hũ Ăn uống, trung bình 412.000 ₫. Việc nên làm: Chuyển 200.000 ₫ từ hũ Giải trí sang hũ Ăn uống trước thứ Bảy.",
+  "source": {
+    "tool": "rest:GET /profile/behavior",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "behavior_insight",
+  "data": {
+    "insight": {
+      "insight_id": "thu_bay_an_uong",
+      "kind": "weekday_pattern",
+      "headline": "Thứ Bảy là ngày bạn chi nhiều nhất cho hũ Ăn uống, trung bình 412.000 ₫.",
+      "jar_code": "an_uong",
+      "evidence": [
+        {
+          "key": "top_weekday",
+          "label": "Ngày chi nhiều nhất",
+          "value": 6.0,
+          "unit": "weekday"
+        },
+        {
+          "key": "avg_saturday_vnd",
+          "label": "Chi trung bình mỗi thứ Bảy ở hũ Ăn uống",
+          "value": 412000.0,
+          "unit": "vnd",
+          "period_from": "2026-09-22",
+          "period_to": "2026-11-21"
+        }
+      ],
+      "confidence": "medium",
+      "ai_generated": true
+    },
+    "next_step": {
+      "label": "Chuyển 200.000 ₫ từ hũ Giải trí sang hũ Ăn uống trước thứ Bảy",
+      "reason": "Thứ Bảy là ngày hũ Ăn uống hụt nhanh nhất.",
+      "action": {
+        "tool": "move_between_jars",
+        "params": {
+          "from_jar": "giai_tri",
+          "to_jar": "an_uong",
+          "amount_vnd": 200000
+        }
+      }
+    },
+    "app_date": "2026-11-21",
+    "computed_at": "2026-12-09T19:10:00Z",
+    "history_days": 60,
+    "config_version": "behavior-2026-12"
+  }
+}

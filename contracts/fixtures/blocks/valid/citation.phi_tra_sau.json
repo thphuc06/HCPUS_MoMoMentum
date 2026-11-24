@@ -1,0 +1,30 @@
+{
+  "v": 1,
+  "id": "citation:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Nguồn: Biểu phí Trả sau (mô phỏng), Điều 3.2, hiệu lực từ 31/03/2026.",
+  "source": {
+    "tool": "knowledge___search",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "citation",
+  "data": {
+    "query": "phí dịch vụ Trả sau hằng tháng",
+    "items": [
+      {
+        "chunk_id": "6b1f0d2e-3c4a-4b5d-9e6f-7a8b9c0d1e2f",
+        "doc_key": "bieu-phi-tra-sau-mo-phong",
+        "title": "Biểu phí Trả sau (mô phỏng)",
+        "corpus": "fees",
+        "clause_ref": "Điều 3.2",
+        "heading": "Phí dịch vụ hằng tháng",
+        "excerpt": "Phí dịch vụ 33.000 đồng được tính một lần cho mỗi tháng có ít nhất một giao dịch bằng hạn mức Trả sau; tháng không có giao dịch thì không tính phí.",
+        "product_code": "bnpl_sim",
+        "effective_from": "2026-03-31",
+        "source_name": "Biểu phí công khai của sản phẩm trả sau, dùng làm ví dụ cho sản phẩm mô phỏng",
+        "source_url": "https://www.momo.vn/vi-tra-sau"
+      }
+    ]
+  }
+}

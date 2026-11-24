@@ -30,7 +30,9 @@ from yofina_core.wallet import (
     ASSIGN_JAR,
     CONFIRM_ROWS,
     CONFIRM_SALARY,
+    DATA_DELETION_SCOPES,
     DECLARABLE_OBLIGATION_KINDS,
+    DELETE_MY_DATA,
     MOVE_BETWEEN_JARS,
     NUDGE_KINDS,
     NUDGE_OPS,
@@ -599,6 +601,14 @@ def normalize_confirm_rows(params: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+# --- delete_my_data (phase 5, quyền riêng tư) -------------------------------------------------------------
+def normalize_delete_my_data(params: Mapping[str, Any]) -> dict[str, Any]:
+    """`{scope: "all"}`: phạm vi duy nhất là xóa tất cả (vắng thì điền `all` để thứ được ký luôn ghi rõ phạm vi). Không cần
+    trạng thái server nên idempotent không cần ngữ cảnh; khóa lạ bị bỏ như mọi tool."""
+    scope = _clean(params.get("scope"))
+    return {"scope": "all" if scope is None else _choice("scope", scope, DATA_DELETION_SCOPES)}
+
+
 def normalize_params(
     tool: str, params: Mapping[str, Any], ctx: NormContext | None = None
 ) -> dict[str, Any]:
@@ -619,4 +629,6 @@ def normalize_params(
         return normalize_schedule_nudge(params, ctx)
     if tool == CONFIRM_ROWS:
         return normalize_confirm_rows(params)
+    if tool == DELETE_MY_DATA:
+        return normalize_delete_my_data(params)
     raise ParamsError(f"Tool không hỗ trợ xác nhận: {tool!r}")

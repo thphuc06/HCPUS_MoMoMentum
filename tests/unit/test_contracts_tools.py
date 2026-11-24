@@ -8,7 +8,7 @@ from jsonschema import Draft202012Validator
 from pydantic import TypeAdapter
 
 from yofina_core import blocks as b
-from yofina_core import roadmap, scenario, suitability, wallet
+from yofina_core import knowledge, roadmap, scenario, suitability, wallet
 from yofina_core.errors import ErrorCode
 
 LEDGER = load_json(CONTRACTS / "tools" / "ledger.json")
@@ -62,9 +62,9 @@ def test_cac_target_phase_3_khop_hang_so():
     assert [t["name"] for t in FORECAST] == list(wallet.FORECAST_TOOLS)
     assert [t["name"] for t in FORECAST] == [
         "get_forecast", "run_scenario", "list_scenarios", "affordability_check",
-        "get_resilience_score", "stress_test",
+        "get_resilience_score", "stress_test", "get_behavior_profile",
     ]  # fmt: skip
-    assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == ["get_fee_schedule"]
+    assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == ["get_fee_schedule", "search"]
     assert [t["name"] for t in PLANNER] == list(wallet.PLANNER_TOOLS)
     assert [t["name"] for t in AUDIT] == list(wallet.AUDIT_TOOLS) == ["get_trace", "record_turn"]
 
@@ -238,6 +238,7 @@ RESULT_FILE.update(
     check_suitability="planner", schedule_nudge="planner", get_trace="audit", record_turn="audit",
     get_resilience_score="forecast", stress_test="forecast",
     optimize_allocation="planner", save_roadmap="planner", get_roadmap="planner",
+    get_behavior_profile="forecast", search="knowledge",
 )  # fmt: skip
 RESULT_DEF = {
     "get_jar_balances": "GetJarBalancesResult",
@@ -264,6 +265,8 @@ RESULT_DEF = {
     "optimize_allocation": "OptimizeAllocationResult",
     "save_roadmap": "SaveRoadmapResult",
     "get_roadmap": "GetRoadmapResult",
+    "get_behavior_profile": "GetBehaviorProfileResult",
+    "search": "KnowledgeSearchResult",
 }
 
 
@@ -330,6 +333,10 @@ def test_ket_qua_tool_fixture_hop_le(registry, path):
         b.RoadmapData.model_validate(data)
     elif tool == "get_fee_schedule":
         assert data["fees"]
+    elif tool == "get_behavior_profile":
+        b.BehaviorProfileData.model_validate(data)
+    elif tool == "search":
+        knowledge.KnowledgeSearchData.model_validate(data)
     elif tool in ("update_profile", "record_transaction", "assign_jar", "schedule_nudge"):
         model = (
             b.ConfirmActionData if obj["status"] == "NEEDS_CONFIRMATION" else b.ReceiptActionData
@@ -355,7 +362,8 @@ def test_ket_qua_tool_fixture_sai_bi_ca_json_schema_lan_pydantic_tu_choi(registr
 
 def test_get_jar_balances_phase_4_co_loai_va_muc_tieu_goc():
     """Phase 4 (tương thích ngược): mỗi hũ có thêm `kind`, `goal_vnd`, `goal_date` tùy chọn; fixture cũ vẫn hợp lệ."""
-    assert {p.name.split(".")[0] for p in TOOL_INVALID} == {"get_jar_balances"}
+    # tập ca sai: get_jar_balances (phase 4) và hai tool phase 5 (xem test_contracts_phase5)
+    assert {p.name.split(".")[0] for p in TOOL_INVALID} == {"get_jar_balances", "get_behavior_profile", "search"}
     jars = load_json(CONTRACTS / "fixtures/tools/get_jar_balances.ok_goals.json")["data"]["jars"]
     assert {j["kind"] for j in jars} <= set(wallet.USER_JAR_KINDS)
     assert set(b.UserJarKind.__args__) == set(wallet.USER_JAR_KINDS)

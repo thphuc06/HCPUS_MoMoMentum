@@ -1,0 +1,17 @@
+{
+  "deletion_id": "7c5e3a1b-9d8f-4e6c-a2b4-c6d8e0f1a3b5",
+  "status": "deleted",
+  "scope": "all",
+  "requested_at": "2026-12-10T03:00:00Z",
+  "steps": {
+    "s3": {
+      "status": "done"
+    },
+    "memory": {
+      "status": "done"
+    },
+    "aurora": {
+      "status": "done"
+    }
+  }
+}

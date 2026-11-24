@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/citation.schema.json",
+  "title": "CitationBlock",
+  "description": "Trích dẫn nguồn cho một câu trả lời (RAG): 1 đến 5 đoạn trích lấy NGUYÊN VĂN từ kho tri thức (bảng `kb_chunks`, migration 0053) qua tool `knowledge___search`, kèm tên tài liệu, điều khoản, ngày hiệu lực và đường dẫn nguồn. Chỉ để giải thích: số để tính (phí, lãi) vẫn lấy từ `knowledge___get_fee_schedule`, không từ đoạn trích. Agent dựng bằng `build_citation` từ `hits[].citation` của kết quả tool (LLM không viết đoạn trích). Id khối `citation:{trace_id}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "citation" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/CitationData" }
+  },
+  "$defs": {
+    "KnowledgeCorpus": {
+      "description": "Ba kho của knowledge-base: fees (biểu phí và điều khoản sản phẩm trả sau mô phỏng, có ngày hiệu lực), personal_finance (kiến thức tài chính cá nhân), suitability (bộ luật suitability kèm giải thích).",
+      "type": "string",
+      "enum": ["fees", "personal_finance", "suitability"]
+    },
+    "CitationItem": {
+      "description": "Một đoạn trích. `excerpt` là văn bản gốc của đoạn (có thể cắt bớt ở ranh giới câu, không viết lại). `effective_to` vắng là còn hiệu lực. `product_code` chỉ có ở tài liệu gắn một sản phẩm (ví dụ bnpl_sim).",
+      "type": "object",
+      "required": ["chunk_id", "doc_key", "title", "corpus", "excerpt", "effective_from", "source_name", "source_url"],
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": { "$ref": "envelope.schema.json#/$defs/Uuid" },
+        "doc_key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "corpus": { "$ref": "#/$defs/KnowledgeCorpus" },
+        "clause_ref": { "description": "Điều khoản, ví dụ 'Điều 3.2'.", "type": "string", "minLength": 1, "maxLength": 40 },
+        "heading": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "excerpt": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "product_code": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "effective_from": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "effective_to": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+        "source_name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "source_url": { "type": "string", "pattern": "^https://", "maxLength": 500 }
+      }
+    },
+    "CitationData": {
+      "type": "object",
+      "required": ["items"],
+      "additionalProperties": false,
+      "properties": {
+        "query": { "description": "Câu truy vấn đã dùng (đã che PII).", "type": "string", "minLength": 1, "maxLength": 200 },
+        "items": { "type": "array", "minItems": 1, "maxItems": 5, "items": { "$ref": "#/$defs/CitationItem" } }
+      }
+    }
+  }
+}

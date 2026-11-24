@@ -330,9 +330,9 @@ export const ForecastTimelineBlock = z.object({
 })
 export type ForecastTimelineBlock = z.infer<typeof ForecastTimelineBlock>
 
-/** Một nút trên thẻ. kind quyết định giao diện làm gì: open_forecast (mở Chi tiết hũ, cần jar_code), confirm_salary (mở bước xác nhận lương về), review_unclassified (mở danh sách xem lại), open_obligations (mở màn nghĩa vụ), ask_why (mở chat và gửi `prompt`), snooze ('Để sau'), mute_kind ('Ít nhắc loại này'). snooze và mute_kind phase 2 chỉ lưu phía giao diện; lưu ở server khi có bảng nudges (F7). */
+/** Một nút trên thẻ. kind quyết định giao diện làm gì: open_forecast (mở Chi tiết hũ, cần jar_code), confirm_salary (mở bước xác nhận lương về), review_unclassified (mở danh sách xem lại), open_obligations (mở màn nghĩa vụ), ask_why (mở chat và gửi `prompt`), snooze ('Để sau'), mute_kind ('Ít nhắc loại này'); phase 5 thêm open_roadmap (mở Lộ trình, bản chờ chọn), open_resilience (mở Nhìn trước), open_profile (mở Hồ sơ, phần nhận xét hành vi). Thẻ có `nudge_id` (bản tin của cổng giá trị) thì snooze và mute_kind gửi `POST /nudges/{nudge_id}/feedback` (outcome snoozed, less_like_this); thẻ không có `nudge_id` (thẻ tất định của GET /overview) chỉ lưu phía giao diện như phase 2. */
 export const ProactiveAction = z.object({
-  kind: z.enum(["open_forecast", "confirm_salary", "review_unclassified", "open_obligations", "ask_why", "snooze", "mute_kind"]),
+  kind: z.enum(["open_forecast", "confirm_salary", "review_unclassified", "open_obligations", "ask_why", "snooze", "mute_kind", "open_roadmap", "open_resilience", "open_profile"]),
   label: z.string().min(1).max(40),
   jar_code: JarCode.optional(),
   prompt: z.string().min(1).max(200).optional(),
@@ -340,11 +340,12 @@ export const ProactiveAction = z.object({
 export type ProactiveAction = z.infer<typeof ProactiveAction>
 
 export const ProactiveCardData = z.object({
-  kind: z.enum(["runout_warning", "obligation_due", "salary_pending", "review_needed", "low_data"]),
+  kind: z.enum(["runout_warning", "obligation_due", "salary_pending", "review_needed", "low_data", "roadmap_proposed", "resilience_drop", "behavior_insight"]),
   status: JarStatus,
   title: z.string().min(1).max(80),
   reason: z.string().min(1).max(200),
   jar_code: JarCode.optional(),
+  nudge_id: Uuid.optional(),
   actions: z.array(ProactiveAction).min(1).max(4),
 })
 export type ProactiveCardData = z.infer<typeof ProactiveCardData>
@@ -1160,8 +1161,141 @@ export const ReviewListBlock = z.object({
 })
 export type ReviewListBlock = z.infer<typeof ReviewListBlock>
 
-/** Hợp của các khối đã biết (hai mươi mốt), phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema. */
-export const Block = z.discriminatedUnion('type', [JarSummaryBlock, ConfirmBlock, ReceiptBlock, NoticeBlock, ForecastTimelineBlock, ProactiveCardBlock, ConfirmActionBlock, ReceiptActionBlock, AffordabilityCardBlock, ObligationImpactBlock, OptionsBlock, ExplainBlock, ClarifyBlock, SuggestionsBlock, IngestReviewBlock, CoverageChangeBlock, ResilienceScoreBlock, StressResultBlock, RoadmapBlock, RoadmapDiffBlock, ReviewListBlock])
+/** Loại nhận xét: payday_cycle (chi dồn theo nhịp lương), weekday_pattern (ngày trong tuần), time_of_day (giờ trong ngày, chỉ tính giao dịch trong ví vì dòng nạp ngoài ví không có giờ), bnpl_usage (mức dùng Trả sau), category_trend (một hũ tăng hoặc giảm rõ), spending_cluster (nhóm hành vi của phân cụm đơn giản). */
+export const BehaviorInsightKind = z.enum(["payday_cycle", "weekday_pattern", "time_of_day", "bnpl_usage", "category_trend", "spending_cluster"])
+export type BehaviorInsightKind = z.infer<typeof BehaviorInsightKind>
+
+/** Một con số làm bằng chứng, lấy thẳng từ sổ cái trong cửa sổ `period`. Đơn vị: vnd (số nguyên VND), percent (0..100), ratio (0..1), days, count (số nguyên không âm), hour (giờ 0..23 theo múi giờ của ứng dụng), weekday (thứ theo ISO, 1 là thứ Hai, 7 là Chủ nhật). Ràng buộc theo đơn vị do Pydantic kiểm (JSON Schema chỉ biết `number`). */
+export const BehaviorEvidence = z.object({
+  key: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")),
+  label: z.string().min(1).max(80),
+  value: z.number().min(-99999999999999).max(99999999999999),
+  unit: z.enum(["vnd", "percent", "ratio", "days", "count", "hour", "weekday"]),
+  period_from: IsoDate.optional(),
+  period_to: IsoDate.optional(),
+})
+export type BehaviorEvidence = z.infer<typeof BehaviorEvidence>
+
+/** Một nhận xét. `headline` là câu tiếng Việt do model nhỏ tóm tắt (khi `ai_generated` đúng) hoặc do mẫu câu của code điền, và mọi số trong đó có trong `evidence`. `jar_code` khi nhận xét gắn với một hũ. */
+export const BehaviorInsight = z.object({
+  insight_id: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")),
+  kind: BehaviorInsightKind,
+  headline: z.string().min(1).max(160),
+  detail: z.string().min(1).max(280).optional(),
+  jar_code: JarCode.optional(),
+  evidence: z.array(BehaviorEvidence).min(1).max(6),
+  confidence: ConfidenceBand,
+  ai_generated: z.boolean(),
+})
+export type BehaviorInsight = z.infer<typeof BehaviorInsight>
+
+/** MỘT việc cần làm đi kèm nhận xét. `action` (tùy chọn) dùng đúng hình dạng hành động của bước lộ trình: người dùng thực hiện bằng `POST /confirmations` rồi `POST /actions` (ADR-0002); bấm vào không tự ghi gì. */
+export const BehaviorNextStep = z.object({
+  label: z.string().min(1).max(80),
+  reason: z.string().min(1).max(200),
+  action: RoadmapStepAction.optional(),
+})
+export type BehaviorNextStep = z.infer<typeof BehaviorNextStep>
+
+/** Đặc trưng đã tính (đầu vào của nhận xét, để truy vết). `history_days` là số ngày lịch sử đã dùng. Tỷ lệ là phần chi tiêu (0..1) trong cửa sổ. */
+export const BehaviorFeatures = z.object({
+  history_days: z.int().min(0),
+  avg_daily_spend_vnd: Vnd.optional(),
+  first_week_after_payday_share: Ratio.optional(),
+  weekend_share: Ratio.optional(),
+  evening_share: Ratio.optional(),
+  top_weekday: z.int().min(1).max(7).optional(),
+  bnpl_purchases_per_month: z.number().min(0).max(1000).optional(),
+  bnpl_share: Ratio.optional(),
+})
+export type BehaviorFeatures = z.infer<typeof BehaviorFeatures>
+
+/** Nhóm hành vi của phân cụm đơn giản (k-means trên đặc trưng chuẩn hóa hoặc luật ngưỡng; luồng p5-behavior chọn). */
+export const BehaviorSegment = z.object({
+  segment_id: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")),
+  label: z.string().min(1).max(60),
+})
+export type BehaviorSegment = z.infer<typeof BehaviorSegment>
+
+/** Hồ sơ hành vi của người dùng ở ngày mô phỏng `app_date` (một dòng `behavior_profiles`). `ready` sai khi chưa đủ lịch sử hoặc batch đêm chưa chạy: khi đó không có nhận xét và `headline` nói cần thêm bao nhiêu ngày (`min_history_days`). Đây không phải lỗi. `ready` đúng thì có `computed_at`, `config_version`, `features`, `next_step` (MỘT việc cần làm của cả hồ sơ) và ít nhất một nhận xét (Pydantic kiểm). Cùng `data` cho tool `forecast___get_behavior_profile` và `GET /profile/behavior`. */
+export const BehaviorProfileData = z.object({
+  ready: z.boolean(),
+  app_date: IsoDate,
+  computed_at: IsoDateTime.optional(),
+  config_version: z.string().min(1).max(40).optional(),
+  headline: z.string().min(1).max(160),
+  history_days: z.int().min(0),
+  min_history_days: z.int().min(1).optional(),
+  features: BehaviorFeatures.optional(),
+  segment: BehaviorSegment.optional(),
+  insights: z.array(BehaviorInsight).max(6),
+  next_step: BehaviorNextStep.optional(),
+})
+export type BehaviorProfileData = z.infer<typeof BehaviorProfileData>
+
+export const BehaviorInsightData = z.object({
+  insight: BehaviorInsight,
+  next_step: BehaviorNextStep,
+  app_date: IsoDate,
+  computed_at: IsoDateTime,
+  history_days: z.int().min(0),
+  config_version: z.string().min(1).max(40).optional(),
+})
+export type BehaviorInsightData = z.infer<typeof BehaviorInsightData>
+
+/** MỘT nhận xét hành vi chi tiêu (F7) kèm bằng chứng số và MỘT việc cần làm, trong chat và ở màn Hồ sơ. Nhận xét lấy từ hồ sơ hành vi do batch đêm tính (bảng `behavior_profiles`, migration 0053; tool `forecast___get_behavior_profile`, `GET /profile/behavior`). Mỗi số trong câu nhận xét có trong `evidence` (đã qua NumericGrounding lúc batch đêm tóm tắt); số trong khối do code dựng, LLM không viết. Id khối `behavior_insight:{trace_id}:{insight_id}`. `$defs` ở đây cũng là hình dạng của hồ sơ hành vi (`BehaviorProfileData`) cho tool và REST. */
+export const BehaviorInsightBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("behavior_insight"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: BehaviorInsightData,
+})
+export type BehaviorInsightBlock = z.infer<typeof BehaviorInsightBlock>
+
+/** Ba kho của knowledge-base: fees (biểu phí và điều khoản sản phẩm trả sau mô phỏng, có ngày hiệu lực), personal_finance (kiến thức tài chính cá nhân), suitability (bộ luật suitability kèm giải thích). */
+export const KnowledgeCorpus = z.enum(["fees", "personal_finance", "suitability"])
+export type KnowledgeCorpus = z.infer<typeof KnowledgeCorpus>
+
+/** Một đoạn trích. `excerpt` là văn bản gốc của đoạn (có thể cắt bớt ở ranh giới câu, không viết lại). `effective_to` vắng là còn hiệu lực. `product_code` chỉ có ở tài liệu gắn một sản phẩm (ví dụ bnpl_sim). */
+export const CitationItem = z.object({
+  chunk_id: Uuid,
+  doc_key: z.string().regex(new RegExp("^[a-z0-9][a-z0-9_-]{0,63}$")),
+  title: z.string().min(1).max(120),
+  corpus: KnowledgeCorpus,
+  clause_ref: z.string().min(1).max(40).optional(),
+  heading: z.string().min(1).max(120).optional(),
+  excerpt: z.string().min(1).max(600),
+  product_code: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")).optional(),
+  effective_from: IsoDate,
+  effective_to: IsoDate.optional(),
+  source_name: z.string().min(1).max(200),
+  source_url: z.string().max(500).regex(new RegExp("^https://")),
+})
+export type CitationItem = z.infer<typeof CitationItem>
+
+export const CitationData = z.object({
+  query: z.string().min(1).max(200).optional(),
+  items: z.array(CitationItem).min(1).max(5),
+})
+export type CitationData = z.infer<typeof CitationData>
+
+/** Trích dẫn nguồn cho một câu trả lời (RAG): 1 đến 5 đoạn trích lấy NGUYÊN VĂN từ kho tri thức (bảng `kb_chunks`, migration 0053) qua tool `knowledge___search`, kèm tên tài liệu, điều khoản, ngày hiệu lực và đường dẫn nguồn. Chỉ để giải thích: số để tính (phí, lãi) vẫn lấy từ `knowledge___get_fee_schedule`, không từ đoạn trích. Agent dựng bằng `build_citation` từ `hits[].citation` của kết quả tool (LLM không viết đoạn trích). Id khối `citation:{trace_id}`. */
+export const CitationBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("citation"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: CitationData,
+})
+export type CitationBlock = z.infer<typeof CitationBlock>
+
+/** Hợp của các khối đã biết (hai mươi ba), phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema. */
+export const Block = z.discriminatedUnion('type', [JarSummaryBlock, ConfirmBlock, ReceiptBlock, NoticeBlock, ForecastTimelineBlock, ProactiveCardBlock, ConfirmActionBlock, ReceiptActionBlock, AffordabilityCardBlock, ObligationImpactBlock, OptionsBlock, ExplainBlock, ClarifyBlock, SuggestionsBlock, IngestReviewBlock, CoverageChangeBlock, ResilienceScoreBlock, StressResultBlock, RoadmapBlock, RoadmapDiffBlock, ReviewListBlock, BehaviorInsightBlock, CitationBlock])
 export type Block = z.infer<typeof Block>
 
 /** type -> schema của MỌI khối, thứ tự như contracts/blocks/block.schema.json. */
@@ -1187,10 +1321,12 @@ export const blockSchemas = {
   roadmap: RoadmapBlock,
   roadmap_diff: RoadmapDiffBlock,
   review_list: ReviewListBlock,
+  behavior_insight: BehaviorInsightBlock,
+  citation: CitationBlock,
 } as const
 
 export type AnyBlockType = keyof typeof blockSchemas
-export const ALL_BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions", "ingest_review", "coverage_change", "resilience_score", "stress_result", "roadmap", "roadmap_diff", "review_list"] as const
+export const ALL_BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions", "ingest_review", "coverage_change", "resilience_score", "stress_result", "roadmap", "roadmap_diff", "review_list", "behavior_insight", "citation"] as const
 
 /** Khối mà registry frontend đã đăng ký (xem scripts/gen_contracts.mjs, REGISTERED_BY_FRONTEND). */
 export const BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions", "ingest_review", "coverage_change", "resilience_score", "stress_result", "roadmap", "roadmap_diff", "review_list"] as const
