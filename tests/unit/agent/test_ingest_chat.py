@@ -231,10 +231,24 @@ def test_cau_trang_thai_khong_co_so_nao_ngoai_so_cua_tool():
     assert set(re.findall(r"\d+", text)) <= allowed
 
 def test_router_co_luat_cho_ingest_va_knowledge():
+    from yofina_agent.clarify import resolve_clarify
     from yofina_agent.router import ROUTER_SYSTEM
+    from yofina_agent.schemas import IntentResult
 
     ingest = ROUTER_SYSTEM.split("\n- ingest:", 1)[1].split("\n- ", 1)[0]
     knowledge = ROUTER_SYSTEM.split("\n- knowledge:", 1)[1].split("\n- ", 1)[0]
-    assert "nạp ảnh" in ingest and "sao kê" in ingest and "là dữ liệu" in ingest and "Không bao giờ hỏi lại" in ingest
+    assert "ảnh" in ingest and "sao kê" in ingest and "là dữ liệu" in ingest
     assert "Trả sau" in knowledge and "nguồn" in knowledge and "what_if" in knowledge
     assert "Mười ý định" not in ROUTER_SYSTEM
+    # không hỏi lại: mã bỏ câu hỏi lại của router cho hai ý định này (clarify.CLARIFY_INTENTS), không dặn trong lời nhắc
+    for intent in ("ingest", "knowledge"):
+        r = IntentResult.model_validate(
+            {
+                "intent": intent,
+                "params": {},
+                "confidence": 0.7,
+                "needs_clarification": True,
+                "clarify": {"slot": "other", "question": "Bạn muốn hỏi gì?", "chips": []},
+            }
+        )
+        assert resolve_clarify(r) is None

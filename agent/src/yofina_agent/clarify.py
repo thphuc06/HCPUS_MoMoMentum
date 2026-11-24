@@ -14,6 +14,10 @@ from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, IntentResult
 _NO_AMOUNT_KINDS = {"goal_delay"}
 #: scenario_kind nào là mua hàng và cần biết trả bằng hũ hay Trả sau
 _PURCHASE_KINDS = {None, "one_time_purchase", "bnpl_purchase"}
+#: Ý định duy nhất có ô bắt buộc nên được hỏi lại qua khối `clarify` (cùng tập với `pending_intent` của hợp đồng khối). Ý định khác
+#: tự xử lý phần còn thiếu trong handler (dự báo không nói hũ thì đọc mọi hũ, cú sốc chưa chọn thì hỏi bằng danh sách cấu hình,
+#: lộ trình không hỏi lại...), nên câu hỏi lại router đặt cho chúng bị bỏ ở đây, không dặn lại trong lời nhắc của từng ý định.
+CLARIFY_INTENTS = frozenset({"what_if", "affordability", "move", "profile_update"})
 
 
 def _canned(slot: str, variant: str | None = None) -> ClarifyRequest:
@@ -65,10 +69,11 @@ def resolve_clarify(r: IntentResult) -> ClarifyRequest | None:
 
     Ưu tiên câu của router khi nó hỏi đúng ô còn thiếu; nếu mã thấy thiếu mà router không hỏi (hoặc hỏi ô khác thì mã vẫn đúng hơn
     về ô BẮT BUỘC) thì dùng câu của mã. Router hỏi mà mã thấy đã đủ thì tin mã (tránh hỏi thừa), trừ khi ô router hỏi là `other`.
+    Ý định ngoài `CLARIFY_INTENTS` không bao giờ hỏi lại ở đây.
     """
+    if r.intent not in CLARIFY_INTENTS:
+        return None
     slot = missing_slot(r)
-    if r.intent in ("out_of_scope", "chitchat", "lookup"):
-        return r.clarify if (r.clarify and r.intent == "lookup") else None
     if slot is None:
         return r.clarify if (r.clarify and r.clarify.slot == "other") else None
     wire_slot = "jar" if slot == "pay_jar" else slot

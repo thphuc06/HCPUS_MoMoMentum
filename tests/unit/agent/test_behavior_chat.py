@@ -132,6 +132,6 @@ def test_ho_so_sai_hop_dong_thi_bao_loi_khong_phat_khoi(monkeypatch):
 
 
 def test_router_co_luat_cho_y_dinh_behavior():
-    assert "- behavior:" in ROUTER_SYSTEM and "Các ý định (intent):" in ROUTER_SYSTEM
+    assert "- behavior:" in ROUTER_SYSTEM and "Các ý định (intent)" in ROUTER_SYSTEM
     assert behavior_chat.asked_kind("Mình có hay xài trả sau không") == "bnpl_usage"
     assert behavior_chat.asked_kind("số lượng giao dịch của mình") is None  # "lượng" không phải "lương"

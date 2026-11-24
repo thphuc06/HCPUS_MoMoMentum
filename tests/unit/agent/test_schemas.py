@@ -3,6 +3,8 @@ biến; chưa có luồng agent nào dùng chúng (luồng B nối vào sau)."""
 
 from __future__ import annotations
 
+from typing import get_args
+
 import pytest
 from pydantic import ValidationError
 from yofina_agent import schemas as s
@@ -190,16 +192,20 @@ def test_needs_clarification_phai_di_voi_clarify_va_nguoc_lai():
 
 
 def test_chi_hoi_mot_cau_va_ngoai_pham_vi_khong_hoi_lai():
+    from yofina_agent.clarify import CLARIFY_INTENTS, resolve_clarify
+
     with pytest.raises(ValidationError):
         s.ClarifyRequest.model_validate({"slot": "amount", "question": "Bao nhiêu? Bằng gì?"})
-    with pytest.raises(ValidationError):
-        s.IntentResult.model_validate(
+    # router lỡ hỏi lại cho ý định không có ô bắt buộc: schema vẫn nhận (không tốn lượt thử lại), mã bỏ câu hỏi đó
+    for name in sorted(set(get_args(s.Intent)) - CLARIFY_INTENTS):
+        r = s.IntentResult.model_validate(
             intent(
-                intent="out_of_scope",
+                intent=name,
                 needs_clarification=True,
                 clarify={"slot": "other", "question": "Bạn muốn gì?"},
             )
         )
+        assert resolve_clarify(r) is None, name
 
 
 @pytest.mark.parametrize(

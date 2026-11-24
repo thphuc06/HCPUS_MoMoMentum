@@ -190,8 +190,6 @@ class IntentResult(_Model):
             p.from_jar_text = p.to_jar_text = None
         if self.needs_clarification != (self.clarify is not None):
             raise ValueError("needs_clarification đúng khi và chỉ khi có `clarify`")
-        if self.needs_clarification and self.intent in ("out_of_scope", "chitchat"):
-            raise ValueError("ngoài phạm vi và chitchat không hỏi lại")
         return self
 
 

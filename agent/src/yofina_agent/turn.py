@@ -62,7 +62,7 @@ from yofina_agent.identity import Identity
 from yofina_agent.ingest_chat import on_ingest
 from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
-from yofina_agent.router import PENDING_INTENTS, merge_pending, pending_params, route, route_runout_overview
+from yofina_agent.router import PENDING_INTENTS, merge_pending, pending_params, route
 from yofina_agent.schemas import (
     ClarifyChipIn,
     ClarifyRequest,
@@ -773,15 +773,9 @@ class Turn:
             return
         # Câu trả lời cụt cho khối `clarify`: giữ tham số của câu đang chờ (số tiền, người nhận, hũ...) bằng mã, không trông vào model nhớ.
         routed = merge_pending(routed, question, self.pending_params_before(index))
-        # "Hũ nào sắp cạn?": dự báo mọi hũ, không hỏi lại hũ nào (router hay xếp vào tra số dư hoặc hỏi lại).
-        overview = route_runout_overview(routed, question)
-        if overview is not None and overview is not routed:
-            routed, self.intent = overview, overview.intent
         handler = self._intent_handlers()[routed.intent]
-        # Handler tự kiểm mã cú sốc và chọn thao tác với lộ trình.
-        if routed.intent not in ("stress", "roadmap") and (
-            req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed)
-        ):
+        # Chỉ ý định có ô bắt buộc mới hỏi lại (clarify.CLARIFY_INTENTS); handler khác tự xử lý phần còn thiếu.
+        if req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed):
             await self.emit_clarify(req, routed)
             return
         await handler(routed, question)
@@ -905,7 +899,7 @@ class Turn:
                 Exception
             ) as exc:  # ModelBudgetExceeded, AllModelsFailed, StructuredOutputError, lỗi mạng...
                 self.llm_failed(exc)
-        fallback = route_runout_overview(classify_by_rules(question), question)
+        fallback = classify_by_rules(question)
         log.info(
             json.dumps(
                 {"event": "router_fallback", "intent": fallback.intent if fallback else None}

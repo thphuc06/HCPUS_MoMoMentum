@@ -3,6 +3,10 @@
 Lỗi gốc: router xếp câu này vào `lookup`/`forecast` không có hũ (hoặc tra số dư, hoặc kèm câu hỏi lại), `on_forecast` gọi `ask_which_jar`:
 hiện thẻ số dư rồi model viết "Bạn muốn kiểm tra hũ nào sắp cạn?" (log Runtime: trace 341b5800…, chỉ `ledger___get_jar_balances` và
 một lượt writer 49 token, không có `forecast___get_forecast`).
+
+Kiểm toán prompt đợt 3: câu này nay chỉ đi một lớp. Router hiểu theo nghĩa của `lookup_kind=forecast` (jar_text null khi hỏi về mọi
+hũ); mã không nhận câu hỏi lại của router cho `lookup` (`clarify.CLARIFY_INTENTS`), và `on_forecast` không có hũ thì đọc mọi hũ. Lớp
+regex ép ý định (`route_runout_overview`) đã bỏ; khi model lỗi, luật dự phòng nhận ra bằng từ khóa chung như mọi câu dự báo.
 """
 
 from __future__ import annotations
@@ -23,8 +27,7 @@ from agent_helpers import (
     run_turn,
 )
 from yofina_agent.compact import compact_forecast, compact_forecast_overview
-from yofina_agent.router import asks_which_jar_runs_out, route_runout_overview
-from yofina_agent.schemas import IntentParams, IntentResult
+from yofina_agent.fallback import classify_by_rules
 from yofina_agent.tools import classify_result
 from yofina_agent.turn import forecast_overview_text
 
@@ -85,13 +88,12 @@ EXPECTED = (
     "routed",
     [
         route_response(intent="forecast_lookup"),  # đúng như log: dự báo, không có hũ
-        route_response(intent="balance_lookup"),  # router xếp nhầm vào tra số dư
         route_response(  # router tự hỏi lại hũ nào
             intent="forecast_lookup",
             clarify={"slot": "jar", "question": "Bạn muốn kiểm tra hũ nào sắp cạn?", "chips": []},
         ),
     ],
-    ids=["du_bao_khong_hu", "tra_so_du", "router_hoi_lai"],
+    ids=["du_bao_khong_hu", "router_hoi_lai"],
 )
 def test_hu_nao_sap_can_doc_du_bao_moi_hu_va_khong_hoi_lai(monkeypatch, routed):
     tools = _tools()
@@ -113,7 +115,7 @@ def test_hu_nao_sap_can_khi_model_loi_van_doc_du_bao_moi_hu(monkeypatch):
     llm = make_llm([], FakeUsage(caps_hit={"m-small-a", "m-small-b"}))
     events, tools, writer = run_turn(CHIP, llm=llm, tools=_tools(), monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert _forecast_jars(tools) == list(_PLAN)  # luật dự phòng không nhận ra câu này; mã vẫn nhận
+    assert _forecast_jars(tools) == list(_PLAN)  # luật dự phòng nhận ra câu dự báo; không có hũ thì đọc mọi hũ
     assert _text(events) == EXPECTED
     assert llm[1].calls == [] and writer.calls == []
 
@@ -146,45 +148,28 @@ def test_hoi_mot_hu_cu_the_van_chi_doc_mot_hu(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("text", "want"),
-    [
-        ("Hũ nào sắp cạn?", True),
-        (CHIP, True),
-        ("Những hũ nào sẽ hết tiền trước kỳ lương?", True),
-        ("Các hũ có đủ tới kỳ lương không?", True),
-        ("Hũ nào bị hụt tháng này", True),
-        ("hũ ăn uống còn trụ được bao lâu", False),
-        ("Số dư các hũ của mình", False),
-        ("Chuyển 100k từ hũ Du lịch sang hũ Ăn uống", False),
-    ],
+    "text",
+    ["Hũ nào sắp cạn?", CHIP, "Những hũ nào sẽ hết tiền trước kỳ lương?", "Các hũ có đủ tới kỳ lương không?", "Hũ nào bị hụt tháng này"],
 )
-def test_nhan_ra_cau_hoi_hu_nao_sap_can(text, want):
-    assert asks_which_jar_runs_out(text) is want
+def test_luat_du_phong_xep_cau_hu_nao_sap_can_vao_du_bao_khong_hu(text):
+    r = classify_by_rules(text)
+    assert r is not None and (r.intent, r.params.lookup_kind, r.params.jar_text) == ("lookup", "forecast", None)
 
 
-def test_khong_ep_y_dinh_khac_cua_router():
-    what_if = IntentResult(
-        intent="what_if",
-        params=IntentParams(scenario_kind="bnpl_purchase", amount_vnd=1_200_000, funding="credit"),
-        confidence=0.9,
-        needs_clarification=False,
+def test_router_hoi_lai_cho_tra_cuu_bi_bo_qua():
+    from yofina_agent.clarify import resolve_clarify
+    from yofina_agent.schemas import IntentResult
+
+    r = IntentResult.model_validate(
+        {
+            "intent": "lookup",
+            "params": {"lookup_kind": "forecast"},
+            "confidence": 0.8,
+            "needs_clarification": True,
+            "clarify": {"slot": "jar", "question": "Hũ nào?", "chips": []},
+        }
     )
-    assert (
-        route_runout_overview(
-            what_if, "Nếu mua tai nghe 1,2 triệu bằng Trả sau thì hũ nào sắp cạn?"
-        )
-        is what_if
-    )
-    forced = route_runout_overview(None, CHIP)
-    assert forced is not None and (
-        forced.intent,
-        forced.params.lookup_kind,
-        forced.params.jar_text,
-    ) == (
-        "lookup",
-        "forecast",
-        None,
-    )
+    assert resolve_clarify(r) is None
 
 
 def test_ban_gon_va_cau_tra_loi_chi_chep_so_cua_tool():
