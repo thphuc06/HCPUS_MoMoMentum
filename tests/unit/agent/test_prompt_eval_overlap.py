@@ -86,7 +86,7 @@ def ngrams(text: str, n: int = N) -> set[tuple[str, ...]]:
 
 def test_tim_duoc_cau_eval_va_loi_nhac():
     questions = eval_questions()
-    assert len(questions) > 80
+    assert len(questions) > 80 and any(q.startswith("paraphrase/") for q, _ in questions)
     assert len(agent_prompts()) > 15
 
 

@@ -25,6 +25,12 @@ Phase 5 chạy thêm trước và sau câu hỏi (qua REST `yofina-api`, cùng t
 
 Lưu ý khi chạy phase 5: đặt lại tài khoản (`uv run scripts/seed_demo.py minh`) trước mỗi bộ và sau khi chạy, vì nạp lại cùng tệp bị từ chối `INGEST_DUPLICATE_FILE` (ca trượt `tep_da_nap_truoc_do`) và các ca nạp tệp để lại dòng chờ duyệt. Bộ nhớ còn sở thích của lần chạy trước thì `memory-reuse-new-session` có thể đạt mà không nhờ phiên trước: xóa bộ nhớ (`DELETE /memory` hoặc màn Hồ sơ) trước bộ golden. `--min-interval` tính cả lượt của phiên trước.
 
+## `paraphrase/`: bộ câu diễn đạt lại cho router
+
+`router.jsonl` (18 câu) đo router có hiểu câu mới hay chỉ nhớ ví dụ: mỗi câu một ý định, cách nói khác hẳn câu golden mà nó diễn đạt lại (`paraphrases`), không trùng cụm 5 từ nào với golden, đối kháng hay lời nhắc của agent (test `test_prompt_eval_overlap.py`, `test_paraphrase_router.py`). Mỗi ca có `intent` và `params` kỳ vọng; chỉ chấm các tham số ghi trong `params` (`null` là router phải để trống), gồm cả ý định phụ `insight_kind`, `fee_topic`, `ingest_action`, `roadmap_action`.
+
+Chạy: `uv run python evals/paraphrase/run_router.py [--only ID ...] [--min-interval 4]` (cần `AWS_REGION=ap-southeast-1`, nên đặt `YOFINA_USAGE_TABLE=yofina-usage` để đếm vào trần ngày chung). Mỗi câu gọi router đúng một lần (vai `small`, không lịch sử), không gọi Runtime, tool hay writer; lỗi model ghi nhận, không chạy lại. Kết quả ở `evals/results/paraphrase-router.jsonl`, tóm tắt (độ đúng ý định, độ đúng tham số, theo từng ý định) in ra màn hình; mã thoát 1 khi có ca trượt.
+
 ## `ingest/`: bộ thử F6 (nạp ảnh và CSV)
 
 - `manifest.json` (commit): mỗi mục có `set` (`real` | `synthetic`), `kind_of_image`, `bank_or_wallet`, `quality`, `readable`, `label_status` (`agent_read` | `needs_human` | `orchestrator_checked`) và `expected` (giao dịch mong đợi với `match_rule` từng trường, `expected_jar` theo mã hũ persona `minh`, `expected_error`, `attack`, `duplicate_of`). Tên người chỉ giữ chữ cái đầu + `***`, số tài khoản/SĐT chỉ `****` + 4 số cuối; mục kiểm PII và tấn công lưu băm sha256, không lưu bản rõ.
