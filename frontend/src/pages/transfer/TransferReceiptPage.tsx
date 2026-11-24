@@ -67,7 +67,7 @@ export function TransferReceiptPage() {
       {d.follow_up?.kind === 'review_unclassified' && (
         <div className="mt-3 rounded-card bg-warn-bg p-4 text-small text-ink">
           <p>{d.follow_up.label}</p>
-          <Button type="button" variant="soft" size="sm" className="mt-2 bg-surface" onClick={() => navigate('/activity?review=1')}>
+          <Button type="button" variant="soft" size="sm" className="mt-2 bg-surface" onClick={() => navigate('/review')}>
             Xem lại giao dịch
           </Button>
         </div>

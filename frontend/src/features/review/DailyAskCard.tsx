@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import type { ReviewListData } from '@/contracts/blocks'
 import { ReviewAssignments } from './ReviewAssignments'
 
-export function DailyAskCard({ data, refreshing }: { data?: ReviewListData; refreshing?: boolean }) {
+/** `onSkipped`: người dùng vừa "Để sau" câu hỏi gộp (Tổng quan đổi sang một dòng "Việc cần làm" có lối sang Xem lại). */
+export function DailyAskCard({ data, refreshing, onSkipped }: { data?: ReviewListData; refreshing?: boolean; onSkipped?: () => void }) {
   const api = useApi()
   const [dismissedDate, setDismissedDate] = useState<string | null>(null)
   const [skipping, setSkipping] = useState(false)
@@ -23,6 +24,7 @@ export function DailyAskCard({ data, refreshing }: { data?: ReviewListData; refr
     try {
       const result = await api.skipReviewAsk({ ask_date: date })
       setDismissedDate(result.ask_date)
+      onSkipped?.()
     } catch (e) {
       setFailure({ date, error: e instanceof ApiError ? e : new ApiError('INTERNAL_ERROR', 0) })
     } finally {

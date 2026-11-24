@@ -56,7 +56,8 @@ export function JarDetailPage() {
       <ScreenHeader
         title={jar ? `Hũ ${jar.name}` : 'Chi tiết hũ'}
         backTo="/jars"
-        right={jar && !isSystem ? <JarStatusChip jar={{ ...jar, status }} /> : undefined}
+        // Khối dự báo đã có nhãn Đủ/Sát/Hụt kèm ngày cạn: chip ở đầu màn chỉ khi chưa có khối dự báo (đang tải, lỗi), không hiện hai lần.
+        right={jar && !isSystem && !forecast.data ? <JarStatusChip jar={{ ...jar, status }} /> : undefined}
       />
 
       {detail.status === 'loading' && (
@@ -79,7 +80,10 @@ export function JarDetailPage() {
                 {formatVnd(jar.balance_vnd)}
               </p>
               {jar.system_role === 'unclassified' && jar.balance_vnd < 0 && (
-                <p className="mt-1 text-small text-warn-fg">Đã chi {formatVnd(Math.abs(jar.balance_vnd))} mà chưa xếp vào hũ nào.</p>
+                <>
+                  <p className="mt-1 text-small text-warn-fg">Đã chi {formatVnd(Math.abs(jar.balance_vnd))} mà chưa xếp vào hũ nào.</p>
+                  <Link to="/review" className="mt-1 inline-flex min-h-11 items-center text-small font-semibold text-brand-text">Xếp hũ cho các giao dịch này</Link>
+                </>
               )}
               {jar.system_role === 'other_income' && <p className="mt-1 text-small text-ink-2">Tiền vào chưa gán hũ, không tính là thu nhập.</p>}
               {(status === 'short' || status === 'tight') && (
@@ -169,7 +173,8 @@ export function JarDetailPage() {
                     </dd>
                   </div>
                 )}
-                {payday && (
+                {/* Khối dự báo đã ghi ngày lương ("… trước lương 05/12"): dòng này chỉ khi chưa có khối dự báo. */}
+                {payday && !forecast.data && (
                   <div className="flex justify-between gap-3">
                     <dt className="text-ink-2">Kỳ lương kế tiếp</dt>
                     <dd className="num font-semibold text-ink">

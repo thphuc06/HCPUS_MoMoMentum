@@ -1,18 +1,15 @@
 import { Link } from 'react-router'
-import { JarIcon } from '@/components/JarIcon'
-import { JarStatusChip } from '@/components/JarStatusChip'
 import { Notice } from '@/components/Notice'
 import { SimNote } from '@/components/SimNote'
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/StateViews'
 import { useOverview } from '@/api/OverviewProvider'
 import type { JarFull } from '@/api/schemas'
+import type { ReviewListData } from '@/contracts/blocks'
+import { JarRunway } from '@/features/forecast/JarRunway'
 import { ResilienceSection } from '@/features/resilience/ResilienceSection'
 import { RoadmapEntryCard } from '@/features/roadmap/RoadmapEntry'
-import { UnclassifiedSummary } from '@/features/review/UnclassifiedSummary'
 import { useReview } from '@/features/review/useReview'
-import { CONFIDENCE_LABEL } from '@/lib/jar'
-import { formatDayMonth } from '@/lib/dates'
-import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd } from '@/lib/format'
+import { formatVnd } from '@/lib/format'
 
 const SEVERITY: Record<string, number> = { short: 0, tight: 1, ok: 2 }
 
@@ -27,6 +24,22 @@ export function sortByRisk(jars: readonly JarFull[]): JarFull[] {
   })
 }
 
+/**
+ * Giao dịch chưa xếp hũ chưa thuộc lịch sử của hũ chi tiêu nào nên dự báo từng hũ chưa tính chúng: một dòng nhỏ có lối sang Xem lại.
+ * Việc xếp hũ nằm ở Tổng quan ("Việc cần làm"), ở đây chỉ nói ảnh hưởng tới dự báo (ui-design-review.md §10).
+ */
+function UnclassifiedNote({ data }: { data?: ReviewListData }) {
+  if (!data || data.count === 0) return null
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-2 rounded-xl bg-warn-bg px-3 py-1.5 text-note text-warn-fg" data-testid="forecast-unclassified">
+      <span className="num">{data.count} giao dịch ({formatVnd(data.pending_total_vnd)}) chưa xếp hũ, dự báo chưa tính.</span>
+      <Link to="/review" className="inline-flex min-h-11 items-center font-semibold underline underline-offset-2">Xếp hũ</Link>
+    </p>
+  )
+}
+
+// Tab Nhìn trước là nhà của dự báo, chống chịu, cú sốc và lộ trình (ui-design-review.md §10). Thứ tự giữ như cảnh 3 và 4: điểm
+// chống chịu, lối vào Lộ trình, thử cú sốc, rồi khối dự báo hũ (B2 gộp danh sách hũ dự báo, kỳ lương, chất lượng dự báo).
 export function ForesightPage() {
   const ov = useOverview()
   const review = useReview('daily_ask')
@@ -36,7 +49,7 @@ export function ForesightPage() {
     <>
       <header className="px-4 pt-[max(16px,env(safe-area-inset-top))] pb-3">
         <h1 className="text-title font-bold text-ink">Nhìn trước</h1>
-        <p className="text-small text-ink-2">Hũ nào dự kiến cạn trước kỳ lương</p>
+        <p className="text-small text-ink-2">Chống chịu, lộ trình và dự báo từng hũ</p>
       </header>
 
       <ResilienceSection>
@@ -48,67 +61,21 @@ export function ForesightPage() {
 
       {data && (
         <div className="space-y-3 px-4 pb-8">
-          {review.status === 'ready' && <UnclassifiedSummary data={review.data.data} />}
-          {data.next_payday && (
-            <section className="rounded-card bg-surface p-4 shadow-card" aria-label="Kỳ lương kế tiếp" data-testid="next-payday">
-              <p className="text-small text-ink-2">Kỳ lương kế tiếp</p>
-              <p className="text-subtitle font-bold text-ink">
-                {formatDayMonth(data.next_payday.date)} · còn {data.next_payday.days_until} ngày
-              </p>
-              {data.next_payday.expected_vnd !== undefined && <p className="num text-small text-ink-2">Dự kiến {formatVnd(data.next_payday.expected_vnd)}</p>}
-            </section>
-          )}
-
           {data.jars.length > 0 && !f && (
             <Notice kind="low_data" title="Chưa có dự báo" message="Hệ thống chưa tính dự báo cho các hũ. Khi có, hũ sẽ được xếp theo mức cần chú ý." />
           )}
-          {f && (
-            <section className="rounded-card bg-surface p-4 text-small shadow-card" aria-label="Chất lượng dự báo" data-testid="forecast-quality">
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-                <div>
-                  <dt className="text-ink-2">Nhóm tin cậy</dt>
-                  <dd className="font-semibold text-ink">{CONFIDENCE_LABEL[f.confidence_band]}</dd>
-                </div>
-                <div>
-                  <dt className="text-ink-2">Độ phủ dữ liệu</dt>
-                  <dd className="num font-semibold text-ink">{f.coverage !== undefined ? formatRatioPercent(f.coverage) : 'Chưa tính được'}</dd>
-                </div>
-                <div>
-                  <dt className="text-ink-2">Dữ liệu lịch sử</dt>
-                  <dd className="num font-semibold text-ink">{f.history_days} ngày</dd>
-                </div>
-                <div>
-                  <dt className="text-ink-2">Cập nhật</dt>
-                  <dd className="font-semibold text-ink">{formatSimMoment(f.run_app_date, f.computed_at)}</dd>
-                </div>
-              </dl>
-              {f.is_initial_estimate && <p className="mt-2 font-semibold text-warn-fg">Ước lượng ban đầu: mới có ít ngày dữ liệu.</p>}
-              {f.stale && <p className="mt-2 font-semibold text-warn-fg">Số liệu cũ: mở chi tiết một hũ để tính lại.</p>}
-            </section>
-          )}
-
           {data.jars.length === 0 ? (
             <EmptyState title="Chưa có hũ nào" message="Khai lương và chia hũ để Yofina dự báo ngày mỗi hũ cạn." />
           ) : (
-            <ul className="space-y-3" aria-label="Hũ theo mức cần chú ý">
-              {sortByRisk(data.jars).map((j) => (
-                <li key={j.code}>
-                  <Link to={`/jars/${j.code}`} className="flex min-h-[72px] items-center gap-3 rounded-card bg-surface p-4 shadow-card" aria-label={`Mở hũ ${j.name}`}>
-                    <JarIcon colorKey={j.color_key} iconKey={j.icon_key} size={40} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-subtitle font-semibold text-ink">{j.name}</span>
-                      <span className="num block text-small text-ink-2">
-                        {formatVnd(j.balance_vnd)}
-                      </span>
-                      {j.p_shortfall !== undefined && <span className="num block text-small text-ink-2">Khả năng hụt {formatShortfallChance(j.p_shortfall).toLowerCase()}</span>}
-                    </span>
-                    <JarStatusChip jar={j} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <JarRunway
+              jars={sortByRisk(data.jars)}
+              appDate={data.app_date}
+              nextPayday={data.next_payday}
+              obligations={data.obligations_due}
+              forecast={f ?? null}
+              notice={review.status === 'ready' ? <UnclassifiedNote data={review.data.data} /> : undefined}
+            />
           )}
-
           <SimNote />
         </div>
       )}

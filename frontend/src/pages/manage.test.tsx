@@ -23,7 +23,7 @@ const receiptAction = (over: (d: Json) => void = () => {}): Json => {
 }
 
 describe('Nghĩa vụ', () => {
-  it('hạn mức Trả sau có nguồn biểu phí; khoản khai theo khoảng; khoản Trả sau tự sinh không sửa được, hiện gốc + phí của server', async () => {
+  it('hạn mức Trả sau có nguồn biểu phí; khoản khai theo khoảng; khoản Trả sau tự sinh không sửa được, phải trả của server', async () => {
     mountApp(backend(), '/obligations')
     const credit = await screen.findByTestId('credit-line')
     expect(credit).toHaveTextContent('Trả sau (mô phỏng)')
@@ -36,7 +36,9 @@ describe('Nghĩa vụ', () => {
     expect(rows[0]).toHaveTextContent('Tiền điện')
     expect(rows[0]).toHaveTextContent('300.000 ₫ đến 450.000 ₫')
     expect(within(rows[0]!).getByRole('link', { name: 'Sửa Tiền điện' })).toHaveAttribute('href', `/obligations/${TIEN_DIEN}`)
-    expect(rows[1]).toHaveTextContent('Gốc 300.000 ₫ + phí 33.000 ₫')
+    // "Gốc + phí" của khoản Trả sau gần nhất đã ở thẻ B6 phía trên: dòng danh sách chỉ giữ số phải trả (không ghi hai lần).
+    expect(rows[1]).not.toHaveTextContent('Gốc 300.000 ₫ + phí 33.000 ₫')
+    expect(credit).toHaveTextContent('Phải trả: gốc 300.000 ₫ + phí 33.000 ₫')
     expect(rows[1]).toHaveTextContent('333.000 ₫')
     expect(within(rows[1]!).queryByRole('link')).toBeNull()
     expect(screen.getByTestId('obligations-total')).toHaveTextContent('708.000 ₫')

@@ -37,17 +37,19 @@ export function RoadmapVersionList({ items, current, selected, onSelect }: {
       {items.map((item) => {
         const status = VERSION_STATUS[item.status]
         const feasibility = FEASIBILITY[item.feasibility]
+        // Bản đang hiện ở trên đã có trạng thái, mức khả thi, lý do và số bước: ở danh sách chỉ ghi "(bản này)", không lặp lại (§10).
+        const here = item.version === current
         const body = (
           <>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-small font-semibold text-ink">
-                Phiên bản {item.version}{item.version === current ? ' (bản này)' : ''}
+                Phiên bản {item.version}{here ? ' (bản này)' : ''}
               </span>
-              <StatusChip kind={status.kind}>{status.label}</StatusChip>
-              {onSelect && <StatusChip kind={feasibility.kind}>{feasibility.label}</StatusChip>}
+              {!here && <StatusChip kind={status.kind}>{status.label}</StatusChip>}
+              {onSelect && !here && <StatusChip kind={feasibility.kind}>{feasibility.label}</StatusChip>}
             </div>
-            <p className="text-note text-ink-2">{item.reason_text}</p>
-            {onSelect && <p className="num text-note text-ink-2">{item.counts.pending} bước chờ</p>}
+            {!here && <p className="text-note text-ink-2">{item.reason_text}</p>}
+            {onSelect && !here && <p className="num text-note text-ink-2">{item.counts.pending} bước chờ</p>}
           </>
         )
         return (

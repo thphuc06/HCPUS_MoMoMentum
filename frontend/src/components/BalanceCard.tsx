@@ -7,9 +7,21 @@ import { useAnimateOnce, useCountUp } from '@/lib/motion'
 // Figma BalanceCard (14:143): thẻ gradient chủ đạo, tổng số dư lớn, dòng "Ví mô phỏng", hàng hành động nhanh.
 // Tổng = tổng MỌI hũ (gồm Tiền vào khác và Chưa phân loại) do server tính (`balance.total_vnd`); các dòng dưới thẻ
 // giải thích tổng đến từ đâu. Hũ Chưa phân loại có thể ÂM: đó là khoản đã chi mà chưa xếp hũ, ghi theo giá trị tuyệt đối.
+// Mỗi dòng có dấu cộng/trừ để "Trong N hũ" (đúng số "Tổng trong N hũ" ở tab Hũ) cộng trừ ra đúng Tổng số dư, không đọc thành
+// hai con số mâu thuẫn (ui-design-review.md §10). Dấu chỉ để đọc; số vẫn là số server trả.
 export type BalanceParts = { total_vnd: number; jars_total_vnd: number; other_income_vnd: number; unclassified_vnd: number }
 
-export function BalanceCard({ balance, appDate, children }: { balance: BalanceParts; appDate: string; children?: ReactNode }) {
+/** Dấu cộng/trừ trước nhãn dòng; trình đọc màn hình đọc "cộng"/"trừ". */
+function Sign({ plus }: { plus: boolean }) {
+  return (
+    <>
+      <span aria-hidden className="num mr-1 inline-block w-3 font-bold">{plus ? '+' : '−'}</span>
+      <span className="sr-only">{plus ? 'cộng ' : 'trừ '}</span>
+    </>
+  )
+}
+
+export function BalanceCard({ balance, appDate, jarsCount, children }: { balance: BalanceParts; appDate: string; jarsCount?: number; children?: ReactNode }) {
   const [hidden, setHidden] = useState(false)
   // Tổng số dư đếm lên một lần mỗi phiên khi mở app (cảnh 1); giảm chuyển động thì hiện thẳng số cuối.
   const shown = useCountUp(balance.total_vnd, useAnimateOnce('balance-total'))
@@ -47,19 +59,19 @@ export function BalanceCard({ balance, appDate, children }: { balance: BalancePa
       <Disclosure label="Chi tiết số dư" className="mt-1" buttonClassName="text-white/90" panelClassName="pt-1">
       <dl className="grid gap-1.5 rounded-2xl bg-white/15 px-3.5 py-2.5 text-small" data-testid="balance-parts">
         <div className="flex justify-between gap-3">
-          <dt>Trong các hũ</dt>
+          <dt>{jarsCount !== undefined ? `Trong ${jarsCount} hũ` : 'Trong các hũ'}</dt>
           <dd className="num font-semibold" data-testid="balance-jars">{mask(balance.jars_total_vnd)}</dd>
         </div>
         {balance.other_income_vnd !== 0 && (
           <div className="flex justify-between gap-3">
-            <dt>Tiền vào khác (chưa gán hũ)</dt>
-            <dd className="num font-semibold" data-testid="balance-other">{mask(balance.other_income_vnd)}</dd>
+            <dt><Sign plus={balance.other_income_vnd > 0} /><span>Tiền vào khác (chưa gán hũ)</span></dt>
+            <dd className="num font-semibold" data-testid="balance-other">{mask(Math.abs(balance.other_income_vnd))}</dd>
           </div>
         )}
         {un !== 0 && (
           <div className="flex justify-between gap-3">
-            <dt>{un < 0 ? 'Đã chi, chưa xếp hũ' : 'Chưa phân loại'}</dt>
-            <dd className="num font-semibold" data-testid="balance-unclassified">{mask(un < 0 ? Math.abs(un) : un)}</dd>
+            <dt><Sign plus={un > 0} /><span>{un < 0 ? 'Đã chi, chưa xếp hũ' : 'Chưa phân loại'}</span></dt>
+            <dd className="num font-semibold" data-testid="balance-unclassified">{mask(Math.abs(un))}</dd>
           </div>
         )}
       </dl>

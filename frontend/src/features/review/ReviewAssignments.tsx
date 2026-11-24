@@ -11,7 +11,7 @@ import { useAssignJar, type RememberJar } from './useAssignJar'
 
 type Selection = { transactionId: string; jar: ReviewJarRef | null }
 
-export function ReviewAssignments({ data, disabled, footer }: { data: ReviewListData; disabled?: boolean; footer?: ReactNode }) {
+export function ReviewAssignments({ data, disabled, footer, title }: { data: ReviewListData; disabled?: boolean; footer?: ReactNode; title?: string }) {
   const frame = usePhoneFrame()
   const write = useAssignJar()
   const [selection, setSelection] = useState<Selection | null>(null)
@@ -41,6 +41,7 @@ export function ReviewAssignments({ data, disabled, footer }: { data: ReviewList
     <>
       <ReviewList
         data={data}
+        title={title}
         footer={footer}
         actions={{
           disabled: locked,

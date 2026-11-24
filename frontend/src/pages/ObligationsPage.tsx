@@ -86,7 +86,8 @@ export function ObligationsPage() {
                       {KIND_LABEL[o.kind] ?? o.kind} · {CYCLE_LABEL[o.cycle] ?? o.cycle} · đến hạn {formatDayMonth(o.due_date)}
                       {o.pay_jar ? ` · hũ ${lookup.get(o.pay_jar)?.name ?? o.pay_jar}` : ''}
                     </p>
-                    {o.kind === 'bnpl' && o.principal_vnd !== undefined && (
+                    {/* Khoản Trả sau gần nhất đã có "gốc + phí" ở thẻ B6 phía trên: không ghi lại lần hai. */}
+                    {o.kind === 'bnpl' && o.principal_vnd !== undefined && !(line && o.id === due?.id) && (
                       <p className="num text-note text-ink-2">
                         Gốc {formatVnd(o.principal_vnd)} + phí {formatVnd(o.fee_vnd)}
                       </p>

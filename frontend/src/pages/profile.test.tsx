@@ -28,6 +28,16 @@ describe('Hồ sơ: nhận xét hành vi', () => {
     expect(within(section).getByText(behavior.next_step!.label)).toBeInTheDocument()
   })
 
+  it('câu tổng trùng đúng câu của một nhận xét (vd. câu Trả sau): chỉ hiện một lần, ở thẻ nhận xét', async () => {
+    const dup = structuredClone(restFixture('BehaviorProfileResponse.minh')) as Record<string, any>
+    dup.headline = `${dup.insights[2].headline}`
+    mountApp(backend({ 'GET /profile/behavior': dup }), '/profile')
+    const section = await screen.findByRole('region', { name: 'Nhận xét hành vi' })
+    expect(await within(section).findByText(dup.segment.label)).toBeInTheDocument()
+    expect(within(section).getAllByText(dup.insights[2].headline)).toHaveLength(1)
+    expect(within(section).queryByTestId('behavior-headline')).toBeNull()
+  })
+
   it('B3: nhận xét có cặp phần chi và phần số ngày thì thẻ ở Hồ sơ cũng có hai thanh (cùng component với chat)', async () => {
     const withPair = structuredClone(restFixture('BehaviorProfileResponse.minh')) as Record<string, any>
     withPair.insights[0].evidence.push({ key: 'first_week_day_share', label: 'Phần số ngày thuộc tuần đầu sau lương', value: 23, unit: 'percent' })

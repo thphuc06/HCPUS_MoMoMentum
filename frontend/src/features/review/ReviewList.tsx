@@ -3,13 +3,14 @@ import type { ReviewListData } from '@/contracts/blocks'
 import { formatVnd } from '@/lib/format'
 import { ReviewItemRow, type ReviewRowActions } from './ReviewItemRow'
 
-export function ReviewList({ data, actions, footer }: { data: ReviewListData; actions?: ReviewRowActions; footer?: ReactNode }) {
-  const title = data.mode === 'review' ? 'Xem lại giao dịch' : 'Chọn hũ cho giao dịch hôm nay'
+export function ReviewList({ data, actions, footer, title: titleOverride }: { data: ReviewListData; actions?: ReviewRowActions; footer?: ReactNode; title?: string }) {
+  const title = titleOverride ?? (data.mode === 'review' ? 'Xem lại giao dịch' : 'Chọn hũ cho giao dịch hôm nay')
   return (
     <section aria-label={title} data-block="review_list" className="space-y-3 rounded-card bg-surface p-4 shadow-card">
       <header className="space-y-1">
         <h3 className="text-subtitle font-semibold text-ink">{title}</h3>
-        {data.items.length > 0 && <p className="text-small text-ink-2">{data.headline}</p>}
+        {/* Câu mở đầu của server nhắc lại đúng số giao dịch và tổng tiền của dòng dưới: chỉ cho trình đọc màn hình (§10). */}
+        {data.items.length > 0 && <p className="sr-only">{data.headline}</p>}
         <p className="num text-small font-semibold text-ink">{data.count} giao dịch · {formatVnd(data.pending_total_vnd)}</p>
       </header>
       {data.items.length === 0 ? (

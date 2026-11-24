@@ -9,6 +9,27 @@ describe('Xem lại', () => {
   const review = ReviewListResponse.parse(restFixture('ReviewListResponse.review'))
   const first = review.data.items[0]!
   const empty = validBlock('review_list.empty')
+  const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
+  const dailyEmpty = { ...daily, data: { ...daily.data, items: [], count: 0, pending_total_vnd: 0 } }
+  const byMode = (u: URL) => u.searchParams.get('mode')
+
+  it('nhà của giao dịch chờ xếp hũ: giao dịch chưa xếp hũ (daily_ask) lên trước, rồi giao dịch Yofina đã tự xếp (review)', async () => {
+    const { calls } = mountApp(backend({ 'GET /review': (_init, url) => (byMode(url) === 'daily_ask' ? daily : review) }), '/review')
+    const pending = await screen.findByRole('region', { name: 'Giao dịch chưa xếp hũ' })
+    const checked = await screen.findByRole('region', { name: 'Xem lại giao dịch' })
+    expect(pending.compareDocumentPosition(checked) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(pending).getByText(daily.data.items[0]!.counterparty!)).toBeInTheDocument()
+    expect(pending).toHaveTextContent(/2 giao dịch · 180\.000\s₫/)
+    // Câu mở đầu của server nhắc lại đúng số và tổng tiền của dòng đếm: chỉ cho trình đọc màn hình.
+    expect(within(pending).getByText(daily.data.headline)).toHaveClass('sr-only')
+    expect(callsTo(calls, 'GET', '/review').map(({ url }) => new URL(url).search).sort()).toEqual(['?mode=daily_ask', '?mode=review'])
+  })
+
+  it('danh sách chưa xếp hũ lỗi: báo riêng, danh sách xem lại vẫn hiện', async () => {
+    mountApp(backend({ 'GET /review': (_init, url) => (byMode(url) === 'daily_ask' ? json(503, { error: { code: 'UNAVAILABLE' } }) : review) }), '/review')
+    expect(await screen.findByRole('region', { name: 'Xem lại giao dịch' })).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Chưa tải được giao dịch chưa xếp hũ')
+  })
 
   it('tải mục và gợi ý từ fixture, xác nhận Luôn luôn rồi cập nhật danh sách từ server', async () => {
     const user = userEvent.setup()
@@ -20,7 +41,7 @@ describe('Xem lại', () => {
     const action = { tool: actionFixture.tool, params, confirm_token: actionFixture.confirm_token }
     const receipt = restFixture('ActionResponse.receipt_action')
     const { calls } = mountApp(backend({
-      'GET /review': () => applied ? { ...review, data: { ...review.data, items: review.data.items.slice(1) } } : review,
+      'GET /review': (_init, url) => byMode(url) === 'daily_ask' ? dailyEmpty : applied ? { ...review, data: { ...review.data, items: review.data.items.slice(1) } } : review,
       'POST /confirmations': () => ({
         tool: action.tool,
         params: action.params,
@@ -55,12 +76,12 @@ describe('Xem lại', () => {
       { ...confirmation, params },
     ])
     expect(callsTo(calls, 'POST', '/actions').map(bodyOf)).toEqual([action])
-    expect(callsTo(calls, 'GET', '/review').map(({ url }) => new URL(url).search)).toEqual(['?mode=review', '?mode=review'])
+    expect(callsTo(calls, 'GET', '/review').map(({ url }) => new URL(url).search).filter((s) => s === '?mode=review')).toEqual(['?mode=review', '?mode=review'])
   })
 
   it('Đúng rồi giữ chính hũ hiện tại khi chọn Chỉ lần này', async () => {
     const user = userEvent.setup()
-    const { calls } = mountApp(backend({ 'GET /review': review }), '/review')
+    const { calls } = mountApp(backend({ 'GET /review': (_init, url) => (byMode(url) === 'daily_ask' ? dailyEmpty : review) }), '/review')
     const row = (await screen.findByText(first.counterparty!)).closest('li')!
     await user.click(within(row).getByRole('button', { name: 'Đúng rồi' }))
     await user.click(await screen.findByRole('button', { name: 'Chỉ lần này' }))
@@ -71,7 +92,7 @@ describe('Xem lại', () => {
   })
 
   it('hiện EmptyState từ review_list.empty', async () => {
-    mountApp(backend({ 'GET /review': empty }), '/review')
+    mountApp(backend({ 'GET /review': (_init, url) => (byMode(url) === 'daily_ask' ? dailyEmpty : empty) }), '/review')
     const title = await screen.findByRole('heading', { name: 'Đã xem lại xong' })
     expect(title.closest('[data-state="empty"]')).toHaveTextContent(empty.fallback_text as string)
     expect(screen.queryByRole('button', { name: 'Đúng rồi' })).toBeNull()
@@ -80,7 +101,7 @@ describe('Xem lại', () => {
   it('hiện lỗi và có thể tải lại danh sách', async () => {
     const user = userEvent.setup()
     let attempts = 0
-    mountApp(backend({ 'GET /review': () => ++attempts === 1 ? json(500, { error: { code: 'INTERNAL_ERROR' } }) : empty }), '/review')
+    mountApp(backend({ 'GET /review': (_init, url) => byMode(url) === 'daily_ask' ? dailyEmpty : ++attempts === 1 ? json(500, { error: { code: 'INTERNAL_ERROR' } }) : empty }), '/review')
     const error = await screen.findByRole('alert')
     expect(error).toHaveTextContent('Chưa tải được giao dịch cần xem lại')
     await user.click(within(error).getByRole('button', { name: 'Thử lại' }))

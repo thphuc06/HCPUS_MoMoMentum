@@ -156,7 +156,8 @@ describe('lộ trình trong chat: lối sang trang Lộ trình', () => {
     expect(items).toHaveLength(3)
     expect(items[0]).toHaveTextContent('Phiên bản 3 (bản này)')
     expect(items[0]).toHaveAttribute('aria-current', 'true')
-    expect(within(items[0]!).getByText('Đề xuất · chờ bạn chọn')).toBeInTheDocument()
+    // Khối đã nói trạng thái của chính nó ở trên: dòng "(bản này)" không lặp chip trạng thái và lý do (ui-design-review.md §10).
+    expect(within(items[0]!).queryByText('Đề xuất · chờ bạn chọn')).toBeNull()
     expect(within(items[1]!).getByText('Đang dùng')).toBeInTheDocument()
     expect(within(items[2]!).getByText('Bản cũ · đã thay')).toBeInTheDocument()
     expect(api.listRoadmapVersions).toHaveBeenCalledOnce()

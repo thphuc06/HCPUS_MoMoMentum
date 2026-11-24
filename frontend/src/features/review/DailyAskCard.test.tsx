@@ -6,7 +6,8 @@ import { restFixture } from '@/test/fixtures'
 import { backend, bodyOf, callsTo, json, mountApp } from '@/test/mountApp'
 
 const CARD = 'Chọn hũ cho giao dịch hôm nay'
-const SUMMARY = /^2 giao dịch chưa phân loại · 180\.000\s₫$/
+// Sau khi Để sau: một dòng Việc cần làm gộp hai hàng chờ (2 chưa xếp hũ ở daily_ask, 1 cần xem lại = needs_review_count 3 − 2).
+const SUMMARY = /^Xếp hũ cho 3 giao dịch 2 chưa xếp hũ · 180\.000\s₫; 1 cần xem lại$/
 
 describe('Hỏi gộp ở Tổng quan', () => {
   const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
@@ -32,7 +33,7 @@ describe('Hỏi gộp ở Tổng quan', () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: CARD })).toBeNull())
     expect(callsTo(calls, 'POST', '/review/daily-ask/skip').map(bodyOf)).toEqual([restFixture('ReviewAskSkipRequest.default')])
     expect(callsTo(calls, 'POST', '/confirmations')).toHaveLength(0)
-    expect(screen.getByRole('link', { name: SUMMARY })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: SUMMARY })).toHaveAttribute('href', '/review')
   })
 
   it('mục không có gợi ý dùng Hũ khác rồi chỉ cho lưu lần này', async () => {
@@ -57,7 +58,7 @@ describe('Hỏi gộp ở Tổng quan', () => {
     expect(callsTo(calls, 'POST', '/confirmations')).toHaveLength(0)
     await user.click(within(scope).getByRole('button', { name: 'Chỉ lần này' }))
 
-    expect(await screen.findByRole('link', { name: /^1 giao dịch chưa phân loại · 60\.000\s₫$/ })).toBeInTheDocument()
+    await waitFor(() => expect(within(screen.getByRole('region', { name: CARD })).getByText(/^1 giao dịch · 60\.000\s₫$/)).toBeInTheDocument())
     expect(within(card).queryByText('120.000 ₫')).toBeNull()
     expect(callsTo(calls, 'POST', '/confirmations').map(bodyOf)).toEqual([
       { tool: 'assign_jar', params: { transaction_id: second!.transaction_id, jar: jar.code, remember: 'once' } },

@@ -8,6 +8,19 @@ import { BEHAVIOR_SECTION_ID } from '@/features/behavior/format'
 import { ExecuteStepDrawer } from '@/features/roadmap/RoadmapStepDialogs'
 import { formatDateTime } from '@/lib/format'
 
+/** Bỏ dấu câu, khoảng trắng thừa và hoa thường để so hai câu. */
+const plain = (s: string) => s.normalize('NFC').toLowerCase().replace(/[.,;:!?…"'“”()]/g, '').replace(/\s+/g, ' ').trim()
+
+/** Câu tổng của hồ sơ trùng (hoặc nằm trọn trong, hoặc chứa trọn) câu của một nhận xét: hiện một lần ở thẻ nhận xét là đủ. */
+export function repeatsInsight(headline: string, insights: ReadonlyArray<{ headline: string }>): boolean {
+  const h = plain(headline)
+  if (!h) return false
+  return insights.some((i) => {
+    const x = plain(i.headline)
+    return x !== '' && (x === h || x.includes(h) || h.includes(x))
+  })
+}
+
 /**
  * Nhận xét hành vi ở màn Hồ sơ (`GET /profile/behavior`, batch đêm tính). Mỗi nhận xét vẽ như khối `behavior_insight` (cùng
  * component với chat); việc cần làm của cả hồ sơ ở cuối, có hành động thì "Thực hiện" đi luồng xác nhận của màn hình
@@ -40,8 +53,9 @@ export function BehaviorSection() {
       {data?.ready && (
         <>
           <div className="rounded-card bg-surface p-4 shadow-card">
-            <p className="text-subtitle font-semibold text-ink">{data.headline}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-note text-ink-2">
+            {/* Câu tổng do batch viết có lúc trùng đúng câu của một nhận xét bên dưới (vd. câu Trả sau): khi đó không hiện lại. */}
+            {!repeatsInsight(data.headline, data.insights) && <p className="text-subtitle font-semibold text-ink" data-testid="behavior-headline">{data.headline}</p>}
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-note text-ink-2 first:mt-0">
               {data.segment && <StatusChip kind="info">{data.segment.label}</StatusChip>}
               <span className="num">Từ {data.history_days} ngày dữ liệu{data.computed_at ? ` · cập nhật ${formatDateTime(data.computed_at)}` : ''}</span>
             </div>

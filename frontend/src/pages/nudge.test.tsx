@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NudgeTodayResponse } from '@/api/phase5Schemas'
@@ -133,17 +133,47 @@ describe('lối vào Lộ trình', () => {
     expect(msgs.at(-1)).toMatchObject({ role: 'user', content: ROADMAP_PROMPT })
   })
 
-  it('Tổng quan: một dòng "Lộ trình thích ứng" dẫn tới /roadmap', async () => {
+  // Tổng quan không còn thẻ/dòng lộ trình cố định (nhà là Nhìn trước, ui-design-review.md §10): chỉ một dòng "Việc cần làm" khi có việc.
+  const todoRoadmap = () => document.querySelector('[data-todo="roadmap"]')
+
+  it('Tổng quan: có phiên bản mới chờ chọn thì một dòng Việc cần làm dẫn tới /roadmap', async () => {
     mountApp(backend())
-    const row = await screen.findByTestId('roadmap-row')
-    expect(row).toHaveTextContent('Phiên bản 2 · Kịp hạn · 2 bước chờ · Có phiên bản mới')
+    await waitFor(() => expect(todoRoadmap()).not.toBeNull())
+    const row = within(todoRoadmap() as HTMLElement).getByRole('link')
+    expect(row).toHaveTextContent('Lộ trình mới chờ bạn chọn Phiên bản 3')
     expect(row).toHaveAttribute('href', '/roadmap')
+    expect(screen.queryByText('Lộ trình thích ứng')).toBeNull()
+  })
+
+  it('Tổng quan: chỉ còn bước chờ ở bản đang dùng thì dòng nói số bước; không có việc hay chưa có lộ trình thì không có dòng', async () => {
+    const activeOnly = { versions: versions.versions.filter((v) => v.status !== 'proposed'), active_version: 2 }
+    mountApp(backend({ 'GET /roadmap/versions': activeOnly }))
+    await waitFor(() => expect(todoRoadmap()).not.toBeNull())
+    expect(todoRoadmap()).toHaveTextContent('Lộ trình: 2 bước chờ bạn Phiên bản 2')
+    cleanup()
+    const done = { versions: activeOnly.versions.map((v) => ({ ...v, counts: { ...v.counts, pending: 0 } })), active_version: 2 }
+    const { calls } = mountApp(backend({ 'GET /roadmap/versions': done }))
+    await waitFor(() => expect(callsTo(calls, 'GET', '/roadmap/versions')).toHaveLength(1))
+    await screen.findByTestId('balance-total')
+    expect(todoRoadmap()).toBeNull()
+    cleanup()
+    const none = mountApp(backend({ 'GET /roadmap/versions': restFixture('RoadmapVersionsResponse.chua_co') }))
+    await waitFor(() => expect(callsTo(none.calls, 'GET', '/roadmap/versions')).toHaveLength(1))
+    expect(todoRoadmap()).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Lập lộ trình' })).toBeNull()
+  })
+
+  it('Tổng quan: thẻ chính hôm nay đã là "Lộ trình mới chờ bạn chọn" thì không lặp thành dòng', async () => {
+    mountApp(backend({ 'GET /nudges/today': withNudge }))
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Việc cần làm hôm nay' })).toHaveTextContent('Lộ trình mới chờ bạn chọn'))
+    await waitFor(() => expect(screen.getByTestId('todo-list')).toBeInTheDocument())
+    expect(todoRoadmap()).toBeNull()
   })
 
   it('Tổng quan: lỗi đọc lộ trình thì không hiện dòng (không làm ồn Tổng quan)', async () => {
     mountApp(backend({ 'GET /roadmap/versions': json(500, { error: { code: 'INTERNAL_ERROR' } }) }))
     await screen.findByTestId('balance-total')
-    await waitFor(() => expect(screen.queryByTestId('roadmap-row')).toBeNull())
-    expect(screen.queryByTestId('roadmap-row-empty')).toBeNull()
+    await waitFor(() => expect(screen.getByTestId('todo-list')).toBeInTheDocument())
+    expect(todoRoadmap()).toBeNull()
   })
 })

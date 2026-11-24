@@ -11,10 +11,13 @@ describe('tab Nhìn trước', () => {
   const score = ResilienceScoreResponse.parse(restFixture('ResilienceScoreResponse.minh')).data
   const { shocks } = ShocksResponse.parse(restFixture('ShocksResponse.default'))
 
-  it('dẫn đến Xem lại với số giao dịch và tiền chưa phân loại từ daily_ask', async () => {
+  it('giao dịch chưa xếp hũ: một dòng nhỏ trong khối dự báo nói dự báo chưa tính, có lối sang Xem lại (daily_ask)', async () => {
     const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
     const { calls } = mountApp(backend({ 'GET /review': daily }), '/foresight')
-    expect(await screen.findByRole('link', { name: /^2 giao dịch chưa phân loại · 180\.000\s₫$/ })).toHaveAttribute('href', '/review')
+    const note = await screen.findByTestId('forecast-unclassified')
+    expect(note).toHaveTextContent(/^2 giao dịch \(180\.000\s₫\) chưa xếp hũ, dự báo chưa tính\.\s*Xếp hũ$/)
+    expect(within(note).getByRole('link', { name: 'Xếp hũ' })).toHaveAttribute('href', '/review')
+    expect(screen.getByTestId('jar-runway')).toContainElement(note)
     expect(callsTo(calls, 'GET', '/review').map(({ url }) => new URL(url).search)).toEqual(['?mode=daily_ask'])
     expect(screen.queryByRole('region', { name: 'Chọn hũ cho giao dịch hôm nay' })).toBeNull()
   })
@@ -25,7 +28,7 @@ describe('tab Nhìn trước', () => {
     const { calls } = mountApp(backend({ 'GET /review': empty }), '/foresight')
     await waitFor(() => expect(callsTo(calls, 'GET', '/review')).toHaveLength(1))
     expect(await screen.findByRole('list', { name: 'Hũ theo mức cần chú ý' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /giao dịch chưa phân loại/ })).toBeNull()
+    expect(screen.queryByTestId('forecast-unclassified')).toBeNull()
   })
 
   it('hiện điểm, nhãn nhóm và các cú sốc từ REST trước phần hũ', async () => {
