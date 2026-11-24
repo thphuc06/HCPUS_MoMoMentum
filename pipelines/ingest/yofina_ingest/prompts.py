@@ -59,6 +59,7 @@ Trường của mỗi dòng (một giao dịch một dòng, giữ thứ tự tr�
 - description: lời nhắn hoặc nội dung đúng như ảnh. Giữ NGUYÊN ký tự, KHÔNG sửa chính tả, KHÔNG thêm hay bỏ dấu tiếng Việt. Đừng chép số tài khoản, số thẻ hay số điện thoại vào counterparty hay description.
 - tx_type: một mã trong danh sách loại giao dịch bên dưới, đúng chiều chi/thu, hoặc null nếu không chắc.
 - jar_code: với dòng chi, một mã hũ trong danh sách hũ của người dùng bên dưới phù hợp nhất với mục đích chi; null nếu không chắc hoặc không có hũ hợp. Dòng thu để null. jar_confidence: 0..1.
+- Chuyển tiền cho một cá nhân mà lời nhắn hoặc nội dung nói rõ MỤC ĐÍCH (ví dụ tiền phòng, tiền nhà, tiền điện, học phí): chọn tx_type và jar_code theo mục đích đó, không theo việc người nhận là cá nhân; chỉ dùng loại chuyển tiền cho người khác khi không thấy mục đích.
 - confidence: 0..1, độ chắc bạn đã đọc ĐÚNG ngày, số tiền và chiều (ảnh mờ, nghiêng, cắt mất chữ thì thấp).
 
 Hũ của người dùng:
@@ -113,6 +114,7 @@ Với mỗi dòng:
 - own_account_transfer=true nếu là nạp tiền hay chuyển giữa các tài khoản, ví, thẻ của chính người dùng.
 - tx_type: một mã trong danh sách loại giao dịch, đúng chiều chi/thu; null nếu không chắc.
 - jar_code: với dòng chi, một mã hũ trong danh sách hũ bên dưới; null nếu không chắc. Dòng thu để null. jar_confidence: 0..1.
+- Chuyển tiền cho một cá nhân mà lời nhắn hoặc nội dung nói rõ MỤC ĐÍCH (ví dụ tiền phòng, tiền nhà, tiền điện, học phí): chọn tx_type và jar_code theo mục đích đó, không theo việc người nhận là cá nhân; chỉ dùng loại chuyển tiền cho người khác khi không thấy mục đích.
 
 Hũ của người dùng:
 {_jar_lines(jars)}
