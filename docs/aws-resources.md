@@ -38,7 +38,7 @@ Không thuộc dự án, không được đụng: cluster Aurora và Cognito use
 |---|---|---|---|---|
 | `yofina-users` | Cognito user pool | 1 | Không (10.000 MAU đầu miễn phí) | Tắt tự đăng ký, đăng nhập bằng email, deletion protection, RETAIN |
 | `yofina-web` | Cognito app client | 1 | Không | Công khai, không secret, SRP, access token 60 phút |
-| `ops` | Cognito group | 1 | Không | Từ 24/11 (phase 5) có đúng một thành viên: tài khoản demo `minh` (thêm bằng `aws cognito-idp admin-add-user-to-group`, ngoài CDK), để xem `/ops/*` và màn trace X1. Các tài khoản demo khác không thuộc nhóm (kiểm 403) |
+| `ops` | Cognito group | 1 | Không | Từ 24/11 (phase 5) có hai thành viên, đều thêm bằng `admin-add-user-to-group` (ngoài CDK) để xem `/ops/*` và màn trace X1: tài khoản demo `minh`, và `giamkhao1` (thêm chiều 24/11 để một tài khoản đi được cả 6 cảnh demo). Các tài khoản demo khác (`lan`, `khoa`, `giamkhao2`, `giamkhao3`) không thuộc nhóm (kiểm 403) |
 | `/yofina/auth/…` | SSM Parameter | 1 | Không | user pool id, client id, discovery URL |
 
 ### Stack `YofinaFrontend` (phase 1)
