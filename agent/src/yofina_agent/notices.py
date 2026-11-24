@@ -155,6 +155,25 @@ ROADMAP_UNBUILDABLE: tuple[str, str] = (
     "Chưa lập được lộ trình",
     "Mình chưa lập được lộ trình phù hợp với dữ liệu hiện có. Bạn có thể thử lại sau.",
 )
+#: Lý do ngắn của một phiên bản lộ trình theo `reason_code` (nhãn giao diện, không chứa số).
+ROADMAP_REASON_LABELS: dict[str, str] = {
+    "initial": "bản đầu tiên",
+    "behavior_changed": "hành vi thay đổi",
+    "goal_changed": "mục tiêu thay đổi",
+    "income_changed": "thu nhập thay đổi",
+    "forecast_drift": "dự báo lệch",
+    "user_request": "bạn yêu cầu lập lại",
+    "step_edited": "bạn sửa một bước",
+}
+ROADMAP_REASON_FALLBACK = "có thay đổi"
+#: Bản vừa lưu làm bản đề xuất đang chờ bị bỏ (`discarded`). {old}: số phiên bản bị thay; {reason}: nhãn lý do ở trên;
+#: {active}: số phiên bản đang dùng.
+ROADMAP_PROPOSAL_REPLACED_TITLE = "Đã thay bản đề xuất đang chờ"
+ROADMAP_PROPOSAL_REPLACED = "Bản này thay bản đề xuất phiên bản {old} (lý do: {reason}) đang chờ bạn chọn."
+ROADMAP_PROPOSED_NEXT = (
+    "Bản đang dùng vẫn là phiên bản {active}. Mở trang Lộ trình để so với bản đang dùng, rồi chọn Dùng bản mới "
+    "hoặc Giữ bản cũ."
+)
 
 # Gộp kịch bản trong một cuộc trò chuyện: khoản mới cùng hũ với khoản người dùng đã hỏi trước đó.
 # {previous}: nhãn các khoản trước (do engine dựng, ví dụ "mua giày 800k"); {jar}: tên hũ; {new}: nhãn khoản mới.

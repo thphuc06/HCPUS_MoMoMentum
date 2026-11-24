@@ -74,9 +74,12 @@ TASKS: dict[str, str] = {
         "Chép nguyên dạng các số và chuỗi shortfall_text. Không khuyên đầu tư hay vay tiền."
     ),
     "roadmap": (
-        "Viết 1 đến 2 câu ngắn về phiên bản lộ trình đã lưu, lý do có phiên bản này và khả năng kịp mục tiêu "
+        "Viết 1 đến 2 câu ngắn về phiên bản lộ trình (version), lý do có phiên bản này và khả năng kịp mục tiêu "
         "(on_track là kịp, relaxed là kịp sau khi điều chỉnh, infeasible là chưa khả thi). "
-        "Có thể nhắc số bước theo trạng thái hoặc tên bước từ dữ liệu nếu phù hợp. "
+        "Nếu status là proposed: nói rõ đây là bản ĐỀ XUẤT, chưa thay lộ trình đang dùng; có active_version thì nêu bản "
+        "đang dùng là phiên bản đó; có replaced_proposal thì nói bản này thay bản đề xuất phiên bản đó (kèm lý do) đang chờ "
+        "chọn; rồi nhắc người dùng mở trang Lộ trình để so với bản đang dùng và chọn Dùng bản mới hoặc Giữ bản cũ. "
+        "Nếu status là active thì nói đây là lộ trình đang dùng. "
         "Chép nguyên dạng các số đã có. Không tự tính tổng, đề xuất bước mới, khuyên đầu tư hay vay tiền."
     ),
     "confirm_action": (

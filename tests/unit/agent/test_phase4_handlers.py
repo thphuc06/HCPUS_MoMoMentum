@@ -104,9 +104,11 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
     else:
         assert compact == {
             "version": data["version"],
+            "status": data["status"],
             "reason": data["reason"]["text"],
             "feasibility": data["feasibility"],
             "counts": data["counts"],
+            "phase_count": len(data["phases"]),
             "step_titles": [step["title"] for step in data["phases"][0]["steps"]],
         }
 
@@ -285,6 +287,7 @@ def review_outline():
         "title": "Xem lại mục tiêu",
         "reason": "Theo dõi khả năng giữ mục tiêu",
         "jar_code": "du_lich",
+        "action": "schedule_nudge",  # bước không có số tiền phải là nhắc/xem lại có ngày
     }
     return {"phases": [{"phase_id": "on_dinh", "title": "Ổn định ngân sách", "steps": [step]}]}
 

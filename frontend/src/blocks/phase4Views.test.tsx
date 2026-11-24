@@ -1,6 +1,9 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { createMemoryRouter, RouterProvider } from 'react-router'
+import { describe, expect, it, vi } from 'vitest'
+import { ChatLauncherContext } from '@/chat/launcher'
+import { Providers, fakeApi } from '@/test/helpers'
 import { validBlock } from '@/test/fixtures'
 import { BlockRenderer } from './registry'
 
@@ -63,7 +66,7 @@ describe('lộ trình', () => {
     const user = userEvent.setup()
     renderFixture('roadmap.minh_v3_proposed')
     expect(screen.getByRole('heading', { name: 'Lộ trình · Phiên bản 3' })).toBeInTheDocument()
-    expect(screen.getByText('Bản đề xuất')).toBeInTheDocument()
+    expect(screen.getByText('Đề xuất · chờ bạn chọn')).toBeInTheDocument()
     expect(screen.getByText('Khả thi sau điều chỉnh')).toBeInTheDocument()
     expect(screen.getByText(/Chi Ăn uống mỗi tuần tăng.*giữ mức đó 2 tuần/)).toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'Số bước theo trạng thái' })).toHaveTextContent('Chờ 5')
@@ -106,6 +109,69 @@ describe('lộ trình', () => {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
     expect(screen.getByText(/Chi Ăn uống mỗi tuần tăng.*giữ mức đó 2 tuần/)).toBeInTheDocument()
+  })
+})
+
+describe('lộ trình trong chat: lối sang trang Lộ trình', () => {
+  function renderInChat(raw: Record<string, unknown>, api = fakeApi()) {
+    const close = vi.fn()
+    const router = createMemoryRouter([
+      { path: '/', element: <BlockRenderer raw={raw} blockId={String(raw.id)} /> },
+      { path: '/roadmap', element: <p>TRANG LỘ TRÌNH</p> },
+      { path: '/roadmap/compare', element: <p>TRANG SO SÁNH</p> },
+    ])
+    render(
+      <ChatLauncherContext.Provider value={{ open: vi.fn(), close }}>
+        <Providers api={api}>
+          <RouterProvider router={router} />
+        </Providers>
+      </ChatLauncherContext.Provider>,
+    )
+    return { close, router, api }
+  }
+
+  it('bản đề xuất: nói rõ chưa thay bản đang dùng, "So với bản đang dùng" đóng chat và mở trang so sánh', async () => {
+    const user = userEvent.setup()
+    const { close, router } = renderInChat(validBlock('roadmap.minh_v3_proposed'))
+    expect(screen.getByText(/^Đây là bản đề xuất, chưa thay lộ trình bạn đang dùng/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'So với bản đang dùng' }))
+    expect(close).toHaveBeenCalledOnce()
+    expect(router.state.location.pathname).toBe('/roadmap/compare')
+    expect(await screen.findByText('TRANG SO SÁNH')).toBeInTheDocument()
+  })
+
+  it('"Xem các phiên bản" tải danh sách khi mở và hiện trạng thái từng bản', async () => {
+    const user = userEvent.setup()
+    const { api } = renderInChat(validBlock('roadmap.minh_v3_proposed'))
+    expect(api.listRoadmapVersions).not.toHaveBeenCalled()
+    const toggle = screen.getByRole('button', { name: 'Xem các phiên bản' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const list = await screen.findByRole('list', { name: 'Các phiên bản lộ trình' })
+    const items = within(list).getAllByRole('listitem')
+    expect(items).toHaveLength(3)
+    expect(items[0]).toHaveTextContent('Phiên bản 3 (bản này)')
+    expect(items[0]).toHaveAttribute('aria-current', 'true')
+    expect(within(items[0]!).getByText('Đề xuất · chờ bạn chọn')).toBeInTheDocument()
+    expect(within(items[1]!).getByText('Đang dùng')).toBeInTheDocument()
+    expect(within(items[2]!).getByText('Bản cũ · đã thay')).toBeInTheDocument()
+    expect(api.listRoadmapVersions).toHaveBeenCalledOnce()
+  })
+
+  it('bản đang dùng: không có nút so sánh, "Mở trang Lộ trình" đưa sang trang Lộ trình', async () => {
+    const user = userEvent.setup()
+    const { close, router } = renderInChat(validBlock('roadmap.active_edited'))
+    expect(screen.queryByRole('button', { name: 'So với bản đang dùng' })).toBeNull()
+    expect(screen.getByText('Đây là lộ trình bạn đang dùng.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Mở trang Lộ trình' }))
+    expect(close).toHaveBeenCalledOnce()
+    expect(router.state.location.pathname).toBe('/roadmap')
+  })
+
+  it('ngoài router (trang Lộ trình tự có nút): không vẽ lối sang trang', () => {
+    renderFixture('roadmap.minh_v3_proposed')
+    expect(screen.queryByRole('button', { name: 'Xem các phiên bản' })).toBeNull()
   })
 })
 

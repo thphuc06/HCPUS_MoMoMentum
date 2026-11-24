@@ -45,21 +45,41 @@ from yofina_core.suitability import Proposal, SuitabilityVerdict
 from yofina_core.wallet import SAVE_JARS
 
 ROADMAP_SYSTEM = """Bạn là Yofina, trợ lý lập lộ trình quản lý chi tiêu theo hũ. Viết tiếng Việt ngắn gọn, tự nhiên.
-- Xếp giai đoạn theo trình tự thực hiện. Mỗi bước có mã riêng, việc cụ thể và lý do “Vì sao”. Giữ tiền cho khoản thiết yếu
-  và nghĩa vụ trước. Ưu tiên quỹ dự phòng khi thành phần Tiết kiệm (save) yếu. Tránh lặp việc người dùng đã từ chối.
+Khuôn lộ trình:
+- Lập hai hoặc ba giai đoạn xếp theo thời gian: giai đoạn đầu là việc làm ngay trong tháng này, trước kỳ lương kế; giai
+  đoạn giữa là việc sau kỳ lương (phần chia từ lương các kỳ sau); giai đoạn cuối là về đích (xem lại mục tiêu, nhắc có
+  ngày). Chương trình đặt ngày cho từng giai đoạn theo đúng thứ tự đó. Tên giai đoạn nói rõ mốc thời gian bằng chữ.
+- Tổng số bước không vượt max_steps. Khi dữ liệu cho phép, lập từ bốn bước trở lên, mỗi giai đoạn một đến ba bước.
+  Không lặp hai bước cùng việc trên cùng hũ. Lo khoản thiết yếu và nghĩa vụ sắp đến hạn trước. Ưu tiên quỹ dự phòng khi
+  thành phần Tiết kiệm (save) yếu. Tránh lặp việc người dùng đã từ chối.
+Mỗi bước là MỘT hành động cụ thể người dùng tự làm được:
+- title bắt đầu bằng động từ hành động (Chuyển, Dành, Giảm chi, Đổi tỷ lệ chia, Đặt nhắc, Xem lại, Lùi hạn...) và nêu tên
+  hũ: hũ nguồn và hũ nhận khi chuyển tiền. Không viết bước chỉ "giữ tiền", "theo dõi" hay "cân nhắc" mà không nói lấy
+  tiền từ hũ nào sang hũ nào. reason là một câu ngắn nói vì sao, dựa trên dữ liệu (hũ sắp cạn, nghĩa vụ sắp đến hạn,
+  mục tiêu đang chậm, thành phần yếu nhất).
+- set_aside và pay_obligation là chuyển tiền: bắt buộc có jar_code (hũ nguồn), to_jar_code (hũ nhận, khác hũ nguồn) và
+  amount_ref. Dùng pay_obligation khi hũ nhận là hũ nghĩa vụ cần thêm tiền trước hạn.
+- cut_spending bắt buộc có jar_code là hũ không thiết yếu và amount_ref trỏ proposed_decrease của chính hũ đó.
+- adjust_split cần amount_ref (hũ được tăng hoặc giảm phần chia) hoặc action save_jars.
+- Bước không có số tiền chỉ được là remind hoặc review_goal và phải có action schedule_nudge để có ngày nhắc.
+- Ví dụ khuôn dạng một bước (chữ trong ngoặc nhọn là chỗ điền theo dữ liệu, không phải dữ liệu thật): kind set_aside,
+  title "Chuyển từ {tên hũ nguồn} sang {tên hũ nhận} trước kỳ lương", jar_code {mã hũ nguồn}, to_jar_code {mã hũ nhận},
+  amount_ref {jar_code: mã hũ nhận, field: proposed_increase}, action move_between_jars.
 - kind của bước chỉ nhận đúng một trong sáu giá trị: set_aside (chuyển một khoản từ hũ nguồn jar_code sang hũ nhận
-  to_jar_code), adjust_split (đổi tỷ lệ chia lương vào các hũ), pay_obligation (giữ tiền trả nghĩa vụ của hũ jar_code),
-  cut_spending (giảm chi ở hũ không thiết yếu jar_code), review_goal (lùi hạn hoặc giảm mục tiêu của hũ jar_code),
-  remind (đặt nhắc xem lại). move_between_jars, save_jars và schedule_nudge là giá trị của trường action, không bao giờ
-  là kind.
+  to_jar_code), adjust_split (đổi tỷ lệ chia lương vào các hũ), pay_obligation (chuyển tiền từ hũ nguồn jar_code sang hũ
+  nghĩa vụ to_jar_code), cut_spending (giảm chi ở hũ không thiết yếu jar_code), review_goal (lùi hạn hoặc giảm mục tiêu
+  của hũ jar_code), remind (đặt nhắc xem lại). move_between_jars, save_jars và schedule_nudge là giá trị của trường
+  action, không bao giờ là kind.
 - Chỉ dùng mã hũ có trong dữ liệu. Muốn gắn số tiền, chọn amount_ref trỏ tới hũ liên quan và trường phân bổ.
   amount_ref.jar_code phải là jar_code hoặc to_jar_code của chính bước đó.
   proposed_increase là phần đề xuất tăng so với hiện tại, proposed_decrease là phần giảm. Chỉ tham chiếu khoản dương.
   Lần phác thảo đầu chưa có số phân bổ; chương trình báo lại nếu tham chiếu không dương để bạn sửa.
 - title và reason không chứa chữ số: không đánh số giai đoạn hay bước (thứ tự đã do vị trí trong danh sách), không viết
   số tháng, số tiền, ngày hay phần trăm. Chương trình điền tiền, ngày và tham số hành động.
-- Số tiền của bước là mức hằng tháng. Bước set_aside hay pay_obligation có cả hũ nguồn và hũ nhận được đối chiếu với số dư
-  HIỆN CÓ của hũ nguồn, ở mọi giai đoạn. Muốn tăng phần để dành từ lương các kỳ sau, dùng adjust_split.
+- Số tiền của bước là mức hằng tháng. Bước set_aside hay pay_obligation ở giai đoạn đầu (trước kỳ lương kế) lấy tiền từ số
+  dư HIỆN CÓ của hũ nguồn (balance_vnd): chọn hũ nguồn còn đủ tiền và tham chiếu nhỏ vừa số dư đó (thường là
+  proposed_decrease của hũ nguồn). Ở các giai đoạn sau kỳ lương, khoản hằng tháng được so với thu nhập tháng. Muốn tăng
+  phần để dành từ lương các kỳ sau, dùng adjust_split.
 - Chỉ chọn horizon_months hoặc trọng số khi cần. goals chỉ gồm hũ có kind saving và đã có goal_vnd; không có hũ nào như vậy
   thì để goals rỗng. Khi sửa, trả lại danh sách giai đoạn với các bước đã đạt và các bước
   đã sửa. Có thể đổi việc, đổi tham chiếu hoặc bỏ bước theo phản hồi. Không tự thay đổi phương án tối ưu.
@@ -85,11 +105,20 @@ _STEP_CATEGORY: dict[str, str] = {
 #: gợi ý thêm vào phản hồi sửa khi luật chặn, để model biết cách sửa mà lúc lưu vẫn qua.
 _REPAIR_HINTS = {
     "source_jar_covers": (
-        "Khoản hằng tháng lớn hơn số dư hiện có của hũ nguồn. Lúc lưu, bước có hũ nguồn và hũ nhận được đối chiếu với số dư"
-        " hiện có ở mọi giai đoạn, nên hoãn sang giai đoạn sau không đủ. Chọn hũ nguồn khác, tham chiếu nhỏ hơn, hoặc đổi"
-        " thành bước adjust_split để tăng phần chia từ lương."
+        "Khoản hằng tháng lớn hơn số tiền hũ nguồn có lúc lấy. Ở giai đoạn đầu (trước kỳ lương kế) tiền lấy từ số dư hiện có"
+        " của hũ nguồn; từ kỳ lương kế trở đi khoản được so với thu nhập tháng. Chọn hũ nguồn khác, tham chiếu nhỏ hơn, dời"
+        " bước sang giai đoạn sau kỳ lương, hoặc đổi thành bước adjust_split để tăng phần chia từ lương."
     ),
 }
+#: các trường tham chiếu tiền của `AmountRef`, theo thứ tự gợi ý trong phản hồi sửa.
+_REF_FIELDS: tuple[str, ...] = (
+    "proposed_decrease",
+    "proposed_increase",
+    "floor_gap_vnd",
+    "floor_vnd",
+    "proposed_monthly_vnd",
+    "current_monthly_vnd",
+)
 _ORDINAL_RE = re.compile(
     r"^\s*(?:(?:giai\s+đoạn|bước|phase|step)\s+)?\d{1,2}\s*[:.)\-–—](?!\d)\s*", re.IGNORECASE
 )
@@ -467,13 +496,29 @@ def _build_step(
 
 
 async def _verify_step(
-    tools: RoadmapTools, step: RoadmapDraftStep, proposal: Proposal
-) -> tuple[RoadmapDraftStep, list[RepairIssue], SuitabilityVerdict | None]:
-    outcome = await tools(
-        "check_suitability", {"proposal": proposal.model_dump(exclude_none=True)}, "planner"
-    )
-    verdict = _parse(outcome, SuitabilityVerdict)
+    tools: RoadmapTools,
+    step: RoadmapDraftStep,
+    proposal: Proposal,
+    cache: dict[str, asyncio.Task[SuitabilityVerdict | None]],
+) -> tuple[RoadmapDraftStep, list[RepairIssue], SuitabilityVerdict | None, bool]:
+    """Kiểm một bước bằng `check_suitability`. Mỗi đề xuất khác nhau chỉ được kiểm một lần trong cùng lần lập: bước có đề xuất giống
+    hệt (cùng vòng, hoặc bước đã đạt được giữ nguyên ở vòng sửa) dùng chung phán quyết đó, vì luật tất định trên cùng dữ kiện và
+    chưa có tiền nào đổi trong lượt. Lần kiểm hỏng thì bỏ khỏi cache để vòng sau kiểm lại. Phần tử cuối: bước này có gọi tool."""
+    key = json.dumps(proposal.model_dump(mode="json", exclude_none=True), sort_keys=True)
+    task = cache.get(key)
+    fresh = task is None
+    if task is None:
+
+        async def check() -> SuitabilityVerdict | None:
+            outcome = await tools(
+                "check_suitability", {"proposal": proposal.model_dump(exclude_none=True)}, "planner"
+            )
+            return _parse(outcome, SuitabilityVerdict)
+
+        task = cache[key] = asyncio.ensure_future(check())
+    verdict = await task
     if verdict is None:
+        cache.pop(key, None)
         return (
             step,
             [
@@ -484,6 +529,7 @@ async def _verify_step(
                 )
             ],
             None,
+            fresh,
         )
     if suitability_status(verdict) == "short":
         return (
@@ -500,8 +546,83 @@ async def _verify_step(
                 if v.severity == "block"
             ],
             verdict,
+            fresh,
         )
-    return step.model_copy(update={"checked_rules": passed_rules(verdict)}), [], verdict
+    return step.model_copy(update={"checked_rules": passed_rules(verdict)}), [], verdict, fresh
+
+
+def _ref_options(
+    jar_codes: tuple[str | None, ...], lines: dict[str, AllocationLine], cap: int | None
+) -> str:
+    """Gợi ý cho vòng sửa, dựng bằng mã: các tham chiếu tiền dương của hũ nguồn và hũ nhận trong phương án tối ưu, chỉ những
+    khoản không vượt `cap` (số dư hiện có của hũ nguồn, với bước chuyển tiền làm ngay). Số chỉ nằm trong phản hồi cho model."""
+    found = []
+    for code in dict.fromkeys(c for c in jar_codes if c):
+        if (line := lines.get(code)) is None:
+            continue
+        for name in _REF_FIELDS:
+            value = _number_ref(AmountRef(jar_code=code, field=name), line)  # type: ignore[arg-type]
+            if value > 0 and (cap is None or value <= cap):
+                found.append(f"{code}.{name} ({format_vnd(value)})")
+    if not found:
+        return (
+            " Không có tham chiếu nào của hai hũ này dùng được: chọn hũ nguồn khác, dời bước sang giai đoạn sau kỳ lương"
+            " hoặc đổi thành bước adjust_split."
+        )
+    return " Tham chiếu dùng được: " + ", ".join(found[:6]) + "."
+
+
+def _vague_reason(item: StepOutline) -> str | None:
+    """Bước mơ hồ theo luật cấu trúc (không đọc chữ): chưa nói lấy tiền từ hũ nào sang hũ nào, giảm bao nhiêu, hay nhắc vào
+    ngày nào. Trả phản hồi cho vòng sửa, None nếu bước là một hành động cụ thể."""
+    if item.kind in _MONEY_MOVING_KINDS:
+        if not item.jar_code or not item.to_jar_code or item.jar_code == item.to_jar_code:
+            return (
+                "Bước chuyển tiền phải nói lấy từ hũ nào sang hũ nào: cần jar_code là hũ nguồn và to_jar_code là hũ nhận"
+                " khác nhau. Không viết bước chỉ giữ tiền trong một hũ."
+            )
+        if item.amount_ref is None:
+            return "Bước chuyển tiền cần amount_ref để có số tiền tham chiếu."
+    elif item.kind == "cut_spending":
+        if not item.jar_code or item.amount_ref is None:
+            return (
+                "Bước giảm chi cần jar_code là hũ không thiết yếu và amount_ref trỏ proposed_decrease của hũ đó để có số"
+                " tiền giảm."
+            )
+    elif item.kind == "adjust_split":
+        if item.amount_ref is None and item.action != "save_jars":
+            return "Bước đổi tỷ lệ chia cần amount_ref (hũ được tăng hoặc giảm phần chia) hoặc action save_jars."
+    elif item.amount_ref is None and item.action != "schedule_nudge":
+        return "Bước nhắc hoặc xem lại không có số tiền cần action schedule_nudge để có ngày nhắc."
+    return None
+
+
+def _add_month(day: date) -> date:
+    year, month = divmod(day.year * 12 + day.month, 12)
+    return payday_in_month(day.day, year, month + 1)
+
+
+def _phase_bounds(start: date, end: date, count: int) -> list[tuple[date, date]]:
+    """Ngày của từng giai đoạn theo thứ tự thời gian: giai đoạn đầu là tháng đầu tiên (việc làm ngay, trước và quanh kỳ lương kế),
+    các giai đoạn sau chia đều phần còn lại tới cuối kỳ. Kỳ quá ngắn thì chia đều cả kỳ."""
+    first_end = _add_month(start)
+    if count <= 1 or first_end >= end:
+        days = (end - start).days
+        return [
+            (
+                start + timedelta(days=days * index // count),
+                start + timedelta(days=days * (index + 1) // count),
+            )
+            for index in range(count)
+        ]
+    rest, later = (end - first_end).days, count - 1
+    return [(start, first_end)] + [
+        (
+            first_end + timedelta(days=rest * index // later),
+            first_end + timedelta(days=rest * (index + 1) // later),
+        )
+        for index in range(later)
+    ]
 
 
 def _strip_ordinal(title: str) -> str:
@@ -522,12 +643,13 @@ async def _verify(
     today: date,
     *,
     round_no: int = 0,
+    cache: dict[str, asyncio.Task[SuitabilityVerdict | None]] | None = None,
 ) -> tuple[list[RoadmapDraftPhase], list[RepairIssue], list[SuitabilityVerdict]]:
     allowed = Allowed.from_payloads([compact])
     lines = {line.jar.code: line for line in plan.lines}
     start, horizon_end = period
-    days = (horizon_end - start).days
-    phases, issues, verdicts = [], [], []
+    cache = {} if cache is None else cache
+    issues, verdicts = [], []
     phase_ids: set[str] = set()
     step_ids: set[str] = set()
 
@@ -540,6 +662,15 @@ async def _verify(
         """Các số (do model viết) không có căn cứ, để phản hồi nói đúng chỗ cần bỏ. Không đưa vào log."""
         found = {tok for text in texts for tok in _DIGITS_RE.findall(text) if not grounded(tok)}
         return f" ({', '.join(sorted(found)[:5])})" if found else ""
+
+    balance_of = {jar.code: jar.balance_vnd for jar in balances}
+
+    def options(item: StepOutline | RoadmapDraftStep, phase_start: date) -> str:
+        """Tham chiếu tiền dùng được cho bước này; bước chuyển tiền của giai đoạn đầu (làm ngay) bị chặn bởi số dư hũ nguồn."""
+        cap = None
+        if item.kind in _MONEY_MOVING_KINDS and item.jar_code and phase_start <= start:
+            cap = balance_of.get(item.jar_code)
+        return _ref_options((item.jar_code, item.to_jar_code), lines, cap)
 
     def rejected(phase_id: str, item: StepOutline, reason: str, rule_id: str, **extra: Any) -> None:
         _log_event(
@@ -562,9 +693,12 @@ async def _verify(
             candidates = phase.steps[:step_limit]
             active_phases.append((phase, candidates))
             step_limit -= len(candidates)
-    for index, (phase, candidates) in enumerate(active_phases):
-        phase_start = start + timedelta(days=days * index // len(active_phases))
-        phase_end = start + timedelta(days=days * (index + 1) // len(active_phases))
+    bounds = _phase_bounds(start, horizon_end, len(active_phases)) if active_phases else []
+    # Bước đã dựng của mọi giai đoạn được kiểm suitability CÙNG LÚC (một asyncio.gather cho cả vòng): độ trễ một vòng là độ trễ của
+    # lượt check_suitability chậm nhất, không cộng dồn theo số bước hay số giai đoạn.
+    pending: list[tuple[int, Awaitable[Any]]] = []
+    kept: list[tuple[PhaseOutline, str, tuple[date, date]]] = []
+    for (phase, candidates), (phase_start, phase_end) in zip(active_phases, bounds, strict=True):
         phase_title = _strip_ordinal(phase.title)
         if phase.phase_id in phase_ids or not grounded(phase_title):
             if phase.phase_id in phase_ids:
@@ -586,7 +720,8 @@ async def _verify(
                 )
             continue
         phase_ids.add(phase.phase_id)
-        pending = []
+        index = len(kept)
+        kept.append((phase, phase_title, (phase_start, phase_end)))
         for item in candidates:
             if item.step_id in step_ids:
                 issues.append(
@@ -631,48 +766,66 @@ async def _verify(
                 else:
                     code = exc.code if isinstance(exc, _StepInvalid) else "value_error"
                     message = str(exc)
+                if code in ("amount_not_positive", "amount_ref_jar"):
+                    message += options(item, phase_start)
                 issues.append(
                     RepairIssue(step_id=item.step_id, rule_id="step_invalid", message=message)
                 )
                 rejected(phase.phase_id, item, "step_invalid", "step_invalid", detail=code)
                 continue
-            pending.append(_verify_step(tools, step, proposal))
-        steps = []
-        for step, blocked, verdict in await asyncio.gather(*pending):
-            if verdict is not None:
-                verdicts.append(verdict)
-            issues.extend(blocked)
-            for issue in blocked:
-                _log_event(
-                    "roadmap_step_rejected",
-                    round=round_no,
-                    phase_id=phase.phase_id,
-                    step_id=step.step_id,
-                    kind=step.kind,
-                    action=step.action.tool if step.action else None,
-                    reason="suitability",
-                    rule_id=issue.rule_id,
-                    funding_source=_proposal(step, phase_start).funding_source,
+            # Bước dựng được nhưng chưa là một hành động cụ thể: đưa vào vòng sửa, không tốn lượt check_suitability.
+            if (vague := _vague_reason(item)) is not None:
+                issues.append(
+                    RepairIssue(step_id=item.step_id, rule_id="vague_step", message=vague)
                 )
-            if not blocked:
-                steps.append(step)
-        if steps:
-            phases.append(
-                RoadmapDraftPhase(
-                    phase_id=phase.phase_id,
-                    title=_clean_text(phase_title),
-                    start_date=phase_start.isoformat(),
-                    end_date=phase_end.isoformat(),
-                    steps=steps,
-                )
+                rejected(phase.phase_id, item, "vague", "vague_step")
+                continue
+            pending.append((index, _verify_step(tools, step, proposal, cache)))
+    checked = await asyncio.gather(*(job for _, job in pending))
+    passed: list[list[RoadmapDraftStep]] = [[] for _ in kept]
+    for (index, _), (step, blocked, verdict, fresh) in zip(pending, checked, strict=True):
+        phase, _, (phase_start, _) = kept[index]
+        if verdict is not None and fresh:
+            verdicts.append(verdict)
+        blocked = [
+            issue.model_copy(update={"message": issue.message + options(step, phase_start)})
+            if issue.rule_id == "source_jar_covers"
+            else issue
+            for issue in blocked
+        ]
+        issues.extend(blocked)
+        for issue in blocked:
+            _log_event(
+                "roadmap_step_rejected",
+                round=round_no,
+                phase_id=phase.phase_id,
+                step_id=step.step_id,
+                kind=step.kind,
+                action=step.action.tool if step.action else None,
+                reason="suitability",
+                rule_id=issue.rule_id,
+                funding_source=_proposal(step, phase_start).funding_source,
             )
+        if not blocked:
+            passed[index].append(step)
+    phases = [
+        RoadmapDraftPhase(
+            phase_id=phase.phase_id,
+            title=_clean_text(phase_title),
+            start_date=phase_start.isoformat(),
+            end_date=phase_end.isoformat(),
+            steps=steps,
+        )
+        for (phase, phase_title, (phase_start, phase_end)), steps in zip(kept, passed, strict=True)
+        if steps
+    ]
     return phases, issues, verdicts
 
 
 def _tool_budget(settings: AgentSettings, remaining: int, rounds: int, has_latest: bool) -> int:
     # Context đọc 4 tool, dùng lại lần đọc latest từ chat nếu có. Mỗi bản nháp
-    # gọi tối ưu một lần, kiểm mỗi bước một lần/vòng và có thể lưu mỗi vòng.
-    # Xung đột dành thêm hai call cho một lần đọc latest và một lần lưu lại.
+    # gọi tối ưu một lần, kiểm mỗi bước một lần/vòng (trường hợp xấu nhất: không bước nào dùng lại được phán quyết cũ) và có thể
+    # lưu mỗi vòng. Xung đột dành thêm hai call cho một lần đọc latest và một lần lưu lại.
     fixed = (4 - int(has_latest)) + 1 + (1 + rounds) + 2
     return min(settings.roadmap_max_steps, max(0, (remaining - fixed) // (1 + rounds)))
 
@@ -712,7 +865,9 @@ async def build_roadmap(
     def model_left() -> bool:
         return scope.max_calls is None or scope.calls < scope.max_calls
 
-    remaining = settings.max_tool_calls_per_turn
+    # Trần tool call riêng của việc lập lộ trình (`roadmap_max_tool_calls_per_turn`): phần lớn là check_suitability, Lambda tất định,
+    # chạy song song trong một vòng. Người gọi (chat) truyền số lượt còn lại của lượt; job sinh lại dùng thẳng trần này.
+    remaining = settings.roadmap_max_tool_calls_per_turn
     if tool_calls_left is not None:
         remaining = min(remaining, tool_calls_left)
     rounds = max(0, settings.roadmap_fix_max_rounds)
@@ -900,6 +1055,7 @@ async def build_roadmap(
     conflict_retried = False
     saving = False
     outline: RoadmapOutline = sketch
+    checked_proposals: dict[str, asyncio.Task[SuitabilityVerdict | None]] = {}
 
     async def repair(issues: list[RepairIssue]) -> RoadmapOutline | None:
         nonlocal retries, model_error
@@ -983,6 +1139,7 @@ async def build_roadmap(
             (period_start, period_end),
             today,
             round_no=retries,
+            cache=checked_proposals,
         )
         verdicts.extend(checked)
         if issues and (revised := await repair(issues)) is not None:

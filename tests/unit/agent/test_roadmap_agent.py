@@ -6,6 +6,7 @@ import asyncio
 import json
 from dataclasses import replace
 from datetime import date
+from pathlib import Path
 
 import pytest
 from agent_helpers import (
@@ -26,6 +27,7 @@ from agent_helpers import (
 from yofina_agent import notices
 from yofina_agent.roadmap_agent import build_roadmap
 from yofina_agent.tools import ToolKind, ToolOutcome, classify_result
+from yofina_agent.writer import build_writer_prompt as writer_prompt
 
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import TurnScope
@@ -52,12 +54,14 @@ def step(step_id="bu_du_phong", **changes):
 
 
 def review(**changes):
+    # Bước không có số tiền phải là nhắc/xem lại CÓ NGÀY (action schedule_nudge), không thì bị đưa vào vòng sửa như bước mơ hồ.
     return {
         "step_id": "giu_muc_tieu",
         "kind": "review_goal",
         "title": "Xem lại mục tiêu",
         "reason": "Theo dõi khả năng giữ mục tiêu",
         "jar_code": "du_lich",
+        "action": "schedule_nudge",
         **changes,
     }
 
@@ -162,6 +166,7 @@ def test_save_grounded_roadmap_and_report_stages():
     ]
     result, client, scope = build(tools, draft, stages=stages)
     assert result.outcome.payload == fixture("save_roadmap.ok.json")
+    # hai bước xem lại ở hai giai đoạn có cùng đề xuất: kiểm một lần, dùng chung phán quyết
     assert len(result.suitability) == 2
     assert scope.calls == 1
     assert [stage for stage, _ in stages] == ["context", "draft", "allocate", "suitability", "save"]
@@ -176,10 +181,12 @@ def test_save_grounded_roadmap_and_report_stages():
     data = fixture("optimize_allocation.ok.json")["data"]
     assert stored["goals"] == data["goals"]
     assert stored["alternatives"] == data["alternatives"]
-    first, second = stored["phases"]
-    assert first["start_date"] == data["period_start"]
-    assert first["end_date"] == second["start_date"]
-    assert second["end_date"] == "2027-03-21"  # horizon trả về là bốn tháng
+    first, second, third = stored["phases"]
+    # giai đoạn đầu là tháng đầu (việc làm ngay), các giai đoạn sau chia đều phần còn lại, nối liền và theo thứ tự thời gian
+    assert first["start_date"] == data["period_start"] == "2026-11-21"
+    assert first["end_date"] == "2026-12-21" == second["start_date"]
+    assert second["end_date"] == third["start_date"]
+    assert third["end_date"] == "2027-03-21"  # horizon trả về là bốn tháng
     move, nudge = first["steps"][0], second["steps"][0]
     line = next(line for line in data["lines"] if line["jar"]["code"] == "du_phong")
     expected = line["proposed_monthly_vnd"] - line["current_monthly_vnd"]
@@ -200,6 +207,8 @@ def test_save_grounded_roadmap_and_report_stages():
         proposal_for_step(item, phase["start_date"]).model_dump(exclude_none=True)
         for item, phase in ((move, first), (nudge, second))
     ]
+    assert proposal_for_step(third["steps"][0], third["start_date"]).model_dump(exclude_none=True) == proposals[1]
+    assert third["steps"][0]["checked_rules"] == nudge["checked_rules"]
     assert proposals[0]["start_date"] == first["start_date"] and "start_date" not in proposals[1]
     assert [proposal["kind"] for proposal in proposals] == [
         "roadmap_set_aside",
@@ -232,7 +241,8 @@ def test_save_relaxed_and_infeasible(fixture_name, feasibility, alternatives):
 
 def test_suitability_feedback_repairs_amount_reference():
     tools = scripted_tools(checks=("violation", "ok"))
-    fixed = step(amount_ref={"jar_code": "giai_tri", "field": "proposed_decrease"})
+    # bản sửa đổi số tiền tham chiếu (đề xuất khác) nên được kiểm lại; đề xuất y hệt thì dùng lại phán quyết cũ
+    fixed = step(to_jar_code="du_lich", amount_ref={"jar_code": "du_lich", "field": "proposed_increase"})
     result, client, scope = build(tools, outline(step()), outline(fixed))
     assert result.outcome.ok
     assert scope.calls == 2
@@ -363,7 +373,9 @@ def test_model_cannot_send_money_as_a_structured_field():
 def test_split_advice_does_not_overwrite_existing_jar_configuration():
     # get_jar_balances.ok.json là dữ liệu cũ (không có `kind`): không dựng được save_jars, bước giữ dạng hướng dẫn
     tools = scripted_tools()
-    split = review(kind="adjust_split")
+    split = review(
+        kind="adjust_split", action=None, amount_ref={"jar_code": "du_lich", "field": "proposed_increase"}
+    )
     result, client, _ = build(tools, outline({**split, "action": "save_jars"}), outline(split))
     assert result.outcome.ok
     assert "save_jars" in prompt(client, 1)["feedback"][0]["message"]
@@ -411,7 +423,7 @@ def test_save_jars_chi_gan_cho_buoc_adjust_split():
     result, client, _ = build(tools, outline(wrong), outline(review()))
     assert result.outcome.ok
     assert "adjust_split" in prompt(client, 1)["feedback"][0]["message"]
-    assert "action" not in args_for(tools, "save_roadmap")[0]["phases"][0]["steps"][0]
+    assert args_for(tools, "save_roadmap")[0]["phases"][0]["steps"][0]["action"]["tool"] == "schedule_nudge"
 
 
 def test_optimization_error_stops_before_save():
@@ -471,9 +483,67 @@ def test_initial_conflict_returns_other_turns_saved_version():
     assert len(args_for(tools, "save_roadmap")) == 1
 
 
+def six_distinct_steps():
+    """Bảy bước có đề xuất suitability khác nhau trong ba giai đoạn (bước thứ bảy vượt `roadmap_max_steps`)."""
+    return {
+        "phases": [
+            {
+                "phase_id": "thang_nay",
+                "title": "Ngay trong tháng này",
+                "steps": [
+                    step("chuyen_du_phong"),
+                    step(
+                        "chuyen_du_lich",
+                        to_jar_code="du_lich",
+                        amount_ref={"jar_code": "du_lich", "field": "proposed_increase"},
+                    ),
+                    step(
+                        "giam_giai_tri",
+                        kind="cut_spending",
+                        to_jar_code=None,
+                        action=None,
+                        amount_ref={"jar_code": "giai_tri", "field": "proposed_decrease"},
+                    ),
+                ],
+            },
+            {
+                "phase_id": "sau_ky_luong",
+                "title": "Sau kỳ lương",
+                "steps": [
+                    step(
+                        "tang_chia_du_phong",
+                        kind="adjust_split",
+                        jar_code="du_phong",
+                        to_jar_code=None,
+                        action=None,
+                    ),
+                    review(step_id="xem_lai_du_lich"),
+                ],
+            },
+            {
+                "phase_id": "ve_dich",
+                "title": "Về đích",
+                "steps": [
+                    review(step_id="nhac_du_phong", kind="remind", jar_code="du_phong"),
+                    review(step_id="thua", kind="remind", jar_code="an_uong"),
+                ],
+            },
+        ]
+    }
+
+
 def test_tool_budget_includes_every_round_save_and_conflict_attempt():
+    from yofina_agent.roadmap_agent import _tool_budget
+
     settings = agent_settings()
-    draft = outline(step(), step("giu_tien"), step("khong_du_ngan_sach"))
+    # trần riêng của lượt lập lộ trình (cũ: trần chung 16 chỉ đủ hai bước)
+    assert settings.roadmap_max_steps == 6
+    assert settings.roadmap_max_tool_calls_per_turn == 40 > settings.max_tool_calls_per_turn == 16
+    assert _tool_budget(settings, 15, 2, True) == 2
+    # chat đã đọc get_roadmap (latest, có thể thêm active): 3 ngữ cảnh + 1 tối ưu + 3 lưu + 2 xung đột + 6 bước × 3 vòng = 27
+    assert _tool_budget(settings, 40 - 2, 2, True) == 6
+
+    draft = six_distinct_steps()
     tools = scripted_tools(
         checks=("ok",) * 6,
         saves=("error_invalid", "error_invalid", "error_version_conflict", "ok"),
@@ -483,12 +553,109 @@ def test_tool_budget_includes_every_round_save_and_conflict_attempt():
         tools, draft, draft, draft, settings=settings, reason_code="user_request"
     )
     assert result.outcome.ok and scope.calls == 3
-    assert prompt(client)["max_steps"] == settings.roadmap_max_steps
-    assert len(tools.calls) == settings.max_tool_calls_per_turn == 16
+    assert prompt(client)["max_steps"] == settings.roadmap_max_steps == 6
+    # bước đã kiểm và giữ nguyên ở vòng sửa không bị kiểm lại: 6 lượt check cho cả ba vòng
     assert len(args_for(tools, "check_suitability")) == 6
-    assert all(
-        len(payload["phases"][0]["steps"]) == 2 for payload in args_for(tools, "save_roadmap")
+    assert len(tools.calls) == 4 + 1 + 6 + 4 + 1 <= settings.roadmap_max_tool_calls_per_turn
+    for payload in args_for(tools, "save_roadmap"):
+        assert [len(phase["steps"]) for phase in payload["phases"]] == [3, 2, 1]
+        assert "thua" not in json.dumps(payload)
+
+
+def test_check_suitability_cua_moi_giai_doan_chay_song_song():
+    """Mọi bước của một vòng được kiểm cùng lúc: lượt check thứ sáu mới mở chốt, nên chạy tuần tự (theo bước hay theo giai
+    đoạn) sẽ hết giờ."""
+    tools = scripted_tools(checks=("ok",) * 6)
+    llm, _client, _ = make_llm([tool_response("draft_roadmap", six_distinct_steps())])
+    settings = agent_settings()
+
+    async def exercise():
+        ready = asyncio.Event()
+        in_flight = 0
+        peak = 0
+
+        async def call(name, args, target):
+            nonlocal in_flight, peak
+            if name == "check_suitability":
+                in_flight += 1
+                peak = max(peak, in_flight)
+                if in_flight == 6:
+                    ready.set()
+                await asyncio.wait_for(ready.wait(), timeout=1)
+                in_flight -= 1
+            return await tools.call(settings.tool(name, target=target), args)
+
+        result = await build_roadmap(call, llm, settings, TurnScope(1), reason_code="initial")
+        return result, peak
+
+    result, peak = run(exercise())
+    assert result.outcome.ok and peak == 6
+    (stored,) = args_for(tools, "save_roadmap")
+    assert sum(len(phase["steps"]) for phase in stored["phases"]) == 6
+    assert [phase["start_date"] for phase in stored["phases"]] == sorted(
+        phase["start_date"] for phase in stored["phases"]
     )
+
+
+@pytest.mark.parametrize(
+    ("vague", "fragment"),
+    [
+        # "Giữ tiền hũ Nghĩa vụ cho các khoản sắp đến hạn": không nói lấy tiền từ hũ nào
+        (
+            step(kind="pay_obligation", jar_code="nghia_vu", to_jar_code=None, action=None,
+                 amount_ref={"jar_code": "nghia_vu", "field": "floor_vnd"}),
+            "hũ nguồn",
+        ),
+        (step(to_jar_code="giai_tri", action=None,
+              amount_ref={"jar_code": "giai_tri", "field": "proposed_decrease"}), "hũ nguồn"),
+        (step(amount_ref=None, action=None), "amount_ref"),
+        # "Giảm chi tiêu Giải trí để bù nghĩa vụ": không có số tiền giảm
+        (step(kind="cut_spending", to_jar_code=None, action=None, amount_ref=None), "proposed_decrease"),
+        (review(kind="adjust_split", action=None), "save_jars"),
+        (review(action=None), "schedule_nudge"),
+        (review(kind="remind", action=None), "schedule_nudge"),
+    ],
+)  # fmt: skip
+def test_buoc_mo_ho_vao_vong_sua_khong_ton_luot_kiem(vague, fragment, caplog):
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    tools = scripted_tools(checks=("ok",))
+    vague = {**vague, "step_id": "mo_ho"}
+    result, client, scope = build(tools, outline(vague), outline(step()))
+    assert result.outcome.ok and scope.calls == 2
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert feedback["step_id"] == "mo_ho" and feedback["rule_id"] == "vague_step"
+    assert fragment in feedback["message"]
+    # chỉ bước đã sửa được kiểm suitability và lưu
+    (checked,) = args_for(tools, "check_suitability")
+    assert checked["proposal"]["kind"] == "roadmap_set_aside"
+    (stored,) = args_for(tools, "save_roadmap")
+    assert [s["step_id"] for p in stored["phases"] for s in p["steps"]] == ["bu_du_phong"]
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected["reason"] == "vague" and rejected["rule_id"] == "vague_step"
+
+
+def test_tham_chieu_khong_duong_duoc_goi_y_tham_chieu_vua_so_du():
+    # floor_gap_vnd của hũ Dự phòng là 0: phản hồi liệt kê các tham chiếu dương không vượt số dư hũ Giải trí (760.000 ₫)
+    tools = scripted_tools()
+    bad = step(amount_ref={"jar_code": "du_phong", "field": "floor_gap_vnd"})
+    result, client, _ = build(tools, outline(bad), outline(step()))
+    assert result.outcome.ok
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert feedback["rule_id"] == "step_invalid"
+    assert "giai_tri.proposed_decrease (600.000 ₫)" in feedback["message"]
+    assert "du_phong.proposed_increase (600.000 ₫)" in feedback["message"]
+    assert "current_monthly_vnd" not in feedback["message"]  # 1.200.000 ₫ vượt số dư hũ nguồn
+
+
+def test_prompt_neu_khuon_hanh_dong_cu_the_khong_chep_seed():
+    from yofina_agent.roadmap_agent import ROADMAP_SYSTEM
+
+    for rule in ("hai hoặc ba giai đoạn", "từ bốn bước", "MỘT hành động cụ thể", "schedule_nudge", "hũ nguồn"):
+        assert rule in ROADMAP_SYSTEM
+    seed = json.loads((Path(__file__).parents[3] / "data/personas/roadmaps/minh.json").read_text(encoding="utf-8"))
+    titles = [s["title"] for v in seed["versions"] for p in v.get("phases", []) for s in p["steps"]]
+    assert titles and not any(title in ROADMAP_SYSTEM for title in titles)
+    assert not any(ch.isdigit() for ch in ROADMAP_SYSTEM)
 
 
 def test_turn_missing_roadmap_generates_emits_and_records(monkeypatch):
@@ -556,6 +723,82 @@ def test_turn_create_roadmap_uses_latest_as_base_or_creates_initial(monkeypatch,
         assert "based_on_version" not in stored
     (block,) = blocks_of(events)
     assert block["data"] == fixture("save_roadmap.ok.json")["data"]
+
+
+def roadmap_payload(name, **data_changes):
+    payload = fixture(name)
+    payload["data"].update(data_changes)
+    return payload
+
+
+def test_turn_lap_lai_khi_co_ban_de_xuat_dang_cho_noi_ro_ban_bi_thay(monkeypatch):
+    # minh sau khi đặt lại: v2 đang dùng, v3 "hành vi thay đổi" đang chờ. Lập lại trong chat tạo v4 và bỏ v3 (migration 0052).
+    pending = roadmap_payload("save_roadmap.ok.json")  # v3 proposed, behavior_changed, dựa trên v2
+    active = fixture("get_roadmap.ok.json")  # v2 active
+    saved = roadmap_payload("save_roadmap.ok.json", version=4, based_on_version=2)
+    tools = scripted_tools(latest=(pending, active), saves=(saved,), checks=("ok",) * 6)
+    llm = make_llm(
+        [
+            route_response(intent="roadmap", roadmap_action="create"),
+            tool_response("draft_roadmap", six_distinct_steps()),
+        ]
+    )
+    settings = agent_settings()
+    events, _, writer = run_turn(
+        "Lập lại lộ trình giúp mình", llm=llm, tools=tools, settings=settings, monkeypatch=monkeypatch
+    )
+    check_agui_order(events)
+    # đọc bản mới nhất rồi bản đang dùng TRƯỚC khi lưu; bản mới dựa trên bản đang dùng
+    assert args_for(tools, "get_roadmap") == [{"which": "latest"}, {"which": "active"}]
+    (stored,) = args_for(tools, "save_roadmap")
+    assert stored["based_on_version"] == 2 and stored["reason_code"] == "user_request"
+    assert sum(len(phase["steps"]) for phase in stored["phases"]) == 6
+    # trần tool call riêng của lượt lập lộ trình: với trần chung 16 sau hai lần đọc get_roadmap chỉ còn chỗ cho một bước
+    assert prompt(llm[1], 1)["max_steps"] == settings.roadmap_max_steps == 6
+    assert len(tools.calls) <= settings.roadmap_max_tool_calls_per_turn
+    roadmap, notice = blocks_of(events)
+    assert roadmap["type"] == "roadmap" and roadmap["data"]["version"] == 4
+    assert notice["type"] == "notice" and notice["data"]["kind"] == "info"
+    assert notice["data"]["code"] == "ROADMAP_PROPOSAL_REPLACED"
+    assert notice["data"]["message"].startswith(
+        "Bản này thay bản đề xuất phiên bản 3 (lý do: hành vi thay đổi) đang chờ bạn chọn."
+    )
+    assert "Bản đang dùng vẫn là phiên bản 2" in notice["data"]["message"]
+    assert "Dùng bản mới" in notice["data"]["message"] and "Giữ bản cũ" in notice["data"]["message"]
+    ((task, compact),) = [(call["task"], call["compact"]) for call in writer.calls]
+    assert task == "roadmap"
+    assert compact["status"] == "proposed" and compact["version"] == 4
+    assert compact["active_version"] == 2
+    assert compact["replaced_proposal"] == {"version": 3, "reason": "hành vi thay đổi"}
+    prompt_text = writer_prompt("roadmap", "Lập lại lộ trình giúp mình", compact)
+    assert "ĐỀ XUẤT" in prompt_text and "Dùng bản mới hoặc Giữ bản cũ" in prompt_text
+
+
+def test_turn_lap_lai_khi_ban_moi_nhat_da_bo_dua_tren_ban_dang_dung(monkeypatch):
+    # Người dùng đã "Giữ bản cũ" (v3 discarded): lưu dựa trên bản đã bỏ thì ledger trả ROADMAP_VERSION_CONFLICT.
+    dropped = roadmap_payload("save_roadmap.ok.json", status="discarded")
+    tools = scripted_tools(latest=(dropped, fixture("get_roadmap.ok.json")))
+    llm = make_llm(
+        [route_response(intent="roadmap", roadmap_action="create"), tool_response("draft_roadmap", outline(step()))]
+    )
+    events, _, writer = run_turn("Lập lại lộ trình", llm=llm, tools=tools, monkeypatch=monkeypatch)
+    check_agui_order(events)
+    assert args_for(tools, "get_roadmap") == [{"which": "latest"}, {"which": "active"}]
+    assert args_for(tools, "save_roadmap")[0]["based_on_version"] == 2
+    assert [block["type"] for block in blocks_of(events)] == ["roadmap"]  # không có bản đề xuất nào bị thay
+    compact = writer.calls[0]["compact"]
+    assert compact["active_version"] == 2 and "replaced_proposal" not in compact
+
+
+def test_turn_lap_lai_tu_ban_dang_dung_khong_doc_them(monkeypatch):
+    tools = scripted_tools(latest=("ok",))
+    llm = make_llm(
+        [route_response(intent="roadmap", roadmap_action="create"), tool_response("draft_roadmap", outline(step()))]
+    )
+    events, _, writer = run_turn("Lập lại lộ trình", llm=llm, tools=tools, monkeypatch=monkeypatch)
+    assert args_for(tools, "get_roadmap") == [{"which": "latest"}]
+    assert [block["type"] for block in blocks_of(events)] == ["roadmap"]
+    assert writer.calls[0]["compact"]["active_version"] == 2
 
 
 def test_turn_draft_failure_emits_degraded_notice(monkeypatch):
@@ -719,6 +962,9 @@ def test_step_starting_now_over_current_balance_is_still_blocked(caplog):
     assert move["kind"] == "roadmap_set_aside" and move["start_date"] < facts.next_payday.isoformat()
     (feedback,) = prompt(client, 1)["feedback"]
     assert feedback["step_id"] == "bu_du_phong" and feedback["rule_id"] == "source_jar_covers"
+    # không tham chiếu nào của hai hũ vừa số dư 200.000 ₫ của hũ nguồn: phản hồi nói cách sửa khác
+    assert "Không có tham chiếu nào" in feedback["message"]
+    assert "dời bước sang giai đoạn sau kỳ lương" in feedback["message"]
 
     # ledger chặn cùng bước đó lúc lưu (giai đoạn bắt đầu hôm nay)
     original = {
@@ -769,8 +1015,7 @@ def test_agent_proposal_matches_ledger_save_check_in_later_phase():
     [
         step(),
         step(action=None),
-        step(kind="pay_obligation", jar_code="nghia_vu", to_jar_code=None, action=None,
-             amount_ref={"jar_code": "nghia_vu", "field": "floor_vnd"}),
+        # pay_obligation một hũ ("giữ tiền hũ Nghĩa vụ") nay là bước mơ hồ: xem test_buoc_mo_ho_vao_vong_sua_khong_ton_luot_kiem
         step(kind="pay_obligation", jar_code="an_uong", to_jar_code="nghia_vu", action=None,
              amount_ref={"jar_code": "nghia_vu", "field": "floor_vnd"}),
         step(kind="cut_spending", jar_code="giai_tri", to_jar_code="du_phong",

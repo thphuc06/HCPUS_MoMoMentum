@@ -31,7 +31,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -90,7 +90,7 @@ from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, Tu
 from yofina_core.money import format_vnd, format_vnd_short
 from yofina_core.pii import mask_pii
 from yofina_core.resilience import load_shock_set
-from yofina_core.roadmap import JobStage, RoadmapReasonCode
+from yofina_core.roadmap import JobStage, Roadmap, RoadmapReasonCode
 from yofina_core.suitability import SuitabilityVerdict
 
 log = logging.getLogger("yofina.agent.turn")
@@ -1014,12 +1014,36 @@ class Turn:
             self.tool_failure(res.outcome)
             return
         if create:
+            base, versions = await self.roadmap_base(res.outcome)
             await self.generate_roadmap(
-                "user_request", question, latest_outcome=res.outcome, user_goal=goal
+                "user_request", question, latest_outcome=base, user_goal=goal, versions=versions
             )
             return
         assert res.compact is not None
         await self.write("roadmap", question, res.compact)
+
+    async def roadmap_base(self, latest: ToolOutcome) -> tuple[ToolOutcome, _RoadmapVersions]:
+        """Bản gốc cho lần lập lại và các phiên bản liên quan, đọc TRƯỚC khi lưu.
+
+        Lưu một bản mới làm bản `proposed` đang chờ bị bỏ (`discarded`, `app_save_roadmap` của migration 0052), nên phải biết bản đó
+        để nói cho người dùng. Bản mới nhất không phải bản đang dùng (đang chờ chọn, hoặc đã bị bỏ hay bị thay) thì đọc bản đang
+        dùng làm gốc như job sinh lại: lưu dựa trên một bản đã bỏ thì `save_roadmap` trả ROADMAP_VERSION_CONFLICT.
+        """
+        newest = _roadmap_of(latest)
+        if newest is None:
+            return latest, _RoadmapVersions()
+        if newest.status == "active":
+            return latest, _RoadmapVersions(active_version=newest.version)
+        pending = newest if newest.status == "proposed" else None
+        versions = _RoadmapVersions(
+            pending_version=pending.version if pending else None,
+            pending_reason=pending.reason.code if pending else None,
+        )
+        res = await self.call_tool_retry("get_roadmap", {"which": "active"}, target="planner", emit=False)
+        active = _roadmap_of(res.outcome)
+        if active is None or active.status != "active":
+            return latest, versions
+        return res.outcome, replace(versions, active_version=active.version)
 
     async def roadmap_user_goal(self, p: IntentParams) -> UserGoal | None:
         """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text) ra mã hũ và ngày ISO bằng mã. Chỉ nhận hũ kind `saving`.
@@ -1085,8 +1109,13 @@ class Turn:
         shock_id: str | None = None,
         latest_outcome: ToolOutcome | None = None,
         user_goal: UserGoal | None = None,
+        versions: _RoadmapVersions | None = None,
     ) -> None:
         await self.ensure_llm()
+        # Lượt lập lộ trình dùng trần tool call riêng: mỗi bước tốn một lượt check_suitability mỗi vòng (Lambda tất định, các bước
+        # của một vòng chạy song song). Trần lượt gọi model giữ nguyên (TurnScope).
+        if self.s.roadmap_max_tool_calls_per_turn > self.s.max_tool_calls_per_turn:
+            self.s = replace(self.s, max_tool_calls_per_turn=self.s.roadmap_max_tool_calls_per_turn)
         # Lượt đã đọc hũ (đổi mục tiêu sang mã hũ): build_roadmap dùng lại lần đọc đó, không tốn thêm tool call.
         cached_jars = self._jars.outcome if self._jars is not None and self._jars.outcome.ok else None
 
@@ -1144,9 +1173,36 @@ class Turn:
         self.verified = True
         self.emit_block(block)
         compact = compact_roadmap(result.outcome.payload or {})
+        compact.update(self.roadmap_versions_note(block.data, versions))
         if user_goal is not None:
             compact["user_goal"] = _user_goal_compact(user_goal, self._jar_rows)
         await self.write("roadmap", question, compact)
+
+    def roadmap_versions_note(
+        self, saved: B.RoadmapData, versions: _RoadmapVersions | None
+    ) -> dict[str, Any]:
+        """Nói rõ bản vừa lưu đứng ở đâu so với các phiên bản khác: khối `notice` (info) khi nó thay bản đề xuất đang chờ, và các
+        trường cho câu trả lời (bản đang dùng, bản bị thay). Số phiên bản lấy từ get_roadmap đã đọc trước khi lưu."""
+        if versions is None:
+            return {}
+        out: dict[str, Any] = {}
+        if saved.status == "proposed" and versions.active_version is not None:
+            out["active_version"] = versions.active_version
+        old = versions.pending_version
+        if old is None or saved.version <= old:
+            return out
+        reason = notices.ROADMAP_REASON_LABELS.get(versions.pending_reason or "", notices.ROADMAP_REASON_FALLBACK)
+        out["replaced_proposal"] = {"version": old, "reason": reason}
+        message = notices.ROADMAP_PROPOSAL_REPLACED.format(old=old, reason=reason)
+        if "active_version" in out:
+            message += " " + notices.ROADMAP_PROPOSED_NEXT.format(active=out["active_version"])
+        self.emit_notice(
+            kind="info",
+            code="ROADMAP_PROPOSAL_REPLACED",
+            title=notices.ROADMAP_PROPOSAL_REPLACED_TITLE,
+            message=message,
+        )
+        return out
 
     # --- what-if và kiểm tra trước khi quẹt -------------------------------------------------
     async def on_what_if(self, r: IntentResult, question: str) -> None:
@@ -1403,6 +1459,25 @@ _GOAL_NOT_SAVING = (
 )
 _GOAL_BAD_DATE = "Mình chưa đọc được hạn “{typed}” nên dùng hạn đã khai ở hũ {name}, nếu có."
 _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa đặt hạn này. Bạn cho mình biết số tiền muốn gom nhé."
+
+
+@dataclass(frozen=True)
+class _RoadmapVersions:
+    """Các phiên bản đọc trước khi lưu bản lập lại: bản đang dùng và bản đề xuất đang chờ (sẽ bị bỏ khi lưu bản mới)."""
+
+    active_version: int | None = None
+    pending_version: int | None = None
+    pending_reason: str | None = None
+
+
+def _roadmap_of(outcome: ToolOutcome) -> Roadmap | None:
+    if not outcome.ok:
+        return None
+    try:
+        return Roadmap.model_validate((outcome.payload or {}).get("data"))
+    except ValueError:
+        return None
+
 
 def _user_goal_compact(goal: UserGoal, jar_rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Mục tiêu người dùng nói, cho model viết câu trả lời (số và ngày đúng dạng để kiểm căn cứ)."""
