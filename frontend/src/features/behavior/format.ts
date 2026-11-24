@@ -52,3 +52,42 @@ export const INSIGHT_KIND_LABEL: Record<BehaviorInsightKind, string> = {
   category_trend: 'Xu hướng hũ',
   spending_cluster: 'Nhóm thói quen',
 }
+
+/**
+ * Cặp bằng chứng "phần chi" so với "phần số ngày" (mốc nếu chi đều) mà batch hành vi phát trong CÙNG nhận xét
+ * (`ml/yofina_ml/behavior.py`): khóa phần chi -> khóa phần số ngày. Hợp đồng chưa có `compare_key` (P1 của
+ * spending-visualization.md §4.1) nên giao diện ghép theo bảng khóa cố định này; thiếu một vế thì không vẽ.
+ */
+export const SHARE_PAIRS: Readonly<Record<string, string>> = {
+  weekend_share: 'weekend_day_share',
+  first_week_share: 'first_week_day_share',
+}
+
+export type SharePair = { share: BehaviorEvidence; base: BehaviorEvidence; sharePct: number; basePct: number }
+
+const toPct = (e: BehaviorEvidence) => (e.unit === 'ratio' ? e.value * 100 : e.value)
+
+/** Các cặp vẽ được của một nhận xét: cả hai vế có mặt, cùng đơn vị phần trăm hoặc tỷ lệ, giá trị trong 0..100%. */
+export function sharePairs(evidence: readonly BehaviorEvidence[]): SharePair[] {
+  const byKey = new Map(evidence.map((e) => [e.key, e]))
+  const out: SharePair[] = []
+  for (const [shareKey, baseKey] of Object.entries(SHARE_PAIRS)) {
+    const share = byKey.get(shareKey)
+    const base = byKey.get(baseKey)
+    if (!share || !base || share.unit !== base.unit || (share.unit !== 'percent' && share.unit !== 'ratio')) continue
+    const sharePct = toPct(share)
+    const basePct = toPct(base)
+    if ([sharePct, basePct].some((v) => !Number.isFinite(v) || v < 0 || v > 100)) continue
+    out.push({ share, base, sharePct, basePct })
+  }
+  return out
+}
+
+const points = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 })
+
+/** "Nhiều hơn mức chi đều 11 điểm phần trăm" từ hai số của cặp (hiệu hai số server trả, không tính số mới nào khác). */
+export function shareGapText(p: Pick<SharePair, 'sharePct' | 'basePct'>): string {
+  const d = Math.round((p.sharePct - p.basePct) * 10) / 10
+  if (d === 0) return 'Bằng mức chi đều.'
+  return `${d > 0 ? 'Nhiều hơn' : 'Ít hơn'} mức chi đều ${points.format(Math.abs(d))} điểm phần trăm.`
+}

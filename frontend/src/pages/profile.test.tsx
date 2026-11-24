@@ -28,6 +28,16 @@ describe('Hồ sơ: nhận xét hành vi', () => {
     expect(within(section).getByText(behavior.next_step!.label)).toBeInTheDocument()
   })
 
+  it('B3: nhận xét có cặp phần chi và phần số ngày thì thẻ ở Hồ sơ cũng có hai thanh (cùng component với chat)', async () => {
+    const withPair = structuredClone(restFixture('BehaviorProfileResponse.minh')) as Record<string, any>
+    withPair.insights[0].evidence.push({ key: 'first_week_day_share', label: 'Phần số ngày thuộc tuần đầu sau lương', value: 23, unit: 'percent' })
+    mountApp(backend({ 'GET /profile/behavior': withPair }), '/profile')
+    const section = await screen.findByRole('region', { name: 'Nhận xét hành vi' })
+    const bars = await within(section).findByTestId('evidence-bars')
+    expect(within(bars).getByRole('img')).toHaveAccessibleName(/46%.*23%.*Nhiều hơn mức chi đều 23 điểm phần trăm/)
+    expect(within(section).getAllByTestId('evidence-bars')).toHaveLength(1)
+  })
+
   it('"Thực hiện" việc nên làm: xem trước do server tính, chỉ ghi khi bấm xác nhận (token)', async () => {
     const user = userEvent.setup()
     const { calls } = mountApp(backend(), '/profile')

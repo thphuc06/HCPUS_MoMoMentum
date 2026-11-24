@@ -1,8 +1,7 @@
 import { useCallback, useState, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
-import { ArrowDownToLine, ArrowLeftRight, ChevronRight, ListChecks, Send, ShieldCheck } from 'lucide-react'
+import { ArrowDownToLine, ArrowLeftRight, ChevronRight, ListChecks, Send } from 'lucide-react'
 import { BalanceCard } from '@/components/BalanceCard'
-import { JarCard } from '@/components/JarCard'
 import { MiniTimeline } from '@/components/MiniTimeline'
 import { Notice } from '@/components/Notice'
 import { ProactiveCard } from '@/components/ProactiveCard'
@@ -14,6 +13,11 @@ import { useOverview } from '@/api/OverviewProvider'
 import { parseProactiveCard, type OverviewResponse } from '@/api/schemas'
 import type { NudgeOutcome } from '@/api/phase5Schemas'
 import type { ProactiveCardBlock } from '@/contracts/blocks'
+import { CreditUsage } from '@/features/credit/CreditUsage'
+import { nearestBnpl, payJarFor } from '@/features/credit/select'
+import { JarCarousel } from '@/features/overview/JarCarousel'
+import { JarRunway } from '@/features/overview/JarRunway'
+import { emptyDaysBeforePayday, RunoutHero } from '@/features/overview/RunoutHero'
 import { useProactiveActions, type ProactiveAction } from '@/features/overview/useProactiveActions'
 import { useTodayNudge } from '@/features/overview/useTodayNudge'
 import { RoadmapEntryRow } from '@/features/roadmap/RoadmapEntry'
@@ -23,7 +27,7 @@ import { UnclassifiedSummary } from '@/features/review/UnclassifiedSummary'
 import { useReview } from '@/features/review/useReview'
 import { formatDayMonth } from '@/lib/dates'
 import { formatRatioPercent, formatVnd, greetingNow } from '@/lib/format'
-import { jarForecastLevel, jarLevel } from '@/lib/jar'
+import { useAnimateOnce } from '@/lib/motion'
 import { isCardHidden, nudgeKey } from '@/lib/nudgePrefs'
 import { displayName } from '@/lib/user'
 
@@ -41,37 +45,25 @@ function Header({ name }: { name: string }) {
   )
 }
 
-function QuickAction({ label, Icon, to, disabledNote }: { label: string; Icon: typeof Send; to?: string; disabledNote?: string }) {
-  const body = (
-    <>
+function QuickAction({ label, Icon, to }: { label: string; Icon: typeof Send; to: string }) {
+  return (
+    <Link to={to} className="group flex min-h-[88px] flex-1 flex-col items-center gap-1 text-white">
       <span className="grid size-12 place-items-center rounded-full bg-white/20 group-active:bg-white/30">
         <Icon className="size-6" aria-hidden />
       </span>
       <span className="text-center text-small leading-tight font-semibold">{label}</span>
-      {disabledNote && <span className="text-note font-medium text-white/80">{disabledNote}</span>}
-    </>
-  )
-  if (!to || disabledNote) {
-    return (
-      <button type="button" disabled aria-disabled="true" title={disabledNote} className="group flex min-h-[88px] flex-1 flex-col items-center gap-1 text-white opacity-60">
-        {body}
-      </button>
-    )
-  }
-  return (
-    <Link to={to} className="group flex min-h-[88px] flex-1 flex-col items-center gap-1 text-white">
-      {body}
     </Link>
   )
 }
 
+// Ba lối đi thật. Nút "Kiểm tra" (chưa có màn) đã bỏ: thứ trông như bấm được thì phải bấm được (ui-design-review.md §3.2 #3);
+// kiểm tra trước khi chi vẫn có ở bước chuyển tiền và trong chat.
 function QuickActions() {
   return (
     <nav aria-label="Hành động nhanh" className="mt-4 flex gap-1">
       <QuickAction label="Chuyển tiền" Icon={Send} to="/transfer" />
       <QuickAction label="Tiền vào" Icon={ArrowDownToLine} to="/income" />
       <QuickAction label="Giữa hũ" Icon={ArrowLeftRight} to="/move" />
-      <QuickAction label="Kiểm tra" Icon={ShieldCheck} to="/check" disabledNote="Sắp có" />
     </nav>
   )
 }
@@ -110,12 +102,14 @@ function ProactiveCardFor({ card, data, onAction, footer }: {
 }) {
   const d = card.data
   const jar = d.jar_code ? data.jars.find((j) => j.code === d.jar_code) : undefined
+  // Cảnh 1: thẻ cảnh báo cạn có số lớn "N ngày" hũ trống trước kỳ lương và dải ô ngày tới kỳ lương; chạy một lần mỗi phiên.
+  const animate = useAnimateOnce('runout-strip')
+  const runout = d.kind === 'runout_warning' && data.next_payday && jar?.runout_date ? { payday: data.next_payday.date, date: jar.runout_date } : null
+  const emptyDays = runout ? emptyDaysBeforePayday(runout.date, runout.payday, data.app_date) : null
   return (
     <div className="mx-4 mt-4">
-      <ProactiveCard data={d} onAction={onAction}>
-        {d.kind === 'runout_warning' && data.next_payday && jar?.runout_date && (
-          <MiniTimeline today={data.app_date} paydayDate={data.next_payday.date} runoutDate={jar.runout_date} />
-        )}
+      <ProactiveCard data={d} onAction={onAction} hero={emptyDays !== null ? <RunoutHero days={emptyDays} animate={animate} /> : undefined}>
+        {runout && <MiniTimeline today={data.app_date} paydayDate={runout.payday} runoutDate={runout.date} animate={animate} />}
       </ProactiveCard>
       {footer}
     </div>
@@ -231,7 +225,7 @@ export function OverviewPage() {
 
   if (data && !data.profile.onboarded) return <Navigate to="/onboarding" replace />
 
-  const max = data ? Math.max(0, ...data.jars.map((j) => j.balance_vnd)) : 0
+  const bnplDue = data ? nearestBnpl(data.obligations_due) : undefined
   return (
     <>
       <Header name={name} />
@@ -264,16 +258,16 @@ export function OverviewPage() {
           {data.jars.length === 0 ? (
             <p className="px-4 text-small text-ink-2">Chưa có hũ nào trong tài khoản này.</p>
           ) : (
-            <ul className="flex snap-x gap-3 overflow-x-auto scroll-px-4 px-4 pt-1 pb-4 [scrollbar-width:none]" aria-label="Danh sách hũ">
-              {data.jars.map((j) => (
-                <li key={j.code} className="shrink-0">
-                  <Link to={`/jars/${j.code}`} className="block text-left" aria-label={`Mở hũ ${j.name}`}>
-                    <JarCard jar={j} level={jarLevel(j, max)} forecastLevel={jarForecastLevel(j, max)} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <JarCarousel jars={data.jars} />
           )}
+
+          <JarRunway
+            jars={data.jars}
+            appDate={data.app_date}
+            nextPayday={data.next_payday}
+            obligations={data.obligations_due}
+            forecast={data.forecast}
+          />
 
           <RoadmapEntryRow />
 
@@ -284,6 +278,18 @@ export function OverviewPage() {
               subtitle="Kiểm tra các hũ Yofina đã tự chọn"
               icon={<ListChecks className="size-5" aria-hidden />}
             />
+          )}
+
+          {data.credit_line && data.credit_line.outstanding_vnd > 0 && (
+            <div className="mx-4 mt-3">
+              <CreditUsage
+                line={data.credit_line}
+                due={bnplDue}
+                payJar={payJarFor(bnplDue, data.jars)}
+                to="/obligations"
+                testId="credit-usage"
+              />
+            </div>
           )}
 
           {data.obligations_due.length > 0 && (

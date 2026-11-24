@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { restFixture } from '@/test/fixtures'
@@ -40,6 +40,34 @@ describe('Nghĩa vụ', () => {
     expect(rows[1]).toHaveTextContent('333.000 ₫')
     expect(within(rows[1]!).queryByRole('link')).toBeNull()
     expect(screen.getByTestId('obligations-total')).toHaveTextContent('708.000 ₫')
+  })
+
+  it('B6: thanh hạn mức đã dùng trên tổng; khoản Trả sau đến hạn gần nhất so với số dư hũ trả (từ Tổng quan)', async () => {
+    mountApp(backend(), '/obligations')
+    const credit = await screen.findByTestId('credit-line')
+    expect(within(credit).getByRole('heading', { name: 'Đã dùng Trả sau bao nhiêu' })).toBeInTheDocument()
+    expect(within(credit).getByRole('img', { name: /^Đã dùng 300\.000\s₫ trên hạn mức 5\.000\.000\s₫, còn 4\.700\.000\s₫$/ })).toBeInTheDocument()
+    expect(credit).toHaveTextContent('Đã dùng 300.000 ₫ (6%)')
+    const due = await within(credit).findByTestId('credit-due')
+    expect(due).toHaveTextContent('Đến hạn 05/12')
+    expect(due).toHaveTextContent('Phải trả: gốc 300.000 ₫ + phí 33.000 ₫')
+    expect(await within(due).findByTestId('credit-due-status')).toHaveTextContent('Đủ trả')
+    expect(due).toHaveTextContent(/Hũ Nghĩa vụ đang có\s*1\.000\.000 ₫/)
+    // Màn Nghĩa vụ không có lối quay về chính nó
+    expect(within(credit).queryByRole('link', { name: /Xem các khoản Trả sau/ })).toBeNull()
+  })
+
+  it('B6: chưa dùng Trả sau thì thanh rỗng và nói rõ; không có hạn mức thì không có thẻ', async () => {
+    const none = { ...(restFixture('CreditLineResponse.default') as Json) }
+    none.credit_line = { ...none.credit_line, outstanding_vnd: 0, available_vnd: 5000000 }
+    mountApp(backend({ 'GET /credit-line': none, 'GET /obligations': { app_date: '2026-11-21', obligations: [], total_due_vnd: 0 } }), '/obligations')
+    const credit = await screen.findByTestId('credit-line')
+    expect(credit).toHaveTextContent('Chưa dùng Trả sau. Hạn mức 5.000.000 ₫.')
+    expect(within(credit).queryByTestId('credit-due')).toBeNull()
+    cleanup()
+    mountApp(backend({ 'GET /credit-line': restFixture('CreditLineResponse.none') }), '/obligations')
+    expect(await screen.findByTestId('obligation-list')).toBeInTheDocument()
+    expect(screen.queryByTestId('credit-line')).toBeNull()
   })
 
   it('rỗng: trạng thái rỗng có nút thêm; lỗi: Thử lại', async () => {

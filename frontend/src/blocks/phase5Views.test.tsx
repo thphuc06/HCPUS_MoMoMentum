@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { ChatLauncherContext } from '@/chat/launcher'
 import { BehaviorInsightBlock, CitationBlock } from '@/contracts/blocks'
-import { formatEvidencePeriod, formatEvidenceValue, weekdayLabel } from '@/features/behavior/format'
+import { formatEvidencePeriod, formatEvidenceValue, shareGapText, sharePairs, weekdayLabel } from '@/features/behavior/format'
 import { Providers, fakeApi } from '@/test/helpers'
 import { validBlock } from '@/test/fixtures'
 import { BlockRenderer } from './registry'
@@ -73,6 +73,49 @@ describe('behavior_insight', () => {
     expect(weekdayLabel(6)).toBe('Thứ Bảy')
     expect(formatEvidencePeriod({})).toBe('')
     expect(formatEvidencePeriod({ period_from: '2026-11-05' })).toBe('từ 05/11')
+  })
+})
+
+describe('behavior_insight: B3 thanh "phần chi" so với "phần số ngày"', () => {
+  const withEvidence = (name: string, patch: (ev: Array<Record<string, unknown>>) => void) => {
+    const raw = structuredClone(validBlock(name)) as { data: { insight: { evidence: Array<Record<string, unknown>> } } }
+    patch(raw.data.insight.evidence)
+    return BehaviorInsightBlock.parse(raw)
+  }
+
+  it('cặp phần chi tuần đầu sau lương và phần số ngày: hai thanh, nhãn đủ cho trình đọc màn hình, chênh lệch bằng chữ; bảng bằng chứng giữ nguyên', () => {
+    const block = withEvidence('behavior_insight.chi_don_sau_luong', (ev) => {
+      ev.push({ key: 'first_week_day_share', label: 'Phần số ngày thuộc tuần đầu sau lương', value: 23, unit: 'percent' })
+    })
+    render(<Providers api={fakeApi()}><BlockRenderer raw={block} blockId={block.id} /></Providers>)
+    const card = screen.getByRole('region', { name: `Nhận xét: ${block.data.insight.headline}` })
+    const bars = within(card).getByTestId('evidence-bars')
+    expect(within(bars).getByRole('img', {
+      name: 'Phần chi trong 7 ngày đầu sau lương 46%; Phần số ngày thuộc tuần đầu sau lương 23%. Nhiều hơn mức chi đều 23 điểm phần trăm.',
+    })).toBeInTheDocument()
+    const fills = bars.querySelectorAll<HTMLElement>('[style*="width"]')
+    expect([...fills].map((f) => f.style.width)).toEqual(['46%', '23%'])
+    // Bảng bằng chứng vẫn là bản tương đương đầy đủ
+    expect(card.querySelector('[data-evidence="first_week_day_share"]')).toHaveTextContent('23%')
+    expect(card.querySelector('[data-evidence="first_week_share"]')).toHaveTextContent('46%')
+  })
+
+  it('cuối tuần đơn vị tỷ lệ cũng vẽ; thiếu một vế hoặc khác đơn vị thì không vẽ thanh (giữ bảng như cũ)', () => {
+    const weekend = [
+      { key: 'weekend_share', label: 'Phần chi vào thứ Bảy, Chủ nhật', value: 0.37, unit: 'ratio' },
+      { key: 'weekend_day_share', label: 'Phần số ngày là cuối tuần', value: 0.26, unit: 'ratio' },
+    ] as const
+    const pairs = sharePairs(weekend as never)
+    expect(pairs.map((p) => [p.share.key, Math.round(p.sharePct), Math.round(p.basePct)])).toEqual([['weekend_share', 37, 26]])
+    expect(shareGapText(pairs[0]!)).toBe('Nhiều hơn mức chi đều 11 điểm phần trăm.')
+    expect(sharePairs([weekend[0]] as never)).toEqual([])
+    expect(sharePairs([weekend[0], { ...weekend[1], unit: 'percent', value: 26 }] as never)).toEqual([])
+    expect(shareGapText({ sharePct: 20, basePct: 30 })).toBe('Ít hơn mức chi đều 10 điểm phần trăm.')
+    expect(shareGapText({ sharePct: 30, basePct: 30 })).toBe('Bằng mức chi đều.')
+
+    const block = BehaviorInsightBlock.parse(validBlock('behavior_insight.chi_don_sau_luong'))
+    render(<Providers api={fakeApi()}><BlockRenderer raw={block} blockId={block.id} /></Providers>)
+    expect(screen.queryByTestId('evidence-bars')).toBeNull()
   })
 })
 
