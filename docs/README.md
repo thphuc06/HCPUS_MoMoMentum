@@ -6,6 +6,7 @@
 | Thư mục nào chứa gì, FAST (chỉ tham khảo) | [architecture/project-structure.md](architecture/project-structure.md) |
 | Kiến trúc AWS, 3 nhịp chạy, harness 6 tầng, tool, dữ liệu | [architecture/overview.md](architecture/overview.md) |
 | FR/NFR, MVP vs mở rộng | [requirements/requirements.md](requirements/requirements.md) |
+| Bộ tài liệu BA: bối cảnh thị trường và pain point, BC/BR, FR chi tiết, NFR đo được, AC | [ba/README.md](ba/README.md) |
 | Câu hỏi chưa chốt | [requirements/open-questions.md](requirements/open-questions.md) |
 | Quyết định kiến trúc (ADR) | [decisions/README.md](decisions/README.md) |
 | Link nguồn theo chủ đề | [references/links.md](references/links.md) |
