@@ -214,7 +214,9 @@ class IngestApi:
             jobs.append(item)
         return {"jobs": jobs}
 
-    def get_job(self, uid: str, job_id_raw: Any, *, trace_id: str) -> dict[str, Any]:
+    def get_job(
+        self, uid: str, job_id_raw: Any, *, trace_id: str, source_tool: str = "rest:GET /ingest/jobs"
+    ) -> dict[str, Any]:
         job_id = _uuid("job_id", job_id_raw, code=ErrorCode.INGEST_JOB_NOT_FOUND)
         found = self.repo.get_job(uid, job_id, REVIEW_ROW_LIMIT)
         if found is None:
@@ -245,7 +247,7 @@ class IngestApi:
                 rows=rows,
                 jars=jars,
                 trace_id=trace_id,
-                source_tool="rest:GET /ingest/jobs",
+                source_tool=source_tool,
                 as_of=now,
                 app_date=app_date,
             )
@@ -273,7 +275,7 @@ class IngestApi:
                     # lần chốt đã yêu cầu tính lại dự báo; trạng thái từng lần gọi không lưu lại
                     forecast_refresh="queued" if self._forecast is not None else "skipped",
                     trace_id=trace_id,
-                    source_tool="rest:GET /ingest/jobs",
+                    source_tool=source_tool,
                     as_of=now,
                     app_date=app_date,
                 )
@@ -391,14 +393,22 @@ class IngestApi:
         self, uid: str, *, tool: Any, params: Any, client_params_hash: Any, trace_id: str
     ) -> tuple[Any, dict[str, Any]]:
         """Người dùng bấm "Xem lại": kiểm nghiệp vụ, tính xem trước, ký token cho (người, tool, tham số). Không ghi gì."""
-        norm = self._normalize(tool, params)
-        prep = self._prepare(uid, norm)
+        norm, preview = self.preview_confirmation(uid, tool=tool, params=params)
         digest = hash_normalized_params(CONFIRM_ROWS, norm)
         if client_params_hash and client_params_hash != digest:
             raise YofinaError(
                 ErrorCode.PARAMS_MISMATCH,
                 "Tham số khác với khối xác nhận bạn đang xem; hãy hỏi lại.",
             )
+        return self.confirm.issue(uid, CONFIRM_ROWS, norm), preview
+
+    def preview_confirmation(
+        self, uid: str, *, tool: Any, params: Any
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Chuẩn hóa, kiểm nghiệp vụ và tính bản xem trước (`summary`, `changes`, `warnings`) của một lần chốt. Không ghi gì, không
+        ký token: REST `POST /ingest/confirmations` ký thêm token, tool Gateway `confirm_rows` không token chỉ trả bản xem trước."""
+        norm = self._normalize(tool, params)
+        prep = self._prepare(uid, norm)
         before, after = self._coverage_preview(uid, prep["spend"], prep["income"])
         changes: list[dict[str, str]] = [
             {"label": "Thêm vào lịch sử chi tiêu", "after": f"{prep['count']} dòng ngoài ví"},
@@ -424,7 +434,7 @@ class IngestApi:
             preview["warnings"] = [
                 f"{prep['rejected']} dòng sẽ được bỏ qua, không ghi vào lịch sử."
             ]
-        return self.confirm.issue(uid, CONFIRM_ROWS, norm), preview
+        return norm, preview
 
     def apply_action(
         self,
@@ -434,6 +444,7 @@ class IngestApi:
         params: Any,
         confirm_token: str | None,
         trace_id: str,
+        source_tool: str = "rest:POST /ingest/actions",
     ) -> Any:
         """Chốt dòng (cần token): chuẩn hóa, kiểm chữ ký/hạn/người/tool/hash, kiểm nghiệp vụ, RỒI MỚI tiêu `jti`, ghi một transaction,
         tính lại dự báo (không bao giờ làm hỏng việc đã ghi), trả `receipt_action` kèm `coverage_change`."""
@@ -483,7 +494,7 @@ class IngestApi:
             jars_affected=[{"code": c, "name": names.get(c, c)} for c in out.jar_codes],
             forecast_refresh="queued" if queued else "skipped",
             trace_id=trace_id,
-            source_tool="rest:POST /ingest/actions",
+            source_tool=source_tool,
             as_of=now,
             app_date=app_date,
         )
@@ -510,7 +521,7 @@ class IngestApi:
             app_date=app_date,
             summary=f"Đã thêm {out.rows_added} dòng ngoài ví vào lịch sử chi tiêu",
             trace_id=trace_id,
-            source_tool="rest:POST /ingest/actions",
+            source_tool=source_tool,
             reference_id=norm["job_id"],
             amount_vnd=out.external_spend_added_vnd or None,
             jars_after=[],

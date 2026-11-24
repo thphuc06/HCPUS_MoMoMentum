@@ -32,6 +32,7 @@ import yofina_ingest.api  # noqa: E402
 import yofina_ingest.classify  # noqa: E402
 import yofina_ingest.context  # noqa: E402
 import yofina_ingest.csvparse  # noqa: E402
+import yofina_ingest.gateway_api  # noqa: E402
 import yofina_ingest.normalize  # noqa: E402
 import yofina_ingest.prompts  # noqa: E402
 import yofina_ingest.repo  # noqa: E402
