@@ -24,7 +24,8 @@
         "risk_within_tolerance",
         "no_credit_for_discretionary",
         "obligation_income_ratio",
-        "source_jar_balance_covers"
+        "source_jar_balance_covers",
+        "emergency_fund_not_for_discretionary"
       ]
     },
     "severity": {

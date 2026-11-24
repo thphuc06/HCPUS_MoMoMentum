@@ -615,6 +615,9 @@ async def _call_analyst(
     a: Analysis = res.value
     # origin do mã đặt, không tin model: phương án do hệ thống đề xuất luôn bị kiểm nghiêm hơn lời người dùng tự hỏi
     options = [o.model_copy(update={"proposal": normalize_proposal(o)}) for o in a.options]
+    # khoản mua của kịch bản là chi tùy ý khi không ai nói khác: phương án trả khoản đó bằng tiền hũ mang cùng phân loại
+    if spend_amount is not None:
+        options = [inherit_purchase_class(o) for o in options]
     # nhãn, tóm tắt, hũ và số tiền của phương án "dùng hũ khác" theo hũ thật của đề xuất (Verifier kiểm chính chữ đã dựng này)
     options = [enforce_switch_jar(o, turn.jar_rows, spend_amount) for o in options]
     # "trả ngay bằng tiền hũ" trả cả khoản mua: số tiền không nhỏ hơn giá món, chữ nói đúng hũ đủ hay không
@@ -660,6 +663,56 @@ def normalize_proposal(o: Any) -> Any:
 CREDIT_OPTION_KINDS = frozenset({"use_credit", "proceed"})
 #: loại phương án chi NGAY bằng tiền của một hũ (dùng hũ khác, trả ngay, giảm số tiền): hũ đó phải đủ tiền mới được gắn "Đủ"
 JAR_SPEND_OPTION_KINDS = frozenset({"switch_jar", "pay_now", "reduce_amount"})
+
+
+def inherit_purchase_class(o: AnalysisOption) -> AnalysisOption:
+    """Phương án trả khoản mua của kịch bản bằng tiền hũ (dùng hũ khác, trả ngay, giảm số tiền) mang phân loại của khoản mua đó.
+
+    Kịch bản mua một lần, Trả sau, chi lặp lại là chi tùy ý khi người gọi không nói `is_essential` (`yofina_planner.engine.
+    DISCRETIONARY_KINDS`), nhưng đề xuất của phương án mang `kind` của phương án (`switch_jar`...) nên engine không suy được phân loại.
+    Model bỏ trống thì đặt `is_essential=false` và `category=spending`; model đã nói (kể cả "thiết yếu") thì giữ nguyên. Không có phân
+    loại, các luật chỉ áp cho khoản không thiết yếu (nghĩa vụ trước, giữ quỹ dự phòng) bị bỏ qua."""
+    p = o.proposal
+    if o.kind not in JAR_SPEND_OPTION_KINDS or p.funding_source == "credit":
+        return o
+    update: dict[str, Any] = {}
+    if p.is_essential is None:
+        update["is_essential"] = False
+    if p.category is None:
+        update["category"] = "spending"
+    if not update:
+        return o
+    return o.model_copy(update={"proposal": p.model_copy(update=update)})
+
+
+#: luật "giữ quỹ dự phòng cho việc gấp" (`rules/emergency_not_for_discretionary.yaml`, mức warn)
+EMERGENCY_RULE_ID = "emergency_not_for_discretionary"
+#: câu nói rõ phương án đang tiêu quỹ dự phòng; {name}: tên hũ thật của đề xuất
+EMERGENCY_FUND_NOTE = "Tiền lấy từ quỹ dự phòng (hũ {name}), vốn nên giữ cho việc gấp."
+
+
+def mark_emergency_spend(o: Any, verdict: SuitabilityVerdict, jar_rows: list[dict[str, Any]]) -> Any:
+    """Phương án bị luật giữ quỹ dự phòng cảnh báo: không bao giờ là "Gợi ý", tóm tắt nói rõ tiền lấy từ quỹ dự phòng (mã quyết định).
+
+    Luật ở mức warn nên phương án vẫn được đưa cho người dùng tự chọn. Hũ lấy từ đề xuất đã kiểm (`proposal.jar_code`), tên hũ từ số dư
+    thật; câu không chứa số nên không cần kiểm lại căn cứ số liệu. Tóm tắt đã có câu đó thì không thêm lần nữa."""
+    if not any(v.rule_id == EMERGENCY_RULE_ID for v in verdict.violations):
+        return o
+    code = o.proposal.jar_code or o.jar_code
+    row = _jar_row(code, jar_rows)
+    note = EMERGENCY_FUND_NOTE.format(name=str((row or {}).get("name") or code))
+    summary = o.summary
+    if note not in summary:
+        room = 200 - len(note) - 1
+        head = summary if len(summary) <= room else summary[: room - 1].rstrip() + "…"
+        summary = f"{head} {note}"
+    return o.model_copy(update={"recommended": None, "summary": summary})
+
+
+def mark_emergency_options(
+    pairs: list[tuple[Any, SuitabilityVerdict]], jar_rows: list[dict[str, Any]]
+) -> list[tuple[Any, SuitabilityVerdict]]:
+    return [(mark_emergency_spend(o, v, jar_rows), v) for o, v in pairs]
 
 
 def _jar_row(code: str | None, jar_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -844,6 +897,7 @@ async def _verify(
 
 async def _compose(turn: Turn, analysis: Analysis, checked: list[tuple[Any, SuitabilityVerdict]], st: WhatIfState) -> None:
     """L5: (guardrail ra) -> tool ghi lấy khối xác nhận -> khối `options` -> khối xác nhận -> văn bản stream."""
+    checked = mark_emergency_options(checked, turn.jar_rows)
     with turn.step("composer"):
         if not await _output_allowed(turn, [analysis.narrative, *(f"{o.label}. {o.summary}" for o, _ in checked)], st):
             return
@@ -959,6 +1013,7 @@ async def _compose_degraded(
         turn.emit_notice(kind="degraded", code=None, title=t, message=m, retryable=False, degraded_reason="verifier_failed")
         return
     turn.record_verdict(verdict, picked)
+    picked = mark_emergency_options(picked, turn.jar_rows)
     with turn.step("composer"):
         if not await _output_allowed(turn, [f"{o.label}. {o.summary}" for o, _ in picked], st):
             return

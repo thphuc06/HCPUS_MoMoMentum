@@ -1,4 +1,4 @@
-"""Bộ luật suitability: nạp YAML (dữ liệu), năm bộ đánh giá, ngưỡng đọc từ file (đổi file đổi kết quả, không đổi mã)."""
+"""Bộ luật suitability: nạp YAML (dữ liệu), bảy bộ đánh giá, ngưỡng đọc từ file (đổi file đổi kết quả, không đổi mã)."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ RULE_IDS = [
     "no_borrow_to_spend",
     "obligation_to_income",
     "source_jar_covers",
+    "emergency_not_for_discretionary",
 ]
 
 
@@ -70,7 +71,8 @@ def by(verdict):
 # --- nạp luật -------------------------------------------------------------------------------------------
 def test_sau_luat_nap_tu_yaml_theo_thu_tu_va_phien_ban():
     assert [r.id for r in RULES] == RULE_IDS
-    assert rules_version(RULES) == "v1.1.1.1.1.2"  # source_jar_covers v2: khoản từ kỳ lương kế so với thu nhập tháng
+    # source_jar_covers v2: khoản từ kỳ lương kế so với thu nhập tháng; emergency_not_for_discretionary v1 (luật thứ bảy, phase 5)
+    assert rules_version(RULES) == "v1.1.1.1.1.2.1"
     assert all(p.stem in RULE_IDS for p in default_rules_dir().glob("*.yaml"))
 
 
@@ -221,6 +223,59 @@ def test_nguong_hu_nguon_la_du_lieu(tmp_path: Path):
     assert by(check(prop))["source_jar_covers"].outcome == "pass"
     v = evaluate(Proposal.model_validate(prop, strict=False), facts(), load_rules(tmp_path / "r"))
     assert by(v)["source_jar_covers"].outcome == "fail"  # phải giữ lại 500.000 ₫
+
+
+# --- luật 7: giữ quỹ dự phòng cho việc gấp --------------------------------------------------------------
+#: what-if "mua tai nghe 1,2 triệu bằng Trả sau" (Runtime v23): phương án "Mua bằng hũ Dự phòng" do hệ thống đề xuất
+HEADPHONES = {"kind": "switch_jar", "amount_vnd": 1_200_000, "funding_source": "jar", "jar_code": "du_phong",
+              "is_essential": False, "category": "spending", "risk_level": "low", "origin": "recommendation"}  # fmt: skip
+EMERGENCY = "emergency_not_for_discretionary"
+
+
+@pytest.mark.parametrize("origin", ["recommendation", "user_request"])
+def test_quy_du_phong_cho_khoan_khong_thiet_yeu_thi_canh_bao_khong_chan(origin):
+    v = check({**HEADPHONES, "origin": origin})
+    c = by(v)[EMERGENCY]
+    assert c.outcome == "warn" and "Dự phòng" in c.detail and "1.200.000" in c.detail
+    assert [(x.rule_id, x.severity) for x in v.violations] == [(EMERGENCY, "warn")]
+    assert v.ok  # mức warn: phương án vẫn được đưa cho người dùng, không bị loại
+    assert EMERGENCY not in passed_rule_ids(v)
+
+
+def test_quy_du_phong_mua_sam_khong_noi_ro_thiet_yeu_la_tuy_y():
+    # mua một lần không nói is_essential: chi tùy ý theo mặc định của engine (effective_essential)
+    prop = {"kind": "one_time_purchase", "amount_vnd": 1_200_000, "funding_source": "jar", "jar_code": "du_phong", "category": "spending"}
+    assert by(check(prop))[EMERGENCY].outcome == "warn"
+
+
+def test_quy_du_phong_khoan_thiet_yeu_hoac_hu_khac_thi_khong_canh_bao():
+    assert by(check({**HEADPHONES, "is_essential": True}))[EMERGENCY].outcome == "skipped"  # thuốc, tiền trọ...
+    # hũ tiết kiệm có mục tiêu (Du lịch) và hũ chi tiêu không phải quỹ dự phòng
+    for code in ("du_lich", "hoa_don"):
+        c = by(check({**HEADPHONES, "jar_code": code}))[EMERGENCY]
+        assert c.outcome == "pass" and "không phải quỹ dự phòng" in c.detail
+    # hũ Dự phòng đã gắn mục tiêu thì không còn là quỹ dự phòng (cùng định nghĩa với facts.emergency_fund_vnd)
+    goal = facts(jars=(JarFact("du_phong", "Dự phòng", "saving", 2_700_000, goal_vnd=5_000_000),))
+    assert by(check(HEADPHONES, goal))[EMERGENCY].outcome == "pass" and goal.emergency_fund_vnd() == 0
+
+
+def test_quy_du_phong_khong_ap_cho_de_xuat_khong_chi_tieu_bang_tien_hu():
+    # bước lộ trình để dành từ hũ Dự phòng (category saving), vay, hoãn không lấy tiền: không phải tiêu quỹ dự phòng
+    assert by(check(STEP))[EMERGENCY].outcome == "skipped"
+    credit = {**HEADPHONES, "kind": "use_credit", "funding_source": "credit"}
+    assert by(check(credit))[EMERGENCY].outcome == "skipped"
+    defer = {"kind": "defer", "funding_source": "jar", "jar_code": "du_phong", "is_essential": False, "category": "spending"}
+    assert by(check(defer))[EMERGENCY].outcome == "skipped"
+    # thiếu phân loại (kind của phương án, không nói is_essential): engine không đoán
+    unknown = {k: v for k, v in HEADPHONES.items() if k != "is_essential"}
+    assert by(check(unknown))[EMERGENCY].outcome == "skipped"
+
+
+def test_luat_quy_du_phong_la_du_lieu_muc_warn():
+    rule = next(r for r in RULES if r.id == EMERGENCY)
+    assert rule.severity == "warn" and rule.severity_for("recommendation") == "warn"
+    assert rule.applies_when is not None and rule.applies_when.essential is False
+    assert rule.applies_when.funding_sources == ["jar"] and rule.applies_when.categories == ["spending"]
 
 
 # --- khoản bắt đầu từ kỳ lương kế (bước hằng tháng của giai đoạn sau trong lộ trình) ---------------------------

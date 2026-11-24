@@ -1,4 +1,4 @@
-"""Bộ đánh giá suitability: sáu luật của `rules/*.yaml`, mỗi luật một hàm theo tên `evaluator`. Tất định, không model.
+"""Bộ đánh giá suitability: bảy luật của `rules/*.yaml`, mỗi luật một hàm theo tên `evaluator`. Tất định, không model.
 
 `evaluate(proposal, facts, rules)` trả `SuitabilityVerdict` có `checked` LIỆT KÊ ĐỦ mọi luật (luật không áp dụng thì `skipped`),
 `violations` (mỗi vi phạm kèm mức block hoặc warn theo luật và theo nguồn của đề xuất) và `ok` (đúng khi không có block).
@@ -230,6 +230,24 @@ def _source_jar_covers(
     )
 
 
+def _emergency_not_for_discretionary(
+    rule: SuitabilityRule, proposal: Proposal, facts: SuitabilityFacts, ctx: Context
+) -> Outcome:
+    """Khoản không thiết yếu không lấy tiền từ quỹ dự phòng. Luật chỉ tới đây khi `applies_when` khớp (chi tiêu, tiền hũ, khoản
+    không thiết yếu theo `effective_essential`); hũ nguồn là quỹ dự phòng theo cùng định nghĩa của `facts.emergency_fund_vnd`."""
+    if not proposal.amount_vnd or not proposal.jar_code:
+        return Outcome("skipped", "Đề xuất không lấy một khoản tiền cụ thể từ hũ nào.")
+    jar = facts.jar(proposal.jar_code)
+    if jar is None:
+        return Outcome("skipped", "Không thấy hũ nguồn trong ví để đối chiếu.")
+    if not facts.is_emergency_jar(jar):
+        return Outcome("pass", f"Hũ {jar.name} không phải quỹ dự phòng.")
+    return Outcome(
+        "fail",
+        f"Lấy {format_vnd(proposal.amount_vnd)} từ hũ {jar.name} (quỹ dự phòng) cho khoản không thiết yếu.",
+    )
+
+
 EVALUATORS_BY_NAME: dict[str, Evaluator] = {
     "essential_obligations_covered": _essential_covered,
     "emergency_fund_before_investing": _emergency_before_investing,
@@ -237,6 +255,7 @@ EVALUATORS_BY_NAME: dict[str, Evaluator] = {
     "no_credit_for_discretionary": _no_credit_for_discretionary,
     "obligation_income_ratio": _obligation_income_ratio,
     "source_jar_balance_covers": _source_jar_covers,
+    "emergency_fund_not_for_discretionary": _emergency_not_for_discretionary,
 }
 
 

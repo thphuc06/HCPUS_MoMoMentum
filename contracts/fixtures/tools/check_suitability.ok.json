@@ -35,6 +35,11 @@
         "rule_id": "source_jar_covers",
         "label": "Hũ nguồn đủ tiền",
         "outcome": "skipped"
+      },
+      {
+        "rule_id": "emergency_not_for_discretionary",
+        "label": "Giữ quỹ dự phòng cho việc gấp",
+        "outcome": "skipped"
       }
     ],
     "rules_version": "1"

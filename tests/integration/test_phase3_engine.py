@@ -465,6 +465,7 @@ def test_check_suitability_liet_ke_du_nam_luat_va_chan_vay_de_tieu(tool, schema_
         "no_borrow_to_spend",
         "obligation_to_income",
         "source_jar_covers",  # luật thứ sáu (23/11): hũ nguồn đủ tiền
+        "emergency_not_for_discretionary",  # luật thứ bảy (25/11): giữ quỹ dự phòng cho việc gấp
     }
     rec = tool(
         "minh",

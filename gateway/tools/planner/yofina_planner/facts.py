@@ -92,9 +92,14 @@ class SuitabilityFacts:
                 total += Decimal(ob.amount_vnd) / 12
         return total
 
+    def is_emergency_jar(self, jar: JarFact) -> bool:
+        """Hũ thuộc quỹ dự phòng: hũ tiết kiệm không gắn mục tiêu cụ thể (hũ có mục tiêu là để dành cho việc khác). Cùng định nghĩa
+        với `yofina_forecast.resilience.emergency_jar`."""
+        return jar.kind == "saving" and jar.goal_vnd is None
+
     def emergency_fund_vnd(self) -> int:
-        """Quỹ dự phòng: số dư các hũ tiết kiệm không gắn mục tiêu cụ thể (hũ có mục tiêu là để dành cho việc khác)."""
-        return sum(j.balance_vnd for j in self.jars if j.kind == "saving" and j.goal_vnd is None)
+        """Quỹ dự phòng: tổng số dư các hũ thuộc quỹ dự phòng (`is_emergency_jar`)."""
+        return sum(j.balance_vnd for j in self.jars if self.is_emergency_jar(j))
 
 
 def facts_from_rows(
