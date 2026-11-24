@@ -38,7 +38,7 @@ Không thuộc dự án, không được đụng: cluster Aurora và Cognito use
 |---|---|---|---|---|
 | `yofina-users` | Cognito user pool | 1 | Không (10.000 MAU đầu miễn phí) | Tắt tự đăng ký, đăng nhập bằng email, deletion protection, RETAIN |
 | `yofina-web` | Cognito app client | 1 | Không | Công khai, không secret, SRP, access token 60 phút |
-| `ops` | Cognito group | 1 | Không | |
+| `ops` | Cognito group | 1 | Không | Từ 24/11 (phase 5) có đúng một thành viên: tài khoản demo `minh` (thêm bằng `aws cognito-idp admin-add-user-to-group`, ngoài CDK), để xem `/ops/*` và màn trace X1. Các tài khoản demo khác không thuộc nhóm (kiểm 403) |
 | `/yofina/auth/…` | SSM Parameter | 1 | Không | user pool id, client id, discovery URL |
 
 ### Stack `YofinaFrontend` (phase 1)
@@ -176,6 +176,22 @@ Thuộc stack `YofinaTools` (construct `RoadmapRegen`, `infra-cdk/lib/roadmap-re
 | `yofina-roadmap-events-dlq-not-empty` | CloudWatch alarm | 4 | Không đáng kể (khoảng 0,10 USD/tháng nếu vượt 10 alarm miễn phí) | -> SNS `yofina-alerts` |
 
 Thứ tự khi deploy: build zip (`pipelines/roadmap/README.md`), `uv run scripts/cdk.py diff YofinaTools`, rồi `deploy YofinaTools`. Không cần đổi `YofinaAgent`.
+
+### Phase 5 (hồ sơ hành vi, bản tin, bộ nhớ, xóa dữ liệu, trace và vận hành) — đã deploy 24/11 trưa (`main` d22d2d4)
+
+**Deploy 24/11 trưa (Kiro, worker `p5-deploy`)**: build lại mọi zip theo lệnh hiện hành (ledger bằng `LEDGER_BUILD_COMMAND` có `--keep-boto`, boto3/botocore 1.44.9, 22,3 MB; forecast 48,1 MB; classify 4,1 MB; roadmap 13,2 MB; ingest 3,3 MB có `yofina_classify`; agent 31,0 MB); migration `0053_phase5` trên Aurora; `YofinaIngest` (code hai Lambda, worker thêm `bedrock:InvokeModel` cho `cohere.embed-multilingual-v3`); `YofinaTools` (11 route, dashboard, 8 alarm, code 6 Lambda, IAM ledger); `scripts/agent_deploy.py` -> `YofinaAgent` (Memory, target `ingest`, 4 policy Cedar mới) và Runtime `yofina_agent` **version 21**; frontend Amplify **job 13**. Diff của ba stack chỉ có thêm và sửa tại chỗ, không xóa hay thay thế tài nguyên. Không thêm tài nguyên tính tiền theo giờ (không NAT, OpenSearch, endpoint SageMaker; không bật CloudWatch Transaction Search); Aurora `yofina-db` vẫn min 0 / max 2 ACU, tự ngủ sau 600 s.
+
+| Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
+|---|---|---|---|---|
+| Migration `0053_phase5` | Schema Aurora | 5 | Không | Bảng `behavior_profiles`, `data_deletions` (RLS FORCE); cột mới của `nudges` (`value_vnd`, `gate_reason`, `title`, `body`, `outcome`, `outcome_at`); hàm `app_delete_user_data`, `app_nudge_outcome_stats`, `app_ops_list_traces`, `app_ops_get_trace`, `app_ops_summary`, `app_ops_model_calls_by_day` |
+| `yofina_memory` | AgentCore Memory (stack `YofinaAgent`, construct `LongTermMemory`) + IAM role dịch vụ | 5 | Không (tính theo lượt dùng) | Ba strategy dựng sẵn: `facts` (SEMANTIC), `preferences` (USER_PREFERENCE), `session_summaries` (SUMMARIZATION), namespace `/yofina/users/{actorId}/...`; sự kiện ngắn hạn hết hạn sau 7 ngày. Id ghi ở SSM `/yofina/memory/id` (và `/yofina/memory/arn`); Runtime nhận `YOFINA_MEMORY_ID`, ledger đọc SSM lúc chạy. Phí theo [trang giá AgentCore](https://aws.amazon.com/bedrock/agentcore/pricing/) (ước tính ở `docs/research/agentcore-memory-design.md` mục 2.13): truy xuất khoảng 0,50 USD/1.000 lượt (mỗi lượt chat 2 lần), bản ghi dài hạn khoảng 0,75 USD/1.000 bản ghi/tháng; không dùng thì không tốn |
+| `yofina-memory-failed-extraction` | CloudWatch alarm (Metrics Insights trên `AWS/Bedrock-AgentCore`) | 5 | Không đáng kể (khoảng 0,10 USD mỗi metric được phân tích mỗi tháng) | -> SNS `yofina-alerts` |
+| Target Gateway `ingest` (Lambda `yofina-ingest-api`) + 3 policy Cedar (một policy mỗi tool, khuôn `<target>_<tool>_own_user`) | Gateway target, policy | 5 | Không | Ba tool `ingest___*`; Cedar ép `user_id`; `confirm_rows` cần token xác nhận |
+| Tool `forecast___get_behavior_profile` + policy Cedar | Tool trên target `forecast`, policy | 5 | Không | Đọc `behavior_profiles` |
+| 10 route ledger: `GET /nudges/today`, `POST /nudges/{nudge_id}/feedback`, `GET /memory`, `DELETE /memory`, `DELETE /memory/{record_id}`, `POST /me/delete-data/confirmations`, `POST /me/delete-data`, `GET /ops/traces`, `GET /ops/traces/{trace_id}`, `GET /ops/summary`; 1 route forecast: `GET /profile/behavior` | Route trên HTTP API `yofina-api` | 5 | Không | CORS của `yofina-api` thêm `DELETE`. `/ops/*` chỉ nhóm Cognito `ops` (403 cho người khác) |
+| `yofina-ops` | CloudWatch dashboard | 5 | Không (3 dashboard đầu mỗi tài khoản miễn phí, tài khoản hiện có 2; vượt thì 3 USD/dashboard/tháng) | Lượt, độ trễ, lỗi Lambda tool, lượt gọi model, Aurora ACU, REST 4xx/5xx |
+| `yofina-ops-tool-lambda-errors`, `yofina-ops-ledger-p95-latency`, `yofina-ops-aurora-acu-at-max`, 5 alarm `yofina-ops-model-calls-<model>` | CloudWatch alarm (chuẩn, chu kỳ 5 phút) | 5 | Không đáng kể (0,10 USD mỗi metric mỗi tháng ngoài 10 alarm miễn phí; alarm lỗi tool dùng 2 metric; tổng khoảng 0,90 USD/tháng) | -> SNS `yofina-alerts` |
+| IAM ledger, forecast batch | Quyền thêm trên role `yofina-ledger` và `yofina-forecast-batch` | 5 | Không | Ledger: AgentCore Memory (`ListMemoryRecords`, `GetMemoryRecord`, `DeleteMemoryRecord`, `BatchDeleteMemoryRecords`, `ListSessions`, `ListEvents`, `DeleteEvent`) chỉ trên `memory/yofina_memory-*`; `ssm:GetParameter` chỉ `/yofina/memory/id`; `s3:ListBucket` và `s3:DeleteObject` trong `u/*` của bucket `yofina-ingest-*` (Xóa dữ liệu của tôi). Forecast batch (theo `forecast-pipeline.ts`, model nhỏ viết lại nhận xét hành vi): Bedrock mẫu 3 phần global cho Nova 2 Lite và Haiku 4.5, `yofina-usage` |
 
 ## Không do CDK tạo
 
