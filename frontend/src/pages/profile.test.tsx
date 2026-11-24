@@ -1,15 +1,26 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ERROR_MESSAGES } from '@/api/errors'
 import { BehaviorProfileResponse, MemoryListResponse } from '@/api/phase5Schemas'
 import { MEMORY_KIND_LABEL } from '@/features/profile/MemorySection'
+import {
+  MEMORY_DELETE_GRACE_MS,
+  hideMemoryCreatedBefore,
+  hideMemoryRecords,
+  isMemoryRecordHidden,
+  resetHiddenMemory,
+  unhideMemoryRecords,
+} from '@/features/profile/hiddenMemory'
 import { restFixture } from '@/test/fixtures'
-import { backend, bodyOf, callsTo, config, json, mountApp } from '@/test/mountApp'
+import { backend, bodyOf, callsTo, config, json, mountApp, type Reply } from '@/test/mountApp'
 
 // Màn Hồ sơ phase 5 (thay khung S1): nhận xét hành vi, bộ nhớ của tôi, đồng ý theo nguồn nạp, xóa dữ liệu của tôi, lối vào bảng vận hành.
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  resetHiddenMemory() // trạng thái ẩn sống ở mức module: không để ca trước làm lệch ca sau
+})
 afterEach(() => vi.unstubAllGlobals())
 
 const behavior = BehaviorProfileResponse.parse(restFixture('BehaviorProfileResponse.minh'))
@@ -130,6 +141,114 @@ describe('Hồ sơ: bộ nhớ của tôi', () => {
     expect(screen.getByTestId('profile-declared')).toBeInTheDocument()
     await user.click(within(alert).getByRole('button', { name: 'Thử lại' }))
     expect(await within(section).findByRole('list', { name: 'Các mục nhớ' })).toBeInTheDocument()
+  })
+})
+
+describe('Hồ sơ: xóa bộ nhớ là optimistic, không hiện lại bản ghi đã xóa trong lúc dịch vụ còn trễ', () => {
+  // Đo Runtime v25: ngay sau khi xóa, `GET /memory` còn liệt kê bản ghi cũ khoảng một phút. Backend giả ở đây cũng vậy: GET luôn trả đủ.
+  afterEach(() => vi.restoreAllMocks())
+
+  function deferred() {
+    let release!: (r: Reply) => void
+    const promise = new Promise<Reply>((res) => (release = res))
+    return { promise, release }
+  }
+
+  async function revisitProfile(router: { navigate: (to: string) => Promise<void> }) {
+    await act(() => router.navigate('/'))
+    await act(() => router.navigate('/profile'))
+    return within(await screen.findByRole('region', { name: 'Bộ nhớ của tôi' })).findByRole('list', { name: 'Các mục nhớ' })
+  }
+
+  it('xóa một mục: ẩn ngay khi bấm (trước khi API trả); quay lại Hồ sơ mà GET còn trả thì vẫn ẩn; quá MEMORY_DELETE_GRACE_MS thì hiện', async () => {
+    const user = userEvent.setup()
+    const gate = deferred()
+    const { router, calls } = mountApp(backend({ 'DELETE /memory/*': () => gate.promise }), '/profile')
+    const list = await screen.findByRole('list', { name: 'Các mục nhớ' })
+    const first = memory.records[0]!
+    await user.click(within(list).getByRole('button', { name: `Xóa mục nhớ: ${first.text}` }))
+    expect(within(list).queryByText(first.text)).toBeNull()
+    expect(within(list).getAllByRole('listitem')).toHaveLength(memory.records.length - 1)
+    gate.release({ record_id: first.record_id, deleted: true })
+    await waitFor(() => expect(callsTo(calls, 'DELETE', `/memory/${first.record_id}`)).toHaveLength(1))
+
+    const again = await revisitProfile(router)
+    expect(within(again).getAllByRole('listitem')).toHaveLength(memory.records.length - 1)
+    expect(within(again).queryByText(first.text)).toBeNull()
+
+    const now = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(now + MEMORY_DELETE_GRACE_MS + 1000)
+    const later = await revisitProfile(router)
+    expect(within(later).getByText(first.text)).toBeInTheDocument()
+  })
+
+  it('xóa một mục mà API báo lỗi: mục hiện lại và báo lỗi', async () => {
+    const user = userEvent.setup()
+    const gate = deferred()
+    mountApp(backend({ 'DELETE /memory/*': () => gate.promise }), '/profile')
+    const list = await screen.findByRole('list', { name: 'Các mục nhớ' })
+    const first = memory.records[0]!
+    await user.click(within(list).getByRole('button', { name: `Xóa mục nhớ: ${first.text}` }))
+    expect(within(list).queryByText(first.text)).toBeNull()
+    gate.release(json(503, { error: { code: 'MEMORY_UNAVAILABLE' } }))
+    expect(await within(list).findByText(first.text)).toBeInTheDocument()
+    const section = screen.getByRole('region', { name: 'Bộ nhớ của tôi' })
+    expect(within(section).getByRole('alert')).toHaveTextContent(ERROR_MESSAGES.MEMORY_UNAVAILABLE)
+    expect(within(list).getAllByRole('listitem')).toHaveLength(memory.records.length)
+  })
+
+  it('xóa hết: ẩn ngay khi xác nhận; GET sau đó còn trả bản ghi cũ thì vẫn trống', async () => {
+    const user = userEvent.setup()
+    const gate = deferred()
+    const { router } = mountApp(backend({ 'DELETE /memory': () => gate.promise }), '/profile')
+    const section = await screen.findByRole('region', { name: 'Bộ nhớ của tôi' })
+    await within(section).findByRole('list', { name: 'Các mục nhớ' })
+    await user.click(within(section).getByRole('button', { name: 'Xóa hết' }))
+    await user.click(await screen.findByRole('button', { name: 'Xóa hết bộ nhớ' }))
+    expect(within(section).queryByRole('list', { name: 'Các mục nhớ' })).toBeNull()
+    expect(within(section).getByText('Đang xóa bộ nhớ…')).toBeInTheDocument()
+    gate.release(restFixture('MemoryClearResponse.default'))
+    expect(await within(section).findByText(/Đã xóa 6 mục nhớ/)).toBeInTheDocument()
+    expect(within(section).getByTestId('memory-empty')).toBeInTheDocument()
+    await act(() => router.navigate('/'))
+    await act(() => router.navigate('/profile'))
+    const back = await screen.findByRole('region', { name: 'Bộ nhớ của tôi' })
+    expect(await within(back).findByTestId('memory-empty')).toBeInTheDocument()
+  })
+
+  it('xóa hết mà API báo lỗi: danh sách hiện lại và báo lỗi', async () => {
+    const user = userEvent.setup()
+    const gate = deferred()
+    mountApp(backend({ 'DELETE /memory': () => gate.promise }), '/profile')
+    const section = await screen.findByRole('region', { name: 'Bộ nhớ của tôi' })
+    await within(section).findByRole('list', { name: 'Các mục nhớ' })
+    await user.click(within(section).getByRole('button', { name: 'Xóa hết' }))
+    await user.click(await screen.findByRole('button', { name: 'Xóa hết bộ nhớ' }))
+    expect(within(section).queryByRole('list', { name: 'Các mục nhớ' })).toBeNull()
+    gate.release(json(503, { error: { code: 'MEMORY_UNAVAILABLE' } }))
+    const list = await within(section).findByRole('list', { name: 'Các mục nhớ' })
+    expect(within(list).getAllByRole('listitem')).toHaveLength(memory.records.length)
+    expect(within(section).getByRole('alert')).toHaveTextContent(ERROR_MESSAGES.MEMORY_UNAVAILABLE)
+  })
+})
+
+describe('hiddenMemory: ẩn theo id và theo mốc "xóa hết", có hạn', () => {
+
+  it('ẩn theo id đến hết hạn; bỏ ẩn được; "xóa hết" ẩn bản ghi tạo trước mốc, không ẩn bản ghi mới hơn', () => {
+    const t0 = Date.parse('2026-11-25T10:00:00Z')
+    const old = { record_id: 'mem-a', created_at: '2026-11-25T09:00:00Z' }
+    const fresh = { record_id: 'mem-b', created_at: '2026-11-25T10:01:00Z' }
+    hideMemoryRecords(['mem-a'], t0)
+    expect(isMemoryRecordHidden(old, t0 + 1000)).toBe(true)
+    expect(isMemoryRecordHidden(fresh, t0 + 1000)).toBe(false)
+    expect(isMemoryRecordHidden(old, t0 + MEMORY_DELETE_GRACE_MS)).toBe(false)
+    hideMemoryRecords(['mem-a'], t0)
+    unhideMemoryRecords(['mem-a'])
+    expect(isMemoryRecordHidden(old, t0 + 1000)).toBe(false)
+    hideMemoryCreatedBefore(t0, t0)
+    expect(isMemoryRecordHidden(old, t0 + 1000)).toBe(true)
+    expect(isMemoryRecordHidden(fresh, t0 + 61_000)).toBe(false)
+    expect(isMemoryRecordHidden(old, t0 + MEMORY_DELETE_GRACE_MS + 1)).toBe(false)
   })
 })
 
