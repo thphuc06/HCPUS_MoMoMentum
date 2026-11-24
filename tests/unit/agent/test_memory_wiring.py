@@ -28,8 +28,8 @@ from yofina_agent.compact import allowed_amounts
 from yofina_agent.identity import Identity
 from yofina_agent.store import UnconfiguredTurnBlockStore
 from yofina_agent.turn import Turn, TurnDeps
-from yofina_agent.whatif import ANALYST_SYSTEM, analyst_prompt
-from yofina_agent.writer import MEMORY_GUIDE, MEMORY_TASKS, WRITER_SYSTEM, build_writer_prompt
+from yofina_agent.whatif import ANALYST_MEMORY_GUIDE, ANALYST_SYSTEM, analyst_prompt
+from yofina_agent.writer import MEMORY_GUIDE, MEMORY_TASKS, TASKS, WRITER_SYSTEM, build_writer_prompt
 
 TRAVEL_PREF = "Ưu tiên hũ Du lịch, đừng lấy tiền từ hũ Du lịch"
 OPEN_TAG, CLOSE_TAG = f"<{m.PROMPT_TAG}>", f"</{m.PROMPT_TAG}>"
@@ -113,8 +113,9 @@ def test_what_if_dua_so_thich_vao_analyst_doc_mot_lan_khong_them_luot_model(monk
     assert len(client.lists) == 1 and len(client.retrieves) == 1
     assert all(c["namespace"].startswith(f"/yofina/users/{SUB}/") for c in client.reads)
     assert text_of(events).startswith("Nếu mua tai nghe")  # Verifier vẫn cho qua: bộ nhớ không đổi căn cứ số liệu
-    # chỉ dẫn trung tính: không có tên hũ mẫu, dùng `hu` do mã đối chiếu
-    assert "bo_nho_nguoi_dung" in ANALYST_SYSTEM and "`hu`" in ANALYST_SYSTEM and "Du lịch" not in ANALYST_SYSTEM
+    # chỉ dẫn dùng bộ nhớ đi cùng khối (không nằm trong system prompt), dùng `hu` do mã đối chiếu, không tên hũ mẫu
+    assert "bo_nho_nguoi_dung" not in ANALYST_SYSTEM
+    assert ANALYST_MEMORY_GUIDE in raw_prompt(analyst) and "`hu`" in ANALYST_MEMORY_GUIDE and "Du lịch" not in ANALYST_MEMORY_GUIDE
     entries = memory_entries(raw_prompt(analyst))
     assert entries["so_thich"][0]["hu"] == ["Du lịch"]
 
@@ -122,7 +123,7 @@ def test_what_if_dua_so_thich_vao_analyst_doc_mot_lan_khong_them_luot_model(monk
 def test_analyst_prompt_dat_bo_nho_truoc_cau_hoi_va_khong_dua_vao_du_lieu():
     block = m.MemoryContext(items=(m.RecalledItem("preference", "Ưu tiên hũ Du lịch", "r1"),)).prompt_block()
     p = analyst_prompt("nếu mua tai nghe", {"a_text": "1.000 ₫"}, [{"code": "du_lich", "name": "Du lịch"}], "2026-11-21", memory=block)
-    assert p.index(OPEN_TAG) < p.index("<cau_hoi>") < p.index("<du_lieu>")
+    assert p.index(OPEN_TAG) < p.index(CLOSE_TAG) < p.index(ANALYST_MEMORY_GUIDE) < p.index("<cau_hoi>") < p.index("<du_lieu>")
     assert m.PROMPT_NOTICE in p
     assert analyst_prompt("nếu mua tai nghe", {}, [], "2026-11-21").count(OPEN_TAG) == 0
 
@@ -161,10 +162,8 @@ def test_phien_moi_hoi_nen_de_vao_hu_nao_nguoi_viet_nhan_so_thich_co_cau_truc_va
     assert turn.app_date.isoformat() == "2026-11-21"
     prompt = build_writer_prompt(call["task"], q, {"jars_total_text": "7.730.000 ₫"}, call["memory"])
     assert MEMORY_GUIDE in prompt and prompt.index(CLOSE_TAG) < prompt.index(MEMORY_GUIDE) < prompt.index("<cau_hoi>")
-    # chỉ dẫn trung tính: không có câu mẫu để chép, có điều kiện "trực tiếp trả lời câu hỏi", ví dụ âm, và cấm số từ bộ nhớ
-    assert "ví dụ: theo điều bạn đã dặn" not in MEMORY_GUIDE.lower()
-    assert "trực tiếp trả lời câu hỏi" in MEMORY_GUIDE and "Ví dụ âm" in MEMORY_GUIDE and "`hu`" in MEMORY_GUIDE
-    assert "không nhắc tới bộ nhớ" in MEMORY_GUIDE and "Không lấy con số" in MEMORY_GUIDE
+    # chỉ dẫn nêu mục đích và lý do, dùng `hu` do mã đối chiếu; không câu mẫu (test riêng ở cuối tệp)
+    assert "Mục đích" in MEMORY_GUIDE and "Lý do" in MEMORY_GUIDE and "`hu`" in MEMORY_GUIDE
     assert MEMORY_GUIDE not in build_writer_prompt("balance", q, {"jars_total_text": "7.730.000 ₫"})
     # căn cứ số tiền vẫn chỉ là bản gọn
     assert allowed_amounts({"jars_total_text": "7.730.000 ₫"}) == {7_730_000}
@@ -240,7 +239,7 @@ def test_writer_prompt_chi_them_bo_nho_cho_viec_lien_quan_va_khong_doi_can_cu_so
         assert OPEN_TAG not in build_writer_prompt(task, "hỏi", compact, block)
     assert build_writer_prompt("balance", "hỏi", compact) == build_writer_prompt("balance", "hỏi", compact, "")
     assert allowed_amounts(compact) == {1_200_000}
-    assert "bo_nho_nguoi_dung" in WRITER_SYSTEM
+    assert "bo_nho_nguoi_dung" not in WRITER_SYSTEM  # chỉ dẫn bộ nhớ chỉ đi cùng khối
 
 
 def test_bo_nho_doc_ve_khong_dong_duoc_the_va_khong_mang_so_tien(monkeypatch):
@@ -252,3 +251,39 @@ def test_bo_nho_doc_ve_khong_dong_duoc_the_va_khong_mang_so_tien(monkeypatch):
     mem = writer.calls[0]["memory"]
     assert mem.count(CLOSE_TAG) == 1 and mem.count(OPEN_TAG) == 1  # chỉ thẻ của mã
     assert "99.000.000" not in mem and m.AMOUNT_PLACEHOLDER in mem
+
+
+# --- P0-1 (docs/research/long-term-memory-research.md mục 3.4): không câu mẫu; khối rỗng thì không có chỉ dẫn bộ nhớ ----------------
+#: Cụm gán lời cho người dùng mà model từng chép (Runtime v23). Không prompt nào được chứa, kể cả trong ví dụ âm.
+ATTRIBUTION_SNIPPETS = ("đã dặn", "theo sở thích", "theo điều bạn", "như bạn đã nói", "bạn từng nói", "theo ưu tiên của bạn")
+MEMORY_PROMPTS = {"MEMORY_GUIDE": MEMORY_GUIDE, "ANALYST_MEMORY_GUIDE": ANALYST_MEMORY_GUIDE, "PROMPT_NOTICE": m.PROMPT_NOTICE}
+
+
+def test_prompt_khong_co_cau_mau_hay_cum_tu_de_chep():
+    every = {"WRITER_SYSTEM": WRITER_SYSTEM, "ANALYST_SYSTEM": ANALYST_SYSTEM, **MEMORY_PROMPTS}
+    every.update({f"TASKS[{k}]": v for k, v in TASKS.items()})
+    for name, text in every.items():
+        low = text.lower()
+        assert not [s for s in ATTRIBUTION_SNIPPETS if s in low], name
+    for name, text in MEMORY_PROMPTS.items():
+        # chỉ dẫn bộ nhớ nêu mục đích và giới hạn bằng lời thường: không ví dụ, không cụm trong ngoặc kép, không tên hũ mẫu
+        assert not any(q in text for q in '"“”«»'), name
+        assert "ví dụ" not in text.lower() and "Du lịch" not in text and "Dự phòng" not in text, name
+    for guide in (MEMORY_GUIDE, ANALYST_MEMORY_GUIDE):
+        assert "Mục đích" in guide and "Lý do" in guide and "`hu`" in guide and "`ngay_ghi`" in guide
+        assert guide.startswith("<cach_dung_bo_nho>") and guide.endswith("</cach_dung_bo_nho>")
+
+
+def test_khoi_bo_nho_rong_thi_khong_gan_chi_dan_bo_nho(monkeypatch):
+    empty = FakeMemoryClient({})
+    q = "Tháng này còn dư một ít, mình nên để vào hũ nào?"
+    _, _, writer, _ = run_with_memory(q, [route_response(intent="lookup", lookup_kind="balance")], empty, monkeypatch)
+    assert len(empty.lists) == 1 and writer.calls[0]["memory"] == ""
+    prompt = build_writer_prompt("balance", q, {"jars_total_text": "7.730.000 ₫"}, writer.calls[0]["memory"])
+    assert "bo_nho" not in prompt and "cach_dung_bo_nho" not in prompt and "bo_nho" not in WRITER_SYSTEM
+
+    script = [route_response(**ROUTE_WHAT_IF), tool_response("plan_scenario", SCENARIO), tool_response("analyze", analysis())]
+    _, _, _, bedrock = run_with_memory(WHAT_IF_Q, script, FakeMemoryClient({}), monkeypatch)
+    analyst = bedrock.calls[-1]
+    assert "bo_nho" not in json.dumps(analyst, ensure_ascii=False, default=str)
+    assert "bo_nho" not in analyst_prompt(WHAT_IF_Q, {}, [], "2026-11-21", memory="")
