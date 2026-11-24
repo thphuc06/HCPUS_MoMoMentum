@@ -21,8 +21,8 @@ export function RunoutHero({ days, animate = false }: { days: number; animate?: 
       className={cn('mt-2 flex items-baseline gap-2.5', animate && 'motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 fill-mode-both duration-300 ease-out')}
       style={animate ? ({ '--tw-animation-delay': '560ms' } as CSSProperties) : undefined}
     >
-      <span className="num text-[40px] leading-[44px] font-extrabold tracking-[-0.02em] text-bad-fg">{days} ngày</span>{' '}
-      <span className="text-body font-semibold text-ink">hũ trống trước kỳ lương</span>
+      <span className="num shrink-0 whitespace-nowrap text-[40px] leading-[44px] font-extrabold tracking-[-0.02em] text-bad-fg">{days} ngày</span>{' '}
+      <span className="min-w-0 text-body font-semibold text-ink">hũ trống trước kỳ lương</span>
     </p>
   )
 }
