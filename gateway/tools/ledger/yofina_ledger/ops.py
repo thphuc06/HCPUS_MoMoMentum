@@ -6,9 +6,11 @@ Ba thao tác (`GET /ops/traces`, `GET /ops/traces/{trace_id}`, `GET /ops/summary
 
 Lượt gọi model theo ngày so với trần: đọc bộ đếm DynamoDB `yofina-usage` (khóa `day` + `model`, thuộc tính `count`) mà
 `yofina_core.llm` tăng trước MỖI lời gọi Bedrock của mọi thành phần (agent, nạp dữ liệu, phân loại, sinh lại lộ trình). Ngày là
-ngày của múi giờ trần (`budget_timezone` của `llm_defaults.json`), đúng cửa sổ mà trần được tính; trần là tổng trần ngày của các
-model đang cấu hình. Bảng có TTL (`usage_ttl_days`) nên ngày cũ hơn không còn số. Không đọc được bảng thì dùng số lượt gọi model ghi
-trong bản ghi lượt của agent (`app_ops_model_calls_by_day`, ngày UTC; chỉ tính agent, nên thấp hơn số thật) và ghi log cảnh báo.
+ngày của múi giờ trần (`budget_timezone` của `llm_defaults.json`), đúng cửa sổ mà trần được tính. Trần tính theo TỪNG model, nên mỗi
+ngày có `by_model` (model id, lượt gọi, trần ngày của model đó); `cap` của ngày chỉ là tổng trần các model đang cấu hình. Bảng có TTL
+(`usage_ttl_days`) nên ngày cũ hơn không còn số. Không đọc được bảng thì dùng số lượt gọi model ghi
+trong bản ghi lượt của agent (`app_ops_model_calls_by_day`, ngày UTC; chỉ tính agent, nên thấp hơn số thật; không có `by_model`) và ghi
+log cảnh báo.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ OUTCOMES = frozenset({"ok", "rejected", "error"})
 LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX = 50, 100
 CURSOR_MAX = 200
 MAX_DAYS_IN_SUMMARY = 31  # maxItems của `model_calls_by_day`
+MAX_MODELS_PER_DAY = 20  # maxItems của `OpsDayModelCalls.by_model`
 
 SQL_LIST_TRACES = (
     "SELECT * FROM app_ops_list_traces(CAST(:p_from AS timestamptz), CAST(:p_to AS timestamptz), CAST(:p_intent AS text), "
@@ -166,7 +169,7 @@ class OpsRepo:
 
 # --- bộ đếm lượt gọi model (DynamoDB `yofina-usage`) -----------------------------------------------------------------
 class UsageReader:
-    """Đọc bộ đếm của `yofina_core.llm.DynamoUsageStore`: `Query` theo khóa `day`, cộng `count` của mọi model. Chỉ đọc."""
+    """Đọc bộ đếm của `yofina_core.llm.DynamoUsageStore`: `Query` theo khóa `day`, lấy `count` của từng model. Chỉ đọc."""
 
     def __init__(self, table_name: str, client: Any = None, *, region: str | None = None) -> None:
         self._table, self._client, self._region = table_name, client, region
@@ -189,14 +192,15 @@ class UsageReader:
             )
         return self._client
 
-    def calls_on(self, day: date) -> int:
-        total = 0
+    def calls_by_model_on(self, day: date) -> dict[str, int]:
+        """Lượt gọi theo model id trong một ngày (khóa `day` + `model`), mọi trang của `Query`."""
+        out: dict[str, int] = {}
         kw: dict[str, Any] = {
             "TableName": self._table,
-            # `day` và `count` là từ khóa dành riêng của DynamoDB: đi qua tên giả
+            # `day`, `model` và `count` đi qua tên giả (`day`, `count` là từ khóa dành riêng của DynamoDB)
             "KeyConditionExpression": "#d = :d",
-            "ProjectionExpression": "#c",
-            "ExpressionAttributeNames": {"#d": "day", "#c": "count"},
+            "ProjectionExpression": "#m, #c",
+            "ExpressionAttributeNames": {"#d": "day", "#m": "model", "#c": "count"},
             "ExpressionAttributeValues": {":d": {"S": day.isoformat()}},
         }
         while True:
@@ -204,10 +208,14 @@ class UsageReader:
             for item in page.get("Items", []):
                 raw = item.get("count", {}).get("N")
                 if raw is not None:
-                    total += int(raw)
+                    model = str(item.get("model", {}).get("S") or "")
+                    out[model] = out.get(model, 0) + int(raw)
             if not page.get("LastEvaluatedKey"):
-                return total
+                return out
             kw["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+    def calls_on(self, day: date) -> int:
+        return sum(self.calls_by_model_on(day).values())
 
 
 # --- tham số ------------------------------------------------------------------------------------------------------
@@ -344,11 +352,19 @@ class OpsService:
         assert self.usage is not None
         tz = ZoneInfo(self.settings.budget_timezone)
         days = _days(start.astimezone(tz).date(), end.astimezone(tz).date())[-MAX_DAYS_IN_SUMMARY:]
+        caps = self.settings.model_caps
         out = []
         for d in days:
-            calls = self.usage.calls_on(d)
+            by_model = {m: n for m, n in self.usage.calls_by_model_on(d).items() if n > 0}
+            calls = sum(by_model.values())
             if calls > 0:
-                out.append({"day": d.isoformat(), "model_calls": calls, "cap": cap})
+                rows = []
+                for model in sorted(by_model)[:MAX_MODELS_PER_DAY]:
+                    row: dict[str, Any] = {"model": model[:200] or "unknown", "model_calls": by_model[model]}
+                    if model in caps:
+                        row["cap"] = int(caps[model])
+                    rows.append(row)
+                out.append({"day": d.isoformat(), "model_calls": calls, "cap": cap, "by_model": rows})
         return out
 
 

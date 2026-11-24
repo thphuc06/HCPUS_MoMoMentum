@@ -16,17 +16,29 @@
     {
       "day": "2026-12-08",
       "model_calls": 61,
-      "cap": 500
+      "cap": 7800,
+      "by_model": [
+        { "model": "global.amazon.nova-2-lite-v1:0", "model_calls": 46, "cap": 2000 },
+        { "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0", "model_calls": 3, "cap": 2000 },
+        { "model": "global.anthropic.claude-sonnet-4-6", "model_calls": 12, "cap": 400 }
+      ]
     },
     {
       "day": "2026-12-09",
       "model_calls": 44,
-      "cap": 500
+      "cap": 7800,
+      "by_model": [
+        { "model": "global.amazon.nova-2-lite-v1:0", "model_calls": 35, "cap": 2000 },
+        { "model": "global.anthropic.claude-sonnet-4-6", "model_calls": 9, "cap": 400 }
+      ]
     },
     {
       "day": "2026-12-10",
       "model_calls": 9,
-      "cap": 500
+      "cap": 7800,
+      "by_model": [
+        { "model": "global.amazon.nova-2-lite-v1:0", "model_calls": 9, "cap": 2000 }
+      ]
     }
   ],
   "est_cost_vnd": 27500
