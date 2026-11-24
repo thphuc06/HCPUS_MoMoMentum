@@ -129,6 +129,14 @@ def add_label(env, text_norm: str, jar: str, vec=VEC, source: str = "seed") -> N
         )
 
 
+def clear_seed_labels(conn, *users: str) -> None:
+    """Bỏ nhãn k-NN seed mà đặt lại demo nạp (`classify_seed.apply_seed_labels`), cho test cần kho nhãn chỉ có nhãn của chính nó."""
+    for user in users:
+        conn.execute(
+            "delete from tx_embeddings_labeled where user_id = %s and source = 'seed'", (user,)
+        )
+
+
 def rest(env, method, path, body=None, query=None):
     out = handle_http(http_event(method, path, sub=MINH, body=body, query=query), env.svc)
     return out["statusCode"], json.loads(out["body"])
@@ -230,6 +238,9 @@ def test_nhan_cua_nguoi_dung_khac_khong_bi_thay_rls(env):
     env.reset(MINH)
     env.reset("sub-lan", "lan")
     with env.master() as c:
+        # đặt lại nạp nhãn k-NN seed của persona (`classify_seed`): bỏ đi để kho nhãn chỉ có nhãn của test, nên k-NN rỗng nghĩa là
+        # không thấy nhãn của người khác
+        clear_seed_labels(c, MINH, "sub-lan")
         c.execute(
             "insert into tx_embeddings_labeled (user_id, text_norm, jar_code, source, model, embedding) "
             "values ('sub-lan', 'cua hang bi mat', 'giai_tri', 'user', 'm', %s::vector)",
@@ -420,6 +431,9 @@ def test_sua_lan_gan_tu_dong_dem_va_nang_nguong_rieng_cua_nguoi_nhan(env):
             "YOFINA_CLASSIFY_HISTORY_MIN_COUNT": "1000",  # cô lập khỏi lịch sử giao dịch seed của người nhận
         }
     )
+    with env.master() as c:
+        # cô lập khỏi nhãn k-NN seed: seed của minh có chuỗi "tien nuoc" (hũ hoa_don), khớp chính xác thì không tới model nhỏ
+        clear_seed_labels(c, MINH)
     svc, *_ = make(
         env, th=loose, emb=FakeEmbedder(orthogonal=True), judge=FakeJudge(Verdict("giai_tri", 1.0))
     )
@@ -548,12 +562,22 @@ def test_dat_lai_xoa_nhan_nguoi_dung_va_seed_nap_lai_khi_co_file(env):
     env.reset(MINH)
     add_label(env, "ca phe nha rieng", "an_uong", source="user")
     env.reset(MINH)
+    seed = classify_seed.load_seed_set("minh")
+    assert seed is not None
+    jars = {j["code"] for j in env.svc.overview_response(MINH)["jars"]}
+    expected = {(lab.text_norm, lab.jar_code) for lab in seed.labels if lab.jar_code in jars}
     with env.master() as c:
-        assert (
-            c.execute(
-                "select count(*) from tx_embeddings_labeled where user_id = %s", (MINH,)
-            ).fetchone()[0]
-            == 0
-        )
+        rows = c.execute(
+            "select source, text_norm, jar_code from tx_embeddings_labeled where user_id = %s",
+            (MINH,),
+        ).fetchall()
+    assert [r for r in rows if r[0] != "seed"] == []  # nhãn của người dùng bị xóa cùng hũ
+    assert {(r[1], r[2]) for r in rows} == expected and len(rows) == len(expected)  # đúng bộ seed
+    # nạp lại lần nữa thì thay bộ seed, không nhân đôi
+    assert classify_seed.apply_seed_labels(env.db, MINH, "minh") == len(expected)
+    with env.master() as c:
+        assert c.execute(
+            "select count(*) from tx_embeddings_labeled where user_id = %s", (MINH,)
+        ).fetchone()[0] == len(expected)
     # persona không có file nhãn thì không nạp gì, không lỗi
     assert classify_seed.apply_seed_labels(env.db, MINH, "persona_khong_co") == 0
