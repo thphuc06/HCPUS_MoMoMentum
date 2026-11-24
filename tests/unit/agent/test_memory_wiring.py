@@ -236,7 +236,7 @@ def test_writer_prompt_chi_them_bo_nho_cho_viec_lien_quan_va_khong_doi_can_cu_so
         assert task in MEMORY_TASKS
         p = build_writer_prompt(task, "hỏi", compact, block)
         assert p.index(OPEN_TAG) < p.index("<cau_hoi>") < p.index("<du_lieu>")
-    for task in ("chitchat", "clarify", "out_of_scope", "confirm_move", "confirm_action"):
+    for task in ("chitchat", "clarify", "confirm_move", "confirm_action"):
         assert OPEN_TAG not in build_writer_prompt(task, "hỏi", compact, block)
     assert build_writer_prompt("balance", "hỏi", compact) == build_writer_prompt("balance", "hỏi", compact, "")
     assert allowed_amounts(compact) == {1_200_000}

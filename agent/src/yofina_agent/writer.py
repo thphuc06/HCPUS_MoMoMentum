@@ -92,10 +92,6 @@ TASKS: dict[str, str] = {
         "Hỏi lại người dùng đúng một câu để làm rõ điều còn thiếu hoặc còn mơ hồ (xem trường van_de trong dữ liệu). "
         "Có thể gợi ý tên các hũ hiện có."
     ),
-    "out_of_scope": (
-        "Nói ngắn gọn rằng bạn chưa hỗ trợ việc người dùng hỏi (không đưa lời khuyên đầu tư), rồi nhắc những việc "
-        "bạn làm được: xem số dư, dự báo hũ, thử kịch bản \"nếu mua...\", kiểm tra trước khi chi, chuyển tiền giữa các hũ."
-    ),
     "chitchat": (
         "Trả lời xã giao ngắn gọn, rồi nhắc rằng bạn giúp được việc xem số dư, giao dịch, dự báo một hũ và chuyển tiền giữa các hũ."
     ),

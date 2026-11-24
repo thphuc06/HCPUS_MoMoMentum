@@ -260,7 +260,6 @@ SCENARIO_UNBUILDABLE: tuple[str, str] = (
     "Chưa dựng được kịch bản",
     "Mình chưa hiểu đủ để dựng kịch bản này. Bạn nói rõ món gì, bao nhiêu tiền và trả bằng cách nào nhé.",
 )
-PROFILE_PREPARED_HINT = "Đã chuẩn bị thay đổi hồ sơ; chưa lưu gì cho tới khi bạn bấm Xác nhận."
 
 # Tiêu đề cho lỗi của tool (nội dung lấy từ chính thông điệp tiếng Việt của tool).
 ERROR_TITLES: dict[str, str] = {
@@ -283,7 +282,4 @@ FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này."
 SESSION_EXPIRED_MESSAGE = "Phiên đăng nhập đã hết hạn. Bạn đăng nhập lại rồi hỏi tiếp nhé."
 UNAVAILABLE_MESSAGE = "Dịch vụ dữ liệu đang tạm thời không phản hồi. Bạn thử lại sau ít phút nhé."
 
-ASK_MOVE_DETAILS = (
-    "Bạn muốn chuyển bao nhiêu tiền, từ hũ nào sang hũ nào?"  # hỏi lại khi router không trả reply
-)
 EMPTY_INPUT_MESSAGE = "Không thấy câu hỏi nào của người dùng trong yêu cầu."

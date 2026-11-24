@@ -41,7 +41,6 @@ from ag_ui.core import BaseEvent, RunAgentInput
 from yofina_agent import behavior_chat, notices, trace
 from yofina_agent import events as ev
 from yofina_agent import memory as agent_memory
-from yofina_agent import notices, trace
 from yofina_agent.clarify import resolve_clarify
 from yofina_agent.compact import (
     compact_affordability,
@@ -63,7 +62,7 @@ from yofina_agent.identity import Identity
 from yofina_agent.ingest_chat import on_ingest
 from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
-from yofina_agent.router import merge_pending, pending_params, route, route_runout_overview
+from yofina_agent.router import PENDING_INTENTS, merge_pending, pending_params, route, route_runout_overview
 from yofina_agent.schemas import (
     ClarifyChipIn,
     ClarifyRequest,
@@ -134,7 +133,6 @@ _DEGRADED_REASON = {
     ErrorCode.INTERNAL_ERROR.value: "model_error",
     "NUMERIC_UNVERIFIED": "verifier_failed",
 }
-_PENDING_INTENTS = {"what_if", "affordability", "move", "profile_update"}
 
 
 @dataclass
@@ -1584,7 +1582,7 @@ class Turn:
                 source_tool="agent",
                 as_of=self.d.now(),
                 app_date=self.block_app_date(),
-                pending_intent=r.intent if r.intent in _PENDING_INTENTS else None,
+                pending_intent=r.intent if r.intent in PENDING_INTENTS else None,
                 allow_free_text=True,
             )
         )
