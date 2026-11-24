@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Yofina · Bản xem trước bảng màu đề xuất (ui-design-review)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap&subset=vietnamese" rel="stylesheet" />
+<!--
+  Trang tĩnh minh họa cho docs/research/ui-design-review.md. Không phải code sản phẩm, không import gì từ frontend/.
+  Số liệu là persona hư cấu Minh (figma-ui-design.md §5), ngày mô phỏng 21/11/2026. Biểu tượng vẽ theo nét của lucide (ISC).
+  Mở trực tiếp bằng trình duyệt. Nút "Phát lại chuyển động" chạy lại chuỗi chuyển động; hệ thống bật "giảm chuyển động" thì hiện thẳng trạng thái cuối.
+-->
+<style>
+  :root {
+    --ease-out: cubic-bezier(0.2, 0, 0, 1);
+    --ease-in: cubic-bezier(0.3, 0, 1, 1);
+    --ease-pop: linear(0, 0.36 12%, 0.88 30%, 1.06 45%, 1.01 62%, 1);
+    --dur-1: 120ms;
+    --dur-2: 200ms;
+    --dur-3: 320ms;
+    --dur-4: 800ms;
+    --page: #ECE6E9;
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: #2B1823; -webkit-text-size-adjust: 100%; }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+  /* ---------- Token theo chế độ (khớp bảng ở ui-design-review.md §4.1) ---------- */
+  .t-light {
+    color-scheme: light;
+    --bg: #FBF5F8; --surface: #FFFFFF; --surface-2: #F3EAEF; --tint: #FFEAF1;
+    --border: #E8DCE2; --border-strong: #967E8B; --hairline: transparent;
+    --ink: #2B1823; --ink-2: #5D4452; --ink-3: #725B68; --on-brand: #FFFFFF;
+    --brand: #C8276A; --brand-text: #821041; --brand-deep: #6E113D; --brand-vivid: #E4518F;
+    --blue: #3050C8; --blue-tint: #EAEFFF;
+    --ok-fg: #0A6B45; --ok-bg: #E0F3E9; --ok-line: #00A166;
+    --warn-fg: #8A4B00; --warn-bg: #FFF0D1; --warn-line: #C78200;
+    --bad-fg: #AE2F0E; --bad-bg: #FFE8DE; --bad-line: #E04F1A;
+    --jar-an-uong: #7C5CE0; --jar-du-lich: #008E89; --jar-giai-tri: #B05CE0;
+    --glass-shine: rgba(255, 255, 255, 0.7);
+    --elev-2: 0 1px 2px rgba(43, 24, 35, 0.05), 0 8px 24px -12px rgba(43, 24, 35, 0.18);
+    --elev-hero: 0 2px 4px rgba(110, 17, 61, 0.12), 0 18px 36px -14px rgba(110, 17, 61, 0.45);
+  }
+  .t-dark {
+    color-scheme: dark;
+    --bg: #1A0D14; --surface: #281821; --surface-2: #37232E; --tint: #4D1E30;
+    --border: #47323D; --border-strong: #816A76; --hairline: rgba(255, 255, 255, 0.06);
+    --ink: #F7EFF3; --ink-2: #CAB8C1; --ink-3: #B39DA9; --on-brand: #FFFFFF;
+    --brand: #C8276A; --brand-text: #FEA6C5; --brand-deep: #550A2E; --brand-vivid: #E4518F;
+    --blue: #93A9FF; --blue-tint: #1E2752;
+    --ok-fg: #5AD6A6; --ok-bg: #10342A; --ok-line: #5AD6A6;
+    --warn-fg: #FFC55E; --warn-bg: #3A2B0E; --warn-line: #FFC55E;
+    --bad-fg: #FF9166; --bad-bg: #3D1F15; --bad-line: #FF9166;
+    --jar-an-uong: #A58CF2; --jar-du-lich: #4FC9C3; --jar-giai-tri: #C98AF0;
+    --glass-shine: rgba(255, 255, 255, 0.18);
+    --elev-2: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --elev-hero: 0 18px 36px -16px rgba(0, 0, 0, 0.7);
+  }
+
+  /* ---------- Trang ---------- */
+  .top { max-width: 840px; margin: 0 auto; padding: 24px 16px 8px; }
+  .top h1 { margin: 0; font-size: 22px; line-height: 30px; font-weight: 800; }
+  .top p { margin: 6px 0 0; font-size: 14px; line-height: 21px; color: #5D4452; max-width: 70ch; }
+  .replay {
+    margin-top: 12px; height: 44px; padding: 0 18px; border-radius: 999px; border: 0; cursor: pointer;
+    background: #2B1823; color: #fff; font: 700 15px/1 "Plus Jakarta Sans", system-ui, sans-serif;
+    transition: transform var(--dur-1) var(--ease-out);
+  }
+  .replay:active { transform: scale(0.97); }
+  .replay:focus-visible, .btn:focus-visible { outline: 3px solid #3050C8; outline-offset: 2px; }
+  .frames { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; padding: 16px 0 32px; }
+  .frame-label { font-size: 13px; font-weight: 700; color: #5D4452; margin: 0 0 8px 8px; }
+
+  /* ---------- Khung 390 px ---------- */
+  .phone {
+    width: 390px; max-width: 100vw; background: var(--bg); color: var(--ink);
+    border-radius: 36px; padding: 20px 16px 28px; box-shadow: 0 30px 70px -30px rgba(43, 24, 35, 0.45);
+    display: grid; gap: 16px;
+  }
+  .card { background: var(--surface); border-radius: 24px; padding: 16px; box-shadow: var(--elev-2); border: 1px solid var(--hairline); }
+  .h-sec { font-size: 18px; line-height: 26px; font-weight: 700; margin: 4px 0 0; }
+  .small { font-size: 13px; line-height: 19px; }
+  .note { font-size: 12px; line-height: 18px; color: var(--ink-3); }
+  .ink-2 { color: var(--ink-2); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .between { justify-content: space-between; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 8px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  .chip svg { width: 16px; height: 16px; flex: none; }
+  .chip.ok { background: var(--ok-bg); color: var(--ok-fg); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn-fg); }
+  .chip.bad { background: var(--bad-bg); color: var(--bad-fg); }
+  .chip.info { background: var(--blue-tint); color: var(--blue); }
+  .chip.ai { background: var(--tint); color: var(--brand-text); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 18px; border-radius: 999px;
+    border: 0; font: 700 15px/1 "Plus Jakarta Sans", system-ui, sans-serif; cursor: pointer;
+    transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2) var(--ease-out);
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn.primary { background: var(--brand); color: var(--on-brand); }
+  .btn.soft { background: var(--tint); color: var(--brand-text); }
+  .btn.text { background: transparent; color: var(--ink-2); padding: 0 8px; font-weight: 600; font-size: 13px; }
+
+  /* ---------- Thẻ số dư ---------- */
+  .balance {
+    border-radius: 28px; padding: 20px; color: #fff; box-shadow: var(--elev-hero);
+    background: radial-gradient(130% 150% at 0% 0%, var(--brand-deep) 0%, var(--brand) 72%);
+  }
+  .balance .lbl { font-size: 15px; font-weight: 600; opacity: 0.95; }
+  .display { font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.02em; margin-top: 4px; }
+  .display .cur { font-size: 0.55em; font-weight: 600; margin-left: 4px; opacity: 0.9; letter-spacing: 0; }
+  .balance .sim { font-size: 12px; line-height: 18px; opacity: 0.92; margin-top: 2px; }
+  .qa { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 14px; }
+  .qa span { display: grid; justify-items: center; gap: 4px; font-size: 13px; font-weight: 600; }
+  .qa i { width: 44px; height: 44px; border-radius: 999px; background: rgba(255, 255, 255, 0.2); display: grid; place-items: center; }
+  .qa svg { width: 22px; height: 22px; }
+
+  /* ---------- Thẻ cảnh báo cạn + dải ngày ---------- */
+  .eyebrow { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 8px; border-radius: 999px; background: var(--tint); color: var(--brand-text); font-size: 13px; font-weight: 600; }
+  .eyebrow svg { width: 16px; height: 16px; }
+  .hero-row { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; }
+  .hero-num { font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.02em; color: var(--bad-fg); }
+  .hero-cap { font-size: 15px; line-height: 21px; font-weight: 600; }
+  .strip { display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: 3px; margin-top: 10px; }
+  .strip-lbl.strip-top { margin-top: 12px; }
+  .day {
+    height: 30px; border-radius: 7px; background: var(--ok-bg); position: relative;
+    transform-origin: 50% 100%; transform: scaleY(0.35); opacity: 0;
+    transition: transform var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-out);
+    transition-delay: calc(var(--i) * 32ms);
+  }
+  .on .day { transform: none; opacity: 1; }
+  .day.today { background: var(--ok-bg); box-shadow: inset 0 0 0 2px var(--brand); }
+  .day.runout { background: var(--bad-line); }
+  .day.gap { background: repeating-linear-gradient(135deg, var(--bad-bg) 0 4px, color-mix(in srgb, var(--bad-line) 38%, var(--bad-bg)) 4px 6px); }
+  .day.payday { background: var(--ok-line); }
+  .strip-lbl { display: grid; grid-template-columns: repeat(var(--n), 1fr); margin-top: 6px; font-size: 12px; line-height: 16px; font-weight: 600; }
+  .strip-lbl .l-today { grid-column: 1 / span 4; color: var(--ink-2); }
+  .strip-lbl .l-run { color: var(--bad-fg); white-space: nowrap; justify-self: center; }
+  .strip-lbl .l-pay { color: var(--ok-fg); white-space: nowrap; justify-self: end; }
+  .pin { position: absolute; left: 50%; top: -7px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--bad-line); border: 2px solid var(--surface); }
+  .on .day.runout .pin { animation: pop var(--dur-3) var(--ease-pop) both; animation-delay: calc(var(--i) * 32ms + 200ms); }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  .fade { opacity: 0; transform: translateY(4px); transition: opacity var(--dur-3) var(--ease-out), transform var(--dur-3) var(--ease-out); transition-delay: 560ms; }
+  .on .fade { opacity: 1; transform: none; }
+
+  /* ---------- Thẻ hũ ---------- */
+  .jars { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .jar { padding: 14px; display: grid; gap: 6px; }
+  .jar h3 { margin: 0; font-size: 16px; line-height: 22px; font-weight: 700; }
+  .jar-ico { width: 32px; height: 32px; border-radius: 999px; display: grid; place-items: center; color: #fff; flex: none; }
+  .jar-ico svg { width: 18px; height: 18px; }
+  .jar .amt { font-size: 20px; line-height: 28px; font-weight: 800; text-align: center; }
+  .jar .chip { justify-self: center; }
+  .water { transition: transform var(--dur-4) var(--ease-out); }
+
+  /* ---------- Bước lộ trình (timeline) ---------- */
+  .phase-title { font-size: 13px; line-height: 18px; font-weight: 700; color: var(--ink-2); margin: 14px 0 8px; }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .step { position: relative; padding-left: 40px; }
+  .step::before {
+    content: ""; position: absolute; left: 13px; top: 30px; bottom: -14px; width: 2px; border-radius: 2px; background: var(--border);
+  }
+  .step:last-child::before { display: none; }
+  .step.done::before { background: var(--ok-line); }
+  .node {
+    position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--surface); box-shadow: inset 0 0 0 2px var(--brand);
+    font-size: 12px; font-weight: 800; color: var(--brand-text);
+  }
+  .step.done .node { background: var(--ok-line); box-shadow: none; color: var(--surface); }
+  .node .tick { width: 16px; height: 16px; stroke-dasharray: 24; stroke-dashoffset: 24; transition: stroke-dashoffset var(--dur-3) var(--ease-out) 300ms; }
+  .on .node .tick { stroke-dashoffset: 0; }
+  .step-body { background: var(--surface-2); border-radius: 16px; padding: 12px; }
+  .step-title { font-size: 15px; line-height: 21px; font-weight: 700; margin: 0; }
+  .flow { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .flow .amt { font-size: 18px; line-height: 24px; font-weight: 800; margin-right: 4px; }
+  .dot { width: 22px; height: 22px; border-radius: 999px; display: inline-grid; place-items: center; color: #fff; }
+  .dot svg { width: 13px; height: 13px; }
+  .step-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .step-actions .btn { height: 44px; font-size: 14px; padding: 0 14px; white-space: nowrap; }
+  .why { font-size: 13px; font-weight: 600; color: var(--brand-text); background: none; border: 0; padding: 0; min-height: 44px; cursor: pointer; font-family: inherit; }
+
+  /* ---------- Bảng màu ---------- */
+  .palette { max-width: 840px; margin: 0 auto 40px; padding: 0 16px; }
+  .palette h2 { font-size: 18px; margin: 8px 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; background: #fff; border-radius: 16px; overflow: hidden; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #EEE4E9; }
+  th { background: #F7EEF2; font-weight: 700; }
+  .sw { display: inline-block; width: 18px; height: 18px; border-radius: 6px; vertical-align: middle; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); margin-right: 6px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0.01ms !important; transition-delay: 0ms !important; animation-duration: 0.01ms !important; animation-delay: 0ms !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>Yofina: bảng màu và ba thẻ mẫu đề xuất</h1>
+    <p>Minh họa cho <code>docs/research/ui-design-review.md</code>: thẻ hũ, thẻ cảnh báo cạn có dải ngày tới kỳ lương, và bước lộ trình dạng dòng thời gian, ở khổ 390 px, sáng và tối. Số liệu là persona hư cấu, ví mô phỏng. Hồng chủ đạo là mã riêng của Yofina, không dùng mã màu hay logo của MoMo.</p>
+    <button type="button" class="replay" id="replay">Phát lại chuyển động</button>
+  </div>
+
+  <div class="frames" id="frames"></div>
+
+  <section class="palette" aria-label="Bảng màu đề xuất">
+    <h2>Token màu và tỷ lệ tương phản (WCAG 2.x, tính từ mã hex)</h2>
+    <div class="grid2">
+      <table>
+        <thead><tr><th>Sáng</th><th>Mã</th><th>Cặp đã đo</th></tr></thead>
+        <tbody>
+          <tr><td><span class="sw" style="background:#FBF5F8"></span>bg-app</td><td><code>#FBF5F8</code></td><td>chữ chính 15,52</td></tr>
+          <tr><td><span class="sw" style="background:#FFFFFF"></span>surface</td><td><code>#FFFFFF</code></td><td>chữ chính 16,70</td></tr>
+          <tr><td><span class="sw" style="background:#F3EAEF"></span>surface-2</td><td><code>#F3EAEF</code></td><td>chữ phụ 7,38</td></tr>
+          <tr><td><span class="sw" style="background:#5D4452"></span>text-secondary</td><td><code>#5D4452</code></td><td>trên thẻ 8,70</td></tr>
+          <tr><td><span class="sw" style="background:#725B68"></span>text-tertiary</td><td><code>#725B68</code></td><td>trên thẻ 6,16</td></tr>
+          <tr><td><span class="sw" style="background:#C8276A"></span>brand</td><td><code>#C8276A</code></td><td>chữ trắng 5,31</td></tr>
+          <tr><td><span class="sw" style="background:#821041"></span>brand-text</td><td><code>#821041</code></td><td>trên thẻ 10,00; trên tint 8,71</td></tr>
+          <tr><td><span class="sw" style="background:#6E113D"></span>brand-deep</td><td><code>#6E113D</code></td><td>chữ trắng 11,60</td></tr>
+          <tr><td><span class="sw" style="background:#0A6B45"></span>đủ (chữ/nền)</td><td><code>#0A6B45 / #E0F3E9</code></td><td>5,67</td></tr>
+          <tr><td><span class="sw" style="background:#8A4B00"></span>sát (chữ/nền)</td><td><code>#8A4B00 / #FFF0D1</code></td><td>6,04</td></tr>
+          <tr><td><span class="sw" style="background:#AE2F0E"></span>hụt (chữ/nền)</td><td><code>#AE2F0E / #FFE8DE</code></td><td>5,56</td></tr>
+          <tr><td><span class="sw" style="background:#C78200"></span>nét sát (đồ họa)</td><td><code>#C78200</code></td><td>trên thẻ 3,17 (≥ 3)</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Tối</th><th>Mã</th><th>Cặp đã đo</th></tr></thead>
+        <tbody>
+          <tr><td><span class="sw" style="background:#1A0D14"></span>bg-app</td><td><code>#1A0D14</code></td><td>chữ chính 16,73</td></tr>
+          <tr><td><span class="sw" style="background:#281821"></span>surface</td><td><code>#281821</code></td><td>chữ chính 14,96</td></tr>
+          <tr><td><span class="sw" style="background:#37232E"></span>surface-2</td><td><code>#37232E</code></td><td>chữ phụ 7,72</td></tr>
+          <tr><td><span class="sw" style="background:#CAB8C1"></span>text-secondary</td><td><code>#CAB8C1</code></td><td>trên thẻ 8,96</td></tr>
+          <tr><td><span class="sw" style="background:#B39DA9"></span>text-tertiary</td><td><code>#B39DA9</code></td><td>trên thẻ 6,69</td></tr>
+          <tr><td><span class="sw" style="background:#C8276A"></span>brand</td><td><code>#C8276A</code></td><td>chữ trắng 5,31; so với thẻ 3,18</td></tr>
+          <tr><td><span class="sw" style="background:#FEA6C5"></span>brand-text</td><td><code>#FEA6C5</code></td><td>trên thẻ 9,23; trên tint 7,43</td></tr>
+          <tr><td><span class="sw" style="background:#550A2E"></span>brand-deep</td><td><code>#550A2E</code></td><td>chữ trắng 14,29</td></tr>
+          <tr><td><span class="sw" style="background:#5AD6A6"></span>đủ (chữ/nền)</td><td><code>#5AD6A6 / #10342A</code></td><td>7,50</td></tr>
+          <tr><td><span class="sw" style="background:#FFC55E"></span>sát (chữ/nền)</td><td><code>#FFC55E / #3A2B0E</code></td><td>8,75</td></tr>
+          <tr><td><span class="sw" style="background:#FF9166"></span>hụt (chữ/nền)</td><td><code>#FF9166 / #3D1F15</code></td><td>6,76</td></tr>
+          <tr><td><span class="sw" style="background:#93A9FF"></span>accent-blue</td><td><code>#93A9FF</code></td><td>trên thẻ 7,53</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+<template id="phone-tpl">
+  <div>
+    <p class="frame-label"></p>
+    <div class="phone">
+      <!-- Thẻ số dư: số đếm lên một lần khi mở -->
+      <section class="balance" aria-label="Tổng số dư">
+        <div class="lbl">Tổng số dư</div>
+        <div class="display num" data-count="8260000" aria-label="8.260.000 ₫"><span aria-hidden="true" class="v">8.260.000</span><span class="cur" aria-hidden="true">₫</span></div>
+        <div class="sim">Ví mô phỏng · ngày mô phỏng 21/11/2026</div>
+        <div class="qa" aria-hidden="true">
+          <span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></i>Chuyển tiền</span>
+          <span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg></i>Tiền vào</span>
+          <span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg></i>Giữa hũ</span>
+        </div>
+      </section>
+
+      <!-- Thẻ cảnh báo cạn (cảnh 1) -->
+      <section class="card" aria-label="Việc cần làm hôm nay">
+        <div class="row between">
+          <span class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>Việc cần làm hôm nay</span>
+          <button type="button" class="btn text">Để sau</button>
+        </div>
+        <div class="row between" style="margin-top:10px">
+          <h2 class="h-sec" style="margin:0">Hũ Ăn uống sắp cạn</h2>
+          <span class="chip bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10"/><path d="M17 7v10H7"/></svg>Hụt</span>
+        </div>
+        <div class="hero-row fade">
+          <span class="hero-num num">12 ngày</span>
+          <span class="hero-cap">hũ trống trước<br />kỳ lương</span>
+        </div>
+        <div class="strip-lbl strip-top" aria-hidden="true"></div>
+        <div class="strip" role="img"></div>
+        <div class="strip-lbl strip-bottom" aria-hidden="true"></div>
+        <p class="small ink-2" style="margin:10px 0 0">Hũ còn 380.000 ₫, dự kiến cạn 23/11. Lương về 5/12.</p>
+        <div class="row" style="margin-top:14px; flex-wrap:wrap">
+          <button type="button" class="btn primary">Xem cách bù</button>
+          <button type="button" class="btn soft">Hỏi vì sao</button>
+          <button type="button" class="btn text">Ít nhắc loại này</button>
+        </div>
+      </section>
+
+      <!-- Hai thẻ hũ: hụt và đủ -->
+      <div class="jars">
+        <article class="card jar" aria-label="Hũ Ăn uống, số dư 380.000 ₫, cạn ngày 23/11">
+          <div class="row">
+            <span class="jar-ico" style="background:var(--jar-an-uong)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></span>
+            <div style="min-width:0"><h3>Ăn uống</h3><div class="note">Chia lương 30%</div></div>
+          </div>
+          <svg class="glass" data-level="0.14" data-forecast="0" data-color="--jar-an-uong" viewBox="0 0 156 112" width="156" height="112" aria-hidden="true" style="max-width:100%;margin:0 auto;display:block"></svg>
+          <div class="amt num">380.000 ₫</div>
+          <span class="chip bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10"/><path d="M17 7v10H7"/></svg>Cạn 23/11</span>
+        </article>
+        <article class="card jar" aria-label="Hũ Du lịch, số dư 1.800.000 ₫, đủ tới kỳ lương">
+          <div class="row">
+            <span class="jar-ico" style="background:var(--jar-du-lich)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg></span>
+            <div style="min-width:0"><h3>Du lịch</h3><div class="note">Chia lương 10%</div></div>
+          </div>
+          <svg class="glass" data-level="0.67" data-forecast="0.6" data-color="--jar-du-lich" viewBox="0 0 156 112" width="156" height="112" aria-hidden="true" style="max-width:100%;margin:0 auto;display:block"></svg>
+          <div class="amt num">1.800.000 ₫</div>
+          <span class="chip ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>Đủ</span>
+        </article>
+      </div>
+
+      <!-- Bước lộ trình dạng dòng thời gian (cảnh 4) -->
+      <section class="card" aria-label="Lộ trình phiên bản 3">
+        <div class="row between" style="align-items:flex-start">
+          <h2 class="h-sec" style="margin:0">Lộ trình · Phiên bản 3</h2>
+          <span class="chip ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8Z"/></svg>Mới</span>
+        </div>
+        <div class="row" style="flex-wrap:wrap;margin-top:8px">
+          <span class="chip info">Đề xuất · chờ bạn chọn</span>
+          <span class="chip warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 2.5 20h19Z"/><path d="M12 10v4M12 17h.01"/></svg>Khả thi sau điều chỉnh</span>
+        </div>
+        <p class="small ink-2" style="margin:8px 0 0">Chi ăn uống tuần qua cao hơn kế hoạch 18%, nên lộ trình lập lại.</p>
+
+        <div class="phase-title">Tuần này · 21–30/11</div>
+        <ol class="steps">
+          <li class="step done">
+            <span class="node" aria-hidden="true"><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>
+            <div class="step-body">
+              <p class="step-title">Bù hũ Giải trí trước hạn Trả sau</p>
+              <div class="flow">
+                <span class="amt num">410.000 ₫</span>
+                <span class="dot" style="background:var(--jar-du-lich)" title="Du lịch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg></span>
+                <span class="small ink-2">Du lịch → Giải trí</span>
+                <span class="dot" style="background:var(--jar-giai-tri)" title="Giải trí"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12h4M8 10v4"/><path d="M15 13h.01M18 11h.01"/><rect x="2" y="6" width="20" height="12" rx="4"/></svg></span>
+              </div>
+              <div class="small" style="margin-top:6px;color:var(--ok-fg);font-weight:600">Đã chấp nhận · hạn 26/11</div>
+            </div>
+          </li>
+          <li class="step">
+            <span class="node" aria-hidden="true">2</span>
+            <div class="step-body">
+              <p class="step-title">Giảm ăn ngoài cuối tuần</p>
+              <div class="flow">
+                <span class="amt num">150.000 ₫</span>
+                <span class="small ink-2">mỗi tuần · hũ Ăn uống</span>
+              </div>
+              <div class="step-actions">
+                <button type="button" class="btn primary">Chấp nhận</button>
+                <button type="button" class="btn soft">Sửa, từ chối…</button>
+              </div>
+              <button type="button" class="why">Vì sao bước này?</button>
+            </div>
+          </li>
+        </ol>
+        <div class="phase-title">Kỳ lương 5/12</div>
+        <ol class="steps">
+          <li class="step">
+            <span class="node" aria-hidden="true">3</span>
+            <div class="step-body">
+              <p class="step-title">Giữ trước cho hũ Dự phòng</p>
+              <div class="flow"><span class="amt num">500.000 ₫</span><span class="small ink-2">khi lương về</span></div>
+            </div>
+          </li>
+        </ol>
+        <p class="note" style="margin:12px 0 0">Ví mô phỏng. Mọi bước đổi số dư đều cần bạn xác nhận.</p>
+      </section>
+    </div>
+  </div>
+</template>
+
+<script>
+  // Dữ liệu minh họa: hôm nay 21/11, cạn 23/11, lương 5/12 (figma-ui-design.md §5).
+  const TODAY = new Date(Date.UTC(2026, 10, 21));
+  const RUNOUT = new Date(Date.UTC(2026, 10, 23));
+  const PAYDAY = new Date(Date.UTC(2026, 11, 5));
+  const DAY = 86400000;
+  const fmt = new Intl.NumberFormat('vi-VN');
+  const dm = (d) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
+  const reduce = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function buildStrip(root) {
+    const n = Math.round((PAYDAY - TODAY) / DAY) + 1;
+    const runIdx = Math.round((RUNOUT - TODAY) / DAY);
+    const strip = root.querySelector('.strip');
+    const top = root.querySelector('.strip-top');
+    const lbl = root.querySelector('.strip-bottom');
+    for (const el of [strip, top, lbl]) el.style.setProperty('--n', n);
+    strip.setAttribute('aria-label', `Từ hôm nay ${dm(TODAY)} đến kỳ lương ${dm(PAYDAY)}: còn tiền tới ${dm(RUNOUT)}, sau đó ${Math.round((PAYDAY - RUNOUT) / DAY)} ngày hũ trống`);
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement('span');
+      d.className = 'day' + (i === 0 ? ' today' : i === runIdx ? ' runout' : i === n - 1 ? ' payday' : i > runIdx ? ' gap' : '');
+      d.style.setProperty('--i', i);
+      if (i === runIdx) d.innerHTML = '<span class="pin"></span>';
+      strip.appendChild(d);
+    }
+    // Nhãn nằm đúng cột của ngày tương ứng (cùng lưới với dải), không đặt bằng phần trăm. Nhãn ngày cạn ở hàng trên để không
+    // chồng lên nhãn "Hôm nay" khi hai ngày gần nhau.
+    const run = document.createElement('span');
+    run.className = 'l-run';
+    run.style.gridColumn = `${runIdx + 1} / span 4`;
+    run.style.justifySelf = 'start';
+    run.style.marginLeft = '-4px';
+    run.textContent = `Cạn ${dm(RUNOUT)}`;
+    top.appendChild(run);
+    lbl.innerHTML = `<span class="l-today">Hôm nay ${dm(TODAY)}</span>`;
+    const pay = document.createElement('span');
+    pay.className = 'l-pay';
+    pay.style.gridColumn = `${n - 3} / span 4`;
+    pay.textContent = `Lương ${dm(PAYDAY)}`;
+    lbl.appendChild(pay);
+  }
+
+  // Hũ thủy tinh theo hình học của JarGlass.tsx (148×112, kính 76×92 bo 20); mực nước trượt từ đáy lên khi mở.
+  function buildGlass(svg) {
+    const G = { x: 24, y: 16, w: 76, h: 92, r: 20 };
+    const level = Number(svg.dataset.level);
+    const fc = svg.dataset.forecast === undefined ? null : Number(svg.dataset.forecast);
+    const color = `var(${svg.dataset.color})`;
+    const id = 'g' + Math.random().toString(36).slice(2, 8);
+    const shift = G.h - G.h * level;
+    const fy = fc === null ? 0 : G.y + G.h * (1 - fc);
+    svg.innerHTML = `
+      <defs><clipPath id="${id}"><rect x="${G.x}" y="${G.y}" width="${G.w}" height="${G.h}" rx="${G.r}"/></clipPath></defs>
+      <rect x="38" y="0" width="48" height="12" rx="5" fill="${color}"/>
+      <rect x="${G.x}" y="${G.y}" width="${G.w}" height="${G.h}" rx="${G.r}" fill="var(--surface-2)"/>
+      <g clip-path="url(#${id})">
+        <g class="water" data-shift="${shift}" style="transform: translateY(${G.h}px)">
+          <rect x="${G.x}" y="${G.y}" width="${G.w}" height="${G.h}" fill="${color}" opacity="0.88"/>
+          <rect x="${G.x}" y="${G.y - 5}" width="${G.w}" height="10" rx="5" fill="${color}" opacity="0.55"/>
+        </g>
+        <rect x="${G.x + 6}" y="${G.y + 10}" width="6" height="46" rx="3" fill="var(--glass-shine)"/>
+      </g>
+      <rect x="${G.x}" y="${G.y}" width="${G.w}" height="${G.h}" rx="${G.r}" fill="none" stroke="var(--border)" stroke-width="2"/>
+      ${fc === null ? '' : `<line x1="${G.x + 4}" x2="${G.x + G.w + 6}" y1="${fy}" y2="${fy}" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="${G.x + G.w + 9}" y="${fy + 4}" font-size="12" font-weight="600" fill="var(--ink-2)" font-family="Plus Jakarta Sans, system-ui, sans-serif">dự báo</text>`}`;
+  }
+
+  function countUp(el) {
+    const target = Number(el.dataset.count);
+    const out = el.querySelector('.v');
+    if (reduce()) { out.textContent = fmt.format(target); return; }
+    const t0 = performance.now();
+    const dur = 800;
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      out.textContent = fmt.format(Math.round((target * e) / 1000) * 1000);
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  function play(root) {
+    root.classList.remove('on');
+    root.querySelectorAll('.water').forEach((g) => { g.style.transition = 'none'; g.style.transform = 'translateY(92px)'; });
+    void root.offsetWidth;
+    requestAnimationFrame(() => {
+      root.querySelectorAll('.water').forEach((g, i) => {
+        g.style.transition = '';
+        g.style.transitionDelay = `${120 + i * 40}ms`;
+        g.style.transform = `translateY(${g.dataset.shift}px)`;
+      });
+      root.classList.add('on');
+      root.querySelectorAll('[data-count]').forEach(countUp);
+    });
+  }
+
+  const frames = document.getElementById('frames');
+  const tpl = document.getElementById('phone-tpl');
+  for (const [cls, label] of [['t-light', 'Sáng'], ['t-dark', 'Tối']]) {
+    const node = tpl.content.firstElementChild.cloneNode(true);
+    node.querySelector('.frame-label').textContent = label;
+    node.querySelector('.phone').classList.add(cls);
+    buildStrip(node);
+    node.querySelectorAll('svg.glass').forEach(buildGlass);
+    frames.appendChild(node);
+  }
+  const playAll = () => frames.querySelectorAll('.phone').forEach(play);
+  document.getElementById('replay').addEventListener('click', playAll);
+  window.addEventListener('load', playAll);
+</script>
+</body>
+</html>
