@@ -399,12 +399,46 @@ class IngestJar(_Strict):
     icon_key: KeyName
 
 
+#: số thập phân không âm dạng chuỗi (số tiền theo ngoại tệ, tỷ giá VND cho một đơn vị): chính xác, không qua float
+FxDecimal = Annotated[str, Field(pattern=r"^[0-9]{1,12}(\.[0-9]{1,4})?$", max_length=17)]
+CurrencyCode = Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
+
+
+class IngestFx(_Strict):
+    """Dòng ghi bằng ngoại tệ (F6): số và tiền tệ đúng như chứng từ, và tỷ giá đã dùng để ước tính `amount_vnd`.
+
+    `converted`: có tỷ giá bán của nguồn (`rate_source`) ngày `rate_date`, `amount_vnd` = làm tròn tới đồng của
+    `amount_original * rate`. `rate_unavailable`: tra tỷ giá lỗi, không có `rate_*` và dòng chưa có `amount_vnd` cho tới khi
+    người dùng nhập số VND lúc chốt."""
+
+    currency: CurrencyCode
+    amount_original: FxDecimal
+    status: Literal["converted", "rate_unavailable"]
+    #: số VND cho một đơn vị ngoại tệ (không phải số tiền nên không có hậu tố `_vnd`)
+    rate: FxDecimal | None = None
+    rate_type: Literal["sell"] | None = None
+    rate_source: Literal["vietcombank"] | None = None
+    rate_date: IsoDate | None = None
+
+    @model_validator(mode="after")
+    def _rate_matches_status(self) -> IngestFx:
+        fields = (self.rate, self.rate_type, self.rate_source, self.rate_date)
+        if self.currency == "VND":
+            raise ValueError("fx chỉ dành cho dòng không phải VND")
+        if self.status == "converted" and any(f is None for f in fields):
+            raise ValueError("fx converted cần đủ rate, rate_type, rate_source, rate_date")
+        if self.status == "rate_unavailable" and any(f is not None for f in fields):
+            raise ValueError("fx rate_unavailable không có rate_*")
+        return self
+
+
 class IngestRow(_Strict):
     row_id: Uuid
     seq: Annotated[int, Field(ge=1, le=10000)]
     kind: Literal["expense", "income"]
     app_date: IsoDate
-    amount_vnd: VndPositive
+    #: vắng CHỈ khi dòng ngoại tệ chưa có tỷ giá (`fx.status = rate_unavailable`): người dùng nhập số VND lúc chốt
+    amount_vnd: VndPositive | None = None
     counterparty: Annotated[str, Field(min_length=1, max_length=120)] | None = None
     description: Annotated[str, Field(min_length=1, max_length=200)] | None = None
     extract_confidence: Ratio
@@ -413,6 +447,13 @@ class IngestRow(_Strict):
     jar_source: Literal["type_map", "rule", "model", "user"] | None = None
     review_status: IngestRowStatus
     duplicate_of: Uuid | None = None
+    fx: IngestFx | None = None
+
+    @model_validator(mode="after")
+    def _amount_or_pending_rate(self) -> IngestRow:
+        if self.amount_vnd is None and (self.fx is None or self.fx.status != "rate_unavailable"):
+            raise ValueError("amount_vnd chỉ được vắng ở dòng ngoại tệ chưa có tỷ giá")
+        return self
 
 
 class IngestCounts(_Strict):

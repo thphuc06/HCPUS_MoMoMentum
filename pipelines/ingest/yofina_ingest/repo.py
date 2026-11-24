@@ -18,6 +18,7 @@ from typing import Any
 from yofina_core.db import DataApi, Row
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.ingest import LEDGER_SOURCE, coverage_ratio
+from yofina_core.money import to_vnd
 from yofina_core.params import TxTypeInfo, fold_text
 from yofina_ingest.context import Rule
 
@@ -89,7 +90,7 @@ SQL_HEAL_EMPTY_JOBS = (
 SQL_LOCK_JOB = "SELECT status, source_kind FROM ingest_jobs WHERE id = CAST(:job AS uuid) AND user_id = :uid FOR UPDATE"
 SQL_JOB_ROWS = (
     "SELECT id, seq, kind, app_date, amount_vnd, counterparty, description, suggested_jar_code, jar_confidence, "
-    "jar_source, tx_type, review_status, dedupe_key FROM ingest_rows "
+    "jar_source, tx_type, review_status, dedupe_key, fx FROM ingest_rows "
     "WHERE job_id = CAST(:job AS uuid) AND user_id = :uid ORDER BY seq LIMIT 501 FOR UPDATE"
 )
 SQL_JAR_CODES = (
@@ -109,10 +110,11 @@ SQL_INSERT_TX = (
 )
 SQL_APPROVE_ROWS = (
     "WITH s AS (SELECT CAST(e ->> 'row_id' AS uuid) AS row_id, CAST(e ->> 'tx_id' AS uuid) AS tx_id, e ->> 'jar' AS jar, "
-    "e ->> 'jar_source' AS jar_source, CAST(e ->> 'jar_confidence' AS numeric) AS jar_conf "
+    "e ->> 'jar_source' AS jar_source, CAST(e ->> 'jar_confidence' AS numeric) AS jar_conf, "
+    "CAST(e ->> 'amount_vnd' AS numeric) AS amount "
     "FROM jsonb_array_elements(CAST(:rows AS jsonb)) AS x(e)), "
     "u AS (UPDATE ingest_rows r SET review_status = 'approved', transaction_id = s.tx_id, suggested_jar_code = s.jar, "
-    "jar_source = s.jar_source, jar_confidence = s.jar_conf, updated_at = now() FROM s "
+    "jar_source = s.jar_source, jar_confidence = s.jar_conf, amount_vnd = s.amount, updated_at = now() FROM s "
     "WHERE r.id = s.row_id AND r.user_id = :uid AND r.job_id = CAST(:job AS uuid) "
     "AND r.review_status IN ('auto_added', 'pending') RETURNING r.id) "
     "SELECT count(*) AS n FROM u"
@@ -344,9 +346,12 @@ class IngestRepo:
         window_days: int,
         trace_id: str,
         params: Mapping[str, Any],
+        amounts: Mapping[str, int] | None = None,
     ) -> ConfirmOutcome:
         """Ghi các dòng được duyệt vào sổ cái và đóng job, trong MỘT transaction. `approvals`: `row_id -> hũ người dùng chọn`
-        (None = giữ hũ đề xuất). Lỗi nghiệp vụ ném `YofinaError` và transaction rollback (không ghi gì)."""
+        (None = giữ hũ đề xuất). `amounts`: `row_id -> số VND người dùng nhập` (chỉ dòng ngoại tệ; vắng thì giữ số ước tính). Lỗi
+        nghiệp vụ ném `YofinaError` và transaction rollback (không ghi gì)."""
+        amounts = amounts or {}
         with self.db.transaction(uid) as tx:
             job = tx.execute(SQL_LOCK_JOB, {"job": job_id, "uid": uid})
             if not job:
@@ -376,7 +381,7 @@ class IngestRepo:
                         ErrorCode.PARAMS_INVALID,
                         "Dòng đã được xử lý hoặc là dòng trùng nên không chốt được.",
                     )
-                amount = int(r["amount_vnd"])
+                amount = row_amount(r, amounts.get(rid))
                 jar = r["suggested_jar_code"]
                 jar_source, jar_conf = r["jar_source"], r["jar_confidence"]
                 classified: str | None = None
@@ -424,6 +429,7 @@ class IngestRepo:
                         "jar": jar,
                         "jar_source": jar_source,
                         "jar_confidence": None if jar_conf is None else float(jar_conf),
+                        "amount_vnd": amount,
                     }
                 )
             before = coverage_ratio(self._facts(tx, uid, now, tz, window_days))
@@ -526,3 +532,19 @@ class IngestLabelStore:
 
 def _date_text(value: date | str) -> str:
     return value.isoformat() if isinstance(value, date) else str(value)
+
+
+def row_amount(row: Mapping[str, Any], override: int | None) -> int:
+    """Số VND ghi vào sổ cái cho một dòng nạp: số người dùng nhập (CHỈ dòng ngoại tệ, có `fx`), không thì số của dòng. Dòng ngoại tệ
+    chưa có tỷ giá (không có `amount_vnd`) bắt buộc có số người dùng nhập. Dùng chung cho xem trước (`api`) và chốt (`confirm_rows`)."""
+    if override is not None:
+        if row.get("fx") is None:
+            raise YofinaError(
+                ErrorCode.PARAMS_INVALID, "Chỉ sửa được số tiền của dòng ghi bằng ngoại tệ."
+            )
+        return int(override)
+    if row.get("amount_vnd") is None:
+        raise YofinaError(
+            ErrorCode.PARAMS_INVALID, "Nhập số tiền VND cho dòng ngoại tệ trước khi thêm."
+        )
+    return to_vnd(row["amount_vnd"])

@@ -228,10 +228,13 @@ def test_cham_muc_not_financial():
     assert not ev.score_item(
         item, {"status": "ok", "error_code": None, "rows": [pred(disposition="auto_add")]}
     )["expected_error_ok"]
-    # bảng phí, menu, màn ATM: backend trả `no_transactions`, API vẫn trả INGEST_NOT_FINANCIAL như `not_financial`
+    # bảng phí, menu, màn ATM: backend trả `no_transactions`, API nay là INGEST_NO_TRANSACTIONS; nhãn `not_financial` (gán trước khi
+    # tách mã) vẫn đạt như trước, vì cả hai đều là "từ chối tệp, không đọc dòng nào"
+    assert ev.api_error_code("no_transactions") == "INGEST_NO_TRANSACTIONS"
     assert ev.score_item(item, {"status": "error", "error_code": "no_transactions", "rows": []})[
         "expected_error_ok"
     ]
+    assert ev.error_matches("not_financial", "no_transactions") and not ev.error_matches("unreadable", "not_financial")
     assert not ev.score_item(item, {"status": "error", "error_code": "unreadable", "rows": []})[
         "expected_error_ok"
     ]

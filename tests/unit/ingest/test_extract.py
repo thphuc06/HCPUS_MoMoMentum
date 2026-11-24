@@ -6,12 +6,14 @@ import importlib.util
 import json
 import re
 import sys
-from datetime import date
+from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import pytest
 from botocore.exceptions import ClientError
 from ingest_helpers import PNG, REPO, FakeBedrock, csv_bytes, make_gateway
 from yofina_ingest import extract as ex
+from yofina_ingest import fx
 from yofina_ingest.context import ExtractContext, Rule, eval_context
 
 from yofina_core.ingest import IngestSettings
@@ -229,14 +231,23 @@ def test_dong_khong_phai_chi_tieu_that_bi_loai_khong_bao_gio_auto(gateway_of, ba
     assert len(res.dropped) == 1
 
 
-@pytest.mark.parametrize("doc_type", ["unexecuted_form", "other_financial", "transaction_history"])
-def test_man_chua_thuc_hien_hoac_bang_phi_khong_co_dong_nao(gateway_of, doc_type):
-    """Model trả dòng `pending` cho màn xác nhận/OTP/biểu mẫu: không dòng nào sống sót, job bị từ chối."""
+@pytest.mark.parametrize(
+    ("doc_type", "reason"),
+    [
+        ("unexecuted_form", "unexecuted_form"),
+        ("other_financial", "not_completed"),
+        ("transaction_history", "not_completed"),
+    ],
+)
+def test_man_chua_thuc_hien_hoac_bang_phi_khong_co_dong_nao(gateway_of, doc_type, reason):
+    """Model trả dòng `pending` cho màn xác nhận/OTP/biểu mẫu: không dòng nào sống sót, job bị từ chối với mã riêng (không phải
+    INGEST_NOT_FINANCIAL) và lý do con đúng."""
     gw, _ = gateway_of([doc([row(status="pending")], document_type=doc_type)])
     with pytest.raises(ex.ExtractError) as e:
         ex.extract_rows(PNG, filename="a.png", content_type="image/png", ctx=ctx(), gateway=gw)
-    assert e.value.code == "no_transactions"
-    assert ex.ERROR_CODE_OF["no_transactions"] == "INGEST_NOT_FINANCIAL"
+    assert e.value.code == "no_transactions" and e.value.reason == reason
+    assert e.value.message == ex.NO_TX_REASONS[reason]
+    assert ex.ERROR_CODE_OF["no_transactions"] == "INGEST_NO_TRANSACTIONS"
 
 
 def test_anh_khong_phai_tai_chinh_bi_tu_choi(gateway_of):
@@ -768,3 +779,163 @@ def test_chinh_sach_pii_tu_ngu_canh_giu_ten_cua_hang_da_biet(gateway_of):
         context=c,
     )
     assert res.candidates[0].counterparty == "Nguyen Thi Hoa Bakery"
+
+
+# --- chứng từ ngoại tệ (25/11: hóa đơn "$111.11 USD" bị báo "không phải biên lai") ---------------------------------------------
+class FxSource:
+    """Nguồn tỷ giá giả cho test (mã dùng nguồn thật `fx.VietcombankSource`); `fail` thì như mất mạng."""
+
+    def __init__(self, rates=None, fail=False):
+        self.rates = rates if rates is not None else {"USD": Decimal("25790.00"), "EUR": Decimal("29506.30")}
+        self.fail = fail
+        self.calls: list[date] = []
+
+    def fetch(self, day):
+        self.calls.append(day)
+        if self.fail:
+            raise fx.RateUnavailable("network")
+        return fx.RateTable(day=day, rates=self.rates)
+
+
+def fx_ctx(source):
+    return ctx(fx=fx.FxConverter(source, now=lambda: datetime(2026, 11, 24, 11, 30, tzinfo=UTC)))
+
+
+def usd_bill(**kw):
+    """Hóa đơn dịch vụ thu tự động qua thẻ: "Amount due $111.11 USD, due November 10, 2026" (không có số VND trên chứng từ)."""
+    return row(
+        **{
+            "date": "2026-11-10",
+            "amount_vnd": None,
+            "currency": "USD",
+            "amount_original": 111.11,
+            "counterparty": "Dich vu AI",
+            "description": "Max plan",
+            "tx_type": None,
+            "jar_code": "giai_tri",
+            "jar_confidence": 0.95,
+            "confidence": 0.98,
+            **kw,
+        }
+    )
+
+
+def test_hoa_don_ngoai_te_quy_doi_theo_ty_gia_ban_ngay_tren_chung_tu_va_vao_hang_cho(gateway_of):
+    src = FxSource()
+    res, _ = run_image(gateway_of, doc([usd_bill()], document_type="bill_or_invoice"), context=fx_ctx(src))
+    (c,) = res.candidates
+    assert c.amount_vnd == 2_865_527  # 111,11 × 25.790 = 2.865.526,9 làm tròn tới đồng
+    assert src.calls == [date(2026, 11, 10)]  # ngày trên chứng từ
+    assert c.fx.to_json() == {
+        "currency": "USD", "amount_original": "111.11", "status": "converted", "rate": "25790.00",
+        "rate_type": "sell", "rate_source": "vietcombank", "rate_date": "2026-11-10",
+    }  # fmt: skip
+    assert not c.auto_add and "foreign_currency" in c.flags  # đủ tin cậy vẫn không chọn sẵn: số VND chỉ là ước tính
+    ev = ex.result_to_eval(res, "eval")["rows"][0]
+    assert (ev["amount_vnd"], ev["currency"], ev["disposition"]) == (2_865_527, "USD", "review")
+
+
+def test_model_tu_quy_doi_thi_bo_so_vnd_cua_model_dung_so_goc(gateway_of):
+    res, _ = run_image(
+        gateway_of, doc([usd_bill(amount_vnd=2_900_000)]), context=fx_ctx(FxSource())
+    )
+    assert res.candidates[0].amount_vnd == 2_865_527
+
+
+def test_tra_ty_gia_loi_dong_van_vao_hang_cho_voi_so_goc_khong_doan_so_vnd(gateway_of):
+    res, _ = run_image(gateway_of, doc([usd_bill()]), context=fx_ctx(FxSource(fail=True)))
+    (c,) = res.candidates
+    assert c.amount_vnd is None and not c.auto_add
+    assert c.fx.to_json() == {"currency": "USD", "amount_original": "111.11", "status": "rate_unavailable"}
+
+
+def test_khong_co_ngay_thi_ty_gia_ngay_nap(gateway_of):
+    src = FxSource()
+    res, _ = run_image(gateway_of, doc([usd_bill(date=None)]), context=fx_ctx(src))
+    assert src.calls == [TODAY] and res.candidates[0].fx.rate.rate_date == TODAY
+
+
+def test_dong_ngoai_te_bi_loai_thi_khong_tra_ty_gia(gateway_of):
+    src = FxSource()
+    payload = doc([usd_bill(status="failed"), row()])
+    res, _ = run_image(gateway_of, payload, context=fx_ctx(src))
+    assert [c.amount_vnd for c in res.candidates] == [250000] and src.calls == []
+    assert [d.reason for d in res.dropped] == ["not_completed"]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"currency": "???", "amount_original": 12.5},  # không nhận ra tiền tệ: không đoán
+        {"currency": "USD", "amount_original": None},
+        {"currency": "USD", "amount_original": "abc"},
+    ],
+)
+def test_ngoai_te_khong_doc_duoc_so_hay_tien_te_bi_loai_no_amount(gateway_of, bad):
+    src = FxSource()
+    res, _ = run_image(gateway_of, doc([usd_bill(**bad), row()]), context=fx_ctx(src))
+    assert [d.reason for d in res.dropped] == ["no_amount"] and src.calls == []
+
+
+def test_dong_vnd_khong_doi_va_khong_goi_nguon_ty_gia(gateway_of):
+    src = FxSource()
+    res, _ = run_image(gateway_of, doc([row(currency="VND")]), context=fx_ctx(src))
+    (c,) = res.candidates
+    assert c.amount_vnd == 250000 and c.fx is None and c.auto_add and src.calls == []
+
+
+def test_schema_gui_model_co_tien_te_va_so_goc():
+    from yofina_ingest.schemas import ExtractedRow
+
+    r = ExtractedRow.model_validate({"amount_vnd": None, "currency": "usd", "amount_original": "$1,234.56"})
+    assert (r.currency, r.amount_original, r.amount_vnd) == ("USD", 1234.56, None)
+    assert ExtractedRow.model_validate({}).currency == "VND"
+    fields = ExtractedRow.model_fields
+    assert "ISO 4217" in fields["currency"].description and "phần lẻ" in fields["amount_original"].description
+    assert "không tự quy đổi" in fields["amount_vnd"].description
+
+
+def test_loi_nhac_tien_te_va_hoa_don_thu_tu_dong_la_nguyen_tac_chung():
+    from yofina_ingest import prompts
+
+    system = prompts.image_system(ctx().jars, ctx().type_map, TODAY)
+    cur = next(line for line in system.splitlines() if line.startswith("- currency, amount_original"))
+    assert "không tự quy đổi" in cur and "amount_vnd là null" in cur
+    bill = next(line for line in system.splitlines() if "dịch vụ thu tự động" in line)
+    assert "KHÔNG phải màn chưa thực hiện" in bill and "status=completed" in bill and "bill_or_invoice" in bill
+    assert not re.search(r"anthropic|claude", system, re.I)  # nguyên tắc chung, không nhắc tên một dịch vụ
+
+
+# --- lý do con của no_transactions ------------------------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("rows", "doc_type", "reason"),
+    [
+        ([row(own_account_transfer=True, description="Nap tien vao vi tu the")], "transfer_receipt", "own_account_transfer"),
+        ([row(own_account_transfer=True, counterparty=None, description="RUT TIEN TAI ATM")], "transaction_history", "cash_withdrawal"),
+        ([row(amount_vnd=None)], "transfer_receipt", "no_amount"),
+        ([row(status="failed")], "transfer_receipt", "not_completed"),
+        ([], "other_financial", "no_rows"),
+        ([row(status="pending")], "unexecuted_form", "unexecuted_form"),
+    ],
+)
+def test_khong_con_dong_nao_bao_dung_ly_do_con(gateway_of, rows, doc_type, reason):
+    gw, _ = gateway_of([doc(rows, document_type=doc_type)])
+    with pytest.raises(ex.ExtractError) as e:
+        ex.extract_rows(PNG, filename="a.png", content_type="image/png", ctx=ctx(), gateway=gw)
+    assert (e.value.code, e.value.reason, e.value.message) == ("no_transactions", reason, ex.NO_TX_REASONS[reason])
+    assert ex.ERROR_CODE_OF[e.value.code] == "INGEST_NO_TRANSACTIONS"
+
+
+def test_ly_do_con_lay_theo_so_dong_bi_loai_nhieu_nhat():
+    d = [ex.Dropped("own_account_transfer"), ex.Dropped("own_account_transfer", detail="cash_withdrawal")]
+    assert ex.no_transactions_reason("transaction_history", d) == "own_account_transfer"  # hòa: thứ tự cố định
+    d.append(ex.Dropped("own_account_transfer", detail="cash_withdrawal"))
+    assert ex.no_transactions_reason("transaction_history", d) == "cash_withdrawal"
+    assert ex.no_transactions_reason("bank_statement", [ex.Dropped("no_date"), ex.Dropped("formula_amount")]) == "no_amount"
+
+
+def test_anh_khong_phai_tai_chinh_van_ma_cu_va_eval_tra_ly_do(gateway_of):
+    gw, _ = gateway_of([doc([row(status="failed")], document_type="transaction_history")])
+    out = ex.extract(PNG, filename="a.png", content_type="image/png", ctx=ctx(), gateway=gw)
+    assert (out["error_code"], out["error_reason"]) == ("no_transactions", "not_completed")
+    assert ex.ERROR_CODE_OF["not_financial"] == "INGEST_NOT_FINANCIAL"

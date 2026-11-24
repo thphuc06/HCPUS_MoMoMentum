@@ -73,14 +73,14 @@ export function CoverageChange({ data, actions }: { data: CoverageChangeData; ac
  * dòng ĐÃ THÊM của bảng duyệt (chỉ để chọn đích điều hướng, không phải số nghiệp vụ hiển thị). Không có bảng duyệt thì lấy
  * hũ đầu tiên server liệt kê. Không có hũ nào (chỉ có thu nhập) thì null.
  */
-export function mostAffectedJar(data: CoverageChangeData, rows?: ReadonlyArray<{ kind: string; review_status: string; amount_vnd: number; suggested_jar?: { code: string } }>): string | null {
+export function mostAffectedJar(data: CoverageChangeData, rows?: ReadonlyArray<{ kind: string; review_status: string; amount_vnd?: number; suggested_jar?: { code: string } }>): string | null {
   const affected = new Set(data.jars_affected.map((j) => j.code))
   if (affected.size === 0) return null
   const sums = new Map<string, number>()
   for (const r of rows ?? []) {
     const code = r.suggested_jar?.code
     if (r.kind !== 'expense' || r.review_status !== 'approved' || !code || !affected.has(code)) continue
-    sums.set(code, (sums.get(code) ?? 0) + r.amount_vnd)
+    sums.set(code, (sums.get(code) ?? 0) + (r.amount_vnd ?? 0))
   }
   let best: string | null = null
   for (const [code, sum] of sums) if (best === null || sum > sums.get(best)!) best = code

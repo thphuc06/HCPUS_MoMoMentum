@@ -169,3 +169,39 @@ def test_nhan_ra_van_ban_giong_chi_dan(text):
 )
 def test_noi_dung_binh_thuong_khong_bi_gan_co(text):
     assert not n.looks_like_instruction(text)
+
+
+# --- tiền tệ của chứng từ ---------------------------------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("raw", "want"),
+    [
+        (None, "VND"), ("", "VND"), ("vnd", "VND"), ("₫", "VND"), ("VNĐ", "VND"),
+        ("usd", "USD"), ("$", "USD"), ("US$", "USD"), ("€", "EUR"), ("£", "GBP"), ("jpy", "JPY"),
+        ("¥", ""), ("đô", ""), ("US dollar", ""),  # không nhận ra thì rỗng: dòng bị loại, không đoán
+    ],
+)  # fmt: skip
+def test_ma_tien_te(raw, want):
+    assert n.currency_code(raw) == want
+
+
+@pytest.mark.parametrize(
+    ("raw", "want"),
+    [
+        (111.11, "111.11"), ("111.11", "111.11"), ("$111.11 USD", "111.11"), ("1,234.56", "1234.56"),
+        ("1.234,56 €", "1234.56"), ("48,50", "48.5"), ("1,000", "1000"), ("1.000.000", "1000000"),
+        (20, "20"), ("0.1234", "0.1234"), (-5.5, "5.5"),
+    ],
+)  # fmt: skip
+def test_so_tien_ngoai_te_giu_phan_le(raw, want):
+    assert format(n.parse_foreign_amount(raw), "f") == want
+
+
+@pytest.mark.parametrize("raw", [None, True, "", "abc", 0, "0.00", float("nan"), "1" * 13])
+def test_so_tien_ngoai_te_khong_hop_le(raw):
+    assert n.parse_foreign_amount(raw) is None
+
+
+def test_rut_tien_mat_khac_phi_rut_tien():
+    assert n.looks_like_cash_withdrawal("RUT TIEN TAI ATM VCB")
+    assert not n.looks_like_cash_withdrawal("PHI RUT TIEN ATM")
+    assert not n.looks_like_cash_withdrawal("Nap tien vao vi tu the")

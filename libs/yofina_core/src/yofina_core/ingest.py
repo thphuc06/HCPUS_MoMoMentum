@@ -26,6 +26,7 @@ from yofina_core.blocks import (
     CoverageChangeData,
     CoverageJar,
     IngestCounts,
+    IngestFx,
     IngestJar,
     IngestJobStatus,
     IngestReviewBlock,
@@ -251,13 +252,14 @@ def build_ingest_review(
         code = r.get("suggested_jar_code")
         sj = by_code.get(code) if code and r["kind"] == "expense" else None
         dup = r.get("duplicate_of_transaction_id")
+        fx = r.get("fx")
         out_rows.append(
             IngestRow(
                 row_id=str(r["id"]),
                 seq=int(r["seq"]),
                 kind=r["kind"],
                 app_date=_date_text(r["app_date"])[:10],
-                amount_vnd=to_vnd(r["amount_vnd"]),
+                amount_vnd=to_vnd(r["amount_vnd"]) if r.get("amount_vnd") is not None else None,
                 counterparty=r.get("counterparty") or None,
                 description=r.get("description") or None,
                 extract_confidence=float(Decimal(str(r["extract_confidence"]))),
@@ -266,6 +268,7 @@ def build_ingest_review(
                 jar_source=r.get("jar_source") if sj else None,
                 review_status=r["review_status"],
                 duplicate_of=str(dup) if dup and r["review_status"] == "duplicate" else None,
+                fx=IngestFx(**fx) if fx else None,
             )
         )
     job_id = str(job["id"])

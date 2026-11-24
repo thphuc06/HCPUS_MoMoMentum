@@ -753,12 +753,24 @@ export type IngestJobStatus = z.infer<typeof IngestJobStatus>
 export const IngestRowStatus = z.enum(["auto_added", "pending", "approved", "rejected", "duplicate"])
 export type IngestRowStatus = z.infer<typeof IngestRowStatus>
 
+/** Dòng ghi bằng ngoại tệ: số và tiền tệ đúng như chứng từ, và tỷ giá đã dùng để ước tính amount_vnd. converted: có tỷ giá bán của rate_source ngày rate_date, amount_vnd = amount_original × rate làm tròn tới đồng (số ước tính, người dùng sửa được trước khi chốt vì sao kê thẻ thường khác do phí chuyển đổi). rate_unavailable: tra tỷ giá lỗi, không có rate, rate_type, rate_source, rate_date và dòng chưa có amount_vnd cho tới khi người dùng nhập số VND lúc chốt. Dòng có fx không bao giờ được chọn sẵn. */
+export const IngestFx = z.object({
+  currency: z.string().regex(new RegExp("^[A-Z]{3}$")),
+  amount_original: z.string().max(17).regex(new RegExp("^[0-9]{1,12}(\\.[0-9]{1,4})?$")),
+  status: z.enum(["converted", "rate_unavailable"]),
+  rate: z.string().max(17).regex(new RegExp("^[0-9]{1,12}(\\.[0-9]{1,4})?$")).optional(),
+  rate_type: z.enum(["sell"]).optional(),
+  rate_source: z.enum(["vietcombank"]).optional(),
+  rate_date: IsoDate.optional(),
+})
+export type IngestFx = z.infer<typeof IngestFx>
+
 export const IngestRow = z.object({
   row_id: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")),
   seq: z.int().min(1).max(10000),
   kind: z.enum(["expense", "income"]),
   app_date: IsoDate,
-  amount_vnd: VndPositive,
+  amount_vnd: VndPositive.optional(),
   counterparty: z.string().min(1).max(120).optional(),
   description: z.string().min(1).max(200).optional(),
   extract_confidence: Ratio,
@@ -767,6 +779,7 @@ export const IngestRow = z.object({
   jar_source: z.enum(["type_map", "rule", "model", "user"]).optional(),
   review_status: IngestRowStatus,
   duplicate_of: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")).optional(),
+  fx: IngestFx.optional(),
 })
 export type IngestRow = z.infer<typeof IngestRow>
 

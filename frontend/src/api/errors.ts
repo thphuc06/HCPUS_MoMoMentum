@@ -50,6 +50,8 @@ export const ERROR_CODES = [
   // phase 5 (bộ nhớ của trợ lý)
   'MEMORY_RECORD_NOT_FOUND',
   'MEMORY_UNAVAILABLE',
+  // phase 5 (F6: tệp là chứng từ tài chính nhưng không còn giao dịch nào, tách khỏi INGEST_NOT_FINANCIAL)
+  'INGEST_NO_TRANSACTIONS',
 ] as const
 
 export const ErrorCode = z.enum(ERROR_CODES)
@@ -108,6 +110,7 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   SHOCK_NOT_FOUND: 404,
   MEMORY_RECORD_NOT_FOUND: 404,
   MEMORY_UNAVAILABLE: 503,
+  INGEST_NO_TRANSACTIONS: 422,
 }
 
 /** Thông báo tiếng Việt cho từng mã lỗi (thay vì hiện mã thô hay chữ tiếng Anh của server). */
@@ -156,11 +159,25 @@ export const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   SHOCK_NOT_FOUND: 'Không có cú sốc này. Bạn chọn một trong các cú sốc có sẵn nhé.',
   MEMORY_RECORD_NOT_FOUND: 'Không còn mục nhớ này. Có thể nó đã được xóa.',
   MEMORY_UNAVAILABLE: 'Bộ nhớ của trợ lý đang không trả lời. Thử lại sau ít phút; dữ liệu khác vẫn dùng được.',
+  INGEST_NO_TRANSACTIONS: 'Tệp này không có giao dịch nào đã hoàn tất để thêm.',
   NETWORK: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
   TIMEOUT: 'Máy chủ phản hồi quá lâu. Nếu bạn vừa ghi một giao dịch, kiểm tra ở Hoạt động trước khi thử lại.',
   INVALID_RESPONSE: 'Máy chủ trả dữ liệu không đọc được. Thử lại sau ít phút.',
   SESSION_EXPIRED: 'Phiên đăng nhập đã hết hạn. Bạn đăng nhập lại nhé.',
   UPLOAD_FAILED: 'Chưa tải được tệp lên. Kiểm tra mạng rồi thử lại.',
+}
+
+/**
+ * Lý do con của INGEST_NO_TRANSACTIONS (`error_reason` của job, enum IngestErrorReason trong openapi.yaml): câu báo đúng vì sao
+ * tệp không có dòng nào để duyệt. Lý do lạ (server mới hơn) thì dùng câu chung của mã.
+ */
+export const INGEST_NO_TX_REASON_MESSAGES: Record<string, string> = {
+  unexecuted_form: 'Đây là màn chưa thực hiện (xác nhận hay OTP), chưa có giao dịch nào.',
+  not_completed: 'Giao dịch trong tệp chưa thành công nên chưa thêm.',
+  own_account_transfer: 'Tệp chỉ có tiền chuyển giữa các tài khoản của bạn.',
+  cash_withdrawal: 'Tệp chỉ có rút tiền mặt; Yofina không theo dõi tiền mặt.',
+  no_amount: 'Chưa đọc được số tiền nào trong tệp. Bạn thử ảnh rõ hơn nhé.',
+  no_rows: 'Tệp này không có khoản tiền đã giao dịch nào.',
 }
 
 export class ApiError extends Error {

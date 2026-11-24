@@ -109,11 +109,13 @@ class FakeRepo:
         }
 
     def confirm_rows(
-        self, uid, *, job_id, approvals, reject_ids, now, tz, window_days, trace_id, params
-    ):
+        self, uid, *, job_id, approvals, reject_ids, now, tz, window_days, trace_id, params,
+        amounts=None,
+    ):  # fmt: skip
         self.confirmed.append(
-            {"uid": uid, "job_id": job_id, "approvals": dict(approvals), "reject": list(reject_ids)}
-        )
+            {"uid": uid, "job_id": job_id, "approvals": dict(approvals), "reject": list(reject_ids),
+             "amounts": dict(amounts or {})}
+        )  # fmt: skip
         self.jobs[job_id]["status"] = "done"
         return ConfirmOutcome(
             rows_added=len(approvals), external_spend_added_vnd=85000, external_income_added_vnd=2_000_000,
@@ -423,3 +425,73 @@ def test_loi_khong_biet_la_internal_error_khong_lo_chi_tiet(env, monkeypatch):
     monkeypatch.setattr(repo, "list_jobs", boom)
     out = call(api, "get_job_status")
     assert (out["code"], out["message"]) == ("INTERNAL_ERROR", "Có lỗi hệ thống, thử lại sau.")
+
+
+# --- dòng ngoại tệ: số VND người dùng sửa hay nhập lúc chốt ----------------------------------------------------------------
+FX_OK = {"currency": "USD", "amount_original": "111.11", "status": "converted", "rate": "25790.00",
+         "rate_type": "sell", "rate_source": "vietcombank", "rate_date": "2026-11-10"}  # fmt: skip
+FX_NO_RATE = {"currency": "EUR", "amount_original": "48.5", "status": "rate_unavailable"}
+
+
+def fx_job(repo):
+    repo.add_job()
+    repo.rows[JOB][0].update(amount_vnd=Decimal(2_865_527), fx=FX_OK, review_status="pending")
+    repo.rows[JOB][1].update(amount_vnd=None, fx=FX_NO_RATE)
+
+
+def test_dong_ngoai_te_giu_so_uoc_tinh_hay_sua_so_vnd_va_xem_truoc_dung_so(env):
+    api, repo = env
+    fx_job(repo)
+    norm, preview = api.preview_confirmation(
+        USER, tool="confirm_rows",
+        params={"job_id": JOB, "rows": [{"row_id": R1}, {"row_id": R2, "amount_vnd": "1400000"}], "reject_row_ids": [R3]},
+    )  # fmt: skip
+    assert norm["rows"] == [{"row_id": R1}, {"row_id": R2, "amount_vnd": 1_400_000}]  # ký kèm số VND người dùng nhập
+    changes = {c["label"]: c["after"] for c in preview["changes"]}
+    assert changes["Chi ngoài ví"] == "4.265.527 ₫"  # 2.865.527 ước tính + 1.400.000 người dùng nhập
+    assert "1 dòng ngoại tệ dùng số VND ước tính" in preview["warnings"][1]
+    _, edited = api.preview_confirmation(
+        USER, tool="confirm_rows", params={"job_id": JOB, "rows": [{"row_id": R1, "amount_vnd": 2_950_000}]}
+    )
+    assert {c["label"]: c["after"] for c in edited["changes"]}["Chi ngoài ví"] == "2.950.000 ₫"
+    assert "warnings" not in edited
+
+
+def test_chot_dong_ngoai_te_chuyen_so_vnd_xuong_repo(env):
+    api, repo = env
+    fx_job(repo)
+    params = {"job_id": JOB, "rows": [{"row_id": R1, "amount_vnd": 2_950_000}], "reject_row_ids": [R2, R3]}
+    token = api.confirm.issue(USER, "confirm_rows", normalize_params("confirm_rows", params)).token
+    assert call(api, "confirm_rows", **params, confirm_token=token)["status"] == "OK"
+    assert repo.confirmed[0]["amounts"] == {R1: 2_950_000}
+
+
+@pytest.mark.parametrize(
+    ("rows", "msg"),
+    [
+        ([{"row_id": R2}], "Nhập số tiền VND cho dòng ngoại tệ"),  # chưa có tỷ giá: bắt buộc nhập
+        ([{"row_id": R3, "amount_vnd": 5}], "Chỉ sửa được số tiền của dòng ghi bằng ngoại tệ"),  # dòng VND không sửa số
+    ],
+)
+def test_so_vnd_thieu_hoac_sua_dong_vnd_bi_tu_choi(env, rows, msg):
+    api, repo = env
+    fx_job(repo)
+    with pytest.raises(YofinaError) as e:
+        api.preview_confirmation(USER, tool="confirm_rows", params={"job_id": JOB, "rows": rows})
+    assert e.value.code == ErrorCode.PARAMS_INVALID and msg in e.value.message
+
+
+def test_get_job_status_co_ly_do_con_va_dong_ngoai_te(env):
+    api, repo = env
+    fx_job(repo)
+    out = call(api, "get_job_status", job_id=JOB)
+    check_contract("get_job_status", out)
+    rows = {r["row_id"]: r for r in out["data"]["review"]["rows"]}
+    assert rows[R1]["fx"] == FX_OK and rows[R1]["amount_vnd"] == 2_865_527
+    assert rows[R2]["fx"] == FX_NO_RATE and "amount_vnd" not in rows[R2]
+    repo.add_job(
+        status="rejected", job_id=str(uuid.uuid4()), error_code="INGEST_NO_TRANSACTIONS",
+        error_message="Tệp chỉ có rút tiền mặt.", error_reason="cash_withdrawal",
+    )  # fmt: skip
+    rejected = api.get_job(USER, list(repo.jobs)[-1], trace_id="t" * 32)
+    assert (rejected["error_code"], rejected["error_reason"]) == ("INGEST_NO_TRANSACTIONS", "cash_withdrawal")

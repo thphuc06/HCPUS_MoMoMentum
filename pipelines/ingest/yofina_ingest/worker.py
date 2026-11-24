@@ -39,6 +39,7 @@ from yofina_ingest.extract import (
     ExtractionResult,
     extract_rows,
 )
+from yofina_ingest.fx import FxConverter
 from yofina_ingest.repo import IngestRepo
 from yofina_ingest.settings import IngestRuntime
 
@@ -121,12 +122,15 @@ class Worker:
         *,
         gateway: LlmGateway | None = None,
         clock: Callable[[], datetime] | None = None,
+        fx: FxConverter | None = None,
     ) -> None:
         self.repo = repo
         self.storage = storage
         self.rt = runtime
         self.gateway = gateway
         self._clock = clock or (lambda: datetime.now(UTC))
+        #: bộ quy đổi ngoại tệ; vắng thì bộ của tiến trình với nguồn tỷ giá thật (`yofina_ingest.fx.default_converter`)
+        self.fx = fx
 
     # --- ngữ cảnh ------------------------------------------------------------------------------------------------------------
     def build_context(self, uid: str, today: date, display_name: str | None) -> ExtractContext:
@@ -146,6 +150,7 @@ class Worker:
             user_id=uid,
             store=self.repo.label_store(),
             tz=ZoneInfo(self.rt.app_timezone),
+            fx=self.fx,
         )
 
     # --- một tệp -------------------------------------------------------------------------------------------------------------
@@ -187,11 +192,19 @@ class Worker:
             log.exception("ingest_mark_failed_error job=%s", job_id)
 
     def _reject(
-        self, uid: str, job_id: str, code: str, message: str, *, status: str = "rejected"
+        self,
+        uid: str,
+        job_id: str,
+        code: str,
+        message: str,
+        *,
+        status: str = "rejected",
+        reason: str | None = None,
     ) -> Outcome:
-        self.repo.update_job(
-            uid, job_id, status, patch={"error_code": code, "error_message": message[:280]}
-        )
+        patch = {"error_code": code, "error_message": message[:280]}
+        if reason:
+            patch["error_reason"] = reason
+        self.repo.update_job(uid, job_id, status, patch=patch)
         return Outcome(status, job_id, code)
 
     def _process(self, uid: str, job_id: str, bucket: str, key: str, last_attempt: bool) -> Outcome:
@@ -279,6 +292,7 @@ class Worker:
                 ERROR_CODE_OF.get(exc.code, "INTERNAL_ERROR"),
                 exc.message,
                 status=outcome_status,
+                reason=exc.reason,
             )
         self.repo.update_job(
             uid, job_id, "processing", 70, {"model": (result.model or "")[:80] or None}
@@ -299,6 +313,7 @@ class Worker:
     ) -> None:
         window = self.rt.settings.ingest_dedupe_window_days
         cands = result.candidates
+        # dòng ngoại tệ chưa có số VND không so được với sổ cái (khóa so là số tiền)
         matches = self.repo.find_matches(
             uid,
             [
@@ -310,6 +325,7 @@ class Worker:
                     "kind": c.kind,
                 }
                 for c in cands
+                if c.amount_vnd is not None
             ],
             window,
         )
@@ -462,7 +478,9 @@ def pick_matches(
 
 
 def to_row(c: Candidate, sha: str, match: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Dòng cho `app_insert_ingest_rows`. Dòng trùng sổ cái thành `duplicate` (không chọn sẵn, không chốt được)."""
+    """Dòng cho `app_insert_ingest_rows`. Dòng trùng sổ cái thành `duplicate` (không chọn sẵn, không chốt được). Dòng ngoại tệ mang
+    `fx`; chưa có tỷ giá thì không có `amount_vnd` và khóa khử trùng tính với số tiền 0 (khóa vẫn duy nhất nhờ `content_sha256` và
+    `seq`, và là khóa của dòng sổ cái khi chốt)."""
     row: dict[str, Any] = {
         "seq": c.seq,
         "kind": c.kind,
@@ -477,12 +495,14 @@ def to_row(c: Candidate, sha: str, match: Mapping[str, Any] | None) -> dict[str,
         "tx_type": c.tx_type,
         "dedupe_key": row_dedupe_key(
             app_date=c.app_date,
-            amount_vnd=c.amount_vnd,
+            amount_vnd=c.amount_vnd or 0,
             counterparty=c.counterparty,
             content_sha256=sha,
             seq=c.seq,
         ),
     }
+    if c.fx is not None:
+        row["fx"] = c.fx.to_json()
     if match is not None:
         row["review_status"] = "duplicate"
         row["duplicate_of_transaction_id"] = str(match["transaction_id"])

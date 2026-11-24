@@ -1,6 +1,8 @@
 import { ChevronDown, Copy } from 'lucide-react'
 import { JarIcon } from '@/components/JarIcon'
-import type { IngestJar, IngestRow as Row } from '@/contracts/blocks'
+import { MoneyInput } from '@/components/MoneyInput'
+import { Disclosure } from '@/components/ui/Disclosure'
+import type { IngestFx, IngestJar, IngestRow as Row } from '@/contracts/blocks'
 import { formatAppDate, formatVnd } from '@/lib/format'
 import { cn } from '@/lib/cn'
 
@@ -21,6 +23,18 @@ export const isOpenRow = (r: Row) => r.review_status === 'auto_added' || r.revie
 /** Tên ngắn để đọc màn hình: đối tác, không có thì nội dung, không có nữa thì số thứ tự. */
 export const rowTitle = (r: Row) => r.counterparty ?? r.description ?? `Dòng ${r.seq}`
 
+/** Số theo ngoại tệ như chứng từ, viết kiểu Việt Nam: "111,11 USD". */
+export function formatFxOriginal(fx: IngestFx): string {
+  return `${Number(fx.amount_original).toLocaleString('vi-VN', { maximumFractionDigits: 4 })} ${fx.currency}`
+}
+
+/** Câu tỷ giá trong mục thu gọn của dòng ngoại tệ. */
+export function fxRateText(fx: IngestFx): string {
+  if (fx.status !== 'converted' || !fx.rate || !fx.rate_date) return 'Chưa lấy được tỷ giá. Nhập số VND trên sao kê của bạn.'
+  const rate = Number(fx.rate).toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+  return `Tỷ giá bán Vietcombank ${rate} ₫ ngày ${formatAppDate(fx.rate_date)}. Sao kê thẻ có thể khác do phí.`
+}
+
 export type IngestRowProps = {
   row: Row
   /** Hũ đang hiện (đề xuất của server, hoặc hũ người dùng vừa đổi). */
@@ -33,16 +47,30 @@ export type IngestRowProps = {
   /** Đang gửi đổi hũ. */
   jarBusy?: boolean
   disabled?: boolean
+  /** Dòng ngoại tệ ở màn duyệt: số VND đang nhập (chữ số, chưa định dạng) và hàm đổi; vắng thì chỉ xem. */
+  amountDigits?: string
+  onAmountChange?: (digits: string) => void
 }
 
-export function IngestRow({ row, jar, selected, onToggle, onPickJar, jarBusy, disabled }: IngestRowProps) {
+export function IngestRow({ row, jar, selected, onToggle, onPickJar, jarBusy, disabled, amountDigits, onAmountChange }: IngestRowProps) {
   const status = STATUS[row.review_status]
   const title = rowTitle(row)
   const income = row.kind === 'income'
-  const amount = `${income ? '+' : '−'}${formatVnd(row.amount_vnd)}`
+  const editing = !!onAmountChange && !!row.fx && isOpenRow(row)
+  const shown = editing && amountDigits ? Number(amountDigits) : row.amount_vnd
+  const amount = shown === undefined ? 'Chưa có số VND' : `${income ? '+' : '−'}${formatVnd(shown)}`
   const selectable = !!onToggle && isOpenRow(row)
   const duplicate = row.review_status === 'duplicate'
   const checkId = `ingest-row-${row.row_id}`
+  const amountInput = editing ? (
+    <MoneyInput
+      label="Số VND sẽ ghi"
+      value={amountDigits ?? ''}
+      onChange={(d) => onAmountChange!(d)}
+      error={row.fx!.status === 'rate_unavailable' && !amountDigits ? 'Nhập số VND trước khi thêm' : undefined}
+      className="mt-2"
+    />
+  ) : null
 
   return (
     <li
@@ -69,7 +97,7 @@ export function IngestRow({ row, jar, selected, onToggle, onPickJar, jarBusy, di
             <p className="truncate text-body font-semibold text-ink">{title}</p>
             {row.description && row.counterparty && <p className="truncate text-small text-ink-2">{row.description}</p>}
           </div>
-          <p className={cn('num shrink-0 text-body font-bold', income ? 'text-ok-fg' : 'text-ink')}>{amount}</p>
+          <p className={cn('num shrink-0 text-body font-bold', shown === undefined ? 'text-small text-warn-fg' : income ? 'text-ok-fg' : 'text-ink')}>{amount}</p>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-note text-ink-2">
           <span className="num">{formatAppDate(row.app_date)}</span>
@@ -79,6 +107,25 @@ export function IngestRow({ row, jar, selected, onToggle, onPickJar, jarBusy, di
           </span>
           {income && <span className="rounded-full bg-surface-2 px-2 py-0.5 font-semibold">Thu nhập ngoài ví</span>}
         </div>
+        {row.fx &&
+          (row.fx.status === 'converted' ? (
+            <Disclosure
+              label={<span className="num">{formatFxOriginal(row.fx)}</span>}
+              ariaLabel={`${formatFxOriginal(row.fx)}: tỷ giá của dòng ${title}`}
+              buttonClassName="text-note"
+              panelClassName="pb-1 text-note text-ink-2"
+            >
+              <p data-testid="ingest-fx-rate">{fxRateText(row.fx)}</p>
+              {amountInput}
+            </Disclosure>
+          ) : (
+            <div className="mt-1 text-note text-ink-2">
+              <p data-testid="ingest-fx-rate">
+                <span className="num font-semibold text-ink">{formatFxOriginal(row.fx)}</span> · {fxRateText(row.fx)}
+              </p>
+              {amountInput}
+            </div>
+          ))}
         {!income && (
           <div className="mt-2">
             {onPickJar && isOpenRow(row) ? (

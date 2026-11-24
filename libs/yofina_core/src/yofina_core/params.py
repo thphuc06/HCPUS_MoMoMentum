@@ -563,9 +563,10 @@ def _uuid_list(name: str, raw: Any) -> list[str]:
 
 
 def normalize_confirm_rows(params: Mapping[str, Any]) -> dict[str, Any]:
-    """`job_id`; `rows` là các dòng ĐƯỢC GHI vào sổ cái, mỗi dòng `{row_id, jar?}` (`jar` là hũ của dòng chi; vắng với dòng thu
-    hoặc khi giữ hũ đề xuất đã hiển thị), sắp theo `row_id`; `reject_row_ids` sắp tăng dần. Không cần trạng thái server nên
-    idempotent không cần ngữ cảnh. Một dòng không được vừa ghi vừa bỏ; phải có ít nhất một dòng."""
+    """`job_id`; `rows` là các dòng ĐƯỢC GHI vào sổ cái, mỗi dòng `{row_id, jar?, amount_vnd?}` (`jar` là hũ của dòng chi; vắng với
+    dòng thu hoặc khi giữ hũ đề xuất đã hiển thị; `amount_vnd` là số VND người dùng nhập cho dòng ngoại tệ, vắng thì giữ số ước tính
+    đã hiển thị), sắp theo `row_id`; `reject_row_ids` sắp tăng dần. Không cần trạng thái server nên idempotent không cần ngữ cảnh. Một
+    dòng không được vừa ghi vừa bỏ; phải có ít nhất một dòng."""
     if _clean(params.get("job_id")) is None:
         raise ParamsError("Thiếu tham số: job_id")
     raw_rows = params.get("rows")
@@ -584,6 +585,8 @@ def normalize_confirm_rows(params: Mapping[str, Any]) -> dict[str, Any]:
         jar = _clean(item.get("jar"))
         if jar is not None:
             row["jar"] = _jar_code("jar", jar)
+        if item.get("amount_vnd") not in (None, ""):
+            row["amount_vnd"] = _amount("amount_vnd", item["amount_vnd"])
         rows[rid] = row
     rejects = _uuid_list("reject_row_ids", params.get("reject_row_ids"))
     if len(set(rejects)) != len(rejects):

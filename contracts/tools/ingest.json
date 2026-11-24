@@ -61,6 +61,10 @@
               "jar": {
                 "type": "string",
                 "description": "Mã hũ của dòng chi (lấy từ danh sách hũ của bảng duyệt). Không dùng hũ Tiền vào khác hay Chưa phân loại."
+              },
+              "amount_vnd": {
+                "type": "integer",
+                "description": "Chỉ cho dòng ngoại tệ (có fx): số VND người dùng nói ra (ví dụ số trên sao kê thẻ). Bỏ trống: ghi số ước tính đang hiển thị. Dòng ngoại tệ chưa có tỷ giá bắt buộc có. Không tự quy đổi hay đoán số này."
               }
             },
             "required": [

@@ -60,6 +60,8 @@ class ErrorCode(StrEnum):
     # Phase 5 (bộ nhớ dài hạn): thêm cuối danh sách.
     MEMORY_RECORD_NOT_FOUND = "MEMORY_RECORD_NOT_FOUND"
     MEMORY_UNAVAILABLE = "MEMORY_UNAVAILABLE"
+    # Phase 5 (F6, tách "không có giao dịch nào" khỏi "không phải tài liệu tài chính"): thêm cuối danh sách.
+    INGEST_NO_TRANSACTIONS = "INGEST_NO_TRANSACTIONS"
 
 HTTP_STATUS: dict[ErrorCode, int] = {
     ErrorCode.UNAUTHENTICATED: 401,
@@ -106,6 +108,7 @@ HTTP_STATUS: dict[ErrorCode, int] = {
     ErrorCode.SHOCK_NOT_FOUND: 404,
     ErrorCode.MEMORY_RECORD_NOT_FOUND: 404,
     ErrorCode.MEMORY_UNAVAILABLE: 503,
+    ErrorCode.INGEST_NO_TRANSACTIONS: 422,
 }
 
 

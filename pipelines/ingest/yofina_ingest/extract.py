@@ -11,7 +11,10 @@ Luồng một tệp:
    nhãn đối tác/hũ cho các dòng (nội dung ĐÃ che PII; lỗi hay hết hạn mức thì dòng vẫn được nạp, chỉ không có hũ đề xuất).
 2. **Che PII ngay sau khi đọc** (`yofina_core.pii`) TRƯỚC khi lưu, ghi log hay gửi văn bản cho lời gọi model thứ hai.
 3. **Loại**: thất bại, chưa thực hiện, nạp tiền giữa tài khoản của chính mình, dòng không đọc được số tiền. Không dòng nào của màn xác
-   nhận/OTP/biểu mẫu trống hay bảng phí đi qua được bước này thành `auto_add`.
+   nhận/OTP/biểu mẫu trống hay bảng phí đi qua được bước này thành `auto_add`. Không còn dòng nào thì `no_transactions` kèm lý do con
+   (`no_transactions_reason`), API `INGEST_NO_TRANSACTIONS`, khác `not_financial` (ảnh không phải chứng từ tài chính).
+   **Ngoại tệ** (`currency` khác VND): đổi sang VND theo tỷ giá bán của ngày giao dịch (`yofina_ingest.fx`), giữ số gốc và tỷ giá ở
+   `Candidate.fx`; tra tỷ giá lỗi thì dòng vẫn vào hàng chờ với số gốc, không có số VND (người dùng nhập lúc chốt).
 4. **Gán hũ**: bộ phân loại phase 4 (`yofina_ingest.classify`): luật người dùng, bảng `tx_type_map`, embedding k-NN, model nhỏ (đề xuất
    hũ của chính lượt đọc tệp); ba mức tin cậy, chỉ mức `auto` được chọn sẵn.
 5. **Tự chọn sẵn** (`should_auto_add`): chỉ khi đủ tin cậy và tệp không chứa văn bản giống chỉ dẫn; dòng chứa câu giống chỉ dẫn và mọi dòng
@@ -20,11 +23,13 @@ Luồng một tệp:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -40,16 +45,19 @@ from yofina_core.llm import (
 )
 from yofina_core.params import MAX_VND
 from yofina_core.pii import PiiPolicy, mask_counterparty, mask_row_text
-from yofina_ingest import csvparse, prompts
+from yofina_ingest import csvparse, fx, prompts
 from yofina_ingest.classify import RowInput, classify_rows
 from yofina_ingest.context import ExtractContext, eval_context
+from yofina_ingest.fx import FxRate, RateUnavailable
 from yofina_ingest.normalize import (
     clean_text,
     looks_failed,
+    looks_like_cash_withdrawal,
     looks_like_instruction,
     looks_like_self_topup,
     neutralize,
     parse_date,
+    parse_foreign_amount,
 )
 from yofina_ingest.schemas import ColumnMap, CsvLabels, ImageExtraction
 
@@ -65,7 +73,7 @@ DESC_LIMIT = 200
 #: mã lỗi của `extract` (chữ thường, đúng quy ước của eval_ingest) -> mã `ErrorCode` của job
 ERROR_CODE_OF = {
     "not_financial": "INGEST_NOT_FINANCIAL",
-    "no_transactions": "INGEST_NOT_FINANCIAL",
+    "no_transactions": "INGEST_NO_TRANSACTIONS",
     "unsupported_type": "INGEST_UNSUPPORTED_TYPE",
     "unreadable": "INGEST_UNSUPPORTED_TYPE",
     "too_large": "INGEST_TOO_LARGE",
@@ -75,7 +83,7 @@ ERROR_CODE_OF = {
 }
 ERROR_MESSAGES = {
     "not_financial": "Ảnh này không giống biên lai, tin nhắn hay lịch sử giao dịch nên mình không đọc được khoản nào.",
-    "no_transactions": "Mình không thấy giao dịch nào đã hoàn tất trong tệp này (có thể là màn xác nhận, giao dịch không thành công hoặc chỉ là nạp tiền giữa tài khoản của bạn).",
+    "no_transactions": "Mình không thấy giao dịch nào đã hoàn tất trong tệp này.",
     "unsupported_type": "Mình chưa đọc được loại tệp này. Hãy dùng ảnh PNG, JPEG, WebP hoặc tệp CSV.",
     "unreadable": "Mình không đọc được nội dung tệp này. Hãy thử ảnh rõ hơn hoặc tệp CSV khác.",
     "too_large": "Tệp lớn hơn giới hạn cho phép.",
@@ -83,25 +91,83 @@ ERROR_MESSAGES = {
     "budget_exceeded": "Hôm nay đã hết lượt đọc tệp bằng AI. Hãy thử lại vào ngày mai.",
     "model_failed": "Không đọc được tệp lúc này. Hãy thử lại sau.",
 }
+#: lý do con của `no_transactions` (`ingest_jobs.error_reason`, enum `IngestErrorReason` của OpenAPI) và câu báo ngắn
+NO_TX_REASONS = {
+    "unexecuted_form": "Đây là màn chưa thực hiện (xác nhận, OTP hay biểu mẫu), chưa có giao dịch nào.",
+    "not_completed": "Giao dịch trong tệp chưa thành công hoặc đang xử lý nên chưa thêm.",
+    "own_account_transfer": "Tệp chỉ có tiền chuyển giữa các tài khoản của bạn, không có khoản chi hay thu nào.",
+    "cash_withdrawal": "Tệp chỉ có rút tiền mặt; Yofina không theo dõi tiền mặt nên không thêm.",
+    "no_amount": "Mình không đọc được số tiền của giao dịch nào trong tệp này.",
+    "no_rows": "Mình không thấy khoản tiền đã giao dịch nào trong tệp này.",
+}
+#: lý do loại dòng (`Dropped.reason`, hay `detail` khi có) -> lý do con; dòng CSV hỏng ngày hay số tiền tính là không đọc được số tiền
+_REASON_OF_DROP = {
+    "not_completed": "not_completed",
+    "own_account_transfer": "own_account_transfer",
+    "cash_withdrawal": "cash_withdrawal",
+}
+#: hòa số dòng thì lấy lý do đứng trước
+_REASON_ORDER = ("not_completed", "own_account_transfer", "cash_withdrawal", "no_amount")
 
 
 class ExtractError(Exception):
-    """Tệp bị từ chối hay không đọc được. `code` là mã chữ thường của `ERROR_CODE_OF`."""
+    """Tệp bị từ chối hay không đọc được. `code` là mã chữ thường của `ERROR_CODE_OF`; `reason` là lý do con của `no_transactions`."""
 
-    def __init__(self, code: str, message: str | None = None) -> None:
+    def __init__(self, code: str, message: str | None = None, *, reason: str | None = None) -> None:
         super().__init__(code)
         self.code = code
-        self.message = message or ERROR_MESSAGES.get(code, ERROR_MESSAGES["unreadable"])
+        self.reason = reason
+        default = NO_TX_REASONS.get(reason or "") if code == "no_transactions" else None
+        self.message = (
+            message or default or ERROR_MESSAGES.get(code, ERROR_MESSAGES["unreadable"])
+        )
+
+
+def no_transactions_reason(document_type: str | None, dropped: Sequence[Dropped]) -> str:
+    """Lý do con khi không còn dòng nào: màn chưa thực hiện theo loại tài liệu, không thì lý do của số dòng bị loại nhiều nhất."""
+    if document_type == "unexecuted_form":
+        return "unexecuted_form"
+    counts: dict[str, int] = {}
+    for d in dropped:
+        reason = _REASON_OF_DROP.get(d.detail or d.reason, "no_amount")
+        counts[reason] = counts.get(reason, 0) + 1
+    if not counts:
+        return "no_rows"
+    return max(_REASON_ORDER, key=lambda r: (counts.get(r, 0), -_REASON_ORDER.index(r)))
+
+
+@dataclass
+class FxInfo:
+    """Phần ngoại tệ của một dòng (hình dạng `IngestFx` của hợp đồng khối, lưu ở `ingest_rows.fx`)."""
+
+    currency: str
+    amount_original: Decimal
+    rate: FxRate | None = None
+
+    def to_json(self) -> dict[str, str]:
+        out = {
+            "currency": self.currency,
+            "amount_original": format(self.amount_original.normalize(), "f"),
+            "status": "converted" if self.rate else "rate_unavailable",
+        }
+        if self.rate is not None:
+            out.update(
+                rate=fx.decimal_text(self.rate.rate_vnd, 2),
+                rate_type=self.rate.rate_type,
+                rate_source=self.rate.source,
+                rate_date=self.rate.rate_date.isoformat(),
+            )
+        return out
 
 
 @dataclass
 class Candidate:
-    """Một dòng sẵn sàng ghi vào `ingest_rows` (văn bản ĐÃ che PII)."""
+    """Một dòng sẵn sàng ghi vào `ingest_rows` (văn bản ĐÃ che PII). `amount_vnd` vắng CHỈ khi dòng ngoại tệ chưa có tỷ giá."""
 
     seq: int
     kind: str  # expense | income
     app_date: date
-    amount_vnd: int
+    amount_vnd: int | None
     counterparty: str | None
     description: str | None
     extract_confidence: float
@@ -112,12 +178,15 @@ class Candidate:
     auto_add: bool = False
     source_row: int | None = None
     flags: list[str] = field(default_factory=list)
+    fx: FxInfo | None = None
 
 
 @dataclass
 class Dropped:
     reason: str
     source_row: int | None = None
+    #: chi tiết của lý do khi cần báo khác nhau (dòng rút tiền mặt vẫn là `own_account_transfer`, chi tiết `cash_withdrawal`)
+    detail: str | None = None
 
 
 @dataclass
@@ -151,6 +220,9 @@ class RawRow:
     confidence: float = 0.5
     source_row: int | None = None
     flags: list[str] = field(default_factory=list)
+    #: tiền tệ trên chứng từ ("" = không nhận ra); khác VND thì số tiền nằm ở `amount_original`, `amount_vnd` bị bỏ qua
+    currency: str = "VND"
+    amount_original: Decimal | None = None
 
 
 # --- phát hiện loại tệp -----------------------------------------------------------------------------------------------------------
@@ -182,6 +254,22 @@ def _masked(raw: RawRow, ctx: ExtractContext) -> tuple[str | None, str | None]:
     return clean_text(neutralize(cp), CP_LIMIT), clean_text(neutralize(desc), DESC_LIMIT)
 
 
+def _convert(raw: RawRow, ctx: ExtractContext) -> tuple[int | None, FxInfo | None]:
+    """`(amount_vnd, phần ngoại tệ)` của một dòng đã qua các luật loại. Dòng VND giữ nguyên số. Dòng ngoại tệ đổi theo tỷ giá bán của
+    ngày giao dịch (không có ngày thì ngày nạp); tra lỗi thì không có `amount_vnd` (người dùng nhập lúc chốt), không đoán."""
+    if raw.currency == "VND" or raw.amount_original is None:
+        return raw.amount_vnd, None
+    info = FxInfo(currency=raw.currency, amount_original=raw.amount_original)
+    try:
+        info.rate = ctx.fx_converter().rate(raw.currency, raw.date or ctx.today)
+    except RateUnavailable as exc:
+        log.warning(
+            json.dumps({"msg": "fx_rate_unavailable", "currency": raw.currency, "why": exc.reason})
+        )
+        return None, info
+    return fx.to_vnd(raw.amount_original, info.rate.rate_vnd), info
+
+
 def finalize_rows(
     raws: Sequence[RawRow],
     ctx: ExtractContext,
@@ -189,18 +277,26 @@ def finalize_rows(
     file_flagged: bool,
     gateway: LlmGateway | None = None,
 ) -> tuple[list[Candidate], list[Dropped]]:
-    """Loại, che PII, gán hũ (bộ phân loại phase 4, `yofina_ingest.classify`), quyết định tự chọn sẵn. Thứ tự dòng được giữ; `seq`
-    đánh lại từ 1. `gateway` chỉ dùng để nhúng chuỗi cho bước k-NN (khi ngữ cảnh có kho nhãn)."""
+    """Loại, quy đổi ngoại tệ, che PII, gán hũ (bộ phân loại phase 4, `yofina_ingest.classify`), quyết định tự chọn sẵn. Thứ tự dòng
+    được giữ; `seq` đánh lại từ 1. `gateway` chỉ dùng để nhúng chuỗi cho bước k-NN (khi ngữ cảnh có kho nhãn).
+
+    Dòng ngoại tệ (`currency` khác VND) KHÔNG bao giờ được chọn sẵn: số VND chỉ là ước tính theo tỷ giá bán, sao kê thẻ thường khác do
+    phí chuyển đổi; người dùng xem số gốc, tỷ giá và sửa số VND trước khi chốt."""
     out: list[Candidate] = []
     proposals: list[tuple[str | None, float | None, bool | None]] = []
     dropped: list[Dropped] = []
     cap = ctx.settings.ingest_csv_max_rows
     for raw in raws:
         texts = (raw.counterparty, raw.description)
-        if raw.amount_vnd is None or raw.amount_vnd <= 0:
+        foreign = raw.currency != "VND"
+        if foreign:
+            has_amount = bool(raw.currency) and raw.amount_original is not None and raw.amount_original > 0
+        else:
+            has_amount = raw.amount_vnd is not None and raw.amount_vnd > 0
+        if not has_amount:
             dropped.append(Dropped("no_amount", raw.source_row))
             continue
-        if raw.amount_vnd > MAX_VND:
+        if not foreign and raw.amount_vnd > MAX_VND:
             dropped.append(Dropped("amount_out_of_range", raw.source_row))
             continue
         if raw.direction not in ("out", "in"):
@@ -210,12 +306,20 @@ def finalize_rows(
             dropped.append(Dropped("not_completed", raw.source_row))
             continue
         if raw.own_account_transfer or looks_like_self_topup(*texts):
-            dropped.append(Dropped("own_account_transfer", raw.source_row))
+            detail = "cash_withdrawal" if looks_like_cash_withdrawal(*texts) else None
+            dropped.append(Dropped("own_account_transfer", raw.source_row, detail))
             continue
         if len(out) >= cap:
             dropped.append(Dropped("over_row_cap", raw.source_row))
             continue
+        # quy đổi SAU các luật loại: không tra tỷ giá cho dòng sẽ bị bỏ
+        amount, fx_info = _convert(raw, ctx)
+        if amount is not None and amount > MAX_VND:
+            dropped.append(Dropped("amount_out_of_range", raw.source_row))
+            continue
         flags = list(raw.flags)
+        if fx_info is not None:
+            flags.append("foreign_currency")
         confidence = float(raw.confidence)
         day = raw.date
         if day is None:
@@ -236,13 +340,14 @@ def finalize_rows(
                 seq=len(out) + 1,
                 kind=kind,
                 app_date=day,
-                amount_vnd=int(raw.amount_vnd),
+                amount_vnd=amount,
                 counterparty=cp,
                 description=desc,
                 extract_confidence=round(confidence, 3),
                 tx_type=tx_type,
                 source_row=raw.source_row,
                 flags=flags,
+                fx=fx_info,
             )
         )
         proposals.append((raw.jar_code, raw.jar_confidence, raw.is_person))
@@ -252,7 +357,7 @@ def finalize_rows(
         [
             RowInput(
                 app_date=out[i].app_date,
-                amount_vnd=out[i].amount_vnd,
+                amount_vnd=out[i].amount_vnd or 0,
                 counterparty=out[i].counterparty,
                 description=out[i].description,
                 is_person=proposals[i][2],
@@ -280,6 +385,8 @@ def finalize_rows(
         if c.kind == "expense" and (choice is None or choice.tier != "auto"):
             auto = False
         if file_flagged or "instruction_like_text" in c.flags or "date_missing" in c.flags:
+            auto = False
+        if c.fx is not None:  # số VND chỉ là ước tính theo tỷ giá: người dùng luôn duyệt
             auto = False
         c.auto_add = auto
     return out, dropped
@@ -346,6 +453,8 @@ def extract_image(data: bytes, ctx: ExtractContext, gateway: LlmGateway) -> Extr
                 jar_confidence=r.jar_confidence,
                 confidence=r.confidence * (1.0 if doc.readable else 0.7),
                 source_row=i,
+                currency=r.currency,
+                amount_original=parse_foreign_amount(r.amount_original),
             )
         )
     result.candidates, result.dropped = finalize_rows(
@@ -544,8 +653,27 @@ def extract_rows(
     else:
         raise ExtractError("unsupported_type")
     if not result.candidates:
-        raise ExtractError("no_transactions")
+        reason = no_transactions_reason(result.document_type, result.dropped)
+        log.info(
+            json.dumps(
+                {
+                    "msg": "ingest_no_transactions",
+                    "document_type": result.document_type,
+                    "reason": reason,
+                    "dropped": _count_reasons(result.dropped),
+                }
+            )
+        )
+        raise ExtractError("no_transactions", reason=reason)
     return result
+
+
+def _count_reasons(dropped: Sequence[Dropped]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for d in dropped:
+        key = d.detail or d.reason
+        out[key] = out.get(key, 0) + 1
+    return out
 
 
 # --- chế độ eval (không DB) -------------------------------------------------------------------------------------------------------
@@ -609,6 +737,8 @@ def result_to_eval(res: ExtractionResult, mode: str) -> dict[str, Any]:
             "tx_type": c.tx_type,
             "jar_source": c.jar_source,
             "jar_confidence": c.jar_confidence,
+            "currency": c.fx.currency if c.fx else "VND",
+            "fx": c.fx.to_json() if c.fx else None,
         }
         for c in res.candidates
     ]
@@ -657,6 +787,7 @@ def extract(
         return {
             "status": "error",
             "error_code": exc.code,
+            "error_reason": exc.reason,
             "error_message": exc.message,
             "mode": mode,
             "rows": [],

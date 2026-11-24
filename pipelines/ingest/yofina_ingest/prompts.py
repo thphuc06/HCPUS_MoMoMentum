@@ -63,6 +63,7 @@ Hôm nay là {today.isoformat()}.
 
 Ứng dụng chỉ ghi GIAO DỊCH ĐÃ THỰC HIỆN XONG (status=completed). Chiều tiền, trạng thái và từng dòng lấy theo ngữ nghĩa của chính chứng từ (tiêu đề cột, dấu, số dư trước và sau, mã hay thời gian thực hiện), không đoán theo lời nhắn. Định nghĩa của ứng dụng:
 - Chưa thực hiện thì không phải giao dịch: màn xác nhận trước khi chuyển, màn nhập OTP hay mật khẩu, biểu mẫu chưa gửi, màn xem trước. Đặt document_type=unexecuted_form và rows rỗng.
+- Hóa đơn hoặc thông báo kỳ thanh toán của dịch vụ thu tự động qua thẻ hay tài khoản đã đăng ký (ghi số tiền phải trả, ngày đến hạn hoặc ngày thu), kể cả khi có nút hay liên kết thanh toán: KHÔNG phải màn chưa thực hiện. Đặt document_type=bill_or_invoice, tạo một dòng direction=out, status=completed, date là ngày thu hoặc ngày đến hạn trên hóa đơn; người dùng sẽ tự duyệt dòng này.
 - Màn hoặc hộp tra soát, khiếu nại, yêu cầu hoàn tiền về một giao dịch: KHÔNG tạo dòng giao dịch nào, kể cả khi màn chép lại số tiền, ngày, người nhận hay mã của giao dịch gốc (giao dịch gốc đã có, ghi thêm sẽ thành trùng). Đặt document_type=other_financial và rows rỗng. Khoản hoàn tiền ĐÃ về tài khoản thì vẫn là giao dịch (direction=in).
 - Giao dịch thất bại, đã hủy, bị từ chối hay đang xử lý: status=failed hoặc pending, không bao giờ completed.
 - {_OWN_TRANSFER}
@@ -71,6 +72,7 @@ Hôm nay là {today.isoformat()}.
 Trường của mỗi dòng (một giao dịch nhìn thấy là một dòng, giữ thứ tự trên ảnh; không tự bỏ dòng trông giống dòng khác, hệ thống tự lọc trùng):
 - date: YYYY-MM-DD nếu ảnh có năm; DD/MM nếu không có năm; null nếu không thấy ngày. Ngày Việt Nam viết ngày/tháng/năm.
 - amount_vnd: số nguyên VND dương, bỏ mọi dấu phân cách và chữ "đ"/"VND". Không thấy số tiền rõ thì bỏ dòng.
+- currency, amount_original: ghi đúng tiền tệ (mã ISO 4217, mặc định VND) và số trên chứng từ, không tự quy đổi; chứng từ ngoại tệ thì amount_original giữ cả phần lẻ và amount_vnd là null.
 - direction: "out" khi tiền ra khỏi tài khoản của người dùng, "in" khi tiền vào.
 - counterparty: tên người nhận hoặc đơn vị đúng như ảnh, null nếu không có. counterparty_is_person=true nếu là tên một cá nhân.
 - description: lời nhắn hoặc nội dung đúng như ảnh: giữ NGUYÊN ký tự, KHÔNG sửa chính tả, KHÔNG thêm hay bỏ dấu tiếng Việt. Không chép số tài khoản, số thẻ hay số điện thoại vào counterparty hay description.

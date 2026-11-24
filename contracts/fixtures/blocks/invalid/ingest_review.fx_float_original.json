@@ -1,0 +1,46 @@
+{
+  "v": 1,
+  "id": "ingest_review:6d3e9f25-8b4c-4a71-8e32-1c5f7b9d2a48",
+  "trace_id": "9a4b32da5c8f4e1bb2d36f7a8c9d0e12",
+  "fallback_text": "Đã đọc 1 dòng ngoài ví; 1 dòng chờ bạn duyệt, 0 dòng trùng.",
+  "source": {
+    "tool": "rest:GET /ingest/jobs/{job_id}",
+    "as_of": "2026-11-24T11:30:00Z",
+    "app_date": "2026-11-24"
+  },
+  "type": "ingest_review",
+  "data": {
+    "job_id": "6d3e9f25-8b4c-4a71-8e32-1c5f7b9d2a48",
+    "status": "review",
+    "source_kind": "image",
+    "rows": [
+      {
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000011",
+        "seq": 1,
+        "kind": "expense",
+        "app_date": "2026-11-10",
+        "amount_vnd": 2865527,
+        "extract_confidence": 0.95,
+        "review_status": "pending",
+        "fx": {
+          "currency": "USD",
+          "amount_original": 111.11,
+          "status": "converted",
+          "rate": "25790.00",
+          "rate_type": "sell",
+          "rate_source": "vietcombank",
+          "rate_date": "2026-11-10"
+        }
+      }
+    ],
+    "rows_total": 1,
+    "counts": {
+      "auto_added": 0,
+      "pending": 1,
+      "approved": 0,
+      "rejected": 0,
+      "duplicate": 0
+    },
+    "jars": []
+  }
+}

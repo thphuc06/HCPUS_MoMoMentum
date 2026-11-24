@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { Providers, fakeApi } from '@/test/helpers'
 import { invalidBlock, validBlock } from '@/test/fixtures'
@@ -37,7 +38,25 @@ describe('ingest_review', () => {
     expect(screen.getByText('Đã bỏ')).toBeInTheDocument()
   })
 
-  for (const name of ['ingest_review.bad_status', 'ingest_review.float_amount', 'ingest_review.transfer_row']) {
+  it('fixture fx: số VND ước tính hiện ngay, số gốc và tỷ giá ở mục thu gọn; dòng chưa có tỷ giá ghi rõ, chat không cho sửa số', async () => {
+    const { container } = draw(validBlock('ingest_review.fx'))
+    expect(screen.getByText('−2.865.527 ₫')).toBeInTheDocument()
+    const fxButton = screen.getByRole('button', { name: /111,11 USD/ })
+    expect(fxButton).toHaveAttribute('aria-expanded', 'false')
+    const panel = container.querySelector(`#${CSS.escape(fxButton.getAttribute('aria-controls')!)}`)!
+    expect(panel).toHaveAttribute('aria-hidden', 'true')
+    expect(panel).toHaveTextContent('Tỷ giá bán Vietcombank 25.790 ₫ ngày 10/11/2026')
+    await userEvent.setup().click(fxButton)
+    expect(fxButton).toHaveAttribute('aria-expanded', 'true')
+    expect(panel).not.toHaveAttribute('aria-hidden', 'true')
+    // dòng tra tỷ giá lỗi: không đoán số VND
+    expect(screen.getByText('Chưa có số VND')).toBeInTheDocument()
+    expect(screen.getByText('48,5 EUR')).toBeInTheDocument()
+    expect(screen.getByText(/Chưa lấy được tỷ giá/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Số VND sẽ ghi')).toBeNull()
+  })
+
+  for (const name of ['ingest_review.bad_status', 'ingest_review.float_amount', 'ingest_review.transfer_row', 'ingest_review.fx_float_original']) {
     it(`sai schema (${name}): hiện fallback_text`, () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const raw = invalidBlock(name)

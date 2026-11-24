@@ -40,7 +40,7 @@ from yofina_core.money import format_vnd
 from yofina_core.params import JAR_CODE_RE
 from yofina_core.wallet import CONFIRM_ROWS, INGEST_ACTION_TOOLS
 from yofina_ingest.context import jars_from_rows
-from yofina_ingest.repo import IngestRepo, UserContext
+from yofina_ingest.repo import IngestRepo, UserContext, row_amount
 from yofina_ingest.settings import IngestRuntime
 
 log = logging.getLogger("yofina.ingest.api")
@@ -235,6 +235,8 @@ class IngestApi:
             out["error_code"] = job["error_code"]
         if job.get("error_message"):
             out["error_message"] = job["error_message"]
+        if job.get("error_reason"):
+            out["error_reason"] = job["error_reason"]
         if job.get("finished_at"):
             out["finished_at"] = _iso(job["finished_at"])
         if job["status"] in ("review", "done"):
@@ -339,7 +341,7 @@ class IngestApi:
             )
         by_id = {str(r["id"]): r for r in rows}
         jars = {j["code"]: j for j in jars_from_rows(self.repo.jar_rows(uid))}
-        spend = income = count = 0
+        spend = income = count = fx_estimates = 0
         affected: list[str] = []
         for item in norm["rows"]:
             r = by_id.get(item["row_id"])
@@ -351,6 +353,9 @@ class IngestApi:
                     "Dòng đã được xử lý hoặc là dòng trùng nên không chốt được.",
                 )
             count += 1
+            amount = row_amount(r, item.get("amount_vnd"))
+            if r.get("fx") is not None and "amount_vnd" not in item:
+                fx_estimates += 1
             if r["kind"] == "expense":
                 jar = item.get("jar") or r.get("suggested_jar_code")
                 if not jar:
@@ -359,11 +364,11 @@ class IngestApi:
                     )
                 if jar not in jars:
                     raise YofinaError(ErrorCode.JAR_NOT_FOUND, "Không tìm thấy hũ đã chọn.")
-                spend += int(r["amount_vnd"])
+                spend += amount
                 if jar not in affected:
                     affected.append(jar)
             else:
-                income += int(r["amount_vnd"])
+                income += amount
         for rid in norm["reject_row_ids"]:
             if rid not in by_id:
                 raise YofinaError(ErrorCode.PARAMS_INVALID, "Có dòng không thuộc lần nạp này.")
@@ -373,6 +378,7 @@ class IngestApi:
             "income": income,
             "jars": [jars[c] for c in affected],
             "rejected": len(norm["reject_row_ids"]),
+            "fx_estimates": fx_estimates,
         }
 
     def _coverage_preview(
@@ -430,10 +436,15 @@ class IngestApi:
             "summary": f"Thêm {prep['count']} dòng ngoài ví vào lịch sử, số dư hũ không đổi"[:120],
             "changes": changes[:20],
         }
+        warnings: list[str] = []
         if prep["rejected"]:
-            preview["warnings"] = [
-                f"{prep['rejected']} dòng sẽ được bỏ qua, không ghi vào lịch sử."
-            ]
+            warnings.append(f"{prep['rejected']} dòng sẽ được bỏ qua, không ghi vào lịch sử.")
+        if prep["fx_estimates"]:
+            warnings.append(
+                f"{prep['fx_estimates']} dòng ngoại tệ dùng số VND ước tính theo tỷ giá bán; sao kê thẻ có thể khác do phí."
+            )
+        if warnings:
+            preview["warnings"] = warnings
         return norm, preview
 
     def apply_action(
@@ -470,6 +481,7 @@ class IngestApi:
             uid,
             job_id=norm["job_id"],
             approvals={r["row_id"]: r.get("jar") for r in norm["rows"]},
+            amounts={r["row_id"]: r["amount_vnd"] for r in norm["rows"] if "amount_vnd" in r},
             reject_ids=norm["reject_row_ids"],
             now=now,
             tz=self.rt.app_timezone,

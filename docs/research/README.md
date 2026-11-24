@@ -31,6 +31,10 @@ Bảy ghi chú dưới đây do subagent (Claude Sonnet 5.5) viết ngày 2026-1
 | [frontend-fintech-ui.md](frontend-fintech-ui.md) | Stack frontend đề xuất, mẫu thiết kế app ngân hàng, biểu đồ, nhận diện |
 | [spending-visualization.md](spending-visualization.md) | Biểu đồ chi tiêu (theo hũ, hũ sắp cạn, cuối tuần, Trả sau, so kỳ trước): dữ liệu từ endpoint/tool nào, khoảng trống hợp đồng, khối chat, thư viện, ưu tiên P0/P1/P2; minh họa [spending-visualization-preview.html](spending-visualization-preview.html) |
 
+### Tỷ giá cho chứng từ ngoại tệ khi nạp (2026-11-25)
+
+[ingest-fx-rates.md](ingest-fx-rates.md): so sáu nguồn tỷ giá có VND (Vietcombank JSON theo ngày, Vietcombank XML, NHNN, ExchangeRate-API, fawazahmed0, Frankfurter) theo khóa, giới hạn gọi, điều khoản; chọn tỷ giá bán Vietcombank của ngày giao dịch, lý do, làm tròn, bộ nhớ đệm, xử lý lỗi; Lambda nạp ra internet không cần NAT.
+
 ### Kiểm toán prompt tìm overfit (2026-11-25)
 
 [prompt-overfit-audit.md](prompt-overfit-audit.md): kiểm kê mọi prompt gửi model (file:dòng, model, độ dài, số luật), 27 phát hiện câu mẫu trùng ca eval, khuôn "đúng N câu", nhánh khớp chuỗi, luật vá ca, trùng lặp, mã chết (kèm commit và ca liên quan); các mục trông đáng ngờ nhưng hợp lệ; đánh giá bộ chấm eval; kế hoạch sửa theo đợt với cách đo.
