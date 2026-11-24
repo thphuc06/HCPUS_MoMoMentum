@@ -7,6 +7,7 @@ import { ListSkeleton } from '@/components/StateViews'
 import { StatusChip, type ChipKind } from '@/components/StatusChip'
 import type { RuleCheck } from '@/contracts/blocks'
 import { OpsError, OpsLayout } from '@/features/ops/OpsLayout'
+import { stepLabel } from '@/features/explain/stepLabels'
 import { formatMs, OUTCOME_CHIP, splitToolStep, TOOL_STATUS_CHIP } from '@/features/ops/format'
 import { CONFIDENCE_LABEL } from '@/lib/jar'
 import { formatDateTime, formatVnd } from '@/lib/format'
@@ -75,7 +76,7 @@ function Steps({ t }: { t: OpsTraceDetail }) {
               {tool ? (
                 <><span className="text-ink-2">{tool.target} · </span><span className="font-semibold">{tool.tool}</span></>
               ) : (
-                <span className="font-semibold">{s.step}</span>
+                <><span className="font-semibold">{stepLabel(s.step)}</span>{stepLabel(s.step) !== s.step && <span className="text-ink-2"> · {s.step}</span>}</>
               )}
               {status && <StatusChip kind={status.kind} className="ml-2 h-6">{status.label}{s.code ? ` · ${s.code}` : ''}</StatusChip>}
             </span>

@@ -129,7 +129,7 @@ export function AffordCard({
 
       {actions && <div className="mt-4 flex flex-col gap-3">{actions}</div>}
 
-      <BasisFooter basis={d.basis} />
+      <BasisFooter basis={d.basis} appDate={block.source.app_date} />
       {onAskWhy && (
         <div className="mt-1 flex justify-end">
           <button type="button" onClick={onAskWhy} className="min-h-11 px-2 text-small font-semibold text-brand-text">
