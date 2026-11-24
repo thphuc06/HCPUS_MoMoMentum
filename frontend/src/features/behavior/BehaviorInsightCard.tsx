@@ -3,6 +3,7 @@ import { Lightbulb } from 'lucide-react'
 import { AiChip, StatusChip, type ChipKind } from '@/components/StatusChip'
 import type { BehaviorInsight, BehaviorNextStep } from '@/contracts/blocks'
 import { CONFIDENCE_LABEL } from '@/lib/jar'
+import { EvidenceBars } from './EvidenceBars'
 import { formatEvidencePeriod, formatEvidenceValue, INSIGHT_KIND_LABEL } from './format'
 
 const BAND_CHIP: Record<BehaviorInsight['confidence'], ChipKind> = { high: 'ok', medium: 'warn', low: 'bad' }
@@ -27,6 +28,7 @@ export function BehaviorInsightCard({ insight, nextStep, footer, as: Tag = 'sect
       </header>
       <p className="text-subtitle font-semibold text-ink">{insight.headline}</p>
       {insight.detail && <p className="text-small text-ink-2">{insight.detail}</p>}
+      <EvidenceBars evidence={insight.evidence} />
       <dl aria-label="Bằng chứng" className="divide-y divide-line rounded-xl bg-surface-2 px-3">
         {insight.evidence.map((e) => {
           const period = formatEvidencePeriod(e)

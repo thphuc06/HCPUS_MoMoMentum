@@ -14,11 +14,18 @@ const STATUS_CHIP = {
 
 // Figma ProactiveCard (14:176): MỘT việc, lý do ngắn, hành động chính ở đầu rồi các hành động phụ; "Để sau" ở góc,
 // "Ít nhắc loại này" dạng chữ. Nút do server liệt kê (`actions`); ý nghĩa từng `kind` do nơi dùng xử lý (onAction).
-export function ProactiveCard({ data, onAction, children }: { data: ProactiveCardData; onAction: (a: Action) => void; children?: ReactNode }) {
+export function ProactiveCard({ data, onAction, hero, children }: {
+  data: ProactiveCardData
+  onAction: (a: Action) => void
+  /** Số chính của thẻ (vd. "12 ngày" hũ trống của cảnh báo cạn), đặt ngay dưới tiêu đề; có số chính thì lý do xuống sau phần vẽ. */
+  hero?: ReactNode
+  children?: ReactNode
+}) {
   const snooze = data.actions.find((a) => a.kind === 'snooze')
   const mute = data.actions.find((a) => a.kind === 'mute_kind')
   const main = data.actions.filter((a) => a.kind !== 'snooze' && a.kind !== 'mute_kind')
   const chip = STATUS_CHIP[data.status]
+  const reason = <p className={hero ? 'mt-3 text-small text-ink-2' : 'mt-1 text-body text-ink'}>{data.reason}</p>
   return (
     <section aria-label="Việc cần làm hôm nay" data-block="proactive_card" data-kind={data.kind} data-status={data.status} className="rounded-card bg-surface p-5 shadow-card">
       <header className="flex items-center justify-between gap-2">
@@ -36,8 +43,10 @@ export function ProactiveCard({ data, onAction, children }: { data: ProactiveCar
         <h2 className="min-w-0 flex-1 text-subtitle font-bold text-ink">{data.title}</h2>
         <StatusChip kind={chip.kind}>{chip.label}</StatusChip>
       </div>
-      <p className="mt-1 text-body text-ink">{data.reason}</p>
+      {hero}
+      {!hero && reason}
       {children}
+      {hero && reason}
       <div className="mt-4 flex flex-wrap items-center gap-2.5">
         {main.map((a, i) => (
           <Button key={`${a.kind}-${a.label}`} type="button" variant={i === 0 ? 'default' : 'soft'} onClick={() => onAction(a)}>

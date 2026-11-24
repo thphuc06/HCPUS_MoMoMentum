@@ -5,6 +5,8 @@ import { SimNote } from '@/components/SimNote'
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/StateViews'
 import { useApiResource } from '@/api/resource'
 import { useJarLookup } from '@/features/common/useJarLookup'
+import { CreditUsage } from '@/features/credit/CreditUsage'
+import { nearestBnpl, payJarFor } from '@/features/credit/select'
 import { CYCLE_LABEL, KIND_LABEL } from '@/features/obligations/params'
 import { formatDayMonth } from '@/lib/dates'
 import { formatVnd } from '@/lib/format'
@@ -21,6 +23,9 @@ export function ObligationsPage() {
   const credit = useApiResource((api) => api.getCreditLine(), [])
   const lookup = useJarLookup()
   const line = credit.data?.credit_line ?? null
+  // B6: khoản Trả sau đến hạn gần nhất (danh sách nghĩa vụ) so với số dư hũ trả (GET /overview dùng chung).
+  const due = list.status === 'ready' ? nearestBnpl(list.data.obligations) : undefined
+  const payJar = payJarFor(due, [...lookup.values()])
 
   return (
     <>
@@ -35,22 +40,7 @@ export function ObligationsPage() {
       />
       <div className="space-y-3 px-4 pb-8">
         {line && (
-          <section className="rounded-card bg-surface p-4 shadow-card" aria-label={line.product_label} data-testid="credit-line">
-            <h2 className="text-subtitle font-semibold text-ink">{line.product_label}</h2>
-            <dl className="mt-2 grid grid-cols-3 gap-2 text-small">
-              <div>
-                <dt className="text-ink-2">Hạn mức</dt>
-                <dd className="num font-bold text-ink">{formatVnd(line.limit_vnd)}</dd>
-              </div>
-              <div>
-                <dt className="text-ink-2">Dư nợ gốc</dt>
-                <dd className="num font-bold text-ink">{formatVnd(line.outstanding_vnd)}</dd>
-              </div>
-              <div>
-                <dt className="text-ink-2">Còn lại</dt>
-                <dd className="num font-bold text-ok-fg">{formatVnd(line.available_vnd)}</dd>
-              </div>
-            </dl>
+          <CreditUsage line={line} due={due} payJar={payJar}>
             <p className="mt-2 text-note text-ink-2">Đến hạn ngày {line.due_day} hằng tháng.{line.status === 'suspended' ? ' Hạn mức đang tạm khóa.' : ''}</p>
             {(credit.data?.fees ?? []).map((f) => (
               <p key={f.fee_type} className="mt-1 text-note text-ink-2">
@@ -58,7 +48,7 @@ export function ObligationsPage() {
                 {f.condition_note ? `: ${f.condition_note}` : ''} (Nguồn: {f.source_name})
               </p>
             ))}
-          </section>
+          </CreditUsage>
         )}
 
         {list.status === 'loading' && <ListSkeleton rows={4} label="Đang tải nghĩa vụ" />}

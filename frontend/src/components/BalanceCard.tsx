@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Eye, EyeOff, Info } from 'lucide-react'
 import { formatAppDate, formatVnd } from '@/lib/format'
+import { useAnimateOnce, useCountUp } from '@/lib/motion'
 
 // Figma BalanceCard (14:143): thẻ gradient chủ đạo, tổng số dư lớn, dòng "Ví mô phỏng", hàng hành động nhanh.
 // Tổng = tổng MỌI hũ (gồm Tiền vào khác và Chưa phân loại) do server tính (`balance.total_vnd`); các dòng dưới thẻ
@@ -9,6 +10,8 @@ export type BalanceParts = { total_vnd: number; jars_total_vnd: number; other_in
 
 export function BalanceCard({ balance, appDate, children }: { balance: BalanceParts; appDate: string; children?: ReactNode }) {
   const [hidden, setHidden] = useState(false)
+  // Tổng số dư đếm lên một lần mỗi phiên khi mở app (cảnh 1); giảm chuyển động thì hiện thẳng số cuối.
+  const shown = useCountUp(balance.total_vnd, useAnimateOnce('balance-total'))
   const mask = (v: number) => (hidden ? '•••••• ₫' : formatVnd(v))
   const un = balance.unclassified_vnd
   return (
@@ -29,8 +32,10 @@ export function BalanceCard({ balance, appDate, children }: { balance: BalancePa
           {hidden ? <EyeOff className="size-5" aria-hidden /> : <Eye className="size-5" aria-hidden />}
         </button>
       </div>
-      <p className="num mt-1 text-display font-extrabold" data-testid="balance-total">
-        {mask(balance.total_vnd)}
+      <p className="num mt-1 text-display font-extrabold">
+        {/* Số cuối cho trình đọc màn hình; số đang đếm chỉ để nhìn (ui-design-review.md §4.6). */}
+        <span className="sr-only" data-testid="balance-total">{mask(balance.total_vnd)}</span>
+        <span aria-hidden>{hidden ? mask(balance.total_vnd) : formatVnd(shown)}</span>
       </p>
       <p className="mt-1 flex items-center gap-1.5 text-note font-medium text-white/90">
         <Info className="size-3.5 shrink-0" aria-hidden />

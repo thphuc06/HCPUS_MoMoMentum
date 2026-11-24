@@ -472,6 +472,12 @@ export function handleWallet(c: Ctx): Reply | null {
       return ok({ app_date: APP_DATE, as_of: nowIso(), jars, jars_total_vnd: a.jars.reduce((s, j) => s + j.balance_vnd, 0) })
     }
     if (path === '/overview') return ok(overview(a, c.trace))
+    // Hồ sơ hành vi (fixture hợp đồng) kèm vế "phần số ngày" mà batch thật phát cạnh "phần chi", để thấy thanh B3 ở Hồ sơ.
+    if (path === '/profile/behavior') {
+      const p = rest('BehaviorProfileResponse.minh')
+      p.insights[0].evidence.push({ key: 'first_week_day_share', label: 'Phần số ngày thuộc tuần đầu sau lương', value: 23, unit: 'percent' })
+      return ok(p)
+    }
     if (path === '/profile') return ok({ app_date: APP_DATE, as_of: nowIso(), profile: a.profile })
     if (path === '/tx-types') return ok({ tx_types: TX_TYPES() })
     if (path === '/payees') return ok({ payees: [...a.payees].sort((x, y) => Number(y.is_favorite) - Number(x.is_favorite)) })

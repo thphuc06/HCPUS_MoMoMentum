@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReviewListResponse } from '@/api/reviewSchemas'
@@ -36,15 +36,15 @@ describe('Tổng quan', () => {
     expect(within(screen.getByTestId('balance-parts')).getByText('Chưa phân loại')).toBeInTheDocument()
   })
 
-  it('hành động nhanh: Chuyển tiền, Tiền vào, Giữa hũ dẫn đi; Kiểm tra vô hiệu và ghi "Sắp có"', async () => {
+  it('hành động nhanh: Chuyển tiền, Tiền vào, Giữa hũ dẫn đi; không còn nút bị tắt "Kiểm tra · Sắp có"', async () => {
     mountApp(backend())
     const nav = await screen.findByRole('navigation', { name: 'Hành động nhanh' })
     expect(within(nav).getByRole('link', { name: /Chuyển tiền/ })).toHaveAttribute('href', '/transfer')
     expect(within(nav).getByRole('link', { name: /Tiền vào/ })).toHaveAttribute('href', '/income')
     expect(within(nav).getByRole('link', { name: /Giữa hũ/ })).toHaveAttribute('href', '/move')
-    const check = within(nav).getByRole('button', { name: /Kiểm tra/ })
-    expect(check).toBeDisabled()
-    expect(check).toHaveTextContent('Sắp có')
+    expect(within(nav).getAllByRole('link')).toHaveLength(3)
+    expect(within(nav).queryByRole('button')).toBeNull()
+    expect(nav).not.toHaveTextContent('Sắp có')
   })
 
   it('dải hũ: 7 thẻ, trạng thái đủ/sát/hụt có chữ; vạch dự báo chỉ ở hũ có số dự báo (hũ hụt)', async () => {
@@ -246,6 +246,111 @@ describe('Tổng quan', () => {
   it('có 0 hũ nhưng đã khai: thông báo rõ, không vỡ', async () => {
     mountApp(backend({ 'GET /overview': overview((o) => { o.jars = []; o.proactive_card = null; o.forecast = null }) }))
     expect(await screen.findByText('Chưa có hũ nào trong tài khoản này.')).toBeInTheDocument()
+  })
+})
+
+describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2 hũ nào sắp cạn, B6 Trả sau', () => {
+  beforeEach(() => sessionStorage.clear())
+
+  it('thẻ cảnh báo cạn: số lớn "6 ngày" (cạn 29/11, lương 05/12), dải 15 ô từ hôm nay 21/11, ô cạn và ô hũ trống khác nhau', async () => {
+    mountApp(backend())
+    const card = await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
+    expect(within(card).getByTestId('runout-hero')).toHaveTextContent('6 ngày hũ trống trước kỳ lương')
+    const strip = within(card).getByTestId('mini-timeline')
+    expect(strip).toHaveAttribute('aria-label', 'Từ hôm nay 21/11 đến kỳ lương 05/12, dự kiến cạn 29/11, 6 ngày hũ trống trước kỳ lương')
+    const kinds = [...strip.querySelectorAll('[data-day]')].map((c) => c.getAttribute('data-day'))
+    expect(kinds).toEqual([...Array(8).fill('ok'), 'runout', ...Array(5).fill('gap'), 'payday'])
+    // Lần mở đầu trong phiên: ô hiện lần lượt (độ trễ tăng 32 ms mỗi ô), chỉ khi người dùng không tắt chuyển động.
+    const cells = strip.querySelectorAll<HTMLElement>('[data-day]')
+    expect(cells[0]!.className).toContain('motion-safe:animate-in')
+    expect(cells[3]!.style.getPropertyValue('--tw-animation-delay')).toBe('96ms')
+    // Lý do của server vẫn hiện, sau phần vẽ
+    expect(within(card).getByText(/Còn 380\.000 ₫, còn 6 ngày tới kỳ lương 05\/12/)).toBeInTheDocument()
+  })
+
+  it('số dư: trình đọc màn hình nhận ngay số cuối của server; số đang đếm chỉ để nhìn', async () => {
+    mountApp(backend())
+    const total = await screen.findByTestId('balance-total')
+    expect(total).toHaveTextContent('7.900.000 ₫')
+    expect(total).toHaveClass('sr-only')
+    const visual = total.nextElementSibling as HTMLElement
+    expect(visual).toHaveAttribute('aria-hidden', 'true')
+    await waitFor(() => expect(visual).toHaveTextContent('7.900.000 ₫'))
+  })
+
+  it('giảm chuyển động: số dư, dải ngày, nước trong hũ hiện thẳng trạng thái cuối, không có lớp chuyển động', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((q: string) => ({ matches: q === '(prefers-reduced-motion: reduce)', addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    mountApp(backend())
+    const total = await screen.findByTestId('balance-total')
+    expect(total.nextElementSibling).toHaveTextContent('7.900.000 ₫')
+    const strip = screen.getByTestId('mini-timeline')
+    expect(strip.innerHTML).not.toContain('animate-in')
+    expect(screen.getByTestId('jar-runway').innerHTML).not.toContain('animate-in')
+  })
+
+  it('không có ngày cạn trước kỳ lương (thẻ không phải cảnh báo cạn): không có số lớn, không có dải', async () => {
+    mountApp(backend({ 'GET /overview': overview((o) => { o.proactive_card.data.kind = 'low_data'; o.proactive_card.data.status = 'ok' }) }))
+    const card = await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
+    expect(within(card).queryByTestId('runout-hero')).toBeNull()
+    expect(within(card).queryByTestId('mini-timeline')).toBeNull()
+  })
+
+  it('B2: mỗi hũ chi tiêu và hũ nghĩa vụ một đường băng tới kỳ lương; hũ tiết kiệm không hiện; câu tóm tắt từ trạng thái server', async () => {
+    mountApp(backend())
+    const fig = await screen.findByTestId('jar-runway')
+    expect(within(fig).getByRole('heading', { name: 'Hũ nào sắp cạn' })).toBeInTheDocument()
+    expect(fig).toHaveTextContent('14 ngày tới lương')
+    expect(within(fig).getByText('2 hũ cần chú ý trước kỳ lương 05/12: Ăn uống dự kiến cạn 29/11, Hóa đơn sát.')).toBeInTheDocument()
+    const rows = within(fig).getByRole('list', { name: 'Các hũ từ hôm nay tới kỳ lương' })
+    expect([...rows.querySelectorAll('[data-runway]')].map((r) => r.getAttribute('data-runway'))).toEqual(['an_uong', 'di_lai', 'hoa_don', 'giai_tri', 'nghia_vu'])
+    // Hũ hụt: đoạn hũ trống bắt đầu ở ngày cạn (29/11 là ngày 8 trên 14), chữ đầy đủ cho trình đọc màn hình, mở Chi tiết hũ
+    const an = within(rows).getByRole('link', { name: /^Ăn uống: hụt, dự kiến cạn 29\/11, 6 ngày trước kỳ lương, số dư 380\.000\s₫\.$/ })
+    expect(an).toHaveAttribute('href', '/jars/an_uong')
+    expect(parseFloat((an.querySelector('[data-part="empty"]') as HTMLElement).style.left)).toBeCloseTo((8 / 14) * 100, 2)
+    expect(within(an).getByText('Hụt')).toBeInTheDocument()
+    // Hũ sát có mốc nghĩa vụ (tiền điện 26/11) bằng vạch và bằng chữ
+    const hd = within(rows).getByRole('link', { name: /^Hóa đơn: sát, số dư 450\.000\s₫\. Sắp đến hạn: Tiền điện 26\/11 300\.000\s₫ đến 450\.000\s₫\.$/ })
+    expect(hd.querySelectorAll('[data-tick]')).toHaveLength(1)
+    expect(hd.querySelector('[data-track]')).toHaveAttribute('data-track', 'tight')
+    // Hũ nghĩa vụ: mốc Trả sau 05/12
+    const nv = within(rows).getByRole('link', { name: /^Nghĩa vụ: đủ tới kỳ lương, số dư 1\.000\.000\s₫\. Sắp đến hạn: Trả sau \(mô phỏng\) 05\/12 333\.000\s₫\.$/ })
+    expect(nv.querySelectorAll('[data-tick]')).toHaveLength(1)
+    expect(within(rows).queryByRole('link', { name: /^Du lịch/ })).toBeNull()
+  })
+
+  it('B2: hũ chưa có dự báo ghi rõ; không có kỳ lương thì không vẽ', async () => {
+    mountApp(backend({ 'GET /overview': overview((o) => { o.jars = o.jars.map((j: Json) => (j.code === 'di_lai' ? { ...j, status: undefined } : j)) }) }))
+    const fig = await screen.findByTestId('jar-runway')
+    expect(within(fig).getByRole('link', { name: /^Đi lại: chưa có dự báo/ })).toBeInTheDocument()
+    cleanup()
+    mountApp(backend({ 'GET /overview': overview((o) => { o.next_payday = null; o.proactive_card = null }) }))
+    expect(await screen.findByTestId('balance-total')).toBeInTheDocument()
+    expect(screen.queryByTestId('jar-runway')).toBeNull()
+  })
+
+  it('B6: có dư nợ Trả sau thì có thẻ hạn mức đã dùng và khoản đến hạn gần nhất so với hũ Nghĩa vụ', async () => {
+    mountApp(backend())
+    const card = await screen.findByTestId('credit-usage')
+    expect(within(card).getByRole('heading', { name: 'Đã dùng Trả sau bao nhiêu' })).toBeInTheDocument()
+    expect(within(card).getByRole('img', { name: /^Đã dùng 300\.000\s₫ trên hạn mức 5\.000\.000\s₫, còn 4\.700\.000\s₫$/ })).toBeInTheDocument()
+    expect(card).toHaveTextContent('Đang nợ gốc 300.000 ₫ trên hạn mức 5.000.000 ₫. Ngày 05/12 phải trả 333.000 ₫, hũ Nghĩa vụ đang có đủ.')
+    const due = within(card).getByTestId('credit-due')
+    expect(due).toHaveTextContent('Đến hạn 05/12')
+    expect(due).toHaveTextContent('Phải trả: gốc 300.000 ₫ + phí 33.000 ₫')
+    expect(due).toHaveTextContent(/Hũ Nghĩa vụ đang có\s*1\.000\.000 ₫/)
+    expect(within(due).getByTestId('credit-due-status')).toHaveTextContent('Đủ trả')
+    expect(within(card).getByRole('link', { name: /Xem các khoản Trả sau/ })).toHaveAttribute('href', '/obligations')
+  })
+
+  it('B6: hũ trả có ít hơn số phải trả thì báo "Chưa đủ trả"; không có dư nợ thì không hiện thẻ ở Tổng quan', async () => {
+    mountApp(backend({ 'GET /overview': overview((o) => { o.jars = o.jars.map((j: Json) => (j.code === 'nghia_vu' ? { ...j, balance_vnd: 200000 } : j)) }) }))
+    const card = await screen.findByTestId('credit-usage')
+    expect(within(card).getByTestId('credit-due-status')).toHaveTextContent('Chưa đủ trả')
+    expect(card).toHaveTextContent('hũ Nghĩa vụ đang có chưa đủ')
+    cleanup()
+    mountApp(backend({ 'GET /overview': overview((o) => { o.credit_line.outstanding_vnd = 0; o.credit_line.available_vnd = 5000000 }) }))
+    expect(await screen.findByTestId('balance-total')).toBeInTheDocument()
+    expect(screen.queryByTestId('credit-usage')).toBeNull()
   })
 })
 
