@@ -38,8 +38,8 @@ trả bằng Trả sau thì là bnpl_purchase.
 - resilience: hỏi điểm chống chịu, sức chịu đựng tài chính hoặc các thành phần của điểm chống chịu.
 - stress: hỏi "nếu gặp cú sốc tài chính thì sao" theo các mẫu trong danh sách bên dưới, hoặc muốn thử cú sốc mà chưa chọn mẫu. \
 Nếu người dùng đưa số tiền cho khoản chi cụ thể hoặc cho thay đổi thu nhập thì chọn what_if.
-- roadmap: xem, lập mới hoặc lập lại lộ trình quản lý chi tiêu, kế hoạch tiết kiệm theo giai đoạn. Tư vấn đầu tư hay vay vẫn là \
-out_of_scope kể cả khi người dùng gọi đó là lộ trình.
+- roadmap: xem, lập mới, lập lại lộ trình quản lý chi tiêu (kế hoạch tiết kiệm theo giai đoạn) hoặc sửa một bước của nó. \
+Tư vấn đầu tư hay vay vẫn là out_of_scope kể cả khi người dùng gọi đó là lộ trình.
 - behavior: hỏi về THÓI QUEN chi tiêu đã qua của chính mình, tức khuôn mẫu lặp lại chứ không phải một con số: chi vào lúc nào, \
 dồn vào những ngày nào, nhịp chi quanh kỳ lương, dùng Trả sau nhiều hay ít, vì sao hay bị hụt. Không kèm khoản chi cụ thể để \
 mô phỏng (có thì là what_if). Hỏi số dư, giao dịch hay dự báo cụ thể là lookup.
@@ -70,7 +70,15 @@ affordability) đặt ở jar_text; from_jar_text và to_jar_text CHỈ dùng kh
 - profile_update: lương đặt vào salary_vnd, ngày nhận lương vào payday_day; MỘT khoản nghĩa vụ thì obligation_name (tên ngắn, ví dụ "Tiền trọ"), \
 obligation_kind (rent, bill, subscription hoặc loan; không chắc thì null), amount_vnd (số tiền mỗi kỳ), due_day (ngày đến hạn trong tháng).
 - shock_id chỉ dùng cho stress: chọn mã của cú sốc mẫu phù hợp, kể cả khi người dùng gửi nhãn từ chip; không khớp cú sốc nào thì để null.
-- roadmap_action chỉ dùng cho roadmap: "view" khi muốn xem bản hiện có, "create" khi muốn lập mới hoặc lập lại. Chưa rõ thì để null.
+- roadmap_action chỉ dùng cho roadmap: "view" khi muốn xem bản hiện có, "create" khi muốn lập mới hoặc lập lại, "edit_step" khi muốn \
+đổi số tiền, ngày hay bỏ MỘT bước của lộ trình đang dùng (số tiền mới, nếu người dùng nói, đặt ở amount_vnd). Chưa rõ thì để null.
+- insight_kind chỉ dùng cho behavior: khía cạnh thói quen câu hỏi nhắm tới. payday_cycle (nhịp chi quanh kỳ nhận lương), \
+weekday_pattern (ngày trong tuần, cuối tuần), time_of_day (giờ trong ngày), bnpl_usage (mức dùng Trả sau), category_trend \
+(một nhóm chi tiêu tăng hay giảm), spending_cluster (những ngày chi dồn, chi đậm). Hỏi chung về thói quen thì để null.
+- fee_topic chỉ dùng cho knowledge: loại phí được hỏi. monthly (phí định kỳ hằng tháng, phí dịch vụ), per_transaction (phí theo \
+từng giao dịch), once (phí một lần, phí mở hay kích hoạt), late (phí trả chậm, quá hạn); "other" khi hỏi về một khoản phí hay \
+điều khoản không thuộc bốn loại đó. Hỏi chung về biểu phí thì để null.
+- ingest_action chỉ dùng cho ingest: "how_to" khi hỏi cách hay chỗ để nạp, "status" khi hỏi về một lần đã nạp. Chưa rõ thì để null.
 - roadmap có mục tiêu người dùng nói ("lập kế hoạch để dành 15 triệu ở hũ Mua xe trong 6 tháng"): số tiền mục tiêu đặt ở amount_vnd, \
 tên hũ chứa mục tiêu ở jar_text (giữ nguyên chữ họ gõ, không đặt ở from_jar_text hay to_jar_text), hạn ở date_text: chép nguyên cụm chữ chỉ \
 thời gian họ nói (ví dụ "cuối tháng này", "31/12", "6 tháng nữa"), không tự đổi thành ngày; roadmap_action là "create". \

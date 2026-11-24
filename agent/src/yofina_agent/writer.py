@@ -19,7 +19,8 @@ from yofina_agent.metered_model import MeteredModel
 from yofina_agent.textutil import ungrounded_amounts
 from yofina_core.llm import LlmGateway, TurnScope
 
-PHASE4_TASKS = frozenset({"resilience", "stress", "roadmap"})
+#: Việc mà phần lời được kiểm trọn (mọi con số, kể cả điểm, số ngày, phiên bản) trước khi phát; sai thì bỏ phần lời.
+PHASE4_TASKS = frozenset({"resilience", "stress", "roadmap", "roadmap_step_edit"})
 _NUMBER_RE = re.compile(r"-?\d+(?:[.,/\-]\d+)*(?:\s*%)?")
 
 WRITER_SYSTEM = """Bạn là Yofina, trợ lý quản lý chi tiêu theo hũ cho người dùng Việt Nam. Trả lời bằng tiếng Việt, giọng thân thiện.
@@ -78,6 +79,12 @@ TASKS: dict[str, str] = {
         "kịp mục tiêu (on_track kịp, relaxed kịp sau khi nới hạn hoặc mức, infeasible chưa khả thi). status proposed là bản đề xuất "
         "chưa thay lộ trình đang dùng (người dùng so và chọn ở trang Lộ trình); active là lộ trình đang dùng. Không tự tính tổng "
         "và không đề xuất bước mới."
+    ),
+    "roadmap_step_edit": (
+        "Người dùng muốn sửa một bước của lộ trình đang dùng; thẻ lộ trình đó đã hiện. Chat chưa sửa được bước nên chưa có gì "
+        "thay đổi (sua_trong_chat là false); người dùng sửa ở trang Lộ trình theo cach_sua. steps là mọi bước hiện có. Câu hỏi chỉ "
+        "tới một bước trong steps thì gọi đúng bước đó, không thấy bước nào khớp thì nói vậy. so_tien_moi_text (nếu có) là số "
+        "tiền người dùng muốn đặt."
     ),
     "confirm_action": (
         "Thẻ xác nhận một thay đổi đã hiện (summary, changes). Chưa lưu gì cho tới khi người dùng bấm Xác nhận trên thẻ; câu trả "

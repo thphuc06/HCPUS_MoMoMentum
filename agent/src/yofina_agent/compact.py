@@ -430,3 +430,23 @@ def compact_roadmap(payload: Mapping[str, Any]) -> dict[str, Any]:
         "phase_count": len(data["phases"]),
         "step_titles": [step["title"] for phase in data["phases"] for step in phase["steps"]][:3],
     }
+
+
+def compact_roadmap_steps(payload: Mapping[str, Any], jar_names: Mapping[str, str]) -> dict[str, Any]:
+    """Lộ trình đang dùng cho lượt "sửa một bước": mọi bước kèm giai đoạn, số tiền (chuỗi đã định dạng), hũ nguồn và hũ đích (tên
+    hũ thật của người dùng), hạn `dd/mm`. Model chỉ ra bước người dùng nói tới từ bản này, không tự tính hay đổi gì."""
+    data = payload["data"]
+    steps: list[dict[str, Any]] = []
+    for phase in data["phases"]:
+        for step in phase["steps"]:
+            row: dict[str, Any] = {"phase": phase["title"], "title": step["title"]}
+            if step.get("amount_vnd") is not None:
+                row["amount_text"] = format_vnd(step["amount_vnd"])
+            if step.get("jar_code"):
+                row["from_jar"] = jar_names.get(step["jar_code"], step["jar_code"])
+            if step.get("to_jar_code"):
+                row["to_jar"] = jar_names.get(step["to_jar_code"], step["to_jar_code"])
+            if step.get("due_date"):
+                row["due_date_text"] = _dm(step["due_date"])
+            steps.append(row)
+    return {"version": data["version"], "status": data["status"], "steps": steps}

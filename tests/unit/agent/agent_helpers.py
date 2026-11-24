@@ -126,7 +126,7 @@ _LEGACY_INTENT = {
 _PARAM_KEYS = (
     "jar_text", "from_jar_text", "to_jar_text", "amount_vnd", "days_back", "limit", "funding", "scenario_kind",
     "label", "date_text", "salary_vnd", "payday_day", "obligation_name", "obligation_kind", "due_day", "keep_previous",
-    "shock_id", "roadmap_action",
+    "shock_id", "roadmap_action", "insight_kind", "fee_topic", "ingest_action",
 )  # fmt: skip
 
 

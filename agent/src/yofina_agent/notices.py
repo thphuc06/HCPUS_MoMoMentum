@@ -218,22 +218,11 @@ ROADMAP_CLOSING_NEXT_COMPARE = (
 ROADMAP_CLOSING_NEXT_REVIEW = (
     "Bước tiếp theo: mở trang Lộ trình để chấp nhận, sửa hoặc từ chối từng bước."
 )
-#: Người dùng muốn sửa một bước trong chat (chat chưa có tool sửa bước): chỉ ra bước khớp và chỗ sửa, không nói là đã sửa.
-#: {title}: tiêu đề bước; {detail}: số tiền và giai đoạn của bước; {version}: phiên bản đang dùng; {amount}: số tiền người
-#: dùng muốn; {titles}: các bước khớp; {about}: hũ người dùng nhắc.
-ROADMAP_EDIT_MATCH = "Bước khớp với yêu cầu của bạn là “{title}” ({detail}) trong lộ trình đang dùng, phiên bản {version}."
-ROADMAP_EDIT_MANY = "Có {count} bước khớp yêu cầu của bạn trong lộ trình đang dùng, phiên bản {version}: {titles}."
+#: Người dùng muốn sửa một bước trong chat (chat chưa có tool sửa bước): chỗ sửa trên giao diện. Vừa là dữ kiện `cach_sua` cho writer
+#: (writer chỉ ra bước người dùng nói tới từ bản gọn các bước), vừa là lời đáp khi writer không viết được. Không chứa số.
 ROADMAP_EDIT_HOW = (
     "Mình chưa sửa được bước ngay trong chat nên chưa đổi gì. Bấm Mở trang Lộ trình trên thẻ, rồi bấm Sửa ở bước đó "
     "để đổi số tiền hoặc ngày."
-)
-ROADMAP_EDIT_HOW_AMOUNT = (
-    "Mình chưa sửa được bước ngay trong chat nên chưa đổi gì. Bấm Mở trang Lộ trình trên thẻ, rồi bấm Sửa ở bước đó "
-    "và nhập số tiền mới {amount}."
-)
-ROADMAP_EDIT_NONE = (
-    "Lộ trình đang dùng (phiên bản {version}) không có bước nào khớp yêu cầu của bạn{about}, nên mình chưa đổi gì. "
-    "Bạn xem các bước trên thẻ; muốn sửa bước khác thì bấm Mở trang Lộ trình rồi bấm Sửa ở bước đó."
 )
 ROADMAP_EDIT_NO_ROADMAP = (
     "Bạn chưa có lộ trình đang dùng nên chưa có bước nào để sửa. Muốn lập lộ trình, bạn nhắn “Lập lộ trình giúp mình” nhé."
