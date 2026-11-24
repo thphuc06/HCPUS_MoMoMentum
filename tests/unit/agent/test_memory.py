@@ -350,13 +350,27 @@ PASSED = GuardrailResult(blocked=False, latency_ms=10)
             None,
         ),
         (
-            {"intent": "profile_update", "guardrail_input": PASSED, "user_text": "mình mới đổi việc"},
+            # hồ sơ (lương, ngày lương, nghĩa vụ) ở Aurora là nguồn sự thật: không nhân bản vào bộ nhớ
+            {"intent": "profile_update", "guardrail_input": PASSED, "user_text": "lương mình về ngày 10 hằng tháng"},
+            "app_record:profile_update",
+        ),
+        (
+            {"intent": "memory", "guardrail_input": PASSED, "user_text": "mình mới đổi việc, giờ làm ca đêm"},
             None,
         ),
     ],
 )
 def test_chi_ghi_luot_da_qua_guardrail_va_khong_rui_ro(kw, reason):
     assert m.skip_reason(**kw) == reason
+
+
+def test_khong_ghi_luot_khai_ho_so_du_guardrail_cho_qua():
+    """Đo Runtime v25: lượt `profile_update` thành sở thích về ngày lương. Lý do bỏ đứng trước kiểm Guardrail (không phụ thuộc kết quả
+    Guardrail) và không đụng ý định khác: `memory`, `roadmap`, `chitchat` vẫn được ghi."""
+    assert m.APP_RECORD_INTENTS == frozenset({"profile_update"})
+    assert m.skip_reason(intent="profile_update", guardrail_input=None, user_text="tiền trọ đóng ngày 3") == "app_record:profile_update"
+    for intent in ("memory", "roadmap", "chitchat"):
+        assert m.skip_reason(intent=intent, guardrail_input=PASSED, user_text="đi làm xa nhà") is None
 
 
 # --- đọc ------------------------------------------------------------------------------------------

@@ -19,7 +19,8 @@ import { publishParams } from './ssm-outputs';
  *   TRÍCH XUẤT dùng chỉ dẫn riêng (`appendToPrompt` THAY phần chỉ dẫn mặc định, nên văn bản dưới đây là chỉ dẫn mặc định của AWS cộng
  *   luật của Yofina): chỉ trích điều người dùng KHẲNG ĐỊNH về bản thân, bỏ câu hỏi và what-if, không số tiền, không tên người khác, sự
  *   thật không lặp sở thích, luôn viết tiếng Việt; giữ chữ giới hạn thời gian của người dùng, viết câu đổi ý hay rút lại thành lời
- *   khẳng định đầy đủ về cùng một điều, coi lý do từ chối một đề xuất là lời khẳng định (`CHANGE_AND_SCOPE_RULES`). Bước hợp nhất
+ *   khẳng định đầy đủ về cùng một điều, coi lý do từ chối một đề xuất là lời khẳng định (`CHANGE_AND_SCOPE_RULES`); không trích hồ sơ
+ *   ứng dụng đã lưu (`PROFILE_OWNED`), không chèn ngày (`NO_DATES`), viết ngôi thứ ba (`THIRD_PERSON`). Bước hợp nhất
  *   (consolidation) giữ mặc định. Model trích xuất chạy TRONG tài khoản
  *   qua execution role của Memory (`EXTRACTION_MODEL_ID`, có ở `ap-southeast-1` qua inference profile `apac.`).
  * - Bỏ strategy tóm tắt phiên (SUMMARIZATION): agent không đọc tóm tắt, nó chỉ tốn lượt trích và sinh mẩu "Thời điểm: ," cùng số liệu.
@@ -66,6 +67,30 @@ const NO_NUMBERS_NO_OTHERS = `- Do NOT include amounts of money, balances, accou
 about the user.`;
 
 /**
+ * Thay khối TEMPORAL GROUNDING của chỉ dẫn mặc định (đổi ngày tương đối thành ngày tuyệt đối, chèn "as of <ngày hội thoại>"). Đo
+ * Runtime v25: bản ghi có "Từ ngày <ngày thật>, ..." dù luật TIME LIMITS bảo giữ chữ của người dùng. Ngày đã có ở metadata bản ghi
+ * (`createdAt`), agent đổi nó sang ngày mô phỏng (`ngay_ghi`); ngày thật chép vào chữ thì lệch lịch của ứng dụng, và khi đọc bị che
+ * thành `[số]`.
+ */
+const NO_DATES = `Do NOT write dates, weekdays or clock times of the conversation into a memory, and do not turn relative time words into \
+dates: every memory record already stores when it was written, and the application runs on its own calendar, so a date written into \
+the text is redundant or wrong. Relative time words the user said follow the TIME LIMITS rule below.`;
+
+/**
+ * Hồ sơ mà ứng dụng tự lưu ở Aurora (lương, ngày nhận lương, khoản nghĩa vụ định kỳ; ý định `profile_update` ghi qua token xác nhận).
+ * Nguyên tắc "không nhân bản nguồn sự thật khác" (docs/research/long-term-memory-research.md mục 1): bản sao trong bộ nhớ cũ đi hoặc
+ * mâu thuẫn khi người dùng sửa hồ sơ. Đo Runtime v25: "Lương về ngày 5", "Đóng tiền trọ ngày 1" thành sở thích. Mã cũng không ghi lượt
+ * `profile_update` (`agent/src/yofina_agent/memory.py`), luật này phủ khi thông tin đó lọt vào lượt khác.
+ */
+const PROFILE_OWNED = `- Do NOT extract the profile data the application keeps in its own records and lets the user edit there: the salary or \
+income amount, the day income arrives, and recurring obligations (rent, bills, subscriptions, loan repayments) with their amounts or \
+due days. Those records are the source of truth; a copy in memory goes stale or contradicts them once the user edits the profile.`;
+
+/** Ngôi kể của bản ghi: bản ghi hiện lại cho người dùng (Hồ sơ, Bộ nhớ của tôi) và vào prompt như dữ liệu VỀ người dùng. */
+const THIRD_PERSON = `in the third person, as an observation about the user: never in the user's own first-person voice \
+(mình, tôi, em, tớ) and never addressing them (bạn)`;
+
+/**
  * Ba nguyên tắc chung của hai chỉ dẫn trích xuất (P0-3, docs/research/long-term-memory-research.md mục 2.4). Hợp nhất (consolidation)
  * mặc định của AgentCore chỉ có Add, Update, Skip: nó chỉ thay được bản cũ khi bản mới nói rõ trạng thái HIỆN TẠI của cùng một điều,
  * và nó bỏ "trạng thái tạm thời"; nên bước trích xuất phải (1) giữ nguyên chữ giới hạn thời gian của người dùng, (2) viết câu rút lại
@@ -86,7 +111,8 @@ question. Extract the reason; do not record that a suggestion was declined (the 
 
 /**
  * Chỉ dẫn trích xuất của strategy sự thật. Phần đầu là chỉ dẫn mặc định của AWS ("System prompt for semantic memory strategy", tra
- * 25/11/2026), chỉ đổi câu về chủ ngữ và thay khối `<language_requirement>`; phần sau là luật của Yofina. Không đụng output schema.
+ * 25/11/2026), chỉ đổi câu về chủ ngữ, thay khối TEMPORAL GROUNDING bằng `NO_DATES` và thay khối `<language_requirement>`; phần sau
+ * là luật của Yofina. Không đụng output schema.
  */
 export const SEMANTIC_EXTRACTION_PROMPT = `You are a long-term memory extraction agent supporting a lifelong learning system. Your task is to identify and extract meaningful information about the users from a given list of messages.
 
@@ -108,9 +134,7 @@ Analyze the conversation and extract structured information about the user accor
 - Do NOT extract anything from prior conversation history, even if provided. Use it solely for context.
 - Do NOT incorporate external knowledge.
 - Avoid duplicate extractions.
-- TEMPORAL GROUNDING: When conversation messages include timestamps (shown in brackets like [2023-05-25T13:14:00]), use them as your temporal anchor.
-    - For computable references ("yesterday", "last week", "last Saturday", "three days ago"), resolve to an absolute date. Example: conversation on 2023-05-25, user says "last Saturday" → write "2023-05-20".
-    - For vague references ("recently", "a while ago", "not long ago", "lately"), do NOT guess a specific date. Instead, keep the original wording and append the conversation date as context: "recently started learning piano (as of 2024-03-15)". This preserves temporal searchability without fabricating precision.
+- ${NO_DATES}
 - CAUSAL SEPARATION: When the user mentions two or more events in the same message, extract each as an independent fact.
     - Do NOT link them causally (e.g., "X improved after Y", "X because of Y", "X since Y") unless the user explicitly states a causal relationship using words like "because", "caused", "led to", "as a result of", etc.
     - Temporal proximity ("after", "since", "then") does NOT imply causation. If the user later corrects a causal assumption, extract only the corrected version.
@@ -128,20 +152,22 @@ Analyze the conversation and extract structured information about the user accor
 ${APP_CONTEXT}
 - Extract only statements in which the user ASSERTS something about themselves: their situation (job, studies, family, where they live), lasting plans or goals they have decided on (a trip, saving for something, an upcoming life event) and constraints they live with.
 - Do NOT extract anything from questions, hypothetical or "what-if" messages, or requests for numbers, balances, forecasts, checks or explanations (for example ${QUESTION_EXAMPLES}). Asking about, considering or simulating a purchase is not a fact about the user. If the user messages only ask or request something, return an empty list.
-- Do NOT restate preferences (what the user likes or dislikes, which jar they want to prioritise or protect, when or how they want to be reminded, how answers should be written). A separate strategy stores preferences; a fact must never repeat one.
+- Do NOT restate preferences (what the user likes or dislikes, which jar they want to prioritise or protect, when or how they want to be reminded, how answers should be written). A separate strategy stores preferences; a fact must never repeat one, even in other words or as part of a longer sentence. A message that only states or changes a preference gives an empty list here; when a message mixes a preference with something about the user's situation, extract only the situation.
+${PROFILE_OWNED}
 ${CHANGE_AND_SCOPE_RULES}
+- The rule on changes applies here only to the subjects this memory keeps; a change of mind about a preference is recorded by the preference memory alone.
 - For a reason given when declining a suggestion, this memory keeps the part about the user's situation or constraints they live with; what they want to protect or prioritise belongs to the preference memory.
 ${NO_NUMBERS_NO_OTHERS}
 
 <language_requirement>
 - Always write "fact" in Vietnamese with full diacritics, whatever the language of the conversation, and set "language" to "Vietnamese".
-- Write each fact as a short statement about the user without a subject (for example "Làm giáo viên ở Đà Nẵng", "Đang để dành cho chuyến đi Đà Lạt cuối năm"); do not start with "Người dùng" or "The user".
+- Write each fact ${THIRD_PERSON}, as a short statement whose subject is left implicit (for example "Làm giáo viên ở Đà Nẵng", "Đang để dành cho chuyến đi Đà Lạt cuối năm"); do not start with "Người dùng" or "The user".
 - Keep proper nouns, brand names and jar names exactly as the user wrote them.
 </language_requirement>`;
 
 /**
  * Chỉ dẫn trích xuất của strategy sở thích. Phần đầu là chỉ dẫn mặc định của AWS ("System prompt for user preference memory strategy",
- * tra 25/11/2026), nguyên văn; phần sau là luật của Yofina. Khối `<language_requirement>` của strategy này nằm trong output schema
+ * tra 25/11/2026), nguyên văn trừ khối TEMPORAL GROUNDING (thay bằng `NO_DATES`); phần sau là luật của Yofina. Khối `<language_requirement>` của strategy này nằm trong output schema
  * (không sửa được), nên luật ngôn ngữ ở đây chỉ nói thêm, không mâu thuẫn: hội thoại tiếng Việt thì ngôn ngữ chính đã là tiếng Việt.
  */
 export const USER_PREFERENCE_EXTRACTION_PROMPT = `You are tasked with analyzing conversations to extract the user's preferences. You'll be analyzing two sets of data:
@@ -169,10 +195,8 @@ Your job is to identify and categorize the user's preferences into two main type
 For explicit preference, extract only preference that the user has explicitly shared. Do not infer user's preference.
 For implicit preference, it is allowed to infer user's preference, but only the ones with strong signals, such as requesting something multiple times or repeatedly engaging with a category in JSON payloads.
 
-TEMPORAL GROUNDING:
-When conversation messages include timestamps (shown in brackets like [2023-05-25T13:14:00]), use them as your temporal anchor:
-- For computable references ("yesterday", "last week", "three days ago"), resolve to an absolute date in the extracted context.
-- For vague references ("recently", "a while ago", "lately"), keep the original wording and append the conversation date: e.g., "recently switched to oat milk (as of 2024-03-15)".
+DATES:
+- ${NO_DATES}
 
 AMBIGUOUS OR INCOMPLETE WORDS:
 - If a user message contains a truncated or abbreviated word, and no other payload in the conversation contains a domain-specific noun that
@@ -188,13 +212,15 @@ ${APP_CONTEXT}
 - In this application do NOT infer implicit preferences from the questions the user asks: asking about a purchase, a balance, a jar or a forecast, even several times, is not a preference.
 - Do NOT extract anything from questions, hypothetical or "what-if" messages, or requests for numbers (for example ${QUESTION_EXAMPLES}). If the user messages only ask or request something, return an empty list.
 - Keep times of day exactly as the user stated them: they are needed to respect reminder preferences.
+- The user's situation, plans and constraints (work, income, family, obligations, upcoming events) are not preferences, even when the user asks to remember them: the fact memory and the application's own records keep them.
+${PROFILE_OWNED}
 ${CHANGE_AND_SCOPE_RULES}
 - For a reason given when declining a suggestion, this memory keeps what the user wants to protect, avoid or prioritise; the situation behind it belongs to the fact memory.
 ${NO_NUMBERS_NO_OTHERS}
 
 <language_requirement>
 - Write "context", "preference" and "categories" in Vietnamese with full diacritics, whatever the language of the conversation, and set "language" to "Vietnamese".
-- Write "preference" as a short statement without a subject (for example "Không muốn được nhắc sau 22 giờ"); keep jar names exactly as the user wrote them.
+- Write "context" and "preference" ${THIRD_PERSON}. Write "preference" as a short statement without a subject (for example "Không muốn được nhắc sau 22 giờ"); keep jar names exactly as the user wrote them.
 </language_requirement>`;
 
 /** Đoạn đầu ARN của Bedrock theo id model: inference profile (`global.`, `apac.`, ...) hay foundation model trong vùng. */

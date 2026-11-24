@@ -17,7 +17,8 @@ Thiết kế và nguồn: docs/research/agentcore-memory-design.md. Tóm tắt:
 - GHI sau khi lượt đã trả lời xong (sau `RUN_FINISHED`, tác vụ nền): `IngestData` (trích xuất dài hạn, KHÔNG lưu event ngắn hạn: ứng
   dụng đã lưu lượt thô ở Aurora). CHỈ ghi câu của người dùng (không ghi lời trả lời của trợ lý: lời đó chứa số và trạng thái hũ đọc từ
   sổ cái), SAU KHI che PII, tên người khác và số tiền, và CHỈ khi Guardrail đầu vào đã thật sự chạy và cho qua. Không ghi lượt bị chặn,
-  ngoài phạm vi, có dấu hiệu tấn công prompt, lượt nạp tệp, lượt chuyển tiền (lời nhắn giao dịch) và lượt hỏi đáp thuần (tra cứu,
+  ngoài phạm vi, có dấu hiệu tấn công prompt, lượt nạp tệp, lượt chuyển tiền (lời nhắn giao dịch), lượt khai hồ sơ (`profile_update`:
+  ứng dụng đã lưu ở Aurora, là nguồn sự thật) và lượt hỏi đáp thuần (tra cứu,
   what-if, kiểm tra trước khi chi...: câu hỏi không phải điều người dùng khẳng định về mình). Điều gì đáng nhớ do chỉ dẫn trích xuất
   của strategy quyết định (built-in with overrides, `infra-cdk/lib/memory.ts`); lọc theo ý định chỉ là chính sách ghi. Lỗi ghi chỉ log.
 - Trích xuất dài hạn là bất đồng bộ: không dựa vào bản ghi mới trong cùng phiên.
@@ -65,6 +66,11 @@ SKIP_INTENTS = frozenset({"out_of_scope", "ingest", "move"})
 QA_INTENTS = frozenset(
     {"lookup", "what_if", "affordability", "resilience", "stress", "behavior", "knowledge"}
 )
+#: Ý định khai báo dữ liệu mà ứng dụng tự lưu ở Aurora (lương, ngày nhận lương, khoản nghĩa vụ; ghi qua token xác nhận). Hồ sơ ở Aurora
+#: là nguồn sự thật, người dùng sửa ở đó; bản sao trong bộ nhớ cũ đi hoặc mâu thuẫn khi hồ sơ đổi (nguyên tắc "không nhân bản nguồn sự
+#: thật khác", docs/research/long-term-memory-research.md mục 1). Đo Runtime v25: lượt `profile_update` thành sở thích về ngày lương,
+#: ngày đóng tiền trọ. Chỉ dẫn trích xuất (`PROFILE_OWNED` trong `infra-cdk/lib/memory.ts`) bỏ thông tin này khi nó lọt vào lượt khác.
+APP_RECORD_INTENTS = frozenset({"profile_update"})
 #: Thay cho số tiền cụ thể trong chữ ghi vào và đọc ra khỏi bộ nhớ.
 AMOUNT_PLACEHOLDER = "[số tiền]"
 #: Thay cho mọi con số khác (phần trăm, số ngày, số lần, ngày tháng) trong chữ ĐỌC ra khỏi bộ nhớ; giờ trong ngày được giữ.
@@ -678,6 +684,8 @@ def skip_reason(*, intent: str | None, guardrail_input: Any, user_text: str) -> 
         return f"intent:{intent}"
     if intent in QA_INTENTS:
         return f"qa_intent:{intent}"
+    if intent in APP_RECORD_INTENTS:
+        return f"app_record:{intent}"
     if intent == "memory" and is_recall_question(user_text):
         return (
             "recall_question"  # lời đáp là chính các bản ghi đã nhớ: ghi lại thì bộ nhớ tự nhân bản
@@ -843,6 +851,7 @@ async def on_memory(turn: Turn, r: IntentResult, question: str) -> None:
 
 __all__ = [
     "AMOUNT_PLACEHOLDER",
+    "APP_RECORD_INTENTS",
     "DISABLED",
     "EMPTY",
     "PROMPT_NOTICE",

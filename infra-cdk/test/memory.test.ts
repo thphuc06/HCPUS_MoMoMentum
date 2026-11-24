@@ -115,6 +115,40 @@ describe('YofinaMemory', () => {
     assert.match(USER_PREFERENCE_EXTRACTION_PROMPT, /this memory keeps what the user wants to protect, avoid or prioritise/);
   });
 
+  it('chỉ dẫn trích xuất (sau đo v25): không trích hồ sơ ứng dụng đã lưu, không chèn ngày, ngôi thứ ba, sự thật không nói lại sở thích', () => {
+    for (const prompt of [SEMANTIC_EXTRACTION_PROMPT, USER_PREFERENCE_EXTRACTION_PROMPT]) {
+      // hồ sơ ở Aurora là nguồn sự thật: lương, ngày nhận lương, khoản nghĩa vụ định kỳ không vào bộ nhớ, kèm lý do
+      assert.match(prompt, /Do NOT extract the profile data the application keeps in its own records/);
+      assert.match(prompt, /the day income arrives/);
+      assert.match(prompt, /Those records are the source of truth/);
+      // khối TEMPORAL GROUNDING mặc định (đổi ra ngày tuyệt đối, chèn "as of <ngày>") đã thay bằng luật không ghi ngày
+      assert.ok(!prompt.includes('TEMPORAL GROUNDING') && !prompt.includes('as of 2024') && !prompt.includes('resolve to an absolute date'));
+      assert.match(prompt, /Do NOT write dates, weekdays or clock times of the conversation into a memory/);
+      assert.match(prompt, /every memory record already stores when it was written/);
+      // ngôi thứ ba, không giọng của chính người dùng
+      assert.match(prompt, /in the third person, as an observation about the user: never in the user's own first-person voice/);
+      for (const evalWord of ['tháng này', 'Du lịch', 'Giải trí', 'Dự phòng', 'ngày 5', 'tiền trọ']) {
+        assert.ok(!prompt.includes(evalWord), evalWord);
+      }
+    }
+    // sự thật: câu chỉ nói hay đổi một sở thích thì danh sách sự thật rỗng; đổi ý về sở thích chỉ do strategy sở thích ghi
+    assert.match(SEMANTIC_EXTRACTION_PROMPT, /A message that only states or changes a preference gives an empty list here/);
+    assert.match(SEMANTIC_EXTRACTION_PROMPT, /a change of mind about a preference is recorded by the preference memory alone/);
+    // sở thích: hoàn cảnh, kế hoạch không phải sở thích dù người dùng dặn nhớ
+    assert.match(USER_PREFERENCE_EXTRACTION_PROMPT, /are not preferences, even when the user asks to remember them/);
+  });
+
+  it('đổi chỉ dẫn là cập nhật tại chỗ: giữ logical id của Memory và tên hai strategy (không thay Memory, id giữ nguyên)', () => {
+    const { t } = memoryStack();
+    const ids = Object.keys(t.findResources('AWS::BedrockAgentCore::Memory'));
+    assert.equal(ids.length, 1);
+    assert.match(ids[0], /^MMemory[0-9A-F]{8}$/);
+    const names = (Object.values(t.findResources('AWS::BedrockAgentCore::Memory'))[0] as any).Properties.MemoryStrategies.map(
+      (s: any) => s.CustomMemoryStrategy.Name,
+    );
+    assert.deepEqual(names, ['preferences_vi', 'facts_vi']);
+  });
+
   it('execution role của Memory chỉ được gọi đúng model trích xuất (inference profile và foundation model của nó)', () => {
     const { t } = memoryStack();
     const roles = Object.values(t.findResources('AWS::IAM::Role')) as any[];
