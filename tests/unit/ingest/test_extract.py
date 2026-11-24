@@ -140,23 +140,24 @@ def test_tien_phong_chuyen_cho_ca_nhan_theo_muc_dich_ra_hu_hoa_don(gateway_of):
     (c,) = res.candidates
     assert (c.jar_code, c.jar_source) == ("hoa_don", "type_map")
     system = client.requests[0]["system"][0]["text"]
-    assert "MỤC ĐÍCH" in system and "không theo việc người nhận là cá nhân" in system
+    assert "mục đích chi" in system and "không theo việc người nhận là cá nhân" in system
     assert "rent" in system  # loại tiền thuê nhà có trong danh sách loại giao dịch gửi model
     from yofina_ingest import prompts
 
     assert "không theo việc người nhận là cá nhân" in prompts.labels_system(ctx().jars, ctx().type_map)  # CSV cũng vậy
 
 
-def test_loi_nhac_anh_co_luat_cua_kiem_mu_24_11():
-    """Ba lỗi đọc ảnh của lượt eval 24/11 (file phase 5, mục "Tiêu chí 3"): r08 màn chi tiết sau chuyển có mã giao dịch nhưng không có chữ
-    "thành công"; r15 sao kê Ghi nợ/Ghi có bị đọc lẫn chiều và thiếu cả 5 dòng rút ATM. Chỉ kiểm lời nhắc có luật, không thay eval."""
+def test_loi_nhac_anh_neu_nguyen_tac_doc_chung_tu_mot_lan():
+    """Kiểm toán prompt đợt 6: luật "cách đọc chứng từ" thêm theo từng ảnh trượt 24/11 (r08 màn chi tiết có mã giao dịch, r15 cột Ghi
+    nợ/Ghi có và số dư) là kiến thức chung của model đọc ảnh, nay thay bằng MỘT câu nguyên tắc. Điều model không tự biết vẫn nói rõ: hệ
+    thống tự lọc trùng nên không tự bỏ dòng giống nhau, và dòng rút tiền mặt vẫn được trích."""
     from yofina_ingest import prompts
 
     system = prompts.image_system(ctx().jars, ctx().type_map, TODAY)
-    assert "số tham chiếu, mã giao dịch" in system and 'không có chữ "thành công"' in system
-    assert "TIÊU ĐỀ của cột chứa số tiền" in system and "cột số dư" in system
-    assert "trích MỌI dòng giao dịch" in system
-    assert "Rút tiền mặt (ATM" in system
+    assert "ngữ nghĩa của chính chứng từ" in system and "số dư trước và sau" in system
+    assert "hệ thống tự lọc trùng" in system and "vẫn được trích" in system
+    for dropped in ('không có chữ "thành công"', "TIÊU ĐỀ của cột chứa số tiền", "trích MỌI dòng giao dịch"):
+        assert dropped not in system
 
 
 def test_loi_nhac_rut_tien_mat_va_tra_soat_theo_quyet_dinh_24_11():
@@ -166,15 +167,17 @@ def test_loi_nhac_rut_tien_mat_va_tra_soat_theo_quyet_dinh_24_11():
     from yofina_ingest.schemas import CsvRowLabel, ExtractedRow
 
     system = prompts.image_system(ctx().jars, ctx().type_map, TODAY)
-    atm = next(line for line in system.splitlines() if line.startswith("- Rút tiền mặt (ATM"))
-    assert "KHÔNG phải khoản chi" in atm and "own_account_transfer=true" in atm
+    atm = next(line for line in system.splitlines() if "rút tiền mặt" in line)
+    assert "không phải khoản chi" in atm and "own_account_transfer=true" in atm
     assert "phí rút tiền" in atm  # phí là khoản chi thật
     assert "direction=out, own_account_transfer=false" not in system  # luật cũ (24/11 sáng) đã bỏ
     dispute = next(line for line in system.splitlines() if "tra soát" in line)
     assert "khiếu nại" in dispute and "yêu cầu hoàn tiền" in dispute
     assert "KHÔNG tạo dòng giao dịch nào" in dispute and "rows rỗng" in dispute
     labels = prompts.labels_system(ctx().jars, ctx().type_map)
-    assert "rút tiền mặt" in labels and "RUT TIEN TAI ATM" in labels
+    # cùng MỘT luật cho ảnh và CSV (prompts._OWN_TRANSFER); không chép chuỗi literal của bộ eval CSV ("RUT TIEN TAI ATM")
+    assert prompts._OWN_TRANSFER in labels and prompts._OWN_TRANSFER in system
+    assert "RUT TIEN TAI ATM" not in labels and "dù chứng từ ghi tắt thế nào" in labels
     for model in (ExtractedRow, CsvRowLabel):
         assert "rút tiền mặt" in model.model_fields["own_account_transfer"].description
 

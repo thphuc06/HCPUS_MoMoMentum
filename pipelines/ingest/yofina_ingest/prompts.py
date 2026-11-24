@@ -20,6 +20,22 @@ _DATA_NOT_INSTRUCTIONS = (
 )
 
 
+#: Luật nghiệp vụ của ứng dụng (model không tự biết), dùng chung cho lời nhắc ảnh và lời nhắc gắn nhãn CSV.
+#: Rút tiền mặt: quyết định của chủ dự án 24/11 (ứng dụng không theo dõi tiền mặt); phí rút tiền vẫn là khoản chi thật.
+_OWN_TRANSFER = (
+    "own_account_transfer=true khi tiền chỉ đi giữa các tài khoản, ví, thẻ của CHÍNH người dùng (nạp tiền vào ví từ tài khoản của "
+    "mình, chuyển giữa hai tài khoản của mình) hoặc khi rút tiền mặt ở ATM hay tại quầy, dù chứng từ ghi tắt thế nào: ứng dụng không "
+    "theo dõi tiền mặt nên đó không phải khoản chi. Dòng như vậy vẫn được trích, chỉ mang own_account_transfer=true. Nạp tiền điện "
+    "thoại, trả nợ thẻ tín dụng cho ngân hàng, mua hàng không thuộc loại này; phí rút tiền tách thành dòng riêng vẫn là khoản chi "
+    "(own_account_transfer=false)."
+)
+#: Phân loại theo mục đích chi, không theo loại người nhận (hũ của người dùng theo mục đích).
+_PURPOSE = (
+    "Chuyển tiền cho một cá nhân mà nội dung nói rõ mục đích chi: chọn tx_type và jar_code theo mục đích đó, không theo việc người "
+    "nhận là cá nhân; chỉ dùng loại chuyển tiền cho người khác khi không thấy mục đích."
+)
+
+
 def _jar_lines(jars: Sequence[Mapping[str, Any]]) -> str:
     return "\n".join(f"- {j['code']}: {j['name']}" for j in jars) or "- (người dùng chưa có hũ nào)"
 
@@ -45,25 +61,22 @@ def image_system(
 
 Hôm nay là {today.isoformat()}.
 
-Chỉ trích GIAO DỊCH ĐÃ THỰC HIỆN XONG (status=completed):
-- Màn hình xác nhận trước khi thực hiện, màn nhập OTP hay mật khẩu, biểu mẫu chuyển tiền chưa điền hoặc chưa gửi, màn xem trước: KHÔNG phải giao dịch. Đặt document_type=unexecuted_form và rows rỗng.
-- Màn chi tiết hoặc kết quả SAU khi chuyển tiền, có số tham chiếu, mã giao dịch hay thời gian thực hiện và không còn bước xác nhận hay OTP nào: giao dịch ĐÃ thực hiện, status=completed, kể cả khi phần ảnh nhìn thấy không có chữ "thành công".
-- Màn hoặc hộp tra soát, khiếu nại, yêu cầu hoàn tiền về một giao dịch: KHÔNG tạo dòng giao dịch nào, kể cả khi màn chép lại số tiền, ngày, người nhận hay mã của giao dịch gốc (đó là đơn hỏi về giao dịch đã có, ghi thêm sẽ thành trùng). Đặt document_type=other_financial và rows rỗng. Khoản hoàn tiền ĐÃ về tài khoản thì vẫn là giao dịch (direction=in).
-- Giao dịch ghi "không thành công", "thất bại", "đã hủy", "bị từ chối", "đang xử lý": status=failed (hoặc pending), không bao giờ completed.
-- Nạp tiền hoặc chuyển giữa các tài khoản, ví, thẻ của CHÍNH người dùng (ví dụ "Nạp tiền vào ví từ thẻ/tài khoản ngân hàng"): đặt own_account_transfer=true. Nạp tiền điện thoại, trả tiền thẻ tín dụng cho ngân hàng, mua hàng thì KHÔNG phải loại này.
-- Rút tiền mặt (ATM, tại quầy): tiền chuyển thành tiền mặt của chính người dùng, ứng dụng không theo dõi tiền mặt nên KHÔNG phải khoản chi. Vẫn trích dòng đó nhưng đặt own_account_transfer=true, như chuyển sang tài khoản của chính mình; description giữ nguyên nội dung trên ảnh. Dòng phí rút tiền tách riêng (ví dụ phí rút ATM) vẫn là khoản chi bình thường, own_account_transfer=false.
-- Bảng phí, biểu lãi suất, menu, màn hình khuyến mãi, ảnh không thấy một khoản tiền cụ thể nào: rows rỗng (document_type=other_financial), còn ảnh hoàn toàn không liên quan tài chính (phong cảnh, thú cưng, ghi chú chữ...) thì document_type=not_financial.
+Ứng dụng chỉ ghi GIAO DỊCH ĐÃ THỰC HIỆN XONG (status=completed). Chiều tiền, trạng thái và từng dòng lấy theo ngữ nghĩa của chính chứng từ (tiêu đề cột, dấu, số dư trước và sau, mã hay thời gian thực hiện), không đoán theo lời nhắn. Định nghĩa của ứng dụng:
+- Chưa thực hiện thì không phải giao dịch: màn xác nhận trước khi chuyển, màn nhập OTP hay mật khẩu, biểu mẫu chưa gửi, màn xem trước. Đặt document_type=unexecuted_form và rows rỗng.
+- Màn hoặc hộp tra soát, khiếu nại, yêu cầu hoàn tiền về một giao dịch: KHÔNG tạo dòng giao dịch nào, kể cả khi màn chép lại số tiền, ngày, người nhận hay mã của giao dịch gốc (giao dịch gốc đã có, ghi thêm sẽ thành trùng). Đặt document_type=other_financial và rows rỗng. Khoản hoàn tiền ĐÃ về tài khoản thì vẫn là giao dịch (direction=in).
+- Giao dịch thất bại, đã hủy, bị từ chối hay đang xử lý: status=failed hoặc pending, không bao giờ completed.
+- {_OWN_TRANSFER}
+- Bảng phí, biểu lãi suất, menu, khuyến mãi, ảnh không có khoản tiền cụ thể nào: rows rỗng, document_type=other_financial. Ảnh không liên quan tài chính (phong cảnh, thú cưng, ghi chú chữ...): document_type=not_financial.
 
-Trường của mỗi dòng (một giao dịch một dòng, giữ thứ tự trên ảnh):
-- Lịch sử, sao kê, bảng nhiều dòng: trích MỌI dòng giao dịch nhìn thấy, không bỏ dòng nào, kể cả dòng cùng số tiền hay cùng nội dung, dòng phí và dòng rút tiền mặt (dòng rút tiền mặt mang own_account_transfer=true như luật ở trên).
+Trường của mỗi dòng (một giao dịch nhìn thấy là một dòng, giữ thứ tự trên ảnh; không tự bỏ dòng trông giống dòng khác, hệ thống tự lọc trùng):
 - date: YYYY-MM-DD nếu ảnh có năm; DD/MM nếu không có năm; null nếu không thấy ngày. Ngày Việt Nam viết ngày/tháng/năm.
 - amount_vnd: số nguyên VND dương, bỏ mọi dấu phân cách và chữ "đ"/"VND". Không thấy số tiền rõ thì bỏ dòng.
-- direction: "out" nếu tiền ra (chi, chuyển đi, thanh toán, trừ tiền, dấu âm); "in" nếu tiền vào (nhận, cộng tiền, lương, hoàn tiền, dấu dương). Bảng có cột Ghi nợ/Ghi có (Nợ/Có, Debit/Credit, Tiền ra/Tiền vào): chiều lấy theo TIÊU ĐỀ của cột chứa số tiền của dòng đó (Ghi nợ là out, Ghi có là in), không đoán theo nội dung. Có cột số dư thì kiểm lại: số dư sau giao dịch giảm so với dòng liền trước theo thời gian là out, tăng là in.
-- counterparty: tên người nhận hoặc đơn vị đúng như ảnh (không bịa; null nếu không có). counterparty_is_person=true nếu là tên một cá nhân.
-- description: lời nhắn hoặc nội dung đúng như ảnh. Giữ NGUYÊN ký tự, KHÔNG sửa chính tả, KHÔNG thêm hay bỏ dấu tiếng Việt. Đừng chép số tài khoản, số thẻ hay số điện thoại vào counterparty hay description.
+- direction: "out" khi tiền ra khỏi tài khoản của người dùng, "in" khi tiền vào.
+- counterparty: tên người nhận hoặc đơn vị đúng như ảnh, null nếu không có. counterparty_is_person=true nếu là tên một cá nhân.
+- description: lời nhắn hoặc nội dung đúng như ảnh: giữ NGUYÊN ký tự, KHÔNG sửa chính tả, KHÔNG thêm hay bỏ dấu tiếng Việt. Không chép số tài khoản, số thẻ hay số điện thoại vào counterparty hay description.
 - tx_type: một mã trong danh sách loại giao dịch bên dưới, đúng chiều chi/thu, hoặc null nếu không chắc.
 - jar_code: với dòng chi, một mã hũ trong danh sách hũ của người dùng bên dưới phù hợp nhất với mục đích chi; null nếu không chắc hoặc không có hũ hợp. Dòng thu để null. jar_confidence: 0..1.
-- Chuyển tiền cho một cá nhân mà lời nhắn hoặc nội dung nói rõ MỤC ĐÍCH (ví dụ tiền phòng, tiền nhà, tiền điện, học phí): chọn tx_type và jar_code theo mục đích đó, không theo việc người nhận là cá nhân; chỉ dùng loại chuyển tiền cho người khác khi không thấy mục đích.
+- {_PURPOSE}
 - confidence: 0..1, độ chắc bạn đã đọc ĐÚNG ngày, số tiền và chiều (ảnh mờ, nghiêng, cắt mất chữ thì thấp).
 
 Hũ của người dùng:
@@ -114,11 +127,11 @@ def labels_system(jars: Sequence[Mapping[str, Any]], type_map: Mapping[str, Any]
 {_DATA_NOT_INSTRUCTIONS}
 
 Với mỗi dòng:
-- merchant: tên đơn vị hoặc người nhận ngắn gọn, đã bỏ mã tham chiếu, mã giao dịch, tiền tố ngân hàng và cụm như "thanh toan QR" (ví dụ "Highlands Coffee", "CGV", "Grab"). Tên cá nhân đã bị che dạng "N***": giữ nguyên dạng đó, đặt is_person=true. null nếu không rõ.
-- own_account_transfer=true nếu là nạp tiền hay chuyển giữa các tài khoản, ví, thẻ của chính người dùng, hoặc rút tiền mặt (ATM, tại quầy, ví dụ "RUT TIEN TAI ATM"): ứng dụng không theo dõi tiền mặt nên không ghi thành khoản chi. Dòng phí rút tiền tách riêng vẫn là khoản chi bình thường (own_account_transfer=false).
+- merchant: tên đơn vị hoặc người nhận ngắn gọn, bỏ mã tham chiếu, mã giao dịch, tiền tố ngân hàng và cụm chỉ cách thanh toán. Tên cá nhân đã bị che dạng "N***": giữ nguyên dạng đó, đặt is_person=true. null nếu không rõ.
+- {_OWN_TRANSFER}
 - tx_type: một mã trong danh sách loại giao dịch, đúng chiều chi/thu; null nếu không chắc.
 - jar_code: với dòng chi, một mã hũ trong danh sách hũ bên dưới; null nếu không chắc. Dòng thu để null. jar_confidence: 0..1.
-- Chuyển tiền cho một cá nhân mà lời nhắn hoặc nội dung nói rõ MỤC ĐÍCH (ví dụ tiền phòng, tiền nhà, tiền điện, học phí): chọn tx_type và jar_code theo mục đích đó, không theo việc người nhận là cá nhân; chỉ dùng loại chuyển tiền cho người khác khi không thấy mục đích.
+- {_PURPOSE}
 
 Hũ của người dùng:
 {_jar_lines(jars)}
