@@ -28,3 +28,8 @@ export function useOverview(): Resource<OverviewResponse> {
   if (!c) throw new Error('useOverview phải nằm trong <OverviewProvider>')
   return c
 }
+
+/** Như `useOverview` nhưng trả null khi nằm ngoài <OverviewProvider> (khối dùng chung giữa màn hình và chat, vẽ được cả khi đứng riêng). */
+export function useOptionalOverview(): Resource<OverviewResponse> | null {
+  return useContext(OverviewContext)
+}

@@ -8,6 +8,7 @@ import { formatDayMonth } from '@/lib/dates'
 import { formatVnd } from '@/lib/format'
 import { ROADMAP_JOB_POLL } from '@/lib/config'
 import { restFixture, validBlock } from '@/test/fixtures'
+import { fakeApi, Providers } from '@/test/helpers'
 import { backend, bodyOf, callsTo, json, mountApp } from '@/test/mountApp'
 
 const v3 = RoadmapResponse.parse(restFixture('RoadmapResponse.minh_v3'))
@@ -62,6 +63,26 @@ describe('lộ trình thích ứng', () => {
     const step = await stepCard(executable.title)
     await userEvent.click(step.getByText('Vì sao'))
     expect(step.getByText(executable.reason)).toBeVisible()
+  })
+
+  it('hiện tên hũ của người dùng ở mọi bước, không hiện mã hũ thô', async () => {
+    mountApp(backend({ 'GET /roadmap': v3, 'GET /roadmap/versions': versions }), '/roadmap')
+    const overview = restFixture('OverviewResponse.minh') as { jars: Array<{ code: string; name: string }> }
+    const name = (code: string) => overview.jars.find((j) => j.code === code)!.name
+    const steps = v3.data.phases.flatMap((phase) => phase.steps).filter((s) => s.jar_code && s.to_jar_code)
+    expect(steps.length).toBeGreaterThan(0)
+    for (const s of steps) {
+      const card = await stepCard(s.title)
+      expect(await card.findByText(`Hũ ${name(s.jar_code!)} → ${name(s.to_jar_code!)}`)).toBeVisible()
+    }
+    expect(screen.queryByText(/\b(giai_tri|nghia_vu|an_uong|du_phong|du_lich)\b/)).toBeNull()
+  })
+
+  it('khối lộ trình trong chat lấy tên hũ từ danh sách hũ của người dùng', async () => {
+    render(<Providers api={fakeApi()}><BlockRenderer raw={v3} blockId={v3.id} /></Providers>)
+    expect(await screen.findByText('Hũ Giải trí → Ăn uống')).toBeVisible()
+    expect(screen.getByText('Hũ Giải trí → Nghĩa vụ')).toBeVisible()
+    expect(screen.queryByText(/giai_tri|an_uong|nghia_vu/)).toBeNull()
   })
 
   it('giữ khối lộ trình trong chat ở chế độ chỉ xem', () => {

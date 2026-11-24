@@ -5,6 +5,7 @@ Câu ngoài phạm vi thật (router không trích tham số chi tiêu) và câu
 
 from __future__ import annotations
 
+import pytest
 from agent_helpers import (
     FakeGuardrailClient,
     blocks_of,
@@ -14,6 +15,8 @@ from agent_helpers import (
     route_response,
     run_turn,
 )
+from yofina_agent import notices
+from yofina_agent.fallback import classify_by_rules
 
 
 def types_of(events):
@@ -51,3 +54,29 @@ def test_guardrail_chan_thi_tu_choi_du_router_trich_duoc_so_tien(monkeypatch):
     events, tools, _ = run_turn("Có 10 triệu nên mua cổ phiếu FPT không", llm=llm, monkeypatch=monkeypatch, guardrail=g)
     assert types_of(events) == ["notice", "suggestions"]
     assert not tools.calls
+
+
+def test_tu_choi_ngoai_pham_vi_co_chip_quay_ve_chong_chiu_va_lo_trinh(monkeypatch):
+    # Cảnh 4 của kịch bản demo (figma-ui-design.md §8.2): sau lời từ chối "Nên mua cổ phiếu nào?" có chip về điểm chống chịu và lộ trình.
+    llm = make_llm([route_response(intent="out_of_scope")])
+    events, _, _ = run_turn("Nên mua cổ phiếu nào?", llm=llm, monkeypatch=monkeypatch)
+    assert types_of(events) == ["notice", "suggestions"]
+    items = blocks_of(events)[1]["data"]["items"]
+    assert len(items) <= 6
+    by_id = {x["id"]: x for x in items}
+    assert by_id["resilience"]["label"] == "Điểm chống chịu của mình"
+    assert by_id["roadmap"]["label"] == "Xem lộ trình"
+    # chip cũ vẫn còn
+    assert {"balances", "forecast", "what_if", "check"} <= set(by_id)
+
+
+@pytest.mark.parametrize(
+    ("chip_id", "intent", "roadmap_action"),
+    [("resilience", "resilience", None), ("roadmap", "roadmap", "view")],
+)
+def test_cau_cua_chip_moi_vao_dung_intent_ca_khi_router_model_nghi(chip_id, intent, roadmap_action):
+    # Câu chip gửi phải được bộ luật dự phòng (dùng khi model router hỏng) hiểu đúng intent, không thành ngoài phạm vi.
+    (item,) = [x for x in notices.SUGGESTION_ITEMS if x["id"] == chip_id]
+    r = classify_by_rules(item["prompt"])
+    assert r is not None and r.intent == intent
+    assert r.params.roadmap_action == roadmap_action

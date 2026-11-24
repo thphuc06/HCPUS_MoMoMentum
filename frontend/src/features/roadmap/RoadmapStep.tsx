@@ -22,7 +22,10 @@ type Props = StepActions & { step: RoadmapStepData; jarNames?: ReadonlyMap<strin
 
 export function RoadmapStep({ step, jarNames, onAccept, onReject, onEdit, onExecute, disabled }: Props) {
   const status = STEP_STATUS[step.status]
-  const jars = [step.jar_code, step.to_jar_code].flatMap((code) => (code ? [jarNames?.get(code) ?? code] : []))
+  // Chỉ hiện tên hũ; chưa có tên (danh sách hũ chưa tải) thì ẩn dòng hũ thay vì lộ mã thô như "giai_tri".
+  const codes = [step.jar_code, step.to_jar_code].filter((code): code is string => !!code)
+  const names = codes.map((code) => jarNames?.get(code))
+  const jars = names.every((name): name is string => !!name) ? names : []
 
   return (
     <li className="space-y-1 rounded-xl bg-surface-2 px-3 py-2">

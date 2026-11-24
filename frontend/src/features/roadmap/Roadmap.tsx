@@ -1,6 +1,8 @@
+import { useMemo } from 'react'
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/button'
 import type { RoadmapAlternative, RoadmapData } from '@/contracts/blocks'
+import { useJarNames } from '@/features/common/useJarLookup'
 import { RoadmapStep, STEP_STATUS, type StepActions } from './RoadmapStep'
 
 const VERSION_STATUS = {
@@ -24,7 +26,9 @@ type Props = StepActions & {
 export function Roadmap({ data, onAlternative, ...actions }: Props) {
   const version = VERSION_STATUS[data.status]
   const feasibility = FEASIBILITY[data.feasibility]
-  const jarNames = new Map(data.goals.map(({ jar }) => [jar.code, jar.name]))
+  // Bước chỉ mang mã hũ: tên lấy từ mục tiêu của khối, còn lại từ danh sách hũ của người dùng (Tổng quan).
+  const goalNames = useMemo(() => data.goals.map(({ jar }) => [jar.code, jar.name] as const), [data.goals])
+  const jarNames = useJarNames(goalNames)
 
   return (
     <section data-block="roadmap" className="space-y-3 rounded-card bg-surface p-4 shadow-card">
