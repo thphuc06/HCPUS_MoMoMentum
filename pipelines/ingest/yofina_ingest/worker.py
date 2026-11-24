@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -312,7 +313,9 @@ class Worker:
             ],
             window,
         )
-        best = pick_matches(matches, {c.seq: c.counterparty for c in cands}, window)
+        tx_ids = sorted({str(m["transaction_id"]) for m in matches})
+        details = self.repo.matched_transactions(uid, tx_ids) if tx_ids else {}
+        best = pick_matches(matches, {c.seq: c for c in cands}, window, details)
         rows = [to_row(c, sha, best.get(c.seq)) for c in cands]
         self.repo.update_job(uid, job_id, "processing", 85)
         ids = self.repo.insert_rows(uid, job_id, rows)
@@ -346,42 +349,110 @@ class Worker:
         self.repo.update_job(uid, job_id, "review", 100, patch)
 
 
-#: Dòng nạp KHÔNG có đối tác (chỉ có nội dung, ví dụ "CK tien phong T11"): chỉ coi là trùng một giao dịch đã có khi cùng ngày. Không có
-#: đối tác để so thì cùng số tiền trong cả cửa sổ là quá lỏng.
-NO_COUNTERPARTY_MAX_DAY_DIFF = 0
+#: Nguồn trả của giao dịch TRONG ví (hũ, Trả sau). Ví ghi giao dịch lúc thanh toán, nên ảnh chụp hay bản xuất của CÙNG khoản đó mang
+#: cùng ngày. Lệch tối đa `WALLET_MAX_DAY_DIFF` ngày (qua nửa đêm), không phải cả cửa sổ: cửa sổ khử trùng dành cho độ trễ ghi sổ giữa
+#: hai chứng từ ngân hàng (biên lai và sao kê của cùng một lần chuyển). Một khoản trên sao kê ngân hàng không thể đồng thời trừ vào hũ
+#: trong ví: HIGHLANDS COFFEE 45.000 ₫ ngày 31/10 của `c01` (mã FT riêng) và Highlands Coffee 45.000 ₫ trả từ hũ của `vy` ngày 29/10
+#: là hai lần mua.
+WALLET_FUNDING = frozenset({"jar", "credit"})
+WALLET_MAX_DAY_DIFF = 1
+#: Khi một bên KHÔNG BIẾT đối tác (đã che "N***" hay rỗng) và nội dung không gần giống: chỉ coi là trùng một giao dịch ngoài ví khi số
+#: tiền đủ lớn để khó trùng ngẫu nhiên (tiền phòng, học phí, lương...) và lệch ngày không quá `UNKNOWN_PARTY_MAX_DAY_DIFF`. Khoản nhỏ
+#: (cà phê, xe ôm) cùng số tiền rất thường gặp: không ẩn, để người dùng duyệt.
+UNKNOWN_PARTY_LARGE_VND = 500_000
+UNKNOWN_PARTY_MAX_DAY_DIFF = 1
+#: Nội dung "gần giống": tỷ lệ từ chung trên tập từ ngắn hơn (overlap coefficient), sau khi bỏ từ chung của mọi nội dung ngân hàng.
+TEXT_MIN_OVERLAP = 0.6
+#: Từ xuất hiện trong gần như mọi nội dung chuyển khoản hay thanh toán (đã bỏ dấu, chữ thường): không phân biệt được hai khoản.
+# fmt: off
+GENERIC_TOKENS = frozenset({
+    "ck", "chuyen", "khoan", "tien", "thanh", "toan", "qr", "tt", "gd", "giao", "dich", "nd", "noi", "dung", "ref", "ft",
+    "mbvcb", "vcb", "ibft", "napas", "internet", "banking", "ib", "sms", "tk", "stk", "so", "tai", "cho", "den", "tu", "toi",
+    "gui", "nhan", "va", "cua", "thang", "nam", "ngay", "vn", "the", "atm", "pay", "payment", "transfer",
+})
+# fmt: on
 
 
-def is_duplicate_match(m: Mapping[str, Any], candidate_counterparty: str | None, window_days: int) -> bool:
-    """Một giao dịch đã có (cùng chiều, cùng số tiền, lệch ngày trong cửa sổ, do `app_find_ingest_matches` lọc) có thật là CÙNG khoản không.
+def known_party(name: str | None) -> str | None:
+    """Đối tác đã chuẩn hóa, hoặc None khi KHÔNG BIẾT: rỗng hay đã che (`N***`, `[STK]`). Hai tên đã che cùng chữ cái đầu không phải
+    là cùng một người, nên không dùng để so."""
+    folded = fold_text(name or "")
+    if not folded or "*" in folded or "[" in folded:
+        return None
+    return folded
 
-    - Đối tác khớp (`counterparty_match`): trùng nếu lệch ngày trong cửa sổ khử trùng.
-    - Dòng nạp có đối tác mà không khớp: KHÔNG trùng. Cùng số tiền ở cửa hàng khác là khoản khác: sao kê `c01` có 5 dòng bị đánh trùng
-      giả theo cách cũ (Circle K 56.000 ₫ với GrabFood 56.000 ₫ hôm sau, Be 26.000 ₫ với GrabFood cùng ngày...). Đối tác ngắn hơn 3 ký tự
-      ("Be") hàm DB không so được nên không bao giờ khớp: dòng đó vào hàng chờ duyệt (người dùng tự bỏ nếu trùng), thay vì bị ẩn oan
-      như dòng trùng (dòng trùng không chốt được).
-    - Dòng nạp không có đối tác: chỉ trùng khi cùng ngày (`NO_COUNTERPARTY_MAX_DAY_DIFF`).
+
+def text_tokens(*parts: str | None) -> frozenset[str]:
+    """Từ phân biệt được của đối tác và nội dung: tách theo mọi ký tự không phải chữ hay số, bỏ từ có chữ số (mã tham chiếu, số tài
+    khoản đã che, "T11"), từ một ký tự (chữ cái của tên đã che) và `GENERIC_TOKENS`."""
+    out: set[str] = set()
+    for part in parts:
+        for tok in re.split(r"[\W_]+", fold_text(part or "")):
+            if len(tok) < 2 or any(ch.isdigit() for ch in tok) or tok in GENERIC_TOKENS:
+                continue
+            out.add(tok)
+    return frozenset(out)
+
+
+def texts_similar(a: frozenset[str], b: frozenset[str]) -> bool:
+    if not a or not b:
+        return False
+    common = a & b
+    return bool(common) and len(common) / min(len(a), len(b)) >= TEXT_MIN_OVERLAP
+
+
+def is_duplicate_match(
+    m: Mapping[str, Any],
+    candidate: Candidate | None,
+    existing: Mapping[str, Any] | None,
+    window_days: int,
+) -> bool:
+    """Một giao dịch đã có (cùng chiều, cùng số tiền, lệch ngày trong cửa sổ, do `app_find_ingest_matches` lọc) có thật là CÙNG khoản
+    với dòng nạp `candidate` không. `existing`: đối tác (`merchant`) và ghi chú (`note`) của giao dịch đó (`IngestRepo.matched_transactions`).
+
+    1. Lệch ngày: giao dịch trong ví (`WALLET_FUNDING`) tối đa `WALLET_MAX_DAY_DIFF`, giao dịch ngoài ví tối đa cửa sổ khử trùng.
+    2. Hai bên đều BIẾT đối tác: trùng khi và chỉ khi đối tác khớp (`counterparty_match` của hàm DB). Cùng số tiền ở cửa hàng khác là
+       khoản khác: sao kê `c01` có 5 dòng bị đánh trùng giả theo cách cũ (Circle K 56.000 ₫ với GrabFood 56.000 ₫ hôm sau, Be 26.000 ₫
+       với GrabFood cùng ngày...). Đối tác ngắn hơn 3 ký tự ("Be") hàm DB không so được nên không bao giờ khớp: dòng đó vào hàng chờ.
+    3. Một bên KHÔNG BIẾT đối tác (`known_party`): đối tác đã che hay rỗng không phải là "khác". Trùng khi nội dung và đối tác gần giống
+       (`texts_similar`), hoặc khi cả hai ở ngoài ví, số tiền từ `UNKNOWN_PARTY_LARGE_VND` và lệch ngày không quá
+       `UNKNOWN_PARTY_MAX_DAY_DIFF`. Ca thật: ảnh `s02` (tiền phòng 1.500.000 ₫, đối tác "N***", "MINH CK tien phong thang 11") đã
+       chốt, rồi dòng 15 của `c01` ("MBVCB.3765569.CK tien phong T11", bộ đọc CSV lấy đối tác "TIEN PHONG") cùng ngày 01/11.
+    4. Không đọc được giao dịch đã có (`existing` None): chỉ tin đối tác khớp của hàm DB.
     """
     diff = abs(int(m["day_diff"]))
-    if diff > window_days:
+    wallet = m.get("funding_source") in WALLET_FUNDING
+    limit = min(window_days, WALLET_MAX_DAY_DIFF) if wallet else window_days
+    if diff > limit:
         return False
-    if bool(m["counterparty_match"]):
+    if existing is None:
+        return bool(m["counterparty_match"])
+    cand_cp = candidate.counterparty if candidate else None
+    cand_desc = candidate.description if candidate else None
+    if known_party(cand_cp) and known_party(existing.get("merchant")):
+        return bool(m["counterparty_match"])
+    if texts_similar(
+        text_tokens(cand_cp, cand_desc), text_tokens(existing.get("merchant"), existing.get("note"))
+    ):
         return True
-    if fold_text(candidate_counterparty or ""):
-        return False
-    return diff <= NO_COUNTERPARTY_MAX_DAY_DIFF
+    amount = candidate.amount_vnd if candidate else 0
+    return not wallet and amount >= UNKNOWN_PARTY_LARGE_VND and diff <= UNKNOWN_PARTY_MAX_DAY_DIFF
 
 
 def pick_matches(
     matches: Sequence[Mapping[str, Any]],
-    counterparties: Mapping[int, str | None] | None = None,
+    candidates: Mapping[int, Candidate] | None = None,
     window_days: int = 30,
+    details: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[int, Mapping[str, Any]]:
     """Giao dịch trùng gần ngày nhất cho từng ứng viên, chỉ trong các khớp được `is_duplicate_match` nhận; đối tác khớp được ưu tiên
-    (hàm DB đã sắp, đây chọn lại cho chắc). `counterparties`: đối tác của từng ứng viên theo `idx` (vắng: coi như không có đối tác)."""
+    (hàm DB đã sắp, đây chọn lại cho chắc). `candidates`: dòng nạp theo `idx`; `details`: đối tác và ghi chú của giao dịch đã có theo id
+    (vắng: chỉ tin `counterparty_match`)."""
     best: dict[int, Mapping[str, Any]] = {}
     for m in matches:
         idx = int(m["idx"])
-        if not is_duplicate_match(m, (counterparties or {}).get(idx), window_days):
+        existing = details.get(str(m["transaction_id"])) if details is not None else None
+        if not is_duplicate_match(m, (candidates or {}).get(idx), existing, window_days):
             continue
         cur = best.get(idx)
         key = (not bool(m["counterparty_match"]), abs(int(m["day_diff"])))
