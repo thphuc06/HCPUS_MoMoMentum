@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
+import { REDUCED_MOTION_QUERY } from '@/lib/motion'
 
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
 const COUNTDOWN_DURATION_MS = 600
 
-function useCountdown(from: number, to: number) {
-  const [value, setValue] = useState(() => window.matchMedia?.(REDUCED_MOTION).matches ? to : from)
+/**
+ * Số chạy từ `from` tới `to` (lên hoặc xuống) trong `durationMs`, bắt đầu sau `delayMs`. Giảm chuyển động thì hiện thẳng số
+ * cuối. Đây chỉ là phần nhìn: nơi dùng phải đặt số cuối (do server trả) vào chữ cho trình đọc màn hình.
+ */
+export function useCountdown(from: number, to: number, durationMs = COUNTDOWN_DURATION_MS, delayMs = 0) {
+  const [value, setValue] = useState(() => window.matchMedia?.(REDUCED_MOTION_QUERY).matches ? to : from)
 
   useEffect(() => {
-    const preference = window.matchMedia?.(REDUCED_MOTION)
+    const preference = window.matchMedia?.(REDUCED_MOTION_QUERY)
     if (preference?.matches || from === to) {
       setValue(to)
       return
@@ -17,7 +21,7 @@ function useCountdown(from: number, to: number) {
     let startedAt: number | undefined
     function tick(now: number) {
       startedAt ??= now
-      const progress = Math.min((now - startedAt) / COUNTDOWN_DURATION_MS, 1)
+      const progress = Math.min(Math.max(now - startedAt - delayMs, 0) / durationMs, 1)
       setValue(Math.round(from + (to - from) * progress))
       if (progress < 1) frame = requestAnimationFrame(tick)
     }
@@ -30,16 +34,16 @@ function useCountdown(from: number, to: number) {
     }
 
     frame = requestAnimationFrame(tick)
-    preference?.addEventListener('change', onPreferenceChange)
+    preference?.addEventListener?.('change', onPreferenceChange)
     return () => {
       cancelAnimationFrame(frame)
-      preference?.removeEventListener('change', onPreferenceChange)
+      preference?.removeEventListener?.('change', onPreferenceChange)
     }
-  }, [from, to])
+  }, [from, to, durationMs, delayMs])
 
   return value
 }
 
-export function AnimatedNumber({ from, to }: { from: number; to: number }) {
-  return <span>{useCountdown(from, to)}</span>
+export function AnimatedNumber({ from, to, durationMs }: { from: number; to: number; durationMs?: number }) {
+  return <span>{useCountdown(from, to, durationMs)}</span>
 }

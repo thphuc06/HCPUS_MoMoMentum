@@ -9,7 +9,12 @@ import { buildChartModel, xToLabel, type ChartModel } from './model'
 // Chạm hoặc rê lên biểu đồ chọn một ngày (cha vẽ dòng đọc số); `activeX` là ngày đang chọn.
 
 const HALO = { paintOrder: 'stroke', stroke: 'var(--bg-surface)', strokeWidth: 3, strokeLinejoin: 'round' } as const
-const TICK = { fontSize: 11, fill: 'var(--text-secondary)' } as const
+// Nhãn trên biểu đồ tối thiểu 12 px (Figma, ui-design-review.md §4.2).
+const LABEL_PX = 12
+const LEVEL_PX = 15
+const TICK = { fontSize: LABEL_PX, fill: 'var(--text-secondary)' } as const
+/** Đường "Sau" và dải chênh vẽ dần từ trái sang khi khối xuất hiện (kịch bản cảnh 2: "biểu đồ dịch chuyển"). */
+export const AFTER_DRAW_MS = 700
 
 export type ForecastChartProps = {
   data: ForecastTimelineData
@@ -19,12 +24,18 @@ export type ForecastChartProps = {
   /** Chỉ cho test: vẽ với kích thước cố định thay vì đo khung (jsdom không có kích thước). */
   fixedSize?: { width: number; height: number }
   model?: ChartModel
+  /** Vẽ dần đường "Sau" (nơi dùng đã xét giảm chuyển động và chỉ bật một lần cho mỗi khối). */
+  animateAfter?: boolean
 }
 
-export default function ForecastChart({ data, activeX, onActiveChange, height = 240, fixedSize, model }: ForecastChartProps) {
+export default function ForecastChart({ data, activeX, onActiveChange, height = 240, fixedSize, model, animateAfter = false }: ForecastChartProps) {
   const uid = useId().replace(/:/g, '')
   const m = useMemo(() => model ?? buildChartModel(data), [model, data])
   const hatchId = `hatch-${uid}`
+  // Chỉ hai lớp của kịch bản (Sau, dải chênh) chuyển động; dải 80%, đường Trước và các mốc đứng yên để người xem so được.
+  const drawIn = animateAfter
+    ? ({ isAnimationActive: true, animationBegin: 0, animationDuration: AFTER_DRAW_MS, animationEasing: 'ease-out' } as const)
+    : ({ isAnimationActive: false } as const)
 
   const pick = (s: { activeTooltipIndex?: unknown }) => {
     const i = typeof s.activeTooltipIndex === 'number' ? s.activeTooltipIndex : Number(s.activeTooltipIndex)
@@ -35,7 +46,7 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
   const chart = (
     <ComposedChart
       data={m.rows}
-      margin={{ top: 28 + Math.max(0, ...m.eventLevels) * 13, right: 18, bottom: 0, left: 0 }}
+      margin={{ top: 30 + Math.max(0, ...m.eventLevels) * LEVEL_PX, right: 18, bottom: 0, left: 0 }}
       {...(fixedSize ? { width: fixedSize.width, height: fixedSize.height } : {})}
       onMouseMove={pick}
       onClick={pick}
@@ -61,7 +72,7 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
         tickMargin={6}
         interval={0}
       />
-      <YAxis domain={[m.yMin, m.yMax]} ticks={m.yTicks} tickFormatter={(v: number) => formatVndAxis(v)} tick={TICK} tickLine={false} axisLine={false} width={46} />
+      <YAxis domain={[m.yMin, m.yMax]} ticks={m.yTicks} tickFormatter={(v: number) => formatVndAxis(v)} tick={TICK} tickLine={false} axisLine={false} width={50} />
 
       {m.shortfallRange && (
         <ReferenceArea x1={m.shortfallRange.x1} x2={m.shortfallRange.x2} y1={m.yMin} y2={0} fill={`url(#${hatchId})`} fillOpacity={1} stroke="none" ifOverflow="hidden" />
@@ -70,7 +81,7 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
       <Area type="monotone" dataKey="band" stroke="none" fill="var(--accent-blue)" fillOpacity={0.18} isAnimationActive={false} activeDot={false} name="Dải 80%" />
       {m.hasCompare && (
         // Dải chênh lệch giữa TRƯỚC và SAU (màu thương hiệu): thấy ngay kịch bản kéo số dư xuống bao nhiêu.
-        <Area type="monotone" dataKey="gap" stroke="none" fill="var(--brand-primary)" fillOpacity={0.22} isAnimationActive={false} activeDot={false} name="Chênh lệch" />
+        <Area type="monotone" dataKey="gap" stroke="none" fill="var(--brand-primary)" fillOpacity={0.22} activeDot={false} name="Chênh lệch" {...drawIn} />
       )}
       <Line
         type="monotone"
@@ -84,7 +95,7 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
         name={m.hasCompare ? 'Trước' : 'Số dư giữa'}
       />
       {m.hasCompare && (
-        <Line type="monotone" dataKey="after" stroke="var(--brand-primary)" strokeWidth={2.5} dot={false} activeDot={false} isAnimationActive={false} name="Sau" />
+        <Line type="monotone" dataKey="after" stroke="var(--brand-primary)" strokeWidth={2.5} dot={false} activeDot={false} name="Sau" {...drawIn} />
       )}
       <ReferenceLine y={0} stroke="var(--text-secondary)" strokeOpacity={0.6} />
 
@@ -93,14 +104,15 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
           key={`${e.date}-${e.label}`}
           x={e.x}
           stroke={e.kind === 'salary' ? 'var(--status-ok-line)' : 'var(--status-warn-line)'}
-          strokeWidth={1.5}
-          strokeDasharray={e.kind === 'salary' ? '4 3' : '2 3'}
+          // Nét mốc nghĩa vụ dùng --status-warn-line (từ 3:1 trên thẻ, WCAG 1.4.11), dày 2 px để đọc được trên máy chiếu.
+          strokeWidth={2}
+          strokeDasharray={e.kind === 'salary' ? '4 3' : '3 3'}
           label={{
             value: `${e.label} ${formatDayMonth(e.date)}`,
             position: 'top',
             // Mốc gần nhau xếp lên các tầng khác nhau để nhãn không chồng lên nhau.
-            offset: 4 + (m.eventLevels[i] ?? 0) * 13,
-            fontSize: 10.5,
+            offset: 4 + (m.eventLevels[i] ?? 0) * LEVEL_PX,
+            fontSize: LABEL_PX,
             fontWeight: 700,
             fill: e.kind === 'salary' ? 'var(--status-ok-fg)' : 'var(--status-warn-fg)',
             style: HALO,
@@ -116,7 +128,7 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
           fill="var(--status-bad-line)"
           stroke="var(--bg-surface)"
           strokeWidth={2}
-          label={{ value: `Cạn ${formatDayMonth(m.runout.date)}`, position: 'bottom', fontSize: 11, fontWeight: 700, fill: 'var(--status-bad-fg)', dy: 4, style: HALO }}
+          label={{ value: `Cạn ${formatDayMonth(m.runout.date)}`, position: 'bottom', fontSize: LABEL_PX, fontWeight: 700, fill: 'var(--status-bad-fg)', dy: 4, style: HALO }}
         />
       )}
 
@@ -128,7 +140,9 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
           fill="var(--brand-primary)"
           stroke="var(--bg-surface)"
           strokeWidth={2}
-          label={{ value: `Sau: cạn ${formatDayMonth(m.afterRunout.date)}`, position: 'bottom', fontSize: 11, fontWeight: 700, fill: 'var(--text-brand)', dy: 18, style: HALO }}
+          label={{ value: `Sau: cạn ${formatDayMonth(m.afterRunout.date)}`, position: 'bottom', fontSize: LABEL_PX, fontWeight: 700, fill: 'var(--text-brand)', dy: 19, style: HALO }}
+          // Chấm "Sau: cạn" bật ra khi đường Sau vẽ tới nơi.
+          className={animateAfter ? 'motion-pop [--motion-delay:700ms]' : undefined}
         />
       )}
 

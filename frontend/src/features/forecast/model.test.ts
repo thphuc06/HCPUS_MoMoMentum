@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ForecastTimelineData } from '@/contracts/blocks'
 import { validBlock } from '@/test/fixtures'
-import { buildChartModel, jarReference, lowestP50BeforePayday, niceTicks, rowAt, stackLevels, xToLabel } from './model'
+import { buildChartModel, jarReference, LABEL_SPAN, lowestP50BeforePayday, niceTicks, rowAt, stackLevels, xToLabel } from './model'
 
 const data = (name: string): ForecastTimelineData => (validBlock(name) as unknown as { data: ForecastTimelineData }).data
 
@@ -119,6 +119,14 @@ describe('nhãn mốc không chồng nhau (lỗi nhỏ phase 2)', () => {
     ]
     const m = buildChartModel(d)
     expect(m.events.map((e) => e.label)).toEqual(['B', 'A'])
+    expect(m.eventLevels).toEqual([0, 1])
+  })
+
+  it('nhãn 12 px: hai mốc cách nhau dưới khoảng một phần ba trục (Tiền điện 26/11, Lương về 05/12) xếp hai tầng', () => {
+    const d = structuredClone(data('forecast_timeline.short'))
+    const m = buildChartModel(d)
+    const [first, second] = m.events
+    expect(second!.x - first!.x).toBeLessThan(m.lastX * LABEL_SPAN)
     expect(m.eventLevels).toEqual([0, 1])
   })
 })

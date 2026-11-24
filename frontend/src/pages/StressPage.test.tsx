@@ -24,7 +24,17 @@ describe('mô phỏng cú sốc', () => {
     const posts = callsTo(calls, 'POST', '/resilience/stress')
     expect(posts).toHaveLength(1)
     expect(bodyOf(posts[0]!)).toEqual(request)
-    expect(await screen.findByText(String(data.score_after))).toBeVisible()
+    // Đồng hồ: mô tả có điểm sau và điểm trước; số giữa cung dừng ở điểm sau sau khi chạy.
+    const gauge = screen.getByRole('img', { name: `Điểm chống chịu ${data.score_after}/100, nhóm Yếu, trước cú sốc ${data.score_before}/100 nhóm Vừa` })
+    expect(gauge).toHaveAttribute('data-animate', 'score')
+    expect(await within(gauge).findByText(`${data.score_after}/100`)).toBeInTheDocument()
+    expect(screen.getByText(`${data.score_before} → ${data.score_after}`)).toBeVisible()
+    // Thanh trụ được: dài theo runway / horizon, số lớn đếm tới số của server.
+    expect(screen.getByRole('img', { name: `Thanh số ngày trụ được: ${data.runway_days_total} trên ${data.horizon_days} ngày mô phỏng` })).toBeInTheDocument()
+    expect(screen.getByTestId('runway-fill')).toHaveStyle({ width: `${(data.runway_days_total! / data.horizon_days) * 100}%` })
+    expect(screen.getByTestId('runway-fill')).toHaveClass('motion-grow-x')
+    expect(screen.getByTestId('runway-gap')).toBeInTheDocument()
+    expect(await screen.findByText(String(data.runway_days_total), { selector: '[data-testid="runway-count"]' })).toBeInTheDocument()
     expect(screen.getByText(data.headline)).toBeInTheDocument()
     expect(screen.getByText('Hụt')).toBeInTheDocument()
     expect(screen.getByText(`Trụ được ${data.runway_days_total} ngày`)).toBeInTheDocument()
@@ -57,8 +67,12 @@ describe('mô phỏng cú sốc', () => {
     mountApp(backend({ 'POST /resilience/stress': result }), `/foresight/stress/${request.shock_id}`)
 
     await screen.findByRole('heading', { name: data.shock.label })
-    expect(screen.getByText(String(data.score_after))).toBeVisible()
-    expect(screen.queryByText(String(data.score_before))).not.toBeInTheDocument()
+    const gauge = screen.getByRole('img', { name: /^Điểm chống chịu/ })
+    expect(gauge).not.toHaveAttribute('data-animate')
+    expect(within(gauge).getByText(`${data.score_after}/100`)).toBeInTheDocument()
+    expect(within(gauge).queryByText(`${data.score_before}/100`)).not.toBeInTheDocument()
+    expect(screen.getByTestId('runway-count')).toHaveTextContent(String(data.runway_days_total))
+    expect(screen.getByTestId('runway-fill')).not.toHaveClass('motion-grow-x')
   })
 
   it('hiện thông báo SHOCK_NOT_FOUND cho mã cú sốc không tồn tại', async () => {

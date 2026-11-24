@@ -1,19 +1,63 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
-// Chuyển động gắn với dữ liệu (ui-design-review.md §4.6): chạy MỘT lần khi phần đó hiện lần đầu trong phiên (cờ trong
-// sessionStorage), không chạy lại mỗi lần quay về tab; người dùng bật "giảm chuyển động" thì hiện thẳng trạng thái cuối.
-// Chỉ đổi cách hiện số server trả, không tính số nghiệp vụ nào.
+// Chuyển động gắn với dữ liệu (ui-design-review.md §4.6): tôn trọng `prefers-reduced-motion` và chỉ chạy một lần mỗi phiên
+// cho cùng một khối, để quay lại màn cũ hay mở lại chat không phát lại hiệu ứng.
 
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
-const KEY_PREFIX = 'yofina.motion.'
+export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
+
+function query(): MediaQueryList | undefined {
+  return typeof window === 'undefined' ? undefined : window.matchMedia?.(REDUCED_MOTION_QUERY)
+}
 
 export function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia?.(REDUCED_MOTION).matches === true
+  return !!query()?.matches
 }
+
+function subscribe(onChange: () => void) {
+  const q = query()
+  q?.addEventListener?.('change', onChange)
+  return () => q?.removeEventListener?.('change', onChange)
+}
+
+/** true khi người dùng bật giảm chuyển động; đổi theo cài đặt máy mà không cần tải lại. */
+export function usePrefersReducedMotion(): boolean {
+  return useSyncExternalStore(subscribe, prefersReducedMotion, () => false)
+}
+
+const SEEN_PREFIX = 'yf-motion:'
 
 function seen(key: string): boolean {
   try {
-    return sessionStorage.getItem(KEY_PREFIX + key) === '1'
+    return window.sessionStorage.getItem(SEEN_PREFIX + key) !== null
+  } catch {
+    return false
+  }
+}
+
+/**
+ * true nếu được phép chạy chuyển động cho khối `key` lần này: chưa thấy trong phiên và người dùng không giảm chuyển động.
+ * Đọc cờ lúc mount (thuần), ghi cờ trong effect. `key` rỗng thì chỉ xét giảm chuyển động.
+ */
+export function useEntranceMotion(key?: string): boolean {
+  const reduced = usePrefersReducedMotion()
+  const [fresh] = useState(() => !key || !seen(key))
+  useEffect(() => {
+    if (!key) return
+    try {
+      window.sessionStorage.setItem(SEEN_PREFIX + key, '1')
+    } catch {
+      // Safari riêng tư hoặc bộ nhớ đầy: chỉ mất cờ "đã xem", không ảnh hưởng gì khác.
+    }
+  }, [key])
+  return fresh && !reduced
+}
+
+// Các hook của Tổng quan (ui-b): cờ riêng; sessionStorage bị chặn thì coi như đã xem (không chạy).
+const ONCE_PREFIX = 'yofina.motion.'
+
+function seenOnce(key: string): boolean {
+  try {
+    return sessionStorage.getItem(ONCE_PREFIX + key) === '1'
   } catch {
     return true
   }
@@ -24,10 +68,10 @@ function seen(key: string): boolean {
  * nguyên suốt đời component (đọc một lần lúc mount); cờ ghi trong effect nên lần mount sau trong cùng phiên sẽ là `false`.
  */
 export function useAnimateOnce(key: string): boolean {
-  const [animate] = useState(() => !prefersReducedMotion() && !seen(key))
+  const [animate] = useState(() => !prefersReducedMotion() && !seenOnce(key))
   useEffect(() => {
     try {
-      sessionStorage.setItem(KEY_PREFIX + key, '1')
+      sessionStorage.setItem(ONCE_PREFIX + key, '1')
     } catch {
       // sessionStorage bị chặn (chế độ riêng tư): bỏ qua, chỉ mất tính năng "một lần mỗi phiên".
     }
@@ -65,7 +109,7 @@ export function useCountUp(to: number, animate: boolean, durationMs = 800): numb
       setValue(p >= 1 ? to : Math.round(to * easeOut(p)))
       if (p < 1) frame = requestAnimationFrame(tick)
     }
-    const preference = window.matchMedia?.(REDUCED_MOTION)
+    const preference = window.matchMedia?.(REDUCED_MOTION_QUERY)
     const onChange = (e: MediaQueryListEvent) => {
       if (e.matches) {
         cancelAnimationFrame(frame)
