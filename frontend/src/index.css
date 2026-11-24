@@ -9,71 +9,89 @@
   prefers-color-scheme, hoặc ép bằng <html data-theme="dark|light">.
   Màu hũ bản Tối và accent-blue-tint bản Tối không đọc được qua Figma MCP (chỉ trả bộ Sáng):
   hai nhóm này là giá trị chọn lại theo tông "sáng hơn" của figma-ui-design.md §2.
+  Bảng màu đổi theo docs/research/ui-design-review.md §4.1 (24/11/2026): bỏ mã #A50064 trùng màu logo MoMo, họ hồng riêng
+  #C8276A / #821041 / #6E113D; nét đủ/sát/hụt từ 3:1 trên thẻ; màu hũ Đi lại và Du lịch (bản Sáng) từ 3:1 trên nền trắng.
+  Tên biến giữ nguyên; tương phản kiểm ở src/styles/palette.test.ts. Hai khối Tối phải giống hệt nhau (test kiểm).
 */
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root {
   color-scheme: light;
-  --bg-app: #faf6f7;
+  --bg-app: #fbf5f8;
   --bg-surface: #ffffff;
-  --bg-surface-2: #f4eef0;
-  --bg-tint: #fce7f1;
-  --border-default: #e8dfe3;
-  --text-primary: #2b1a24;
-  --text-secondary: #6e5a66;
+  --bg-surface-2: #f3eaef;
+  --bg-tint: #ffeaf1;
+  --border-default: #e8dce2;
+  --border-strong: #967e8b;
+  --text-primary: #2b1823;
+  --text-secondary: #5d4452;
+  --text-tertiary: #725b68;
   --text-on-brand: #ffffff;
-  --text-brand: #a50064;
-  --brand-primary: #c8207e;
-  --brand-deep: #a50064;
-  --brand-vivid: #d82d8b;
+  --text-brand: #821041;
+  --brand-primary: #c8276a;
+  --brand-deep: #6e113d;
+  --brand-vivid: #e4518f;
   --accent-blue: #3050c8;
-  --accent-blue-tint: #eaf0ff;
-  --status-ok-fg: #0b7a52;
-  --status-ok-bg: #e1f5ec;
-  --status-ok-line: #12a877;
-  --status-warn-fg: #8f5200;
-  --status-warn-bg: #fff0d2;
-  --status-warn-line: #e39a00;
-  --status-bad-fg: #b8330a;
-  --status-bad-bg: #ffe8dc;
-  --status-bad-line: #e8541c;
+  --accent-blue-tint: #eaefff;
+  --status-ok-fg: #0a6b45;
+  --status-ok-bg: #e0f3e9;
+  --status-ok-line: #00a166;
+  --status-warn-fg: #8a4b00;
+  --status-warn-bg: #fff0d1;
+  --status-warn-line: #c78200;
+  --status-bad-fg: #ae2f0e;
+  --status-bad-bg: #ffe8de;
+  --status-bad-line: #e04f1a;
   --jar-an-uong: #7c5ce0;
-  --jar-di-lai: #2fa3d6;
+  --jar-di-lai: #0085bc;
   --jar-hoa-don: #a8794a;
   --jar-giai-tri: #b05ce0;
-  --jar-du-lich: #1fa6a0;
+  --jar-du-lich: #008e89;
   --jar-du-phong: #3b6fd0;
   --jar-nghia-vu: #7a8794;
-  --elev-card: 0 1px 2px rgba(43, 26, 36, 0.05), 0 10px 28px -14px rgba(43, 26, 36, 0.16);
+  --gradient-hero: radial-gradient(130% 150% at 0% 0%, var(--brand-deep), var(--brand-primary) 72%);
+  --elev-card: 0 1px 2px rgba(43, 24, 35, 0.05), 0 8px 24px -12px rgba(43, 24, 35, 0.18);
+  --elev-hero: 0 2px 4px rgba(110, 17, 61, 0.12), 0 18px 36px -14px rgba(110, 17, 61, 0.45);
   --elev-sheet: 0 -10px 36px rgba(43, 26, 36, 0.18);
   --stage-bg: #efe6ea;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.3, 0, 1, 1);
+  --ease-pop: linear(0, 0.36 12%, 0.88 30%, 1.06 45%, 1.01 62%, 1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --dur-4: 800ms;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg-app: #17101a;
-    --bg-surface: #241a28;
-    --bg-surface-2: #2f2433;
-    --bg-tint: #3a1c30;
-    --border-default: #3a2e40;
-    --text-primary: #f4eef0;
-    --text-secondary: #b8a9b2;
-    --text-brand: #ff7ebb;
-    --brand-deep: #8c0054;
-    --brand-vivid: #e0348f;
-    --accent-blue: #8fa8ff;
-    --accent-blue-tint: #1f2850;
-    --status-ok-fg: #4fd3a1;
-    --status-ok-bg: #123428;
-    --status-ok-line: #4fd3a1;
-    --status-warn-fg: #ffc25c;
-    --status-warn-bg: #3a2c10;
-    --status-warn-line: #ffc25c;
-    --status-bad-fg: #ff8c5e;
-    --status-bad-bg: #3c2016;
-    --status-bad-line: #ff8c5e;
+    --bg-app: #1a0d14;
+    --bg-surface: #281821;
+    --bg-surface-2: #37232e;
+    --bg-tint: #4d1e30;
+    --border-default: #47323d;
+    --border-strong: #816a76;
+    --text-primary: #f7eff3;
+    --text-secondary: #cab8c1;
+    --text-tertiary: #b39da9;
+    --text-on-brand: #ffffff;
+    --text-brand: #fea6c5;
+    --brand-primary: #c8276a;
+    --brand-deep: #550a2e;
+    --brand-vivid: #e4518f;
+    --accent-blue: #93a9ff;
+    --accent-blue-tint: #1e2752;
+    --status-ok-fg: #5ad6a6;
+    --status-ok-bg: #10342a;
+    --status-ok-line: #5ad6a6;
+    --status-warn-fg: #ffc55e;
+    --status-warn-bg: #3a2b0e;
+    --status-warn-line: #ffc55e;
+    --status-bad-fg: #ff9166;
+    --status-bad-bg: #3d1f15;
+    --status-bad-line: #ff9166;
     --jar-an-uong: #a58cf2;
     --jar-di-lai: #5cc0ec;
     --jar-hoa-don: #c79a6b;
@@ -81,7 +99,8 @@
     --jar-du-lich: #4fc9c3;
     --jar-du-phong: #7f9fe8;
     --jar-nghia-vu: #9aa5b1;
-    --elev-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
+    --elev-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    --elev-hero: 0 18px 36px -16px rgba(0, 0, 0, 0.7);
     --elev-sheet: 0 -10px 36px rgba(0, 0, 0, 0.5);
     --stage-bg: #0f0a12;
   }
@@ -89,27 +108,31 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg-app: #17101a;
-  --bg-surface: #241a28;
-  --bg-surface-2: #2f2433;
-  --bg-tint: #3a1c30;
-  --border-default: #3a2e40;
-  --text-primary: #f4eef0;
-  --text-secondary: #b8a9b2;
-  --text-brand: #ff7ebb;
-  --brand-deep: #8c0054;
-  --brand-vivid: #e0348f;
-  --accent-blue: #8fa8ff;
-  --accent-blue-tint: #1f2850;
-  --status-ok-fg: #4fd3a1;
-  --status-ok-bg: #123428;
-  --status-ok-line: #4fd3a1;
-  --status-warn-fg: #ffc25c;
-  --status-warn-bg: #3a2c10;
-  --status-warn-line: #ffc25c;
-  --status-bad-fg: #ff8c5e;
-  --status-bad-bg: #3c2016;
-  --status-bad-line: #ff8c5e;
+  --bg-app: #1a0d14;
+  --bg-surface: #281821;
+  --bg-surface-2: #37232e;
+  --bg-tint: #4d1e30;
+  --border-default: #47323d;
+  --border-strong: #816a76;
+  --text-primary: #f7eff3;
+  --text-secondary: #cab8c1;
+  --text-tertiary: #b39da9;
+  --text-on-brand: #ffffff;
+  --text-brand: #fea6c5;
+  --brand-primary: #c8276a;
+  --brand-deep: #550a2e;
+  --brand-vivid: #e4518f;
+  --accent-blue: #93a9ff;
+  --accent-blue-tint: #1e2752;
+  --status-ok-fg: #5ad6a6;
+  --status-ok-bg: #10342a;
+  --status-ok-line: #5ad6a6;
+  --status-warn-fg: #ffc55e;
+  --status-warn-bg: #3a2b0e;
+  --status-warn-line: #ffc55e;
+  --status-bad-fg: #ff9166;
+  --status-bad-bg: #3d1f15;
+  --status-bad-line: #ff9166;
   --jar-an-uong: #a58cf2;
   --jar-di-lai: #5cc0ec;
   --jar-hoa-don: #c79a6b;
@@ -117,7 +140,8 @@
   --jar-du-lich: #4fc9c3;
   --jar-du-phong: #7f9fe8;
   --jar-nghia-vu: #9aa5b1;
-  --elev-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
+  --elev-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --elev-hero: 0 18px 36px -16px rgba(0, 0, 0, 0.7);
   --elev-sheet: 0 -10px 36px rgba(0, 0, 0, 0.5);
   --stage-bg: #0f0a12;
 }
@@ -190,6 +214,8 @@
   --color-bad-bg: var(--status-bad-bg);
   --color-bad-line: var(--status-bad-line);
   --color-stage: var(--stage-bg);
+  --color-line-strong: var(--border-strong);
+  --color-ink-3: var(--text-tertiary);
 
   /* Thang chữ "Yofina/*": cỡ / dòng; độ đậm đặt bằng font-* khi dùng. */
   --text-display: 34px;
@@ -221,6 +247,7 @@
 
   --shadow-card: var(--elev-card);
   --shadow-sheet: var(--elev-sheet);
+  --shadow-hero: var(--elev-hero);
 }
 
 @layer base {
@@ -304,11 +331,70 @@
   display: none;
 }
 
+/*
+  Chuyển động gắn với dữ liệu (ui-design-review.md §4.6): chỉ transform, opacity, stroke-dashoffset; chạy một lần khi khối
+  xuất hiện. `--motion-delay` đặt trên từng phần tử để lệch nhịp.
+*/
+@keyframes yf-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes yf-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes yf-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes yf-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* Chấm, nhãn bật ra sau khi đường vẽ xong (SVG: phóng quanh tâm của chính nó). */
+.motion-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: yf-pop var(--dur-3) var(--ease-pop) var(--motion-delay, 0ms) both;
+}
+.motion-fade {
+  animation: yf-fade var(--dur-3) var(--ease-out) var(--motion-delay, 0ms) both;
+}
+/* Thanh chạy từ trái sang (chiều dài thật đặt bằng width; chuyển động chỉ là scaleX). */
+.motion-grow-x {
+  transform-origin: left center;
+  animation: yf-grow-x var(--dur-4) var(--ease-out) var(--motion-delay, 0ms) both;
+}
+/* Nét tự vẽ: phần tử SVG cần pathLength="1" và stroke-dasharray="1". */
+.motion-draw {
+  animation: yf-draw var(--dur-3) var(--ease-out) var(--motion-delay, 0ms) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
 }
