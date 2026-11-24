@@ -419,3 +419,44 @@ Kỳ lương 5/12
 - [Eleken: Fintech UX best practices 2026](https://www.eleken.co/blog-posts/fintech-ux-best-practices), [Toptal: Mastering fintech UX](https://www.toptal.com/designers/ux/mastering-fintech-ux-case-study)
 - [worldvectorlogo: MoMo](https://worldvectorlogo.com/logo/momo-2) (mã màu logo `#A50064`)
 - Google Fonts CSS API cho Plus Jakarta Sans và Be Vietnam Pro (subset, file TTF để kiểm `tnum` và bề ngang chữ số)
+
+## 9. Luật chữ (đợt p5/ui-c, 25/11/2026)
+
+Chủ dự án: "chữ ít thôi, phần nào quan trọng thì để chữ, ưu tiên sự gọn gàng; phần nào chữ nhiều quá thì bỏ vào mục thu gọn, ai có nhu cầu xem thì bấm vào". Áp cho mọi màn và mọi khối trong chat.
+
+**Hiện ngay**: tiêu đề ngắn, con số chính, nhãn trạng thái, nút hành động. Nếu thật cần thì thêm một câu phụ, tối đa khoảng 12 từ.
+
+**Thu gọn, mặc định đóng**: đoạn giải thích; câu tóm tắt lặp lại điều biểu đồ đã nói; bảng bằng chứng; chú thích phương pháp; ghi chú "mô phỏng" dài; danh sách mốc chi tiết; nguồn trích.
+
+**Không xóa, chỉ ẩn**: thông tin truy căn cứ số liệu vẫn nằm trong DOM. Câu tóm tắt của biểu đồ vẫn là phần `sr-only` (hoặc `aria-describedby`) để trình đọc màn hình đọc ngay; phần nhìn thấy nằm trong mục thu gọn.
+
+**Cách làm**: dùng `components/ui/Disclosure.tsx`. Nút là `<button>` thật có `aria-expanded`, `aria-controls`, cao tối thiểu 44 px, bấm được bằng Enter và Space. Mũi tên xoay khi mở. Vùng nội dung mở bằng `grid-template-rows` từ 0fr lên 1fr trong `--dur-3`; khi đóng thì vùng có `inert`, `aria-hidden` và `visibility: hidden`. Có `prefers-reduced-motion` thì không có transition. Nút và vùng nội dung có thể đặt ở hai chỗ khác nhau bằng `useDisclosure`, `DisclosureButton`, `DisclosurePanel`. Nhãn ngắn, theo việc người dùng muốn biết: "Chi tiết", "Vì sao?", "Xem căn cứ", "Giả định", "Phí và nguồn", "Chi tiết dự báo".
+
+**Nhãn trạng thái**: dùng chung một bộ "Đủ", "Sát", "Hụt" ở thẻ hũ, danh sách hũ, chi tiết hũ, B2 và thẻ kiểm tra. Hũ hụt có ngày cạn thì ghi "Hụt · cạn 27/11". Thẻ "Việc cần làm hôm nay" bỏ "Cần xử lý". Thẻ có trạng thái `ok` giữ "Thông tin", vì nó không nói về một hũ.
+
+**Lời trả lời chữ của agent trong chat**: lời dài hơn 160 ký tự (khoảng 3 dòng ở 390 px) chỉ hiện 3 dòng đầu, kèm nút "Xem thêm" hoặc "Thu gọn". Phần này chỉ cắt bằng CSS (`line-clamp-3`), nên chữ vẫn đủ trong DOM. Lời đang chạy thì không cắt.
+
+Đã áp ở các màn sau. Số từ đếm bằng Chrome headless trên `dev:mock` ở khổ 390×844, tính chữ nhìn thấy trên cả trang khi chưa bấm gì, không tính `sr-only` và phần đang thu gọn. Ảnh có hậu tố `-gon-truoc` và `-gon-sau` nằm ở [ui-round1/](ui-round1/).
+
+| Màn | Từ hiện ngay (trước → sau) | Đã thu gọn |
+|---|---|---|
+| Tổng quan | 518 → 406 | Bảng ba dòng của số dư ("Chi tiết số dư"); câu lý do "Còn …, còn … ngày tới kỳ lương" của thẻ cạn ("Chi tiết"); câu tóm tắt B2, các mốc nghĩa vụ (viết gọn: "Hóa đơn: Tiền điện 26/11 · 300.000–450.000 ₫") và chú thích "Hũ tiết kiệm không hiện…" ("Chi tiết"); câu tóm tắt và câu "đủ trả" của B6 |
+| Hũ | 100 → 85 | Chip trạng thái rút còn Đủ, Sát, "Hụt · cạn 27/11" |
+| Chi tiết hũ | 240 → 191 | Câu tóm tắt dài thay bằng dòng ngắn "Cạn 27/11, 8 ngày trước lương 05/12."; câu đầy đủ, mốc tiền, bốn chỉ số chất lượng vào "Chi tiết dự báo"; lời nhắc thanh trượt rút còn "Chạm vào biểu đồ để xem từng ngày." |
+| Nhìn trước | 242 → 182 | Mô tả từng cú sốc chỉ còn cho trình đọc màn hình (màn kết quả có mục "Giả định") |
+| Mô phỏng cú sốc | 81 → 66 | Câu tóm tắt (chỉ `sr-only`); thêm mục "Giả định": mô tả cú sốc, số đường Monte Carlo |
+| Chi tiết điểm chống chịu | 142 → 75 | Câu giải thích của từng thành phần (chạm hàng để mở); câu tóm tắt (chỉ `sr-only`) |
+| Lộ trình | 310 → 292 | Lý do lập lại và số trước → sau ("Vì sao có bản này?"); "Vì sao" của từng bước nay nằm cùng hàng với nút bước ở 390 px |
+| Hồ sơ | 606 → 448 | Câu giải thích và bảng bằng chứng của từng nhận xét ("Xem căn cứ"); lý do của việc nên làm ("Vì sao?"); giới thiệu bộ nhớ ("Bộ nhớ là gì?"); danh sách thứ bị xóa ("Xóa những gì?"); chính sách giữ tệp ("Tệp được giữ thế nào?") |
+| Nghĩa vụ | 158 → 99 | Câu tóm tắt B6 ("Chi tiết"); điều kiện phí và nguồn ("Phí và nguồn") |
+| Nạp dữ liệu | 89 → 48 | Đoạn giới thiệu rút còn một câu; loại tệp và giới hạn kích thước ("Nạp được gì?"). Phần đồng ý trước khi tải lên giữ nguyên |
+| Chat, lúc trống | 147 → 63 | Gợi ý lên trước; "Mình làm được / chưa làm" vào "Mình làm được gì?" (cả khối `suggestions`) |
+| Chat, khối dự báo (`forecast_timeline`) | 167 → 117 | Như Chi tiết hũ; câu "cùng dãy số ngẫu nhiên" vào "Vì sao so được?" |
+| Chat, bảng Vì sao (`explain`) | khoảng 293 → 205 | Lý do xếp nhóm tin cậy ("Vì sao?"); "Chi tiết kỹ thuật" dùng Disclosure thay `<details>` |
+| Chat, `behavior_insight` | khoảng 242 → 159 | "Xem căn cứ", "Vì sao?" như Hồ sơ |
+| Chat, `citation` | khoảng 180 → 108 | Loại phí và câu trích ("Xem trích dẫn"); ghi chú mô phỏng rút còn một câu ngắn |
+| Chat, `stress_result`, `resilience_score` | khoảng 144 → 102, 356 → 257 | Như màn Mô phỏng cú sốc và Chi tiết điểm chống chịu |
+| Chat, `affordability_card`, `obligation_impact` | khoảng 309 → 280, 366 → 338 | Dòng "Dựa trên dự báo cập nhật…" ("Căn cứ"); phí theo nguồn và phạt trễ hạn ("Phí và nguồn") |
+| Chat, lời chữ dài | 9 dòng → 3 dòng | "Xem thêm" |
+
+Số của khối chat là hiệu giữa hai lần chụp liên tiếp, nên có lẫn câu hỏi thử và nhãn "Do AI tạo"; chỉ là ước lượng.
