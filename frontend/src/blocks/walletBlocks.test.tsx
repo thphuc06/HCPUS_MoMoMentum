@@ -16,13 +16,13 @@ import { receiptNote } from './useConfirmFlow'
 
 type Json = Record<string, any>
 
-describe('registry: đủ hai mươi mốt khối của hợp đồng', () => {
+describe('registry: đủ hai mươi ba khối của hợp đồng', () => {
   it('tất cả khối đã đăng ký và có schema', () => {
     for (const t of ALL_BLOCK_TYPES) {
       expect(REGISTERED_TYPES).toContain(t)
       expect(blockSchemas[t]).toBeDefined()
     }
-    expect(ALL_BLOCK_TYPES).toHaveLength(21)
+    expect(ALL_BLOCK_TYPES).toHaveLength(23)
     expect(BLOCK_TYPES).toEqual(ALL_BLOCK_TYPES)
   })
 })
