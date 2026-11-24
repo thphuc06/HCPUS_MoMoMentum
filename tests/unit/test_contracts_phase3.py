@@ -646,11 +646,13 @@ def load_rule(path):
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def test_co_du_sau_luat():
-    """Năm luật của phase 3 cộng `source_jar_covers` (hũ nguồn đủ tiền, thêm khi đóng phase 4)."""
+def test_co_du_bay_luat():
+    """Năm luật của phase 3, `source_jar_covers` (hũ nguồn đủ tiền, thêm khi đóng phase 4) và `emergency_not_for_discretionary`
+    (giữ quỹ dự phòng cho việc gấp, phase 5)."""
     assert {p.stem for p in RULE_FILES} == {
         "obligations_first", "emergency_before_investing", "risk_within_tolerance",
         "no_borrow_to_spend", "obligation_to_income", "source_jar_covers",
+        "emergency_not_for_discretionary",
     }  # fmt: skip
 
 
@@ -694,6 +696,15 @@ def test_luat_khong_khuyen_vay_de_tieu_chi_chan_khuyen_nghi_cua_he_thong():
     rule = suitability.parse_rule(load_rule(RULES_DIR / "no_borrow_to_spend.yaml"))
     assert rule.severity_for("recommendation") == "block"
     assert rule.applies_when.funding_sources == ["credit"] and rule.applies_when.essential is False
+
+
+def test_luat_giu_quy_du_phong_chi_canh_bao_khong_chan():
+    """Luật thứ bảy ở mức warn cho mọi nguồn (người dùng vẫn tự chọn được), chỉ áp cho chi tiêu không thiết yếu bằng tiền hũ."""
+    rule = suitability.parse_rule(load_rule(RULES_DIR / "emergency_not_for_discretionary.yaml"))
+    assert rule.evaluator == "emergency_fund_not_for_discretionary"
+    assert rule.severity_for("recommendation") == "warn" and rule.severity_for("user_request") == "warn"
+    w = rule.applies_when
+    assert w.categories == ["spending"] and w.funding_sources == ["jar"] and w.essential is False
 
 
 def test_ket_luan_suitability_bat_bien():

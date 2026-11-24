@@ -1,0 +1,16 @@
+# Luật 7: không khuyên tiêu quỹ dự phòng cho khoản không thiết yếu.
+id: emergency_not_for_discretionary
+version: 1
+title: Giữ quỹ dự phòng cho việc gấp
+description: >-
+  Đề xuất lấy tiền từ quỹ dự phòng (hũ tiết kiệm không gắn mục tiêu, cùng định nghĩa với luật dự phòng trước đầu tư) để chi cho
+  khoản không thiết yếu thì kèm cảnh báo, và hệ thống không gợi ý nó là phương án tốt nhất. Mức warn: người dùng vẫn tự chọn
+  được. Khoản thiết yếu (thuốc men, tiền trọ, nghĩa vụ đến hạn) và tiền lấy từ hũ khác không thuộc luật này.
+evaluator: emergency_fund_not_for_discretionary
+severity: warn
+applies_when:
+  categories: [spending]
+  funding_sources: [jar]
+  essential: false
+thresholds: {}
+message: Khoản không thiết yếu này lấy tiền từ quỹ dự phòng. Nên giữ quỹ dự phòng cho việc gấp.

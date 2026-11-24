@@ -22,7 +22,7 @@ def default_rules_dir() -> Path:
 
 
 def load_rules(directory: Path | None = None) -> tuple[SuitabilityRule, ...]:
-    """Mọi luật trong thư mục, theo thứ tự bộ đánh giá (năm luật của hợp đồng). Luật sai định dạng thì ném lỗi (không bỏ qua
+    """Mọi luật trong thư mục, theo thứ tự bộ đánh giá (`yofina_core.suitability.EVALUATORS`). Luật sai định dạng thì ném lỗi (không bỏ qua
     âm thầm: một luật bị mất làm người dùng tưởng đã được kiểm)."""
     base = directory or default_rules_dir()
     rules: list[SuitabilityRule] = []

@@ -180,7 +180,7 @@ def test_check_suitability_dau_tu_khi_chua_du_quy_du_phong_bi_chan(svc, registry
     )
     validate(registry, "planner", "CheckSuitabilityResult", res)
     v = res["data"]
-    assert v["ok"] is False and len(v["checked"]) == 6  # đủ sáu luật
+    assert v["ok"] is False and len(v["checked"]) == 7  # đủ bảy luật
     by = {c["rule_id"]: c["outcome"] for c in v["checked"]}
     assert by["emergency_before_investing"] == "fail" and by["risk_within_tolerance"] == "fail"
     assert by["obligations_first"] == "skipped" and by["no_borrow_to_spend"] == "skipped"
