@@ -85,8 +85,12 @@ class DeletionRepo:
         status: str,
         finished_at: datetime | None,
     ) -> Row:
+        # Data API gửi mọi `stringValue` không có `typeHint` dưới dạng text (datetime của `yofina_core.db` cũng vậy): cột không phải
+        # text phải CAST tường minh, nếu không Postgres báo 42804 ("finished_at is of type timestamp with time zone but expression is
+        # of type text") và cả lần xóa lùi ở bước Aurora.
         rows = tx.execute(
-            "UPDATE data_deletions SET steps = CAST(:steps AS jsonb), status = :status, finished_at = :fin, updated_at = now() "
+            "UPDATE data_deletions SET steps = CAST(:steps AS jsonb), status = :status, "
+            "finished_at = CAST(:fin AS timestamptz), updated_at = now() "
             f"WHERE id = CAST(:id AS uuid) AND user_id = :uid RETURNING {_COLS}",
             {"steps": steps, "status": status, "fin": finished_at, "id": did, "uid": uid},
         )

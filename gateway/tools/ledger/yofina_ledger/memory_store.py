@@ -44,7 +44,7 @@ from yofina_core.memory import (
     namespace_for,
     user_root,
 )
-from yofina_core.pii import fold, mask_names, mask_pii
+from yofina_core.pii import fold, mask_names, mask_pii, strip_epoch_timestamps
 
 log = logging.getLogger("yofina.ledger.memory")
 
@@ -84,11 +84,27 @@ def _error_code(exc: BaseException) -> str:
 
 _NOT_FOUND_CODES = {"ResourceNotFoundException", "ValidationException", "InvalidInputException"}
 _TAG_RE = re.compile(r"<topic\s+name=\"([^\"]{0,120})\"\s*>|</?[a-zA-Z][^>]{0,200}>")
+#: Dấu markdown của bản tóm tắt cả phiên (FULL_SESSION): tiêu đề `## ...` và chữ đậm `**...**`, bỏ khi hiển thị.
+_MD_HEADING_RE = re.compile(r"^[ \t]*#{1,6}[ \t]*(.+?)[ \t]*$", re.MULTILINE)
+_MD_EMPHASIS_RE = re.compile(r"\*\*|__")
+#: Khóa metadata hệ thống của AgentCore Memory: loại bản ghi tóm tắt (`BASE` là một đoạn tóm tắt, `FULL_SESSION` là bản tóm tắt cả
+#: phiên, cùng namespace). Tài liệu: devguide/summary-strategy.html, mục "Full session summary".
+RECORD_TYPE_KEY = "x-amz-agentcore-memory-recordType"
+
+
+def record_type(rec: Mapping[str, Any]) -> str | None:
+    """`BASE` hay `FULL_SESSION` theo metadata hệ thống; None nếu dịch vụ không trả."""
+    meta = rec.get("metadata")
+    value = meta.get(RECORD_TYPE_KEY) if isinstance(meta, Mapping) else None
+    if isinstance(value, Mapping) and isinstance(value.get("stringValue"), str):
+        return value["stringValue"]
+    return None
 
 
 def display_text(content: Any) -> str:
     """Chữ hiển thị của một bản ghi, đã che PII và tên người khác: sở thích (JSON `{context, preference, categories}`) lấy
-    `preference`; tóm tắt phiên (XML `<topic name="...">`) đổi thành "chủ đề: nội dung"; cắt `MEMORY_TEXT_MAX_CHARS`."""
+    `preference`; tóm tắt phiên (XML `<topic name="...">`) đổi thành "chủ đề: nội dung", tóm tắt cả phiên (markdown) bỏ dấu `#`, `**`;
+    bỏ dấu thời gian Unix mà bước tóm tắt chép vào ("timestamp 1795505552861"); cắt `MEMORY_TEXT_MAX_CHARS`."""
     raw = content.get("text") if isinstance(content, Mapping) else None
     if not isinstance(raw, str):
         return ""
@@ -107,7 +123,9 @@ def display_text(content: Any) -> str:
                 ),
                 raw,
             )
-    text = _TAG_RE.sub(lambda m: f" {m.group(1)}: " if m.group(1) else " ", raw)
+    text = strip_epoch_timestamps(raw)
+    text = _MD_EMPHASIS_RE.sub("", _MD_HEADING_RE.sub(lambda m: f"{m.group(1)}:", text))
+    text = _TAG_RE.sub(lambda m: f" {m.group(1)}: " if m.group(1) else " ", text)
     text = " ".join(mask_names(mask_pii(text).text).split())
     if len(text) > MEMORY_TEXT_MAX_CHARS:
         text = text[: MEMORY_TEXT_MAX_CHARS - 1].rstrip() + "…"
@@ -274,6 +292,10 @@ class MemoryStore:
             raise YofinaError(ErrorCode.PARAMS_INVALID, "cursor không hợp lệ.") from exc
         records = []
         for rec, _ns, k in self._own(sub, resp.get("memoryRecordSummaries") or []):
+            if k == "session_summary" and record_type(rec) == "BASE":
+                # Mỗi phiên có các đoạn tóm tắt (BASE, XML) VÀ một bản tóm tắt cả phiên (FULL_SESSION, markdown) gom lại đúng các
+                # đoạn đó: hiện cả hai thì người dùng thấy mỗi phiên hai lần. Chỉ hiện bản cả phiên; xóa hết vẫn xóa cả hai loại.
+                continue
             text = display_text(rec.get("content"))
             created = rec.get("createdAt")
             if not text or not isinstance(created, datetime):
@@ -309,7 +331,24 @@ class MemoryStore:
             }
             if token:
                 kwargs["nextToken"] = token
-            resp = self._call("list_memory_records", **kwargs)
+            try:
+                resp = self._call("list_memory_records", **kwargs)
+            except YofinaError:
+                raise
+            except Exception as exc:  # ResourceNotFound/Validation: Memory sai id hoặc đã bị xóa
+                log.warning(
+                    json.dumps(
+                        {
+                            "msg": "memory_api_error",
+                            "op": "list_memory_records",
+                            "code": _error_code(exc),
+                        }
+                    )
+                )
+                raise YofinaError(
+                    ErrorCode.MEMORY_UNAVAILABLE,
+                    "Bộ nhớ tạm thời không truy cập được, thử lại sau.",
+                ) from exc
             out.extend(self._own(sub, resp.get("memoryRecordSummaries") or []))
             token = resp.get("nextToken")
             if not token:
@@ -367,7 +406,9 @@ class MemoryStore:
                         for rec, ns, _k in chunk
                     ],
                 )
-            except YofinaError:
+            except (
+                Exception
+            ):  # YofinaError hoặc lỗi thô của dịch vụ: tính vào failed, gọi lại để xóa nốt
                 failed += len(chunk)
                 continue
             ok = len(resp.get("successfulRecords") or [])
@@ -382,6 +423,9 @@ class MemoryStore:
         return result
 
     def _clear_events(self, mid: str, sub: str) -> tuple[int, int]:
+        """Xóa sự kiện ngắn hạn của `actorId` = `sub`. Agent ghi bằng `IngestData` (không tạo sự kiện), nên người dùng thường chưa từng
+        có sự kiện và `ListSessions` trả `ResourceNotFoundException` ("Actor ... not found"): đó là "không có gì để xóa", không phải
+        lỗi. Lỗi khác của dịch vụ: `MEMORY_UNAVAILABLE` (503), không bao giờ là lỗi thô (500)."""
         deleted = failed = 0
         token: str | None = None
         seen = 0
@@ -389,7 +433,23 @@ class MemoryStore:
             kwargs: dict[str, Any] = {"memoryId": mid, "actorId": sub, "maxResults": 100}
             if token:
                 kwargs["nextToken"] = token
-            resp = self._call("list_sessions", **kwargs)
+            try:
+                resp = self._call("list_sessions", **kwargs)
+            except YofinaError:
+                raise
+            except Exception as exc:
+                if _error_code(exc) == "ResourceNotFoundException":
+                    log.info(json.dumps({"msg": "memory_no_events", "op": "list_sessions"}))
+                    break
+                log.warning(
+                    json.dumps(
+                        {"msg": "memory_api_error", "op": "list_sessions", "code": _error_code(exc)}
+                    )
+                )
+                raise YofinaError(
+                    ErrorCode.MEMORY_UNAVAILABLE,
+                    "Bộ nhớ tạm thời không truy cập được, thử lại sau.",
+                ) from exc
             sessions = list(resp.get("sessionSummaries") or [])
             for s in sessions:
                 seen += 1
@@ -417,7 +477,14 @@ class MemoryStore:
             }
             if token:
                 kwargs["nextToken"] = token
-            resp = self._call("list_events", **kwargs)
+            try:
+                resp = self._call("list_events", **kwargs)
+            except YofinaError:
+                raise
+            except Exception as exc:
+                if _error_code(exc) == "ResourceNotFoundException":
+                    return deleted, failed  # phiên đã hết sự kiện (hết hạn hoặc vừa xóa)
+                return deleted, failed + 1
             for e in resp.get("events") or []:
                 try:
                     self._call(
@@ -576,4 +643,5 @@ __all__ = [
     "load_defaults",
     "parse_quiet_hours",
     "quiet_hours",
+    "record_type",
 ]
