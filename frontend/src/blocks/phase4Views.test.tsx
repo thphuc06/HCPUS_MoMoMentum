@@ -68,7 +68,8 @@ describe('lộ trình', () => {
     expect(screen.getByText(/Chi Ăn uống mỗi tuần tăng.*giữ mức đó 2 tuần/)).toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'Số bước theo trạng thái' })).toHaveTextContent('Chờ 5')
     expect(screen.getByRole('heading', { name: 'Ổn định tháng này' })).toBeInTheDocument()
-    expect(screen.getByText('Hũ giai_tri → nghia_vu')).toBeInTheDocument()
+    // Đứng riêng (không có danh sách hũ của người dùng): không lộ mã hũ thô; tên lấy từ mục tiêu của khối vẫn hiện.
+    expect(screen.queryByText(/giai_tri|nghia_vu|an_uong|du_phong/)).toBeNull()
     expect(screen.getAllByText('Hũ Du lịch')).toHaveLength(2)
     expect(screen.getByText('300.000 ₫')).toBeInTheDocument()
 
