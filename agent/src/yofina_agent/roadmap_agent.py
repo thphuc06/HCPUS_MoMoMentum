@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -23,7 +24,7 @@ from yofina_agent.writer import has_ungrounded_numbers
 from yofina_core import blocks as B
 from yofina_core.clock import payday_in_month
 from yofina_core.errors import ErrorCode
-from yofina_core.llm import LlmGateway, TurnScope, user_message
+from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
 from yofina_core.money import format_vnd
 from yofina_core.params import (
     ParamsError,
@@ -54,7 +55,8 @@ Khuôn lộ trình:
   thành phần Tiết kiệm (save) yếu. Tránh lặp việc người dùng đã từ chối.
 Mỗi bước là MỘT hành động cụ thể người dùng tự làm được:
 - title bắt đầu bằng động từ hành động (Chuyển, Dành, Giảm chi, Đổi tỷ lệ chia, Đặt nhắc, Xem lại, Lùi hạn...) và nêu tên
-  hũ: hũ nguồn và hũ nhận khi chuyển tiền. Không viết bước chỉ "giữ tiền", "theo dõi" hay "cân nhắc" mà không nói lấy
+  hũ: hũ nguồn và hũ nhận khi chuyển tiền. title ngắn, khoảng mười từ, chỉ một mệnh đề (mục đích để sang reason); tên giai
+  đoạn còn ngắn hơn. Không viết bước chỉ "giữ tiền", "theo dõi" hay "cân nhắc" mà không nói lấy
   tiền từ hũ nào sang hũ nào. reason là một câu ngắn nói vì sao, dựa trên dữ liệu (hũ sắp cạn, nghĩa vụ sắp đến hạn,
   mục tiêu đang chậm, thành phần yếu nhất).
 - set_aside và pay_obligation là chuyển tiền: bắt buộc có jar_code (hũ nguồn), to_jar_code (hũ nhận, khác hũ nguồn) và
@@ -70,18 +72,23 @@ Mỗi bước là MỘT hành động cụ thể người dùng tự làm đư�
   nghĩa vụ to_jar_code), cut_spending (giảm chi ở hũ không thiết yếu jar_code), review_goal (lùi hạn hoặc giảm mục tiêu
   của hũ jar_code), remind (đặt nhắc xem lại). move_between_jars, save_jars và schedule_nudge là giá trị của trường
   action, không bao giờ là kind.
-- Chỉ dùng mã hũ có trong dữ liệu. Muốn gắn số tiền, chọn amount_ref trỏ tới hũ liên quan và trường phân bổ.
+- Chỉ dùng mã hũ có trong dữ liệu. Dữ liệu đã có phương án phân bổ của bộ tối ưu (context.allocation) và bảng
+  context.amount_refs: với mỗi hũ, các trường tham chiếu có số tiền DƯƠNG kèm số tiền đó. Muốn gắn số tiền, amount_ref chỉ
+  được chọn một cặp hũ và trường có trong amount_refs; hũ không có trong bảng thì không gắn số tiền theo hũ đó.
   amount_ref.jar_code phải là jar_code hoặc to_jar_code của chính bước đó.
-  proposed_increase là phần đề xuất tăng so với hiện tại, proposed_decrease là phần giảm. Chỉ tham chiếu khoản dương.
-  Lần phác thảo đầu chưa có số phân bổ; chương trình báo lại nếu tham chiếu không dương để bạn sửa.
-- title và reason không chứa chữ số: không đánh số giai đoạn hay bước (thứ tự đã do vị trí trong danh sách), không viết
-  số tháng, số tiền, ngày hay phần trăm. Chương trình điền tiền, ngày và tham số hành động.
+  proposed_increase là phần đề xuất tăng so với hiện tại, proposed_decrease là phần giảm.
+- title không chứa chữ số. reason chỉ được có số khi chép NGUYÊN VĂN một chuỗi trong reason_numbers (số dư, khoản đến
+  hạn, ngày đến hạn, mục tiêu, khoản phân bổ); không tự tính, không ghép hay rút gọn chuỗi, không viết số tháng, phần trăm
+  hay số đếm. Không đánh số giai đoạn hay bước (thứ tự đã do vị trí trong danh sách). Chương trình điền tiền, ngày và tham
+  số hành động.
 - Số tiền của bước là mức hằng tháng. Bước set_aside hay pay_obligation ở giai đoạn đầu (trước kỳ lương kế) lấy tiền từ số
-  dư HIỆN CÓ của hũ nguồn (balance_vnd): chọn hũ nguồn còn đủ tiền và tham chiếu nhỏ vừa số dư đó (thường là
-  proposed_decrease của hũ nguồn). Ở các giai đoạn sau kỳ lương, khoản hằng tháng được so với thu nhập tháng. Muốn tăng
-  phần để dành từ lương các kỳ sau, dùng adjust_split.
-- Chỉ chọn horizon_months hoặc trọng số khi cần. goals chỉ gồm hũ có kind saving và đã có goal_vnd; không có hũ nào như vậy
-  thì để goals rỗng. Khi sửa, trả lại danh sách giai đoạn với các bước đã đạt và các bước
+  dư HIỆN CÓ của hũ nguồn: hũ nguồn phải có trong context.first_phase_sources, và amount_ref phải là một mục trong refs của
+  chính hũ nguồn đó (dạng mã hũ chấm trường), với mã hũ là hũ nguồn hoặc hũ nhận của bước. Ở các giai đoạn sau kỳ
+  lương, khoản hằng tháng được so với thu nhập tháng. Muốn tăng phần để dành từ lương các kỳ sau, dùng adjust_split.
+- Phương án phân bổ trong dữ liệu đã tính theo mặc định (và theo mục tiêu người dùng nói, nếu có). Thường để trống
+  horizon_months và goals; chỉ đặt khi thật sự cần một phương án khác (kỳ khác, hoặc ưu tiên một mục tiêu hơn mục tiêu
+  khác bằng trọng số khác một). goals chỉ gồm hũ có kind saving và đã có goal_vnd. Khi sửa, trả lại danh sách giai
+  đoạn với các bước đã đạt và các bước
   đã sửa. Có thể đổi việc, đổi tham chiếu hoặc bỏ bước theo phản hồi. Không tự thay đổi phương án tối ưu.
 - Chỉ gắn action move_between_jars khi có hũ nguồn, hũ đích khác nhau và có amount_ref. Có thể gắn action schedule_nudge
   cho bước nhắc xem lại. Có thể gắn action save_jars cho MỘT bước adjust_split để áp tỷ lệ chia đề xuất của bộ tối ưu cho
@@ -94,6 +101,8 @@ log = logging.getLogger("yofina.agent.roadmap")
 
 #: lần gọi model tối đa cho bản phác thảo đầu: lần thứ hai nhận lỗi schema của lần đầu (ví dụ `kind` ngoài enum).
 _DRAFT_ATTEMPTS = 2
+#: trọng số mục tiêu mặc định của optimize_allocation (`yofina_forecast.allocation`): gửi đúng giá trị này không đổi phương án.
+_DEFAULT_GOAL_WEIGHT = 1.0
 # Cùng cách đổi bước thành đề xuất với `yofina_ledger.roadmap_logic.proposal_for_step`: `save_roadmap` kiểm lại MỌI bước bằng
 # hàm đó và từ chối cả bản nháp nếu có vi phạm mức block, nên vòng sửa phải thấy đúng vi phạm mà lúc lưu sẽ gặp.
 _MONEY_MOVING_KINDS = frozenset({"set_aside", "pay_obligation"})
@@ -140,14 +149,41 @@ class _StepInvalid(ValueError):
         self.code = code
 
 
-def _log_event(event: str, **fields: Any) -> None:
+def _log_event(event: str, *, level: int = logging.WARNING, **fields: Any) -> None:
     """Sự kiện JSON một dòng như `llm_degraded`. Chỉ mã (phase_id, step_id, kind, rule_id...), không chữ người dùng, không tiền."""
-    log.warning(
+    log.log(
+        level,
         json.dumps(
             {"event": event, **{k: v for k, v in fields.items() if v is not None}},
             ensure_ascii=False,
-        )
+        ),
     )
+
+
+class _StageClock:
+    """Đo thời lượng từng chặng của một lần lập (sự kiện `roadmap_stage`: stage, ms, và vài mã đếm), để đo được trên Runtime.
+
+    `lap` ghi thời gian từ lần ghi trước; `total` ghi cả lần lập. Không ghi chữ hay tiền."""
+
+    def __init__(self, reason_code: str) -> None:
+        self.reason_code = reason_code
+        self.started = self.last = time.perf_counter()
+
+    def lap(self, stage: str, **fields: Any) -> None:
+        now = time.perf_counter()
+        _log_event(
+            "roadmap_stage",
+            level=logging.INFO,
+            stage=stage,
+            ms=int((now - self.last) * 1000),
+            reason_code=self.reason_code,
+            **fields,
+        )
+        self.last = now
+
+    def total(self, **fields: Any) -> None:
+        self.last = self.started
+        self.lap("total", **fields)
 
 
 class RoadmapTools(Protocol):
@@ -305,6 +341,125 @@ def _compact_allocation(plan: AllocationPlanData) -> dict[str, Any]:
     }
 
 
+def _amount_refs(lines: dict[str, AllocationLine]) -> dict[str, dict[str, str]]:
+    """Bảng tham chiếu tiền DƯƠNG dùng được cho từng hũ trong phương án tối ưu, dựng bằng mã: mã hũ -> trường -> số tiền đã định dạng.
+    Model chỉ chọn `amount_ref` trong bảng này, nên bản phác thảo không còn trỏ vào khoản bằng 0 (nguyên nhân chính của vòng sửa)."""
+    table: dict[str, dict[str, str]] = {}
+    for code, line in lines.items():
+        refs = {
+            name: format_vnd(value)
+            for name in _REF_FIELDS
+            if (value := _number_ref(AmountRef(jar_code=code, field=name), line)) > 0  # type: ignore[arg-type]
+        }
+        if refs:
+            table[code] = refs
+    return table
+
+
+#: tối đa số chuỗi số đưa vào `reason_numbers` (giữ ngữ cảnh gọn).
+_REASON_NUMBERS_MAX = 40
+
+
+def _reason_numbers(compact: dict[str, Any], grounded: Callable[[str], bool]) -> list[str]:
+    """Các chuỗi số model được chép nguyên văn vào `reason`: mọi giá trị `*_text` có chữ số trong ngữ cảnh (số dư, khoản đến hạn,
+    ngày đến hạn, mục tiêu, khoản phân bổ) và số tiền của bảng tham chiếu. Chỉ giữ chuỗi qua đúng bộ kiểm grounding của bước."""
+    found: list[str] = []
+
+    def walk(node: Any, key: str = "") -> None:
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, k)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, key)
+        elif isinstance(node, str) and key.endswith("_text") and any(ch.isdigit() for ch in node):
+            found.append(node)
+
+    walk(compact)
+    for refs in compact.get("amount_refs", {}).values():
+        found.extend(refs.values())
+    unique = [text for text in dict.fromkeys(found) if grounded(text)]
+    return unique[:_REASON_NUMBERS_MAX]
+
+
+def _grounding(compact: dict[str, Any]) -> Callable[[str], bool]:
+    """Bộ kiểm số của chữ model viết (tiêu đề, lý do): số tiền theo NumericGrounding và mọi con số khác đúng dạng có trong ngữ cảnh."""
+    allowed = Allowed.from_payloads([compact])
+
+    def grounded(text: str) -> bool:
+        return NumericGrounding.check({"text": text}, allowed).ok and not has_ungrounded_numbers(
+            text, compact
+        )
+
+    return grounded
+
+
+def _date_text(value: Any) -> str | None:
+    """Ngày ISO -> dd/mm/yyyy (dạng người đọc, để lý do của bước chép nguyên văn mà vẫn có căn cứ); không đọc được thì None."""
+    if not isinstance(value, str):
+        return None
+    try:
+        when = date.fromisoformat(value)
+    except ValueError:
+        return None
+    return f"{when.day:02d}/{when.month:02d}/{when.year}"
+
+
+def _user_goal_entry(goal: UserGoal, jars: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Mục tiêu người dùng nói, dạng một phần tử `goals` của optimize_allocation. Chỉ hũ tiết kiệm; chỉ có hạn thì hũ phải có sẵn
+    goal_vnd. Không hợp lệ thì None (không gửi, bộ tối ưu dùng mục tiêu đã khai ở hũ)."""
+    jar = next((j for j in jars if j.get("code") == goal.jar and j.get("kind") == "saving"), None)
+    if jar is None or not (
+        goal.target_vnd is not None or (goal.target_date and "goal_vnd" in jar)
+    ):
+        return None
+    entry: dict[str, Any] = {"jar": goal.jar}
+    if goal.target_vnd is not None:
+        entry["target_vnd"] = goal.target_vnd
+    if goal.target_date:
+        entry["target_date"] = goal.target_date
+    return entry
+
+
+def _allocation_of(outcome: ToolOutcome) -> tuple[AllocationPlanData, tuple[date, date]] | None:
+    """Phương án tối ưu và kỳ của nó (ngày đầu, ngày cuối theo horizon). IsoDate chỉ kiểm hình dạng nên kiểm lịch thật ở đây."""
+    plan = _parse(outcome, AllocationPlanData)
+    if plan is None:
+        return None
+    try:
+        period_start = date.fromisoformat(plan.period_start)
+        end_year, month = divmod(
+            period_start.year * 12 + period_start.month - 1 + plan.horizon_months, 12
+        )
+        period_end = payday_in_month(period_start.day, end_year, month + 1)
+    except ValueError:
+        return None
+    return plan, (period_start, period_end)
+
+
+def _set_allocation(compact: dict[str, Any], plan: AllocationPlanData) -> None:
+    lines = {line.jar.code: line for line in plan.lines}
+    compact["allocation"] = _compact_allocation(plan)
+    compact["amount_refs"] = refs = _amount_refs(lines)
+    # Bước chuyển tiền của giai đoạn đầu lấy từ số dư hiện có của hũ nguồn (luật source_jar_covers): cho model biết trước hũ nào làm
+    # nguồn được và những tham chiếu nào (của mọi hũ) không vượt số dư đó, để bản phác thảo không phải sửa vì luật này. Model chỉ
+    # cần chọn trong danh sách, không phải tự so số.
+    sources: dict[str, dict[str, Any]] = {}
+    for jar in compact["jars"]:
+        code, balance = jar["code"], int(jar["balance_vnd"])
+        if balance <= 0:
+            continue
+        fitting = [
+            f"{ref_jar}.{name}"
+            for ref_jar, fields in refs.items()
+            for name in fields
+            if _number_ref(AmountRef(jar_code=ref_jar, field=name), lines[ref_jar]) <= balance  # type: ignore[arg-type]
+        ]
+        if fitting:
+            sources[code] = {"max_text": jar["balance_text"], "refs": fitting}
+    compact["first_phase_sources"] = sources
+
+
 async def _ask[T: RoadmapOutline](
     llm: LlmGateway,
     scope: TurnScope,
@@ -312,10 +467,10 @@ async def _ask[T: RoadmapOutline](
     compact: dict[str, Any],
     max_tokens: int,
     max_attempts: int = 1,
-) -> T:
+) -> StructuredResult[T]:
     """Một lần hỏi model. `max_attempts` > 1 thì `structured_json` gửi lỗi schema cho model và hỏi lại (mỗi lần là một lượt gọi
     model, tính vào trần của lượt)."""
-    response = await llm.astructured_json(
+    return await llm.astructured_json(
         "planner",
         output_model=schema,
         messages=[user_message(json.dumps(compact, ensure_ascii=False))],
@@ -326,7 +481,6 @@ async def _ask[T: RoadmapOutline](
         max_tokens=max_tokens,
         scope=scope,
     )
-    return response.value
 
 
 def _number_ref(ref: AmountRef, line: AllocationLine) -> int:
@@ -445,13 +599,70 @@ def _proposal(step: RoadmapDraftStep, phase_start: date) -> Proposal:
     )
 
 
+def _label(prefix: str, name: str) -> str:
+    return f"{prefix} {name}"[:60]
+
+
+def _step_metrics(
+    outline: StepOutline,
+    ref: AmountRef,
+    line: AllocationLine,
+    amount: int,
+    immediate: bool,
+    balances: dict[str, B.JarBalance],
+) -> list[B.ActionChange] | None:
+    """Số "trước → sau" của bước, dựng bằng mã và khớp đúng hũ, đúng số tiền của bước; không có so sánh có nghĩa thì không có metric.
+
+    - Bước chuyển tiền làm ngay (giai đoạn đầu, lấy từ số dư hiện có): số dư hũ nguồn giảm và hũ nhận tăng đúng số tiền bước.
+    - Bước theo phân bổ hằng tháng (giai đoạn sau, đổi tỷ lệ chia, giảm chi) có tham chiếu là phần tăng, phần giảm hay mức đề xuất:
+      phân bổ hằng tháng của chính hũ được tham chiếu, từ mức hiện tại tới mức đề xuất (chênh lệch, hoặc mức sau, bằng số tiền bước).
+    - Tham chiếu là sàn, phần thiếu sàn hay mức hiện tại: không có "trước → sau" nào khớp số tiền bước, nên bỏ metric.
+    """
+    source, target = outline.jar_code, outline.to_jar_code
+    moves = outline.kind in _MONEY_MOVING_KINDS and source and target and source != target
+    if moves and immediate and source in balances and target in balances:
+        out, into = balances[source], balances[target]
+        if out.balance_vnd < amount:
+            return None  # luật source_jar_covers sẽ chặn bước này; không vẽ số dư âm
+        return [
+            B.ActionChange(
+                label=_label("Hũ", _clean_text(out.name)),
+                before=format_vnd(out.balance_vnd),
+                after=format_vnd(out.balance_vnd - amount),
+            ),
+            B.ActionChange(
+                label=_label("Hũ", _clean_text(into.name)),
+                before=format_vnd(into.balance_vnd),
+                after=format_vnd(into.balance_vnd + amount),
+            ),
+        ]
+    if ref.field not in ("proposed_increase", "proposed_decrease", "proposed_monthly_vnd"):
+        return None
+    if ref.field == "proposed_monthly_vnd" and outline.kind != "adjust_split":
+        return None  # mức chia mới chỉ là "sau" của bước đổi tỷ lệ chia; với bước chuyển tiền nó không phải số tiền được chuyển
+    if line.current_monthly_vnd == line.proposed_monthly_vnd:
+        return None
+    jar = balances.get(ref.jar_code)
+    name = _clean_text(jar.name) if jar is not None else _clean_text(line.jar.name)
+    return [
+        B.ActionChange(
+            label=_label("Phân bổ hằng tháng hũ", name),
+            before=format_vnd(line.current_monthly_vnd),
+            after=format_vnd(line.proposed_monthly_vnd),
+        )
+    ]
+
+
 def _build_step(
     outline: StepOutline,
     balances: list[B.JarBalance],
     lines: dict[str, AllocationLine],
     phase: tuple[date, date],
     today: date,
+    *,
+    immediate: bool = False,
 ) -> tuple[RoadmapDraftStep, Proposal]:
+    """`immediate`: giai đoạn của bước bắt đầu ngay đầu kỳ (bước chuyển tiền lấy từ số dư hiện có của hũ nguồn)."""
     phase_start, phase_end = phase
     jars = {jar.code for jar in balances}
     jar, to_jar = outline.jar_code, outline.to_jar_code
@@ -471,13 +682,9 @@ def _build_step(
                 "amount_not_positive",
                 f"Trường {ref.field} của hũ {ref.jar_code} không dương trong phương án tối ưu. Đổi tham chiếu hoặc bỏ số tiền.",
             )
-        metrics = [
-            B.ActionChange(
-                label="Phân bổ hằng tháng",
-                before=format_vnd(line.current_monthly_vnd),
-                after=format_vnd(line.proposed_monthly_vnd),
-            )
-        ]
+        metrics = _step_metrics(
+            outline, ref, line, amount, immediate, {item.code: item for item in balances}
+        )
     action = _build_action(outline, amount, phase_end, today, balances, lines)
     step = RoadmapDraftStep(
         step_id=outline.step_id,
@@ -645,18 +852,13 @@ async def _verify(
     round_no: int = 0,
     cache: dict[str, asyncio.Task[SuitabilityVerdict | None]] | None = None,
 ) -> tuple[list[RoadmapDraftPhase], list[RepairIssue], list[SuitabilityVerdict]]:
-    allowed = Allowed.from_payloads([compact])
     lines = {line.jar.code: line for line in plan.lines}
     start, horizon_end = period
     cache = {} if cache is None else cache
     issues, verdicts = [], []
     phase_ids: set[str] = set()
     step_ids: set[str] = set()
-
-    def grounded(text: str) -> bool:
-        return NumericGrounding.check({"text": text}, allowed).ok and not has_ungrounded_numbers(
-            text, compact
-        )
+    grounded = _grounding(compact)
 
     def ungrounded(*texts: str) -> str:
         """Các số (do model viết) không có căn cứ, để phản hồi nói đúng chỗ cần bỏ. Không đưa vào log."""
@@ -743,7 +945,8 @@ async def _verify(
                         rule_id="numeric_grounding",
                         message=(
                             f"Tiêu đề hoặc lý do có số chưa có căn cứ{ungrounded(item.title, item.reason)}."
-                            " Bỏ mọi chữ số khỏi câu chữ, kể cả số tháng và số thứ tự."
+                            " Tiêu đề không có chữ số; lý do chỉ giữ số chép nguyên văn từ reason_numbers, bỏ mọi số"
+                            " khác, kể cả số tháng và số thứ tự."
                         ),
                     )
                 )
@@ -757,7 +960,14 @@ async def _verify(
                 )
                 continue
             try:
-                step, proposal = _build_step(item, balances, lines, (phase_start, phase_end), today)
+                step, proposal = _build_step(
+                    item,
+                    balances,
+                    lines,
+                    (phase_start, phase_end),
+                    today,
+                    immediate=phase_start <= start,
+                )
             except ValueError as exc:
                 if isinstance(exc, ValidationError):
                     fields = sorted({".".join(map(str, e["loc"])) for e in exc.errors()})
@@ -822,11 +1032,19 @@ async def _verify(
     return phases, issues, verdicts
 
 
+def _enough(phases: list[RoadmapDraftPhase], settings: AgentSettings) -> bool:
+    """Các giai đoạn đã đạt đủ khuôn để lưu mà không cần vòng sửa (ngưỡng 0 thì luôn sửa như trước)."""
+    min_phases, min_steps = settings.roadmap_accept_min_phases, settings.roadmap_accept_min_steps
+    if min_phases <= 0 or min_steps <= 0:
+        return False
+    return len(phases) >= min_phases and sum(len(phase.steps) for phase in phases) >= min_steps
+
+
 def _tool_budget(settings: AgentSettings, remaining: int, rounds: int, has_latest: bool) -> int:
-    # Context đọc 4 tool, dùng lại lần đọc latest từ chat nếu có. Mỗi bản nháp
-    # gọi tối ưu một lần, kiểm mỗi bước một lần/vòng (trường hợp xấu nhất: không bước nào dùng lại được phán quyết cũ) và có thể
-    # lưu mỗi vòng. Xung đột dành thêm hai call cho một lần đọc latest và một lần lưu lại.
-    fixed = (4 - int(has_latest)) + 1 + (1 + rounds) + 2
+    # Context đọc 4 tool, dùng lại lần đọc latest từ chat nếu có. Tối ưu chạy một lần trước bản phác thảo và có thể thêm một lần
+    # nếu bản phác thảo xin phương án khác; kiểm mỗi bước một lần/vòng (trường hợp xấu nhất: không bước nào dùng lại được phán
+    # quyết cũ) và có thể lưu mỗi vòng. Xung đột dành thêm hai call cho một lần đọc latest và một lần lưu lại.
+    fixed = (4 - int(has_latest)) + 2 + (1 + rounds) + 2
     return min(settings.roadmap_max_steps, max(0, (remaining - fixed) // (1 + rounds)))
 
 
@@ -881,13 +1099,36 @@ async def build_roadmap(
         _log_event("roadmap_invalid", stage="tool_budget", reason_code=reason_code)
         return RoadmapResult()
 
+    clock = _StageClock(reason_code)
     await stage("context")
-    balances, obligations, resilience, old = await asyncio.gather(
-        tools("get_jar_balances", {}, "ledger"),
+    # Phương án phân bổ mặc định chạy CÙNG LÚC với các lần đọc ngữ cảnh, trước bản phác thảo: model thấy ngay bảng tham chiếu tiền
+    # dương của từng hũ nên không chọn khoản bằng 0. Trọng số của model không có ở lần này; mục tiêu người dùng nói thì có.
+    balances_task = asyncio.ensure_future(tools("get_jar_balances", {}, "ledger"))
+
+    async def first_allocation() -> tuple[dict[str, Any], ToolOutcome | None]:
+        args: dict[str, Any] = {}
+        if shock_id is not None:
+            args["shock_id"] = shock_id
+        if user_goal is not None:
+            read = await balances_task
+            try:
+                jars_view = compact_jars(read.payload or {})["jars"] if read.ok else None
+            except (TypeError, ValueError, KeyError):
+                jars_view = None
+            if jars_view is None:
+                return args, None  # đọc hũ hỏng: lượt dừng ở bước kiểm hũ bên dưới, không gọi tối ưu
+            if (entry := _user_goal_entry(user_goal, jars_view)) is not None:
+                args["goals"] = [entry]
+        return args, await tools("optimize_allocation", args, "planner")
+
+    balances, obligations, resilience, old, (base_alloc_args, optimized) = await asyncio.gather(
+        balances_task,
         tools("get_obligations", {}, "ledger"),
         tools("get_resilience_score", {}, "forecast"),
         read_base(),
+        first_allocation(),
     )
+    clock.lap("context")
     if (jar_summary := _parse(balances, B.JarSummaryData)) is None:
         return RoadmapResult(outcome=_tool_error(balances))
     if _data(obligations) is None:
@@ -921,6 +1162,9 @@ async def build_roadmap(
         return RoadmapResult(outcome=_tool_error(balances))
     for jar in compact["jars"]:
         jar["name"] = _clean_text(jar["name"])
+        # hạn mục tiêu dạng người đọc (dd/mm/yyyy) để lý do của bước chép được mà vẫn có căn cứ
+        if (goal_date_text := _date_text(jar.get("goal_date"))) is not None:
+            jar["goal_date_text"] = goal_date_text
     try:
         obligations_view = compact_obligations(obligations.payload or {})
     except (TypeError, ValueError, KeyError):
@@ -935,11 +1179,41 @@ async def build_roadmap(
         compact["weakest"] = {"key": weakest.key, "band": weakest.band, "score": weakest.score}
     if previous is not None:
         compact["previous_feedback"] = _previous_context(previous)
+    # Mục tiêu người dùng nói đã vào optimize_allocation (hũ tiết kiệm hợp lệ): đưa số vào bản gọn để grounding của bước (Allowed)
+    # và model thấy nó.
+    if user_goal is not None and any(
+        goal.get("jar") == user_goal.jar for goal in base_alloc_args.get("goals", [])
+    ):
+        compact["user_goal"] = {
+            k: v
+            for k, v in {
+                "jar_code": user_goal.jar,
+                "target_vnd": user_goal.target_vnd,
+                "target_text": format_vnd(user_goal.target_vnd)
+                if user_goal.target_vnd is not None
+                else None,
+                "target_date": user_goal.target_date,
+                "target_date_text": _date_text(user_goal.target_date),
+            }.items()
+            if v is not None
+        }
+    if optimized is None:
+        return RoadmapResult(outcome=_tool_error(balances))
+    allocated = _allocation_of(optimized)
+    if allocated is None:
+        return RoadmapResult(outcome=_tool_error(optimized))
+    plan, (period_start, period_end) = allocated
+    _set_allocation(compact, plan)
 
     await stage("draft")
     if llm is None or not model_left():
         return RoadmapResult(model_budget_exhausted=True)
-    model_context = {"context": compact, "reason_code": reason_code, "max_steps": step_limit}
+    model_context: dict[str, Any] = {
+        "context": compact,
+        "reason_code": reason_code,
+        "max_steps": step_limit,
+        "reason_numbers": _reason_numbers(compact, _grounding(compact)),
+    }
     if regeneration is not None:
         preferences: dict[str, Any] = {}
         if regeneration.alternative_id is not None:
@@ -957,8 +1231,7 @@ async def build_roadmap(
             preferences["note"] = _clean_text(regeneration.note)
         if preferences:
             model_context["regeneration_preferences"] = preferences
-    # Mục tiêu người dùng nói trong câu: bản phác thảo đầu cũng phải thấy (không chỉ vòng sửa). Kiểm hũ và số đưa vào
-    # optimize_allocation vẫn làm ở bước allocate bên dưới.
+    # Mục tiêu người dùng nói trong câu: bản phác thảo cũng phải thấy, kể cả khi hũ không hợp lệ cho bộ tối ưu.
     if user_goal is not None:
         model_context["user_goal"] = {
             k: v
@@ -977,7 +1250,7 @@ async def build_roadmap(
     if scope.max_calls is not None:
         attempts = max(1, min(attempts, scope.max_calls - scope.calls))
     try:
-        sketch = await _ask(
+        drafted = await _ask(
             llm,
             scope,
             RoadmapSketch,
@@ -986,13 +1259,18 @@ async def build_roadmap(
             max_attempts=attempts,
         )
     except Exception as exc:
+        clock.lap("draft", outcome=type(exc).__name__)
         return RoadmapResult(model_error=exc)
+    sketch = drafted.value
+    clock.lap("draft", attempts=drafted.attempts)
     if not any(phase.steps for phase in sketch.phases):
         _log_event("roadmap_invalid", stage="empty_draft", reason_code=reason_code)
         return RoadmapResult()
 
     await stage("allocate")
-    # optimize_allocation chỉ nhận trọng số cho hũ tiết kiệm đã có mục tiêu (hũ khác trả PARAMS_INVALID): lọc bằng mã, không tin model.
+    # Bản phác thảo xin phương án khác (horizon hoặc trọng số) thì mới tối ưu lần hai. optimize_allocation chỉ nhận trọng số cho hũ
+    # tiết kiệm đã có mục tiêu (hũ khác trả PARAMS_INVALID): lọc bằng mã, không tin model. Mục tiêu người dùng nói thay cho trọng số
+    # model chọn với cùng hũ.
     goal_jars = {
         j["code"] for j in compact["jars"] if j.get("kind") == "saving" and "goal_vnd" in j
     }
@@ -1001,53 +1279,30 @@ async def build_roadmap(
         for goal in sketch.goals
         if goal.jar in goal_jars
     }
-    # Mục tiêu người dùng nói thay cho trọng số model chọn với cùng hũ. Chỉ hũ tiết kiệm; chỉ có hạn thì hũ phải có sẵn goal_vnd.
-    saving_jars = {j["code"]: j for j in compact["jars"] if j.get("kind") == "saving"}
-    if (
-        user_goal is not None
-        and (jar := saving_jars.get(user_goal.jar)) is not None
-        and (user_goal.target_vnd is not None or (user_goal.target_date and "goal_vnd" in jar))
-    ):
-        entry: dict[str, Any] = {"jar": user_goal.jar}
-        if user_goal.target_vnd is not None:
-            entry["target_vnd"] = user_goal.target_vnd
-        if user_goal.target_date:
-            entry["target_date"] = user_goal.target_date
-        goals[user_goal.jar] = entry
-        # Số tiền mục tiêu đến từ câu người dùng: đưa vào bản gọn để grounding của bước (Allowed) và model sửa thấy nó.
-        compact["user_goal"] = {
-            k: v
-            for k, v in {
-                "jar_code": user_goal.jar,
-                "target_vnd": user_goal.target_vnd,
-                "target_text": format_vnd(user_goal.target_vnd)
-                if user_goal.target_vnd is not None
-                else None,
-                "target_date": user_goal.target_date,
-            }.items()
-            if v is not None
-        }
-    args: dict[str, Any] = {}
-    if sketch.horizon_months is not None:
-        args["horizon_months"] = sketch.horizon_months
-    if goals:
-        args["goals"] = list(goals.values())
-    if shock_id is not None:
-        args["shock_id"] = shock_id
-    optimized = await tools("optimize_allocation", args, "planner")
-    plan = _parse(optimized, AllocationPlanData)
-    if plan is None:
-        return RoadmapResult(outcome=_tool_error(optimized))
-    # IsoDate kiểm hình dạng. Kiểm lịch thật trước khi chia mốc giai đoạn.
-    try:
-        period_start = date.fromisoformat(plan.period_start)
-        end_year, month = divmod(
-            period_start.year * 12 + period_start.month - 1 + plan.horizon_months, 12
-        )
-        period_end = payday_in_month(period_start.day, end_year, month + 1)
-    except ValueError:
-        return RoadmapResult(outcome=_tool_error(optimized))
-    compact["allocation"] = _compact_allocation(plan)
+    user_goals = {goal["jar"]: goal for goal in base_alloc_args.get("goals", [])}
+    # Trọng số bằng mặc định của bộ tối ưu (một) cho ra đúng phương án đã có: không tối ưu lại vì nó.
+    weighted = {jar for jar, goal in goals.items() if goal["weight"] != _DEFAULT_GOAL_WEIGHT}
+    asks_more = bool(weighted - set(user_goals)) or (
+        sketch.horizon_months is not None and sketch.horizon_months != plan.horizon_months
+    )
+    reoptimized = False
+    if asks_more:
+        args = {k: v for k, v in base_alloc_args.items() if k != "goals"}
+        if sketch.horizon_months is not None:
+            args["horizon_months"] = sketch.horizon_months
+        merged = {**goals, **user_goals}
+        if merged:
+            args["goals"] = list(merged.values())
+        second = await tools("optimize_allocation", args, "planner")
+        if (again := _allocation_of(second)) is not None:
+            optimized, (plan, (period_start, period_end)) = second, again
+            _set_allocation(compact, plan)
+            model_context["reason_numbers"] = _reason_numbers(compact, _grounding(compact))
+            reoptimized = True
+        else:
+            # Phương án mặc định vẫn dùng được: giữ nó thay vì bỏ cả lượt.
+            _log_event("roadmap_reoptimize_failed", reason_code=reason_code, code=second.code)
+    clock.lap("allocate", reoptimized=reoptimized)
 
     verdicts: list[SuitabilityVerdict] = []
     model_error: Exception | None = None
@@ -1074,12 +1329,15 @@ async def build_roadmap(
             "feedback": [issue.model_dump(exclude_none=True) for issue in issues],
         }
         try:
-            return await _ask(
+            revised = await _ask(
                 llm, scope, RoadmapOutline, payload, settings.roadmap_draft_max_tokens
             )
         except Exception as exc:
             model_error = exc
+            clock.lap("repair", round=retries, outcome=type(exc).__name__)
             return None
+        clock.lap("repair", round=retries)
+        return revised.value
 
     async def save(phases: list[RoadmapDraftPhase]) -> ToolOutcome:
         nonlocal conflict_retried, version
@@ -1128,6 +1386,15 @@ async def build_roadmap(
         return result if _parse(result, Roadmap) is not None else _tool_error(result)
 
     await stage("suitability")
+
+    def finish(result: RoadmapResult) -> RoadmapResult:
+        clock.total(
+            planner_calls=drafted.attempts + retries,
+            rounds=retries,
+            saved=result.outcome is not None and result.outcome.ok,
+        )
+        return result
+
     while True:
         phases, issues, checked = await _verify(
             tools,
@@ -1142,11 +1409,24 @@ async def build_roadmap(
             cache=checked_proposals,
         )
         verdicts.extend(checked)
+        clock.lap("suitability", round=retries, issues=len(issues))
+        # Các bước đạt đã đủ khuôn lộ trình (đủ giai đoạn, đủ bước): bỏ các bước bị loại thay vì tốn thêm một lượt planner để sửa.
+        # Mọi bước được lưu vẫn đã qua grounding và check_suitability; save_roadmap kiểm lại như cũ.
+        if issues and _enough(phases, settings):
+            _log_event(
+                "roadmap_repair_skipped",
+                level=logging.INFO,
+                round=retries,
+                kept_phases=len(phases),
+                kept_steps=sum(len(phase.steps) for phase in phases),
+                dropped=len(issues),
+            )
+            issues = []
         if issues and (revised := await repair(issues)) is not None:
             outline = revised
             continue
         if regeneration is not None and model_error is not None:
-            return RoadmapResult(model_error=model_error, suitability=tuple(verdicts))
+            return finish(RoadmapResult(model_error=model_error, suitability=tuple(verdicts)))
         if not phases:
             _log_event(
                 "roadmap_invalid",
@@ -1157,11 +1437,12 @@ async def build_roadmap(
                 rules=dict(sorted(Counter(issue.rule_id for issue in issues).items())),
                 model_error=type(model_error).__name__ if model_error is not None else None,
             )
-            return RoadmapResult(model_error=model_error, suitability=tuple(verdicts))
+            return finish(RoadmapResult(model_error=model_error, suitability=tuple(verdicts)))
         if not saving:
             await stage("save")
             saving = True
         result = await save(phases)
+        clock.lap("save", code=result.code)
         if result.code == ErrorCode.ROADMAP_INVALID.value:
             issue = RepairIssue(
                 rule_id="roadmap_invalid",
@@ -1173,4 +1454,6 @@ async def build_roadmap(
             _log_event(
                 "roadmap_invalid", stage="save", reason_code=reason_code, rounds=retries
             )
-        return RoadmapResult(outcome=result, model_error=model_error, suitability=tuple(verdicts))
+        return finish(
+            RoadmapResult(outcome=result, model_error=model_error, suitability=tuple(verdicts))
+        )
