@@ -1,0 +1,128 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "ready": true,
+    "app_date": "2026-11-21",
+    "computed_at": "2026-12-09T19:10:00Z",
+    "config_version": "behavior-2026-12",
+    "headline": "Bạn hay chi dồn trong tuần đầu sau ngày lương.",
+    "history_days": 60,
+    "features": {
+      "history_days": 60,
+      "avg_daily_spend_vnd": 185000,
+      "first_week_after_payday_share": 0.46,
+      "weekend_share": 0.38,
+      "evening_share": 0.41,
+      "top_weekday": 6,
+      "bnpl_purchases_per_month": 2.5,
+      "bnpl_share": 0.12
+    },
+    "segment": {
+      "segment_id": "chi_don_sau_luong",
+      "label": "Chi dồn sau kỳ lương"
+    },
+    "insights": [
+      {
+        "insight_id": "chi_don_sau_luong",
+        "kind": "payday_cycle",
+        "headline": "7 ngày đầu sau ngày lương bạn chi 46% tổng chi của cả kỳ.",
+        "detail": "Kỳ lương 05/11, 7 ngày đầu bạn chi 2.580.000 ₫.",
+        "evidence": [
+          {
+            "key": "first_week_share",
+            "label": "Phần chi trong 7 ngày đầu sau lương",
+            "value": 46,
+            "unit": "percent",
+            "period_from": "2026-09-22",
+            "period_to": "2026-11-21"
+          },
+          {
+            "key": "first_week_days",
+            "label": "Số ngày tính là tuần đầu",
+            "value": 7,
+            "unit": "days"
+          },
+          {
+            "key": "first_week_spend_vnd",
+            "label": "Chi 7 ngày đầu kỳ lương 05/11",
+            "value": 2580000,
+            "unit": "vnd",
+            "period_from": "2026-11-05",
+            "period_to": "2026-11-11"
+          }
+        ],
+        "confidence": "medium",
+        "ai_generated": true
+      },
+      {
+        "insight_id": "thu_bay_an_uong",
+        "kind": "weekday_pattern",
+        "headline": "Thứ Bảy là ngày bạn chi nhiều nhất cho hũ Ăn uống, trung bình 412.000 ₫.",
+        "jar_code": "an_uong",
+        "evidence": [
+          {
+            "key": "top_weekday",
+            "label": "Ngày chi nhiều nhất",
+            "value": 6,
+            "unit": "weekday"
+          },
+          {
+            "key": "avg_saturday_vnd",
+            "label": "Chi trung bình mỗi thứ Bảy ở hũ Ăn uống",
+            "value": 412000,
+            "unit": "vnd",
+            "period_from": "2026-09-22",
+            "period_to": "2026-11-21"
+          }
+        ],
+        "confidence": "medium",
+        "ai_generated": true
+      },
+      {
+        "insight_id": "tra_sau_5_lan",
+        "kind": "bnpl_usage",
+        "headline": "60 ngày qua bạn dùng Trả sau 5 lần, chiếm 12% chi tiêu.",
+        "evidence": [
+          {
+            "key": "window_days",
+            "label": "Số ngày đã xét",
+            "value": 60,
+            "unit": "days"
+          },
+          {
+            "key": "bnpl_count",
+            "label": "Số lần dùng Trả sau",
+            "value": 5,
+            "unit": "count",
+            "period_from": "2026-09-22",
+            "period_to": "2026-11-21"
+          },
+          {
+            "key": "bnpl_share",
+            "label": "Phần chi bằng Trả sau",
+            "value": 12,
+            "unit": "percent"
+          }
+        ],
+        "confidence": "high",
+        "ai_generated": false
+      }
+    ],
+    "next_step": {
+      "label": "Để riêng 600.000 ₫ cho hũ Ăn uống ngay khi lương về",
+      "reason": "Chi dồn vào tuần đầu làm hũ Ăn uống hay hụt trước kỳ lương.",
+      "action": {
+        "tool": "schedule_nudge",
+        "params": {
+          "op": "create",
+          "kind": "runout_warning",
+          "fire_on": "2026-12-05",
+          "jar_code": "an_uong",
+          "note": "Để riêng tiền ăn tuần đầu kỳ lương"
+        }
+      }
+    }
+  }
+}

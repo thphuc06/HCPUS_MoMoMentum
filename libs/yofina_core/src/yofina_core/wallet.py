@@ -82,6 +82,13 @@ ACTION_TOOLS = (
 #: `tool` mà `POST /ingest/confirmations` và `POST /ingest/actions` (Lambda `ingest`) nhận: chỉ `confirm_rows`. Cùng schema
 #: yêu cầu và biên nhận với ledger, cùng khóa HMAC và bảng `jti`; tool khác gửi vào đó bị 422 PARAMS_INVALID.
 INGEST_ACTION_TOOLS = (CONFIRM_ROWS,)
+#: Phase 5 (quyền riêng tư): "Xóa dữ liệu của tôi". Chỉ đi qua `POST /me/delete-data/confirmations` rồi `POST /me/delete-data`
+#: (Lambda `ledger`), cùng khóa HMAC và bảng `jti`; không phải tool Gateway (agent không xóa dữ liệu được) và không dùng khối
+#: `confirm_action` (màn Hồ sơ tự dựng bước xác nhận).
+DELETE_MY_DATA = "delete_my_data"
+PRIVACY_ACTION_TOOLS = (DELETE_MY_DATA,)
+#: Phạm vi của `delete_my_data`: chỉ "tất cả" (xóa riêng bộ nhớ thì dùng `DELETE /memory`).
+DATA_DELETION_SCOPES = ("all",)
 #: Tool ghi mà agent gọi qua Gateway (target `ledger`); phần còn lại chỉ có ở REST (màn hình).
 AGENT_WRITE_TOOLS = (UPDATE_PROFILE, RECORD_TRANSACTION, MOVE_BETWEEN_JARS, ASSIGN_JAR)
 #: Tool ghi mà agent gọi qua Gateway ở target `planner` (phase 3). Cùng luồng token; REST `/actions` cũng nhận.
@@ -103,7 +110,7 @@ LEDGER_TOOLS = (
     "assign_jar",
     "save_turn",
 )
-#: Phase 4 thêm `get_resilience_score` và `stress_test` ở cuối target `forecast`.
+#: Phase 4 thêm `get_resilience_score` và `stress_test` ở cuối target `forecast`; phase 5 thêm `get_behavior_profile`.
 FORECAST_TOOLS = (
     "get_forecast",
     "run_scenario",
@@ -111,7 +118,10 @@ FORECAST_TOOLS = (
     "affordability_check",
     "get_resilience_score",
     "stress_test",
+    "get_behavior_profile",
 )
+#: Phase 5 không thêm tool vào target `knowledge` (chủ dự án cắt luồng RAG ngày 24/11): khối `citation` dựng từ kết quả
+#: `get_fee_schedule`.
 KNOWLEDGE_TOOLS = ("get_fee_schedule",)
 #: Phase 4 thêm `optimize_allocation`, `save_roadmap`, `get_roadmap` ở cuối target `planner`. `save_roadmap` là tool GHI nhưng
 #: KHÔNG qua token (không đổi số dư; quyết định số 3 của phase 4), nên KHÔNG nằm trong `PLANNER_WRITE_TOOLS` hay `ACTION_TOOLS`.
@@ -122,10 +132,12 @@ PLANNER_TOOLS = (
     "save_roadmap",
     "get_roadmap",
 )
-#: Tool mới của phase 4 mà hợp đồng đã khai báo nhưng Lambda chưa cài (test `test_ledger_wallet` dùng tập này để khỏi đòi
-#: `_ARG_KEYS` có chúng). Rỗng từ 23/11: năm tool đã cài (forecast: get_resilience_score, stress_test; ledger: optimize_allocation
-#: proxy sang forecast, save_roadmap, get_roadmap).
-PHASE4_TOOLS: tuple[str, ...] = ()
+#: Tool phase 5 mà hợp đồng đã khai báo nhưng Lambda chưa cài: `forecast___get_behavior_profile` (luồng p5-behavior). Luồng
+#: cài xong thì xóa tên khỏi đây và thêm vào `_ARG_KEYS` của Lambda.
+PHASE5_TOOLS: tuple[str, ...] = ("get_behavior_profile",)
+#: Tool đã khai báo trong hợp đồng mà Lambda chưa cài (test `test_ledger_wallet` dùng tập này để khỏi đòi `_ARG_KEYS` có chúng).
+#: Năm tool phase 4 đã cài từ 23/11; tên giữ nguyên cho test cũ, nay là "tool chưa cài" của mọi phase, tức `PHASE5_TOOLS`.
+PHASE4_TOOLS: tuple[str, ...] = PHASE5_TOOLS
 AUDIT_TOOLS = ("get_trace", "record_turn")
 
 # --- phase 3: kịch bản, nhắc, phản hồi, ý định ---------------------------------------------------
@@ -147,7 +159,25 @@ NUDGE_KINDS = (
     "low_data",
     "purchase_review",
 )
+#: Phase 5 (FR13): loại bản tin do CỔNG GIÁ TRỊ của batch đêm chọn (`nudges.source = 'system'`), theo THỨ TỰ ƯU TIÊN của cổng:
+#: hũ thiết yếu sắp cạn, nghĩa vụ trong 3 ngày, lộ trình mới chờ chọn, hỏi gộp, điểm chống chịu tụt nhóm, nhận xét hành vi.
+#: Ba loại mới không nằm trong `NUDGE_KINDS` vì người dùng và agent không tự lên lịch được chúng bằng `schedule_nudge`.
+NUDGE_GATE_ORDER = (
+    "runout_warning",
+    "obligation_due",
+    "roadmap_proposed",
+    "review_needed",
+    "resilience_drop",
+    "behavior_insight",
+)
+SYSTEM_NUDGE_KINDS = NUDGE_GATE_ORDER
+#: Mọi loại của cột `nudges.kind` (migration 0053 nới CHECK của 0010): loại lên lịch được, rồi ba loại chỉ cổng giá trị sinh.
+ALL_NUDGE_KINDS = (*NUDGE_KINDS, *(k for k in NUDGE_GATE_ORDER if k not in NUDGE_KINDS))
 NUDGE_STATUSES = ("scheduled", "sent", "cancelled", "dismissed")
+#: Phản hồi của người dùng với một bản tin (`POST /nudges/{nudge_id}/feedback`, cột `nudges.outcome`): đã làm theo, bỏ qua lần
+#: này, "Để sau", "Ít nhắc loại này" (hạ loại đó một bậc ở cổng).
+NUDGE_OUTCOMES = ("acted", "dismissed", "snoozed", "less_like_this")
+NUDGE_SOURCES = ("user_option", "agent", "system")
 NUDGE_OPS = ("create", "cancel")
 FEEDBACK_DECISIONS = ("accepted", "rejected")
 #: Ý định của router (L1) ở phase 3. Cột `audit_events.intent` của migration 0010 chỉ chấp nhận bảy giá trị này; migration
@@ -164,6 +194,15 @@ INTENTS_PHASE3 = (
 #: Ý định của router (L1): bảy ý định phase 3 và ba ý định phase 4 (`resilience`: hỏi điểm chống chịu, `stress`: bấm hoặc hỏi một
 #: cú sốc, `roadmap`: xin hoặc hỏi lộ trình). Luồng C cài router và xử lý chúng; hợp đồng chỉ khai báo.
 INTENTS = (*INTENTS_PHASE3, "resilience", "stress", "roadmap")
+#: Bốn ý định của phase 5, CHƯA nằm trong `INTENTS` (router chưa chọn được, `agent/.../schemas.py` `Intent` khớp `INTENTS`):
+#: `behavior` (hỏi về thói quen chi tiêu, nhận xét hành vi), `knowledge` (hỏi biểu phí kèm trích dẫn: số từ `get_fee_schedule`,
+#: khối `citation` dựng từ nguồn của chính bảng phí; không có tìm kiếm tài liệu), `ingest` ("mình vừa nạp ảnh": trạng thái lần
+#: nạp và bảng duyệt), `memory` (người dùng nói một sở thích để nhớ, hoặc hỏi trợ lý nhớ gì về mình). Luồng nào cài bộ xử lý thì
+#: chuyển ý định của mình vào `INTENTS` cùng lúc với `Intent` của agent.
+PHASE5_INTENTS = ("behavior", "knowledge", "ingest", "memory")
+#: Ý định mà cột `audit_events.intent` chấp nhận (migration 0053 nới CHECK): mọi ý định đã cài và bốn ý định phase 5, để
+#: `audit___record_turn` không vỡ ở lượt có ý định mới trong lúc các luồng cài dần.
+AUDIT_INTENTS = (*INTENTS, *PHASE5_INTENTS)
 #: Loại phương án của khối `options` và `affordability_card`.
 OPTION_KINDS = (
     "defer",
@@ -277,3 +316,17 @@ REVIEW_ASK_STATUSES = ("open", "answered", "skipped")
 LABEL_SOURCES = ("user", "seed")
 #: Số chiều vector của vai `embedding` (`cohere.embed-multilingual-v3`, xem `llm_defaults.json`); khớp `vector(1024)` ở 0052.
 EMBEDDING_DIMENSIONS = 1024
+
+# --- phase 5: hồ sơ hành vi, bản tin, xóa dữ liệu ----------------------------------------------------
+#: Hồ sơ hành vi được tính do đâu (cột `behavior_profiles.source`, migration 0053).
+BEHAVIOR_PROFILE_SOURCES = ("nightly", "reset", "manual")
+BEHAVIOR_INSIGHT_KINDS = (
+    "payday_cycle",
+    "weekday_pattern",
+    "time_of_day",
+    "bnpl_usage",
+    "category_trend",
+    "spending_cluster",
+)
+#: Lý do cổng giá trị bỏ một loại bản tin (`NudgeSuppressed.reason` của `GET /nudges/today`).
+NUDGE_SUPPRESS_REASONS = ("below_threshold", "demoted", "quiet_hours", "lower_rank")

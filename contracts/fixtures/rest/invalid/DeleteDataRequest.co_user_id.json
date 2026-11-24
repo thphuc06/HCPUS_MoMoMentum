@@ -1,0 +1,8 @@
+{
+  "tool": "delete_my_data",
+  "params": {
+    "scope": "all"
+  },
+  "user_id": "sub-khac",
+  "confirm_token": "a.b"
+}

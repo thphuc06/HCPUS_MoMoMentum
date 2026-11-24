@@ -74,6 +74,18 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
         ("GET", "/roadmap/jobs/{job_id}"),
         ("GET", "/review"),
         ("POST", "/review/daily-ask/skip"),
+        # phase 5: hồ sơ hành vi, bản tin, bộ nhớ, xóa dữ liệu, bảng vận hành (nhóm ops)
+        ("GET", "/profile/behavior"),
+        ("GET", "/nudges/today"),
+        ("POST", "/nudges/{nudge_id}/feedback"),
+        ("GET", "/memory"),
+        ("DELETE", "/memory"),
+        ("DELETE", "/memory/{record_id}"),
+        ("POST", "/me/delete-data/confirmations"),
+        ("POST", "/me/delete-data"),
+        ("GET", "/ops/traces"),
+        ("GET", "/ops/traces/{trace_id}"),
+        ("GET", "/ops/summary"),
     }
     assert SPEC["security"] == [{"bearerAuth": []}]
     scheme = SPEC["components"]["securitySchemes"]["bearerAuth"]
@@ -105,8 +117,16 @@ def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
         ("POST", "/roadmap/versions/{version}/decision"),
         ("POST", "/roadmap/regenerate"),
         ("POST", "/review/daily-ask/skip"),
+        # phase 5: phản hồi bản tin và xóa bộ nhớ không đụng tiền, không qua token; xóa dữ liệu đi qua token riêng (xem
+        # test_contracts_phase5)
+        ("POST", "/nudges/{nudge_id}/feedback"),
+        ("DELETE", "/memory"),
+        ("DELETE", "/memory/{record_id}"),
+        ("POST", "/me/delete-data/confirmations"),
+        ("POST", "/me/delete-data"),
     }
-    assert not any("nudge" in path for _, path in operations())
+    # lên lịch nhắc vẫn KHÔNG có endpoint riêng (đi qua /confirmations và /actions); /nudges/* chỉ đọc bản tin và ghi phản hồi
+    assert {path for _, path in operations() if "nudge" in path} == {"/nudges/today", "/nudges/{nudge_id}/feedback"}
     for path, method in (("/ingest/uploads", "post"), ("/ingest/rows/{row_id}/jar", "post")):
         text = SPEC["paths"][path][method]["description"]
         assert "không ghi sổ cái" in text or "presigned" in text, path
@@ -132,6 +152,7 @@ def test_moi_operation_co_id_duy_nhat_va_x_lambda_hop_le():
 
     assert served_by("forecast") == {
         "/forecasts/{jar_code}", "/affordability", "/resilience", "/resilience/shocks", "/resilience/stress",
+        "/profile/behavior",
     }  # fmt: skip
     assert served_by("audit") == set()  # phase 3: audit chạy chung Lambda ledger
     assert {"/traces/{trace_id}", "/feedback"} <= served_by("ledger")

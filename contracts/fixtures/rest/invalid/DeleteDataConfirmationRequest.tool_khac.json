@@ -1,0 +1,6 @@
+{
+  "tool": "move_between_jars",
+  "params": {
+    "scope": "all"
+  }
+}

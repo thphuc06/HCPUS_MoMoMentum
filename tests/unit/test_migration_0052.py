@@ -206,4 +206,5 @@ def test_khong_sua_migration_cu():
     ).stdout.split()
     assert not [f for f in out if f != "db/migrations/0052_resilience_roadmap_classify.sql"], out
     names = sorted(p.name for p in (REPO / "db" / "migrations").glob("*.sql"))
-    assert names[-1] == "0052_resilience_roadmap_classify.sql" and names[-2].startswith("0051")
+    i = names.index("0052_resilience_roadmap_classify.sql")  # phase 5 thêm 0053 sau nó
+    assert names[i - 1].startswith("0051") and all(n > names[i] for n in names[i + 1 :])

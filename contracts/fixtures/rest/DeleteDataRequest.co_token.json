@@ -1,0 +1,7 @@
+{
+  "tool": "delete_my_data",
+  "params": {
+    "scope": "all"
+  },
+  "confirm_token": "eyJ0b29sIjoiZGVsZXRlX215X2RhdGEifQ.c2ln"
+}

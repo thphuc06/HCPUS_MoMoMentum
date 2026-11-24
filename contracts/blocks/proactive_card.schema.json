@@ -17,7 +17,7 @@
   },
   "$defs": {
     "ProactiveAction": {
-      "description": "Một nút trên thẻ. kind quyết định giao diện làm gì: open_forecast (mở Chi tiết hũ, cần jar_code), confirm_salary (mở bước xác nhận lương về), review_unclassified (mở danh sách xem lại), open_obligations (mở màn nghĩa vụ), ask_why (mở chat và gửi `prompt`), snooze ('Để sau'), mute_kind ('Ít nhắc loại này'). snooze và mute_kind phase 2 chỉ lưu phía giao diện; lưu ở server khi có bảng nudges (F7).",
+      "description": "Một nút trên thẻ. kind quyết định giao diện làm gì: open_forecast (mở Chi tiết hũ, cần jar_code), confirm_salary (mở bước xác nhận lương về), review_unclassified (mở danh sách xem lại), open_obligations (mở màn nghĩa vụ), ask_why (mở chat và gửi `prompt`), snooze ('Để sau'), mute_kind ('Ít nhắc loại này'); phase 5 thêm open_roadmap (mở Lộ trình, bản chờ chọn), open_resilience (mở Nhìn trước), open_profile (mở Hồ sơ, phần nhận xét hành vi). Thẻ có `nudge_id` (bản tin của cổng giá trị) thì snooze và mute_kind gửi `POST /nudges/{nudge_id}/feedback` (outcome snoozed, less_like_this); thẻ không có `nudge_id` (thẻ tất định của GET /overview) chỉ lưu phía giao diện như phase 2.",
       "type": "object",
       "required": ["kind", "label"],
       "additionalProperties": false,
@@ -26,7 +26,7 @@
           "type": "string",
           "enum": [
             "open_forecast", "confirm_salary", "review_unclassified", "open_obligations",
-            "ask_why", "snooze", "mute_kind"
+            "ask_why", "snooze", "mute_kind", "open_roadmap", "open_resilience", "open_profile"
           ]
         },
         "label": { "type": "string", "minLength": 1, "maxLength": 40 },
@@ -45,9 +45,9 @@
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "description": "Loại việc: runout_warning (hũ sắp cạn), obligation_due (nghĩa vụ sắp đến hạn), salary_pending (lương về chờ xác nhận), review_needed (có giao dịch cần xem lại), low_data (dữ liệu ít, mời khai thêm).",
+          "description": "Loại việc: runout_warning (hũ sắp cạn), obligation_due (nghĩa vụ sắp đến hạn), salary_pending (lương về chờ xác nhận), review_needed (có giao dịch cần xem lại), low_data (dữ liệu ít, mời khai thêm); phase 5 (bản tin của cổng giá trị) thêm roadmap_proposed (lộ trình mới chờ chọn), resilience_drop (điểm chống chịu tụt nhóm), behavior_insight (một nhận xét hành vi kèm việc cần làm).",
           "type": "string",
-          "enum": ["runout_warning", "obligation_due", "salary_pending", "review_needed", "low_data"]
+          "enum": ["runout_warning", "obligation_due", "salary_pending", "review_needed", "low_data", "roadmap_proposed", "resilience_drop", "behavior_insight"]
         },
         "status": {
           "description": "Mức độ để chọn màu và biểu tượng: ok (thông tin), tight (sát), short (hụt, cần làm ngay).",
@@ -61,6 +61,10 @@
           "maxLength": 200
         },
         "jar_code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
+        "nudge_id": {
+          "description": "Id dòng `nudges` khi thẻ là bản tin của cổng giá trị (phase 5, `GET /nudges/today`); vắng với thẻ tất định của GET /overview.",
+          "$ref": "envelope.schema.json#/$defs/Uuid"
+        },
         "actions": {
           "description": "Hành động chính đứng đầu, rồi các hành động phụ. Tối đa 4.",
           "type": "array",

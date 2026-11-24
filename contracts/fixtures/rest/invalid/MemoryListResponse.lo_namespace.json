@@ -1,0 +1,12 @@
+{
+  "records": [
+    {
+      "record_id": "mem-0f3b7c2a-9d41-4e8b-a6c5-1e2f3a4b5c01",
+      "kind": "preference",
+      "source": "conversation",
+      "text": "Không muốn được nhắc vào buổi sáng.",
+      "created_at": "2026-12-08T14:02:11Z",
+      "namespace": "/yofina/users/sub-minh/preferences/"
+    }
+  ]
+}

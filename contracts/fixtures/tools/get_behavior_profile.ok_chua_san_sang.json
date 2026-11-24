@@ -1,0 +1,13 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "ready": false,
+    "app_date": "2026-11-21",
+    "headline": "Cần thêm 9 ngày giao dịch để có nhận xét về thói quen chi tiêu.",
+    "history_days": 12,
+    "min_history_days": 21,
+    "insights": []
+  }
+}

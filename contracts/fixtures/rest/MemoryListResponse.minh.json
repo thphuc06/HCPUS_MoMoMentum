@@ -1,0 +1,47 @@
+{
+  "records": [
+    {
+      "record_id": "mem-0f3b7c2a-9d41-4e8b-a6c5-1e2f3a4b5c01",
+      "kind": "preference",
+      "source": "conversation",
+      "text": "Không muốn được nhắc vào buổi sáng.",
+      "created_at": "2026-12-08T14:02:11Z"
+    },
+    {
+      "record_id": "mem-0f3b7c2a-9d41-4e8b-a6c5-1e2f3a4b5c02",
+      "kind": "preference",
+      "source": "conversation",
+      "text": "Ưu tiên để dành cho hũ Du lịch.",
+      "created_at": "2026-12-08T14:02:11Z"
+    },
+    {
+      "record_id": "mem-0f3b7c2a-9d41-4e8b-a6c5-1e2f3a4b5c03",
+      "kind": "fact",
+      "source": "conversation",
+      "text": "Đang ở trọ, hay ăn chung với nhóm bạn.",
+      "created_at": "2026-12-07T09:30:00Z"
+    },
+    {
+      "record_id": "mem-0f3b7c2a-9d41-4e8b-a6c5-1e2f3a4b5c04",
+      "kind": "session_summary",
+      "source": "conversation",
+      "text": "Đã chọn lùi mục tiêu hũ Du lịch sang tháng 3.",
+      "created_at": "2026-12-07T09:41:00Z"
+    },
+    {
+      "record_id": "mem-0f3b7c2a-9d41-4e8b-a6c5-1e2f3a4b5c05",
+      "kind": "behavior",
+      "source": "system",
+      "text": "Hay chi dồn trong tuần đầu sau ngày lương.",
+      "created_at": "2026-12-09T19:10:00Z"
+    },
+    {
+      "record_id": "mem-0f3b7c2a-9d41-4e8b-a6c5-1e2f3a4b5c06",
+      "kind": "lesson",
+      "source": "system",
+      "text": "Gợi ý chuyển tiền giữa hai hũ thường được chấp nhận; gợi ý dùng Trả sau thường bị từ chối.",
+      "created_at": "2026-12-09T19:12:00Z"
+    }
+  ],
+  "next_cursor": "eyJuZXh0IjoiYWJjIn0"
+}

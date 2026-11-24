@@ -1,0 +1,30 @@
+{
+  "confirm_token": "eyJ0b29sIjoiZGVsZXRlX215X2RhdGEifQ.c2ln",
+  "expires_at": "2026-12-10T03:02:00Z",
+  "ttl_seconds": 120,
+  "tool": "delete_my_data",
+  "params": {
+    "scope": "all"
+  },
+  "params_hash": "4b507cf20fd4b9241f6181dff4081b868110a30fb36f55087a1ec997328477c8",
+  "preview": {
+    "summary": "Xóa toàn bộ dữ liệu của bạn trong Yofina",
+    "changes": [
+      {
+        "label": "Hồ sơ, hũ, sổ cái, hội thoại",
+        "after": "Xóa hết"
+      },
+      {
+        "label": "Ảnh và tệp CSV đã nạp",
+        "after": "Xóa hết"
+      },
+      {
+        "label": "Bộ nhớ của trợ lý",
+        "after": "Xóa hết"
+      }
+    ],
+    "warnings": [
+      "Không hoàn tác được. Tài khoản đăng nhập vẫn còn và sẽ như tài khoản mới."
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "from": "2026-12-03T03:00:00Z",
+  "to": "2026-12-10T03:00:00Z",
+  "turns": 42,
+  "turns_rejected": 3,
+  "turns_error": 1,
+  "latency_ms": {
+    "p50": 4200,
+    "p95": 9800
+  },
+  "tool_calls": 96,
+  "tool_errors": 2,
+  "tool_error_rate": 0.0208,
+  "rule_fails": 3,
+  "model_calls_by_day": [
+    {
+      "day": "2026-12-08",
+      "model_calls": 61,
+      "cap": 500
+    },
+    {
+      "day": "2026-12-09",
+      "model_calls": 44,
+      "cap": 500
+    },
+    {
+      "day": "2026-12-10",
+      "model_calls": 9,
+      "cap": 500
+    }
+  ],
+  "est_cost_vnd": 27500
+}

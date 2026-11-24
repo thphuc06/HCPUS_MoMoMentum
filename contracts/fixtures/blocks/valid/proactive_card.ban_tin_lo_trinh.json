@@ -1,0 +1,33 @@
+{
+  "v": 1,
+  "id": "proactive_card:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:roadmap_proposed",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Lộ trình mới chờ bạn chọn. Chi hũ Ăn uống tăng khoảng 210.000 ₫ mỗi tuần nên lộ trình đã được sinh lại.",
+  "source": {
+    "tool": "rest:GET /nudges/today",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "proactive_card",
+  "data": {
+    "kind": "roadmap_proposed",
+    "status": "tight",
+    "title": "Lộ trình mới chờ bạn chọn",
+    "reason": "Chi hũ Ăn uống tăng khoảng 210.000 ₫ mỗi tuần nên lộ trình đã được sinh lại.",
+    "nudge_id": "2d4e6f80-1a3c-4e5b-8d7f-9a1b3c5d7e9f",
+    "actions": [
+      {
+        "kind": "open_roadmap",
+        "label": "Xem lộ trình mới"
+      },
+      {
+        "kind": "snooze",
+        "label": "Để sau"
+      },
+      {
+        "kind": "mute_kind",
+        "label": "Ít nhắc loại này"
+      }
+    ]
+  }
+}

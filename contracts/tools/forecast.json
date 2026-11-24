@@ -253,5 +253,26 @@
         "shock_id"
       ]
     }
+  },
+  {
+    "name": "get_behavior_profile",
+    "description": "Lấy hồ sơ hành vi chi tiêu của người dùng do batch đêm tính: các nhận xét (chi dồn sau ngày lương, ngày trong tuần, giờ trong ngày, mức dùng Trả sau, hũ tăng giảm rõ, nhóm hành vi), mỗi nhận xét kèm bằng chứng số lấy từ sổ cái, và MỘT việc cần làm. Chỉ đọc, không ghi gì, không cần xác nhận. Chưa đủ lịch sử thì ready sai và không có nhận xét: nói rõ cần thêm dữ liệu, KHÔNG tự bịa nhận xét. Số trong câu trả lời chỉ lấy từ evidence. Dùng cho 'mình hay tiêu vào lúc nào', 'thói quen chi tiêu của mình thế nào', 'vì sao cuối tháng hay hụt'.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "insight_kind": {
+          "type": "string",
+          "description": "Chỉ lấy nhận xét loại này: payday_cycle, weekday_pattern, time_of_day, bnpl_usage, category_trend hoặc spending_cluster. Bỏ trống: mọi nhận xét."
+        },
+        "jar": {
+          "type": "string",
+          "description": "Chỉ lấy nhận xét gắn với mã hũ này (ví dụ an_uong). Bỏ trống: mọi hũ."
+        }
+      }
+    }
   }
 ]

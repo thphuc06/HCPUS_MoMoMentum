@@ -1,0 +1,135 @@
+{
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "created_at": "2026-12-10T03:00:02Z",
+  "user_ref": "3f9a0c1d2e4b",
+  "intent": "what_if",
+  "outcome": "ok",
+  "duration_ms": 5400,
+  "steps": [
+    {
+      "step": "router",
+      "ms": 480
+    },
+    {
+      "step": "ledger___get_jar_balances",
+      "ms": 140,
+      "status": "ok"
+    },
+    {
+      "step": "forecast___get_forecast",
+      "ms": 310,
+      "status": "ok"
+    },
+    {
+      "step": "forecast___run_scenario",
+      "ms": 1450,
+      "status": "ok"
+    },
+    {
+      "step": "planner___check_suitability",
+      "ms": 60,
+      "status": "ok"
+    },
+    {
+      "step": "analyst",
+      "ms": 2600
+    },
+    {
+      "step": "verifier",
+      "ms": 35
+    }
+  ],
+  "tool_calls": [
+    {
+      "target": "ledger",
+      "tool": "get_jar_balances",
+      "ms": 140,
+      "status": "ok"
+    },
+    {
+      "target": "forecast",
+      "tool": "get_forecast",
+      "ms": 310,
+      "status": "ok"
+    },
+    {
+      "target": "forecast",
+      "tool": "run_scenario",
+      "ms": 1450,
+      "status": "ok"
+    },
+    {
+      "target": "planner",
+      "tool": "check_suitability",
+      "ms": 60,
+      "status": "ok"
+    }
+  ],
+  "rules_checked": [
+    {
+      "rule_id": "numeric_grounding",
+      "label": "Mọi con số có trong kết quả tool",
+      "outcome": "pass"
+    },
+    {
+      "rule_id": "obligations_first",
+      "label": "Nghĩa vụ trước",
+      "outcome": "pass"
+    },
+    {
+      "rule_id": "obligation_to_income",
+      "label": "Nghĩa vụ trên thu nhập",
+      "outcome": "warn",
+      "detail": "Tổng nghĩa vụ vượt ngưỡng tham khảo."
+    },
+    {
+      "rule_id": "emergency_before_investing",
+      "label": "Dự phòng trước đầu tư",
+      "outcome": "skipped"
+    }
+  ],
+  "data_used": [
+    {
+      "label": "Số dư hũ Giải trí",
+      "value": "760.000 ₫",
+      "tool": "ledger___get_jar_balances",
+      "as_of": "2026-12-10T03:00:00Z"
+    },
+    {
+      "label": "Dự báo 30 ngày của hũ Giải trí",
+      "tool": "forecast___get_forecast",
+      "as_of": "2026-11-21T19:00:03Z"
+    },
+    {
+      "label": "Kịch bản mua một lần 500.000 ₫",
+      "tool": "forecast___run_scenario"
+    }
+  ],
+  "confidence": {
+    "band": "medium",
+    "reasons": [
+      "Có 47 ngày dữ liệu.",
+      "Độ phủ dữ liệu 100%.",
+      "Khoảng dự báo đã được đo trên các tuần gần nhất."
+    ]
+  },
+  "blocks_emitted": [
+    {
+      "id": "forecast_timeline:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:giai_tri:what_if",
+      "type": "forecast_timeline"
+    },
+    {
+      "id": "options:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+      "type": "options"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5200,
+    "output_tokens": 640,
+    "model_calls": 3,
+    "cache_read_tokens": 1024
+  },
+  "est_cost_vnd": 655,
+  "pii_masked": true,
+  "user_id": "sub-minh"
+}

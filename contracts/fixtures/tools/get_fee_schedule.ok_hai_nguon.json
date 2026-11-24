@@ -1,0 +1,31 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "product_code": "bnpl_sim",
+    "product_label": "Trả sau (mô phỏng)",
+    "fees": [
+      {
+        "fee_type": "monthly_service_fee",
+        "amount_vnd": 33000,
+        "period": "per_month",
+        "condition_code": "month_has_transaction",
+        "condition_note": "Tính một lần trong tháng nếu tháng đó có ít nhất một giao dịch bằng hạn mức.",
+        "source_name": "Biểu phí công khai của sản phẩm trả sau, dùng làm ví dụ cho sản phẩm mô phỏng",
+        "source_url": "https://example.invalid/bieu-phi",
+        "effective_from": "2026-03-31"
+      },
+      {
+        "fee_type": "late_payment_fee",
+        "amount_vnd": 0,
+        "period": "once",
+        "condition_code": "overdue",
+        "condition_note": "Ví dụ cho hợp đồng, không có trong db/seed: khoản đến hạn chưa trả được cộng vào kỳ sau, không thu phí phạt.",
+        "source_name": "Điều khoản sản phẩm Trả sau (mô phỏng) của bản demo",
+        "source_url": "https://example.invalid/dieu-khoan-tra-sau",
+        "effective_from": "2026-11-01"
+      }
+    ]
+  }
+}

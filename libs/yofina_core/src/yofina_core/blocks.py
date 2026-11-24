@@ -28,6 +28,7 @@ Quy tắc `id` (ổn định trong một lượt, cùng id thì khối sau thay 
 - resilience_score: `resilience_score:{trace_id}`; stress_result: `stress_result:{trace_id}:{shock_id}`
 - roadmap: `roadmap:{trace_id}:v{version}`; roadmap_diff: `roadmap_diff:{trace_id}:v{from}-v{to}`
 - review_list: `review_list:{trace_id}:{mode}`
+- behavior_insight: `behavior_insight:{trace_id}:{insight_id}`; citation: `citation:{trace_id}` (phase 5)
 """
 
 from __future__ import annotations
@@ -331,11 +332,12 @@ class ForecastTimelineBlock(_BlockBase):
 
 # --- proactive_card ------------------------------------------------------------------------
 ProactiveKind = Literal[
-    "runout_warning", "obligation_due", "salary_pending", "review_needed", "low_data"
-]
+    "runout_warning", "obligation_due", "salary_pending", "review_needed", "low_data",
+    "roadmap_proposed", "resilience_drop", "behavior_insight",
+]  # fmt: skip
 ProactiveActionKind = Literal[
     "open_forecast", "confirm_salary", "review_unclassified", "open_obligations",
-    "ask_why", "snooze", "mute_kind",
+    "ask_why", "snooze", "mute_kind", "open_roadmap", "open_resilience", "open_profile",
 ]  # fmt: skip
 
 
@@ -352,6 +354,7 @@ class ProactiveCardData(_Strict):
     title: Annotated[str, Field(min_length=1, max_length=80)]
     reason: Annotated[str, Field(min_length=1, max_length=200)]
     jar_code: JarCode | None = None
+    nudge_id: Uuid | None = None  # phase 5: bản tin của cổng giá trị (dòng `nudges`), để "Để sau" và "Ít nhắc loại này" gửi phản hồi
     actions: Annotated[list[ProactiveAction], Field(min_length=1, max_length=4)]
 
 
@@ -1193,6 +1196,200 @@ class ReviewListBlock(_BlockBase):
     data: ReviewListData
 
 
+# --- phase 5: nhận xét hành vi, trích dẫn ---------------------------------------------------------------
+BehaviorInsightKind = Literal[
+    "payday_cycle", "weekday_pattern", "time_of_day", "bnpl_usage", "category_trend", "spending_cluster",
+]  # fmt: skip
+EvidenceUnit = Literal["vnd", "percent", "ratio", "days", "count", "hour", "weekday"]
+InsightHeadline = Annotated[str, Field(min_length=1, max_length=160)]
+
+
+class BehaviorEvidence(_Strict):
+    """Một con số làm bằng chứng cho nhận xét, đọc từ sổ cái trong cửa sổ `period_from`..`period_to`."""
+
+    key: SlugKey
+    label: Annotated[str, Field(min_length=1, max_length=80)]
+    value: Number
+    unit: EvidenceUnit
+    period_from: IsoDate | None = None
+    period_to: IsoDate | None = None
+
+    @model_validator(mode="after")
+    def _unit_matches_value(self) -> BehaviorEvidence:
+        """Tiền và số đếm là số nguyên không âm (tiền có thể âm chỉ ở dòng sổ cái, không ở đây); tỷ lệ, phần trăm, giờ, thứ
+        nằm trong khoảng của đơn vị; cửa sổ không ngược."""
+        v = self.value
+        if self.unit in ("vnd", "count", "hour", "weekday") and v != int(v):
+            raise ValueError("bằng chứng đơn vị vnd, count, hour, weekday phải là số nguyên")
+        if self.unit in ("vnd", "count", "days") and v < 0:
+            raise ValueError("bằng chứng đơn vị vnd, count, days không âm")
+        if self.unit == "ratio" and not 0 <= v <= 1:
+            raise ValueError("ratio nằm trong 0..1")
+        if self.unit == "percent" and not 0 <= v <= 100:
+            raise ValueError("percent nằm trong 0..100")
+        if self.unit == "hour" and not 0 <= v <= 23:
+            raise ValueError("hour nằm trong 0..23")
+        if self.unit == "weekday" and not 1 <= v <= 7:
+            raise ValueError("weekday là 1 (thứ Hai) tới 7 (Chủ nhật)")
+        if self.period_from and self.period_to and self.period_from > self.period_to:
+            raise ValueError("period_from không được sau period_to")
+        return self
+
+
+class BehaviorInsight(_Strict):
+    insight_id: SlugKey
+    kind: BehaviorInsightKind
+    headline: InsightHeadline
+    detail: Annotated[str, Field(min_length=1, max_length=280)] | None = None
+    jar_code: JarCode | None = None
+    evidence: Annotated[list[BehaviorEvidence], Field(min_length=1, max_length=6)]
+    confidence: ConfidenceBand
+    ai_generated: bool
+
+    @model_validator(mode="after")
+    def _evidence_keys_unique(self) -> BehaviorInsight:
+        if len({e.key for e in self.evidence}) != len(self.evidence):
+            raise ValueError("key của bằng chứng phải duy nhất trong một nhận xét")
+        return self
+
+
+class BehaviorNextStep(_Strict):
+    """MỘT việc cần làm; `action` (tùy chọn) thực hiện bằng luồng xác nhận, bấm vào không tự ghi gì."""
+
+    label: Annotated[str, Field(min_length=1, max_length=80)]
+    reason: Annotated[str, Field(min_length=1, max_length=200)]
+    action: RoadmapStepAction | None = None
+
+
+class BehaviorFeatures(_Strict):
+    history_days: Annotated[int, Field(ge=0)]
+    avg_daily_spend_vnd: Vnd | None = None
+    first_week_after_payday_share: Ratio | None = None
+    weekend_share: Ratio | None = None
+    evening_share: Ratio | None = None
+    top_weekday: Annotated[int, Field(ge=1, le=7)] | None = None
+    bnpl_purchases_per_month: Annotated[float, Field(ge=0, le=1000)] | None = None
+    bnpl_share: Ratio | None = None
+
+
+class BehaviorSegment(_Strict):
+    segment_id: SlugKey
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+
+
+class BehaviorProfileData(_Strict):
+    """Hồ sơ hành vi ở một ngày mô phỏng (bảng `behavior_profiles`). Chưa sẵn sàng (`ready` sai) không phải lỗi."""
+
+    ready: bool
+    app_date: IsoDate
+    computed_at: IsoDateTime | None = None
+    config_version: Annotated[str, Field(min_length=1, max_length=40)] | None = None
+    headline: InsightHeadline
+    history_days: Annotated[int, Field(ge=0)]
+    min_history_days: Annotated[int, Field(ge=1)] | None = None
+    features: BehaviorFeatures | None = None
+    segment: BehaviorSegment | None = None
+    insights: Annotated[list[BehaviorInsight], Field(max_length=6)]
+    next_step: BehaviorNextStep | None = None
+
+    @model_validator(mode="after")
+    def _ready_consistent(self) -> BehaviorProfileData:
+        """Sẵn sàng thì có thời điểm tính, phiên bản cấu hình, đặc trưng và ít nhất một nhận xét; chưa sẵn sàng thì không có
+        nhận xét, không có việc cần làm và nói cần bao nhiêu ngày. Id nhận xét duy nhất; đặc trưng cùng số ngày lịch sử."""
+        if self.ready:
+            if not (self.computed_at and self.config_version and self.features and self.insights and self.next_step):
+                raise ValueError(
+                    "hồ sơ sẵn sàng phải có computed_at, config_version, features, next_step và ít nhất một nhận xét"
+                )
+            if self.features.history_days != self.history_days:
+                raise ValueError("features.history_days phải bằng history_days")
+        else:
+            if self.insights or self.next_step is not None:
+                raise ValueError("hồ sơ chưa sẵn sàng thì không có nhận xét hay việc cần làm")
+            if self.min_history_days is None:
+                raise ValueError("hồ sơ chưa sẵn sàng phải nói min_history_days")
+        if len({i.insight_id for i in self.insights}) != len(self.insights):
+            raise ValueError("insight_id phải duy nhất trong hồ sơ")
+        return self
+
+
+class BehaviorInsightData(_Strict):
+    insight: BehaviorInsight
+    next_step: BehaviorNextStep
+    app_date: IsoDate
+    computed_at: IsoDateTime
+    history_days: Annotated[int, Field(ge=0)]
+    config_version: Annotated[str, Field(min_length=1, max_length=40)] | None = None
+
+
+class BehaviorInsightBlock(_BlockBase):
+    type: Literal["behavior_insight"]
+    data: BehaviorInsightData
+
+
+FeeType = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")]
+ProductCode = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+
+
+class FeeLine(_Strict):
+    """Một dòng biểu phí có cấu trúc (bảng `fee_schedules`), khớp `FeeLine` của `contracts/tools/knowledge.results.schema.json`."""
+
+    fee_type: FeeType
+    amount_vnd: Vnd | None = None
+    rate_percent: Annotated[float, Field(ge=0)] | None = None
+    period: Literal["per_month", "per_transaction", "once"]
+    condition_code: Literal["always", "month_has_transaction", "overdue"]
+    condition_note: Annotated[str, Field(max_length=200)] | None = None
+    source_name: Annotated[str, Field(max_length=200)]
+    source_url: Annotated[str, Field(pattern=r"^https://")]
+    effective_from: IsoDate
+
+
+class FeeScheduleData(_Strict):
+    """`data` của `knowledge___get_fee_schedule` (cũng là `fees` của `GET /credit-line`): đầu vào của `build_citation`."""
+
+    product_code: ProductCode
+    product_label: Annotated[str, Field(max_length=60)]
+    fees: Annotated[list[FeeLine], Field(min_length=1, max_length=20)]
+
+
+class GetFeeScheduleOk(_Strict):
+    status: Literal["OK"]
+    as_of: IsoDateTime
+    app_date: IsoDate
+    data: FeeScheduleData
+
+
+class CitationItem(_Strict):
+    """Một nguồn của biểu phí (chép từ các `FeeLine` cùng tên nguồn, đường dẫn và ngày hiệu lực) kèm các loại phí của nó."""
+
+    fee_types: Annotated[list[FeeType], Field(min_length=1, max_length=20)]
+    source_name: Annotated[str, Field(min_length=1, max_length=200)]
+    source_url: Annotated[str, Field(pattern=r"^https://", max_length=500)]
+    effective_from: IsoDate
+    excerpt: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+
+
+class CitationData(_Strict):
+    product_code: ProductCode
+    product_label: Annotated[str, Field(min_length=1, max_length=60)]
+    items: Annotated[list[CitationItem], Field(min_length=1, max_length=5)]
+
+    @model_validator(mode="after")
+    def _sources_unique(self) -> CitationData:
+        keys = [(i.source_name, i.source_url, i.effective_from) for i in self.items]
+        if len(set(keys)) != len(keys):
+            raise ValueError("mỗi nguồn (tên, đường dẫn, ngày hiệu lực) chỉ một mục")
+        fee_types = [t for i in self.items for t in i.fee_types]
+        if len(set(fee_types)) != len(fee_types):
+            raise ValueError("mỗi loại phí thuộc đúng một nguồn")
+        return self
+
+class CitationBlock(_BlockBase):
+    type: Literal["citation"]
+    data: CitationData
+
+
 Block = Annotated[
     JarSummaryBlock
     | ConfirmBlock
@@ -1214,7 +1411,9 @@ Block = Annotated[
     | StressResultBlock
     | RoadmapBlock
     | RoadmapDiffBlock
-    | ReviewListBlock,
+    | ReviewListBlock
+    | BehaviorInsightBlock
+    | CitationBlock,
     Field(discriminator="type"),
 ]
 BLOCK_ADAPTER: TypeAdapter[Any] = TypeAdapter(Block)
@@ -1242,6 +1441,8 @@ BLOCK_MODELS: dict[str, type[_BlockBase]] = {
     "roadmap": RoadmapBlock,
     "roadmap_diff": RoadmapDiffBlock,
     "review_list": ReviewListBlock,
+    "behavior_insight": BehaviorInsightBlock,
+    "citation": CitationBlock,
 }
 
 
@@ -2070,5 +2271,115 @@ def build_review_list(
         trace_id=trace_id,
         fallback_text=_clip(d.headline, 280),
         source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+# --- dựng khối phase 5 ---------------------------------------------------------------------
+def behavior_insight_data(
+    profile: Mapping[str, Any] | BehaviorProfileData, insight_id: str | None = None
+) -> BehaviorInsightData:
+    """Rút `data` của khối `behavior_insight` từ hồ sơ ĐÃ SẴN SÀNG (kết quả `forecast___get_behavior_profile` hoặc
+    `GET /profile/behavior`): nhận xét `insight_id` (vắng: nhận xét đầu tiên, tức quan trọng nhất) và việc cần làm của hồ sơ.
+    Hồ sơ chưa sẵn sàng hoặc không có nhận xét đó thì `ValueError` (agent trả câu "chưa đủ dữ liệu" thay vì khối)."""
+    p = _data_model(BehaviorProfileData, profile)
+    if not p.ready or p.next_step is None or p.computed_at is None:
+        raise ValueError("hồ sơ hành vi chưa sẵn sàng")
+    found = next((i for i in p.insights if insight_id in (None, i.insight_id)), None)
+    if found is None:
+        raise ValueError(f"không có nhận xét {insight_id!r} trong hồ sơ")
+    return BehaviorInsightData(
+        insight=found,
+        next_step=p.next_step,
+        app_date=p.app_date,
+        computed_at=p.computed_at,
+        history_days=p.history_days,
+        config_version=p.config_version,
+    )
+
+
+def build_behavior_insight(
+    *,
+    data: Mapping[str, Any] | BehaviorInsightData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> BehaviorInsightBlock:
+    """Bọc `BehaviorInsightData` (thường từ `behavior_insight_data`) thành khối. `fallback_text` là câu nhận xét kèm việc cần
+    làm, cả hai do code hoặc batch đêm dựng (đã qua NumericGrounding), LLM của lượt chat không viết."""
+    d = _data_model(BehaviorInsightData, data)
+    return BehaviorInsightBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"behavior_insight:{trace_id}:{d.insight.insight_id}",
+        type="behavior_insight",
+        trace_id=trace_id,
+        fallback_text=_clip(f"{d.insight.headline} Việc nên làm: {d.next_step.label}.", 280),
+        source=_source(source_tool, as_of, app_date),
+        data=d,
+    )
+
+
+#: Tool mà khối `citation` lấy nguồn (khối không có đường dẫn nào khác).
+CITATION_SOURCE_TOOL = "knowledge___get_fee_schedule"
+CITATION_MAX_ITEMS = 5
+
+
+def citation_data(fee_schedule: Mapping[str, Any] | FeeScheduleData, fee_types: Iterable[str] | None = None) -> CitationData:
+    """Rút `data` của khối `citation` từ `FeeScheduleData` (`data` của `knowledge___get_fee_schedule`): gom các dòng phí theo
+    (tên nguồn, đường dẫn, ngày hiệu lực) theo thứ tự xuất hiện, mỗi nhóm một mục với các loại phí của nó; tối đa 5 nguồn đầu.
+    `fee_types` (vắng: mọi dòng) chỉ giữ các loại phí câu trả lời nhắc tới; loại không có trong kết quả thì `ValueError` (agent
+    không trích dẫn được phí mà tool không trả). `excerpt` là `condition_note` của dòng khi nguồn chỉ có một loại phí."""
+    fs = _data_model(FeeScheduleData, fee_schedule)
+    lines = list(fs.fees)
+    if fee_types is not None:
+        wanted = list(dict.fromkeys(fee_types))
+        known = {f.fee_type for f in lines}
+        missing = [t for t in wanted if t not in known]
+        if missing or not wanted:
+            raise ValueError(f"không có loại phí {missing or wanted!r} trong kết quả get_fee_schedule")
+        lines = [f for f in lines if f.fee_type in wanted]
+    groups: dict[tuple[str, str, str], list[FeeLine]] = {}
+    for f in lines:
+        groups.setdefault((f.source_name, f.source_url, f.effective_from), []).append(f)
+    items = []
+    for (name, url, eff), fees in list(groups.items())[:CITATION_MAX_ITEMS]:
+        note = fees[0].condition_note if len(fees) == 1 else None
+        items.append(
+            CitationItem(
+                fee_types=[f.fee_type for f in fees],
+                source_name=name,
+                source_url=url,
+                effective_from=eff,
+                excerpt=note or None,
+            )
+        )
+    return CitationData(product_code=fs.product_code, product_label=fs.product_label, items=items)
+
+
+def build_citation(
+    *,
+    result: Mapping[str, Any] | GetFeeScheduleOk,
+    trace_id: str,
+    fee_types: Iterable[str] | None = None,
+    block_id: str | None = None,
+) -> CitationBlock:
+    """Dựng khối `citation` từ kết quả OK của `knowledge___get_fee_schedule` (cả `status`, `as_of`, `app_date`, `data`): nguồn
+    của khối là chính lần gọi tool đó, mục là `citation_data(result.data, fee_types)`. `fallback_text` nêu nguồn đầu tiên và
+    ngày hiệu lực; không có số tiền (số nằm ở câu trả lời, lấy từ `amount_vnd`)."""
+    r = _data_model(GetFeeScheduleOk, result)
+    d = citation_data(r.data, fee_types)
+    first = d.items[0]
+    more = f" và {len(d.items) - 1} nguồn khác" if len(d.items) > 1 else ""
+    since = "/".join(reversed(first.effective_from.split("-")))
+    text = f"Nguồn biểu phí {d.product_label}: {first.source_name}, hiệu lực từ {since}{more}."
+    return CitationBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"citation:{trace_id}",
+        type="citation",
+        trace_id=trace_id,
+        fallback_text=_clip(text, 280),
+        source=Source(tool=CITATION_SOURCE_TOOL, as_of=r.as_of, app_date=r.app_date),
         data=d,
     )

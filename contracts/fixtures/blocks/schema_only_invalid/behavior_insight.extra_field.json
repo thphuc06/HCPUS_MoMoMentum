@@ -1,0 +1,65 @@
+{
+  "v": 1,
+  "id": "behavior_insight:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:chi_don_sau_luong",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "7 ngày đầu sau ngày lương bạn chi 46% tổng chi của cả kỳ. Việc nên làm: Để riêng 600.000 ₫ cho hũ Ăn uống ngay khi lương về.",
+  "source": {
+    "tool": "forecast___get_behavior_profile",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "behavior_insight",
+  "data": {
+    "insight": {
+      "insight_id": "chi_don_sau_luong",
+      "kind": "payday_cycle",
+      "headline": "7 ngày đầu sau ngày lương bạn chi 46% tổng chi của cả kỳ.",
+      "detail": "Kỳ lương 05/11, 7 ngày đầu bạn chi 2.580.000 ₫.",
+      "evidence": [
+        {
+          "key": "first_week_share",
+          "label": "Phần chi trong 7 ngày đầu sau lương",
+          "value": 46.0,
+          "unit": "percent",
+          "period_from": "2026-09-22",
+          "period_to": "2026-11-21"
+        },
+        {
+          "key": "first_week_days",
+          "label": "Số ngày tính là tuần đầu",
+          "value": 7.0,
+          "unit": "days"
+        },
+        {
+          "key": "first_week_spend_vnd",
+          "label": "Chi 7 ngày đầu kỳ lương 05/11",
+          "value": 2580000.0,
+          "unit": "vnd",
+          "period_from": "2026-11-05",
+          "period_to": "2026-11-11"
+        }
+      ],
+      "confidence": "medium",
+      "ai_generated": true,
+      "model_note": "tóm tắt bởi model"
+    },
+    "next_step": {
+      "label": "Để riêng 600.000 ₫ cho hũ Ăn uống ngay khi lương về",
+      "reason": "Chi dồn vào tuần đầu làm hũ Ăn uống hay hụt trước kỳ lương.",
+      "action": {
+        "tool": "schedule_nudge",
+        "params": {
+          "op": "create",
+          "kind": "runout_warning",
+          "fire_on": "2026-12-05",
+          "jar_code": "an_uong",
+          "note": "Để riêng tiền ăn tuần đầu kỳ lương"
+        }
+      }
+    },
+    "app_date": "2026-11-21",
+    "computed_at": "2026-12-09T19:10:00Z",
+    "history_days": 60,
+    "config_version": "behavior-2026-12"
+  }
+}

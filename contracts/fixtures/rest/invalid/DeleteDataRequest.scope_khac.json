@@ -1,0 +1,7 @@
+{
+  "tool": "delete_my_data",
+  "params": {
+    "scope": "transactions"
+  },
+  "confirm_token": "a.b"
+}

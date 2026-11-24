@@ -15,17 +15,28 @@
       }
     },
     "TraceStep": {
-      "description": "Thời lượng một bước của lượt.",
+      "description": "Thời lượng một bước của lượt. Phase 5: bước có `step` là TÊN ĐẦY ĐỦ của tool qua Gateway (`<target>___<tool>`, có ba dấu gạch dưới) là MỘT lần gọi tool, kèm `status` và `code` khi lỗi; màn trace (`GET /ops/traces/{trace_id}`) và tỷ lệ lỗi tool (`GET /ops/summary`) đọc từ đây, không cần cột mới. Bước khác (router, verifier...) không có `status`.",
       "type": "object",
       "required": ["step", "ms"],
       "additionalProperties": false,
       "properties": {
         "step": {
-          "description": "Tên bước: guardrail_in, router, tools, orchestrator, analyst, verifier, composer, guardrail_out... (mở).",
+          "description": "Tên bước: guardrail_in, router, tools, orchestrator, analyst, verifier, composer, guardrail_out... (mở), hoặc tên đầy đủ của một tool (`ledger___get_jar_balances`).",
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]{0,39}$"
         },
-        "ms": { "type": "integer", "minimum": 0 }
+        "ms": { "type": "integer", "minimum": 0 },
+        "status": {
+          "description": "Chỉ với bước là một lần gọi tool: ok, error (tool trả ERROR hoặc Lambda lỗi), denied (Cedar từ chối).",
+          "type": "string",
+          "enum": ["ok", "error", "denied"]
+        },
+        "code": {
+          "description": "Mã lỗi (`ErrorCode`) khi `status` là error.",
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "maxLength": 40
+        }
       }
     },
     "TokenUsage": {
@@ -51,7 +62,7 @@
       "additionalProperties": false,
       "properties": {
         "intent": {
-          "description": "Ý định router đã nhận ra (yofina_core.wallet.INTENTS). Vắng với lượt không qua router.",
+          "description": "Ý định router đã nhận ra (yofina_core.wallet.AUDIT_INTENTS: các ý định đã cài và bốn ý định phase 5). Vắng với lượt không qua router.",
           "type": "string",
           "pattern": "^[a-z][a-z_]*$",
           "maxLength": 32
