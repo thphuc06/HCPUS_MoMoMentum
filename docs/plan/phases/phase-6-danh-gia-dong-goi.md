@@ -316,4 +316,46 @@ Hạn trả lời đề xuất: 26/11 cho Q1–Q9 (ảnh hưởng đợt 1), 2/1
 
 ## Kết quả thực hiện
 
-(Điền khi đóng phase.)
+(Điền đủ khi đóng phase. Các mục dưới ghi theo từng luồng khi xong.)
+
+### Luồng K: agent như người tư vấn (K1, K2, K3), 25/11 (Runtime v27, Amplify job 21)
+
+**Đã làm** (nhánh `p6/advisor`, commit 955c354, merge 3a30d7c):
+
+- **K1**: khối mới `reasoning` (`contracts/blocks/reasoning.schema.json`, `yofina_core.blocks.build_reasoning`, Zod sinh, fixture): 0 đến 5 bước `seen`, `why`, `effect` kèm `basis` (tool hoặc luật) và một kết luận tùy chọn. Analyst của what-if (`Analysis.reasoning`, `.conclusion`) và planner lộ trình trong chat (`AdvisedSketch`, `advise=True`) trả lập luận NHƯ DỮ LIỆU trong chính lời gọi đã có: không thêm lượt gọi model (what-if vẫn 3 lượt, lộ trình vẫn 1 lượt planner). Job sinh lại lộ trình không đổi. `agent/src/yofina_agent/advisor.py` kiểm bằng mã: bước có số không căn cứ (NumericGrounding với tập số của lượt; ở lộ trình là bộ kiểm chặt của bước) bị bỏ, không trả lại cho model sửa; căn cứ chỉ hợp lệ khi tool trả OK trong lượt hoặc luật đã được `check_suitability` xét (không `skipped`); nhãn căn cứ do mã dựng; chữ lập luận qua Guardrail đầu ra. Phát dần: một bản `complete: false` cho mỗi bước rồi bản `complete: true` (cùng id), trước khối `options` (what-if) hoặc thẻ lộ trình.
+- **K2**: kết luận một câu phải trỏ đúng phương án mang nhãn "Gợi ý" (sau khi mã đã bỏ gợi ý vì quỹ dự phòng hay hũ thiếu; id phương án đổi theo hũ thật thì theo id mới) hoặc một bước của bản lộ trình ĐÃ LƯU; `personal` (`memory`, `behavior`) chỉ giữ khi nguồn có thật trong lượt, không thì bỏ câu. What-if khoản chi và lộ trình trong chat đọc `forecast___get_behavior_profile` (tool có sẵn, song song với kế hoạch). Bộ nhớ chỉ dùng ở what-if như trước (lộ trình chưa nhận bộ nhớ, theo bảng cắt của phase 6).
+- **K3**: `frontend/src/chat/ReasoningView.tsx`: lần đầu thấy khối thì các bước hiện từng dòng (900 ms), có kết luận thì thu lại thành câu kết luận (nền tint, biểu tượng bóng đèn) và Disclosure "Xem cách mình cân nhắc"; vùng `aria-live="polite"` giữ nguyên suốt nên trình đọc màn hình đọc từng bước rồi đọc kết luận; giảm chuyển động hoặc đã thấy khối trong phiên thì hiện ngay trạng thái cuối; căn cứ ghi bằng chữ ("Căn cứ: Kết quả mô phỏng · Các khoản đến hạn"). Ảnh 390×844 trên `dev:mock` (câu "neu mua…"): [đang cân nhắc, sáng](../../research/ui-round1/chat-can-nhac-tuvan-sang.png), [tối](../../research/ui-round1/chat-can-nhac-tuvan-toi.png); [kết luận, sáng](../../research/ui-round1/chat-ket-luan-tuvan-sang.png), [tối](../../research/ui-round1/chat-ket-luan-tuvan-toi.png).
+- Cấu hình: `analyst_max_tokens` 1800 → 2600 (lập luận thêm khoảng 700 token đầu ra, bản cũ đã dùng 1150 đến 1320), `max_tool_calls_per_turn` 16 → 18 (thêm lần đọc hồ sơ hành vi); phần `narrative` của Analyst rút từ 2–4 câu (450 ký tự) còn 2–3 câu (350 ký tự), lý do chọn phương án để ở lập luận.
+- Test: unit 3922 passed (thêm `tests/unit/agent/test_advisor.py` 24 ca với LLM giả: có lập luận, bước có số không căn cứ bị loại, căn cứ không có thật bị loại, kết luận sai đích/số/nguồn bị bỏ, không có lập luận thì lượt như cũ, Guardrail lọc chữ lập luận, lộ trình chat và job; `tests/unit/test_contracts_phase6.py` 12 ca bất biến hợp đồng); vitest 990 passed, 4 skipped (thêm `ReasoningView.test.tsx` 7 ca), `tsc -b`, build, `check:bundle` sạch.
+
+**Ca kiểm (mỗi ca một lần, `minh` đặt lại trước mỗi ca)**:
+
+| Ca | Kết quả | Lượt gọi model | Độ trễ |
+|---|---|---|---|
+| `whatif-bnpl` | Đạt (grounding, schema, suitability, trajectory 100%) | 3 (như cũ) | Trọn câu 37,9 s. Analyst 16,3 s với 2.013 token ra; trước đó 9,1–10,5 s với 1.150–1.320 token (log v26) |
+| `roadmap-create-emergency-fund` | Đạt (`roadmap_shape` 1/1, 0 bước vi phạm) | 1 planner (như cũ) | Trọn câu 28,0 s; chặng phác thảo 16,5 s, cả lần lập 19,8 s; trước đó phác thảo 10,1–11,7 s, cả lần lập 12,5–18,0 s (log v26) |
+
+Log `advisor_reasoning`: what-if 4 bước model trả, giữ 3 (1 bỏ vì căn cứ), kết luận giữ; lộ trình 4 bước, giữ 2 (2 bỏ vì số không căn cứ), kết luận giữ.
+
+Lập luận nguyên văn, `whatif-bnpl` ("Nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao"):
+
+1. Thấy: "Mua tai nghe bằng Trả sau sẽ khiến hũ Nghĩa vụ hụt, đến ngày 05/12 phải trả tổng 2.200.000 ₫ trong khi số dư dự kiến chỉ 1.450.000 ₫." Vì sao: "Bạn sẽ thiếu 750.000 ₫ đúng ngày đến hạn, dễ bị trễ thanh toán." Ảnh hưởng: "Nghiêng về không dùng Trả sau cho khoản này." Căn cứ: Kết quả mô phỏng · Các khoản đến hạn.
+2. Thấy: "Hũ Giải trí còn 760.000 ₫, hũ Du lịch còn 1.800.000 ₫ — đều có thể dùng để mua tai nghe 1.200.000 ₫." Vì sao: "Tai nghe là đồ điện tử tùy ý, phù hợp lấy từ hũ giải trí hoặc du lịch hơn là vay." Ảnh hưởng: "Mở ra phương án dùng tiền hũ thay vì Trả sau." Căn cứ: Số dư các hũ · Hũ nguồn đủ tiền.
+3. Thấy: "Từ lịch sử chi tiêu, bạn đã dùng Trả sau 2 lần trong 47 ngày qua, chiếm 14% chi tiêu." Vì sao: "Thói quen dùng Trả sau khá thường xuyên, dễ tích lũy nghĩa vụ mà không để ý." Ảnh hưởng: "Cần thận trọng hơn, ưu tiên dùng tiền sẵn có." Căn cứ: Thói quen chi tiêu.
+
+Kết luận: "Nên dùng tiền hũ Du lịch thay vì Trả sau để tránh hụt Nghĩa vụ ngày 05/12 và không đẩy tỷ lệ nợ vốn đã ở mức 60% lên cao hơn." (`option_id` `switch_du_lich`, `personal` `behavior`).
+
+Lập luận nguyên văn, `roadmap-create-emergency-fund`:
+
+1. Thấy: "Hũ Ăn uống chỉ còn 380.000 ₫ trong khi mức thiết yếu tháng là 2.956.000 ₫." Vì sao: "Hũ thiết yếu sắp cạn, cần chuyển bổ sung từ hũ có dư trước kỳ lương." Ảnh hưởng: "Thêm bước chuyển từ hũ Giải trí sang Ăn uống trong giai đoạn đầu." Căn cứ: Số dư các hũ · Hũ nguồn đủ tiền.
+2. Thấy: "Điểm chống chịu thành phần vay mượn ở mức yếu, hệ thống ghi nhận dùng Trả sau hai lần gần đây." Vì sao: "Thói quen Trả sau làm tăng nghĩa vụ tương lai, cần giảm chi không thiết yếu để bù." Ảnh hưởng: "Đề xuất giảm chi Giải trí và tăng phần chia cho Ăn uống từ kỳ lương sau." Căn cứ: Thói quen chi tiêu · Điểm chống chịu · Phương án phân bổ.
+
+Kết luận: "Bắt đầu từ bước chuyển tiền bổ sung hũ Nghĩa vụ ngay hôm nay vì khoản đến hạn 23/11 chỉ còn hai ngày nữa." (`step_id` `bo_sung_nghia_vu`).
+
+**Còn lại**:
+
+- Độ trễ tăng khoảng 6–7 s ở Analyst và 5–6 s ở phác thảo lộ trình vì thêm token ra. Lập luận chỉ hiện sau khi lời gọi xong và qua Verifier (không stream được đầu ra có cấu trúc qua `yofina_core.llm`); muốn lập luận hiện trong lúc chờ thì cần đường gọi stream có cấu trúc (ConverseStream, đọc dần JSON của tool) ở `yofina_core.llm`, làm cùng D2.
+- Kiểm tra trước khi chi (ý định `affordability`, thẻ `affordability_card`) chưa có lập luận: đường này không có Analyst, chỉ có người viết Nova Lite chữ tự do, thời hạn 2 s. Muốn có thì đổi lời gọi đó sang đầu ra có cấu trúc và nới thời hạn (cần chủ dự án chọn).
+- Kiểm bằng mã không bắt được lập luận nói khác bản đã lưu: ở lộ trình, bước 1 nói "chuyển từ hũ Giải trí sang Ăn uống" trong khi bản lưu chuyển từ hũ Đi lại (lập luận viết cùng bản phác thảo, mã chỉ kiểm số và căn cứ). Kết luận what-if khai `personal: behavior` nhưng câu không nhắc thói quen (mã chỉ kiểm nguồn có thật, không kiểm câu có dùng).
+- Bộ chấm `evals/run.py` chưa kiểm số trong chữ của khối `reasoning` (chỉ chữ trả lời và phương án) và gom mọi bản phát dần như nhiều khối; nên thêm khi sửa bộ chấm.
+- K4 (gợi ý hỏi tiếp) không làm.

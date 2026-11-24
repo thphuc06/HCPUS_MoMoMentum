@@ -193,6 +193,8 @@ Thứ tự khi deploy: build zip (`pipelines/roadmap/README.md`), `uv run script
 
 **Cập nhật Memory 24/11 gần nửa đêm (Kiro, `main` sau merge `p5/mem-extract`, mã 7e54131 trên nhánh, ac2a4fe trên `main` sau `git pull --rebase`)**: `cdk diff YofinaAgent` (change set đọc-thôi) chỉ có `[~] AWS::IAM::Policy` (role của Memory: Nova Lite thay bằng Claude Haiku 4.5) và `[~] AWS::BedrockAgentCore::Memory` (`MemoryStrategies`: thêm bước hợp nhất, đổi chỉ dẫn và model của hai strategy cùng tên), không replace hay destroy; `scripts/agent_deploy.py --skip-build` (zip agent không đổi) -> Runtime `yofina_agent` vẫn **version 26** `READY`. Memory `yofina_memory` giữ id, `ACTIVE`, `facts_vi`, `preferences_vi` `ACTIVE`. Không thêm hay xóa tài nguyên. Aurora `yofina-db` min 0 / max 2 ACU.
 
+**Deploy 25/11 rạng sáng (Kiro, `main` sau merge `p6/advisor`, merge commit 3a30d7c, luồng K phase 6)**: `cdk diff YofinaAgent` trước khi tải zip: không có khác biệt (chỉ đổi mã agent); `scripts/agent_deploy.py` (zip agent 31,0 MB) -> Runtime `yofina_agent` **version 27** `READY`. Frontend: `print_env.py frontend --write`, build, `check:bundle` sạch, Amplify **job 21** `SUCCEED`. Không thêm hay xóa tài nguyên; không đổi Lambda (khối mới `reasoning` chỉ agent dựng, frontend vẽ). Aurora `yofina-db` min 0 / max 2 ACU; `minh` đã đặt lại sau kiểm.
+
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
 |---|---|---|---|---|
 | Migration `0053_phase5` | Schema Aurora | 5 | Không | Bảng `behavior_profiles`, `data_deletions` (RLS FORCE); cột mới của `nudges` (`value_vnd`, `gate_reason`, `title`, `body`, `outcome`, `outcome_at`); hàm `app_delete_user_data`, `app_nudge_outcome_stats`, `app_ops_list_traces`, `app_ops_get_trace`, `app_ops_summary`, `app_ops_model_calls_by_day` |
