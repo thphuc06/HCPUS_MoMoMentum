@@ -68,6 +68,9 @@ function xTickList(lastX: number): number[] {
   return out
 }
 
+/** Phần bề ngang vùng vẽ mà một nhãn mốc chiếm (chữ 12 px, khung 390 px). */
+export const LABEL_SPAN = 0.34
+
 /** Tầng của nhãn mốc: mốc đứng gần mốc trước (cách dưới `minGap` ngày) lên tầng kế tiếp, tối đa 3 tầng; đủ xa thì về tầng 0. */
 export function stackLevels(xs: readonly number[], minGap = 4, maxLevels = 3): number[] {
   const out: number[] = []
@@ -146,7 +149,8 @@ export function buildChartModel(d: ForecastTimelineData): ChartModel {
   const paydayX = px >= 0 && px <= lastX ? px : null
   const shortfallRange = runout ? { x1: runout.x, x2: Math.max(runout.x, paydayX ?? lastX) } : null
 
-  const eventLevels = stackLevels(events.map((e) => e.x))
+  // Nhãn mốc 12 px rộng khoảng 1/3 vùng vẽ trên khung 390 px: hai mốc cách nhau dưới 1/3 khoảng ngày thì xếp tầng khác nhau.
+  const eventLevels = stackLevels(events.map((e) => e.x), Math.max(4, lastX * LABEL_SPAN))
   return {
     rows,
     lastX,

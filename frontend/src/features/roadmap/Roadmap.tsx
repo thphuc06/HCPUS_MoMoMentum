@@ -4,6 +4,13 @@ import { Button } from '@/components/ui/button'
 import type { RoadmapAlternative, RoadmapData } from '@/contracts/blocks'
 import { useJarNames } from '@/features/common/useJarLookup'
 import { RoadmapStep, STEP_STATUS, type StepActions } from './RoadmapStep'
+import { formatDayMonth } from '@/lib/dates'
+
+/** "21–30/11" khi cùng tháng, "28/11–05/12" khi khác tháng (ngày của server). */
+function formatRange(start: string, end: string): string {
+  if (start === end) return formatDayMonth(start)
+  return start.slice(0, 7) === end.slice(0, 7) ? `${start.slice(8, 10)}–${formatDayMonth(end)}` : `${formatDayMonth(start)}–${formatDayMonth(end)}`
+}
 
 // Nhãn trạng thái phiên bản: nói rõ bản đề xuất CHƯA thay bản đang dùng và đang chờ người dùng chọn.
 export const VERSION_STATUS = {
@@ -32,6 +39,11 @@ export function Roadmap({ data, onAlternative, footer, ...actions }: Props) {
   // Bước chỉ mang mã hũ: tên lấy từ mục tiêu của khối, còn lại từ danh sách hũ của người dùng (Tổng quan).
   const goalNames = useMemo(() => data.goals.map(({ jar }) => [jar.code, jar.name] as const), [data.goals])
   const jarNames = useJarNames(goalNames)
+  // Số thứ tự liên tục trên cả lộ trình: nội dung là một trình tự thật nên đánh số.
+  const { stepIndex, lastStepId } = useMemo(() => {
+    const ids = data.phases.flatMap((phase) => phase.steps.map((step) => step.step_id))
+    return { stepIndex: new Map(ids.map((id, i) => [id, i + 1])), lastStepId: ids.at(-1) }
+  }, [data.phases])
 
   return (
     <section data-block="roadmap" className="space-y-3 rounded-card bg-surface p-4 shadow-card">
@@ -77,13 +89,30 @@ export function Roadmap({ data, onAlternative, footer, ...actions }: Props) {
           </ul>
         </div>
       )}
-      <ol aria-label="Các giai đoạn" className="space-y-3">
-        {data.phases.map((phase) => (
-          <li key={phase.phase_id}>
-            <h4 className="text-small font-semibold text-ink">{phase.title}</h4>
-            {phase.summary && <p className="mt-1 text-small text-ink-2">{phase.summary}</p>}
-            <ol className="mt-2 space-y-2">
-              {phase.steps.map((step) => <RoadmapStep key={step.step_id} step={step} jarNames={jarNames} {...actions} />)}
+      <ol aria-label="Các giai đoạn" className="pt-1">
+        {data.phases.map((phase, phaseIndex) => (
+          <li key={phase.phase_id} className="relative">
+            {/* Dòng thời gian dọc: tiêu đề giai đoạn nằm trên trục, các bước là nút tròn nối bằng đoạn trục. */}
+            <div className="relative pb-3 pl-11">
+              <span aria-hidden className={`absolute bottom-0 left-[15px] w-0.5 bg-line ${phaseIndex > 0 ? 'top-0' : 'top-3'}`} />
+              <span aria-hidden className="absolute top-1.5 left-[11px] size-2.5 rounded-full bg-surface ring-2 ring-line-strong" />
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <h4 className="text-small font-bold text-ink">{phase.title}</h4>
+                <span className="num text-note text-ink-2">{formatRange(phase.start_date, phase.end_date)}</span>
+              </div>
+              {phase.summary && <p className="mt-0.5 text-small text-ink-2">{phase.summary}</p>}
+            </div>
+            <ol aria-label={`Các bước: ${phase.title}`}>
+              {phase.steps.map((step) => (
+                <RoadmapStep
+                  key={step.step_id}
+                  step={step}
+                  index={stepIndex.get(step.step_id) ?? 0}
+                  last={step.step_id === lastStepId}
+                  jarNames={jarNames}
+                  {...actions}
+                />
+              ))}
             </ol>
           </li>
         ))}

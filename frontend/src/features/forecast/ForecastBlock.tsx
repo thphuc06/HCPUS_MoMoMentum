@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { CONFIDENCE_LABEL, jarStatusChip, statusShortChip } from '@/lib/jar'
 import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd, formatVndShort } from '@/lib/format'
 import { diffDays, formatDayMonth } from '@/lib/dates'
+import { useEntranceMotion } from '@/lib/motion'
 import type { ForecastCompare, ForecastTimelineData } from '@/contracts/blocks'
 import { buildChartModel, rowAt } from './model'
 
@@ -32,6 +33,17 @@ export function forecastSummary(d: ForecastTimelineData): string {
   if (d.status === 'tight')
     return `Hũ ${name} sát: dự kiến còn rất ít tiền trước kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
   return `Hũ ${name} dự kiến đủ tới kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
+}
+
+/**
+ * Mô tả biểu đồ cho trình đọc màn hình: loại biểu đồ, khoảng ngày và điều chính cần đọc (ngày cạn, trước và sau). Số lấy từ khối,
+ * không tự tính; chi tiết từng ngày đọc bằng thanh chọn ngày bên dưới.
+ */
+export function chartLabel(d: ForecastTimelineData): string {
+  const base = `Biểu đồ dự báo số dư hũ ${d.jar.name} ${d.horizon_days} ngày`
+  const runout = (p: { runout_date?: string }) => (p.runout_date ? `cạn ngày ${formatDayMonth(p.runout_date)}` : 'không cạn trong kỳ dự báo')
+  if (d.compare) return `${base}: đường Trước nét đứt ${runout(d)}, đường Sau ${runout(d.compare.after)}.`
+  return `${base}: ${runout(d)}, kỳ lương ${formatDayMonth(d.payday.date)}.`
 }
 
 type AfterPath = ForecastCompare['after']
@@ -124,6 +136,8 @@ export function ForecastBlock({
   const events = model.events
   const compare = data.compare
   const extraEvents = compare?.after.events ?? []
+  // Đường "Sau" vẽ dần một lần cho mỗi khối what-if trong phiên (mở lại chat không vẽ lại); giảm chuyển động thì hiện thẳng.
+  const animateAfter = useEntranceMotion(compare ? `forecast:${data.jar.code}:${data.computed_at}:${compare.label}` : undefined) && !!compare
 
   return (
     <section data-block="forecast_timeline" data-status={data.status} className={`rounded-card bg-surface p-4 shadow-card ${className ?? ''}`}>
@@ -182,9 +196,9 @@ export function ForecastBlock({
         )}
       </div>
 
-      <div role="img" aria-label={`Biểu đồ dự báo số dư hũ ${data.jar.name} ${data.horizon_days} ngày`} data-testid="forecast-chart">
+      <div role="img" aria-label={chartLabel(data)} data-testid="forecast-chart" data-animate={animateAfter ? 'after' : undefined}>
         <Suspense fallback={<Skeleton className="h-[240px] w-full rounded-2xl" />}>
-          <ForecastChart data={data} model={model} activeX={activeX} onActiveChange={setActiveX} fixedSize={chartSize} />
+          <ForecastChart data={data} model={model} activeX={activeX} onActiveChange={setActiveX} fixedSize={chartSize} animateAfter={animateAfter} />
         </Suspense>
       </div>
 

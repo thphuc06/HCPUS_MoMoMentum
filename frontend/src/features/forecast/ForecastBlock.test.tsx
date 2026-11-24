@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ForecastTimelineData } from '@/contracts/blocks'
 import { validBlock } from '@/test/fixtures'
-import { ForecastBlock, forecastSummary } from './ForecastBlock'
+import { chartLabel, ForecastBlock, forecastSummary } from './ForecastBlock'
 import { buildChartModel } from './model'
 import { formatVnd } from '@/lib/format'
 
@@ -182,5 +182,62 @@ describe('ForecastBlock: cách nói số của server (lỗi nhỏ phase 2)', ()
     await mount(d)
     expect(screen.getByTestId('forecast-summary')).not.toHaveTextContent('dự kiến cạn')
     expect(screen.getByText('Đang hết tiền')).toBeInTheDocument()
+  })
+})
+
+describe('ForecastBlock: cảnh 2, đường "Sau" vẽ dần và nhãn đọc được', { timeout: 20_000 }, () => {
+  beforeEach(() => sessionStorage.clear())
+  afterEach(() => vi.unstubAllGlobals())
+
+  const reducedMotion = (on: boolean) =>
+    vi.stubGlobal('matchMedia', vi.fn((q: string) => ({ matches: on && q === '(prefers-reduced-motion: reduce)', addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+
+  it('khối what-if: bật vẽ dần cho đường Sau một lần; mở lại cùng khối trong phiên thì hiện thẳng', async () => {
+    const d = data('forecast_timeline.what_if')
+    const first = await mount(d)
+    expect(first.getByTestId('forecast-chart')).toHaveAttribute('data-animate', 'after')
+    first.unmount()
+    const again = await mount(d)
+    expect(again.getByTestId('forecast-chart')).not.toHaveAttribute('data-animate')
+  })
+
+  it('giảm chuyển động: không vẽ dần, chấm "Sau: cạn" không có hiệu ứng bật', async () => {
+    reducedMotion(true)
+    const d = data('forecast_timeline.what_if')
+    const { container, getByTestId } = await mount(d)
+    expect(getByTestId('forecast-chart')).not.toHaveAttribute('data-animate')
+    expect(container.querySelector('.motion-pop')).toBeNull()
+  })
+
+  it('khối không có so sánh: không có gì chuyển động', async () => {
+    reducedMotion(false)
+    const { getByTestId } = await mount(data('forecast_timeline.short'))
+    expect(getByTestId('forecast-chart')).not.toHaveAttribute('data-animate')
+  })
+
+  it('nhãn trục và nhãn mốc 12 px; nét mốc nghĩa vụ dùng màu nét "sát" dày 2 px', async () => {
+    const d = data('forecast_timeline.short')
+    const { container } = await mount(d)
+    const ticks = Array.from(container.querySelectorAll('.recharts-cartesian-axis-tick-value'))
+    expect(ticks.length).toBeGreaterThan(0)
+    for (const t of ticks) expect(t.getAttribute('font-size')).toBe('12')
+    const names = [...buildChartModel(d).events.map((e) => e.label), 'Cạn']
+    const labels = Array.from(container.querySelectorAll('svg text')).filter((t) => names.some((n) => t.textContent?.startsWith(n)))
+    expect(labels.length).toBeGreaterThan(0)
+    for (const l of labels) expect(l.getAttribute('font-size')).toBe('12')
+    const obligation = buildChartModel(d).events.find((e) => e.kind !== 'salary')!
+    const line = Array.from(container.querySelectorAll('.recharts-reference-line-line')).find((l) => l.getAttribute('stroke') === 'var(--status-warn-line)')
+    expect(obligation).toBeDefined()
+    expect(line).toBeDefined()
+    expect(line!.getAttribute('stroke-width')).toBe('2')
+  })
+
+  it('mô tả biểu đồ cho trình đọc màn hình nêu ngày cạn của Trước và Sau (số của khối)', async () => {
+    const d = data('forecast_timeline.what_if')
+    const { getByRole } = await mount(d)
+    const label = chartLabel(d)
+    expect(getByRole('img', { name: label })).toBeInTheDocument()
+    expect(label).toContain('đường Trước nét đứt')
+    expect(label).toContain(d.compare!.after.runout_date ? `Sau cạn ngày ${d.compare!.after.runout_date.slice(8, 10)}/${d.compare!.after.runout_date.slice(5, 7)}` : 'Sau không cạn trong kỳ dự báo')
   })
 })

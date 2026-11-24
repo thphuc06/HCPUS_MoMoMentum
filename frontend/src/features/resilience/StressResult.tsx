@@ -3,9 +3,17 @@ import { StatusChip } from '@/components/StatusChip'
 import type { StressResultData } from '@/contracts/blocks'
 import { formatAppDate, formatVnd } from '@/lib/format'
 import { statusShortChip } from '@/lib/jar'
-import { AnimatedNumber } from './AnimatedNumber'
-import { RESILIENCE_BANDS } from './ResilienceGauge'
+import { useEntranceMotion } from '@/lib/motion'
+import { RESILIENCE_BANDS, ResilienceGauge } from './ResilienceGauge'
+import { RunwayBar } from './RunwayBar'
 
+/**
+ * Kết quả một cú sốc (cảnh 3, Figma R3): đồng hồ điểm chạy từ điểm trước xuống điểm sau, rồi "trụ được N ngày" là số lớn và
+ * thanh so với khoảng mô phỏng. Mọi số lấy từ khối `stress_result`.
+ *
+ * `animateScore` (màn Mô phỏng cú sốc): mỗi lần mở là một lần mô phỏng mới nên luôn chạy. Trong chat thì chạy một lần cho mỗi
+ * khối trong phiên. Giảm chuyển động thì cả hai nơi hiện thẳng trạng thái cuối.
+ */
 export function StressResult({
   data,
   heading: Heading = 'h3',
@@ -17,42 +25,33 @@ export function StressResult({
 }) {
   const status = statusShortChip(data.status)
   const emergencyJar = data.emergency_jar
+  const animate = useEntranceMotion(animateScore ? undefined : `stress:${data.shock.shock_id}:${data.basis.computed_at}:${data.score_after}`)
 
   return (
-    <section data-block="stress_result" className="space-y-3 rounded-card bg-surface p-4 shadow-card">
-      <header className="flex flex-wrap items-start justify-between gap-2">
-        <Heading className="text-subtitle font-semibold text-ink">{data.shock.label}</Heading>
-        <StatusChip kind={status.kind}>{status.label}</StatusChip>
-      </header>
-      <p className="text-small text-ink-2">{data.headline}</p>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl bg-surface-2 px-3 py-2">
-        <span className="text-small text-ink-2">Điểm trước và sau</span>
-        <strong className="num text-section text-ink">
-          {animateScore ? (
-            <>
-              <span className="sr-only">{data.score_before} → {data.score_after}</span>
-              <span aria-hidden>
-                {data.score_before} → <AnimatedNumber key={`${data.score_before}:${data.score_after}`} from={data.score_before} to={data.score_after} />
-              </span>
-            </>
-          ) : (
-            `${data.score_before} → ${data.score_after}`
-          )}
-        </strong>
-        <span className="num text-small text-ink-2">{data.score_delta} điểm</span>
-        <p className="basis-full text-small text-ink-2">
+    <section data-block="stress_result" className="space-y-4 rounded-card bg-surface p-4 shadow-card">
+      <div className="space-y-2">
+        <header className="flex flex-wrap items-start justify-between gap-2">
+          <Heading className="text-subtitle font-semibold text-ink">{data.shock.label}</Heading>
+          <StatusChip kind={status.kind}>{status.label}</StatusChip>
+        </header>
+        <p className="text-small text-ink-2">{data.headline}</p>
+      </div>
+
+      <div className="text-center" data-testid="stress-score">
+        <ResilienceGauge score={data.score_after} band={data.band_after} from={data.score_before} fromBand={data.band_before} animate={animate} />
+        <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-small text-ink-2">
+          <span className="sr-only">Điểm trước và sau</span>
+          <strong className="num text-subtitle text-ink">{`${data.score_before} → ${data.score_after}`}</strong>
+          <span className="num">{data.score_delta} điểm</span>
+        </p>
+        <p className="text-small text-ink-2">
           Nhóm điểm {RESILIENCE_BANDS[data.band_before].label} → {RESILIENCE_BANDS[data.band_after].label}
         </p>
       </div>
-      <dl className="space-y-2 text-small">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-          <dt className="text-ink-2">Toàn bộ ví</dt>
-          <dd className="num font-semibold text-ink">
-            {data.runway_days_total === undefined
-              ? `Trụ hết ${data.horizon_days} ngày dự báo`
-              : `Trụ được ${data.runway_days_total} ngày`}
-          </dd>
-        </div>
+
+      <RunwayBar days={data.runway_days_total} horizonDays={data.horizon_days} status={data.status} animate={animate} />
+
+      <dl className="space-y-2 border-t border-line pt-3 text-small">
         {emergencyJar && data.runway_days_emergency !== undefined && (
           <div className="flex flex-wrap items-center justify-between gap-x-3">
             <dt className="flex items-center gap-2 text-ink-2">

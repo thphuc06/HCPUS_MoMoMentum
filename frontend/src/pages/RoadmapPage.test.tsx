@@ -35,6 +35,11 @@ async function stepCard(title: string) {
   return within((await screen.findByText(title)).closest('li')!)
 }
 
+/** Sửa và Từ chối nằm trong bảng thao tác phụ của bước (mỗi bước một nút chính). */
+async function openStepMenu(user: ReturnType<typeof userEvent.setup>, card: ReturnType<typeof within>) {
+  await user.click(card.getByRole('button', { name: /^Sửa/ }))
+}
+
 async function pollOnce() {
   await act(async () => vi.advanceTimersByTimeAsync(ROADMAP_JOB_POLL.delayMs))
 }
@@ -129,7 +134,8 @@ describe('lộ trình thích ứng', () => {
       [`POST ${path}`]: withDecision(target.step_id, 'rejected'),
     }), '/roadmap')
     const card = await stepCard(target.title)
-    await user.click(card.getByRole('button', { name: 'Từ chối' }))
+    await openStepMenu(user, card)
+    await user.click(within(await screen.findByRole('dialog', { name: 'Thao tác với bước' })).getByRole('button', { name: 'Từ chối' }))
     const dialog = within(await screen.findByRole('alertdialog'))
     await user.type(dialog.getByRole('textbox', { name: /Vì sao bạn muốn từ chối/ }), String(request.reason))
     await user.click(dialog.getByRole('button', { name: 'Từ chối' }))
@@ -152,7 +158,8 @@ describe('lộ trình thích ứng', () => {
       'GET /roadmap': v2, 'GET /roadmap/versions': versions,
       [`POST ${path}`]: edited,
     }), '/roadmap')
-    await user.click((await stepCard(target.title)).getByRole('button', { name: 'Sửa' }))
+    await openStepMenu(user, await stepCard(target.title))
+    await user.click(within(await screen.findByRole('dialog', { name: 'Thao tác với bước' })).getByRole('button', { name: 'Sửa' }))
     const drawer = within(await screen.findByRole('dialog', { name: 'Sửa bước' }))
     expect(drawer.getByRole('button', { name: 'Lưu thay đổi' })).toBeDisabled()
     if (field === 'amount') fireEvent.change(drawer.getByLabelText('Số tiền'), { target: { value: request.amount_vnd } })
@@ -322,5 +329,77 @@ describe('trang Lộ trình: danh sách phiên bản', () => {
     expect(within(view).getByRole('link', { name: 'So với bản đang dùng' })).toHaveAttribute('href', '/roadmap/compare?from=2&to=3')
     await user.click(within(list).getByRole('button', { name: /Phiên bản 3/ }))
     expect(screen.queryByTestId('roadmap-version-view')).toBeNull()
+  })
+})
+
+describe('lộ trình dạng dòng thời gian (cảnh 4)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const steps = v2.data.phases.flatMap((phase) => phase.steps)
+
+  it('mỗi bước một nút chính theo trạng thái; Sửa, Từ chối nằm trong menu phụ', async () => {
+    const user = userEvent.setup()
+    mountApp(backend({ 'GET /roadmap': v2, 'GET /roadmap/versions': versions }), '/roadmap')
+    for (const s of steps) {
+      const card = await stepCard(s.title)
+      const primary = card.queryAllByRole('button', { name: /^(Chấp nhận|Thực hiện)$/ })
+      expect(primary.length).toBeLessThanOrEqual(1)
+      if (s.status === 'accepted') expect(primary.map((b) => b.textContent)).toEqual(s.action ? ['Thực hiện'] : [])
+      else expect(primary.map((b) => b.textContent)).toEqual(['Chấp nhận'])
+      // Không còn nút Sửa hay Từ chối đứng riêng trên bước.
+      expect(card.queryByRole('button', { name: 'Sửa' })).toBeNull()
+      expect(card.queryByRole('button', { name: 'Từ chối' })).toBeNull()
+    }
+    const rejected = steps.find((s) => s.status === 'rejected')!
+    await user.click((await stepCard(rejected.title)).getByRole('button', { name: /^Sửa…/ }))
+    const sheet = within(await screen.findByRole('dialog', { name: 'Thao tác với bước' }))
+    expect(sheet.getByText(rejected.title)).toBeInTheDocument()
+    expect(sheet.getAllByRole('button').map((b) => b.textContent)).toEqual(['Sửa', 'Hủy'])
+    await user.click(sheet.getByRole('button', { name: 'Hủy' }))
+    await vi.waitFor(() => expect(screen.queryByRole('dialog', { name: 'Thao tác với bước' })).toBeNull())
+    const pending = steps.find((s) => s.status === 'pending')!
+    const trigger = (await stepCard(pending.title)).getByRole('button', { name: /^Sửa, từ chối…/ })
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog')
+    await user.click(trigger)
+    const sheet2 = within(await screen.findByRole('dialog', { name: 'Thao tác với bước' }))
+    expect(sheet2.getAllByRole('button').map((b) => b.textContent)).toEqual(['Sửa', 'Từ chối', 'Hủy'])
+  })
+
+  it('nút tròn trên trục theo trạng thái, đánh số liên tục; chip "Chờ" kiểu thông tin, không dùng màu "sát"', async () => {
+    mountApp(backend({ 'GET /roadmap': v2, 'GET /roadmap/versions': versions }), '/roadmap')
+    const block = (await screen.findByRole('heading', { name: `Lộ trình · Phiên bản ${v2.data.version}` })).closest('[data-block="roadmap"]') as HTMLElement
+    const items = Array.from(block.querySelectorAll('li[data-step-status]'))
+    expect(items.map((li) => li.getAttribute('data-step-status'))).toEqual(steps.map((s) => s.status))
+    items.forEach((li, i) => {
+      const node = li.querySelector('[data-node]')!
+      expect(node.getAttribute('data-node')).toBe(steps[i]!.status)
+      if (steps[i]!.status === 'pending') expect(node).toHaveTextContent(String(i + 1))
+    })
+    // Bước cuối không có đoạn trục nối xuống; đoạn sau bước đã chấp nhận tô màu "đủ".
+    expect(items.at(-1)!.querySelector('[data-axis]')).toBeNull()
+    items.slice(0, -1).forEach((li, i) => expect(li.querySelector('[data-axis]')).toHaveAttribute('data-axis', steps[i]!.status === 'accepted' ? 'done' : 'todo'))
+    for (const chip of within(block).getAllByText('Chờ', { selector: '[data-chip] span' })) {
+      expect(chip.closest('[data-chip]')).toHaveAttribute('data-chip', 'info')
+    }
+    // Giai đoạn có khoảng ngày của server.
+    const phase = v2.data.phases[0]!
+    expect(within(block).getByRole('heading', { name: phase.title }).parentElement).toHaveTextContent(formatDayMonth(phase.end_date))
+  })
+
+  it('vừa chấp nhận trên màn: nút tròn đổ màu và dấu tích tự vẽ (một lần)', async () => {
+    const user = userEvent.setup()
+    const target = v3.data.phases.flatMap((phase) => phase.steps).find((s) => s.status === 'pending')!
+    mountApp(backend({
+      'GET /roadmap': v3, 'GET /roadmap/versions': versions,
+      [`POST /roadmap/steps/${target.step_id}/decision`]: withDecision(target.step_id, 'accepted'),
+    }), '/roadmap')
+    const card = await stepCard(target.title)
+    // Lúc tải, bước đã chấp nhận sẵn không có hiệu ứng.
+    expect(document.querySelector('.motion-draw')).toBeNull()
+    await user.click(card.getByRole('button', { name: 'Chấp nhận' }))
+    await card.findByText('Đã chấp nhận')
+    const li = (await screen.findByText(target.title)).closest('li')!
+    expect(li.querySelector('[data-node="accepted"]')).toHaveClass('motion-pop')
+    expect(li.querySelector('.motion-draw')).not.toBeNull()
   })
 })
