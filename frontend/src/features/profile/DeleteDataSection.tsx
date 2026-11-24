@@ -7,6 +7,7 @@ import type { PreviewState } from '@/api/useConfirmPreview'
 import { useChat } from '@/chat/ChatProvider'
 import { PreviewPanel } from '@/components/PreviewPanel'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { usePhoneFrame } from '@/layout/FrameContext'
 import { unmuteAll } from '@/lib/nudgePrefs'
@@ -89,9 +90,10 @@ export function DeleteDataSection() {
   return (
     <section aria-labelledby="delete-data-heading" className="rounded-card bg-surface p-4 shadow-card">
       <h2 id="delete-data-heading" className="text-subtitle font-semibold text-ink">Xóa dữ liệu của tôi</h2>
-      <p className="mt-1 text-small text-ink-2">
-        Xóa hồ sơ, hũ, sổ cái, hội thoại, tệp đã nạp và bộ nhớ của trợ lý. Không hoàn tác được; tài khoản đăng nhập vẫn còn.
-      </p>
+      <p className="mt-1 text-small text-ink-2">Không hoàn tác được.</p>
+      <Disclosure label="Xóa những gì?" panelClassName="pb-1 text-small text-ink-2">
+        <p>Xóa hồ sơ, hũ, sổ cái, hội thoại, tệp đã nạp và bộ nhớ của trợ lý. Tài khoản đăng nhập vẫn còn.</p>
+      </Disclosure>
       {text && (
         <div role={text.ok ? 'status' : 'alert'} data-testid="delete-result" className={`mt-3 rounded-2xl px-3 py-2 text-small ${text.ok ? 'bg-ok-bg text-ok-fg' : 'bg-warn-bg text-warn-fg'}`}>
           <p className="font-semibold">{text.text}</p>

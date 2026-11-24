@@ -1,5 +1,6 @@
 import { AlertTriangle, Check, Minus, XCircle } from 'lucide-react'
 import { StatusChip, type ChipKind } from '@/components/StatusChip'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { CONFIDENCE_LABEL } from '@/lib/jar'
 import { formatDateTime } from '@/lib/format'
 import type { TraceDetail } from '@/api/schemas'
@@ -26,7 +27,7 @@ export function ExplainBody({ block, detail }: { block: ExplainBlock; detail?: T
     <div data-block="explain" data-band={band} className="space-y-4">
       <div>
         <h3 className="text-section font-bold text-ink">{d.headline ?? 'Vì sao có câu trả lời này'}</h3>
-        {d.ai_generated && <p className="mt-0.5 text-note text-ink-2">Lời giải thích trong câu trả lời do AI viết; con số và bảng này do hệ thống ghi lại.</p>}
+        {d.ai_generated && <p className="mt-0.5 text-note text-ink-2">Lời giải thích do AI viết; số và bảng do hệ thống ghi.</p>}
       </div>
 
       <section aria-label="Dữ liệu đã dùng">
@@ -74,13 +75,16 @@ export function ExplainBody({ block, detail }: { block: ExplainBlock; detail?: T
         <h4 className="text-small font-semibold text-ink-2">Độ tin cậy</h4>
         <div className="mt-1.5 flex items-center gap-2">
           <StatusChip kind={BAND_CHIP[band]}>{CONFIDENCE_LABEL[band]}</StatusChip>
-          <span className="text-small text-ink-2">Nhóm do hệ thống xếp, không phải phần trăm do AI nói.</span>
         </div>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-small text-ink" data-testid="explain-reasons">
-          {d.confidence.reasons.map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
+        {/* Lý do xếp nhóm: căn cứ, mặc định thu gọn (Luật chữ, ui-design-review.md §9). */}
+        <Disclosure label="Vì sao?" panelClassName="pb-1">
+          <ul className="list-disc space-y-1 pl-5 text-small text-ink" data-testid="explain-reasons">
+            {d.confidence.reasons.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-note text-ink-2">Nhóm do hệ thống xếp, không phải phần trăm do AI nói.</p>
+        </Disclosure>
         {band === 'low' && (
           <p role="status" data-testid="explain-low-invite" className="mt-3 rounded-2xl bg-tint px-3 py-2.5 text-small text-ink">
             Độ tin cậy đang thấp vì còn ít dữ liệu. Ghi thêm giao dịch hoặc khai thêm thu nhập và chi phí cố định thì dự báo sẽ sát hơn.
@@ -91,9 +95,8 @@ export function ExplainBody({ block, detail }: { block: ExplainBlock; detail?: T
       <TraceIdRow traceId={d.subject_trace_id} />
 
       {detail && (
-        <details className="rounded-card bg-surface-2 px-3 py-2.5 text-small" data-testid="explain-detail">
-          <summary className="cursor-pointer font-semibold text-ink">Chi tiết kỹ thuật</summary>
-          <dl className="mt-2 space-y-1 text-ink-2">
+        <Disclosure label="Chi tiết kỹ thuật" className="rounded-card bg-surface-2 px-3 text-small" panelClassName="pb-2.5">
+          <dl className="space-y-1 text-ink-2" data-testid="explain-detail">
             {detail.intent && (
               <div className="flex justify-between gap-3">
                 <dt>Ý định</dt>
@@ -121,7 +124,7 @@ export function ExplainBody({ block, detail }: { block: ExplainBlock; detail?: T
               </div>
             ))}
           </dl>
-        </details>
+        </Disclosure>
       )}
     </div>
   )

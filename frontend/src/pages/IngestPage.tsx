@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Camera, FileSpreadsheet, ImageUp, Loader2, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { ScreenHeader } from '@/components/ScreenHeader'
 import { SimNote } from '@/components/SimNote'
 import { ErrorState } from '@/components/StateViews'
@@ -88,18 +89,19 @@ function PickStep({ busy, error, pending, resumable, onOpen, onFile, onConsent, 
         <h2 id="ingest-pick-title" className="text-subtitle font-semibold text-ink">
           Thêm chi tiêu ngoài ví
         </h2>
-        <p className="mt-1 text-small text-ink-2">
-          Chụp thông báo chuyển khoản, hóa đơn, hoặc tải sao kê ngân hàng. Yofina đọc các dòng chi tiêu và thu nhập để dự báo sát hơn; số dư hũ không đổi.
-        </p>
+        <p className="mt-1 text-small text-ink-2">Để dự báo sát hơn; số dư hũ không đổi.</p>
         <div className="mt-4 flex flex-col gap-2.5">
           {/* Ô chụp dùng `image/*`: Chrome Android chỉ mở thẳng camera khi accept là image/*; máy ảnh luôn ra JPEG, loại vẫn được checkFile kiểm. */}
           <FilePick kind="image" label="Chụp ảnh" accept={ACCEPT_CAMERA} capture Icon={Camera} disabled={busy} onFile={onFile} />
           <FilePick kind="image" label="Chọn ảnh có sẵn" accept={ACCEPT_IMAGE} Icon={ImageUp} disabled={busy} onFile={onFile} />
           <FilePick kind="csv" label="Tải sao kê CSV" accept={ACCEPT_CSV} Icon={FileSpreadsheet} disabled={busy} onFile={onFile} />
         </div>
-        <p className="mt-3 text-note text-ink-2">
-          Ảnh PNG, JPEG, WEBP; ảnh chụp lớn được tự thu nhỏ trên máy trước khi tải lên. CSV tối đa {(DEFAULT_LIMITS.csv.maxBytes / 1_000_000).toLocaleString('vi-VN')} MB.
-        </p>
+        <Disclosure label="Nạp được gì?" className="mt-2" panelClassName="space-y-1 pb-1 text-note text-ink-2">
+          <p>Thông báo chuyển khoản, hóa đơn hoặc sao kê ngân hàng. Yofina đọc các dòng chi tiêu và thu nhập.</p>
+          <p>
+            Ảnh PNG, JPEG, WEBP; ảnh chụp lớn được tự thu nhỏ trên máy trước khi tải lên. CSV tối đa {(DEFAULT_LIMITS.csv.maxBytes / 1_000_000).toLocaleString('vi-VN')} MB.
+          </p>
+        </Disclosure>
       </section>
 
       {busy && (

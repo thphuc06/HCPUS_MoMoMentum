@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { ScreenHeader } from '@/components/ScreenHeader'
 import { SimNote } from '@/components/SimNote'
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/StateViews'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { useApiResource } from '@/api/resource'
 import { useJarLookup } from '@/features/common/useJarLookup'
 import { CreditUsage } from '@/features/credit/CreditUsage'
@@ -42,12 +43,17 @@ export function ObligationsPage() {
         {line && (
           <CreditUsage line={line} due={due} payJar={payJar}>
             <p className="mt-2 text-note text-ink-2">Đến hạn ngày {line.due_day} hằng tháng.{line.status === 'suspended' ? ' Hạn mức đang tạm khóa.' : ''}</p>
-            {(credit.data?.fees ?? []).map((f) => (
-              <p key={f.fee_type} className="mt-1 text-note text-ink-2">
-                {f.amount_vnd !== undefined ? `Phí ${formatVnd(f.amount_vnd)}` : 'Phí'}
-                {f.condition_note ? `: ${f.condition_note}` : ''} (Nguồn: {f.source_name})
-              </p>
-            ))}
+            {(credit.data?.fees ?? []).length > 0 && (
+              // Điều kiện tính phí và nguồn trích: căn cứ, mặc định thu gọn (Luật chữ, ui-design-review.md §9).
+              <Disclosure label="Phí và nguồn" panelClassName="pb-1">
+                {(credit.data?.fees ?? []).map((f) => (
+                  <p key={f.fee_type} className="mt-1 text-note text-ink-2">
+                    {f.amount_vnd !== undefined ? `Phí ${formatVnd(f.amount_vnd)}` : 'Phí'}
+                    {f.condition_note ? `: ${f.condition_note}` : ''} (Nguồn: {f.source_name})
+                  </p>
+                ))}
+              </Disclosure>
+            )}
           </CreditUsage>
         )}
 

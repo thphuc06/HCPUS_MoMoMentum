@@ -29,13 +29,16 @@ export function jarForecastLevel(
   return jar.status === 'short' && jar.runout_date ? 0 : null
 }
 
-/** Chip trạng thái từ `status` của server (đủ/sát/hụt): luôn có biểu tượng + chữ (StatusChip). */
+/**
+ * Chip trạng thái từ `status` của server: cùng bộ chữ Đủ / Sát / Hụt với B2 và thẻ kiểm tra (ui-design-review.md §3.2 #13),
+ * hũ hụt kèm ngày cạn ("Hụt · cạn 27/11"). Luôn có biểu tượng + chữ (StatusChip).
+ */
 export function jarStatusChip(status: JarStatus, runoutDate?: string, emptyNow = false): { kind: ChipKind; label: string } {
-  if (status === 'ok') return { kind: 'ok', label: 'Đủ tới kỳ lương' }
-  if (status === 'tight') return { kind: 'warn', label: 'Sát, cần nhắc' }
+  if (status === 'ok') return { kind: 'ok', label: 'Đủ' }
+  if (status === 'tight') return { kind: 'warn', label: 'Sát' }
   // Hũ đã không còn tiền (0 ₫): không nói "cạn ngày ..." như thể còn tiền để cạn.
   if (emptyNow) return { kind: 'bad', label: 'Đang hết tiền' }
-  return { kind: 'bad', label: runoutDate ? `Cạn ngày ${formatDayMonth(runoutDate)}` : 'Hụt tiền' }
+  return { kind: 'bad', label: runoutDate ? `Hụt · cạn ${formatDayMonth(runoutDate)}` : 'Hụt' }
 }
 
 /** Nhãn ngắn của ba trạng thái (Đủ, Sát, Hụt) cho thẻ kiểm tra: luôn đi cùng biểu tượng của StatusChip, không chỉ màu. */

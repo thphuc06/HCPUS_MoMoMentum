@@ -2,6 +2,7 @@ import { Check, Square, SendHorizontal } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { DisclosureButton, useDisclosure } from '@/components/ui/Disclosure'
 import { Input } from '@/components/ui/input'
 import { toolLabel } from './errors'
 import type { ChatItem } from './session'
@@ -23,14 +24,33 @@ export function UserBubble({ text }: { text: string }) {
 // Figma AIMessage (10:242): chữ trực tiếp trên nền, không bong bóng. Con trỏ nhấp nháy khi còn chạy.
 // `superseded`: lượt này có đề nghị đã được thực hiện, nên lời trước đó ("chưa chuyển gì, bấm xác nhận...") không còn
 // đúng ở thời điểm hiện tại: làm mờ và ghi rõ đó là lời trước khi xác nhận (không sửa nội dung).
+/**
+ * Lời dài hơn ngưỡng này (khoảng 3 dòng ở khổ 390 px) thì hiện 3 dòng đầu kèm "Xem thêm" (Luật chữ, ui-design-review.md §9).
+ * Chỉ cắt bằng CSS (line-clamp): toàn bộ chữ vẫn nằm trong DOM nên trình đọc màn hình đọc đủ, không mất nội dung.
+ */
+export const LONG_REPLY_CHARS = 160
+
 export function AIMessage({ text, done, superseded = false }: { text: string; done: boolean; superseded?: boolean }) {
+  const more = useDisclosure()
+  // Đang chạy thì chưa cắt, để chữ mới hiện ra không bị giấu khi đang đọc.
+  const long = done && text.length > LONG_REPLY_CHARS
   return (
     <div data-testid="assistant-message" data-superseded={superseded ? 'true' : undefined} className={cn(superseded && 'opacity-60')}>
       {superseded && <p className="mb-0.5 text-note font-semibold text-ink-2">Trước khi bạn xác nhận</p>}
-      <p data-testid="assistant-text" className="text-body whitespace-pre-wrap text-ink">
+      <p
+        id={long ? more.panelId : undefined}
+        data-testid="assistant-text"
+        data-clamped={long && !more.open ? 'true' : undefined}
+        className={cn('text-body whitespace-pre-wrap text-ink', long && !more.open && 'line-clamp-3')}
+      >
         {text}
         {!done && <span aria-hidden className="ml-0.5 inline-block h-4 w-0.5 translate-y-0.5 animate-pulse bg-brand" />}
       </p>
+      {long && (
+        <DisclosureButton state={more} className="-ml-1">
+          {more.open ? 'Thu gọn' : 'Xem thêm'}
+        </DisclosureButton>
+      )}
     </div>
   )
 }

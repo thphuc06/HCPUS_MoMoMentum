@@ -3,6 +3,7 @@ import { Check, CircleHelp } from 'lucide-react'
 import { useApi } from '@/api/ApiProvider'
 import { useOptionalChatActions } from '@/chat/actions'
 import { AiChip, StatusChip } from '@/components/StatusChip'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { SuggestionChips } from '@/components/SuggestionChips'
 import { Button } from '@/components/ui/button'
 import { AffordCard } from '@/features/affordability/AffordCard'
@@ -249,30 +250,35 @@ export function SuggestionsView({ block }: BlockViewProps<SuggestionsBlock>) {
   return (
     <section data-block="suggestions" data-context={d.context} className="rounded-card bg-surface p-4 shadow-card">
       {d.title && <h3 className="text-subtitle font-semibold text-ink">{d.title}</h3>}
-      {d.can_do && d.can_do.length > 0 && (
-        <>
-          <h4 className="mt-2 text-small font-semibold text-ok-fg">Mình làm được</h4>
-          <ul className="mt-1 space-y-1.5">
-            {d.can_do.map((t) => (
-              <li key={t} className="flex items-start gap-2 text-small text-ink">
-                <Check className="mt-0.5 size-4 shrink-0 text-ok-fg" aria-hidden />
-                {t}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      {d.cannot_do && d.cannot_do.length > 0 && (
-        <>
-          <h4 className="mt-3 text-small font-semibold text-ink-2">Mình chưa làm</h4>
-          <ul className="mt-1 space-y-1.5 text-small text-ink-2">
-            {d.cannot_do.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ul>
-        </>
-      )}
       <SuggestionChips className="mt-3" disabled={!actions} items={d.items} onPick={(prompt) => actions?.ask(prompt)} />
+      {/* Gợi ý bấm được trước; "Mình làm được / chưa làm" là chữ phụ, thu gọn (Luật chữ, ui-design-review.md §9). */}
+      {(!!d.can_do?.length || !!d.cannot_do?.length) && (
+        <Disclosure label="Mình làm được gì?" className="mt-1" panelClassName="pb-1">
+          {d.can_do && d.can_do.length > 0 && (
+            <>
+              <h4 className="mt-1 text-small font-semibold text-ok-fg">Mình làm được</h4>
+              <ul className="mt-1 space-y-1.5">
+                {d.can_do.map((t) => (
+                  <li key={t} className="flex items-start gap-2 text-small text-ink">
+                    <Check className="mt-0.5 size-4 shrink-0 text-ok-fg" aria-hidden />
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {d.cannot_do && d.cannot_do.length > 0 && (
+            <>
+              <h4 className="mt-3 text-small font-semibold text-ink-2">Mình chưa làm</h4>
+              <ul className="mt-1 space-y-1.5 text-small text-ink-2">
+                {d.cannot_do.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Disclosure>
+      )}
     </section>
   )
 }

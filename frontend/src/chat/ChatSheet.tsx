@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check, SquarePen, X } from 'lucide-react'
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from '@/components/ui/drawer'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AiChip } from '@/components/StatusChip'
 import { useAuth } from '@/auth/AuthProvider'
@@ -38,7 +39,20 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
         {greetingNow()}
         {name ? `, ${name}` : ''}. Bạn muốn xem gì hôm nay?
       </h2>
-      <section className="rounded-card bg-surface p-4 shadow-card">
+      {/* Gợi ý bấm được lên trước; "Mình làm được / chưa làm" là chữ phụ, thu gọn (ui-design-review.md §3.2 #12, §9). */}
+      <div className="flex flex-col gap-2.5" role="group" aria-label="Gợi ý">
+        {SUGGESTIONS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onPick(s)}
+            className="min-h-12 rounded-card border border-line bg-surface px-4 py-3 text-left text-body font-semibold text-ink active:scale-[0.99]"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+      <Disclosure label="Mình làm được gì?" panelClassName="rounded-card bg-surface p-4 shadow-card">
         <h3 className="text-small font-semibold text-ok-fg">Mình làm được</h3>
         <ul className="mt-2 space-y-2">
           {CAN_DO.map((t) => (
@@ -57,20 +71,7 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
             </li>
           ))}
         </ul>
-      </section>
-      <p className="text-small font-semibold text-ink-2">Gợi ý</p>
-      <div className="flex flex-col gap-2.5">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onPick(s)}
-            className="min-h-12 rounded-card border border-line bg-surface px-4 py-3 text-left text-body font-semibold text-ink active:scale-[0.99]"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      </Disclosure>
     </div>
   )
 }

@@ -58,7 +58,7 @@ describe('Tổng quan', () => {
     expect(screen.getByRole('heading', { name: 'Nhìn trước' })).toBeInTheDocument()
     const first = within(list).getAllByRole('listitem')[0]!
     expect(first).toHaveTextContent('Ăn uống')
-    expect(first).toHaveTextContent('Cạn ngày 29/11')
+    expect(first).toHaveTextContent('Hụt · cạn 29/11')
   })
 
   it('tab bar có 5 mục, nút giữa Hỏi Yofina', async () => {

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { StatusChip } from './StatusChip'
 import type { ProactiveCardData } from '@/contracts/blocks'
 
@@ -9,7 +10,7 @@ type Action = ProactiveCardData['actions'][number]
 const STATUS_CHIP = {
   ok: { kind: 'info', label: 'Thông tin' },
   tight: { kind: 'warn', label: 'Sát' },
-  short: { kind: 'bad', label: 'Cần xử lý' },
+  short: { kind: 'bad', label: 'Hụt' },
 } as const
 
 // Figma ProactiveCard (14:176): MỘT việc, lý do ngắn, hành động chính ở đầu rồi các hành động phụ; "Để sau" ở góc,
@@ -25,7 +26,14 @@ export function ProactiveCard({ data, onAction, hero, children }: {
   const mute = data.actions.find((a) => a.kind === 'mute_kind')
   const main = data.actions.filter((a) => a.kind !== 'snooze' && a.kind !== 'mute_kind')
   const chip = STATUS_CHIP[data.status]
-  const reason = <p className={hero ? 'mt-3 text-small text-ink-2' : 'mt-1 text-body text-ink'}>{data.reason}</p>
+  // Có số chính và dải ngày thì câu lý do ("Còn …, còn … ngày tới kỳ lương") nhắc lại điều phần vẽ đã nói: thu vào "Chi tiết".
+  const reason = hero ? (
+    <Disclosure label="Chi tiết" className="mt-1" panelClassName="pb-1 text-small text-ink-2">
+      <p data-testid="proactive-reason">{data.reason}</p>
+    </Disclosure>
+  ) : (
+    <p className="mt-1 text-body text-ink" data-testid="proactive-reason">{data.reason}</p>
+  )
   return (
     <section aria-label="Việc cần làm hôm nay" data-block="proactive_card" data-kind={data.kind} data-status={data.status} className="rounded-card bg-surface p-5 shadow-card">
       <header className="flex items-center justify-between gap-2">

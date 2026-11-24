@@ -3,6 +3,7 @@ import type { IngestSourceKind } from '@/api/ingestSchemas'
 import { useApiResource } from '@/api/resource'
 import { ErrorState, ListSkeleton } from '@/components/StateViews'
 import { StatusChip } from '@/components/StatusChip'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { RETENTION_DAYS } from '@/features/ingest/config'
 import { formatDateTime } from '@/lib/format'
 
@@ -41,10 +42,13 @@ export function ConsentSection() {
               )
             })}
           </ul>
-          <p className="border-t border-line py-3 text-note text-ink-2">
-            Tệp gốc được giữ tối đa {RETENTION_DAYS} ngày; số tài khoản, số điện thoại và tên người khác được che trước khi lưu.
-            Muốn bỏ hết đồng ý và tệp đã nạp, dùng “Xóa dữ liệu của tôi” bên dưới. <Link to="/ingest" className="font-semibold text-brand-text">Nạp dữ liệu</Link>
-          </p>
+            <Disclosure label="Tệp được giữ thế nào?" className="border-t border-line pt-1" panelClassName="pb-2 text-note text-ink-2">
+              <p>
+                Tệp gốc được giữ tối đa {RETENTION_DAYS} ngày; số tài khoản, số điện thoại và tên người khác được che trước khi lưu.
+                Muốn bỏ hết đồng ý và tệp đã nạp, dùng “Xóa dữ liệu của tôi” bên dưới.
+              </p>
+            </Disclosure>
+          <Link to="/ingest" className="-mt-1 mb-1 flex min-h-11 items-center text-small font-semibold text-brand-text">Nạp dữ liệu</Link>
         </div>
       )}
     </section>

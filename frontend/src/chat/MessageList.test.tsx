@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { MessageList, referencedConfirmIds, supersededAssistantIds } from './MessageList'
 import type { ChatItem } from './session'
@@ -76,5 +76,33 @@ describe('khối xác nhận do phương án tham chiếu (hợp đồng phase 3
   it('đã hủy hoặc hết hạn thì luôn hiện (không để mất trạng thái), kể cả chưa chọn lại', () => {
     const { container } = render_([user('u1'), options(), refConfirm({ ui: 'cancelled' })])
     expect(container.querySelector('[data-block="confirm"]')).toHaveAttribute('data-phase', 'cancelled')
+  })
+})
+
+describe('lời dài của agent: 3 dòng đầu + "Xem thêm" (Luật chữ §9)', () => {
+  const long = 'Nếu mua tai nghe bằng Trả sau thì hũ Nghĩa vụ ngày 05/12 cần 1.233.000 ₫, trong khi hũ đang có 1.000.000 ₫. Hũ Giải trí vẫn đủ tới kỳ lương. Bạn có thể bù từ hũ Du lịch hoặc hoãn mua tới sau kỳ lương để không hụt.'
+
+  it('lời dài đã xong: cắt 3 dòng bằng CSS, chữ vẫn đủ trong DOM; bấm "Xem thêm" thì mở hết, bấm "Thu gọn" thì cắt lại', () => {
+    render(<Providers api={fakeApi()}><MessageList items={[user('u1'), bot('a1', long)]} running={false} onRetry={vi.fn()} /></Providers>)
+    const text = screen.getByTestId('assistant-text')
+    expect(text).toHaveTextContent(long)
+    expect(text).toHaveClass('line-clamp-3')
+    const more = screen.getByRole('button', { name: 'Xem thêm' })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    expect(more).toHaveAttribute('aria-controls', text.id)
+    fireEvent.click(more)
+    expect(text).not.toHaveClass('line-clamp-3')
+    fireEvent.click(screen.getByRole('button', { name: 'Thu gọn' }))
+    expect(text).toHaveClass('line-clamp-3')
+  })
+
+  it('lời ngắn, hoặc lời dài đang chạy: không cắt, không có nút', () => {
+    render(
+      <Providers api={fakeApi()}>
+        <MessageList items={[user('u1'), bot('a1', 'Đây là số dư.'), user('u2'), { kind: 'assistant', id: 'a2', text: long, done: false }]} running onRetry={vi.fn()} />
+      </Providers>,
+    )
+    for (const t of screen.getAllByTestId('assistant-text')) expect(t).not.toHaveClass('line-clamp-3')
+    expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull()
   })
 })

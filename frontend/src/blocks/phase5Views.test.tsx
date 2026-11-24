@@ -42,8 +42,11 @@ describe('behavior_insight', () => {
     expect(within(card).getByText('AI tóm tắt')).toBeInTheDocument()
     expect(within(card).getByText('Tin cậy vừa')).toBeInTheDocument()
     expect(within(card).getByTestId('behavior-next-step')).toHaveTextContent(block.data.next_step.label)
-    // Ngoài router (không có chỗ điều hướng): không có nút, và khối không tự ghi gì
-    expect(within(card).queryByRole('button')).toBeNull()
+    // Ngoài router (không có chỗ điều hướng): không có nút hành động (chỉ có nút mở/thu gọn), và khối không tự ghi gì
+    expect(within(card).queryAllByRole('button').filter((b) => !b.hasAttribute('aria-expanded'))).toHaveLength(0)
+    // Câu giải thích và bảng bằng chứng thu gọn sau "Xem căn cứ"; thanh B3 (nếu có) hiện ngay
+    expect(within(card).getByRole('button', { name: 'Xem căn cứ' })).toHaveAttribute('aria-expanded', 'false')
+    expect(row('first_week_share').closest('[data-disclosure-panel]')).toHaveAttribute('data-disclosure-panel', 'closed')
   })
 
   it('trong chat: việc có hành động thì "Thực hiện ở Hồ sơ" đóng chat rồi mở phần nhận xét của Hồ sơ (không ghi từ khối)', async () => {

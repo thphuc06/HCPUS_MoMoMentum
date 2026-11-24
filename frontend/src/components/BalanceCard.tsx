@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Eye, EyeOff, Info } from 'lucide-react'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { formatAppDate, formatVnd } from '@/lib/format'
 import { useAnimateOnce, useCountUp } from '@/lib/motion'
 
@@ -18,7 +19,7 @@ export function BalanceCard({ balance, appDate, children }: { balance: BalancePa
     <section
       aria-label="Tổng số dư"
       className="rounded-sheet p-5 text-white shadow-card"
-      style={{ background: 'linear-gradient(135deg, var(--brand-deep), var(--brand-primary))' }}
+      style={{ background: 'var(--gradient-hero)' }}
     >
       <div className="flex items-center justify-between">
         <h2 className="text-subtitle font-semibold">Tổng số dư</h2>
@@ -42,7 +43,9 @@ export function BalanceCard({ balance, appDate, children }: { balance: BalancePa
         <span>Ví mô phỏng · ngày mô phỏng {formatAppDate(appDate)}</span>
       </p>
 
-      <dl className="mt-3 grid gap-1.5 rounded-2xl bg-white/15 px-3.5 py-2.5 text-small" data-testid="balance-parts">
+      {/* Bảng ba dòng giải thích tổng đến từ đâu: chữ phụ, mặc định thu gọn (ui-design-review.md §5 cảnh 1, §9). */}
+      <Disclosure label="Chi tiết số dư" className="mt-1" buttonClassName="text-white/90" panelClassName="pt-1">
+      <dl className="grid gap-1.5 rounded-2xl bg-white/15 px-3.5 py-2.5 text-small" data-testid="balance-parts">
         <div className="flex justify-between gap-3">
           <dt>Trong các hũ</dt>
           <dd className="num font-semibold" data-testid="balance-jars">{mask(balance.jars_total_vnd)}</dd>
@@ -60,6 +63,7 @@ export function BalanceCard({ balance, appDate, children }: { balance: BalancePa
           </div>
         )}
       </dl>
+      </Disclosure>
       {children}
     </section>
   )

@@ -1,4 +1,5 @@
 import { ExternalLink, FileText } from 'lucide-react'
+import { Disclosure } from '@/components/ui/Disclosure'
 import type { CitationData } from '@/contracts/blocks'
 import { formatAppDate } from '@/lib/format'
 
@@ -35,14 +36,17 @@ export function Citation({ data }: { data: CitationData }) {
               <ExternalLink className="mt-0.5 size-4 shrink-0" aria-label="(mở trang mới)" />
             </a>
             <p className="text-note text-ink-2">Hiệu lực từ {formatAppDate(item.effective_from)}</p>
-            <p className="text-note text-ink-2">
-              Áp dụng cho: <span className="text-ink">{item.fee_types.map(feeTypeLabel).join(', ')}</span>
-            </p>
-            {item.excerpt && <blockquote className="border-l-2 border-line pl-2 text-small text-ink">{item.excerpt}</blockquote>}
+            {/* Loại phí áp dụng và câu trích nguyên văn: nguồn trích, mặc định thu gọn (Luật chữ, ui-design-review.md §9). */}
+            <Disclosure label="Xem trích dẫn" panelClassName="space-y-1 pb-1">
+              <p className="text-note text-ink-2">
+                Áp dụng cho: <span className="text-ink">{item.fee_types.map(feeTypeLabel).join(', ')}</span>
+              </p>
+              {item.excerpt && <blockquote className="border-l-2 border-line pl-2 text-small text-ink">{item.excerpt}</blockquote>}
+            </Disclosure>
           </li>
         ))}
       </ol>
-      <p className="text-note text-ink-2">Sản phẩm Trả sau trong bản demo là mô phỏng; biểu phí dẫn nguồn công khai làm ví dụ.</p>
+      <p className="text-note text-ink-2">Trả sau là mô phỏng; biểu phí lấy nguồn công khai làm ví dụ.</p>
     </section>
   )
 }

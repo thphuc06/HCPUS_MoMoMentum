@@ -10,8 +10,9 @@ export function ResilienceScore({ data, heading: Heading = 'h3' }: { data: Resil
         <ResilienceGauge score={data.score} band={data.band} />
         {data.previous_score !== undefined && <p className="text-note text-ink-2">Điểm lần trước {data.previous_score}/100</p>}
       </div>
-      <p className="mt-2 text-small text-ink">{data.headline}</p>
-      <ul className="mt-2 divide-y divide-line">
+      {/* Câu tóm tắt nhắc lại đồng hồ và chip "Yếu nhất": chỉ cho trình đọc màn hình. */}
+      <p className="sr-only">{data.headline}</p>
+      <ul className="mt-2 divide-y divide-line" aria-label="Bốn thành phần điểm">
         {data.components.map((component) => (
           <ScoreRow key={component.key} component={component} weakest={component.key === data.weakest} />
         ))}
