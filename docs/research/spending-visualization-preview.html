@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yofina: minh họa biểu đồ chi tiêu (390 px, sáng và tối)</title>
+<!--
+  Bản minh họa TĨNH cho docs/research/spending-visualization.md. Không phải mã sản phẩm.
+  Số liệu: persona minh, ngày mô phỏng 21/11/2026, đo bằng data/personas/generator.py và yofina_ml.behavior.compute_profile
+  (mục 1.4 của tài liệu). Các số này chỉ nằm ở tài liệu, không đưa vào frontend (scripts/check-bundle.mjs chặn số dư persona).
+  Vẽ bằng HTML và CSS thuần, đúng cách tài liệu đề xuất cho biểu đồ dạng thanh. Màu lấy theo biến của frontend/src/index.css.
+  Khung tối được dựng bằng cách nhân bản khung sáng (đoạn script cuối trang); nội dung chỉ viết một lần.
+-->
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px;
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #e9e3e6; color: #2b1a24;
+  }
+  .page-head { max-width: 820px; margin: 0 auto 20px; font-size: 14px; line-height: 1.5; }
+  .page-head h1 { font-size: 20px; margin: 0 0 6px; }
+  .page-head p { margin: 4px 0; }
+  .frames { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; align-items: flex-start; }
+  .frame-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .frame-label { font-size: 13px; font-weight: 700; text-align: center; color: #4a3a44; }
+
+  /* ---------- biến màu (frontend/src/index.css) ---------- */
+  .theme-light {
+    --bg-app: #faf6f7; --bg-surface: #ffffff; --bg-surface-2: #f4eef0; --bg-tint: #fce7f1; --border: #e8dfe3;
+    --ink: #2b1a24; --ink-2: #6e5a66; --brand-text: #a50064; --brand: #c8207e; --accent: #3050c8;
+    --ok-fg: #0b7a52; --ok-bg: #e1f5ec; --ok-line: #12a877;
+    --warn-fg: #8f5200; --warn-bg: #fff0d2; --warn-line: #e39a00;
+    --bad-fg: #b8330a; --bad-bg: #ffe8dc; --bad-line: #e8541c;
+    --jar-an-uong: #7c5ce0; --jar-di-lai: #2fa3d6; --jar-hoa-don: #a8794a; --jar-giai-tri: #b05ce0;
+    --jar-nghia-vu: #7a8794; --jar-gray: #6e5a66;
+    --fixed: #8c7d86; --fixed-bg: #ece5e9;
+    /* Viền 1 px cho thanh: màu Đi lại (2,86:1) và nét "sát" (2,36:1) không đạt 3:1 trên nền trắng (WCAG 1.4.11, G209). */
+    --edge: rgba(43, 26, 36, 0.38);
+    --shadow: 0 1px 2px rgba(43, 26, 36, 0.06), 0 4px 14px rgba(43, 26, 36, 0.06);
+  }
+  .theme-dark {
+    --bg-app: #17101a; --bg-surface: #241a28; --bg-surface-2: #2f2433; --bg-tint: #3a1c30; --border: #3a2e40;
+    --ink: #f4eef0; --ink-2: #b8a9b2; --brand-text: #ff7ebb; --brand: #c8207e; --accent: #8fa8ff;
+    --ok-fg: #4fd3a1; --ok-bg: #123428; --ok-line: #4fd3a1;
+    --warn-fg: #ffc25c; --warn-bg: #3a2c10; --warn-line: #ffc25c;
+    --bad-fg: #ff8c5e; --bad-bg: #3c2016; --bad-line: #ff8c5e;
+    --jar-an-uong: #a58cf2; --jar-di-lai: #5cc0ec; --jar-hoa-don: #c79a6b; --jar-giai-tri: #c98af0;
+    --jar-nghia-vu: #9aa5b1; --jar-gray: #b8a9b2;
+    --fixed: #9a8b94; --fixed-bg: #3a2e40;
+    --edge: rgba(244, 238, 240, 0.0);
+    --shadow: none;
+  }
+
+  /* ---------- khung điện thoại ---------- */
+  .phone {
+    width: 390px; background: var(--bg-app); color: var(--ink);
+    border-radius: 36px; border: 8px solid #1c1419; padding: 20px 16px 28px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .screen-title { font-size: 24px; line-height: 32px; font-weight: 700; margin: 4px 4px 0; }
+  .screen-sub { font-size: 13px; color: var(--ink-2); margin: -10px 4px 0; }
+
+  .card { margin: 0; background: var(--bg-surface); border-radius: 24px; padding: 16px; box-shadow: var(--shadow); }
+  .card-head { display: flex; align-items: center; gap: 8px; }
+  .card-head h2 { flex: 1; margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; background: var(--bg-surface-2); color: var(--ink-2); white-space: nowrap; }
+  .lead { margin: 10px 0 0; font-size: 15px; line-height: 22px; font-weight: 500; }
+  .lead b { font-weight: 700; }
+  .num { font-variant-numeric: tabular-nums; }
+  .small { font-size: 13px; line-height: 18px; color: var(--ink-2); }
+  .note { font-size: 12px; line-height: 16px; color: var(--ink-2); margin: 10px 0 0; }
+
+  .toggles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .toggles button {
+    min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--bg-surface); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600;
+  }
+  .toggles button[aria-pressed="true"] { background: var(--bg-tint); color: var(--brand-text); border-color: transparent; }
+
+  /* ---------- thanh ngang dùng chung ---------- */
+  .bars { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+  .row-top { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .row-top .name { flex: 1; font-weight: 600; }
+  .row-top .amt { font-weight: 700; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; background: var(--c); box-shadow: inset 0 0 0 1px var(--edge); flex: none; }
+  .row-sub { margin: 4px 0 0; font-size: 12px; line-height: 16px; color: var(--ink-2); }
+  .up { color: var(--bad-fg); font-weight: 600; }
+  .track { position: relative; display: flex; height: 14px; margin-top: 6px; border-radius: 7px; background: var(--bg-surface-2); }
+  .seg { height: 100%; box-shadow: inset 0 0 0 1px var(--edge); }
+  .seg:first-child { border-radius: 7px 0 0 7px; }
+  .seg:last-child { border-radius: 0 7px 7px 0; }
+  .seg:only-child { border-radius: 7px; }
+  .solid { background: var(--c); }
+  /* Trả sau: chấm trên nền nhạt của màu hũ */
+  .credit {
+    background-color: color-mix(in srgb, var(--c) 28%, var(--bg-surface));
+    background-image: radial-gradient(var(--c) 1.4px, transparent 1.6px);
+    background-size: 5px 5px;
+  }
+  /* Khoản cố định (nghĩa vụ): gạch chéo xám */
+  .fixed { background: repeating-linear-gradient(135deg, var(--fixed) 0 2px, var(--fixed-bg) 2px 6px); }
+  .prev { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 0 1.5px var(--bg-surface); }
+
+  .legend { list-style: none; margin: 12px 0 0; padding: 10px 0 0; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { display: inline-block; width: 18px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--edge); }
+  .sw-prev { width: 3px; height: 14px; border-radius: 2px; background: var(--ink); box-shadow: none; }
+
+  .cashflow { margin-top: 12px; padding: 10px 12px; border-radius: 16px; background: var(--bg-surface-2); font-size: 13px; line-height: 18px; }
+  .cashflow .track { height: 10px; margin: 6px 0 4px; background: var(--bg-surface); }
+
+  /* ---------- đường băng (B2) ---------- */
+  .axis { position: relative; height: 16px; margin: 14px 0 -6px; font-size: 11px; color: var(--ink-2); }
+  .axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .axis span:first-child { transform: none; }
+  .axis span:last-child { transform: translateX(-100%); font-weight: 700; color: var(--ok-fg); }
+  .rtrack { position: relative; height: 12px; margin-top: 6px; border-radius: 6px; background: var(--ok-line); box-shadow: inset 0 0 0 1px var(--edge); }
+  .rtrack.warn { background: repeating-linear-gradient(90deg, var(--warn-line) 0 100%); }
+  .rtrack .badpart { position: absolute; top: 0; bottom: 0; right: 0; border-radius: 0 6px 6px 0; background: repeating-linear-gradient(45deg, var(--bad-line) 0 2px, var(--bad-bg) 2px 6px); box-shadow: inset 0 0 0 1px var(--bad-line); }
+  .rtrack .pin { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--bad-line); border: 2.5px solid var(--bg-surface); }
+  .rtrack .tick { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--ink); }
+  .st { display: inline-flex; align-items: center; gap: 3px; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 700; }
+  .st-ok { background: var(--ok-bg); color: var(--ok-fg); }
+  .st-warn { background: var(--warn-bg); color: var(--warn-fg); }
+  .st-bad { background: var(--bad-bg); color: var(--bad-fg); }
+
+  /* ---------- thẻ nhận xét trong chat (B3 + B4) ---------- */
+  .bubble-user { align-self: flex-end; max-width: 80%; background: var(--brand); color: #fff; border-radius: 20px 20px 6px 20px; padding: 10px 14px; font-size: 15px; line-height: 22px; }
+  .kind { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  .ratio { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .ratio-row .lbl { display: flex; justify-content: space-between; font-size: 13px; }
+  .ratio-row .lbl b { font-weight: 700; }
+  .ratio-row .track { height: 12px; }
+  .fill-accent { background: var(--accent); }
+  .fill-muted { background: repeating-linear-gradient(135deg, var(--fixed) 0 2px, var(--fixed-bg) 2px 6px); }
+  .gap-text { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--accent); }
+
+  .cols-wrap { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .cols-title { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+  .cols { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; height: 112px; margin-top: 18px; align-items: end; }
+  .col { position: relative; display: flex; flex-direction: column-reverse; height: 100%; justify-content: flex-start; }
+  .col .part { width: 100%; box-shadow: inset 0 0 0 1px var(--edge); }
+  .col .part.top { border-radius: 6px 6px 0 0; }
+  .col .base { background: var(--accent); }
+  .col .cr { --c: var(--accent); }
+  .col .val { position: absolute; left: 50%; transform: translateX(-50%); font-size: 10.5px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .avgline { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--ink-2); pointer-events: none; }
+  .avgline span { position: absolute; left: 30%; top: -15px; font-size: 10.5px; color: var(--ink-2); background: var(--bg-surface); padding: 0 2px; }
+  .col-labels { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 4px; font-size: 12px; text-align: center; color: var(--ink-2); }
+  .col-labels .wk { font-weight: 700; color: var(--ink); }
+  .wk-tag { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; font-size: 10.5px; color: var(--ink-2); text-align: center; }
+  .wk-tag span:nth-child(6) { grid-column: 6 / span 2; border-top: 1.5px solid var(--ink-2); padding-top: 2px; }
+
+  .evidence { margin: 12px 0 0; border-radius: 12px; background: var(--bg-surface-2); padding: 4px 12px; }
+  .evidence div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13px; }
+  .evidence div + div { border-top: 1px solid var(--border); }
+  .evidence dt { margin: 0; }
+  .evidence dt span { display: block; font-size: 12px; color: var(--ink-2); }
+  .evidence dd { margin: 0; font-weight: 700; white-space: nowrap; }
+  .next { margin-top: 12px; border-radius: 12px; background: var(--bg-tint); padding: 10px 12px; font-size: 13px; line-height: 18px; }
+  .next .t { font-size: 12px; font-weight: 600; color: var(--brand-text); }
+  .next .l { font-weight: 600; }
+
+  /* ---------- Trả sau (B6) ---------- */
+  .meter-row .lbl { display: flex; justify-content: space-between; font-size: 13px; margin-top: 12px; }
+  .credit-c { --c: var(--accent); }
+  .fee { background: var(--ink); }
+  .due { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .due h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .txlist { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
+  .txlist li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; }
+
+  /* ---------- ghi chú cho đội (ngoài thẻ) ---------- */
+  .dev { border: 1.5px dashed var(--border); border-radius: 16px; padding: 8px 12px; font-size: 12px; line-height: 16px; color: var(--ink-2); margin-top: -6px; }
+  .dev b { color: var(--ink); }
+  .dev code { font-size: 11.5px; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    .seg, .col .part { transition: width .3s ease, height .3s ease; }
+  }
+</style>
+</head>
+<body>
+
+<header class="page-head">
+  <h1>Minh họa biểu đồ chi tiêu (khổ 390 px)</h1>
+  <p>Bốn biểu đồ đề xuất ở <a href="spending-visualization.md">spending-visualization.md</a>: B1 kỳ lương này tiêu vào đâu, B2 hũ nào sắp cạn, B3/B4 cuối tuần có tiêu nhiều không (dạng thẻ nhận xét trong chat), B6 đã dùng Trả sau bao nhiêu.</p>
+  <p>Số liệu là của persona <b>minh</b> ở ngày mô phỏng 21/11/2026 (ngày 17 của kỳ lương 05/11), đo bằng bộ sinh persona và batch hành vi của repo. Bản tĩnh: các nút chỉ minh họa trạng thái, không bấm được. Khung viền nét đứt là ghi chú cho đội, không hiện trong app.</p>
+</header>
+
+<main class="frames">
+  <div class="frame-wrap">
+    <div class="frame-label">Chế độ sáng</div>
+    <section class="phone theme-light" aria-label="Khung điện thoại, chế độ sáng" data-frame="light">
+
+      <h1 class="screen-title">Hoạt động</h1>
+      <p class="screen-sub">Ví mô phỏng · Kỳ lương 05/11 đến nay</p>
+
+      <!-- ===== B1: tiêu vào đâu (kèm so với kỳ trước) và B7 thu chi kỳ ===== -->
+      <figure class="card">
+        <div class="card-head">
+          <h2>Kỳ lương này tiêu vào đâu</h2>
+          <span class="chip">05/11–21/11</span>
+        </div>
+        <figcaption class="lead">Đã chi <b class="num">6.908.000 ₫</b> trong 17 ngày, nhiều hơn kỳ trước cùng thời điểm <b class="num">3.141.000 ₫</b>. Nhiều nhất ở Ăn uống.</figcaption>
+
+        <div class="toggles" role="group" aria-label="Cách xem">
+          <button type="button" aria-pressed="true">Theo hũ</button>
+          <button type="button" aria-pressed="false">Theo ngày</button>
+          <button type="button" aria-pressed="false">Ẩn khoản cố định</button>
+        </div>
+
+        <ul class="bars" aria-label="Chi theo hũ, kỳ này so với kỳ trước cùng thời điểm">
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-an-uong)" aria-hidden="true"></span><span class="name">Ăn uống</span><span class="amt num">2.738.000 ₫</span></div>
+            <div class="track" aria-hidden="true">
+              <span class="seg solid" style="--c: var(--jar-an-uong); width: 97.8%"></span>
+              <span class="prev" style="left: 36.6%"></span>
+            </div>
+            <p class="row-sub">Kỳ trước 1.025.000 ₫ · <span class="up">▲ tăng 1.713.000 ₫</span> · 64 giao dịch</p>
+          </li>
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-hoa-don)" aria-hidden="true"></span><span class="name">Hóa đơn</span><span class="amt num">2.435.000 ₫</span></div>
+            <div class="track" aria-hidden="true">
+              <span class="seg solid" style="--c: var(--jar-hoa-don); width: 4.1%"></span>
+              <span class="seg fixed" style="width: 82.9%"></span>
+              <span class="prev" style="left: 83.3%"></span>
+            </div>
+            <p class="row-sub">Gồm cố định 2.320.000 ₫ (thuê phòng, Internet, điện thoại) · kỳ trước 2.333.000 ₫ · <span class="up">▲ tăng 102.000 ₫</span></p>
+          </li>
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-giai-tri)" aria-hidden="true"></span><span class="name">Giải trí</span><span class="amt num">1.245.000 ₫</span></div>
+            <div class="track" aria-hidden="true">
+              <span class="seg solid" style="--c: var(--jar-giai-tri); width: 3.5%"></span>
+              <span class="seg credit" style="--c: var(--jar-giai-tri); width: 34.5%"></span>
+              <span class="seg fixed" style="width: 6.4%"></span>
+              <span class="prev" style="left: 6.4%"></span>
+            </div>
+            <p class="row-sub">Gồm Trả sau 967.000 ₫ và Netflix 180.000 ₫ · kỳ trước 180.000 ₫ · <span class="up">▲ tăng 1.065.000 ₫</span></p>
+          </li>
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-di-lai)" aria-hidden="true"></span><span class="name">Đi lại</span><span class="amt num">310.000 ₫</span></div>
+            <div class="track" aria-hidden="true">
+              <span class="seg solid" style="--c: var(--jar-di-lai); width: 11.1%"></span>
+              <span class="prev" style="left: 8.2%"></span>
+            </div>
+            <p class="row-sub">Kỳ trước 229.000 ₫ · <span class="up">▲ tăng 81.000 ₫</span> · 7 giao dịch</p>
+          </li>
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-gray)" aria-hidden="true"></span><span class="name">Chưa phân loại</span><span class="amt num">180.000 ₫</span></div>
+            <div class="track" aria-hidden="true">
+              <span class="seg solid" style="--c: var(--jar-gray); width: 6.4%"></span>
+            </div>
+            <p class="row-sub">2 khoản chưa xếp hũ · <a href="#" style="color: var(--brand-text); font-weight: 600">Xếp hũ</a></p>
+          </li>
+        </ul>
+
+        <ul class="legend" aria-label="Chú giải">
+          <li><span class="sw" style="background: var(--jar-an-uong)"></span>Chi thường</li>
+          <li><span class="sw credit" style="--c: var(--jar-giai-tri)"></span>Trả sau</li>
+          <li><span class="sw fixed"></span>Khoản cố định</li>
+          <li><span class="sw sw-prev"></span>Kỳ trước, cùng ngày của kỳ</li>
+        </ul>
+
+        <div class="cashflow">
+          <div>Lương vào <b class="num">9.000.000 ₫</b> ngày 05/11 · đã chi <b class="num">6.908.000 ₫</b></div>
+          <div class="track" aria-hidden="true"><span class="seg solid" style="--c: var(--accent); width: 76.8%"></span></div>
+          <div class="small">Tiền vào khác 350.000 ₫ không tính là thu nhập.</div>
+        </div>
+      </figure>
+      <div class="dev"><b>B1 + B7 · P1.</b> Dữ liệu: <code>get_cashflow_summary</code>, cần route <code>GET /cashflow</code> kèm <code>obligation_vnd</code>, <code>credit_vnd</code>, <code>previous</code>. Chạm một hũ lọc danh sách bên dưới (<code>?jar=</code>). Mỗi hũ là một mục danh sách có chữ đầy đủ; thanh là <code>aria-hidden</code>.</div>
+
+      <!-- ===== B2: hũ nào sắp cạn ===== -->
+      <figure class="card">
+        <div class="card-head">
+          <h2>Hũ nào sắp cạn</h2>
+          <span class="chip">14 ngày tới lương</span>
+        </div>
+        <figcaption class="lead">2 hũ cần chú ý trước kỳ lương 05/12: Ăn uống dự kiến cạn 23/11, Hóa đơn sát vì tiền điện 26/11.</figcaption>
+
+        <div class="axis" aria-hidden="true">
+          <span style="left: 0">Hôm nay 21/11</span>
+          <span style="left: 50%">28/11</span>
+          <span style="left: 100%">Lương 05/12</span>
+        </div>
+        <ul class="bars" aria-label="Các hũ từ hôm nay tới kỳ lương">
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-an-uong)" aria-hidden="true"></span><span class="name">Ăn uống</span><span class="st st-bad"><span aria-hidden="true">↘</span> Hụt</span><span class="amt num">380.000 ₫</span></div>
+            <div class="rtrack" aria-hidden="true">
+              <span class="badpart" style="left: 14.3%"></span>
+              <span class="pin" style="left: 14.3%"></span>
+            </div>
+            <p class="row-sub">Dự kiến cạn 23/11, ngày trả cơm văn phòng 300.000 ₫; 12 ngày trước kỳ lương.</p>
+          </li>
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-hoa-don)" aria-hidden="true"></span><span class="name">Hóa đơn</span><span class="st st-warn"><span aria-hidden="true">⚠</span> Sát</span><span class="amt num">450.000 ₫</span></div>
+            <div class="rtrack warn" aria-hidden="true">
+              <span class="tick" style="left: 35.7%"></span>
+            </div>
+            <p class="row-sub">Tiền điện 26/11 khoảng 300.000 đến 450.000 ₫, sau đó còn rất ít.</p>
+          </li>
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-giai-tri)" aria-hidden="true"></span><span class="name">Giải trí</span><span class="st st-ok"><span aria-hidden="true">✓</span> Đủ</span><span class="amt num">760.000 ₫</span></div>
+            <div class="rtrack" aria-hidden="true"></div>
+          </li>
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-di-lai)" aria-hidden="true"></span><span class="name">Đi lại</span><span class="st st-ok"><span aria-hidden="true">✓</span> Đủ</span><span class="amt num">640.000 ₫</span></div>
+            <div class="rtrack" aria-hidden="true"></div>
+          </li>
+          <li>
+            <div class="row-top"><span class="dot" style="--c: var(--jar-nghia-vu)" aria-hidden="true"></span><span class="name">Nghĩa vụ</span><span class="st st-ok"><span aria-hidden="true">✓</span> Đủ</span><span class="amt num">1.000.000 ₫</span></div>
+            <div class="rtrack" aria-hidden="true">
+              <span class="tick" style="left: 99%"></span>
+            </div>
+            <p class="row-sub">Giữ cho khoản Trả sau 1.000.000 ₫ đến hạn 05/12.</p>
+          </li>
+        </ul>
+        <p class="note">Hũ tiết kiệm (Du lịch, Dự phòng) không hiện ở đây. Chạm một hũ để xem dự báo 30 ngày.</p>
+      </figure>
+      <div class="dev"><b>B2 · P0.</b> Dữ liệu: <code>GET /overview</code> (<code>jars[].status</code>, <code>runout_date</code>, <code>next_payday</code>, <code>obligations_due</code>), không đổi hợp đồng. Đặt ở đầu tab Dự báo. Trạng thái luôn có biểu tượng và chữ; đoạn hụt có gạch chéo.</div>
+
+      <!-- ===== B3 + B4: thẻ nhận xét trong chat ===== -->
+      <div class="bubble-user">Cuối tuần mình có tiêu nhiều không?</div>
+      <figure class="card">
+        <div class="card-head">
+          <span class="kind" style="flex: 1">Ngày trong tuần</span>
+          <span class="st st-warn">Tin cậy vừa</span>
+        </div>
+        <figcaption class="lead" style="font-size: 16px; font-weight: 600">Cuối tuần bạn chi 37% tổng chi, dù cuối tuần chỉ chiếm 26% số ngày.</figcaption>
+
+        <div class="ratio" role="img" aria-label="Phần chi vào thứ Bảy, Chủ nhật 37%; phần số ngày là cuối tuần 26%; nhiều hơn mức chi đều 11 điểm phần trăm.">
+          <div class="ratio-row" aria-hidden="true">
+            <div class="lbl"><span>Phần chi vào thứ Bảy, Chủ nhật</span><b class="num">37%</b></div>
+            <div class="track"><span class="seg fill-accent" style="width: 37%"></span></div>
+          </div>
+          <div class="ratio-row" aria-hidden="true">
+            <div class="lbl"><span>Phần số ngày là cuối tuần (nếu chi đều)</span><b class="num">26%</b></div>
+            <div class="track"><span class="seg fill-muted" style="width: 26%"></span></div>
+          </div>
+        </div>
+        <p class="gap-text">Nhiều hơn mức chi đều 11 điểm phần trăm.</p>
+
+        <div class="cols-wrap">
+          <p class="cols-title">Trung bình mỗi ngày theo thứ, 05/10–20/11</p>
+          <div class="cols" aria-hidden="true">
+            <div class="col">
+              <span class="part base" style="height: 43.6%"></span>
+              <span class="part credit cr top" style="height: 53.1%"></span>
+              <span class="val" style="bottom: calc(96.7% + 2px)">251k</span>
+            </div>
+            <div class="col"><span class="part base top" style="height: 34.3%"></span><span class="val" style="bottom: calc(34.3% + 2px)">89k</span></div>
+            <div class="col"><span class="part base top" style="height: 31.9%"></span><span class="val" style="bottom: calc(31.9% + 2px)">83k</span></div>
+            <div class="col"><span class="part base top" style="height: 34.6%"></span><span class="val" style="bottom: calc(34.6% + 2px)">90k</span></div>
+            <div class="col"><span class="part base top" style="height: 36.5%"></span><span class="val" style="bottom: calc(36.5% + 2px)">95k</span></div>
+            <div class="col"><span class="part base top" style="height: 78.1%"></span><span class="val" style="bottom: calc(78.1% + 2px)">203k</span></div>
+            <div class="col"><span class="part base top" style="height: 81.8%"></span><span class="val" style="bottom: calc(81.8% + 2px)">213k</span></div>
+            <div class="avgline" style="bottom: 55.3%"><span>TB 144k</span></div>
+          </div>
+          <div class="col-labels" aria-hidden="true"><span>T2</span><span>T3</span><span>T4</span><span>T5</span><span>T6</span><span class="wk">T7</span><span class="wk">CN</span></div>
+          <div class="wk-tag" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span>Cuối tuần</span></div>
+          <table class="sr-only">
+            <caption>Chi trung bình mỗi ngày theo thứ, 05/10 đến 20/11, không gồm khoản cố định</caption>
+            <thead><tr><th scope="col">Thứ</th><th scope="col">Trung bình mỗi ngày</th><th scope="col">Trong đó Trả sau</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Thứ Hai</th><td>251.429 ₫</td><td>138.143 ₫</td></tr>
+              <tr><th scope="row">Thứ Ba</th><td>89.286 ₫</td><td>0 ₫</td></tr>
+              <tr><th scope="row">Thứ Tư</th><td>83.000 ₫</td><td>0 ₫</td></tr>
+              <tr><th scope="row">Thứ Năm</th><td>90.000 ₫</td><td>0 ₫</td></tr>
+              <tr><th scope="row">Thứ Sáu</th><td>94.857 ₫</td><td>0 ₫</td></tr>
+              <tr><th scope="row">Thứ Bảy</th><td>203.167 ₫</td><td>0 ₫</td></tr>
+              <tr><th scope="row">Chủ nhật</th><td>212.667 ₫</td><td>0 ₫</td></tr>
+            </tbody>
+          </table>
+          <p class="note">Thứ Hai cao vì 2 lần mua Trả sau (09/11 và 16/11, phần chấm) rơi vào thứ Hai; bỏ phần đó thì thứ Hai là 113.286 ₫. Đường đứt là trung bình cả kỳ 143.723 ₫ mỗi ngày.</p>
+        </div>
+
+        <dl class="evidence" aria-label="Bằng chứng">
+          <div><dt>Chi trung bình mỗi Chủ nhật<span>05/10–20/11</span></dt><dd class="num">212.667 ₫</dd></div>
+        </dl>
+        <div class="next">
+          <div class="t">Việc nên làm</div>
+          <div class="l">Xem lại các khoản Trả sau trước ngày đến hạn</div>
+          <div class="small">Trả sau không trừ hũ ngay nhưng sẽ phải trả bằng tiền của hũ khi đến hạn.</div>
+        </div>
+      </figure>
+      <div class="dev"><b>B3 · P0</b> (hai thanh tỷ lệ từ cặp bằng chứng <code>weekend_share</code>/<code>weekend_day_share</code> đã có). <b>B4 · P1</b> (7 cột, cần <code>weekday_avg_vnd</code>, <code>weekday_credit_avg_vnd</code> và <code>BehaviorInsight.series</code>). Cùng component ở chat và Hồ sơ.</div>
+
+      <!-- ===== B6: Trả sau ===== -->
+      <figure class="card">
+        <div class="card-head">
+          <h2>Đã dùng Trả sau bao nhiêu</h2>
+          <span class="chip">Trả sau (mô phỏng)</span>
+        </div>
+        <figcaption class="lead">Đang nợ gốc <b class="num">967.000 ₫</b> trên hạn mức 5.000.000 ₫. Ngày 05/12 phải trả 1.000.000 ₫, hũ Nghĩa vụ đang có đủ.</figcaption>
+
+        <div class="meter-row">
+          <div class="lbl"><span>Đã dùng <b class="num">967.000 ₫</b> (19%)</span><span>Còn <b class="num">4.033.000 ₫</b></span></div>
+          <div class="track" role="img" aria-label="Đã dùng 967.000 ₫ trên hạn mức 5.000.000 ₫, còn 4.033.000 ₫">
+            <span class="seg credit credit-c" style="width: 19.3%"></span>
+          </div>
+        </div>
+
+        <div class="due">
+          <h3>Đến hạn 05/12</h3>
+          <div class="meter-row">
+            <div class="lbl"><span>Phải trả: gốc 967.000 + phí 33.000</span><b class="num">1.000.000 ₫</b></div>
+            <div class="track" aria-hidden="true">
+              <span class="seg credit credit-c" style="width: 96.7%"></span>
+              <span class="seg fee" style="width: 3.3%"></span>
+            </div>
+          </div>
+          <div class="meter-row">
+            <div class="lbl"><span>Hũ Nghĩa vụ đang có</span><b class="num">1.000.000 ₫</b></div>
+            <div class="track" aria-hidden="true"><span class="seg solid" style="--c: var(--jar-nghia-vu); width: 100%"></span></div>
+          </div>
+          <p style="margin: 10px 0 0"><span class="st st-ok"><span aria-hidden="true">✓</span> Đủ trả</span> <span class="small">vừa đúng số phải trả, không còn dư.</span></p>
+        </div>
+
+        <div class="due">
+          <h3>47 ngày qua: 2 lần, chiếm 14% chi tiêu</h3>
+          <ul class="txlist">
+            <li><span>09/11 · Lazada - Bàn phím cơ</span><b class="num">520.000 ₫</b></li>
+            <li><span>16/11 · Tiki - Sách và văn phòng phẩm</span><b class="num">447.000 ₫</b></li>
+          </ul>
+        </div>
+      </figure>
+      <div class="dev"><b>B6 · P0.</b> Dữ liệu: <code>GET /credit-line</code>, <code>GET /obligations</code> (khoản <code>bnpl</code>), số dư hũ trả từ <code>GET /overview</code>, <code>bnpl_share</code> của hồ sơ hành vi; không đổi hợp đồng. Thay dải ba số ở màn Nghĩa vụ.</div>
+
+    </section>
+  </div>
+
+  <div class="frame-wrap" id="dark-slot">
+    <div class="frame-label">Chế độ tối</div>
+    <noscript><p class="frame-label">Khung tối được nhân bản từ khung sáng bằng JavaScript; hãy bật JavaScript để xem.</p></noscript>
+  </div>
+</main>
+
+<script>
+  // Nhân bản khung sáng thành khung tối để nội dung chỉ viết một lần (không có id nào trong khung nên không trùng id).
+  (function () {
+    var light = document.querySelector('[data-frame="light"]');
+    var dark = light.cloneNode(true);
+    dark.classList.remove('theme-light');
+    dark.classList.add('theme-dark');
+    dark.setAttribute('data-frame', 'dark');
+    dark.setAttribute('aria-label', 'Khung điện thoại, chế độ tối');
+    document.getElementById('dark-slot').appendChild(dark);
+  })();
+</script>
+</body>
+</html>
