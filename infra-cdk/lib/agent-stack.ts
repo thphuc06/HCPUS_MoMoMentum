@@ -6,9 +6,11 @@ import * as agentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as sns from 'aws-cdk-lib/aws-sns';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { YofinaConfig } from '../config/config';
 import { YofinaGuardrail } from './guardrail';
+import { YofinaMemory } from './memory';
 import { publishParams } from './ssm-outputs';
 import { ToolsConfig } from './tools-stack';
 
@@ -373,6 +375,12 @@ export class AgentStack extends Stack {
       }),
     );
 
+    // --- AgentCore Memory (phase 5, luồng B): một Memory cho cả ứng dụng, namespace theo sub; quyền tối thiểu cho Runtime -------
+    const memory = new YofinaMemory(this, 'LongTermMemory', {
+      alertTopic: sns.Topic.fromTopicArn(this, 'AlertTopic', param('sns/alert-topic-arn')),
+    });
+    memory.grantAgentRuntime(runtimeRole);
+
     // --- Runtime --------------------------------------------------------------------------
     const runtime = new agentcore.CfnRuntime(this, 'AgentRuntime', {
       agentRuntimeName: agent.runtimeName,
@@ -400,6 +408,7 @@ export class AgentStack extends Stack {
         YOFINA_TURN_BLOCKS_TOOL: 'ledger___save_turn',
         YOFINA_TURN_RECORD_TOOL: 'audit___record_turn',
         YOFINA_LOG_LEVEL: 'INFO',
+        YOFINA_MEMORY_ID: memory.memoryId,
       },
     });
     runtime.node.addDependency(runtimeRole);
