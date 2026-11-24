@@ -664,7 +664,7 @@ def test_cedar_cua_tool_moi_dung_dang_va_save_roadmap_khong_chan_theo_token():
         assert "context.input has user_id && context.input.user_id == principal.id" in code
         assert "confirm_token" not in code and not re.search(r"\b[0-9]{6,}\b", code)  # không token, không số gắn cứng
     contract_tools = set()
-    for target in ("ledger", "forecast", "knowledge", "planner", "audit"):
+    for target in ("ledger", "forecast", "knowledge", "planner", "audit", "ingest"):
         contract_tools |= {t["name"] for t in load_json(CONTRACTS / "tools" / f"{target}.json")}
     # mỗi tool đúng một policy (CDK bắt buộc); tool phase 5 chưa cài có Cedar do luồng cài nó thêm (xem test_contracts_phase5)
     pending = {t for t in wallet.PHASE5_TOOLS if not (policies / f"{t}.cedar").exists()}

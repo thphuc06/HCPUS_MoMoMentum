@@ -12,7 +12,8 @@ Luồng một tệp:
 2. **Che PII ngay sau khi đọc** (`yofina_core.pii`) TRƯỚC khi lưu, ghi log hay gửi văn bản cho lời gọi model thứ hai.
 3. **Loại**: thất bại, chưa thực hiện, nạp tiền giữa tài khoản của chính mình, dòng không đọc được số tiền. Không dòng nào của màn xác
    nhận/OTP/biểu mẫu trống hay bảng phí đi qua được bước này thành `auto_add`.
-4. **Gán hũ**: luật người dùng, rồi bảng `tx_type_map`, rồi đề xuất của model (`context.resolve_jar`).
+4. **Gán hũ**: bộ phân loại phase 4 (`yofina_ingest.classify`): luật người dùng, bảng `tx_type_map`, embedding k-NN, model nhỏ (đề xuất
+   hũ của chính lượt đọc tệp); ba mức tin cậy, chỉ mức `auto` được chọn sẵn.
 5. **Tự chọn sẵn** (`should_auto_add`): chỉ khi đủ tin cậy và tệp không chứa văn bản giống chỉ dẫn; dòng chứa câu giống chỉ dẫn và mọi dòng
    của tệp bị gắn cờ luôn vào hàng chờ duyệt.
 """
@@ -40,7 +41,8 @@ from yofina_core.llm import (
 from yofina_core.params import MAX_VND
 from yofina_core.pii import PiiPolicy, mask_counterparty, mask_row_text
 from yofina_ingest import csvparse, prompts
-from yofina_ingest.context import ExtractContext, eval_context, resolve_jar
+from yofina_ingest.classify import RowInput, classify_rows
+from yofina_ingest.context import ExtractContext, eval_context
 from yofina_ingest.normalize import (
     clean_text,
     looks_failed,
@@ -181,10 +183,16 @@ def _masked(raw: RawRow, ctx: ExtractContext) -> tuple[str | None, str | None]:
 
 
 def finalize_rows(
-    raws: Sequence[RawRow], ctx: ExtractContext, *, file_flagged: bool
+    raws: Sequence[RawRow],
+    ctx: ExtractContext,
+    *,
+    file_flagged: bool,
+    gateway: LlmGateway | None = None,
 ) -> tuple[list[Candidate], list[Dropped]]:
-    """Loại, che PII, gán hũ, quyết định tự chọn sẵn. Thứ tự dòng được giữ; `seq` đánh lại từ 1."""
+    """Loại, che PII, gán hũ (bộ phân loại phase 4, `yofina_ingest.classify`), quyết định tự chọn sẵn. Thứ tự dòng được giữ; `seq`
+    đánh lại từ 1. `gateway` chỉ dùng để nhúng chuỗi cho bước k-NN (khi ngữ cảnh có kho nhãn)."""
     out: list[Candidate] = []
+    proposals: list[tuple[str | None, float | None, bool | None]] = []
     dropped: list[Dropped] = []
     cap = ctx.settings.ingest_csv_max_rows
     for raw in raws:
@@ -223,24 +231,6 @@ def finalize_rows(
         kind = "expense" if raw.direction == "out" else "income"
         info = ctx.type_map.get(raw.tx_type or "")
         tx_type = raw.tx_type if info is not None and info.direction == raw.direction else None
-        choice = resolve_jar(
-            kind=kind,
-            counterparty=cp,
-            description=desc,
-            tx_type=tx_type,
-            model_jar=raw.jar_code,
-            model_jar_confidence=raw.jar_confidence,
-            ctx=ctx,
-        )
-        auto = should_auto_add(
-            kind=kind,
-            extract_confidence=confidence,
-            jar_code=choice.code if choice else None,
-            jar_confidence=choice.confidence if choice else None,
-            settings=ctx.settings,
-        )
-        if file_flagged or injected or "date_missing" in flags:
-            auto = False
         out.append(
             Candidate(
                 seq=len(out) + 1,
@@ -251,14 +241,47 @@ def finalize_rows(
                 description=desc,
                 extract_confidence=round(confidence, 3),
                 tx_type=tx_type,
-                jar_code=choice.code if choice else None,
-                jar_confidence=round(choice.confidence, 3) if choice else None,
-                jar_source=choice.source if choice else None,
-                auto_add=auto,
                 source_row=raw.source_row,
                 flags=flags,
             )
         )
+        proposals.append((raw.jar_code, raw.jar_confidence, raw.is_person))
+    # gán hũ cho MỌI dòng chi một lần (bộ phân loại phase 4; embedding gom lô), rồi mới quyết định chọn sẵn
+    expense = [i for i, c in enumerate(out) if c.kind == "expense"]
+    choices = classify_rows(
+        [
+            RowInput(
+                app_date=out[i].app_date,
+                amount_vnd=out[i].amount_vnd,
+                counterparty=out[i].counterparty,
+                description=out[i].description,
+                is_person=proposals[i][2],
+                tx_type=out[i].tx_type,
+                proposal_jar=proposals[i][0],
+                proposal_confidence=proposals[i][1],
+            )
+            for i in expense
+        ],
+        ctx.classify_inputs(gateway),
+    )
+    chosen = dict(zip(expense, choices, strict=True))
+    for i, c in enumerate(out):
+        choice = chosen.get(i)
+        if choice is not None:
+            c.jar_code, c.jar_confidence, c.jar_source = choice.code, choice.confidence, choice.source
+        auto = should_auto_add(
+            kind=c.kind,
+            extract_confidence=c.extract_confidence,
+            jar_code=c.jar_code,
+            jar_confidence=c.jar_confidence,
+            settings=ctx.settings,
+        )
+        # dòng chi chỉ được chọn sẵn khi bộ phân loại xếp mức `auto`; mức `review`, `ask` vào hàng chờ duyệt
+        if c.kind == "expense" and (choice is None or choice.tier != "auto"):
+            auto = False
+        if file_flagged or "instruction_like_text" in c.flags or "date_missing" in c.flags:
+            auto = False
+        c.auto_add = auto
     return out, dropped
 
 
@@ -326,7 +349,7 @@ def extract_image(data: bytes, ctx: ExtractContext, gateway: LlmGateway) -> Extr
             )
         )
     result.candidates, result.dropped = finalize_rows(
-        raws, ctx, file_flagged=doc.contains_instructions
+        raws, ctx, file_flagged=doc.contains_instructions, gateway=gateway
     )
     return result
 
@@ -494,7 +517,9 @@ def extract_csv(data: bytes, ctx: ExtractContext, gateway: LlmGateway) -> Extrac
                 flags=list(r.notes),
             )
         )
-    result.candidates, finalized_dropped = finalize_rows(raws, ctx, file_flagged=False)
+    result.candidates, finalized_dropped = finalize_rows(
+        raws, ctx, file_flagged=False, gateway=gateway
+    )
     result.dropped.extend(finalized_dropped)
     return result
 

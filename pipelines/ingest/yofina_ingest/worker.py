@@ -5,7 +5,8 @@ Một bản tin SQS (thân là thông báo S3) xử lý như sau:
 1. Khóa S3 `{prefix}{user_id}/{job_id}` cho biết người dùng và job; job phải ở `awaiting_upload` và `s3_key` đã lưu phải trùng khóa này,
    không thì BỎ QUA (tải lại cùng URL, khóa lạ, bản tin kiểm tra của S3).
 2. Đọc tệp, băm `content_sha256`: trùng nội dung với job còn sống khác thì job này `rejected` (`INGEST_DUPLICATE_FILE`).
-3. `queued` -> `processing`, trích dòng (`extract.extract_rows`, che PII ngay), khử trùng với sổ cái (`app_find_ingest_matches`),
+3. `queued` -> `processing`, trích dòng (`extract.extract_rows`, che PII ngay, gán hũ bằng bộ phân loại phase 4 với nhãn k-NN và lịch sử
+   của chính người dùng), khử trùng với sổ cái (`app_find_ingest_matches`),
    ghi `ingest_rows`, tính độ phủ hiện tại, job sang `review`. Tệp gốc xóa khỏi S3 sau khi đọc xong (không giữ ảnh).
 4. Lỗi vĩnh viễn (tệp không đọc được, không phải tài chính, hết hạn mức model) -> job `rejected`/`failed` với mã lỗi, bản tin coi như xong.
    Lỗi tạm thời (Aurora đang dậy, model nghẽn) -> ném lại để SQS giao lại; đến lần giao cuối thì job được đánh dấu `failed` TRƯỚC khi bản
@@ -141,6 +142,9 @@ class Worker:
             policy=PiiPolicy.build(keep=payees, self_names=self_names),
             today=today,
             settings=self.rt.settings,
+            user_id=uid,
+            store=self.repo.label_store(),
+            tz=ZoneInfo(self.rt.app_timezone),
         )
 
     # --- một tệp -------------------------------------------------------------------------------------------------------------

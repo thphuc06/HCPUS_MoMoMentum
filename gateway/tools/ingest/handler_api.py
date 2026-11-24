@@ -1,6 +1,11 @@
-"""Điểm vào của Lambda `yofina-ingest-api`: sáu route `/ingest/*` của HTTP API `yofina-api` (payload v2).
+"""Điểm vào của Lambda `yofina-ingest-api`: một mã, hai đường vào.
 
-Dịch vụ được dựng một lần cho mỗi môi trường thực thi (cache boto3, khóa HMAC, kết nối Data API). Danh tính là claim `sub` của JWT authorizer.
+- HTTP API (payload v2): sáu route `/ingest/*` của `yofina-api`; sự kiện có `requestContext.http`, danh tính là claim `sub` của JWT
+  authorizer.
+- AgentCore Gateway (target `ingest`): ba tool `ingest___start_job`, `ingest___get_job_status`, `ingest___confirm_rows`; sự kiện là tham
+  số của tool (kèm `user_id` do interceptor ghi đè), tên tool ở `context.client_context.custom["bedrockAgentCoreToolName"]`.
+
+Dịch vụ được dựng một lần cho mỗi môi trường thực thi (cache boto3, khóa HMAC, kết nối Data API).
 """
 
 from __future__ import annotations
@@ -10,6 +15,7 @@ import os
 from typing import Any
 
 from yofina_ingest.api import IngestApi, s3_presigner
+from yofina_ingest.gateway_api import handle_gateway, is_gateway_event
 from yofina_ingest.repo import IngestRepo
 from yofina_ingest.rest import handle_http
 from yofina_ingest.settings import IngestRuntime
@@ -49,4 +55,6 @@ def get_api() -> IngestApi:
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    if is_gateway_event(event):
+        return handle_gateway(event, context, get_api())
     return handle_http(event, get_api())

@@ -320,16 +320,39 @@ describe('YofinaIngest', () => {
     assert.match(JSON.stringify(sts[0].Resource), /ap-southeast-1::foundation-model\/amazon\.titan-text-lite-v1/);
   });
 
-  it('llm_defaults.json thật của repo có hai vai ingest: không cảnh báo, quyền đúng model của vai', () => {
+  it('llm_defaults.json thật của repo có ba vai của worker: không cảnh báo, quyền đúng model của vai', () => {
     const real = path.resolve(__dirname, '..', '..', 'libs', 'yofina_core', 'src', 'yofina_core', 'llm_defaults.json');
     const defaults = JSON.parse(fs.readFileSync(real, 'utf-8'));
-    assert.ok(defaults.roles.ingest && defaults.roles.ingest_columns, 'llm_defaults.json thiếu vai ingest hoặc ingest_columns');
+    assert.ok(
+      defaults.roles.ingest && defaults.roles.ingest_columns && defaults.roles.embedding,
+      'llm_defaults.json thiếu vai ingest, ingest_columns hoặc embedding',
+    );
     const { stack: s, template: t } = build({ ingestLlmDefaults: real });
     Annotations.fromStack(s).hasNoWarning('*', Match.stringLikeRegexp('llm-role-missing|chưa có vai'));
     Annotations.fromStack(s).hasNoError('*', Match.anyValue());
-    const json = JSON.stringify(statementsOf(t, 'WorkerServiceRole').filter((x) => asList<string>(x.Action).includes('bedrock:InvokeModel')));
+    const sts = statementsOf(t, 'WorkerServiceRole').filter((x) => asList<string>(x.Action).includes('bedrock:InvokeModel'));
+    const json = JSON.stringify(sts);
     for (const m of ['claude-sonnet-4-6', 'kimi-k3', 'nova-2-lite-v1:0', 'claude-haiku-4-5-20251001-v1:0']) assert.ok(json.includes(m), m);
-    assert.ok(!json.includes('embed'), 'vai embedding không thuộc ingest');
+    // bước k-NN của bộ phân loại phase 4: Cohere Embed gọi thẳng ở region (không hồ sơ global), đúng model của vai embedding
+    const embed = defaults.roles.embedding.models.map((m: { id: string }) => m.id) as string[];
+    const regional = sts.find((x) => x.Sid === 'InvokeRegionalModels');
+    assert.ok(regional, 'thiếu quyền model gọi thẳng ở region');
+    for (const m of embed) assert.match(JSON.stringify(regional.Resource), new RegExp(`ap-southeast-1::foundation-model/${m.replace(/[.]/g, '\\.')}`));
+    // API (REST + Gateway) không gọi model nào
+    assert.equal(statementsOf(t, 'ApiServiceRole').filter((x) => asList<string>(x.Action).includes('bedrock:InvokeModel')).length, 0);
+  });
+
+  it('ngưỡng phân loại ghi đè bằng CÙNG context classifyThresholds với yofina-classify, chỉ ở worker', () => {
+    const { template: t } = build({ classifyThresholds: '{"auto_min_confidence": 0.93}' });
+    const fns = t.findResources('AWS::Lambda::Function') as Record<string, Res>;
+    const env = (name: string) =>
+      Object.values(fns).find((f) => f.Properties.FunctionName === name)!.Properties.Environment.Variables as Record<string, string>;
+    assert.equal(env('yofina-ingest').YOFINA_CLASSIFY_AUTO_MIN_CONFIDENCE, '0.93');
+    assert.equal(env('yofina-ingest-api').YOFINA_CLASSIFY_AUTO_MIN_CONFIDENCE, undefined);
+    const plain = build({}).template.findResources('AWS::Lambda::Function') as Record<string, Res>;
+    for (const f of Object.values(plain)) {
+      assert.ok(!Object.keys(f.Properties.Environment?.Variables ?? {}).some((k) => k.startsWith('YOFINA_CLASSIFY_')));
+    }
   });
 
   it('6 route JWT trên API có sẵn, chỉ GET/POST (CORS của yofina-api), authorizer cùng issuer/audience, AWS_PROXY 2.0', () => {

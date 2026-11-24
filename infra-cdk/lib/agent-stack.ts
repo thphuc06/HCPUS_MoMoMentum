@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { App, CfnOutput, Duration, Fn, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { App, ArnFormat, CfnOutput, Duration, Fn, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as agentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -260,6 +260,20 @@ export class AgentStack extends Stack {
       }
     }
 
+    // --- target ingest (phase 5, F6): Lambda yofina-ingest-api của stack YofinaIngest ------
+    addIngestTarget(this, {
+      gateway,
+      gatewayRole,
+      engine,
+      after: previousTarget,
+      functionName: param('ingest/api-function-name'),
+      renderPolicy: (file) =>
+        renderCedar(file, gateway.attrGatewayArn, {
+          move: tools.moveMaxAmountVnd,
+          transaction: tools.transactionMaxAmountVnd,
+        }),
+    });
+
     // --- vai trò của Runtime (quyền tối thiểu) --------------------------------------------
     const llm = JSON.parse(
       fs.readFileSync(path.join(REPO, 'libs', 'yofina_core', 'src', 'yofina_core', 'llm_defaults.json'), 'utf-8'),
@@ -421,4 +435,64 @@ export class AgentStack extends Stack {
     new CfnOutput(this, 'GatewayId', { value: gateway.attrGatewayIdentifier });
     new CfnOutput(this, 'RuntimeId', { value: runtime.attrAgentRuntimeId });
   }
+}
+
+export interface IngestTargetProps {
+  readonly gateway: agentcore.CfnGateway;
+  readonly gatewayRole: iam.Role;
+  readonly engine: agentcore.CfnPolicyEngine;
+  /** Target tạo trước (Gateway chỉ đổi một target mỗi lần): target ingest đi sau nó. */
+  readonly after: agentcore.CfnGatewayTarget;
+  /** Tên Lambda `yofina-ingest-api` (SSM `/yofina/ingest/api-function-name` do stack YofinaIngest ghi). */
+  readonly functionName: string;
+  /** Đọc một file Cedar và thay placeholder (cùng hàm với các target khác). */
+  readonly renderPolicy: (file: string) => string;
+}
+
+/**
+ * Target Gateway `ingest` (phase 5, F6): ba tool `ingest___start_job`, `ingest___get_job_status`, `ingest___confirm_rows` của
+ * `contracts/tools/ingest.json`, trỏ Lambda `yofina-ingest-api` (cùng Lambda với REST `/ingest/*`: `handler_api.handler` rẽ theo dạng
+ * sự kiện). Cùng interceptor ghi đè `user_id` và một policy Cedar mỗi tool (`gateway/policies/<tool>.cedar`, thiếu là lỗi synth).
+ * `confirm_rows` chỉ ghi khi có token xác nhận do REST cấp (Lambda kiểm, như `POST /ingest/actions`).
+ *
+ * Quyền: vai của Gateway được `lambda:InvokeFunction` đúng hàm này (không wildcard). Deploy YofinaIngest TRƯỚC YofinaAgent (tham số SSM).
+ */
+export function addIngestTarget(stack: Stack, props: IngestTargetProps): agentcore.CfnGatewayTarget {
+  const fnArn = stack.formatArn({
+    service: 'lambda',
+    resource: 'function',
+    resourceName: props.functionName,
+    arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+  });
+  props.gatewayRole.addToPolicy(
+    new iam.PolicyStatement({ sid: 'InvokeIngestTarget', actions: ['lambda:InvokeFunction'], resources: [fnArn] }),
+  );
+  const defs = JSON.parse(
+    fs.readFileSync(path.join(REPO, 'contracts', 'tools', 'ingest.json'), 'utf-8'),
+  ) as Array<{ name: string }>;
+  const target = new agentcore.CfnGatewayTarget(stack, 'IngestTarget', {
+    gatewayIdentifier: props.gateway.attrGatewayIdentifier,
+    name: 'ingest',
+    description: 'Lambda yofina-ingest-api: trang thai lan nap anh/CSV, bang duyet dong, chot dong (ghi co xac nhan)',
+    targetConfiguration: {
+      mcp: { lambda: { lambdaArn: fnArn, toolSchema: { inlinePayload: defs as any } } },
+    },
+    credentialProviderConfigurations: [{ credentialProviderType: 'GATEWAY_IAM_ROLE' }],
+  });
+  target.node.addDependency(props.after);
+  target.node.addDependency(props.gatewayRole); // quyền gọi Lambda có trước khi Gateway gắn target
+  const policyDir = path.join(REPO, 'gateway', 'policies');
+  for (const tool of defs) {
+    const file = path.join(policyDir, `${tool.name}.cedar`);
+    if (!fs.existsSync(file)) throw new Error(`Thiếu luật Cedar cho tool ${tool.name}: ${file}`);
+    const policy = new agentcore.CfnPolicy(stack, `Policy-ingest-${tool.name}`, {
+      policyEngineId: props.engine.attrPolicyEngineId,
+      name: `ingest_${tool.name}_own_user`,
+      description: `Cedar cho ingest___${tool.name}`,
+      definition: { cedar: { statement: props.renderPolicy(file) } },
+      validationMode: 'FAIL_ON_ANY_FINDINGS',
+    });
+    policy.node.addDependency(target);
+  }
+  return target;
 }

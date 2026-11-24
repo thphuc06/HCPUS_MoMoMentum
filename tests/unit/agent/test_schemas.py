@@ -46,10 +46,14 @@ def intent(**over):
 
 # --- IntentResult ------------------------------------------------------------------------------
 def test_muoi_y_dinh_khop_hang_so_hop_dong():
-    assert tuple(s.Intent.__args__) == wallet.INTENTS
+    args = tuple(s.Intent.__args__)
+    assert args[: len(wallet.INTENTS)] == wallet.INTENTS
     assert len(wallet.INTENTS) == 10
     assert wallet.INTENTS[:7] == wallet.INTENTS_PHASE3  # bảy ý định của phase 3 giữ nguyên thứ tự
     assert wallet.INTENTS[7:] == ("resilience", "stress", "roadmap")  # phase 4 (luồng C cài router)
+    # phase 5: ý định đã có bộ xử lý ở agent nằm sau, đều thuộc `wallet.PHASE5_INTENTS` (cột audit_events.intent của 0053 nhận được)
+    assert args[len(wallet.INTENTS) :] == ("knowledge", "ingest")
+    assert set(args) <= set(wallet.AUDIT_INTENTS)
 
 
 @pytest.mark.parametrize("name", wallet.INTENTS)
