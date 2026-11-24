@@ -628,6 +628,8 @@ def test_feedback_upsert_theo_phuong_an_va_tu_choi_dau_vao_sai(api, tool, master
 
 # --- lời nhắc: chỉ qua đường ghi có token, không có POST /nudges -------------------------------------------------------
 def test_schedule_nudge_qua_token_tao_va_huy_va_khong_co_post_nudges(api, tool, master, subs):
+    # từ phase 5, batch sau khi đặt lại ghi một bản tin của cổng giá trị (`source = 'system'`): chỉ đếm lời nhắc người dùng đặt
+    own = "SELECT status, fire_on::text AS fire_on FROM nudges WHERE user_id = :u AND source <> 'system'"
     params = {
         "op": "create",
         "kind": "purchase_review",
@@ -637,18 +639,15 @@ def test_schedule_nudge_qua_token_tao_va_huy_va_khong_co_post_nudges(api, tool, 
     }
     dry = tool("minh", "planner___schedule_nudge", params)  # không token: chỉ xem trước, không ghi
     assert dry["status"] == "NEEDS_CONFIRMATION" and dry["data"]["tool"] == "schedule_nudge"
-    assert master.query("SELECT 1 FROM nudges WHERE user_id = :u", {"u": subs["minh"]}) == []
+    assert master.query(own, {"u": subs["minh"]}) == []
     status, receipt = flow(api, "minh", "schedule_nudge", params)
     assert status == 200, receipt
     nudge_id = receipt["data"]["reference_id"] if "data" in receipt else receipt["reference_id"]
-    rows = master.query(
-        "SELECT status, fire_on::text AS fire_on FROM nudges WHERE user_id = :u",
-        {"u": subs["minh"]},
-    )
+    rows = master.query(own, {"u": subs["minh"]})
     assert [(r["status"], r["fire_on"]) for r in rows] == [("scheduled", "2026-11-26")]
     status, cancelled = flow(api, "minh", "schedule_nudge", {"op": "cancel", "nudge_id": nudge_id})
     assert status == 200, cancelled
-    rows = master.query("SELECT status FROM nudges WHERE user_id = :u", {"u": subs["minh"]})
+    rows = master.query(own, {"u": subs["minh"]})
     assert [r["status"] for r in rows] == ["cancelled"]
     # ngày không sau hôm nay mô phỏng (21/11) bị từ chối ngay ở bước xem trước
     status, bad = api(
