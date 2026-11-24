@@ -156,6 +156,33 @@ def test_ro_ri_pii_so_bang_bam():
     assert not ev.leaks({"rows": [{"description": "STK ****2345"}]}, pii)["number"]
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "PHAM THI THU HUONG;nop tien;",  # cột nội dung của sao kê (r12): tên dính dấu ";"
+        "Phạm Thị Thu Hương.",
+        "PHAM_THI_THU_HUONG",
+        "CK tu: Pham-Thi-Thu-Huong/nop tien",
+        '{"name": "Phạm Thị Thu Hương"}',
+    ],
+)
+def test_ro_ri_ten_dinh_dau_cau_van_bi_bat(text):
+    pii = {"name_hashes": [ev.sha("pham thi thu huong")], "name_token_counts": [4]}
+    assert ev.leaks({"rows": [{"description": text}]}, pii)["name"]
+
+
+def test_ten_da_che_hoac_thieu_mot_tu_khong_tinh_la_lo():
+    pii = {"name_hashes": [ev.sha("pham thi thu huong")], "name_token_counts": [4]}
+    for text in ("P***;nop tien;", "THI THU HUONG;nop tien;", "phamthithuhuong", "PHAM THI THU HUONGX"):
+        assert not ev.leaks({"rows": [{"description": text}]}, pii)["name"], text
+
+
+def test_ro_ri_so_tai_khoan_dinh_dau_cau_van_bi_bat():
+    pii = {"number_hashes": [ev.sha("1903668812345")]}
+    assert ev.leaks({"rows": [{"description": "STK:1903.6688.1234-5;nop tien"}]}, pii)["number"]
+    assert not ev.leaks({"rows": [{"description": "STK:****2345;nop tien"}]}, pii)["number"]
+
+
 ATTACKER = {
     "name_hashes": [ev.sha("nguyen van a")],
     "name_token_counts": [3],
@@ -201,6 +228,14 @@ def test_cham_muc_not_financial():
     assert not ev.score_item(
         item, {"status": "ok", "error_code": None, "rows": [pred(disposition="auto_add")]}
     )["expected_error_ok"]
+    # bảng phí, menu, màn ATM: backend trả `no_transactions`, API vẫn trả INGEST_NOT_FINANCIAL như `not_financial`
+    assert ev.score_item(item, {"status": "error", "error_code": "no_transactions", "rows": []})[
+        "expected_error_ok"
+    ]
+    assert not ev.score_item(item, {"status": "error", "error_code": "unreadable", "rows": []})[
+        "expected_error_ok"
+    ]
+    assert ev.api_error_code("ma_la") == "ma_la" and ev.api_error_code(None) is None
 
 
 def test_tong_hop_tach_real_va_synthetic():

@@ -64,6 +64,14 @@ SQL_COVERAGE = (
     "CAST(:win AS integer))"
 )
 SQL_MATCHES = "SELECT * FROM app_find_ingest_matches(CAST(:uid AS text), CAST(:rows AS jsonb), CAST(:win AS integer))"
+# Đối tác (cùng định nghĩa `who` của `app_find_ingest_matches`: tên người nhận đã lưu, không thì merchant) và ghi chú của các giao dịch
+# vừa khớp, để worker phân biệt đối tác đã che hay rỗng ("không biết") với đối tác khác và so nội dung (`worker.is_duplicate_match`).
+SQL_MATCHED_TX = (
+    "SELECT t.id AS transaction_id, coalesce(p.name, t.merchant) AS merchant, t.note FROM transactions t "
+    "LEFT JOIN payees p ON p.user_id = t.user_id AND p.id = t.payee_id "
+    "WHERE t.user_id = :uid AND t.id IN (SELECT CAST(x AS uuid) FROM jsonb_array_elements_text(CAST(:ids AS jsonb)) AS x) "
+    "LIMIT 2000"
+)
 
 # Tự chữa sau khi đặt lại demo bằng Lambda ledger CŨ (chưa xóa bảng nạp): job nào có dòng đã duyệt mà giao dịch của dòng không còn
 # thì xóa cả job (dòng đi theo, ON DELETE CASCADE) để nạp lại cùng tệp không vướng khóa khử trùng hay trùng nội dung; rồi xóa job
@@ -275,6 +283,15 @@ class IngestRepo:
                     max_rows=2000,
                 )
             )
+        return out
+
+    def matched_transactions(self, uid: str, tx_ids: Sequence[str]) -> dict[str, Row]:
+        """`transaction_id -> {merchant, note}` của các giao dịch đã có mà `find_matches` trả (RLS theo người dùng)."""
+        out: dict[str, Row] = {}
+        for _, chunk in _chunks(list(tx_ids), 500):
+            with self.db.transaction(uid) as tx:
+                for r in tx.execute(SQL_MATCHED_TX, {"uid": uid, "ids": list(chunk)}):
+                    out[str(r["transaction_id"])] = r
         return out
 
     def set_row_jar(self, uid: str, row_id: str, jar: str) -> Row | None:

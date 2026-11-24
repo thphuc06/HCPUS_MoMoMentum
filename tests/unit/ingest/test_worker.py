@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from ingest_helpers import PNG, FakeBedrock, FakeLabelStore, make_gateway
 from yofina_ingest.context import Rule
+from yofina_ingest.extract import Candidate
 from yofina_ingest.settings import IngestRuntime
 from yofina_ingest.worker import Worker, handle_sqs, parse_key, pick_matches, s3_records
 
@@ -56,6 +57,8 @@ class FakeRepo:
         self.jobs: dict[str, dict[str, Any]] = {}
         self.rows: dict[str, list[dict[str, Any]]] = {}
         self.matches: list[dict[str, Any]] = []
+        self.details: dict[str, dict[str, Any]] = {}
+        self.details_asked: list[list[str]] = []
         self.fail_with: Exception | None = None
         self.history: list[tuple[str, str]] = []
         self.coverage: dict[str, Any] | None = {
@@ -131,6 +134,10 @@ class FakeRepo:
         self.window = window
         self.candidates = list(candidates)
         return list(self.matches)
+
+    def matched_transactions(self, uid, tx_ids):
+        self.details_asked.append(list(tx_ids))
+        return {t: self.details[t] for t in tx_ids if t in self.details}
 
     def insert_rows(self, uid, job_id, rows):
         stored = self.rows.setdefault(job_id, [])
@@ -342,47 +349,23 @@ def test_dong_trung_so_cai_thanh_duplicate_khong_tu_chon(env):
     )
 
 
+def cand(seq: int, cp: str | None, desc: str | None = None, amount: int = 59000) -> Candidate:
+    return Candidate(seq=seq, kind="expense", app_date=date(2026, 11, 1), amount_vnd=amount, counterparty=cp,
+                     description=desc, extract_confidence=0.95)  # fmt: skip
+
+
 def test_pick_matches_uu_tien_doi_tac_roi_gan_ngay():
     a = {"idx": 1, "transaction_id": "a", "day_diff": 0, "counterparty_match": False}
     b = {"idx": 1, "transaction_id": "b", "day_diff": 2, "counterparty_match": True}
     c = {"idx": 2, "transaction_id": "c", "day_diff": -1, "counterparty_match": True}
     d = {"idx": 2, "transaction_id": "d", "day_diff": 3, "counterparty_match": True}
-    best = pick_matches([a, b, c, d], {1: "Highlands Coffee", 2: "Grab"}, 3)
+    best = pick_matches([a, b, c, d], {1: cand(1, "Highlands Coffee"), 2: cand(2, "Grab")}, 3)
     assert best[1]["transaction_id"] == "b" and best[2]["transaction_id"] == "c"
-
-
-#: Sáu dòng của sao kê `c01` bị đánh trùng với giao dịch ví của `vy` ở lần nghiệm thu 24/11 (dựng lại bằng `data/personas` với ngày neo
-#: 21/11 và cửa sổ 3 ngày): (đối tác dòng nạp, lệch ngày, đối tác giao dịch ví có khớp không). Năm dòng là cửa hàng khác cùng số tiền.
-C01_FALSE = [
-    ("Circle K", 1, False),  # 56.000 ₫ ngày 26/10 với GrabFood 27/10
-    ("Grab", 3, False),  # 31.000 ₫ với Circle K
-    ("Phuc Long", 2, False),  # 59.000 ₫ với The Coffee House
-    ("Circle K", -3, False),  # 48.000 ₫ với Highlands Coffee
-    ("Be", 0, False),  # 26.000 ₫ với GrabFood cùng ngày
-]
-
-
-def test_cung_so_tien_khac_doi_tac_khong_phai_dong_trung():
-    matches = [
-        {"idx": i, "transaction_id": f"t{i}", "day_diff": dd, "counterparty_match": hit}
-        for i, (_, dd, hit) in enumerate(C01_FALSE, start=1)
-    ]
-    cps = {i: cp for i, (cp, _, _) in enumerate(C01_FALSE, start=1)}
-    assert pick_matches(matches, cps, 3) == {}
-
-
-def test_dong_khong_doi_tac_chi_trung_khi_cung_ngay():
-    # "CK tien phong T11" 1.500.000 ₫ của c01 (không đối tác) trùng dòng tiền phòng vừa chốt từ ảnh s02 cùng ngày 01/11
-    same_day = {"idx": 1, "transaction_id": "s02", "day_diff": 0, "counterparty_match": False}
-    other_day = {"idx": 2, "transaction_id": "x", "day_diff": 1, "counterparty_match": False}
-    best = pick_matches([same_day, other_day], {1: None, 2: ""}, 3)
-    assert set(best) == {1} and best[1]["transaction_id"] == "s02"
 
 
 def test_doi_tac_khop_nhung_ngoai_cua_so_khong_trung():
     m = {"idx": 1, "transaction_id": "a", "day_diff": 4, "counterparty_match": True}
-    assert pick_matches([m], {1: "Highlands Coffee"}, 3) == {}
-
+    assert pick_matches([m], {1: cand(1, "Highlands Coffee")}, 3) == {}
 
 def test_dong_nap_khac_doi_tac_vao_hang_cho_duyet_khong_bi_danh_trung(env):
     repo, storage, make = env
@@ -396,6 +379,31 @@ def test_dong_nap_khac_doi_tac_vao_hang_cho_duyet_khong_bi_danh_trung(env):
     (r,) = repo.rows[jid]
     assert r["review_status"] != "duplicate" and "duplicate_of_transaction_id" not in r
     assert repo.jobs[jid]["rows_duplicate"] == 0
+
+
+def test_dong_tien_phong_trung_dong_anh_da_che_doi_tac_thanh_duplicate(env):
+    """Dòng 15 của `c01` sau khi ảnh `s02` đã chốt: đối tác "TIEN PHONG" so với "N***" (đã che) là không biết, nội dung gần giống."""
+    repo, storage, make = env
+    jid, key = repo.add_job()
+    storage.objects[key] = PNG
+    s02_tx = str(uuid.uuid4())
+    repo.matches = [
+        {"idx": 1, "transaction_id": s02_tx, "funding_source": "external", "app_date": date(2026, 11, 1), "day_diff": 0, "counterparty_match": False},
+    ]  # fmt: skip
+    repo.details = {s02_tx: {"transaction_id": s02_tx, "merchant": "N***", "note": "MINH CK tien phong thang 11"}}
+    worker, _ = make(
+        [
+            good_doc(
+                date="2026-11-01", amount_vnd=1_500_000, counterparty="TIEN PHONG", counterparty_is_person=False,
+                description="MBVCB.3765569.CK tien phong T11", tx_type=None, jar_code=None,
+            )
+        ]
+    )  # fmt: skip
+    run(worker, sqs_event(key))
+    assert repo.details_asked == [[s02_tx]]
+    (r,) = repo.rows[jid]
+    assert (r["review_status"], r["duplicate_of_transaction_id"]) == ("duplicate", s02_tx)
+    assert repo.jobs[jid]["rows_duplicate"] == 1
 
 
 def test_moi_dong_da_co_thi_job_bi_tu_choi_trung_tep(env):

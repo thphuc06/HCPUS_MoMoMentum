@@ -147,6 +147,18 @@ def test_tien_phong_chuyen_cho_ca_nhan_theo_muc_dich_ra_hu_hoa_don(gateway_of):
     assert "không theo việc người nhận là cá nhân" in prompts.labels_system(ctx().jars, ctx().type_map)  # CSV cũng vậy
 
 
+def test_loi_nhac_anh_co_luat_cua_kiem_mu_24_11():
+    """Ba lỗi đọc ảnh của lượt eval 24/11 (file phase 5, mục "Tiêu chí 3"): r08 màn chi tiết sau chuyển có mã giao dịch nhưng không có chữ
+    "thành công"; r15 sao kê Ghi nợ/Ghi có bị đọc lẫn chiều và thiếu cả 5 dòng rút ATM. Chỉ kiểm lời nhắc có luật, không thay eval."""
+    from yofina_ingest import prompts
+
+    system = prompts.image_system(ctx().jars, ctx().type_map, TODAY)
+    assert "số tham chiếu, mã giao dịch" in system and 'không có chữ "thành công"' in system
+    assert "TIÊU ĐỀ của cột chứa số tiền" in system and "cột số dư" in system
+    assert "trích MỌI dòng giao dịch" in system
+    assert "Rút tiền mặt (ATM" in system and "own_account_transfer=false" in system
+
+
 def test_che_pii_truoc_khi_luu_ten_stk_sdt(gateway_of):
     payload = doc(
         [
@@ -543,6 +555,11 @@ def _eval_module():
 
 def _item(mod, item_id):
     return next(i for i in mod.load_manifest()["items"] if i["id"] == item_id)
+
+
+def test_eval_cham_ma_loi_theo_dung_bang_ma_api_cua_backend():
+    """`scripts/eval_ingest.API_ERROR_CODE` là bản sao của `ERROR_CODE_OF` (script chạy được không cần backend): hai bảng phải khớp."""
+    assert _eval_module().API_ERROR_CODE == ex.ERROR_CODE_OF
 
 
 def test_extract_eval_tra_dung_dang_ma_script_cham_va_cham_dung(gateway_of):
