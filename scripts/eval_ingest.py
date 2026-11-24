@@ -38,7 +38,8 @@ nên ở chế độ này chỉ đo được "dòng trích ra khớp bản gốc
 ## Kết quả
 
 `evals/ingest/results/<timestamp>.json`: chỉ có cờ đúng/sai và số đếm, không có văn bản OCR,
-không có giá trị trường trích được, không có ảnh. Báo cáo riêng `real` và `synthetic`.
+không có giá trị trường trích được, không có ảnh. Báo cáo riêng `real` và `synthetic`. Cách chấm
+(lộ PII theo token chuẩn hóa, lỗi theo mã API): `evals/ingest/README.md`.
 """
 
 from __future__ import annotations
@@ -84,6 +85,26 @@ CONTENT_TYPES = {
     ".csv": "text/csv",
 }
 EXIT_NO_BACKEND = 2
+#: Mã lỗi chữ thường của backend -> mã lỗi API của job (bản sao của `yofina_ingest.extract.ERROR_CODE_OF`; test giữ hai bảng khớp
+#: nhau). Eval chấm theo mã API vì đó là thứ người dùng nhận: backend trả `no_transactions` cho bảng phí, menu, màn ATM nhưng job vẫn
+#: `INGEST_NOT_FINANCIAL` như ảnh `not_financial`.
+API_ERROR_CODE = {
+    "not_financial": "INGEST_NOT_FINANCIAL",
+    "no_transactions": "INGEST_NOT_FINANCIAL",
+    "unsupported_type": "INGEST_UNSUPPORTED_TYPE",
+    "unreadable": "INGEST_UNSUPPORTED_TYPE",
+    "too_large": "INGEST_TOO_LARGE",
+    "too_many_rows": "INGEST_TOO_LARGE",
+    "budget_exceeded": "MODEL_BUDGET_EXCEEDED",
+    "model_failed": "INTERNAL_ERROR",
+}
+
+
+def api_error_code(code: str | None) -> str | None:
+    """Mã API của một mã lỗi backend; mã lạ giữ nguyên (không bao giờ khớp nhầm mã khác)."""
+    if code is None:
+        return None
+    return API_ERROR_CODE.get(str(code), str(code))
 
 
 # --- chuẩn hóa ------------------------------------------------------------------------------
@@ -243,15 +264,23 @@ def _strings(obj: Any) -> Iterable[str]:
             yield from _strings(v)
 
 
+def name_tokens(s: str) -> list[str]:
+    """Token chuẩn hóa để so băm tên: bỏ dấu, chữ thường, tách theo MỌI ký tự không phải chữ hay số, nên tên dính dấu câu
+    (`"<tên>;nop tien;"`, `"<tên>."`, `"<HO>_<TEN>"`) vẫn ra đúng các từ của tên. Cùng cách chuẩn hóa với `norm_name` của
+    `make_ingest_synthetic.py` (tên trong manifest chỉ có chữ và khoảng trắng)."""
+    return [t for t in re.split(r"[\W_]+", norm_text(s)) if t]
+
+
 def leaks(result: Mapping[str, Any], pii: Mapping[str, Any] | None) -> dict[str, bool]:
-    """Kết quả có chứa họ tên đầy đủ hoặc dãy số đầy đủ (so bằng băm) hay không."""
+    """Kết quả có chứa họ tên đầy đủ (băm của `n` token chuẩn hóa liền nhau, `name_tokens`) hoặc dãy số đầy đủ (băm, bỏ khoảng trắng,
+    dấu chấm, gạch ngang giữa hai chữ số) hay không."""
     if not pii:
         return {"name": False, "number": False}
     texts = list(_strings(result))
     name_hit = False
     for h, n in zip(pii.get("name_hashes", []), pii.get("name_token_counts", []), strict=False):
         for t in texts:
-            toks = norm_text(t).split()
+            toks = name_tokens(t)
             if any(sha(" ".join(toks[k : k + n])) == h for k in range(len(toks) - n + 1)):
                 name_hit = True
     num_hashes = set(pii.get("number_hashes", []))
@@ -297,9 +326,10 @@ def score_item(item: Mapping[str, Any], result: Mapping[str, Any]) -> dict[str, 
         "dispositions": _count(r.get("disposition") for r in rows),
     }
     if exp.get("expected_error"):
-        out["expected_error_ok"] = result.get("error_code") == exp["expected_error"] and not any(
-            r.get("disposition") == "auto_add" for r in rows
-        )
+        # chấm theo mã API người dùng nhận (`api_error_code`): `no_transactions` và `not_financial` cùng ra INGEST_NOT_FINANCIAL
+        out["expected_error_ok"] = api_error_code(result.get("error_code")) == api_error_code(
+            exp["expected_error"]
+        ) and not any(r.get("disposition") == "auto_add" for r in rows)
     tx_flags = []
     for i, j in pair_rows(rows, txs):
         tx_flags.append(score_tx(rows[i] if i is not None else None, txs[j]))
