@@ -66,15 +66,32 @@ class FakeMemoryClient:
         self.records = records or {}
         self.delay, self.error, self.ingest_error = delay, error, ingest_error
         self.retrieves: list[dict[str, Any]] = []
+        self.lists: list[dict[str, Any]] = []
         self.ingests: list[dict[str, Any]] = []
 
-    def retrieve_memory_records(self, **kw: Any) -> dict[str, Any]:
-        self.retrieves.append(kw)
+    def _maybe_slow_or_fail(self) -> None:
         if self.delay:
             time.sleep(self.delay)
         if self.error:
             raise self.error
+
+    def retrieve_memory_records(self, **kw: Any) -> dict[str, Any]:
+        self.retrieves.append(kw)
+        self._maybe_slow_or_fail()
         return {"memoryRecordSummaries": list(self.records.get(kw["namespace"], []))}
+
+    def list_memory_records(self, **kw: Any) -> dict[str, Any]:
+        self.lists.append(kw)
+        self._maybe_slow_or_fail()
+        recs = list(self.records.get(kw["namespace"], []))[: kw["maxResults"]]
+        return {
+            "memoryRecordSummaries": [{k: v for k, v in r.items() if k != "score"} for r in recs]
+        }
+
+    @property
+    def reads(self) -> list[dict[str, Any]]:
+        """Mọi lời gọi đọc (liệt kê sở thích và tìm sự thật)."""
+        return self.lists + self.retrieves
 
     def ingest_data(self, **kw: Any) -> dict[str, Any]:
         self.ingests.append(kw)
@@ -136,6 +153,70 @@ def test_du_lieu_doc_ve_khong_dong_duoc_the_prompt_va_bi_che_lai():
     out = m.sanitize_recalled(m.record_text({"text": raw}), 300)
     assert "<" not in out and ">" not in out and "0912345678" not in out and "5 triệu" not in out
     assert out.startswith("Ưu tiên hũ Du lịch")
+
+
+@pytest.mark.parametrize(
+    ("raw", "gone", "kept"),
+    [
+        # bản ghi cũ chép số từ lời trợ lý (golden `memory-recall` trượt NumericGrounding vì "37%", "26%")
+        (
+            "Cuối tuần người dùng chi 37% tổng chi, dù chỉ chiếm 26% số ngày.",
+            ["37", "26"],
+            ["Cuối tuần"],
+        ),
+        (
+            "Trong 47 ngày dùng Trả sau 2 lần, lộ trình phiên bản 2, kỳ lương 05/12.",
+            ["47", "05/12"],
+            ["Trả sau"],
+        ),
+        # giờ trong ngày là một phần của sở thích nên giữ
+        (
+            "Không nhắc người dùng trước 9 giờ sáng hay sau 21h, hoặc lúc 7h30, 22:00.",
+            [],
+            ["9 giờ", "21h", "7h30", "22:00"],
+        ),
+    ],
+)
+def test_chu_doc_ve_che_moi_con_so_tru_gio_trong_ngay(raw, gone, kept):
+    out = m.sanitize_recalled(raw, 300)
+    for g in gone:
+        assert g not in out, out
+    for k in kept:
+        assert k in out, out
+    if gone:
+        assert m.NUMBER_PLACEHOLDER in out
+
+
+def test_chu_doc_ve_bo_dau_thoi_gian_cua_tom_tat_khong_thanh_stk():
+    raw = "Người dùng hỏi về hũ Du lịch (timestamp 1795506169868).\n- Timestamp của bản ghi: 1795505552861."
+    out = m.sanitize_recalled(raw, 300)
+    assert "[STK]" not in out and "1795" not in out and "timestamp" not in out.lower()
+    assert out.startswith("Người dùng hỏi về hũ Du lịch")
+
+
+def test_luot_nho_gi_ke_ban_ghi_khong_mang_so_tu_loi_tro_ly():
+    """Golden `memory-recall`: câu kể bộ nhớ không được có con số không căn cứ (bộ nhớ không phải nguồn số liệu)."""
+    from yofina_agent.verifier import Allowed, NumericGrounding
+
+    client = FakeMemoryClient(
+        {
+            ns("preference"): [rec(ns("preference"), "Không nhắc người dùng vào buổi sáng.")],
+            ns("fact"): [
+                rec(
+                    ns("fact"),
+                    "Cuối tuần người dùng chi 37% tổng chi, dù chỉ chiếm 26% số ngày.",
+                    rid="mem-" + "e" * 40,
+                )
+            ],
+        }
+    )
+    events, _turn = run_memory_turn(
+        [route_response(intent="memory")], client, text="Bạn đang nhớ những gì về mình?"
+    )
+    said = "".join(e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT")
+    assert "buổi sáng" in said and "37" not in said and "26" not in said
+    assert NumericGrounding.check({"text": said}, Allowed()).ok
+    assert client.ingests == []  # câu hỏi "nhớ gì" không được ghi lại
 
 
 def test_prompt_block_bao_day_la_du_lieu_va_gioi_han_do_dai():
@@ -260,14 +341,65 @@ def test_doc_dung_namespace_cua_sub_va_bo_ban_ghi_cua_nguoi_khac():
     )
     mem = m.AgentMemory(settings(), client)
     ctx = asyncio.run(mem.recall(SUB, "nhắc mình lúc nào, sđt 0912345678"))
-    assert {c["namespace"] for c in client.retrieves} == {ns("preference"), ns("fact")}
-    assert all(
-        c["memoryId"] == MEMORY_ID and c["searchCriteria"]["topK"] <= 5 for c in client.retrieves
-    )
+    # sở thích: liệt kê HẾT namespace sở thích (không tìm theo câu hỏi); sự thật: tìm ngữ nghĩa theo câu hỏi đã che PII
+    assert [c["namespace"] for c in client.lists] == [ns("preference")]
+    assert [c["namespace"] for c in client.retrieves] == [ns("fact")]
+    assert all(c["memoryId"] == MEMORY_ID for c in client.reads)
+    assert all(c["searchCriteria"]["topK"] <= 5 for c in client.retrieves)
     assert all("0912345678" not in c["searchCriteria"]["searchQuery"] for c in client.retrieves)
     assert ctx.preferences == ["Đừng nhắc buổi sáng"]
     assert [i.text for i in ctx.of("fact")] == ["Làm kỹ sư phần mềm"]
     assert not ctx.degraded
+
+
+def test_so_thich_doc_het_khong_phu_thuoc_cau_hoi_moi_nhat_truoc_va_bo_trung():
+    """Tiêu chí 5 (golden `memory-reuse-new-session`): câu "nên để vào hũ nào" không giống nghĩa với "ưu tiên hũ Du lịch", nên sở
+    thích không được phụ thuộc tìm ngữ nghĩa theo câu hỏi."""
+    older, newer = datetime(2026, 11, 20, tzinfo=UTC), datetime(2026, 11, 24, tzinfo=UTC)
+    prefs = [
+        {
+            **rec(ns("preference"), "Không nhắc người dùng vào buổi sáng.", rid="mem-" + "1" * 40),
+            "createdAt": older,
+        },
+        {
+            **rec(ns("preference"), "Ưu tiên để dành tiền cho hũ Du lịch.", rid="mem-" + "2" * 40),
+            "createdAt": newer,
+        },
+        {
+            **rec(ns("preference"), "Ưu tiên để dành tiền cho hũ Du lịch.", rid="mem-" + "3" * 40),
+            "createdAt": older,
+        },
+    ]
+    client = FakeMemoryClient({ns("preference"): prefs})
+    ctx = asyncio.run(
+        m.AgentMemory(settings(), client).recall(
+            SUB, "Tháng này còn dư một ít, mình nên để vào hũ nào?"
+        )
+    )
+    assert ctx.preferences == [
+        "Ưu tiên để dành tiền cho hũ Du lịch.",
+        "Không nhắc người dùng vào buổi sáng.",
+    ]
+    assert client.lists[0]["maxResults"] == settings().preferences_list_max
+    assert "searchCriteria" not in client.lists[0]
+    assert "Du lịch" in ctx.prompt_block()
+
+
+def test_so_thich_dung_tham_so_list_memory_records_cua_botocore():
+    client, stub = _stubbed()
+    mem = m.AgentMemory(settings(), client)
+    stub.add_response(
+        "list_memory_records",
+        {"memoryRecordSummaries": []},
+        {
+            "memoryId": MEMORY_ID,
+            "namespace": ns("preference"),
+            "maxResults": mem.s.preferences_list_max,
+        },
+    )
+    with stub:
+        assert mem._list_preferences(SUB) == []
+    stub.assert_no_pending_responses()
 
 
 def test_doc_cham_qua_han_thi_suy_giam_khong_nem_loi(caplog):
@@ -295,27 +427,19 @@ def test_khong_co_memory_id_thi_tat_va_khong_goi_gi():
     assert not mem.active
     assert asyncio.run(mem.recall(SUB, "x")) is m.DISABLED
     assert (
-        asyncio.run(
-            mem.remember(
-                sub=SUB, session_id="s1", user_text="x", assistant_text="", idempotency_key="k"
-            )
-        )
+        asyncio.run(mem.remember(sub=SUB, session_id="s1", user_text="x", idempotency_key="k"))
         is False
     )
-    assert client.retrieves == [] and client.ingests == []
+    assert client.reads == [] and client.ingests == []
 
 
 def test_sub_khong_hop_le_cho_namespace_thi_khong_doc_khong_ghi():
     client = FakeMemoryClient()
     mem = m.AgentMemory(settings(), client)
     ctx = asyncio.run(mem.recall("a/../b", "x"))
-    assert ctx.degraded and client.retrieves == []
+    assert ctx.degraded and client.reads == []
     assert (
-        asyncio.run(
-            mem.remember(
-                sub="a/b", session_id="s", user_text="x", assistant_text="", idempotency_key="k"
-            )
-        )
+        asyncio.run(mem.remember(sub="a/b", session_id="s", user_text="x", idempotency_key="k"))
         is False
     )
     assert client.ingests == []
@@ -342,7 +466,6 @@ def test_ingest_data_dung_hinh_dang_api_va_khong_luu_event():
         sub=SUB,
         session_id="conv/with spaces",  # session id lạ thì băm thành id hợp lệ
         user_text="Đừng nhắc mình buổi sáng, gọi 0912345678",
-        assistant_text="Số dư của bạn là 1.234.000 ₫.",
         idempotency_key=f"{SUB}:trace1",
     )
     assert req is not None
@@ -353,18 +476,15 @@ def test_ingest_data_dung_hinh_dang_api_va_khong_luu_event():
                 sub=SUB,
                 session_id="conv/with spaces",
                 user_text="Đừng nhắc mình buổi sáng, gọi 0912345678",
-                assistant_text="Số dư của bạn là 1.234.000 ₫.",
                 idempotency_key=f"{SUB}:trace1",
             )
         )
     stub.assert_no_pending_responses()
     payload = req["source"]["inline"]["payload"]
-    assert req["actorId"] == SUB and [p["conversational"]["role"] for p in payload] == [
-        "USER",
-        "ASSISTANT",
-    ]
+    # chỉ câu của người dùng: lời trả lời của trợ lý chứa số đọc từ sổ cái nên không bao giờ vào bộ nhớ
+    assert req["actorId"] == SUB and [p["conversational"]["role"] for p in payload] == ["USER"]
     texts = " ".join(p["conversational"]["content"]["text"] for p in payload)
-    assert "0912345678" not in texts and "1.234.000" not in texts
+    assert "0912345678" not in texts and "buổi sáng" in texts
     assert m.SESSION_ID_RE.fullmatch(req["sessionId"])
 
 
@@ -443,14 +563,15 @@ def test_luot_binh_thuong_doc_va_ghi_theo_sub_cua_jwt_khong_theo_payload():
         payload_sub=OTHER,
     )
     assert types(events)[-1] == "RUN_FINISHED"
-    assert client.retrieves and all(
-        c["namespace"].startswith(f"/yofina/users/{SUB}/") for c in client.retrieves
+    assert client.reads and all(
+        c["namespace"].startswith(f"/yofina/users/{SUB}/") for c in client.reads
     )
     assert len(client.ingests) == 1
     ing = client.ingests[0]
     assert ing["actorId"] == SUB and OTHER not in json.dumps(ing, default=str)
     texts = [p["conversational"]["content"]["text"] for p in ing["source"]["inline"]["payload"]]
-    assert "0912345678" not in texts[0] and texts[1] == "Chào bạn, mình giúp gì được?"
+    assert len(texts) == 1 and "0912345678" not in texts[0] and "chào bạn" in texts[0]
+    assert "Chào bạn, mình giúp gì được?" not in json.dumps(ing, ensure_ascii=False, default=str)
 
 
 def test_luot_bi_guardrail_chan_thi_khong_ghi():

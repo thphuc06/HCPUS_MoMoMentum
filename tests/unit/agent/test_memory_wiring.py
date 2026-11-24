@@ -28,7 +28,7 @@ from yofina_agent.identity import Identity
 from yofina_agent.store import UnconfiguredTurnBlockStore
 from yofina_agent.turn import Turn, TurnDeps
 from yofina_agent.whatif import ANALYST_SYSTEM, analyst_prompt
-from yofina_agent.writer import MEMORY_TASKS, WRITER_SYSTEM, build_writer_prompt
+from yofina_agent.writer import MEMORY_GUIDE, MEMORY_TASKS, WRITER_SYSTEM, build_writer_prompt
 
 TRAVEL_PREF = "Ưu tiên hũ Du lịch, đừng lấy tiền từ hũ Du lịch"
 OPEN_TAG, CLOSE_TAG = f"<{m.PROMPT_TAG}>", f"</{m.PROMPT_TAG}>"
@@ -90,8 +90,9 @@ def test_what_if_dua_so_thich_vao_analyst_doc_mot_lan_khong_them_luot_model(monk
     assert prompt_text(analyst).count(CLOSE_TAG) == 1
     assert OPEN_TAG not in prompt_text(router)  # router không chờ bộ nhớ (đọc song song)
     assert OPEN_TAG not in prompt_text(orchestrator)
-    # đọc đúng một lần (một lần cho mỗi loại sở thích và sự thật), theo sub của JWT
-    assert len(client.retrieves) == 2 and all(c["namespace"].startswith(f"/yofina/users/{SUB}/") for c in client.retrieves)
+    # đọc đúng một lần mỗi loại (liệt kê sở thích, tìm sự thật), theo sub của JWT
+    assert len(client.lists) == 1 and len(client.retrieves) == 1
+    assert all(c["namespace"].startswith(f"/yofina/users/{SUB}/") for c in client.reads)
     assert text_of(events).startswith("Nếu mua tai nghe")  # Verifier vẫn cho qua: bộ nhớ không đổi căn cứ số liệu
     assert "bo_nho_nguoi_dung" in ANALYST_SYSTEM and "hũ Du lịch" in ANALYST_SYSTEM
 
@@ -120,7 +121,22 @@ def test_tra_cuu_so_du_nguoi_viet_nhan_khoi_bo_nho(monkeypatch):
     assert writer.calls[0]["task"] == "balance"
     mem = writer.calls[0]["memory"]
     assert mem.startswith(OPEN_TAG) and "Du lịch" in mem and mem.endswith(CLOSE_TAG)
-    assert len(client.retrieves) == 2
+    assert len(client.lists) == 1 and len(client.retrieves) == 1
+
+
+def test_phien_moi_hoi_nen_de_vao_hu_nao_nguoi_viet_nhan_so_thich_va_chi_dan_dung_no(monkeypatch):
+    """Tiêu chí 5, ca golden `memory-reuse-new-session` (trượt 24/11): câu hỏi không giống nghĩa với sở thích, router xếp vào tra cứu
+    số dư, và khuôn "đúng 1 câu tổng số dư" của việc `balance` không có chỗ cho sở thích. Nay: sở thích luôn được đọc (liệt kê), và
+    prompt người viết có chỉ dẫn gọi tên hũ ưu tiên khi người dùng hỏi nên để tiền vào đâu."""
+    client = FakeMemoryClient({ns("preference"): [rec(ns("preference"), "Ưu tiên để dành tiền cho hũ Du lịch.")]})
+    q = "Tháng này còn dư một ít, mình nên để vào hũ nào?"
+    _, _, writer, _ = run_with_memory(q, [route_response(intent="lookup", lookup_kind="balance")], client, monkeypatch)
+    call = writer.calls[0]
+    assert call["task"] == "balance" and "hũ Du lịch" in call["memory"]
+    prompt = build_writer_prompt(call["task"], q, {"jars_total_text": "7.730.000 ₫"}, call["memory"])
+    assert MEMORY_GUIDE in prompt and prompt.index(CLOSE_TAG) < prompt.index(MEMORY_GUIDE) < prompt.index("<cau_hoi>")
+    assert "nên để" in MEMORY_GUIDE and "không có con số" in MEMORY_GUIDE
+    assert MEMORY_GUIDE not in build_writer_prompt("balance", q, {"jars_total_text": "7.730.000 ₫"})
 
 
 def test_kiem_tra_truoc_khi_chi_nguoi_viet_nhan_khoi_bo_nho(monkeypatch):
@@ -149,7 +165,7 @@ def test_bo_nho_tat_thi_nguoi_viet_nhan_chuoi_rong(monkeypatch):
         monkeypatch,
         mem_settings=m.MemorySettings.load({}),
     )
-    assert writer.calls[0]["memory"] == "" and client.retrieves == []
+    assert writer.calls[0]["memory"] == "" and client.reads == []
 
 
 def test_writer_prompt_chi_them_bo_nho_cho_viec_lien_quan_va_khong_doi_can_cu_so():
