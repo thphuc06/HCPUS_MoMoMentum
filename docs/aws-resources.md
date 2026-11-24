@@ -161,6 +161,8 @@ Thuộc stack `YofinaTools` (construct `ClassifyPipeline`, `infra-cdk/lib/classi
 
 **Deploy 24/11 rạng sáng (Kiro, `main` fa7f8bd)**: `YofinaTools` một lần, chỉ đổi code 6 Lambda (`yofina-ledger` có luật `source_jar_covers` version 2, `yofina-forecast-batch`, `yofina-on-transaction`, `yofina-forecast`, `yofina-classify`, `yofina-roadmap-regen`); `scripts/agent_deploy.py` -> Runtime `yofina_agent` version 18, schema `check_suitability` trên target `planner` có `start_date`; frontend Amplify job 10. Không thêm, xóa hay thay thế tài nguyên; không migration; Aurora `yofina-db` vẫn min 0 / max 2 ACU.
 
+**Deploy 24/11 sáng (Kiro, `main` 32f22f0)**: `scripts/agent_deploy.py` -> Runtime `yofina_agent` version 19 (chip gợi ý khi từ chối ngoài phạm vi); frontend Amplify job 11 (tên hũ trên bước lộ trình). Không deploy `YofinaTools`/`YofinaData`, không migration, không thêm hay xóa tài nguyên.
+
 Thuộc stack `YofinaTools` (construct `RoadmapRegen`, `infra-cdk/lib/roadmap-regen.ts`). Mã ở `pipelines/roadmap/`. Đã tạo trên AWS ngày 23/11 tối (deploy `YofinaTools` từ `main` 15e9bc7). Không có thứ nào tính tiền theo giờ.
 
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
