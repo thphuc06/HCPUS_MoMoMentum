@@ -58,7 +58,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "Biên nhận VCB thành công 50.000; không có ngày (chỉ giờ 15:45), tên người nhận bị làm mờ. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r02",
@@ -106,7 +108,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "VCB chuyển liên ngân hàng tới người tên 'nguyen ...' ở Techcombank; không có ngày. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r03",
@@ -154,7 +158,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "Techcombank: màn xác nhận và màn thành công của CÙNG một giao dịch 500.000 tới Vietcombank: chỉ một dòng; phí 0. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r04",
@@ -197,7 +203,9 @@
       "****9019"
      ]
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r05",
@@ -236,7 +244,9 @@
      "number_hashes": [],
      "number_last4": []
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r06",
@@ -264,7 +274,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "Bảng biểu phí chuyển tiền MoMo, không phải giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r07",
@@ -324,7 +336,9 @@
       "****2725"
      ]
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p 4 tr??ng. L?ch nh? ?? xem l?i: b?n ??c m? ghi n?i dung 'CK t?i t?i kho?n kh?c', nh?ng ?? l? c?t Lo?i giao d?ch, kh?ng ph?i n?i dung chuy?n kho?n, n?n gi? kh?ng ch?m n?i dung."
   },
   {
    "id": "r08",
@@ -372,7 +386,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "VPBank chi tiết chuyển khoản 10.000.000 ngày 07/02/2017, nội dung 'chuyen khoan'; người nhận chỉ suy được từ tên mẫu giao dịch (tên riêng) nên không chấm đối tác. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p. Hai b?n ??c ??u ?? tr?ng ??i t?c: khung kh?ng hi?n ng??i nh?n, ch? c? t?n m?u giao d?ch."
   },
   {
    "id": "r09",
@@ -401,7 +417,9 @@
     "duplicate_of": null,
     "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (ACB 50.000 tới BIDV, nội dung ABC). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
     "no_auto_rows": true
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r10",
@@ -463,7 +481,9 @@
       "****4011"
      ]
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r11",
@@ -502,7 +522,9 @@
      "number_hashes": [],
      "number_last4": []
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r12",
@@ -578,7 +600,7 @@
        "date": "iso_exact",
        "amount_vnd": "int_exact_abs",
        "counterparty": "person_initial",
-       "description": "text_ratio>=0.80",
+       "description": "text_ratio>=0.70",
        "direction": "exact",
        "expected_jar": "exact_if_not_null"
       }
@@ -598,7 +620,9 @@
      "number_hashes": [],
      "number_last4": []
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p ng?y, s? ti?n, chi?u, ??i t?c. D?ng 1 v? 2 n?i dung b? c?t c?t n?n gi? kh?ng ch?m. S?A d?ng 3: c?t n?i dung tr?n ?nh l? c? chu?i '<t?n ng??i g?i>;nop tien;', b?n che PII ??ng s? l? 'N***;nop tien;' (t? l? gi?ng 'nop tien' kho?ng 0,73), n?n h? ng??ng n?i dung t? 0,80 xu?ng 0,70 ?? nh?n c? hai c?ch tr?ch ??ng."
   },
   {
    "id": "r13",
@@ -697,14 +721,18 @@
      ],
      "number_hashes": [
       "663f0c7d49f39e5f50797ac314ca43b7a341ade0c52e2e7be60621ea2e16ca1c",
-      "c6ab85343830ebe4c9752518e4348da71b0ce243398a18831d233fa079999eeb"
+      "c6ab85343830ebe4c9752518e4348da71b0ce243398a18831d233fa079999eeb",
+      "cdc2edf2a2df2c5ec45b32e4748b90073c42dd85644f57b5f4c84ca2383c8b5a"
      ],
      "number_last4": [
       "****8472",
-      "****5301"
+      "****5301",
+      "****7718"
      ]
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p 3 d?ng. N?i dung 'CK t?i t?i kho?n kh?c' l? c?t Lo?i giao d?ch, gi? kh?ng ch?m. S?A PII: STK ng??i nh?n d?ng 1 hi?n ??y ?? trong ?nh nh?ng ch?a c? trong number_hashes, ?? th?m (****7718)."
   },
   {
    "id": "r14",
@@ -770,7 +798,9 @@
       "****7718"
      ]
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r15",
@@ -1003,7 +1033,9 @@
       "****2725"
      ]
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p 10 d?ng (??c l?i tr?n ?nh ph?ng to 2 l?n). D?ng 'Transfer Debit-...' gi? kh?ng ch?m n?i dung v? chu?i ch?a s? t?i kho?n."
   },
   {
    "id": "r16",
@@ -1031,7 +1063,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "Ảnh quảng cáo cú pháp SMS 'SD gửi 6167', không có giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r17",
@@ -1059,7 +1093,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "Bảng mã ngân hàng Smartlink, không phải giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r19",
@@ -1088,7 +1124,9 @@
     "duplicate_of": null,
     "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (ViettelPay tiền điện: nhập mật khẩu, đang truy vấn; ảnh hóa đơn giấy chèn nhỏ không đọc được số tiền). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
     "no_auto_rows": true
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r20",
@@ -1136,7 +1174,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "Hóa đơn GTGT tiền điện EVNHCMC kỳ 25/06–24/07/2015, tổng thanh toán 709.073 (chưa trả). Ảnh không có ngày phát hành rõ nên không chấm ngày; đối tác chấp nhận mọi tên chứa 'EVN'. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p s? ti?n v? ??i t?c. B?n ??c m? ch?n ng?y cu?i k? 24/07/2015 v? ghi l? m? h?: ?nh kh?ng c? ng?y ph?t h?nh, gi? kh?ng ch?m ng?y. ??i t?c: ?nh c? c? 'EVNHCMC' v? 'C?ng ty ?i?n l?c Gia ??nh'; nh?n ch? nh?n t?n ch?a 'EVN'."
   },
   {
    "id": "r21",
@@ -1165,7 +1205,9 @@
     "duplicate_of": null,
     "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (Grab thanh toán tiền điện 345.496, ảnh ghi 'Đây chưa phải là biên lai'). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
     "no_auto_rows": true
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r22",
@@ -1193,7 +1235,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "Ảnh hướng dẫn các màn menu thanh toán hóa đơn VCB, không có giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p: kh?ng c? giao d?ch, kh?ng d?ng t? th?m. B?n ??c m? ghi 'm?n app ng?n h?ng, 0 giao d?ch'; xem l?i: ??y l? ?nh gh?p h??ng d?n c? ti?u ??, khung form d?ng s? t?i kho?n m?u, kh?ng c? d? li?u t?i kho?n c?a ai, n?n gi? not_financial (kh?c r04 l? m?n th?t c? s? th? v? s? d?)."
   },
   {
    "id": "r23",
@@ -1222,7 +1266,9 @@
     "duplicate_of": null,
     "note": "Màn xác nhận hoặc nhập OTP/mật khẩu: giao dịch CHƯA thực hiện, không được tự thêm dòng nào (MoMo nhập mật khẩu, không thấy số tiền). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
     "no_auto_rows": true
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r24",
@@ -1270,7 +1316,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "Danh sách thông báo MoMo: chỉ 'Thanh toán Gojek thành công' 69.000 (Thứ ba 21/02) là chi tiêu. 'Thanh toán Gojek không thành công' ở màn phải KHÔNG được ghi; các dòng 'Nạp tiền thành công' (27.000, 24.000, 69.000 từ thẻ Agribank) là chuyển tiền giữa tài khoản của chính mình, không phải thu hay chi. Hũ không chấm (Gojek có thể là đi lại hoặc đồ ăn). Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p d?ng Gojek 69.000 21/02. B?n ??c m? c? th?m c?c d?ng 'N?p ti?n th?nh c?ng' t? th? Agribank; gi? quy ??c nh?n: n?p v? t? th? c?a ch?nh m?nh l? chuy?n n?i b?, kh?ng ch?m (d?ng tr?ch th?a kh?ng l?m tr??t ?i?m)."
   },
   {
    "id": "r26",
@@ -1311,7 +1359,9 @@
      "number_hashes": [],
      "number_last4": []
     }
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
   },
   {
    "id": "r27",
@@ -1339,7 +1389,9 @@
     "attack": false,
     "duplicate_of": null,
     "note": "Màn ATM MB nhập mã rút tiền, không có giao dịch. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại."
-   }
+   },
+   "reviewed_by": "blind-review 2026-11-24",
+   "review_note": "Kh?p: m?n ATM nh?p m? r?t ti?n, kh?ng giao d?ch. B?n ??c m? ghi 'not_financial ho?c 0 d?ng'; gi? not_financial."
   },
   {
    "id": "s01",

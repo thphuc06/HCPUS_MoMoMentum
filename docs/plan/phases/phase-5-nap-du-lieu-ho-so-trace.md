@@ -155,6 +155,61 @@ Làm song song với phase 3 trên nhánh `feat/ingest`, merge vào `main` ở `
 
 - **Lệch và hạn chế**: bảng phí, menu, màn ATM được model xếp "tài liệu tài chính khác" nên không tạo dòng nhưng mã lỗi khác nhãn `not_financial` (1/5); eval chạy không DB nên "trùng lặp được đánh dấu" là 0% (khử trùng thật dựa trên DB, đã kiểm bằng local_pg và test tích hợp); ảnh thật có độ đủ trường thấp (58%) nên gần như mọi dòng ảnh thật vào hàng chờ, đúng thiết kế an toàn. Chưa có tool Gateway `ingest___*` và intent "mình vừa nạp ảnh" trong chat; chưa dùng phân loại phase 4; chưa đi màn I1–I4 trên trình duyệt với backend thật (đã kiểm bằng `dev:mock` 390x844 và bằng test tích hợp REST).
 
+### Tiêu chí 3: đánh giá lại sau kiểm mù nhãn (24/11)
+
+Worker Kiro (Claude Opus 5.5) do Claude Code điều phối, làm thay chủ dự án việc duyệt nhãn 25 ảnh thật. Không sửa code, không deploy.
+
+**Cách làm.** `uv run scripts/eval_ingest.py --fetch` tải đủ 25/25 ảnh (đúng sha256, không ảnh nào lỗi). Với từng ảnh, worker tự nhìn ảnh (phóng to r15, r19, r22 khi chữ nhỏ) và ghi nhãn riêng (bốn trường, đọc được, có phải tài liệu tài chính, màn chưa thực hiện) vào một file tạm ngoài repo, rồi mới mở nhãn trong `manifest.json`. File tạm đã xóa. Mỗi ảnh thật trong manifest nay có `reviewed_by: "blind-review 2026-11-24"` và `review_note` (khớp hay sửa, kèm lý do). `label_status` giữ `agent_read`.
+
+**Kết quả kiểm nhãn.** 25/25 ảnh khớp ở bốn trường, cờ đọc được, cờ tài liệu tài chính và cờ màn chưa thực hiện, sau khi xem lại lần hai các chỗ lệch. Không giá trị ngày, số tiền, đối tác hay nội dung nào phải đổi. Có 2 nhãn sửa, cả hai ngoài bốn giá trị:
+- r12 dòng 3: cột nội dung trên ảnh là cả chuỗi "<tên người gửi>;nop tien;". Nhãn "nop tien" giữ nguyên, ngưỡng hạ từ 0,80 xuống 0,70 để nhận cả bản đã che ("N***;nop tien;", tỷ lệ khoảng 0,73).
+- r13: số tài khoản người nhận dòng 1 hiện đầy đủ trong ảnh nhưng thiếu trong `pii.number_hashes`. Đã thêm (****7718) để bộ kiểm lộ PII bắt được.
+
+Có 0 ảnh `needs_human`. Các chỗ lệch đã xem lại và giữ nhãn cũ:
+- r07, r13: "CK tới tài khoản khác" là cột Loại giao dịch, không phải nội dung, nên không chấm.
+- r12 dòng 1 và 2: nội dung bị cắt cụt nên không chấm.
+- r20: ảnh không có ngày phát hành, chỉ có kỳ 25/06 tới 24/07/2015, nên không chấm ngày.
+- r22: ảnh ghép hướng dẫn, dùng số tài khoản mẫu, nên giữ `not_financial`. r04 khác ở chỗ là màn thật có số thẻ và số dư.
+- r24: các dòng "Nạp tiền thành công" từ thẻ của chính mình là chuyển nội bộ, không chấm.
+- r27: màn ATM giữ `not_financial`.
+
+**Lượt eval** (`uv run scripts/eval_ingest.py --set real`, 24/11 14:26, `AWS_REGION=ap-southeast-1`, `YOFINA_USAGE_TABLE=yofina-usage`, 25 mục, 0 lỗi chạy). Lần gọi đầu thiếu biến Region nên dừng ở bước tạo client Bedrock (0,01 giây mỗi mục, chưa gọi model). Kết quả rỗng của lần đó đã xóa và lượt trên là lượt Bedrock duy nhất. Lượt 22/11 không còn file kết quả nên không so được từng ảnh.
+
+| Chỉ số (ảnh thật) | 22/11, nhãn agent chưa duyệt | 24/11, sau kiểm mù |
+|---|---|---|
+| Số tiền đúng | 22/25 (88%) | 18/25 (72%) |
+| Ngày đúng | 16/21 (76%) | 12/21 (57%) |
+| Đối tác đúng | không ghi | 9/10 (90%) |
+| Nội dung đúng | không ghi | 3/11 (27%) |
+| **Đủ 4 trường trên ảnh đọc được** | **7/12 (58%)** | **7/12 (58%)**, chưa đạt 9/10 |
+| Tỷ lệ dòng vào hàng chờ duyệt | 22/23 (96%) | 16/18 (89%) |
+| Màn chưa thực hiện không tự thêm | 8/8 | 8/8 |
+| Không lộ PII | 10/10 | 10/10 (bộ đo có lỗ hổng, xem bên dưới) |
+| Báo `not_financial` đúng | 1/5 | 1/5 |
+| Trùng lặp được đánh dấu | 0% | 0/1 (eval không DB) |
+
+Đạt đủ bốn trường: r01, r02, r03, r07, r10, r13, r20. Năm ảnh trượt:
+
+| Ảnh | Trượt ở | Nguyên nhân |
+|---|---|---|
+| r08 (VPBank, chi tiết sau chuyển) | 0/1 dòng, backend trả `no_transactions` | Model. Màn có số tham chiếu, nút "Xong" và ô "Lưu mẫu giao dịch" (màn sau khi hoàn tất), nhưng phần ảnh hiện ra không có chữ "thành công", và model coi là màn chưa thực hiện. Nhãn rõ. |
+| r12 (VCB lịch sử, mờ) | dòng 2 sai ngày; dòng 3 sai nội dung | Ngày: model đọc sai trên ảnh mờ. Nội dung: không đạt cả ngưỡng 0,70. Rất có thể model chép cả tên người gửi vào nội dung và backend không che tên (lỗi che PII bên dưới). Kết quả eval không lưu giá trị nên không xác nhận được. |
+| r14 (VPBank, hộp tra soát) | 0/1 dòng, `no_transactions` | Nhãn tranh luận được. Hộp tra soát có nút Gửi/Hủy nên model coi là biểu mẫu chưa gửi, dù giao dịch gốc đã thực hiện. Đây là bản trùng của r13 nên bỏ qua không gây hại. Cần chủ dự án chốt (câu hỏi 1). |
+| r15 (VPBank sao kê 10 dòng) | 5/10 dòng; 2 dòng sai chiều | Model và quy ước. Cả 5 dòng "RUT TIEN TAI ATM" đều vắng. Prompt không nói gì về rút ATM, và model có thể đã xếp chúng vào chuyển giữa tài khoản của chính mình (câu hỏi 2). Hai dòng ghi có "ck" (500.000 ngày 10/11, 450.000 ngày 09/11) bị trả là `out`, tức model đọc lẫn cột Ghi nợ/Ghi có. |
+| r24 (MoMo thông báo) | ngày dòng Gojek | Model. Ảnh ghi "Thứ ba, 21/02". Nếu model trả "21/02" thì backend tự thêm năm và chấm đúng, nên trượt nghĩa là model trả ngày khác hoặc không trả ngày; khi thiếu ngày, backend gán ngày hôm nay. Nhãn rõ. |
+
+Có 4 ảnh lỗi do model đọc (r08, r12, r15, r24) và 2 ảnh có quy ước chưa chốt (r14, rút ATM ở r15). Không ảnh nào trượt vì nhãn sai hay vì định dạng ngày hoặc tên viết tắt. Cả hai ca ngày không năm đều do `ddmm_partial` chấm, và r10 đúng. Kể cả khi chốt r14 và rút ATM theo hướng có lợi cho model, kết quả tối đa là 7/11, vẫn dưới 9/10.
+
+**Đề xuất sửa code** (lỗi có hệ thống; worker không sửa):
+1. **Che tên người trong nội dung tự do bị hổng** (`libs/yofina_core/src/yofina_core/pii.py`, `_name_spans`). Vòng gom tên dừng ở từ nằm trong `COMMON_WORDS`, mà tập này có "thi", "tien", "an", "sang", "phuong". Kiểm offline: `mask_row_text("NGUYEN THI A;nop tien;")` giữ nguyên cả tên, `"chuyen tien cho NGUYEN VAN AN"` thành `"chuyen tien cho N*** AN"`. Sửa: sau một họ, các từ viết hoa liền nhau tính là tên dù trùng từ thông dụng, hoặc loại tên đệm phổ biến (Thị, Văn, Tiến...) khỏi `COMMON_WORDS` khi đứng sau họ. Việc này liên quan tiêu chí 4.
+2. **Bộ đo lộ PII của eval bỏ sót** (`scripts/eval_ingest.py`, `leaks`). Hàm tách từ theo khoảng trắng, nên "THU;nop" không khớp băm tên. Cần tách theo ký tự không phải chữ hoặc số. Con số 10/10 "không lộ PII" ở trên vì thế chưa đáng tin cho r12.
+3. **`not_financial` 1/5 là lệch mã chứ không phải lỗi người dùng thấy.** Bảng phí, menu và màn ATM được trả `no_transactions`, mà `ERROR_CODE_OF` đổi cả `no_transactions` lẫn `not_financial` thành `INGEST_NOT_FINANCIAL`. Có hai cách sửa: eval chấp nhận cả hai mã khi nhãn là `not_financial`, hoặc backend trả `not_financial` khi `document_type = other_financial` và không có dòng nào.
+4. **Prompt ảnh** (`pipelines/ingest/yofina_ingest/prompts.py`): ghi rõ màn có số tham chiếu hoặc mã giao dịch (FT..., "Số tham chiếu") là giao dịch đã xong dù không có chữ "thành công" (r08). Ghi rõ quy ước rút ATM sau khi chủ dự án chốt (r15). Với sao kê có cột Ghi nợ/Ghi có/Số dư, kiểm chiều bằng số dư chạy hoặc yêu cầu model trả tên cột chứa số tiền (r15).
+
+**Câu hỏi cho chủ dự án** (nhãn hiện giữ như cũ):
+1. Hộp tra soát của một giao dịch đã thực hiện (r14) có tính là chứng từ giao dịch không? Nhãn hiện nói có, model nói không.
+2. Rút tiền mặt ở ATM (r15, 5 dòng) là khoản chi (`out`, như nhãn) hay chuyển nội bộ sang tiền mặt (không ghi)?
+
 ### Quyết định hợp đồng phase 5
 
 Viết ngày 2026-11-24 bởi worker `p5-contracts` (Kiro, Claude Opus 5.5) làm "Bước 0 — hợp đồng" của "Kế hoạch thực hiện". Sáu luồng sau đọc mục này cùng [contracts/README.md](../../../contracts/README.md) mục "Phase 5 (F7, trích dẫn biểu phí, quyền riêng tư, trace)". Mọi mục dưới đây là lựa chọn tự quyết khi file phase chưa nói rõ; **lệch so với file phase** được đánh dấu. Migration `0053`, tool và route mới **chưa chạy trên Aurora, chưa deploy**. Tài liệu đã tra (24/11): AgentCore Memory (memory-strategies, built-in-strategies, user-preference-memory-strategy, memory-organization, API `CreateEvent`, `ListMemoryRecords`, `MemoryRecordSummary`, `DeleteMemoryRecord`, `BatchDeleteMemoryRecords`, `BatchCreateMemoryRecords`, `DeleteEvent`), README pgvector (hybrid search với full-text và Reciprocal Rank Fusion), PostgreSQL 16 "Tables and Indexes" của full-text search (cột tsvector sinh STORED, chỉ mục GIN). **Sửa cùng ngày 24/11 (worker `p5-contracts`, nhánh `p5/contracts`): gỡ RAG khỏi hợp đồng vì chủ dự án cắt luồng C** (xem "Kế hoạch thực hiện"): bỏ bảng `kb_documents`, `kb_chunks`, chỉ mục và hàm `app_kb_search` khỏi 0053 (migration chưa chạy ở đâu nên sửa thẳng file), bỏ tool `knowledge___search`, kết quả, fixture và `yofina_core.knowledge`; khối `citation` giữ lại nhưng dựng từ kết quả `get_fee_schedule`. Mục 3, 4, 15 dưới đây đánh dấu ĐÃ BỎ (giữ chữ để biết vì sao từng chọn như vậy); mục 15a thay mục 15; các mục khác đã sửa cho khớp.
