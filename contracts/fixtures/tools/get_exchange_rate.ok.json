@@ -1,0 +1,15 @@
+{
+  "status": "OK",
+  "as_of": "2026-11-24T11:30:00Z",
+  "app_date": "2026-11-10",
+  "data": {
+    "currency": "USD",
+    "rate": "25790.00",
+    "rate_type": "sell",
+    "rate_source": "vietcombank",
+    "rate_date": "2026-11-10",
+    "requested_date": "2026-11-10",
+    "amount_original": "111.11",
+    "amount_vnd": 2865527
+  }
+}

@@ -19,5 +19,31 @@
         }
       }
     }
+  },
+  {
+    "name": "get_exchange_rate",
+    "description": "Tra tỷ giá BÁN của một ngoại tệ theo ngày (bảng công bố của Vietcombank, cùng nguồn với lúc nạp chứng từ ngoại tệ) và quy đổi một số tiền ngoại tệ sang VND, làm tròn tới đồng. Khi người dùng nói số tiền bằng ngoại tệ, số VND để tính và để nói là amount_vnd của kết quả; không tự nhân tỷ giá. Số VND là ước tính: thanh toán bằng thẻ thường thêm phí chuyển đổi ngoại tệ của ngân hàng phát hành. Kết quả có ngày của bảng đã dùng (rate_date) và nguồn. Chỉ đọc, không ghi gì.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "currency": {
+          "type": "string",
+          "description": "Mã ngoại tệ ISO 4217, ba chữ in hoa, khác VND."
+        },
+        "date": {
+          "type": "string",
+          "description": "Ngày của tỷ giá, YYYY-MM-DD. Vắng thì ngày hôm nay của ứng dụng (ngày mô phỏng). Ngày chưa có bảng thì dùng bảng gần nhất trước đó, tối đa 4 ngày."
+        },
+        "amount": {
+          "type": "number",
+          "description": "Số tiền theo ngoại tệ, dương, tối đa 4 chữ số lẻ. Vắng thì chỉ trả tỷ giá."
+        }
+      },
+      "required": ["currency"]
+    }
   }
 ]

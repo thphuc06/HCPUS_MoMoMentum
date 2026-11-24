@@ -8,7 +8,7 @@
 - Mười tool (đúng thứ tự `yofina_core.wallet.LEDGER_TOOLS`): năm tool đọc, bốn tool ghi, `save_turn`. Tool ghi KHÔNG có
   `confirm_token` thì không ghi, trả `NEEDS_CONFIRMATION` kèm bản xem trước. `save_jars` và `confirm_salary` chỉ có ở REST.
 - Phase 3: Lambda này CŨNG phục vụ ba target Gateway `planner` (`check_suitability`, `schedule_nudge`), `knowledge`
-  (`get_fee_schedule`) và `audit` (`get_trace`, `record_turn`) theo quyết định của người điều phối (không có Lambda riêng). Tên tool của các
+  (`get_fee_schedule`, `get_exchange_rate`) và `audit` (`get_trace`, `record_turn`) theo quyết định của người điều phối (không có Lambda riêng). Tên tool của các
   target đó là duy nhất trong Gateway nên phân biệt theo tên (phần sau `___`). `schedule_nudge` là tool GHI qua token như các
   tool ghi khác.
 - Phase 4: target `planner` thêm `optimize_allocation` (proxy sang Lambda forecast), `save_roadmap` (ghi, KHÔNG qua token, chạy lại
@@ -79,6 +79,7 @@ _ARG_KEYS: dict[str, tuple[str, ...]] = {
         "confirm_token",
     ),
     "get_fee_schedule": ("fee_type", "product"),
+    "get_exchange_rate": ("currency", "date", "amount"),
     # --- phase 4: target planner (lộ trình; chạy chung Lambda này) ---
     "optimize_allocation": ("horizon_months", "goals", "shock_id", "allow_relaxation"),
     "save_roadmap": (
@@ -190,6 +191,8 @@ def _run(
         return service.fee_schedule_result(
             user_id, product=args.get("product"), fee_type=args.get("fee_type")
         )
+    if tool == "get_exchange_rate":
+        return service.exchange_rate_result(user_id, **args)
     if tool == "get_trace":
         return service.trace_result(user_id, args.get("trace_id"))
     if tool in ROADMAP_TOOLS:

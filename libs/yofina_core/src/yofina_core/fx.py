@@ -1,4 +1,8 @@
-"""Quy đổi số tiền ngoại tệ trên chứng từ sang VND theo tỷ giá THẬT của một ngày (F6). Không gọi model, không ghi DB.
+"""Quy đổi số tiền ngoại tệ sang VND theo tỷ giá THẬT của một ngày. Không gọi model, không ghi DB.
+
+MỘT hàm, MỘT nguồn tỷ giá cho hai nơi dùng: pipeline nạp chứng từ (F6, `yofina_ingest`, gọi thẳng `default_converter()` trong
+Lambda `yofina-ingest`) và tool `knowledge___get_exchange_rate` của agent chat (Lambda `yofina-ledger` sau AgentCore Gateway,
+`yofina_knowledge.fx_rates`). Hai Lambda đều nằm ngoài VPC nên ra được internet; mỗi môi trường thực thi có bộ nhớ đệm riêng.
 
 Nguồn: bảng tỷ giá công bố của Vietcombank, đúng endpoint JSON mà trang "Tỷ giá" chính thức của ngân hàng dùng
 (`/api/exchangerates?date=YYYY-MM-DD`, công khai, không cần khóa). Cột dùng là **Bán** (`sell`): thanh toán thẻ hay chuyển tiền ra
@@ -32,7 +36,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-log = logging.getLogger("yofina.ingest.fx")
+log = logging.getLogger("yofina.fx")
 
 SOURCE = "vietcombank"
 RATE_TYPE = "sell"
@@ -44,7 +48,7 @@ MAX_LOOKBACK_DAYS = 4
 TODAY_TTL_SECONDS = 3600
 MISS_TTL_SECONDS = 600
 CACHE_MAX_DAYS = 400
-USER_AGENT = "yofina-ingest/1.0"
+USER_AGENT = "yofina/1.0"
 
 
 class RateUnavailable(Exception):
@@ -114,8 +118,8 @@ def parse_vcb(payload: Mapping[str, Any], requested: date) -> RateTable | None:
 
 
 class VietcombankSource:
-    """Gọi endpoint JSON công khai của Vietcombank bằng `urllib` (không thêm gói). Lambda `yofina-ingest` không nằm trong VPC nên
-    ra được internet (không cần NAT)."""
+    """Gọi endpoint JSON công khai của Vietcombank bằng `urllib` (không thêm gói). Lambda `yofina-ingest` và `yofina-ledger` không nằm
+    trong VPC nên ra được internet (không cần NAT)."""
 
     def __init__(
         self, *, url: str = VCB_URL, timeout: float = HTTP_TIMEOUT_SECONDS, opener: Any = None

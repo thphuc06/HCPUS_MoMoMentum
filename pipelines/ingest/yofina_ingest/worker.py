@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 
 from yofina_core.clock import app_today
 from yofina_core.errors import ErrorCode, YofinaError
+from yofina_core.fx import FxConverter
 from yofina_core.ingest import IngestSettings, content_sha256, coverage_ratio, row_dedupe_key
 from yofina_core.llm import LlmGateway
 from yofina_core.params import fold_text
@@ -39,7 +40,6 @@ from yofina_ingest.extract import (
     ExtractionResult,
     extract_rows,
 )
-from yofina_ingest.fx import FxConverter
 from yofina_ingest.repo import IngestRepo
 from yofina_ingest.settings import IngestRuntime
 
@@ -129,7 +129,7 @@ class Worker:
         self.rt = runtime
         self.gateway = gateway
         self._clock = clock or (lambda: datetime.now(UTC))
-        #: bộ quy đổi ngoại tệ; vắng thì bộ của tiến trình với nguồn tỷ giá thật (`yofina_ingest.fx.default_converter`)
+        #: bộ quy đổi ngoại tệ; vắng thì bộ của tiến trình với nguồn tỷ giá thật (`yofina_core.fx.default_converter`)
         self.fx = fx
 
     # --- ngữ cảnh ------------------------------------------------------------------------------------------------------------

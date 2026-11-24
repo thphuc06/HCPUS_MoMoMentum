@@ -166,6 +166,8 @@ class IngestTools:
         }
         if out.get("error_code"):
             data["error_code"] = out["error_code"]
+        if out.get("error_reason"):  # lý do con của INGEST_NO_TRANSACTIONS, như `GET /ingest/jobs/{id}`
+            data["error_reason"] = out["error_reason"]
         if "review" in out:
             data["review"] = out["review"]["data"]
         if "coverage_change" in out:

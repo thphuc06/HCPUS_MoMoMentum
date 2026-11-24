@@ -13,7 +13,7 @@ Luồng một tệp:
 3. **Loại**: thất bại, chưa thực hiện, nạp tiền giữa tài khoản của chính mình, dòng không đọc được số tiền. Không dòng nào của màn xác
    nhận/OTP/biểu mẫu trống hay bảng phí đi qua được bước này thành `auto_add`. Không còn dòng nào thì `no_transactions` kèm lý do con
    (`no_transactions_reason`), API `INGEST_NO_TRANSACTIONS`, khác `not_financial` (ảnh không phải chứng từ tài chính).
-   **Ngoại tệ** (`currency` khác VND): đổi sang VND theo tỷ giá bán của ngày giao dịch (`yofina_ingest.fx`), giữ số gốc và tỷ giá ở
+   **Ngoại tệ** (`currency` khác VND): đổi sang VND theo tỷ giá bán của ngày giao dịch (`yofina_core.fx`), giữ số gốc và tỷ giá ở
    `Candidate.fx`; tra tỷ giá lỗi thì dòng vẫn vào hàng chờ với số gốc, không có số VND (người dùng nhập lúc chốt).
 4. **Gán hũ**: bộ phân loại phase 4 (`yofina_ingest.classify`): luật người dùng, bảng `tx_type_map`, embedding k-NN, model nhỏ (đề xuất
    hũ của chính lượt đọc tệp); ba mức tin cậy, chỉ mức `auto` được chọn sẵn.
@@ -33,8 +33,10 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from yofina_core import fx
 from yofina_core.clock import app_today
 from yofina_core.config import Config
+from yofina_core.fx import FxRate, RateUnavailable
 from yofina_core.ingest import IngestSettings, should_auto_add
 from yofina_core.llm import (
     AllModelsFailed,
@@ -45,10 +47,9 @@ from yofina_core.llm import (
 )
 from yofina_core.params import MAX_VND
 from yofina_core.pii import PiiPolicy, mask_counterparty, mask_row_text
-from yofina_ingest import csvparse, fx, prompts
+from yofina_ingest import csvparse, prompts
 from yofina_ingest.classify import RowInput, classify_rows
 from yofina_ingest.context import ExtractContext, eval_context
-from yofina_ingest.fx import FxRate, RateUnavailable
 from yofina_ingest.normalize import (
     clean_text,
     looks_failed,

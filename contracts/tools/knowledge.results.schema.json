@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/tools/knowledge.results.schema.json",
   "title": "KnowledgeToolResults",
-  "description": "Kết quả JSON mà Lambda `knowledge` trả cho Gateway. `get_fee_schedule` đọc bảng có cấu trúc `fee_schedules`, KHÔNG đi qua RAG: số để tính không lấy từ văn bản tự do. Các trường nguồn của `FeeLine` (`fee_type`, `source_name`, `source_url`, `effective_from`) là đầu vào DUY NHẤT của khối `citation` (`yofina_core.blocks.build_citation`); phase 5 không có tìm kiếm tài liệu. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "description": "Kết quả JSON mà Lambda `knowledge` trả cho Gateway. `get_fee_schedule` đọc bảng có cấu trúc `fee_schedules`, KHÔNG đi qua RAG: số để tính không lấy từ văn bản tự do. Các trường nguồn của `FeeLine` (`fee_type`, `source_name`, `source_url`, `effective_from`) là đầu vào DUY NHẤT của khối `citation` (`yofina_core.blocks.build_citation`); phase 5 không có tìm kiếm tài liệu. `get_exchange_rate` đọc tỷ giá bán theo ngày từ cùng hàm và cùng nguồn với pipeline nạp chứng từ (`yofina_core.fx`), không ghi gì. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
   "$defs": {
     "FeeLine": {
       "description": "Một dòng biểu phí có cấu trúc (bảng fee_schedules), đang hiệu lực tại ngày mô phỏng. Cùng hình dạng `FeeLine` của OpenAPI (`GET /credit-line`); test kiểm hai nơi khớp nhau.",
@@ -55,6 +55,57 @@
       "description": "Mã lỗi có thể gặp: FEE_SCHEDULE_NOT_FOUND (loại phí hoặc sản phẩm không có), PARAMS_INVALID.",
       "oneOf": [
         { "$ref": "#/$defs/GetFeeScheduleOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
+    "ExchangeRateData": {
+      "description": "Tỷ giá BÁN của một ngoại tệ theo ngày, từ cùng hàm và cùng nguồn với pipeline nạp chứng từ (`yofina_core.fx`). Số gốc và tỷ giá là chuỗi thập phân (không qua float), cùng dạng `IngestFx` của khối ingest_review. amount_original và amount_vnd có đúng khi người gọi đưa amount: amount_vnd = amount_original × rate làm tròn tới đồng (nửa đồng làm tròn lên), là số ước tính vì thanh toán thẻ thường thêm phí chuyển đổi.",
+      "type": "object",
+      "required": ["currency", "rate", "rate_type", "rate_source", "rate_date", "requested_date"],
+      "additionalProperties": false,
+      "properties": {
+        "currency": { "description": "Mã ISO 4217, khác VND.", "type": "string", "pattern": "^[A-Z]{3}$" },
+        "rate": {
+          "description": "Số VND cho một đơn vị ngoại tệ (chuỗi thập phân, ví dụ 25790.00).",
+          "type": "string",
+          "pattern": "^[0-9]{1,12}(\\.[0-9]{1,4})?$",
+          "maxLength": 17
+        },
+        "rate_type": { "description": "sell: tỷ giá bán của ngân hàng.", "type": "string", "enum": ["sell"] },
+        "rate_source": { "description": "vietcombank: bảng tỷ giá công bố của Vietcombank.", "type": "string", "enum": ["vietcombank"] },
+        "rate_date": {
+          "description": "Ngày của bảng tỷ giá đã dùng: sớm hơn requested_date khi ngày đó chưa có bảng hoặc sau hôm nay theo giờ Việt Nam.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "requested_date": {
+          "description": "Ngày người gọi hỏi; vắng tham số date thì là ngày mô phỏng (app_date).",
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "amount_original": {
+          "description": "Số tiền theo ngoại tệ người gọi đưa (chuỗi thập phân, ví dụ 111.11).",
+          "type": "string",
+          "pattern": "^[0-9]{1,12}(\\.[0-9]{1,4})?$",
+          "maxLength": 17
+        },
+        "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" }
+      },
+      "dependentRequired": { "amount_original": ["amount_vnd"], "amount_vnd": ["amount_original"] }
+    },
+    "GetExchangeRateOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "#/$defs/ExchangeRateData" }
+      }
+    },
+    "GetExchangeRateResult": {
+      "description": "Mã lỗi có thể gặp: PARAMS_INVALID (mã ngoại tệ, ngày hay số tiền sai dạng; ngoại tệ không có trong bảng của nguồn), INTERNAL_ERROR (nguồn tỷ giá không trả lời được; lỗi tạm thời, thử lại sau).",
+      "oneOf": [
+        { "$ref": "#/$defs/GetExchangeRateOk" },
         { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
       ]
     }

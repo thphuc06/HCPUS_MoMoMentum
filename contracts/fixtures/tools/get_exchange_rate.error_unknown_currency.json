@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "PARAMS_INVALID",
+  "message": "Bảng tỷ giá của Vietcombank không có ngoại tệ XAU."
+}

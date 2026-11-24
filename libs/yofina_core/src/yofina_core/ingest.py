@@ -382,6 +382,12 @@ class StartJobOk(_Strict):
     data: StartJobData
 
 
+#: lý do con khi `error_code` là INGEST_NO_TRANSACTIONS (`IngestErrorReason` của OpenAPI, cột `ingest_jobs.error_reason`)
+IngestErrorReason = Literal[
+    "unexecuted_form", "not_completed", "own_account_transfer", "cash_withdrawal", "no_amount", "no_rows"
+]  # fmt: skip
+
+
 class JobStatusData(_Strict):
     job_id: Uuid
     status: IngestJobStatus
@@ -389,6 +395,7 @@ class JobStatusData(_Strict):
     progress: Annotated[int, Field(ge=0, le=100)]
     rows_total: Annotated[int, Field(ge=0)]
     error_code: Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]*$")] | None = None
+    error_reason: IngestErrorReason | None = None
     review: IngestReviewData | None = None
     coverage_change: CoverageChangeData | None = None
 

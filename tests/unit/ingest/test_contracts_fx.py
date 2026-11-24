@@ -8,6 +8,7 @@ import json
 import re
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import get_args
 
 import pytest
 import yaml
@@ -71,6 +72,10 @@ def test_ly_do_con_khop_openapi_backend_va_frontend():
     )
     check = migration.split("ingest_jobs_error_reason_check CHECK", 1)[1].split(";", 1)[0]
     assert set(re.findall(r"'(\w+)'", check)) == set(reasons)
+    # tool `ingest___get_job_status` của agent trả cùng tập lý do con (JSON Schema và Pydantic)
+    tool = load_json(CONTRACTS / "tools" / "ingest.results.schema.json")["$defs"]["JobStatusData"]
+    assert tool["properties"]["error_reason"]["enum"] == reasons
+    assert list(get_args(ingest.IngestErrorReason)) == reasons
 
 
 def test_fixture_rest_no_transactions_co_ly_do():
@@ -185,8 +190,23 @@ def test_frontend_zod_cua_khoi_co_fx():
 def test_so_goc_va_ty_gia_giu_dung_chu_so():
     """`amount_original` và `rate` là chuỗi thập phân (không qua float); `rate` không mang hậu tố `_vnd` vì không phải số tiền."""
     ex = _extract()
-    from yofina_ingest.fx import FxRate
+    from yofina_core.fx import FxRate
 
     info = ex.FxInfo("USD", Decimal("111.11"), FxRate("USD", Decimal("25790"), date(2026, 11, 10)))
     assert info.to_json()["amount_original"] == "111.11" and info.to_json()["rate"] == "25790.00"
     assert b.IngestFx(**info.to_json()).rate == "25790.00"
+
+
+def test_tool_ty_gia_cua_agent_va_pipeline_nap_dung_chung_mot_ham():
+    """Một hàm, một nguồn tỷ giá: tool `knowledge___get_exchange_rate` (Lambda ledger) và pipeline nạp chứng từ cùng gọi
+    `yofina_core.fx`, không có bản sao trong `yofina_ingest`."""
+    import importlib.util
+
+    from yofina_ingest import context as ingest_context
+
+    from yofina_core import fx
+    from yofina_knowledge import fx_rates
+
+    assert fx_rates.fx is fx and _extract().fx is fx
+    assert ingest_context.default_converter is fx.default_converter
+    assert importlib.util.find_spec("yofina_ingest.fx") is None

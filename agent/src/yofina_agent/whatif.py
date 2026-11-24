@@ -326,7 +326,10 @@ Phần giải thích (narrative): 2 đến 4 câu tiếng Việt (tối đa kho�
 (đủ, sát, hụt), khoản đến hạn nào bị ảnh hưởng nếu có, và độ tin cậy của dữ liệu (basis). Trả sau chỉ là sản phẩm mô phỏng. \
 Nếu <du_lieu> có `bundle` (nhiều khoản) thì đây là mô phỏng gộp: các khoản người dùng vẫn giữ từ trước cộng khoản mới (khoản mới là `scenario`); \
 nói tự nhiên là đã tính chung các khoản đó (nêu tên theo `bundle`, viết chữ thường như câu nói bình thường, không viết hoa để nhấn), \
-tổng tiền chỉ được nêu bằng `bundle_total_text`, và phương án có thể là bỏ hoặc hoãn một trong các khoản.
+tổng tiền chỉ được nêu bằng `bundle_total_text`, và phương án có thể là bỏ hoặc hoãn một trong các khoản. \
+Nếu <du_lieu> có `exchange_rate` thì người dùng nói khoản tiền bằng ngoại tệ (`amount_original_text`) và số VND của kịch bản đã được \
+quy đổi theo tỷ giá bán `rate_text` cho một đơn vị `currency` của `source` ngày `rate_date_text`; số VND đó là ước tính vì thanh toán \
+thẻ thường thêm phí chuyển đổi ngoại tệ.
 
 Phương án (options): 2 đến 3 lựa chọn THẬT SỰ khác nhau cho người dùng (ví dụ hoãn mua, dùng hũ khác, giảm số tiền, chuyển bù giữa hũ, nhắc lại sau, vẫn mua). \
 Mỗi phương án: option_id (chữ thường, số, gạch dưới), kind (defer, switch_jar, split, pay_now, use_credit, proceed, reduce_amount, move_between_jars, remind_later, skip), \
@@ -493,7 +496,7 @@ async def _orchestrate(turn: Turn, r: IntentResult, question: str, history: str)
             )
             spec = validate_spec(res.value.scenario.model_dump())
             if spec is not None and _jar_codes_ok(spec, rows):
-                return spec
+                return with_converted_amount(spec, r)
             log.warning(json.dumps({"event": "orchestrator_invalid_spec"}))
         except Exception as exc:  # noqa: BLE001 (ModelBudgetExceeded, AllModelsFailed, StructuredOutputError...)
             turn.llm_failed(exc)
@@ -501,6 +504,16 @@ async def _orchestrate(turn: Turn, r: IntentResult, question: str, history: str)
     if spec is not None:
         spec = validate_spec(spec)
     return spec
+
+
+def with_converted_amount(spec: dict[str, Any], r: IntentResult) -> dict[str, Any]:
+    """Người dùng nói số tiền bằng ngoại tệ: số VND của kịch bản là số mã đã quy đổi bằng tool tỷ giá (`fx_chat`, `amount_vnd` của
+    router sau khi đổi), không phải số model tự đọc từ câu hỏi (số theo ngoại tệ, hay số tự nhân tỷ giá)."""
+    amount = r.params.amount_vnd
+    if r.params.currency is None or amount is None:
+        return spec
+    key = "new_monthly_salary_vnd" if spec.get("kind") == "income_change" else "amount_vnd"
+    return {**spec, key: amount} if key in spec else spec
 
 
 def _jar_codes_ok(spec: Mapping[str, Any], rows: list[dict[str, Any]]) -> bool:
@@ -553,7 +566,11 @@ async def _analyze_and_compose(turn: Turn, question: str, scenario_res: Any, st:
     obligations = turn.compact_of("get_obligations")
     if obligations:
         compact["obligations"] = obligations
-    allowed = Allowed.from_payloads(turn.grounding_payloads(), [question])
+    fx = turn.compact_of("get_exchange_rate")  # khoản tiền người dùng nói bằng ngoại tệ (fx_chat): tỷ giá đã dùng để quy đổi
+    if fx:
+        compact["exchange_rate"] = fx
+    # tỷ giá trong kết quả tool là chuỗi thập phân ("25790.00"); bản gọn của chính kết quả đó mang dạng đã định dạng mà Analyst chép
+    allowed = Allowed.from_payloads([*turn.grounding_payloads(), *([fx] if fx else [])], [question])
     feedback: list[str] | None = None
     previous: Analysis | None = None
     rounds: list[list[tuple[Any, SuitabilityVerdict]]] = []

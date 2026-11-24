@@ -9,6 +9,7 @@ Luồng (mã điều khiển, không để LLM quyết định thứ tự):
     RUN_STARTED
       -> L0: che PII (yofina_core.pii) -> router (model nhỏ, ép tool) song song với Guardrail đầu vào
          (router lỗi: bộ phân loại dự phòng bằng luật; Guardrail chặn: coi như ngoài phạm vi)
+      -> số tiền bằng ngoại tệ: knowledge___get_exchange_rate đổi sang VND (amount_vnd lấy từ kết quả tool; fx_chat.py)
       -> thiếu ô bắt buộc (số tiền, cách trả, hũ): khối `clarify` đúng một câu, kết thúc lượt (lượt sau router ghép với câu trước)
       -> ý định:
            lookup (balance|transactions|forecast|obligations)   đường nhanh: một tool + một câu của model nhỏ
@@ -57,6 +58,7 @@ from yofina_agent.compact import (
 )
 from yofina_agent.fallback import classify_by_rules
 from yofina_agent.fee_citation import on_knowledge
+from yofina_agent.fx_chat import convert_foreign_amount, on_exchange_rate
 from yofina_agent.guardrail import Guardrail, GuardrailResult
 from yofina_agent.identity import Identity
 from yofina_agent.ingest_chat import on_ingest
@@ -773,6 +775,13 @@ class Turn:
             return
         # Câu trả lời cụt cho khối `clarify`: giữ tham số của câu đang chờ (số tiền, người nhận, hũ...) bằng mã, không trông vào model nhớ.
         routed = merge_pending(routed, question, self.pending_params_before(index))
+        # Số tiền bằng ngoại tệ là tham số của câu hỏi, không phải ý định: đổi sang VND bằng tool tỷ giá TRƯỚC khi hỏi lại ô thiếu,
+        # để mọi đường dùng amount_vnd chạy như câu hỏi bằng VND (fx_chat). Tool lỗi thì đã có `notice`, kết thúc lượt.
+        if routed.params.currency is not None:
+            converted = await convert_foreign_amount(self, routed)
+            if converted is None:
+                return
+            routed = converted
         handler = self._intent_handlers()[routed.intent]
         # Chỉ ý định có ô bắt buộc mới hỏi lại (clarify.CLARIFY_INTENTS); handler khác tự xử lý phần còn thiếu.
         if req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed):
@@ -793,7 +802,7 @@ class Turn:
             "stress": self.on_stress,
             "roadmap": self.on_roadmap,
             "behavior": self.on_behavior,
-            "knowledge": lambda r, q: on_knowledge(self, r, q),
+            "knowledge": lambda r, q: (on_exchange_rate if r.params.currency else on_knowledge)(self, r, q),
             "ingest": lambda r, q: on_ingest(self, r, q),
             "memory": lambda r, q: agent_memory.on_memory(self, r, q),
         }
@@ -1387,10 +1396,13 @@ class Turn:
         assert res.compact is not None
         data = (res.outcome.payload or {}).get("data") or {}
         self.note_basis(data.get("basis"))
+        compact = dict(res.compact)
+        if fx := self.compact_of("get_exchange_rate"):  # khoản chi người dùng nói bằng ngoại tệ (fx_chat)
+            compact["exchange_rate"] = fx
         await self.write_buffered(
             "affordability",
             question,
-            res.compact,
+            compact,
             timeout=self.s.affordability_text_timeout_seconds,
             max_tokens=self.s.affordability_text_max_tokens,
         )

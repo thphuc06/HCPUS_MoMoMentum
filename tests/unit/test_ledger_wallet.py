@@ -422,13 +422,15 @@ TOOLS = load_json(CONTRACTS / "tools" / "ledger.json")
 
 
 PHASE3_LEDGER_TOOLS = {"check_suitability", "schedule_nudge", "get_fee_schedule", "get_trace", "record_turn"}
+#: 25/11: tỷ giá ngoại tệ ở target `knowledge`, cũng chạy trong Lambda ledger
+FX_LEDGER_TOOLS = {"get_exchange_rate"}
 #: phase 4: ba tool của target `planner` mà Lambda ledger cài (lộ trình); `forecast___*` do Lambda forecast phục vụ
 PHASE4_LEDGER_TOOLS = {"optimize_allocation", "save_roadmap", "get_roadmap"}
 
 
 def test_moi_tool_trong_hop_dong_co_dung_tham_so_o_gateway_api():
     # phase 3: Lambda ledger CŨNG phục vụ ba target planner, knowledge, audit (cùng Lambda, người điều phối chốt)
-    assert {t["name"] for t in TOOLS} == set(_ARG_KEYS) - PHASE3_LEDGER_TOOLS - (
+    assert {t["name"] for t in TOOLS} == set(_ARG_KEYS) - PHASE3_LEDGER_TOOLS - FX_LEDGER_TOOLS - (
         PHASE4_LEDGER_TOOLS & set(_ARG_KEYS)
     )
     contracts = list(TOOLS)

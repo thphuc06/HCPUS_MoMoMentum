@@ -18,9 +18,11 @@ from yofina_audit.record import parse_turn_record
 from yofina_audit.trace import build_trace_data
 from yofina_core.blocks import format_instant
 from yofina_core.errors import ErrorCode, YofinaError
+from yofina_core.fx import FxConverter, default_converter
 from yofina_core.suitability import Proposal
 from yofina_core.wallet import FEEDBACK_DECISIONS
 from yofina_knowledge.fees import fee_schedule_data
+from yofina_knowledge.fx_rates import exchange_rate_data
 from yofina_planner.engine import evaluate
 from yofina_planner.facts import facts_from_rows
 from yofina_planner.rules import cached_rules
@@ -49,6 +51,9 @@ def adds_scenario_obligation(prop: Proposal) -> bool:
 class Phase3Reads:
     """Mixin: thuộc tính dùng: repo, ref, settings, now(), _app_date()."""
 
+    #: bộ quy đổi ngoại tệ (`yofina_core.fx`); None thì bộ của tiến trình với nguồn tỷ giá thật (test gán nguồn giả)
+    fx: FxConverter | None = None
+
     # --- knowledge ----------------------------------------------------------------------------------------
     def fee_schedule_result(
         self, user_id: str, *, product: Any = None, fee_type: Any = None
@@ -57,6 +62,22 @@ class Phase3Reads:
         now = self.now()
         today = self._app_date(self.repo.clock_offset(user_id), now)
         data = fee_schedule_data(self.ref, today, product=product, fee_type=fee_type)
+        return {
+            "status": "OK",
+            "as_of": format_instant(now),
+            "app_date": today.isoformat(),
+            "data": data,
+        }
+
+    def exchange_rate_result(
+        self, user_id: str, *, currency: Any = None, date: Any = None, amount: Any = None
+    ) -> dict[str, Any]:
+        """`knowledge___get_exchange_rate`: tỷ giá bán theo ngày (mặc định ngày mô phỏng của người gọi) và số VND quy đổi của `amount`.
+        Cùng hàm, cùng nguồn tỷ giá với pipeline nạp chứng từ (`yofina_core.fx`)."""
+        now = self.now()
+        today = self._app_date(self.repo.clock_offset(user_id), now)
+        converter = self.fx or default_converter()
+        data = exchange_rate_data(converter, today, currency=currency, day=date, amount=amount)
         return {
             "status": "OK",
             "as_of": format_instant(now),

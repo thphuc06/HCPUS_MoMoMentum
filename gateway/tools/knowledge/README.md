@@ -1,3 +1,3 @@
 # gateway/tools/knowledge/
 
-Tool `knowledge___*` (target `knowledge`): `search` (Bedrock Knowledge Bases, hybrid search + rerank), `get_fee_schedule` (biểu phí có cấu trúc, số để tính không đi qua RAG). Nguồn dữ liệu ở [../../../knowledge-base/](../../../knowledge-base/README.md). Proposal §9 (RAG).
+Tool `knowledge___*` (target `knowledge`): `search` (Bedrock Knowledge Bases, hybrid search + rerank), `get_fee_schedule` (biểu phí có cấu trúc, số để tính không đi qua RAG, `yofina_knowledge/fees.py`), `get_exchange_rate` (tỷ giá bán ngoại tệ theo ngày và số VND quy đổi, `yofina_knowledge/fx_rates.py`; cùng hàm và cùng nguồn Vietcombank với pipeline nạp chứng từ: `yofina_core.fx`). Hai tool chạy trong Lambda `yofina-ledger` (`yofina_ledger/phase3.py`, `gateway_api.py`). Nguồn dữ liệu ở [../../../knowledge-base/](../../../knowledge-base/README.md). Proposal §9 (RAG).

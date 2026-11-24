@@ -495,3 +495,13 @@ def test_get_job_status_co_ly_do_con_va_dong_ngoai_te(env):
     )  # fmt: skip
     rejected = api.get_job(USER, list(repo.jobs)[-1], trace_id="t" * 32)
     assert (rejected["error_code"], rejected["error_reason"]) == ("INGEST_NO_TRANSACTIONS", "cash_withdrawal")
+    # tool của agent trả cùng lý do con như REST (agent dựng câu báo từ lý do, không đọc error_message)
+    tool = call(api, "get_job_status", job_id=list(repo.jobs)[-1])
+    check_contract("get_job_status", tool)
+    d = tool["data"]
+    assert (d["error_code"], d["error_reason"]) == ("INGEST_NO_TRANSACTIONS", "cash_withdrawal")
+    assert "error_message" not in d
+    # mã khác không có lý do con
+    repo.add_job(status="rejected", job_id=str(uuid.uuid4()), error_code="INGEST_NOT_FINANCIAL")
+    other = call(api, "get_job_status", job_id=list(repo.jobs)[-1])
+    assert other["data"]["error_code"] == "INGEST_NOT_FINANCIAL" and "error_reason" not in other["data"]

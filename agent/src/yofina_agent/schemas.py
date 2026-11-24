@@ -124,6 +124,17 @@ class IntentParams(_Model):
     insight_kind: BehaviorInsightKind | None = None  # behavior; null khi hỏi chung về thói quen
     fee_topic: Literal["monthly", "per_transaction", "once", "late", "other"] | None = None  # knowledge; null khi hỏi chung biểu phí
     ingest_action: Literal["how_to", "status"] | None = None  # ingest; null thì xem lần nạp gần nhất
+    # Số tiền người dùng nói bằng NGOẠI TỆ: router không quy đổi (amount_vnd để null); `fx_chat.convert_foreign_amount` gọi
+    # `knowledge___get_exchange_rate` và điền amount_vnd từ kết quả tool. currency là mã ISO 4217, amount_original là số theo ngoại tệ.
+    currency: str | None = None
+    amount_original: Annotated[float, Field(gt=0)] | None = None
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _currency_code(cls, value: Any) -> Any:
+        """Mã ngoại tệ ba chữ in hoa; VND hay giá trị không phải mã thì coi như không có (số tiền khi đó là VND như mọi câu khác)."""
+        code = value.strip().upper() if isinstance(value, str) else None
+        return code if code and re.fullmatch(r"[A-Z]{3}", code) and code != "VND" else None
 
 
 class IntentResult(_Model):
