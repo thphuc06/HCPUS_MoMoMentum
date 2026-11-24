@@ -1,0 +1,14 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "job_id": "5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
+    "status": "rejected",
+    "source_kind": "image",
+    "progress": 100,
+    "rows_total": 0,
+    "error_code": "INGEST_NO_TRANSACTIONS",
+    "error_reason": "own_account_transfer"
+  }
+}

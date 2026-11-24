@@ -8,6 +8,7 @@ import json
 import re
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import get_args
 
 import pytest
 import yaml
@@ -71,6 +72,10 @@ def test_ly_do_con_khop_openapi_backend_va_frontend():
     )
     check = migration.split("ingest_jobs_error_reason_check CHECK", 1)[1].split(";", 1)[0]
     assert set(re.findall(r"'(\w+)'", check)) == set(reasons)
+    # tool `ingest___get_job_status` của agent trả cùng tập lý do con (JSON Schema và Pydantic)
+    tool = load_json(CONTRACTS / "tools" / "ingest.results.schema.json")["$defs"]["JobStatusData"]
+    assert tool["properties"]["error_reason"]["enum"] == reasons
+    assert list(get_args(ingest.IngestErrorReason)) == reasons
 
 
 def test_fixture_rest_no_transactions_co_ly_do():

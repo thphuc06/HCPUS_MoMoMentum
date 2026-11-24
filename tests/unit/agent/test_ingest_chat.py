@@ -193,6 +193,34 @@ def test_lan_nap_bi_tu_choi_noi_ly_do_theo_ma_loi(monkeypatch):
     )
 
 
+def test_khong_con_giao_dich_noi_ly_do_con_ngan_khong_bao_la_khong_phai_bien_lai(monkeypatch):
+    payload = fixture("ingest/get_job_status.ok_no_transactions.json")
+    events, _, writer, _ = turn_with(
+        "Ảnh vừa nạp sao rồi?", {"get_job_status": ok(payload)}, monkeypatch=monkeypatch
+    )
+    text = text_of(events)
+    assert "không có giao dịch nào để thêm" in text and "chuyển giữa các tài khoản của chính bạn" in text
+    assert "không giống biên lai" not in text and "không thành công" not in text
+    assert writer.calls == []  # câu dựng bằng mã
+    # bản gọn của TOOL_CALL_RESULT mang mã và lý do con, không mang thông điệp tự do
+    (res,) = results(events)
+    assert (res["error_code"], res["error_reason"]) == ("INGEST_NO_TRANSACTIONS", "own_account_transfer")
+
+
+@pytest.mark.parametrize(
+    "reason", ["unexecuted_form", "not_completed", "own_account_transfer", "cash_withdrawal", "no_amount", "no_rows", None]
+)
+def test_moi_ly_do_con_co_cau_rieng_ngan(reason):
+    data = dict(fixture("ingest/get_job_status.ok_no_transactions.json")["data"])
+    data.pop("error_reason")
+    if reason:
+        data["error_reason"] = reason
+    text = status_text(data)
+    assert text.startswith("Lần nạp ảnh gần nhất không có giao dịch nào để thêm: ") and len(text) < 220
+    texts = {r: status_text({**data, "error_reason": r}) for r in ("unexecuted_form", "no_amount", "no_rows")}
+    assert len(set(texts.values())) == 3  # câu dựng từ lý do, không một câu chung cho mọi lý do
+
+
 def test_loi_he_thong_thanh_notice_va_thu_lai_mot_lan(monkeypatch):
     err = {
         "status": "ERROR",

@@ -68,6 +68,11 @@
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$"
         },
+        "error_reason": {
+          "description": "Lý do con khi error_code là INGEST_NO_TRANSACTIONS (vắng với mã khác); cùng tập với IngestErrorReason của OpenAPI (GET /ingest/jobs/{id}).",
+          "type": "string",
+          "enum": ["unexecuted_form", "not_completed", "own_account_transfer", "cash_withdrawal", "no_amount", "no_rows"]
+        },
         "review": {
           "description": "Có khi status là review hoặc done: đúng `data` của khối ingest_review.",
           "$ref": "../blocks/ingest_review.schema.json#/$defs/IngestReviewData"

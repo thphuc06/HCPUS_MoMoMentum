@@ -7,7 +7,7 @@ Luồng (mã điều khiển, KHÔNG có lượt model nào):
         đang đọc     -> câu tiến độ
         chờ duyệt    -> khối `ingest_review` + câu đếm dòng (chọn sẵn, cần duyệt, trùng)
         đã chốt      -> khối `ingest_review` + khối `coverage_change` + câu độ phủ trước và sau
-        hỏng/từ chối -> câu lý do theo mã lỗi
+        hỏng/từ chối -> câu lý do theo mã lỗi (INGEST_NO_TRANSACTIONS: theo lý do con `error_reason`)
         chưa nạp lần nào (INGEST_JOB_NOT_FOUND) -> như câu hỏi cách nạp
 
 Nội dung tệp chỉ là DỮ LIỆU: đối tác và nội dung của từng dòng (đã che PII ở bước nạp) chỉ đi vào khối để người dùng xem, KHÔNG vào lời nhắc
@@ -55,7 +55,7 @@ _MIME_LABEL = {
     "text/csv": "CSV",
     "application/vnd.ms-excel": "CSV",
 }
-#: lý do của lần nạp hỏng hay bị từ chối, theo `error_code` của job (không đọc `error_message` vì tool không trả)
+#: lý do của lần nạp hỏng hay bị từ chối, theo `error_code` của job (không đọc `error_message` vì tool không trả nó)
 _JOB_ERROR_TEXT = {
     ErrorCode.INGEST_NOT_FINANCIAL.value: "tệp không giống biên lai, tin nhắn hay sao kê giao dịch nên mình không đọc được khoản nào",
     ErrorCode.INGEST_DUPLICATE_FILE.value: "tệp này đã được nạp trước đó rồi, mình không ghi trùng",
@@ -64,6 +64,17 @@ _JOB_ERROR_TEXT = {
     ErrorCode.MODEL_BUDGET_EXCEEDED.value: "hôm nay đã hết lượt đọc tệp bằng AI",
 }
 _DEFAULT_JOB_ERROR = "mình chưa xử lý được tệp này"
+#: INGEST_NO_TRANSACTIONS: tệp là chứng từ tài chính nhưng không còn giao dịch nào để thêm. Câu báo theo lý do con (`error_reason` của job,
+#: enum `IngestErrorReason` của hợp đồng); vắng lý do thì câu chung của mã.
+_NO_TX_REASON_TEXT = {
+    "unexecuted_form": "đây là màn xác nhận hay biểu mẫu chưa thực hiện nên chưa có giao dịch nào",
+    "not_completed": "giao dịch trong tệp chưa thành công hoặc còn đang xử lý",
+    "own_account_transfer": "tệp chỉ có tiền chuyển giữa các tài khoản của chính bạn, không có khoản chi hay thu nào",
+    "cash_withdrawal": "tệp chỉ có rút tiền mặt, mà Yofina không theo dõi tiền mặt",
+    "no_amount": "mình không đọc được số tiền của giao dịch nào trong tệp",
+    "no_rows": "mình không thấy khoản tiền đã giao dịch nào trong tệp",
+}
+_DEFAULT_NO_TX = "tệp là chứng từ tài chính nhưng không còn giao dịch nào sau khi lọc"
 
 
 def _mb(n: int) -> str:
@@ -233,6 +244,8 @@ def compact_status(outcome: ToolOutcome) -> dict[str, Any]:
     }
     if "error_code" in d:
         out["error_code"] = d["error_code"]
+    if "error_reason" in d:
+        out["error_reason"] = d["error_reason"]
     if "review" in d:
         out["counts"] = dict(d["review"]["counts"])
     if "coverage_change" in d:
@@ -285,6 +298,12 @@ def status_text(data: Mapping[str, Any]) -> str:
     kind = _KIND_WORD.get(data["source_kind"], "tệp")
     if st in ("awaiting_upload", "queued", "processing"):
         return f"Mình đang đọc {kind} bạn vừa nạp ({int(data['progress'])}%). Bạn hỏi lại sau ít phút hoặc mở màn Nạp dữ liệu để xem tiến độ."
+    if (
+        st in ("failed", "rejected")
+        and data.get("error_code") == ErrorCode.INGEST_NO_TRANSACTIONS.value
+    ):
+        why = _NO_TX_REASON_TEXT.get(str(data.get("error_reason") or ""), _DEFAULT_NO_TX)
+        return f"Lần nạp {kind} gần nhất không có giao dịch nào để thêm: {why}. Tệp khác có khoản chi thật thì bạn nạp ở màn Nạp dữ liệu."
     if st in ("failed", "rejected"):
         why = _JOB_ERROR_TEXT.get(str(data.get("error_code") or ""), _DEFAULT_JOB_ERROR)
         return f"Lần nạp {kind} gần nhất không thành công: {why}. Chưa có dòng nào được thêm. Bạn có thể nạp lại ở màn Nạp dữ liệu."
