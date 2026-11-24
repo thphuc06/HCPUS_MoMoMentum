@@ -238,6 +238,14 @@ model theo được chỉ dẫn. Sửa: override bước hợp nhất của cả
 và đổi model của cả hai bước sang Haiku 4.5, model rẻ nhất trong nhóm gọi được mà theo đủ luật. Không đổi tên strategy, namespace hay
 output schema; không lọc chữ bằng mã.
 
+**Đo sau deploy** (file phase 5, "Sửa trích xuất bộ nhớ"): hai ca golden `memory-state-preference`, `memory-knowledge-update` đạt,
+mỗi ca một lần. Bản ghi: "Ưu tiên để dành cho hũ Du lịch trong tháng này", "Không muốn được nhắc vào buổi sáng", không bản sự thật;
+ca đổi ý còn đúng "Ưu tiên dồn tiền cho hũ Giải trí". Metric `AWS/Bedrock` của Haiku 4.5: 2 lượt gọi cho lượt ghi khi Memory trống,
+3 lượt cho lượt đổi ý khi đã có bản cũ (2 trích xuất, 1 hợp nhất sở thích). Suy ra từ số lượt (tài liệu không nói): bước hợp nhất chỉ
+gọi model khi tìm thấy bản ghi cũ liên quan trong cùng namespace; không có thì bản mới được thêm nguyên như bước trích xuất trả. Vậy
+với Memory trống, bản ghi cuối là output của bước trích xuất, và lỗi của v26 (Memory trống trước ca) nằm ở trích xuất; bước hợp nhất
+quyết định ca đổi ý và các bản có thời hạn khi đã có bản cũ cùng chủ đề.
+
 ### 2.3 Trích xuất: `IngestData`, không lưu event ngắn hạn
 
 - Ứng dụng đã lưu lượt thô ở Aurora (`turn_blocks`) và frontend gửi lịch sử theo từng lượt, nên không cần bộ nhớ ngắn hạn của AgentCore.
