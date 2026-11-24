@@ -8,7 +8,7 @@ import { SimNote } from '@/components/SimNote'
 import { ErrorState } from '@/components/StateViews'
 import { PreviewPanel } from '@/components/PreviewPanel'
 import { useApi } from '@/api/ApiProvider'
-import { ApiError, ERROR_CODES, ERROR_MESSAGES, type ErrorCode } from '@/api/errors'
+import { ApiError, ERROR_CODES, ERROR_MESSAGES, INGEST_NO_TX_REASON_MESSAGES, type ErrorCode } from '@/api/errors'
 import type { ConfirmRowsParams, IngestJobResponse, IngestJobSummary, IngestSourceKind } from '@/api/ingestSchemas'
 import { CoverageChangeBlock, IngestReviewBlock, type IngestJar, type IngestReviewData, type IngestRow as Row } from '@/contracts/blocks'
 import { ACCEPT_CAMERA, ACCEPT_CSV, ACCEPT_IMAGE, DEFAULT_LIMITS, RETENTION_DAYS, useIngestPollTiming } from '@/features/ingest/config'
@@ -28,8 +28,14 @@ import { CoverageChange, mostAffectedJar } from '@/features/ingest/CoverageChang
 const SOURCE_LABEL: Record<IngestSourceKind, string> = { image: 'ảnh', csv: 'tệp CSV' }
 const KNOWN = new Set<string>(ERROR_CODES)
 
-/** Câu hiển thị cho job lỗi: câu tiếng Việt của mã hợp đồng, không có thì câu server gửi, không nữa thì câu chung. */
-function jobErrorMessage(job: IngestJobResponse): string {
+/**
+ * Câu hiển thị cho job lỗi: INGEST_NO_TRANSACTIONS có lý do con đã biết thì câu của lý do đó; không thì câu tiếng Việt của mã hợp
+ * đồng, không có thì câu server gửi, không nữa thì câu chung.
+ */
+function jobErrorMessage(job: Pick<IngestJobResponse, 'error_code' | 'error_message' | 'error_reason'>): string {
+  if (job.error_code === 'INGEST_NO_TRANSACTIONS' && job.error_reason && INGEST_NO_TX_REASON_MESSAGES[job.error_reason]) {
+    return INGEST_NO_TX_REASON_MESSAGES[job.error_reason]!
+  }
   if (job.error_code && KNOWN.has(job.error_code)) return ERROR_MESSAGES[job.error_code as ErrorCode]
   return job.error_message ?? 'Chưa đọc được tệp này. Bạn thử lại với tệp khác nhé.'
 }
@@ -189,9 +195,23 @@ function ProcessingStep({ job, slow, error, onRetry, onCancel }: { job: IngestJo
 
 // ---------------------------------------------------------------- I3: duyệt dòng
 
-function buildParams(data: IngestReviewData, selected: Record<string, boolean>, jars: Record<string, IngestJar>): ConfirmRowsParams {
+/** Chữ số ban đầu của ô "Số VND sẽ ghi" cho mỗi dòng ngoại tệ còn mở: số ước tính của server, chưa có tỷ giá thì rỗng. */
+function initialAmounts(data: IngestReviewData): Record<string, string> {
+  return Object.fromEntries(data.rows.filter((r) => r.fx && isOpenRow(r)).map((r) => [r.row_id, r.amount_vnd ? String(r.amount_vnd) : '']))
+}
+
+function buildParams(data: IngestReviewData, selected: Record<string, boolean>, jars: Record<string, IngestJar>, amounts: Record<string, string>): ConfirmRowsParams {
   const open = data.rows.filter(isOpenRow)
-  const rows = open.filter((r) => selected[r.row_id]).map((r) => (jars[r.row_id] ? { row_id: r.row_id, jar: jars[r.row_id]!.code } : { row_id: r.row_id }))
+  const rows = open
+    .filter((r) => selected[r.row_id])
+    .map((r) => {
+      const item: ConfirmRowsParams['rows'][number] = { row_id: r.row_id }
+      if (jars[r.row_id]) item.jar = jars[r.row_id]!.code
+      // dòng ngoại tệ: chỉ gửi số khi người dùng đã sửa (hoặc dòng chưa có số); không thì server ghi số ước tính đang hiện
+      const digits = r.fx ? amounts[r.row_id] : undefined
+      if (digits && Number(digits) !== r.amount_vnd) item.amount_vnd = Number(digits)
+      return item
+    })
   const reject_row_ids = open.filter((r) => !selected[r.row_id]).map((r) => r.row_id)
   return { job_id: data.job_id, rows, reject_row_ids }
 }
@@ -201,6 +221,7 @@ function ReviewStep({ data, onDone, onPickOther }: { data: IngestReviewData; onD
   const flow = useIngestConfirm()
   const [selected, setSelected] = useState<Record<string, boolean>>(() => Object.fromEntries(data.rows.filter(isOpenRow).map((r) => [r.row_id, r.review_status === 'auto_added'])))
   const [jars, setJars] = useState<Record<string, IngestJar>>({})
+  const [amounts, setAmounts] = useState<Record<string, string>>(() => initialAmounts(data))
   const [busyRow, setBusyRow] = useState<string | null>(null)
   const [rowError, setRowError] = useState<{ rowId: string; error: ApiError } | null>(null)
   const [picking, setPicking] = useState<Row | null>(null)
@@ -208,6 +229,7 @@ function ReviewStep({ data, onDone, onPickOther }: { data: IngestReviewData; onD
   const open = data.rows.filter(isOpenRow)
   const chosen = open.filter((r) => selected[r.row_id])
   const missingJar = chosen.filter((r) => r.kind === 'expense' && !(jars[r.row_id] ?? r.suggested_jar))
+  const missingAmount = chosen.filter((r) => r.fx && !amounts[r.row_id])
   const confirming = flow.phase === 'previewing' || flow.phase === 'ready' || flow.phase === 'working' || flow.phase === 'blocked'
   const locked = confirming || flow.phase === 'done'
 
@@ -226,7 +248,7 @@ function ReviewStep({ data, onDone, onPickOther }: { data: IngestReviewData; onD
     }
   }
 
-  const start = () => void flow.requestPreview(buildParams(data, selected, jars))
+  const start = () => void flow.requestPreview(buildParams(data, selected, jars, amounts))
   const confirm = async () => {
     const res = await flow.confirm()
     if (!res) return
@@ -235,7 +257,8 @@ function ReviewStep({ data, onDone, onPickOther }: { data: IngestReviewData; onD
       rows: data.rows.map((r) => {
         if (!isOpenRow(r)) return r
         const jar = jars[r.row_id] ?? r.suggested_jar
-        return { ...r, review_status: selected[r.row_id] ? 'approved' : 'rejected', ...(jar ? { suggested_jar: jar } : {}) }
+        const digits = r.fx ? amounts[r.row_id] : undefined
+        return { ...r, review_status: selected[r.row_id] ? 'approved' : 'rejected', ...(jar ? { suggested_jar: jar } : {}), ...(digits ? { amount_vnd: Number(digits) } : {}) }
       }),
     }
     onDone(res.type === 'receipt_action' ? res.data.coverage_change : undefined, reviewed)
@@ -267,6 +290,14 @@ function ReviewStep({ data, onDone, onPickOther }: { data: IngestReviewData; onD
           onPickJar: () => setPicking(r),
           jarBusy: busyRow === r.row_id,
           disabled: locked,
+          ...(r.fx
+            ? {
+                amountDigits: amounts[r.row_id] ?? '',
+                onAmountChange: (d: string) => {
+                  if (!locked) setAmounts((m) => ({ ...m, [r.row_id]: d }))
+                },
+              }
+            : {}),
         })}
       />
       {rowError && (
@@ -282,12 +313,17 @@ function ReviewStep({ data, onDone, onPickOther }: { data: IngestReviewData; onD
               Chọn hũ cho {missingJar.map(rowTitle).join(', ')} trước khi thêm.
             </p>
           )}
+          {missingAmount.length > 0 && (
+            <p role="status" className="rounded-2xl bg-warn-bg px-3 py-2 text-small font-medium text-warn-fg">
+              Nhập số VND cho {missingAmount.map(rowTitle).join(', ')} trước khi thêm.
+            </p>
+          )}
           {flow.error && (
             <p role="alert" className="rounded-2xl bg-bad-bg px-3 py-2 text-small font-semibold text-bad-fg">
               {flow.error.message}
             </p>
           )}
-          <Button type="button" className="w-full" disabled={missingJar.length > 0 || busyRow !== null} onClick={start}>
+          <Button type="button" className="w-full" disabled={missingJar.length > 0 || missingAmount.length > 0 || busyRow !== null} onClick={start}>
             {chosen.length === 0 ? 'Bỏ qua tất cả các dòng' : 'Xong, cập nhật dự báo'}
           </Button>
           <p className="text-center text-note text-ink-2">

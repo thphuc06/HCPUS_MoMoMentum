@@ -233,6 +233,18 @@ Có 4 ảnh lỗi do model đọc (r08, r12, r15, r24) và 2 ảnh có quy ướ
 
 Ảnh hưởng tới số đo: mẫu số "đủ 4 trường trên ảnh đọc được" giảm từ 12 xuống 11 (r14 không còn dòng chấm), còn mẫu số "báo `not_financial` đúng" tăng từ 5 lên 6. Hai số này chưa đo lại; lượt Bedrock kế tiếp sẽ cho số mới. Test: `tests/unit/ingest/test_extract.py` (r15 qua backend với model giả, cả khi model đặt và quên cờ; r14; CSV rút tiền mặt và phí; lời nhắc), `tests/unit/ingest/test_normalize.py` (mẫu rút tiền mặt và mẫu không được khớp).
 
+### Chứng từ ngoại tệ và mã `INGEST_NO_TRANSACTIONS` (25/11, nhánh `p5/ingest-fx`, chưa deploy)
+
+Ca thật: hóa đơn dịch vụ thu tự động "$111.11 USD due November 10, 2026" bị báo "Tệp này không phải biên lai…". Log Lambda `yofina-ingest` 24/11 11:22 và 11:23 UTC: lời gọi model `ingest` trả 279 và 262 token ra, rồi job `rejected` với `INGEST_NOT_FINANCIAL`; log không ghi mã trong của backend. Người điều phối chạy lại cục bộ: `bill_or_invoice`, dòng bị loại `no_amount` (chỉ có `amount_vnd`), backend `no_transactions`, `ERROR_CODE_OF` gộp thành `INGEST_NOT_FINANCIAL`. Đề xuất 3 ở trên vì thế đã thành lỗi người dùng thấy. Chủ dự án quyết: quy đổi ngoại tệ về VND. Đã làm:
+
+1. Model ghi `currency` (ISO 4217) và `amount_original`, không tự quy đổi; hóa đơn thu tự động qua thẻ là một dòng chờ duyệt, không phải màn chưa thực hiện (nguyên tắc chung trong lời nhắc).
+2. Quy đổi theo tỷ giá bán Vietcombank của ngày trên chứng từ (`yofina_ingest.fx`, [ghi chú nguồn](../../research/ingest-fx-rates.md)); dòng ngoại tệ luôn vào hàng chờ; tra lỗi thì dòng vẫn vào hàng chờ với số gốc và người dùng nhập số VND.
+3. Màn duyệt: số VND ước tính hiện ngay, "111,11 USD" thu gọn mở ra tỷ giá, nguồn, ngày và ô sửa số VND; `confirm_rows` ký kèm số đã sửa.
+4. Mã `INGEST_NO_TRANSACTIONS` tách khỏi `INGEST_NOT_FINANCIAL`, kèm `error_reason` (màn chưa thực hiện, không thành công, chuyển giữa tài khoản của mình, rút tiền mặt, không đọc được số tiền, không có khoản tiền nào) và câu báo riêng ở frontend. Eval vẫn coi hai mã là đạt với nhãn `not_financial` cũ.
+5. Migration 0054 (`ingest_rows.fx`, `amount_vnd` được NULL khi chưa có tỷ giá, `ingest_jobs.error_reason`) **chưa chạy**: chạy trước khi deploy `YofinaIngest`.
+
+Kiểm sau deploy: nạp lại ảnh hóa đơn ca thật, thấy dòng chờ duyệt khoảng 2,87 triệu ₫ kèm "111,11 USD"; nạp ảnh chỉ có nạp ví từ thẻ thì thấy câu "Tệp chỉ có tiền chuyển giữa các tài khoản của bạn."
+
 ### Nghiệm thu 24/11
 
 Worker Kiro (Claude Opus 5.5) do Claude Code điều phối, chiều 24/11, trên môi trường đã deploy (Runtime `yofina_agent` v21, `ap-southeast-1`). Không deploy, không migration, không sửa code sản phẩm. Mọi kiểm làm qua REST và Runtime từ máy trạm (không kiểm trên điện thoại, theo quyết định của chủ dự án). Script kiểm tay là script tạm, không commit. Trước bước kiểm, `giamkhao1` được thêm vào nhóm Cognito `ops`, để một tài khoản đi được cả 6 cảnh (ghi ở [aws-resources.md](../../aws-resources.md)).

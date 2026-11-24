@@ -2165,6 +2165,7 @@ components:
         - SHOCK_NOT_FOUND
         - MEMORY_RECORD_NOT_FOUND
         - MEMORY_UNAVAILABLE
+        - INGEST_NO_TRANSACTIONS
       x-http-status:
         UNAUTHENTICATED: 401
         FORBIDDEN: 403
@@ -2210,6 +2211,7 @@ components:
         SHOCK_NOT_FOUND: 404
         MEMORY_RECORD_NOT_FOUND: 404
         MEMORY_UNAVAILABLE: 503
+        INGEST_NO_TRANSACTIONS: 422
       x-meaning:
         UNAUTHENTICATED: Thiếu hoặc sai access token.
         FORBIDDEN: Không được phép (token xác nhận không thuộc người dùng này, v.v.).
@@ -2255,6 +2257,7 @@ components:
         SHOCK_NOT_FOUND: Mã cú sốc không có trong danh sách cú sốc mẫu.
         MEMORY_RECORD_NOT_FOUND: Không có bản ghi bộ nhớ này với người dùng (đã xóa, không tồn tại hoặc của người khác; không phân biệt).
         MEMORY_UNAVAILABLE: AgentCore Memory không trả lời hoặc từ chối (giới hạn tần suất); thử lại sau ít phút. Dữ liệu khác không bị ảnh hưởng.
+        INGEST_NO_TRANSACTIONS: Tệp là chứng từ tài chính nhưng không còn giao dịch nào để duyệt sau khi lọc (màn chưa thực hiện, giao dịch không thành công, chỉ chuyển giữa tài khoản của chính mình, rút tiền mặt, không đọc được số tiền). Lý do con ở error_reason của job.
     ErrorResponse:
       type: object
       required: [error]
@@ -2976,6 +2979,8 @@ components:
           type: string
           minLength: 1
           maxLength: 280
+        error_reason:
+          $ref: '#/components/schemas/IngestErrorReason'
         created_at:
           $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
         updated_at:
@@ -2988,6 +2993,14 @@ components:
         coverage_change:
           description: Có khi done.
           $ref: '../blocks/coverage_change.schema.json'
+    IngestErrorReason:
+      type: string
+      description: |
+        Lý do con khi `error_code = INGEST_NO_TRANSACTIONS` (vắng với mã khác): `unexecuted_form` (màn xác nhận, OTP, biểu mẫu
+        chưa thực hiện), `not_completed` (giao dịch không thành công hoặc đang xử lý), `own_account_transfer` (chỉ nạp hoặc chuyển
+        giữa tài khoản, ví, thẻ của chính mình), `cash_withdrawal` (rút tiền mặt), `no_amount` (không đọc được số tiền), `no_rows`
+        (chứng từ tài chính không có khoản tiền nào, ví dụ bảng phí, màn tra soát). Lý do lấy theo dòng bị loại nhiều nhất.
+      enum: [unexecuted_form, not_completed, own_account_transfer, cash_withdrawal, no_amount, no_rows]
     IngestJobSummary:
       description: |
         Một lần nạp trong danh sách gần đây; như `IngestJobResponse` nhưng không có `review` và `coverage_change`.
@@ -3051,8 +3064,10 @@ components:
     ConfirmRowsParams:
       description: |
         Tham số của `confirm_rows`. Chuẩn hóa (`yofina_core.params.normalize_confirm_rows`, idempotent, không cần trạng thái):
-        `rows` sắp theo `row_id`, mỗi dòng `{row_id, jar?}`; `reject_row_ids` sắp tăng dần; một dòng không được vừa ghi vừa bỏ;
-        ít nhất một dòng. Dòng ghi phải còn mở (`auto_added`, `pending`); dòng `duplicate` không ghi được.
+        `rows` sắp theo `row_id`, mỗi dòng `{row_id, jar?, amount_vnd?}`; `reject_row_ids` sắp tăng dần; một dòng không được vừa ghi vừa bỏ;
+        ít nhất một dòng. Dòng ghi phải còn mở (`auto_added`, `pending`); dòng `duplicate` không ghi được. `amount_vnd` chỉ nhận ở
+        dòng ngoại tệ (có `fx`): số VND người dùng nhập (ví dụ số trên sao kê thẻ, đã gồm phí chuyển đổi); vắng thì ghi số ước
+        tính đang hiển thị. Dòng ngoại tệ chưa có tỷ giá (`fx.status = rate_unavailable`) bắt buộc có `amount_vnd`.
       type: object
       required: [job_id]
       additionalProperties: false
@@ -3071,6 +3086,8 @@ components:
                 $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
               jar:
                 $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+              amount_vnd:
+                $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
         reject_row_ids:
           type: array
           maxItems: 500

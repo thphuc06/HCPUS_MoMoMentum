@@ -41,7 +41,17 @@ class ExtractedRow(BaseModel):
     date: str | None = Field(
         default=None, description="YYYY-MM-DD nếu thấy năm, DD/MM nếu không có năm"
     )
-    amount_vnd: int | None = Field(default=None, description="số tiền VND nguyên, dương")
+    amount_vnd: int | None = Field(
+        default=None,
+        description="số tiền VND nguyên, dương; null nếu chứng từ không ghi bằng VND (không tự quy đổi)",
+    )
+    currency: str = Field(
+        default="VND", description="mã ISO 4217 của tiền tệ ghi trên chứng từ (VND, USD, EUR...)"
+    )
+    amount_original: float | None = Field(
+        default=None,
+        description="khi currency khác VND: số tiền đúng như chứng từ, giữ phần lẻ (ví dụ 111.11)",
+    )
     direction: Literal["out", "in"] | None = Field(
         default=None, description="out = tiền đi ra, in = tiền vào"
     )
@@ -71,6 +81,21 @@ class ExtractedRow(BaseModel):
             return abs(round(v))
         parsed = parse_amount(str(v))
         return None if parsed is None else abs(parsed)
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _currency(cls, v: Any) -> str:
+        from yofina_ingest.normalize import currency_code
+
+        return currency_code(v)
+
+    @field_validator("amount_original", mode="before")
+    @classmethod
+    def _original(cls, v: Any) -> float | None:
+        from yofina_ingest.normalize import parse_foreign_amount
+
+        d = parse_foreign_amount(v)
+        return None if d is None else float(d)
 
     @field_validator("confidence", mode="before")
     @classmethod

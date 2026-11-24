@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from ingest_helpers import PNG, FakeBedrock, FakeLabelStore, make_gateway
+from yofina_ingest import fx
 from yofina_ingest.context import Rule
 from yofina_ingest.extract import Candidate
 from yofina_ingest.settings import IngestRuntime
@@ -493,6 +494,67 @@ def test_man_xac_nhan_chua_thuc_hien_khong_sinh_dong_nao(env):
     worker, _ = make([good_doc(status="pending")])
     run(worker, sqs_event(key))
     assert repo.jobs[jid]["status"] == "rejected" and not repo.rows.get(jid)
+
+
+def test_chung_tu_khong_con_giao_dich_co_ma_rieng_va_ly_do_con(env):
+    """Ca 25/11: tệp là chứng từ tài chính nhưng mọi dòng bị loại thì KHÔNG báo INGEST_NOT_FINANCIAL ("không phải biên lai")."""
+    repo, storage, make = env
+    jid, key = repo.add_job()
+    storage.objects[key] = PNG
+    worker, _ = make([good_doc(own_account_transfer=True, description="Nap tien vao vi tu the")])
+    run(worker, sqs_event(key))
+    j = repo.jobs[jid]
+    assert (j["status"], j["error_code"], j["error_reason"]) == (
+        "rejected", "INGEST_NO_TRANSACTIONS", "own_account_transfer",
+    )  # fmt: skip
+    assert j["error_message"] == "Tệp chỉ có tiền chuyển giữa các tài khoản của bạn, không có khoản chi hay thu nào."
+
+
+class _FxSource:
+    def __init__(self, fail=False):
+        self.fail, self.calls = fail, []
+
+    def fetch(self, day):
+        self.calls.append(day)
+        if self.fail:
+            raise fx.RateUnavailable("network")
+        return fx.RateTable(day=day, rates={"USD": Decimal("25790.00")})
+
+
+def _usd_bill():
+    return good_doc(
+        date="2026-11-10", amount_vnd=None, currency="USD", amount_original=111.11, counterparty="Dich vu AI",
+        description="Max plan", tx_type=None, jar_code="giai_tri",
+    )  # fmt: skip
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_hoa_don_ngoai_te_vao_hang_cho_luu_so_goc_va_ty_gia(env, fail):
+    repo, storage, _ = env
+    jid, key = repo.add_job()
+    storage.objects[key] = PNG
+    src = _FxSource(fail=fail)
+    worker = Worker(
+        repo, storage, runtime(), gateway=make_gateway(FakeBedrock([_usd_bill()])), clock=lambda: NOW,
+        fx=fx.FxConverter(src, now=lambda: NOW),
+    )  # fmt: skip
+    run(worker, sqs_event(key))
+    j = repo.jobs[jid]
+    assert j["status"] == "review" and (j["rows_auto_added"], j["rows_review"]) == (0, 1)
+    (r,) = repo.rows[jid]
+    assert r["review_status"] == "pending" and src.calls == [date(2026, 11, 10)]
+    if fail:
+        # tra tỷ giá lỗi: không có số VND, không so trùng với sổ cái, khóa khử trùng tính với 0
+        assert r["amount_vnd"] is None and r["fx"] == {"currency": "USD", "amount_original": "111.11", "status": "rate_unavailable"}
+        assert repo.candidates == []
+        assert r["dedupe_key"] == row_dedupe_key(
+            app_date=date(2026, 11, 10), amount_vnd=0, counterparty=r["counterparty"],
+            content_sha256=content_sha256(PNG), seq=1,
+        )  # fmt: skip
+    else:
+        assert r["amount_vnd"] == 2_865_527
+        assert r["fx"]["rate"] == "25790.00" and r["fx"]["rate_date"] == "2026-11-10"
+        assert repo.candidates[0]["amount_vnd"] == 2_865_527
 
 
 def test_tep_qua_lon_va_loai_tep_sai(env):

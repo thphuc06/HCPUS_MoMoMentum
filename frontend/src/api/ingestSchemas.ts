@@ -45,6 +45,8 @@ export const IngestJobResponse = z.object({
   /** Dễ tính: mã lạ (server mới hơn) vẫn đọc được, nơi hiển thị dùng `error_message` hoặc câu chung. */
   error_code: z.string().max(64).optional(),
   error_message: z.string().min(1).max(280).optional(),
+  /** Lý do con của INGEST_NO_TRANSACTIONS (IngestErrorReason); dễ tính như `error_code`. */
+  error_reason: z.string().max(40).optional(),
   created_at: IsoDateTime,
   updated_at: IsoDateTime,
   finished_at: IsoDateTime.optional(),
@@ -70,10 +72,13 @@ export const IngestRowJarResponse = z.object({
 })
 export type IngestRowJarResponse = z.infer<typeof IngestRowJarResponse>
 
-/** Tham số của `confirm_rows` (server chuẩn hóa lại: sắp xếp, bỏ `jar` rỗng; xem ConfirmRowsParams). */
+/**
+ * Tham số của `confirm_rows` (server chuẩn hóa lại: sắp xếp, bỏ `jar` rỗng; xem ConfirmRowsParams). `amount_vnd` chỉ ở dòng ngoại tệ:
+ * số VND người dùng sửa hoặc nhập (bắt buộc khi dòng chưa có tỷ giá).
+ */
 export type ConfirmRowsParams = {
   job_id: string
-  rows: Array<{ row_id: string; jar?: string }>
+  rows: Array<{ row_id: string; jar?: string; amount_vnd?: number }>
   reject_row_ids: string[]
 }
 

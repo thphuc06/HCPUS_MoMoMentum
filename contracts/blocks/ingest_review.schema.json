@@ -38,9 +38,34 @@
       "type": "string",
       "enum": ["auto_added", "pending", "approved", "rejected", "duplicate"]
     },
+    "IngestFx": {
+      "description": "Dòng ghi bằng ngoại tệ: số và tiền tệ đúng như chứng từ, và tỷ giá đã dùng để ước tính amount_vnd. converted: có tỷ giá bán của rate_source ngày rate_date, amount_vnd = amount_original × rate làm tròn tới đồng (số ước tính, người dùng sửa được trước khi chốt vì sao kê thẻ thường khác do phí chuyển đổi). rate_unavailable: tra tỷ giá lỗi, không có rate, rate_type, rate_source, rate_date và dòng chưa có amount_vnd cho tới khi người dùng nhập số VND lúc chốt. Dòng có fx không bao giờ được chọn sẵn.",
+      "type": "object",
+      "required": ["currency", "amount_original", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "currency": { "description": "Mã ISO 4217 của chứng từ, khác VND.", "type": "string", "pattern": "^[A-Z]{3}$" },
+        "amount_original": {
+          "description": "Số tiền theo ngoại tệ, đúng như chứng từ (chuỗi thập phân, ví dụ 111.11).",
+          "type": "string",
+          "pattern": "^[0-9]{1,12}(\\.[0-9]{1,4})?$",
+          "maxLength": 17
+        },
+        "status": { "type": "string", "enum": ["converted", "rate_unavailable"] },
+        "rate": {
+          "description": "Số VND cho một đơn vị ngoại tệ (chuỗi thập phân, ví dụ 25790.00).",
+          "type": "string",
+          "pattern": "^[0-9]{1,12}(\\.[0-9]{1,4})?$",
+          "maxLength": 17
+        },
+        "rate_type": { "description": "sell: tỷ giá bán của ngân hàng (ngân hàng bán ngoại tệ cho chủ thẻ khi thanh toán).", "type": "string", "enum": ["sell"] },
+        "rate_source": { "description": "vietcombank: bảng tỷ giá công bố của Vietcombank.", "type": "string", "enum": ["vietcombank"] },
+        "rate_date": { "description": "Ngày của bảng tỷ giá đã dùng (có thể sớm hơn ngày giao dịch nếu ngày đó chưa có bảng).", "$ref": "envelope.schema.json#/$defs/IsoDate" }
+      }
+    },
     "IngestRow": {
       "type": "object",
-      "required": ["row_id", "seq", "kind", "app_date", "amount_vnd", "extract_confidence", "review_status"],
+      "required": ["row_id", "seq", "kind", "app_date", "extract_confidence", "review_status"],
       "additionalProperties": false,
       "properties": {
         "row_id": {
@@ -55,7 +80,7 @@
         },
         "app_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
         "amount_vnd": {
-          "description": "Số tiền dương; hướng nằm ở kind.",
+          "description": "Số tiền dương; hướng nằm ở kind. Dòng ngoại tệ: số ước tính theo fx. Vắng CHỈ khi fx.status là rate_unavailable (người dùng nhập số VND lúc chốt).",
           "$ref": "envelope.schema.json#/$defs/VndPositive"
         },
         "counterparty": {
@@ -92,6 +117,10 @@
           "description": "Có khi review_status là duplicate: id giao dịch đã có trong sổ cái (trong ví hoặc đã nạp).",
           "type": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "fx": {
+          "description": "Có khi chứng từ ghi bằng ngoại tệ (không phải VND).",
+          "$ref": "#/$defs/IngestFx"
         }
       }
     },

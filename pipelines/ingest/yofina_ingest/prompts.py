@@ -47,6 +47,7 @@ Hôm nay là {today.isoformat()}.
 
 Chỉ trích GIAO DỊCH ĐÃ THỰC HIỆN XONG (status=completed):
 - Màn hình xác nhận trước khi thực hiện, màn nhập OTP hay mật khẩu, biểu mẫu chuyển tiền chưa điền hoặc chưa gửi, màn xem trước: KHÔNG phải giao dịch. Đặt document_type=unexecuted_form và rows rỗng.
+- Hóa đơn hoặc thông báo kỳ thanh toán của dịch vụ thu tự động qua thẻ hay tài khoản đã đăng ký (ghi số tiền phải trả, ngày đến hạn hoặc ngày thu), kể cả khi có nút hay liên kết thanh toán: KHÔNG phải màn chưa thực hiện. Đặt document_type=bill_or_invoice, tạo một dòng direction=out, status=completed, date là ngày thu hoặc ngày đến hạn trên hóa đơn; người dùng sẽ tự duyệt dòng này.
 - Màn chi tiết hoặc kết quả SAU khi chuyển tiền, có số tham chiếu, mã giao dịch hay thời gian thực hiện và không còn bước xác nhận hay OTP nào: giao dịch ĐÃ thực hiện, status=completed, kể cả khi phần ảnh nhìn thấy không có chữ "thành công".
 - Màn hoặc hộp tra soát, khiếu nại, yêu cầu hoàn tiền về một giao dịch: KHÔNG tạo dòng giao dịch nào, kể cả khi màn chép lại số tiền, ngày, người nhận hay mã của giao dịch gốc (đó là đơn hỏi về giao dịch đã có, ghi thêm sẽ thành trùng). Đặt document_type=other_financial và rows rỗng. Khoản hoàn tiền ĐÃ về tài khoản thì vẫn là giao dịch (direction=in).
 - Giao dịch ghi "không thành công", "thất bại", "đã hủy", "bị từ chối", "đang xử lý": status=failed (hoặc pending), không bao giờ completed.
@@ -58,6 +59,7 @@ Trường của mỗi dòng (một giao dịch một dòng, giữ thứ tự tr�
 - Lịch sử, sao kê, bảng nhiều dòng: trích MỌI dòng giao dịch nhìn thấy, không bỏ dòng nào, kể cả dòng cùng số tiền hay cùng nội dung, dòng phí và dòng rút tiền mặt (dòng rút tiền mặt mang own_account_transfer=true như luật ở trên).
 - date: YYYY-MM-DD nếu ảnh có năm; DD/MM nếu không có năm; null nếu không thấy ngày. Ngày Việt Nam viết ngày/tháng/năm.
 - amount_vnd: số nguyên VND dương, bỏ mọi dấu phân cách và chữ "đ"/"VND". Không thấy số tiền rõ thì bỏ dòng.
+- currency, amount_original: ghi đúng tiền tệ (mã ISO 4217, mặc định VND) và số trên chứng từ, không tự quy đổi; chứng từ ngoại tệ (USD, $, EUR...) thì amount_original giữ phần lẻ (ví dụ 111.11) và amount_vnd là null.
 - direction: "out" nếu tiền ra (chi, chuyển đi, thanh toán, trừ tiền, dấu âm); "in" nếu tiền vào (nhận, cộng tiền, lương, hoàn tiền, dấu dương). Bảng có cột Ghi nợ/Ghi có (Nợ/Có, Debit/Credit, Tiền ra/Tiền vào): chiều lấy theo TIÊU ĐỀ của cột chứa số tiền của dòng đó (Ghi nợ là out, Ghi có là in), không đoán theo nội dung. Có cột số dư thì kiểm lại: số dư sau giao dịch giảm so với dòng liền trước theo thời gian là out, tăng là in.
 - counterparty: tên người nhận hoặc đơn vị đúng như ảnh (không bịa; null nếu không có). counterparty_is_person=true nếu là tên một cá nhân.
 - description: lời nhắn hoặc nội dung đúng như ảnh. Giữ NGUYÊN ký tự, KHÔNG sửa chính tả, KHÔNG thêm hay bỏ dấu tiếng Việt. Đừng chép số tài khoản, số thẻ hay số điện thoại vào counterparty hay description.

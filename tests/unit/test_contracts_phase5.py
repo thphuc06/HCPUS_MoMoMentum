@@ -173,7 +173,10 @@ def test_ma_loi_moi_khop_ba_noi_va_them_cuoi():
     for code, status in NEW_ERRORS.items():
         assert HTTP_STATUS[ErrorCode(code)] == status == schema["x-http-status"][code]
         assert schema["x-meaning"][code]
-    assert schema["enum"][-len(NEW_ERRORS) :] == list(NEW_ERRORS)
+    # hai mã bộ nhớ liền nhau sau mã phase 4; mã thêm sau (INGEST_NO_TRANSACTIONS, test_contracts_ingest.py) nằm cuối
+    first = schema["enum"].index("MEMORY_RECORD_NOT_FOUND")
+    assert schema["enum"][first : first + len(NEW_ERRORS)] == list(NEW_ERRORS)
+    assert schema["enum"][first - 1] == "SHOCK_NOT_FOUND"
     text = (CONTRACTS / "rest/openapi.yaml").read_text(encoding="utf-8")
     assert "MEMORY_RECORD_NOT_FOUND" in SPEC["components"]["responses"]["NotFound"]["description"]
     assert "MEMORY_UNAVAILABLE" in SPEC["components"]["responses"]["Unavailable"]["description"]
@@ -828,7 +831,8 @@ def test_0053_tach_duoc_viet_lai_duoc_va_khong_tham_so():
             name = re.search(r"ADD CONSTRAINT (\w+)", s).group(1)
             assert any(x.endswith(f"DROP CONSTRAINT IF EXISTS {name}") for x in STATEMENTS), name
     names = sorted(p.name for p in (REPO / "db/migrations").glob("*.sql"))
-    assert names[-1] == "0053_phase5.sql"
+    # 0053 là migration cuối của phase 5 lúc đóng hợp đồng; 0054 (ngoại tệ khi nạp) có test riêng ở test_migration_0054.py
+    assert "0053_phase5.sql" in names and names[-1] in ("0053_phase5.sql", "0054_ingest_fx.sql")
 
 
 def test_0053_ham_quyen_va_security():

@@ -8,7 +8,7 @@ import { createApiClient } from '@/api/client'
 import { IngestPollContext, type PollTiming } from '@/features/ingest/config'
 import { uploadToS3 } from '@/features/ingest/upload'
 import { IngestPage } from './IngestPage'
-import { restFixture } from '@/test/fixtures'
+import { restFixture, validBlock } from '@/test/fixtures'
 import { backend, bodyOf, callsTo, json, mountApp, type Call, type Routes } from '@/test/mountApp'
 
 // Màn Nạp dữ liệu (F6): I1 → I2 → I3 → I4 với fetch giả (chỉ trong test). Mọi phản hồi lấy từ contracts/fixtures.
@@ -265,7 +265,82 @@ describe('quay lại lần nạp dang dở và trợ năng', () => {
   })
 })
 
+describe('dòng ngoại tệ ở màn duyệt', () => {
+  const fxJob = () => ({ ...job('review'), rows_total: 2, review: validBlock('ingest_review.fx') })
+  const rowEl = (id: string) => document.querySelector(`[data-ingest-row="${id}"]`) as HTMLElement
+
+  it('không chọn sẵn; dòng chưa có tỷ giá phải nhập số VND; sửa số ước tính rồi chốt thì gửi amount_vnd đã sửa', async () => {
+    const { calls } = mountIngest(withS3(ingestBackend([fxJob()])), `/ingest?job=${JOB}`)
+    const user = userEvent.setup()
+    await screen.findByRole('list', { name: 'Dòng đã đọc' })
+    const est = '9a1b2c3d-4e5f-4a6b-8c7d-000000000011'
+    const noRate = '9a1b2c3d-4e5f-4a6b-8c7d-000000000012'
+    expect(screen.queryAllByRole('checkbox', { checked: true })).toHaveLength(0)
+    expect(within(rowEl(est)).getByText('−2.865.527 ₫')).toBeInTheDocument()
+
+    // dòng chưa có tỷ giá: chọn mà chưa nhập số thì không cho thêm
+    await user.click(within(rowEl(noRate)).getByRole('checkbox'))
+    expect(screen.getByText(/Nhập số VND cho Khách sạn \*\*\* trước khi thêm/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Xong, cập nhật dự báo' })).toBeDisabled()
+    await user.type(within(rowEl(noRate)).getByLabelText('Số VND sẽ ghi'), '1400000')
+    expect(within(rowEl(noRate)).getByText('−1.400.000 ₫')).toBeInTheDocument()
+    expect(screen.queryByText(/Nhập số VND cho/)).toBeNull()
+    await user.click(within(rowEl(noRate)).getByRole('checkbox')) // bỏ lại: dòng này còn thiếu hũ
+
+    // dòng đã quy đổi: mở mục thu gọn, sửa theo số trên sao kê thẻ
+    await user.click(within(rowEl(est)).getByRole('checkbox'))
+    await user.click(within(rowEl(est)).getByRole('button', { name: /111,11 USD/ }))
+    const input = within(rowEl(est)).getByLabelText('Số VND sẽ ghi')
+    expect(input).toHaveValue('2.865.527')
+    await user.clear(input)
+    await user.type(input, '2950000')
+    expect(within(rowEl(est)).getByText('−2.950.000 ₫')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Xong, cập nhật dự báo' }))
+    await user.click(await screen.findByRole('button', { name: 'Xác nhận thêm 1 dòng' }))
+    await screen.findByTestId('coverage-ratios')
+    const sent = bodyOf(callsTo(calls, 'POST', '/ingest/confirmations')[0]!) as { params: { rows: unknown[]; reject_row_ids: string[] } }
+    expect(sent.params.rows).toEqual([{ row_id: est, amount_vnd: 2_950_000 }])
+    expect(sent.params.reject_row_ids).toEqual([noRate])
+  })
+
+  it('giữ số ước tính thì không gửi amount_vnd (server ghi số đang hiện)', async () => {
+    const { calls } = mountIngest(withS3(ingestBackend([fxJob()])), `/ingest?job=${JOB}`)
+    const user = userEvent.setup()
+    await screen.findByRole('list', { name: 'Dòng đã đọc' })
+    const est = '9a1b2c3d-4e5f-4a6b-8c7d-000000000011'
+    await user.click(within(rowEl(est)).getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Xong, cập nhật dự báo' }))
+    await user.click(await screen.findByRole('button', { name: 'Xác nhận thêm 1 dòng' }))
+    await screen.findByTestId('coverage-ratios')
+    const sent = bodyOf(callsTo(calls, 'POST', '/ingest/confirmations')[0]!) as { params: { rows: unknown[] } }
+    expect(sent.params.rows).toEqual([{ row_id: est }])
+  })
+})
+
 describe('lỗi có câu tiếng Việt và lối thoát', () => {
+  it('chứng từ không còn giao dịch nào (INGEST_NO_TRANSACTIONS): câu theo lý do con, không nói "không phải biên lai"', async () => {
+    mountIngest(withS3(ingestBackend([restFixture('IngestJobResponse.no_transactions')])))
+    await pickImage(userEvent.setup())
+    const err = await screen.findByTestId('ingest-error')
+    expect(err).toHaveTextContent('Tệp chỉ có tiền chuyển giữa các tài khoản của bạn.')
+    expect(err).not.toHaveTextContent('không phải biên lai')
+  })
+
+  for (const [reason, text] of [
+    ['unexecuted_form', 'màn chưa thực hiện'],
+    ['cash_withdrawal', 'rút tiền mặt'],
+    ['no_amount', 'Chưa đọc được số tiền'],
+    ['not_completed', 'chưa thành công'],
+    ['no_rows', 'không có khoản tiền'],
+    ['ly_do_moi', 'không có giao dịch nào đã hoàn tất'],
+  ] as const) {
+    it(`INGEST_NO_TRANSACTIONS lý do ${reason}: câu ngắn đúng lý do (lý do lạ thì câu chung của mã)`, async () => {
+      const j = { ...restFixture('IngestJobResponse.no_transactions'), error_reason: reason }
+      mountIngest(withS3(ingestBackend([j])))
+      await pickImage(userEvent.setup())
+      expect(await screen.findByTestId('ingest-error')).toHaveTextContent(text)
+    })
+  }
   it('ảnh không phải tài liệu tài chính (job rejected): câu rõ ràng, nút chọn tệp khác, polling dừng', async () => {
     const { calls } = mountIngest(withS3(ingestBackend([job('processing'), job('rejected')])))
     const user = userEvent.setup()

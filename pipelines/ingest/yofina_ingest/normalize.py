@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from yofina_core.params import fold_text
 
@@ -90,6 +91,67 @@ def parse_amount(raw: str | int | float | None) -> int | None:
             else:
                 value = int("".join(parts))
     return -value if neg else value
+
+
+# --- tiền tệ của chứng từ -----------------------------------------------------------------------------------------------------------
+#: ký hiệu và cách viết hay gặp -> mã ISO 4217. Ký hiệu nhiều nghĩa (¥ là JPY hay CNY, "$" ngoài USD) không đoán trừ "$" và "US$":
+#: ở chứng từ người dùng Việt Nam gửi, "$" gần như luôn là USD, và tỷ giá vẫn chỉ là số ước tính chờ người dùng duyệt.
+_CURRENCY_ALIASES = {
+    "VND": "VND", "VNĐ": "VND", "Đ": "VND", "₫": "VND", "DONG": "VND", "ĐỒNG": "VND",
+    "$": "USD", "US$": "USD", "USD": "USD", "€": "EUR", "EUR": "EUR", "£": "GBP", "GBP": "GBP",
+}  # fmt: skip
+_ISO_CODE = re.compile(r"^[A-Z]{3}$")
+MAX_FOREIGN_DIGITS = 12
+FOREIGN_PLACES = 4
+
+
+def currency_code(raw: object) -> str:
+    """Mã ISO 4217 viết hoa từ chữ model trả. Vắng thì VND (mặc định của ứng dụng); không nhận ra được thì chuỗi rỗng (dòng đó
+    không có số tiền dùng được và bị loại `no_amount`, không đoán)."""
+    if raw is None or isinstance(raw, bool):
+        return "VND"
+    s = " ".join(str(raw).split()).upper()
+    if not s:
+        return "VND"
+    if s in _CURRENCY_ALIASES:
+        return _CURRENCY_ALIASES[s]
+    return s if _ISO_CODE.match(s) else ""
+
+
+def parse_foreign_amount(raw: object) -> Decimal | None:
+    """Số tiền theo ngoại tệ (dương, giữ phần lẻ tới 4 chữ số) từ số hoặc chuỗi như `111.11`, `$1,234.56`, `48,50 €`, `1.234,5`.
+
+    Hai loại dấu cùng có: dấu đứng sau là dấu thập phân. Một loại: một dấu theo sau 1, 2 hay 4 chữ số là dấu thập phân, theo sau
+    đúng 3 chữ số (hay nhiều dấu) là dấu nhóm nghìn. Không phải số, không dương hay quá 12 chữ số phần nguyên thì None."""
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, int | float):
+        if raw != raw or raw in (float("inf"), float("-inf")):
+            return None
+        value = Decimal(str(abs(raw)))
+    else:
+        s = re.sub(r"[^\d.,]", "", str(raw))
+        if not re.search(r"\d", s):
+            return None
+        if "." in s and "," in s:
+            dec = "," if s.rfind(",") > s.rfind(".") else "."
+            s = s.replace("." if dec == "," else ",", "").replace(dec, ".")
+        else:
+            sep = "." if "." in s else ("," if "," in s else "")
+            if sep:
+                parts = s.split(sep)
+                if len(parts) == 2 and len(parts[1]) in (1, 2, 4):
+                    s = f"{parts[0] or '0'}.{parts[1]}"
+                else:
+                    s = "".join(parts)
+        try:
+            value = Decimal(s)
+        except InvalidOperation:
+            return None
+    if value <= 0 or value.adjusted() >= MAX_FOREIGN_DIGITS:
+        return None
+    value = value.quantize(Decimal(1).scaleb(-FOREIGN_PLACES), rounding=ROUND_HALF_UP).normalize()
+    return value if value > 0 else None
 
 
 _DATE_ISO = re.compile(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s].*)?$")
@@ -204,3 +266,12 @@ def looks_like_self_topup(*texts: str | None) -> bool:
 
 def looks_like_instruction(*texts: str | None) -> bool:
     return any(_INSTRUCTION.search(folded(t)) for t in texts if t)
+
+
+def looks_like_cash_withdrawal(*texts: str | None) -> bool:
+    """Rút tiền mặt (ATM, tại quầy), không phải dòng phí của lần rút: chỉ để báo đúng lý do khi cả tệp bị loại."""
+    for t in texts:
+        f = folded(t)
+        if f and _CASH_WITHDRAWAL.search(f) and not _CASH_FEE.search(f):
+            return True
+    return False

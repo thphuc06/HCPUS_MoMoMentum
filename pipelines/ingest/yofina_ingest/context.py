@@ -22,6 +22,7 @@ from yofina_core.ingest import IngestSettings
 from yofina_core.params import TxTypeInfo
 from yofina_core.pii import PiiPolicy
 from yofina_ingest.classify import ClassifyInputs, LabelStore, Rule, match_rule
+from yofina_ingest.fx import FxConverter, default_converter
 
 __all__ = ["ExtractContext", "Rule", "eval_context", "jars_from_rows", "match_rule"]
 
@@ -41,10 +42,17 @@ class ExtractContext:
     #: kho nhãn và lịch sử cho bộ phân loại; vắng thì bỏ bước k-NN và tín hiệu lặp lại
     store: LabelStore | None = None
     tz: ZoneInfo | None = None
+    #: bộ quy đổi ngoại tệ (`yofina_ingest.fx`); vắng thì dùng bộ của tiến trình với nguồn tỷ giá thật (chỉ gọi khi có dòng ngoại tệ)
+    fx: FxConverter | None = None
 
     @property
     def jar_codes(self) -> set[str]:
         return {j["code"] for j in self.jars}
+
+    def fx_converter(self) -> FxConverter:
+        if self.fx is None:
+            self.fx = default_converter()
+        return self.fx
 
     def classify_inputs(self, gateway: Any = None) -> ClassifyInputs:
         return ClassifyInputs(

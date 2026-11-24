@@ -86,11 +86,11 @@ CONTENT_TYPES = {
 }
 EXIT_NO_BACKEND = 2
 #: Mã lỗi chữ thường của backend -> mã lỗi API của job (bản sao của `yofina_ingest.extract.ERROR_CODE_OF`; test giữ hai bảng khớp
-#: nhau). Eval chấm theo mã API vì đó là thứ người dùng nhận: backend trả `no_transactions` cho bảng phí, menu, màn ATM nhưng job vẫn
-#: `INGEST_NOT_FINANCIAL` như ảnh `not_financial`.
+#: nhau). Eval chấm theo mã API vì đó là thứ người dùng nhận. Từ 25/11 `no_transactions` (bảng phí, menu, màn ATM, màn tra soát: chứng
+#: từ tài chính mà không còn giao dịch nào) có mã riêng `INGEST_NO_TRANSACTIONS`, tách khỏi `INGEST_NOT_FINANCIAL`.
 API_ERROR_CODE = {
     "not_financial": "INGEST_NOT_FINANCIAL",
-    "no_transactions": "INGEST_NOT_FINANCIAL",
+    "no_transactions": "INGEST_NO_TRANSACTIONS",
     "unsupported_type": "INGEST_UNSUPPORTED_TYPE",
     "unreadable": "INGEST_UNSUPPORTED_TYPE",
     "too_large": "INGEST_TOO_LARGE",
@@ -98,6 +98,9 @@ API_ERROR_CODE = {
     "budget_exceeded": "MODEL_BUDGET_EXCEEDED",
     "model_failed": "INTERNAL_ERROR",
 }
+#: Hai mã "tệp bị từ chối, không đọc dòng nào": nhãn `not_financial` của manifest (gán trước khi tách mã) đạt với cả hai, như trước
+#: khi tách (hai mã cùng ra một mã API). Mức chấm không đổi; không có dòng tự thêm vẫn là điều kiện.
+REJECTED_NO_ROWS = frozenset({"INGEST_NOT_FINANCIAL", "INGEST_NO_TRANSACTIONS"})
 
 
 def api_error_code(code: str | None) -> str | None:
@@ -105,6 +108,12 @@ def api_error_code(code: str | None) -> str | None:
     if code is None:
         return None
     return API_ERROR_CODE.get(str(code), str(code))
+
+
+def error_matches(got: str | None, expected: str | None) -> bool:
+    """Mã API nhận được có khớp nhãn không: bằng nhau, hoặc cả hai thuộc `REJECTED_NO_ROWS`."""
+    a, b = api_error_code(got), api_error_code(expected)
+    return a == b or (a in REJECTED_NO_ROWS and b in REJECTED_NO_ROWS)
 
 
 # --- chuẩn hóa ------------------------------------------------------------------------------
@@ -326,9 +335,9 @@ def score_item(item: Mapping[str, Any], result: Mapping[str, Any]) -> dict[str, 
         "dispositions": _count(r.get("disposition") for r in rows),
     }
     if exp.get("expected_error"):
-        # chấm theo mã API người dùng nhận (`api_error_code`): `no_transactions` và `not_financial` cùng ra INGEST_NOT_FINANCIAL
-        out["expected_error_ok"] = api_error_code(result.get("error_code")) == api_error_code(
-            exp["expected_error"]
+        # chấm theo mã API người dùng nhận (`error_matches`): nhãn `not_financial` đạt với INGEST_NOT_FINANCIAL hoặc INGEST_NO_TRANSACTIONS
+        out["expected_error_ok"] = error_matches(
+            result.get("error_code"), exp["expected_error"]
         ) and not any(r.get("disposition") == "auto_add" for r in rows)
     tx_flags = []
     for i, j in pair_rows(rows, txs):
