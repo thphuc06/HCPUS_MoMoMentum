@@ -60,9 +60,11 @@ POST_STEP_TRIGGERS = ("nightly", "reset", "manual")
 
 
 def after_forecast(pipeline: Pipeline, user_id: str, trigger: str) -> dict[str, Any]:
-    """N2 (phase 4): dự báo → điểm chống chịu → phát hiện đổi hành vi. Mỗi bước bọc lỗi riêng: một bước hỏng không làm hỏng
-    bước khác và không làm hỏng lần dự báo đã ghi (trả trạng thái từng bước để Step Functions và log thấy)."""
+    """N2 (phase 4): dự báo → điểm chống chịu → phát hiện đổi hành vi; phase 5 (luồng B) thêm hồ sơ hành vi → cổng bản tin. Mỗi
+    bước bọc lỗi riêng: một bước hỏng không làm hỏng bước khác và không làm hỏng lần dự báo đã ghi (trả trạng thái từng bước để
+    Step Functions và log thấy)."""
     from yofina_forecast import (  # nhập muộn: bước `read`/`event` không trả giá nhập module
+        behavior,
         change,
         resilience,
     )
@@ -87,6 +89,30 @@ def after_forecast(pipeline: Pipeline, user_id: str, trigger: str) -> dict[str, 
     except Exception as exc:
         log.exception("change_step_failed")
         steps["change"] = {"status": "failed", "error": type(exc).__name__}
+    steps.update(phase5_steps(pipeline, user_id, trigger, now, behavior))
+    return steps
+
+
+def phase5_steps(pipeline: Pipeline, user_id: str, trigger: str, now: Any, behavior: Any) -> dict[str, Any]:
+    """Phase 5 (luồng B): hồ sơ hành vi (`behavior_profiles`; batch đêm gọi model nhỏ, đặt lại dùng câu mẫu) rồi cổng bản tin
+    (tối đa một dòng `nudges` của hôm nay). Cổng vẫn chạy khi bước hồ sơ hỏng (chỉ thiếu ứng viên nhận xét hành vi)."""
+    steps: dict[str, Any] = {}
+    profile: dict[str, Any] | None = None
+    try:
+        profile = behavior.compute_and_store(pipeline, user_id, now, trigger=trigger)
+        steps["behavior"] = {"status": "ok", "ready": profile["ready"], "insights": len(profile["insights"])}
+    except YofinaError as exc:
+        steps["behavior"] = {"status": "skipped", "code": str(exc.code)}
+    except Exception as exc:
+        log.exception("behavior_step_failed")
+        steps["behavior"] = {"status": "failed", "error": type(exc).__name__}
+    try:
+        steps["nudge_gate"] = behavior.run_nudge_gate(pipeline, user_id, now, profile=profile)
+    except YofinaError as exc:
+        steps["nudge_gate"] = {"status": "skipped", "code": str(exc.code)}
+    except Exception as exc:
+        log.exception("nudge_gate_step_failed")
+        steps["nudge_gate"] = {"status": "failed", "error": type(exc).__name__}
     return steps
 
 

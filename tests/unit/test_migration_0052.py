@@ -151,7 +151,8 @@ def test_check_y_dinh_cua_audit_events_nho_hon_bay_thanh_muoi_va_khop_hang_so():
     drop = next(s for s in STATEMENTS if s.startswith("ALTER TABLE audit_events DROP CONSTRAINT"))
     add = next(s for s in STATEMENTS if s.startswith("ALTER TABLE audit_events ADD CONSTRAINT"))
     assert "audit_events_intent_check" in drop and "audit_events_intent_check" in add
-    assert sql_set(add, "intent") == wallet.INTENTS and len(wallet.INTENTS) == 10
+    # 0052 là ảnh chụp mười ý định của phase 4 (migration không sửa); 0053 nới tiếp thành wallet.AUDIT_INTENTS
+    assert sql_set(add, "intent") == wallet.INTENTS[:10] and wallet.INTENTS[7:10] == ("resilience", "stress", "roadmap")
     assert wallet.INTENTS[: len(wallet.INTENTS_PHASE3)] == wallet.INTENTS_PHASE3
 
 

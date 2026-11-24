@@ -132,9 +132,9 @@ PLANNER_TOOLS = (
     "save_roadmap",
     "get_roadmap",
 )
-#: Tool phase 5 mà hợp đồng đã khai báo nhưng Lambda chưa cài: `forecast___get_behavior_profile` (luồng p5-behavior). Luồng
-#: cài xong thì xóa tên khỏi đây và thêm vào `_ARG_KEYS` của Lambda.
-PHASE5_TOOLS: tuple[str, ...] = ("get_behavior_profile",)
+#: Tool phase 5 mà hợp đồng đã khai báo nhưng Lambda chưa cài. Rỗng từ 24/11: `forecast___get_behavior_profile` đã cài (luồng
+#: p5-behavior, `yofina_forecast.behavior`). Luồng cài tool mới thì xóa tên khỏi đây và thêm vào `_ARG_KEYS` của Lambda.
+PHASE5_TOOLS: tuple[str, ...] = ()
 #: Tool đã khai báo trong hợp đồng mà Lambda chưa cài (test `test_ledger_wallet` dùng tập này để khỏi đòi `_ARG_KEYS` có chúng).
 #: Năm tool phase 4 đã cài từ 23/11; tên giữ nguyên cho test cũ, nay là "tool chưa cài" của mọi phase, tức `PHASE5_TOOLS`.
 PHASE4_TOOLS: tuple[str, ...] = PHASE5_TOOLS
@@ -192,14 +192,15 @@ INTENTS_PHASE3 = (
     "chitchat",
 )
 #: Ý định của router (L1): bảy ý định phase 3 và ba ý định phase 4 (`resilience`: hỏi điểm chống chịu, `stress`: bấm hoặc hỏi một
-#: cú sốc, `roadmap`: xin hoặc hỏi lộ trình). Luồng C cài router và xử lý chúng; hợp đồng chỉ khai báo.
-INTENTS = (*INTENTS_PHASE3, "resilience", "stress", "roadmap")
-#: Bốn ý định của phase 5, CHƯA nằm trong `INTENTS` (router chưa chọn được, `agent/.../schemas.py` `Intent` khớp `INTENTS`):
-#: `behavior` (hỏi về thói quen chi tiêu, nhận xét hành vi), `knowledge` (hỏi biểu phí kèm trích dẫn: số từ `get_fee_schedule`,
+#: cú sốc, `roadmap`: xin hoặc hỏi lộ trình). Luồng C cài router và xử lý chúng; hợp đồng chỉ khai báo. Phase 5 thêm dần các ý định
+#: đã cài: `behavior` (luồng p5-behavior, `yofina_agent.behavior_chat`).
+INTENTS = (*INTENTS_PHASE3, "resilience", "stress", "roadmap", "behavior")
+#: Ý định của phase 5 CHƯA cài (router chưa chọn được, `agent/.../schemas.py` `Intent` khớp `INTENTS`):
+#: `knowledge` (hỏi biểu phí kèm trích dẫn: số từ `get_fee_schedule`,
 #: khối `citation` dựng từ nguồn của chính bảng phí; không có tìm kiếm tài liệu), `ingest` ("mình vừa nạp ảnh": trạng thái lần
 #: nạp và bảng duyệt), `memory` (người dùng nói một sở thích để nhớ, hoặc hỏi trợ lý nhớ gì về mình). Luồng nào cài bộ xử lý thì
-#: chuyển ý định của mình vào `INTENTS` cùng lúc với `Intent` của agent.
-PHASE5_INTENTS = ("behavior", "knowledge", "ingest", "memory")
+#: chuyển ý định của mình vào `INTENTS` cùng lúc với `Intent` của agent. `behavior` (hỏi về thói quen chi tiêu) đã chuyển.
+PHASE5_INTENTS = ("knowledge", "ingest", "memory")
 #: Ý định mà cột `audit_events.intent` chấp nhận (migration 0053 nới CHECK): mọi ý định đã cài và bốn ý định phase 5, để
 #: `audit___record_turn` không vỡ ở lượt có ý định mới trong lúc các luồng cài dần.
 AUDIT_INTENTS = (*INTENTS, *PHASE5_INTENTS)

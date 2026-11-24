@@ -118,7 +118,9 @@ def test_tap_gia_tri_rest_khop_hang_so():
 
 
 def test_y_dinh_phase5_chua_vao_router_nhung_ban_ghi_luot_nhan():
-    assert wallet.PHASE5_INTENTS == ("behavior", "knowledge", "ingest", "memory")
+    # luồng cài ý định nào thì chuyển nó từ PHASE5_INTENTS sang INTENTS (p5-behavior: `behavior`); thứ tự cuối cùng không đổi
+    assert (*wallet.INTENTS[10:], *wallet.PHASE5_INTENTS) == ("behavior", "knowledge", "ingest", "memory")
+    assert "behavior" in wallet.INTENTS
     assert not set(wallet.PHASE5_INTENTS) & set(wallet.INTENTS)  # agent Intent khớp INTENTS, luồng cài thì chuyển sang
     assert (*wallet.INTENTS, *wallet.PHASE5_INTENTS) == wallet.AUDIT_INTENTS
     desc = AUDIT["record_turn"]["inputSchema"]["properties"]["intent"]["description"]
@@ -312,7 +314,8 @@ def test_rag_da_cat_khoi_hop_dong():
 # =====================================================================================
 def test_tool_moi_o_cuoi_target_va_chua_cai():
     assert wallet.FORECAST_TOOLS[-1] == "get_behavior_profile"
-    assert set(wallet.PHASE5_TOOLS) == {"get_behavior_profile"} == set(wallet.PHASE4_TOOLS)
+    # luồng p5-behavior đã cài `get_behavior_profile` (yofina_forecast.behavior) nên không còn tool phase 5 nào chưa cài
+    assert "get_behavior_profile" not in wallet.PHASE5_TOOLS and set(wallet.PHASE5_TOOLS) == set(wallet.PHASE4_TOOLS)
     assert len("forecast___get_behavior_profile") <= 64
 
 

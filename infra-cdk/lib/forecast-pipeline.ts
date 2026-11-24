@@ -1,5 +1,6 @@
+import * as fs from 'fs';
 import * as path from 'path';
-import { App, Duration, RemovalPolicy } from 'aws-cdk-lib';
+import { Annotations, App, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
@@ -15,6 +16,7 @@ import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { YofinaConfig } from '../config/config';
 
 /**
@@ -64,6 +66,12 @@ export interface ForecastPipelineConfig {
   readonly eventBatchSize: number;
   /** SQS giao lại tối đa từng này lần trước khi vào DLQ. */
   readonly eventMaxReceiveCount: number;
+  /**
+   * Phase 5 luồng B: vai model của bước hồ sơ hành vi trong batch đêm (`yofina_forecast.behavior`, mặc định `small`) và đường dẫn
+   * `llm_defaults.json` để lấy model id của các vai đó lúc synth (mặc định là file của yofina_core; test đổi bằng context).
+   */
+  readonly behaviorLlmRoles: string[];
+  readonly llmDefaults: string;
 }
 
 function ctxNum(app: App, key: string, dflt: number): number {
@@ -124,6 +132,15 @@ export function loadForecastConfig(app: App): ForecastPipelineConfig {
     eventMaxConcurrency: ctxNum(app, 'forecastEventMaxConcurrency', 5),
     eventBatchSize: ctxNum(app, 'forecastEventBatchSize', 10),
     eventMaxReceiveCount: ctxNum(app, 'forecastEventMaxReceiveCount', 3),
+    behaviorLlmRoles: ctxStr(app, 'forecastBehaviorLlmRoles', 'small')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+    llmDefaults: path.resolve(
+      __dirname,
+      '..',
+      ctxStr(app, 'forecastLlmDefaults', '../libs/yofina_core/src/yofina_core/llm_defaults.json'),
+    ),
   };
 }
 
@@ -151,6 +168,7 @@ export interface ForecastPipelineProps {
  *
  * Cộng: bảng DynamoDB `yofina-idempotency` (khóa `event_id`, TTL), rule trên `yofina-bus` -> SQS `yofina-forecast-events` (có DLQ và
  * alarm), Step Functions `yofina-nightly` (Standard) và EventBridge Scheduler 02:00 giờ Việt Nam, alarm thất bại -> SNS `yofina-alerts`.
+ * Phase 5 luồng B: batch có thêm quyền gọi model nhỏ (`grantBehaviorModels`) cho bước hồ sơ hành vi của batch đêm.
  */
 export class ForecastPipeline extends Construct {
   public readonly batch: lambda.Function;
@@ -295,6 +313,8 @@ export class ForecastPipeline extends Construct {
       'dynamodb:UpdateItem',
       'dynamodb:DeleteItem',
     );
+    // Phase 5 luồng B: CHỈ Lambda batch gọi model nhỏ (viết lại câu nhận xét hành vi); tool và consumer không có quyền Bedrock.
+    grantBehaviorModels(this, this.batch, { prefix: p, roles: f.behaviorLlmRoles, llmDefaults: f.llmDefaults });
 
     // --- đường sự kiện: yofina-bus -> SQS (+DLQ) -> yofina-on-transaction --------------------------------------------------
     this.deadLetterQueue = new sqs.Queue(this, 'EventsDlq', {
@@ -423,4 +443,86 @@ export class ForecastPipeline extends Construct {
       }).addAlarmAction(new cwActions.SnsAction(alertTopic));
     }
   }
+}
+
+interface LlmDefaults {
+  roles: Record<string, { models: Array<{ id: string }> }>;
+}
+
+export interface BehaviorModelGrantProps {
+  readonly prefix: string;
+  /** Vai model trong `llm_defaults.json` (mặc định `small`). */
+  readonly roles: string[];
+  readonly llmDefaults: string;
+  /** Tên bảng DynamoDB đếm lượt gọi model; vắng thì đọc SSM `/<prefix>/dynamodb/usage-table` lúc deploy. */
+  readonly usageTableName?: string;
+}
+
+/**
+ * Phase 5 luồng B (hồ sơ hành vi): quyền tối thiểu để Lambda batch gọi model của các vai cấu hình qua `yofina_core.llm`:
+ * `bedrock:InvokeModel` (Converse dùng quyền này) CHỈ trên model của các vai đó (đọc lúc synth từ `llm_defaults.json`; mẫu ba phần
+ * của Global cross-Region inference như YofinaIngest và ClassifyPipeline), `dynamodb:UpdateItem` trên bảng đếm lượt gọi
+ * (`yofina-usage`, trần mỗi ngày) và biến `YOFINA_USAGE_TABLE`. Lambda forecast không đặt `YOFINA_SSM_PREFIX` nên `yofina_core.llm`
+ * không đọc SSM, không cần quyền SSM.
+ */
+export function grantBehaviorModels(scope: Construct, fn: lambda.Function, props: BehaviorModelGrantProps): void {
+  const stack = Stack.of(scope);
+  const usageTable =
+    props.usageTableName ?? ssm.StringParameter.valueForStringParameter(scope, `/${props.prefix}/dynamodb/usage-table`);
+  fn.addEnvironment('YOFINA_USAGE_TABLE', usageTable);
+  fn.addToRolePolicy(
+    new iam.PolicyStatement({
+      sid: 'CountModelCalls',
+      actions: ['dynamodb:UpdateItem'],
+      resources: [stack.formatArn({ service: 'dynamodb', resource: 'table', resourceName: usageTable })],
+    }),
+  );
+  const llm = JSON.parse(fs.readFileSync(props.llmDefaults, 'utf-8')) as LlmDefaults;
+  const modelIds: string[] = [];
+  for (const role of props.roles) {
+    const r = llm.roles[role];
+    if (!r) {
+      Annotations.of(scope).addError(`forecastBehaviorLlmRoles: không có vai '${role}' trong llm_defaults.json`);
+      continue;
+    }
+    for (const m of r.models) if (!modelIds.includes(m.id)) modelIds.push(m.id);
+  }
+  const profileArns: string[] = [];
+  const directModelArns: string[] = [];
+  const statements: iam.PolicyStatement[] = [];
+  for (const m of modelIds) {
+    if (!m.startsWith('global.')) {
+      directModelArns.push(`arn:aws:bedrock:${stack.region}::foundation-model/${m}`);
+      continue;
+    }
+    const base = m.slice('global.'.length);
+    const profileArn = `arn:aws:bedrock:${stack.region}:${stack.account}:inference-profile/${m}`;
+    profileArns.push(profileArn);
+    statements.push(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [`arn:aws:bedrock:${stack.region}::foundation-model/${base}`],
+        conditions: { StringEquals: { 'aws:RequestedRegion': stack.region, 'bedrock:InferenceProfileArn': profileArn } },
+      }),
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [`arn:aws:bedrock:::foundation-model/${base}`],
+        conditions: { StringEquals: { 'aws:RequestedRegion': 'unspecified', 'bedrock:InferenceProfileArn': profileArn } },
+      }),
+    );
+  }
+  if (profileArns.length > 0) {
+    statements.unshift(
+      new iam.PolicyStatement({
+        sid: 'InvokeGlobalInferenceProfiles',
+        actions: ['bedrock:InvokeModel'],
+        resources: profileArns,
+        conditions: { StringEquals: { 'aws:RequestedRegion': stack.region } },
+      }),
+    );
+  }
+  if (directModelArns.length > 0) {
+    statements.push(new iam.PolicyStatement({ sid: 'InvokeRegionalModels', actions: ['bedrock:InvokeModel'], resources: directModelArns }));
+  }
+  for (const st of statements) fn.addToRolePolicy(st);
 }

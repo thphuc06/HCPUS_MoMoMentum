@@ -47,9 +47,10 @@ def intent(**over):
 # --- IntentResult ------------------------------------------------------------------------------
 def test_muoi_y_dinh_khop_hang_so_hop_dong():
     assert tuple(s.Intent.__args__) == wallet.INTENTS
-    assert len(wallet.INTENTS) == 10
+    assert len(wallet.INTENTS) == 11
     assert wallet.INTENTS[:7] == wallet.INTENTS_PHASE3  # bảy ý định của phase 3 giữ nguyên thứ tự
-    assert wallet.INTENTS[7:] == ("resilience", "stress", "roadmap")  # phase 4 (luồng C cài router)
+    assert wallet.INTENTS[7:10] == ("resilience", "stress", "roadmap")  # phase 4 (luồng C cài router)
+    assert wallet.INTENTS[10:] == ("behavior",)  # phase 5 luồng B (behavior_chat)
 
 
 @pytest.mark.parametrize("name", wallet.INTENTS)

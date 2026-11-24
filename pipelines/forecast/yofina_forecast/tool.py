@@ -13,6 +13,9 @@ và REST `GET /resilience`, `GET /resilience/shocks`, `POST /resilience/stress` 
 Phase 3: Lambda này CŨNG phục vụ `forecast___run_scenario` và `forecast___list_scenarios` (`scenario.py`) và `forecast___affordability_check` (`afford.py`) qua Gateway,
 và đường REST `POST /affordability` của HTTP API (cùng engine, trả khối `affordability_card`). `GET /forecasts/{jar_code}` vẫn do
 Lambda ledger phục vụ.
+
+Phase 5 (luồng B): `forecast___get_behavior_profile` và REST `GET /profile/behavior` CHỈ ĐỌC bảng `behavior_profiles` (`behavior.py`,
+batch đêm tính và ghi); không gọi model. `handler_tool.py` không truyền engine nên mỗi lần gọi dựng `BehaviorEngine` từ pipeline.
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from yofina_core.blocks import (
 )
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
 from yofina_forecast.afford import AffordabilityEngine
+from yofina_forecast.behavior import BehaviorEngine
 from yofina_forecast.resilience import ResilienceEngine
 from yofina_forecast.runner import Pipeline
 from yofina_forecast.scenario import ScenarioEngine
@@ -138,6 +142,7 @@ def handle_gateway(
     afford: AffordabilityEngine | None = None,
     resilience: ResilienceEngine | None = None,
     stress: StressEngine | None = None,
+    behavior: BehaviorEngine | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     tool = tool_name(context)
@@ -176,6 +181,10 @@ def handle_gateway(
             result = resilience.get(user_id, refresh=event.get("refresh"))
         elif tool == "stress_test" and stress is not None:
             result = stress.run(user_id, event.get("shock_id"))
+        elif tool == "get_behavior_profile":
+            result = (behavior or BehaviorEngine(pipeline)).get(
+                user_id, insight_kind=event.get("insight_kind"), jar=event.get("jar")
+            )
         else:
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Tool không tồn tại.")
         outcome = str(result["status"])
@@ -214,10 +223,12 @@ def handle_http(
     afford: AffordabilityEngine,
     resilience: ResilienceEngine | None = None,
     stress: StressEngine | None = None,
+    behavior: BehaviorEngine | None = None,
 ) -> dict[str, Any]:
     """Đường vào HTTP API (payload v2) của Lambda này (x-lambda: forecast): `POST /affordability` (khối `affordability_card`),
-    `GET /resilience` (khối `resilience_score`), `GET /resilience/shocks` (danh sách cú sốc đọc từ `shocks.json`) và
-    `POST /resilience/stress` (khối `stress_result`). Danh tính CHỈ lấy từ claim `sub` của JWT authorizer; thân yêu cầu không có
+    `GET /resilience` (khối `resilience_score`), `GET /resilience/shocks` (danh sách cú sốc đọc từ `shocks.json`),
+    `POST /resilience/stress` (khối `stress_result`) và `GET /profile/behavior` (phase 5: `BehaviorProfileData`, cùng `data` với tool
+    `forecast___get_behavior_profile`). Danh tính CHỈ lấy từ claim `sub` của JWT authorizer; thân yêu cầu không có
     `user_id`. Cùng engine, cùng số với tool tương ứng."""
     started = time.perf_counter()
     http = event.get("requestContext", {}).get("http", {})
@@ -285,6 +296,9 @@ def handle_http(
                     app_date=app_date,
                 )
             )
+        elif route == "GET /profile/behavior":
+            engine = behavior or BehaviorEngine(afford.pipeline)
+            wire = engine.get(sub)["data"]
         else:
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Đường dẫn không tồn tại.")
         outcome = "200"

@@ -37,8 +37,8 @@ from typing import Any
 
 from ag_ui.core import BaseEvent, RunAgentInput
 
+from yofina_agent import behavior_chat, notices, trace
 from yofina_agent import events as ev
-from yofina_agent import notices, trace
 from yofina_agent.clarify import resolve_clarify
 from yofina_agent.compact import (
     compact_affordability,
@@ -739,6 +739,7 @@ class Turn:
             "resilience": self.on_resilience,
             "stress": self.on_stress,
             "roadmap": self.on_roadmap,
+            "behavior": self.on_behavior,
         }
 
     def pending_params_before(self, index: int) -> dict[str, Any] | None:
@@ -963,6 +964,10 @@ class Turn:
         assert res.compact is not None and isinstance(res.block, B.ResilienceScoreBlock)
         self.note_basis(res.block.data.basis.model_dump())
         await self.write("resilience", question, res.compact)
+
+    async def on_behavior(self, r: IntentResult, question: str) -> None:
+        # phase 5 (luồng B): thói quen chi tiêu -> khối behavior_insight (yofina_agent.behavior_chat)
+        await behavior_chat.answer(self, r, question)
 
     async def on_stress(self, r: IntentResult, question: str) -> None:
         shocks = load_shock_set()
