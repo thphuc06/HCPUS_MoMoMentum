@@ -800,7 +800,7 @@ TEXT_DISABLED = (
 )
 TEXT_RECALL_HEAD = "Đây là những điều mình đang nhớ về bạn từ các lần trò chuyện trước:"
 TEXT_RECALL_TAIL = "Bạn xem đầy đủ hoặc xóa từng mục ở Hồ sơ, mục Bộ nhớ của tôi."
-TEXT_RECALL_EMPTY = "Mình chưa nhớ điều gì về bạn. Bạn có thể nói một sở thích, ví dụ: đừng nhắc mình buổi sáng, hoặc ưu tiên hũ Du lịch."
+TEXT_RECALL_EMPTY = "Mình chưa nhớ điều gì về bạn. Khi bạn kể sở thích hay hoàn cảnh của mình, mình sẽ nhớ để dùng ở lần sau."
 TEXT_RECALL_DEGRADED = "Lúc này mình chưa đọc được bộ nhớ. Bạn thử lại sau ít phút, hoặc xem ở Hồ sơ, mục Bộ nhớ của tôi."
 
 

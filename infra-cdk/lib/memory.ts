@@ -187,7 +187,7 @@ ${APP_CONTEXT}
 - Extract only preferences the user states EXPLICITLY about how the assistant should help them: which jar they want to prioritise, fill first, protect or not take money from; when or how they want, or do not want, to be reminded; how they want answers to be written.
 - In this application do NOT infer implicit preferences from the questions the user asks: asking about a purchase, a balance, a jar or a forecast, even several times, is not a preference.
 - Do NOT extract anything from questions, hypothetical or "what-if" messages, or requests for numbers (for example ${QUESTION_EXAMPLES}). If the user messages only ask or request something, return an empty list.
-- Keep times of day exactly as stated (for example "trước 9 giờ", "buổi sáng", "sau 22h"): they are needed to respect reminder preferences.
+- Keep times of day exactly as the user stated them: they are needed to respect reminder preferences.
 ${CHANGE_AND_SCOPE_RULES}
 - For a reason given when declining a suggestion, this memory keeps what the user wants to protect, avoid or prioritise; the situation behind it belongs to the fact memory.
 ${NO_NUMBERS_NO_OTHERS}
