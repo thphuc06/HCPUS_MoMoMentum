@@ -401,6 +401,38 @@ Rủi ro khi đo lại (ca có thể đổi kết quả và vì sao đó là th�
 - Đợt 6: r08, r15 của `evals/ingest` có thể trượt lại; nếu trượt, đó là bằng chứng luật đọc cụ thể còn cần với Sonnet 4.6, nên thêm lại
   kèm lý do. Adversarial phase 5 `upload-*`, `csv-*` dựa `_DATA_NOT_INSTRUCTIONS` và cờ `contains_instructions`, không đổi nghĩa.
 
+### 5.2 Kết quả đo sau deploy (Runtime v25, 24/11 tối theo giờ máy)
+
+Đo một lần mỗi bộ trên Runtime `yofina_agent` v25 (mã `main` 2baf07d, gồm cả `p5/mem-p0`, `p5/ingest-fx`, `p5/fx-tool`), đặt lại `minh`
+trước mỗi bộ; mốc "trước" là lượt trên Runtime v24 trước cụm sửa (golden phase 3, 4, adversarial phase 3) và các lượt cũ cho phần còn
+lại. Chi tiết, dẫn chứng và phân loại từng ca: file phase 5, mục "Đo sau đợt sửa kiểm toán và bộ nhớ (Runtime v25)".
+
+| Bộ | Trước | Sau |
+|---|---|---|
+| Golden phase 3 | 31/31 | 31/31 |
+| Golden phase 4 | 14/14 | 14/14 |
+| Golden phase 5 | 12/12 (12 ca) | 11/15: 12 ca cũ 11/12, 3 ca mới 0/3, cả bốn ca trượt do bộ chạy eval không nạp được bản ghi (`SEED_EXPIRY_DAYS = 1`, API đòi ≥ 31) |
+| Adversarial phase 3, 4, 5 | 16/16, 12/12, 14/14 | 16/16, 12/12, 14/14 |
+| Diễn đạt lại router (18 câu) | chưa có (đợt 0 không làm) | 18/18, ý định và tham số 100% |
+| OCR bộ real, đủ 4 trường | 9/11 | 9/11 (r08 trượt, r15 đạt) |
+
+Đối chiếu với rủi ro ở trên:
+
+- Đợt 2: không ca nào trượt vì độ dài. Câu trả lời golden phase 3 dài hơn một chút: trung bình 50 lên 56 từ, trung vị 34 lên 42; phase 4
+  và 5 gần như không đổi. `numeric_grounding_pct` 100% ở mọi bộ.
+- Đợt 3: `behavior-habits`, `knowledge-late-fee`, `ingest-*`, `afford-1` đều đạt; `pr-forecast-which-jar` đạt. Không ca nào trượt vì
+  router hiểu kém.
+- Đợt 4: ba ca `expect_insight_kind`, `ingest-start`, `knowledge-late-fee`, `citation-forgery`, `roadmap-edit-one-step` đều đạt; bộ diễn
+  đạt lại chấm đúng cả bốn ý định phụ.
+- Đợt 6: r08 trượt lại (`no_transactions`, 0/1 dòng) đúng như rủi ro đã ghi; r15 đạt. Theo luật giữ hay lùi ở đầu mục 5, đây là bằng
+  chứng luật "màn chi tiết có mã giao dịch là đã thực hiện" còn cần với Sonnet 4.6: nên thêm lại kèm lý do (chưa làm, đợt đo không sửa mã).
+  Adversarial phase 5 `upload-*`, `csv-*` đạt 7/7.
+- Log Runtime: `verifier_fallback` 0 trước và sau. `numeric_ungrounded` 0 trong lượt nền và 2 trong lượt này (việc `roadmap` ở golden
+  phase 4, việc `resilience` ở adversarial phase 4; câu người viết bị bỏ, ca vẫn đạt). Lượt này chạy thêm ba bộ so với lượt nền nên chưa
+  so được tỷ lệ; theo dõi ở lượt sau.
+
+Kết luận theo luật giữ hay lùi: giữ đợt 1 đến 4; giữ đợt 6 nhưng thêm lại luật đọc màn chi tiết có mã giao dịch (r08).
+
 ## 6. Nguồn đã tra
 
 - [Amazon Nova 2: Create precise prompts](https://docs.aws.amazon.com/nova/latest/nova2-userguide/create-precise-prompts.html): khuyên dùng chữ hoa và DO, DO NOT, MUST cho luật phải tuân; nói rõ định dạng và độ dài mong muốn.

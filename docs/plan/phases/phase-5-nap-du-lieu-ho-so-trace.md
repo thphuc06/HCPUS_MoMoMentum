@@ -233,7 +233,7 @@ Có 4 ảnh lỗi do model đọc (r08, r12, r15, r24) và 2 ảnh có quy ướ
 
 Ảnh hưởng tới số đo: mẫu số "đủ 4 trường trên ảnh đọc được" giảm từ 12 xuống 11 (r14 không còn dòng chấm), còn mẫu số "báo `not_financial` đúng" tăng từ 5 lên 6. Đã đo lại 24/11 khuya (cột cuối của bảng trên, chi tiết từng ảnh ở "Kiểm lại sau sửa lần 3"): đủ 4 trường 9/11, `not_financial` 6/6. Test: `tests/unit/ingest/test_extract.py` (r15 qua backend với model giả, cả khi model đặt và quên cờ; r14; CSV rút tiền mặt và phí; lời nhắc), `tests/unit/ingest/test_normalize.py` (mẫu rút tiền mặt và mẫu không được khớp).
 
-### Chứng từ ngoại tệ và mã `INGEST_NO_TRANSACTIONS` (25/11, nhánh `p5/ingest-fx`, chưa deploy)
+### Chứng từ ngoại tệ và mã `INGEST_NO_TRANSACTIONS` (25/11, nhánh `p5/ingest-fx`; đã deploy cùng Runtime v25, xem "Đo sau đợt sửa kiểm toán và bộ nhớ")
 
 Ca thật: hóa đơn dịch vụ thu tự động "$111.11 USD due November 10, 2026" bị báo "Tệp này không phải biên lai…". Log Lambda `yofina-ingest` 24/11 11:22 và 11:23 UTC: lời gọi model `ingest` trả 279 và 262 token ra, rồi job `rejected` với `INGEST_NOT_FINANCIAL`; log không ghi mã trong của backend. Người điều phối chạy lại cục bộ: `bill_or_invoice`, dòng bị loại `no_amount` (chỉ có `amount_vnd`), backend `no_transactions`, `ERROR_CODE_OF` gộp thành `INGEST_NOT_FINANCIAL`. Đề xuất 3 ở trên vì thế đã thành lỗi người dùng thấy. Chủ dự án quyết: quy đổi ngoại tệ về VND. Đã làm:
 
@@ -241,7 +241,7 @@ Ca thật: hóa đơn dịch vụ thu tự động "$111.11 USD due November 10,
 2. Quy đổi theo tỷ giá bán Vietcombank của ngày trên chứng từ (`yofina_ingest.fx`, [ghi chú nguồn](../../research/ingest-fx-rates.md)); dòng ngoại tệ luôn vào hàng chờ; tra lỗi thì dòng vẫn vào hàng chờ với số gốc và người dùng nhập số VND.
 3. Màn duyệt: số VND ước tính hiện ngay, "111,11 USD" thu gọn mở ra tỷ giá, nguồn, ngày và ô sửa số VND; `confirm_rows` ký kèm số đã sửa.
 4. Mã `INGEST_NO_TRANSACTIONS` tách khỏi `INGEST_NOT_FINANCIAL`, kèm `error_reason` (màn chưa thực hiện, không thành công, chuyển giữa tài khoản của mình, rút tiền mặt, không đọc được số tiền, không có khoản tiền nào) và câu báo riêng ở frontend. Eval vẫn coi hai mã là đạt với nhãn `not_financial` cũ.
-5. Migration 0054 (`ingest_rows.fx`, `amount_vnd` được NULL khi chưa có tỷ giá, `ingest_jobs.error_reason`) **chưa chạy**: chạy trước khi deploy `YofinaIngest`.
+5. Migration 0054 (`ingest_rows.fx`, `amount_vnd` được NULL khi chưa có tỷ giá, `ingest_jobs.error_reason`) đã chạy trước khi deploy `YofinaIngest` (đợt đo Runtime v25).
 
 Kiểm sau deploy: nạp lại ảnh hóa đơn ca thật, thấy dòng chờ duyệt khoảng 2,87 triệu ₫ kèm "111,11 USD"; nạp ảnh chỉ có nạp ví từ thẻ thì thấy câu "Tệp chỉ có tiền chuyển giữa các tài khoản của bạn."
 
@@ -376,6 +376,73 @@ Worker Kiro (Claude Opus 5.5) do Claude Code điều phối, sau khi merge `p5/f
 4. **Phương án hũ Giải trí vẫn biến mất thay vì hiện "Hụt"** (như lỗi 3 của lần 2): lượt đầu của Analyst có `switch_jar` 1.200.000 ₫ từ `giai_tri` (số dư 760.000 ₫), `source_jar_covers` trượt, verifier cho làm lại và phương án đó không còn.
 5. Log Runtime có `turn_persist_timeout` hai lần (11:18:53Z, lượt phiên trước của `memory-reuse-new-session`; 11:20:42Z, lượt `memory-recall`), như ghi nhận 6 của lần 2; `yofina-ledger` không có lỗi cùng lúc.
 6. Ghi nhận về công cụ: lần chạy đầu `scripts/eval_ingest.py --set real` dừng sau ảnh r01 vì console Windows dùng cp1252 không in được chữ "Đ" trong dòng kết quả (`UnicodeEncodeError` ở `print(_line(s))`), chưa ghi file kết quả. Lượt đo ở trên chạy lại với `PYTHONIOENCODING=utf-8`; tổng số lần gọi Bedrock vì thế là 26 ảnh thay vì 25. Lượt cục bộ in 10 dòng `embedding_degraded: AllModelsFailed` (bước gắn hũ, không ảnh hưởng bốn trường).
+
+#### Đo sau đợt sửa kiểm toán và bộ nhớ (Runtime v25)
+
+Worker Kiro (Claude Opus 5.5) do Claude Code điều phối, tối 24/11 theo giờ máy (20:00–21:40, +07), mã `main` 2baf07d: gồm các merge `p5/viz-p1` (`GET /cashflow`, biểu đồ B1, B5, B7), `p5/ui-d`, `p5/mem-p0` (chỉ dẫn dùng bộ nhớ, luật trích xuất cho câu đổi ý và thời hạn, ca eval nạp bản ghi trước), `p5/audit-fix` (đợt 1, 2, 3, 4, 6 của [kiểm toán prompt](../../research/prompt-overfit-audit.md)), `p5/ingest-fx` (chứng từ ngoại tệ, `INGEST_NO_TRANSACTIONS`), `p5/fx-tool` (tool `knowledge___get_exchange_rate`). Không sửa code sản phẩm. Script kiểm là script tạm ngoài repo, không commit. Mỗi bộ eval chạy đúng một lần, `--min-interval 25`, đặt lại `minh` trước mỗi bộ, xóa bộ nhớ `minh` trước golden và adversarial phase 5; không chạy lại ca đỏ; không lượt nào gặp `MODEL_BUDGET_EXCEEDED` hay throttling.
+
+**Deploy** (chỉ `ap-southeast-1`, `cdk diff` trước mỗi stack):
+
+- Migration `0054_ingest_fx` chạy qua `scripts/migrate.py` (lần chạy sau báo `applied: []`, 0054 nằm trong `skipped`). Kiểm `information_schema`: `ingest_rows.fx` (jsonb, được NULL), `ingest_rows.amount_vnd` được NULL, `ingest_jobs.error_reason` (text).
+- Build lại năm zip theo các hằng `*_BUILD_COMMAND`: ledger 22,3 MB, ingest 3,4 MB, forecast 48,1 MB, roadmap 13,2 MB, classify 4,1 MB. Cả năm có `yofina_core/fx.py`; ledger và forecast có `yofina_knowledge/fx_rates.py`.
+- `YofinaIngest`: diff chỉ đổi `Code.S3Key` hai Lambda. `YofinaTools`: thêm route `GET /cashflow` và quyền `lambda:InvokeFunction` cho API Gateway trên `yofina-ledger` (nguồn `*/*/cashflow`), đổi code 6 Lambda; 6 thay đổi bị CDK lược vì "mangled non-ASCII" như các lần trước.
+- `YofinaAgent`: diff có thêm `AWS::BedrockAgentCore::Policy` `Policy-knowledge-get_exchange_rate`, target `knowledge` thêm tool `get_exchange_rate`, target `ingest` thêm `rows[].amount_vnd` của `confirm_rows`, Memory đổi `AppendToPrompt` của hai strategy. Diff theo template còn đánh `GuardrailVersion` replace vì mô tả tiếng Việt, nên đã tạo change set `--no-execute` rồi xóa: 1 `Add` (policy Cedar) và 11 `Modify`, tất cả `Replacement: False` (Runtime, hai target, Memory, alarm `FailedExtraction`, 5 tham số SSM, policy của role Runtime); không có Guardrail, Gateway, Aurora, bucket, Cognito, DynamoDB. `scripts/agent_deploy.py` (zip agent 31,0 MB): Runtime `yofina_agent` **version 25** `READY` (cập nhật 13:19:36Z). Memory `yofina_memory-Nadb0PD27l` giữ nguyên id, `ACTIVE`, hai strategy `facts_vi`, `preferences_vi` đều `ACTIVE`. Sáu target Gateway `READY`.
+- Frontend: `print_env.py frontend --write`, `npm.cmd run build`, `deploy_frontend.py`: Amplify **job 18** `SUCCEED`.
+
+**Khói trước eval**
+
+| Mục | Kết quả | Dẫn chứng |
+|---|---|---|
+| `GET /cashflow` của `minh` (vừa đặt lại) | Đạt | 200 sau 722 ms. Kỳ lương 05/11–21/11 (ngày 17/30). Số khớp tool `ledger___get_cashflow_summary` gọi qua Lambda `yofina-ledger` cùng khoảng ngày: chi 6.908.000 ₫, lương 9.000.000 ₫, tiền vào khác 350.000 ₫, chưa phân loại 180.000 ₫, 5 hũ cùng số tiền và số dòng (2.738.000/64, 2.435.000/6, 1.245.000/5, 310.000/7, 180.000/2); `daily` cộng dồn ngày cuối 6.908.000 ₫. Phần tách `split_complete` true: nghĩa vụ 2.500.000 ₫, Trả sau 967.000 ₫, chi thường ngày 4.408.000 ₫; `net_vnd` 2.092.000 ₫; kỳ trước 05/10–21/10 chi 3.767.000 ₫ |
+| Nạp chứng từ ngoại tệ | Bỏ qua | `evals/ingest/manifest.json` không có mục nào có ngoại tệ (`currency`, `USD`, `amount_original`) |
+| Câu hỏi quy đổi qua Runtime: "50 USD là bao nhiêu tiền Việt vậy?" | Đạt | 16,0 giây. Tool duy nhất `get_exchange_rate` với `{"currency": "USD", "amount": 50.0}`, trả tỷ giá bán 25.980 ₫ của Vietcombank ngày 21/11/2026 (ngày mô phỏng), `amount_vnd` 1.299.000. Trả lời nguyên văn: "50 USD quy đổi được khoảng 1.299.000 ₫ theo tỷ giá bán USD của Vietcombank ngày 21/11/2026 (25.980 ₫ cho 1 USD). Đây là số ước tính: thanh toán bằng thẻ thường cộng thêm phí chuyển đổi ngoại tệ của ngân hàng phát hành." Lambda ledger gọi được nguồn ngoài |
+
+**Eval, một lần mỗi bộ** ("Trước": golden phase 3, 4 và adversarial phase 3 đo trên Runtime v24 trước các sửa đổi; golden phase 5 là 10 ca của nghiệm thu v21 cộng 2 ca bộ nhớ đo lại trên v24; adversarial phase 4 từ Runtime v18, phase 5 từ nghiệm thu v21)
+
+| Bộ | Trước | Sau (v25) | Ca trượt |
+|---|---|---|---|
+| Golden phase 3 | 31/31 | **31/31**; NumericGrounding, schema, suitability, trajectory đều 100% | Không |
+| Golden phase 4 | 14/14 | **14/14**; `roadmap_shape` 2/2, `roadmap_feasibility` 1/1, `stress_shock` 5/5, 0 bước lộ trình vi phạm | Không |
+| Golden phase 5 | 12/12 | **11/15**. 12 ca cũ: 11/12; 3 ca mới của `p5/mem-p0`: 0/3. NumericGrounding 15/15, behavior 4/4, citation 2/2, upload_state 2/2, `memory_attribution` 1/1, `option_sources` 1/1 | `memory-recall`, `memory-knowledge-update`, `memory-forget-no-invent`, `memory-whatif-protect-jar` (xem dưới) |
+| Adversarial phase 3 | 16/16 | **16/16**, `adversarial_failures` rỗng | Không |
+| Adversarial phase 4 | 12/12 | **12/12**, 0 bước lộ trình vi phạm | Không |
+| Adversarial phase 5 | 14/14 | **14/14**, upload_state 7/7, citation 1/1 | Không |
+| Diễn đạt lại router (`evals/paraphrase/run_router.py`, 18 câu) | Chưa có lượt nền (đợt 0 không làm) | **18/18**, ý định 100%, tham số 100% (kể cả `insight_kind`, `fee_topic`, `ingest_action`, `roadmap_action`), 94,9 giây | Không |
+| OCR bộ real (`scripts/eval_ingest.py --set real`) | 9/11 (lần 3) | **9/11 (82%)**, 25 mục, 0 lỗi chạy | r08, r12 (xem dưới) |
+
+Phân loại ca trượt:
+
+- **Bốn ca bộ nhớ của golden phase 5: lỗi mã của bộ chạy eval, không phải agent.** Cả bốn có `memory_seed.error` "BatchCreateMemoryRecords ParamValidationError: Invalid value for parameter recordExpirySpecification.recordExpiryDurationDays, value: 1, valid min value: 31". `evals/run.py` đặt `SEED_EXPIRY_DAYS = 1` (dòng 558), trong khi model API của boto3 1.44.9 đòi tối thiểu 31 ngày, nên không ca nào nạp được bản ghi và lỗi `khong_nap_duoc_bo_nho` làm trượt cả ca. Hành vi agent quan sát được khi bộ nhớ không có bản ghi nạp sẵn: `memory-recall` trả lời "Mình chưa nhớ điều gì về bạn. …" (đúng với bộ nhớ rỗng); `memory-knowledge-update` chỉ còn phần phiên đổi ý, trích ra một bản ghi "Từ giờ ưu tiên dồn tiền cho hũ Giải trí, không ưu tiên hũ Du lịch nữa." và trả lời "… bạn nên để số tiền dư tháng này vào hũ Giải trí."; `memory-forget-no-invent`: judge `gan_dieu_khong_co: false` (câu "Bạn nên cân nhắc đưa vào hũ **Dự phòng** vì nó có dư cao nhất là 2.700.000 ₫ …" không gán lời dặn nào); `memory-whatif-protect-jar` không có sở thích giữ hũ để kiểm, `option_sources` vẫn đạt. Sửa: đặt `SEED_EXPIRY_DAYS` từ 31 trở lên (bước dọn sau ca vẫn xóa bản ghi). Bốn ca chưa đo được, không chạy lại theo luật của đợt.
+- **OCR r08: thay đổi hành vi có chủ đích (đợt 6), nay là bằng chứng luật đọc cụ thể còn cần.** Màn chi tiết VPBank có số tham chiếu nhưng không có chữ "thành công": lần 3 đạt 1/1 dòng nhờ luật "màn có mã giao dịch là đã thực hiện"; đợt 6 gộp luật này vào câu nguyên tắc chung, và lượt này ra `no_transactions`, 0/1 dòng. Tài liệu kiểm toán (mục 5.1, rủi ro đợt 6) đã dự đoán và ghi cách làm: thêm lại luật kèm lý do. Kết quả không lưu `error_reason` nên không biết lý do con.
+- **OCR r12: model đọc kém trên ảnh độ phân giải thấp (thông tin thật, không vá bằng ví dụ)**: dòng 2 sai ngày như cả ba lần trước; số tiền và chiều tiền của 3 dòng đều đúng.
+- OCR r15 nay đạt đủ 5/5 dòng (lần 3 trượt một dòng), nên tổng vẫn 9/11. Đạt đủ bốn trường: r01, r02, r03, r07, r10, r13, r15, r20, r24. Số tiền 18/19, ngày 13/15, đối tác 9/9, nội dung 5/6, hàng chờ duyệt 17/18, `not_financial` 6/6, màn chưa thực hiện 8/8, không lộ PII 10/10 (giống hệt lần 3 ở mọi tỷ lệ). Tiêu chí 3 vẫn chưa đạt (cần 9/10).
+
+So với rủi ro từng đợt ở mục 5.1 của kiểm toán: đợt 3 và 4 không làm trượt ca golden nào (`behavior-*` với `expect_insight_kind`, `ingest-start`, `knowledge-late-fee`, `afford-1` đều đạt) và bộ diễn đạt lại đạt 18/18; adversarial không tụt ca nào. Đợt 2: câu trả lời golden phase 3 dài hơn một chút (trung bình 50 lên 56 từ, trung vị 34 lên 42, dài nhất 99 lên 102); phase 4 và 5 gần như không đổi (51 và 50 từ trước, 50 và 48 sau). Log Runtime: `verifier_fallback` 0 cả trước và sau; `numeric_ungrounded` 0 trong lượt nền (11:25–12:20Z) và 2 trong lượt này (13:45:57Z, việc `roadmap`, trong golden phase 4; 14:15:05Z, việc `resilience`, trong adversarial phase 4); cả hai lần câu của người viết bị bỏ và ca vẫn đạt. Lượt này chạy nhiều bộ hơn lượt nền (thêm golden 5, adversarial 4 và 5), nên chưa kết luận là tăng. `verifier_retry` 5 lần, đều `source_jar_covers`.
+
+**Bộ nhớ đổi ý (đo thật, `minh`, một lượt)**
+
+Xóa bộ nhớ trước (0 bản ghi). Phiên 1: "Từ giờ mình muốn ưu tiên dồn tiền cho hũ Du lịch, nhớ giúp mình nhé." (6,4 giây, trả lời câu ghi nhận cố định). Sau 76 giây `ListMemoryRecords` (namespacePath của `sub`) có 2 bản ghi: sở thích `{"context": "Quản lý chi tiêu và tập kiệt tiền cho các hoạt động du lịch", "preference": "Ưu tiên dồn tiền cho hũ Du lịch", …}` và sự thật "Từ giờ mình muốn ưu tiên dồn tiền cho hũ Du lịch.". Phiên 2 (30 giây sau): "Mình đổi ý rồi: giờ mình ưu tiên hũ Dự phòng, không còn ưu tiên hũ Du lịch nữa." Sau 76 giây danh sách đổi, 136 giây sau câu đổi ý còn đúng 2 bản ghi: sở thích "Ưu tiên hũ Dự phòng hơn là hũ Du lịch" (context "… chuyển ưu tiên từ hũ Du lịch sang hũ Dự phòng") và sự thật "Từ ngày 2026-11-24, mình ưu tiên dồn tiền cho hũ Dự phòng và không còn ưu tiên hũ Du lịch nữa.". **Cả hai bản cũ không còn trong `ListMemoryRecords`, và `GetMemoryRecord` theo đúng id và namespace của chúng trả `ResourceNotFoundException` ("The memory record was not found").** `GET /memory` khớp: 1 sở thích, 1 sự thật, đều là bản mới.
+
+Tài liệu đã tra: API `ListMemoryRecords`, `GetMemoryRecord`, `MemoryRecordSummary` không có trường trạng thái, không có bộ lọc theo trạng thái; trang [memory-record-streaming](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-record-streaming.html) ghi hợp nhất (de-duplication/superseding) phát sự kiện `MemoryRecordDeleted`; blog [long-term memory deep dive](https://aws.amazon.com/blogs/machine-learning/building-smarter-ai-agents-agentcore-long-term-memory-deep-dive/) ghi bản cũ bị "marking … as INVALID instead of instantly deleting them". Với người dùng của API, bản bị thay không liệt kê được và không đọc được theo id; nếu dịch vụ còn giữ bản INVALID bên trong thì không API dữ liệu nào cho thấy hay xóa được nó.
+
+`DELETE /memory` cuối: 200, `deleted_records: 2`, `deleted_events: 0`, `failed: 0`. Sau 10 giây `ListMemoryRecords` 0 bản ghi, và `GetMemoryRecord` của cả 4 id (2 bản cũ bị thay, 2 bản mới) đều `ResourceNotFoundException`, nên không cần `DeleteMemoryRecord` thêm. Kết luận: xóa sạch theo mọi cách API cho phép kiểm.
+
+Nhận xét về chất lượng trích xuất (model trích xuất Nova Lite, không phải lỗi mã): sự thật lặp lại sở thích ở cả hai phiên, trái luật "sự thật không lặp sở thích"; sự thật viết ngôi thứ nhất ("mình") và kèm ngày; sở thích mới viết dạng so sánh "hơn là hũ Du lịch" thay vì nói rõ thôi ưu tiên Du lịch; context có lỗi chính tả "tập kiệt". Trong golden và adversarial phase 3, 4, các lượt `profile_update` cũng được ghi và thành sở thích ("Lương mình về ngày 5 hằng tháng", "Đóng tiền trọ ngày 1"), tức hoàn cảnh bị xếp vào sở thích.
+
+**Vận hành sau đo**
+
+- Đã đặt lại `minh` (166 giao dịch); bộ nhớ `minh` 0 bản ghi (`GET /memory` và `ListMemoryRecords`). Không tài khoản khác được dùng.
+- Aurora `yofina-db` `available`, min 0 / max 2 ACU, tự ngủ sau 600 giây. Bốn DLQ 0 tin (kể cả đang xử lý).
+- Log từ 13:00Z: `yofina-ingest` 55 sự kiện, `yofina-ingest-api` 266, đều 0 `ERROR`; `yofina-ledger` 2.056 sự kiện, 1 `ERROR` lúc 13:21:32Z: `data_api_error code=DatabaseErrorException … terminating connection due to administrator command; SQLState: 57P01` ở `POST /demo/reset` (500), lần gọi đầu sau migration khi Aurora vừa thức; chạy lại 1 lần thì xong.
+- `FailedExtraction` của Memory: 0 (Metrics Insights 3 giờ gần nhất không có điểm dữ liệu, `list-metrics` 0), alarm `yofina-memory-failed-extraction` `OK`, `ListMemoryExtractionJobs` 0 job. Log Runtime: `turn_persist_timeout` 1 lần (14:36:06Z, lượt đổi ý).
+
+**Lỗi còn lại** (chưa sửa, theo luật của đợt đo)
+
+1. `evals/run.py` `SEED_EXPIRY_DAYS = 1` dưới mức tối thiểu 31 của `BatchCreateMemoryRecords`: bốn ca bộ nhớ mới không đo được (xem trên).
+2. OCR r08 trượt lại sau đợt 6 (luật màn chi tiết có mã giao dịch); r12 vẫn sai ngày. Tiêu chí 3 vẫn 9/11.
+3. Xóa bộ nhớ nhất quán có độ trễ: ngay sau `DELETE /memory` (200, `deleted_records: 9`, `failed: 0`) một lần `GET /memory` vẫn trả 7 bản ghi cũ, khoảng một phút sau còn 0. Trong golden phase 5, bước dọn của `memory-knowledge-update` báo xóa 2 bản ghi, nhưng bước xóa đầu ca sau báo `failed: 1` và `GET /memory` lúc hỏi vẫn liệt kê bản ghi "Từ giờ ưu tiên dồn tiền cho hũ Giải trí …" (câu trả lời của ca đó không dùng bản ghi này). Bản ghi đã xóa còn được liệt kê một lúc, xóa lại thì lỗi.
+4. Chất lượng trích xuất của Nova Lite như ghi ở trên: sự thật lặp sở thích, hoàn cảnh (ngày lương, ngày đóng tiền trọ) thành sở thích, câu đổi ý thành câu so sánh.
+5. Lần gọi đầu sau khi Aurora thức có thể gặp `57P01` (một lần 500 ở `/demo/reset`).
 
 ### Quyết định hợp đồng phase 5
 

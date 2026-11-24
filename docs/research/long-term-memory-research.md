@@ -356,7 +356,42 @@ Theo năm năng lực của LongMemEval và nhóm adversarial của LoCoMo, áp 
 4. Giá lưu bản ghi tạo bằng Batch API (không qua strategy) chưa đọc được trên trang giá; tài liệu chỉ nói self-managed "lower cost for
    storage than built-in".
 5. "Đánh INVALID" (blog) và "xóa khi hợp nhất" (trang streaming) mô tả cùng một việc ở hai mức; `ListMemoryRecords` có trả bản INVALID
-   không thì tài liệu không nói rõ. Ca `memory-knowledge-update` kiểm được.
+   không thì tài liệu không nói rõ. Ca `memory-knowledge-update` kiểm được. **Đã đo 24/11 tối (mục 8)**: bản bị thay không còn trong
+   `ListMemoryRecords` và `GetMemoryRecord` theo id trả `ResourceNotFoundException`.
+
+## 8. Đo thật sau deploy (Runtime v25, 24/11 tối theo giờ máy)
+
+Sau khi deploy `p5/mem-p0` (chỉ dẫn trích xuất có `CHANGE_AND_SCOPE_RULES`), Memory `yofina_memory` giữ nguyên id, hai strategy
+`preferences_vi`, `facts_vi` `ACTIVE`. Chi tiết ở file phase 5, mục "Đo sau đợt sửa kiểm toán và bộ nhớ (Runtime v25)".
+
+**Đổi ý, một lượt trên `minh`** (xóa bộ nhớ trước, hai phiên chat qua Runtime, đọc thẳng `ListMemoryRecords` theo namespacePath của `sub`):
+
+| Bước | Bản ghi sau trích xuất |
+|---|---|
+| "Từ giờ mình muốn ưu tiên dồn tiền cho hũ Du lịch, nhớ giúp mình nhé." (sau 76 giây) | Sở thích "Ưu tiên dồn tiền cho hũ Du lịch"; sự thật "Từ giờ mình muốn ưu tiên dồn tiền cho hũ Du lịch." |
+| "Mình đổi ý rồi: giờ mình ưu tiên hũ Dự phòng, không còn ưu tiên hũ Du lịch nữa." (danh sách đổi sau 76 giây, đọc lại sau 136 giây) | Sở thích "Ưu tiên hũ Dự phòng hơn là hũ Du lịch"; sự thật "Từ ngày 2026-11-24, mình ưu tiên dồn tiền cho hũ Dự phòng và không còn ưu tiên hũ Du lịch nữa." Hai bản cũ biến mất |
+
+- Hợp nhất mặc định (không override) đã Update đúng ở cả hai strategy: mỗi namespace còn đúng một bản, là bản mới. Điểm 2 của mục 2.4 (câu
+  đổi ý viết thành lời khẳng định đầy đủ) có tác dụng: bản mới nói rõ trạng thái hiện tại. Bản sở thích viết dạng so sánh ("hơn là hũ
+  Du lịch"), chưa nói thẳng thôi ưu tiên Du lịch; bản sự thật nói thẳng.
+- Bản cũ: không còn trong `ListMemoryRecords`; `GetMemoryRecord` theo đúng id và namespace trả `ResourceNotFoundException`. API dữ liệu
+  (`ListMemoryRecords`, `GetMemoryRecord`, `MemoryRecordSummary`) không có trường trạng thái hay bộ lọc trạng thái, nên bản INVALID nếu dịch
+  vụ còn giữ bên trong thì không liệt kê, không đọc, không xóa được qua API; trang memory-record-streaming coi việc này là
+  `MemoryRecordDeleted`.
+- `DELETE /memory` sau đó: 200, `deleted_records: 2`, `failed: 0`; 10 giây sau `ListMemoryRecords` 0 bản ghi và `GetMemoryRecord` của cả
+  4 id (2 bản cũ, 2 bản mới) đều `ResourceNotFoundException`. Xóa sạch theo mọi cách API cho phép kiểm.
+- Thời gian trích xuất khoảng 76 giây mỗi lượt (lần 3: khoảng 62 giây). `FailedExtraction` 0.
+
+**Golden phase 5** (một lần): `memory-state-preference` đạt, bản ghi giữ chữ thời hạn ("Tháng này ưu tiên dành cho hũ Du lịch"), đúng
+điều kiện "sau deploy" của việc 3 trong "Đề xuất triển khai". `memory-reuse-new-session` đạt ("Dựa trên thông tin bạn chia sẻ trước đó,
+bạn ưu tiên để dành cho hũ Du lịch. Hiện tại hũ Du lịch còn 1.800.000 ₫."). Bốn ca có `seed_memory` (`memory-recall`,
+`memory-knowledge-update`, `memory-forget-no-invent`, `memory-whatif-protect-jar`) trượt vì bộ chạy eval gọi `BatchCreateMemoryRecords` với
+`recordExpiryDurationDays: 1`, dưới mức tối thiểu 31 của API (`ParamValidationError`), nên chưa đo được; sửa `SEED_EXPIRY_DAYS` trong
+`evals/run.py`.
+
+**Còn lệch thiết kế** (trích xuất bằng Nova Lite): sự thật lặp sở thích ở cả hai lượt trên (luật "sự thật không lặp sở thích" chưa được
+theo); sự thật viết ngôi thứ nhất và kèm ngày; lượt `profile_update` của golden ("Lương mình về ngày 5 hằng tháng", "Đóng tiền trọ ngày 1")
+thành sở thích thay vì sự thật. Bản ghi vừa xóa còn được `GET /memory` liệt kê trong khoảng dưới một phút (xóa lại thì `failed`).
 
 ## Đề xuất triển khai
 
