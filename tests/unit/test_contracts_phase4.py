@@ -118,7 +118,8 @@ def test_cac_tap_gia_tri_khop_hang_so():
     assert set(wallet.ROADMAP_STEP_ACTION_TOOLS) <= set(wallet.ACTION_TOOLS)  # bước chỉ dẫn tới tool ghi đã có (đường ghi duy nhất)
     assert wallet.ROADMAP_STEP_ACTION_TOOLS == ("move_between_jars", "save_jars", "schedule_nudge")
     assert wallet.RESILIENCE_SOURCES == ("nightly", "reset", "event", "read")
-    assert len(wallet.INTENTS) == 10 and wallet.INTENTS[7:] == ("resilience", "stress", "roadmap")
+    assert len(wallet.INTENTS_PHASE4) == 10 and wallet.INTENTS_PHASE4[7:] == ("resilience", "stress", "roadmap")
+    assert wallet.INTENTS[:10] == wallet.INTENTS_PHASE4  # phase 5 chỉ thêm vào cuối
 
 
 def test_loi_roadmap_va_cu_soc_khop_ba_noi():

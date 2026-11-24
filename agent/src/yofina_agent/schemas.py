@@ -26,10 +26,11 @@ from yofina_core.scenario import SCENARIO_ADAPTER, ScenarioSpec
 from yofina_core.suitability import Proposal, SuitabilityVerdict
 from yofina_core.wallet import INTENTS
 
-# Phase 3 có bảy ý định; phase 4 thêm `resilience`, `stress`, `roadmap`; phase 5 thêm `knowledge`, `ingest` (thuộc `wallet.PHASE5_INTENTS`).
+# Phase 3 có bảy ý định; phase 4 thêm `resilience`, `stress`, `roadmap`; phase 5 thêm `memory` (đã vào `wallet.INTENTS`) và
+# `knowledge`, `ingest` (còn thuộc `wallet.PHASE5_INTENTS`).
 Intent = Literal[
     "lookup", "what_if", "affordability", "profile_update", "move", "out_of_scope", "chitchat",
-    "resilience", "stress", "roadmap",
+    "resilience", "stress", "roadmap", "memory",
     "knowledge", "ingest",
 ]  # fmt: skip
 
@@ -90,7 +91,9 @@ ObligationKind = Literal["rent", "bill", "subscription", "loan"]
 class IntentParams(_Model):
     """Tham số người dùng nói (router không đoán). Tên hũ giữ nguyên chữ họ gõ."""
 
-    lookup_kind: LookupKind | None = None  # chỉ với intent `lookup`: tra số dư, giao dịch, dự báo một hũ hay nghĩa vụ
+    lookup_kind: LookupKind | None = (
+        None  # chỉ với intent `lookup`: tra số dư, giao dịch, dự báo một hũ hay nghĩa vụ
+    )
     jar_text: str | None = None
     from_jar_text: str | None = None
     to_jar_text: str | None = None
@@ -133,7 +136,11 @@ class IntentResult(_Model):
         if value is None:
             return {}
         if isinstance(value, str):
-            text = re.sub(r"\bnull\b", "None", re.sub(r"\btrue\b", "True", re.sub(r"\bfalse\b", "False", value)))
+            text = re.sub(
+                r"\bnull\b",
+                "None",
+                re.sub(r"\btrue\b", "True", re.sub(r"\bfalse\b", "False", value)),
+            )
             try:
                 parsed = ast.literal_eval(text)
             except (ValueError, SyntaxError):

@@ -196,6 +196,11 @@ def _dispatch(
         from yofina_ledger import ops_rest
 
         return ops_rest.dispatch(route, event, sub, trace_id, service)
+    # --- quyền riêng tư (phase 5, luồng B): bộ nhớ của tôi `/memory*`, xóa dữ liệu của tôi `/me/delete-data*` -----------------
+    if route.startswith(("GET /memory", "DELETE /memory", "POST /me/delete-data")):
+        from yofina_ledger import privacy_rest
+
+        return privacy_rest.dispatch(route, event, sub, trace_id, service)
 
     # --- ghi: một đường duy nhất (xác nhận rồi thực hiện) ------------------------------------------------
     if route == "POST /confirmations/cancel":

@@ -151,8 +151,8 @@ def test_check_y_dinh_cua_audit_events_nho_hon_bay_thanh_muoi_va_khop_hang_so():
     drop = next(s for s in STATEMENTS if s.startswith("ALTER TABLE audit_events DROP CONSTRAINT"))
     add = next(s for s in STATEMENTS if s.startswith("ALTER TABLE audit_events ADD CONSTRAINT"))
     assert "audit_events_intent_check" in drop and "audit_events_intent_check" in add
-    assert sql_set(add, "intent") == wallet.INTENTS and len(wallet.INTENTS) == 10
-    assert wallet.INTENTS[: len(wallet.INTENTS_PHASE3)] == wallet.INTENTS_PHASE3
+    assert sql_set(add, "intent") == wallet.INTENTS_PHASE4 and len(wallet.INTENTS_PHASE4) == 10
+    assert wallet.INTENTS_PHASE4[: len(wallet.INTENTS_PHASE3)] == wallet.INTENTS_PHASE3
 
 
 def test_ma_loi_trong_ham_la_ma_error_code_cua_hop_dong():

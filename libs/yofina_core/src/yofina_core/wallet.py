@@ -191,18 +191,20 @@ INTENTS_PHASE3 = (
     "out_of_scope",
     "chitchat",
 )
-#: Ý định của router (L1): bảy ý định phase 3 và ba ý định phase 4 (`resilience`: hỏi điểm chống chịu, `stress`: bấm hoặc hỏi một
-#: cú sốc, `roadmap`: xin hoặc hỏi lộ trình). Luồng C cài router và xử lý chúng; hợp đồng chỉ khai báo.
-INTENTS = (*INTENTS_PHASE3, "resilience", "stress", "roadmap")
-#: Bốn ý định của phase 5, CHƯA nằm trong `INTENTS` (router chưa chọn được, `agent/.../schemas.py` `Intent` khớp `INTENTS`):
-#: `behavior` (hỏi về thói quen chi tiêu, nhận xét hành vi), `knowledge` (hỏi biểu phí kèm trích dẫn: số từ `get_fee_schedule`,
-#: khối `citation` dựng từ nguồn của chính bảng phí; không có tìm kiếm tài liệu), `ingest` ("mình vừa nạp ảnh": trạng thái lần
-#: nạp và bảng duyệt), `memory` (người dùng nói một sở thích để nhớ, hoặc hỏi trợ lý nhớ gì về mình). Luồng nào cài bộ xử lý thì
-#: chuyển ý định của mình vào `INTENTS` cùng lúc với `Intent` của agent.
-PHASE5_INTENTS = ("behavior", "knowledge", "ingest", "memory")
-#: Ý định mà cột `audit_events.intent` chấp nhận (migration 0053 nới CHECK): mọi ý định đã cài và bốn ý định phase 5, để
-#: `audit___record_turn` không vỡ ở lượt có ý định mới trong lúc các luồng cài dần.
-AUDIT_INTENTS = (*INTENTS, *PHASE5_INTENTS)
+#: Ý định của router (L1) tới hết phase 4: bảy ý định phase 3 và ba ý định phase 4 (`resilience`: hỏi điểm chống chịu, `stress`: bấm
+#: hoặc hỏi một cú sốc, `roadmap`: xin hoặc hỏi lộ trình). Migration 0052 nới CHECK của `audit_events.intent` đúng thành tập này.
+INTENTS_PHASE4 = (*INTENTS_PHASE3, "resilience", "stress", "roadmap")
+#: Ý định router chọn được (khớp `Intent` của `agent/.../schemas.py`): mười ý định tới phase 4 và các ý định phase 5 đã có bộ xử lý
+#: (`memory`: luồng p5-memory cài). Luồng nào cài thì chuyển ý định của mình từ `PHASE5_INTENTS` sang đây.
+INTENTS = (*INTENTS_PHASE4, "memory")
+#: Ý định của phase 5 CHƯA có bộ xử lý (router chưa chọn được): `behavior` (hỏi về thói quen chi tiêu, nhận xét hành vi), `knowledge`
+#: (hỏi biểu phí kèm trích dẫn: số từ `get_fee_schedule`, khối `citation` dựng từ nguồn của chính bảng phí; không có tìm kiếm tài
+#: liệu), `ingest` ("mình vừa nạp ảnh": trạng thái lần nạp và bảng duyệt). `memory` (người dùng nói một sở thích để nhớ, hoặc hỏi trợ
+#: lý nhớ gì về mình) đã chuyển vào `INTENTS`.
+PHASE5_INTENTS = ("behavior", "knowledge", "ingest")
+#: Ý định mà cột `audit_events.intent` chấp nhận (migration 0053 nới CHECK), theo ĐÚNG thứ tự của 0053 và không phụ thuộc luồng nào đã
+#: cài: mười ý định tới phase 4 rồi bốn ý định phase 5, để `audit___record_turn` không vỡ ở lượt có ý định mới.
+AUDIT_INTENTS = (*INTENTS_PHASE4, "behavior", "knowledge", "ingest", "memory")
 #: Loại phương án của khối `options` và `affordability_card`.
 OPTION_KINDS = (
     "defer",

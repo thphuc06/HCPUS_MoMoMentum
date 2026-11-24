@@ -17,6 +17,8 @@ import { YofinaConfig } from '../config/config';
 import { ClassifyConfig, ClassifyPipeline } from './classify';
 import { ForecastPipeline, ForecastPipelineConfig } from './forecast-pipeline';
 import { loadOpsDashboardConfig, OpsDashboard, OpsDashboardConfig } from './ops-dashboard';
+import { loadIngestConfig } from './ingest-stack';
+import { grantLedgerPrivacy, PRIVACY_ROUTES } from './memory';
 import { RoadmapRegen, RoadmapRegenConfig } from './roadmap-regen';
 import { publishParams } from './ssm-outputs';
 
@@ -283,6 +285,12 @@ export class ToolsStack extends Stack {
       }),
     );
 
+    // --- Phase 5 luồng B: quyền riêng tư (REST /memory*, /me/delete-data*): Memory theo tên, tệp nạp theo tiền tố, id Memory ở SSM ---
+    grantLedgerPrivacy(this, this.ledger, {
+      prefix: p,
+      uploadPrefix: loadIngestConfig(this.node.root as App).uploadPrefix,
+    });
+
     // --- Phase 4 luồng C: sinh lại lộ trình (EventBridge ba loại sự kiện → SQS + DLQ → Lambda yofina-roadmap-regen) -------
     // Gọi thẳng hai Lambda tool (ledger cho target ledger/planner, forecast TOOL cho target forecast), không qua Gateway.
     if (props.roadmap) {
@@ -320,6 +328,8 @@ export class ToolsStack extends Stack {
         allowMethods: [
           apigwv2.CorsHttpMethod.GET,
           apigwv2.CorsHttpMethod.POST,
+          // phase 5 luồng B: `DELETE /memory`, `DELETE /memory/{record_id}`
+          apigwv2.CorsHttpMethod.DELETE,
           apigwv2.CorsHttpMethod.OPTIONS,
         ],
         allowHeaders: ['authorization', 'content-type', 'traceparent'],
@@ -365,6 +375,8 @@ export class ToolsStack extends Stack {
       ['/ops/traces', apigwv2.HttpMethod.GET],
       ['/ops/traces/{trace_id}', apigwv2.HttpMethod.GET],
       ['/ops/summary', apigwv2.HttpMethod.GET],
+      // phase 5 luồng B (x-lambda: ledger): bộ nhớ của tôi, xóa dữ liệu của tôi (privacy_rest)
+      ...PRIVACY_ROUTES,
     ];
     for (const [routePath, method] of routes) {
       this.api.addRoutes({ path: routePath, methods: [method], integration });

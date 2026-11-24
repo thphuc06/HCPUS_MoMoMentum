@@ -143,6 +143,7 @@ def test_schema_router_phang_va_day_du():
         "resilience",
         "stress",
         "roadmap",
+        "memory",
         "knowledge",
         "ingest",
     ]
