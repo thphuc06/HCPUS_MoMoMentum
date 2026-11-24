@@ -2,6 +2,8 @@
 
 Nguồn: proposal §4, §5. Bảng đầy đủ tiêu chí chấp nhận của FR/NFR nằm ở [proposal-summary.md §5](../proposal/proposal-summary.md#5-yêu-cầu-chức-năng-fr-và-phi-chức-năng-nfr-5); file này chỉ dùng làm bảng theo dõi nhanh (cột trạng thái do đội cập nhật).
 
+> Bản chi tiết (BR, FR có luồng, NFR có chỉ tiêu đo, AC dạng Cho trước/Khi/Thì, trạng thái thực hiện cập nhật 22/11/2026) ở [../ba/](../ba/README.md). Cột trạng thái bên dưới chưa cập nhật theo phase 1–2; xem [03-functional-requirements.md](../ba/03-functional-requirements.md#tổng-quan).
+
 ## FR theo mức
 
 | ID | Yêu cầu | Tính năng | Mức | Trạng thái |

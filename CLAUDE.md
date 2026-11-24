@@ -21,6 +21,7 @@ Tài liệu viết tiếng Việt, thuật ngữ kỹ thuật giữ tiếng Anh.
 | Thư mục nào chứa gì; FAST (chỉ tham khảo, không kéo về) | [docs/architecture/project-structure.md](docs/architecture/project-structure.md) |
 | Kiến trúc AWS, ba nhịp chạy, harness 6 tầng, danh mục tool, bảng dữ liệu | [docs/architecture/overview.md](docs/architecture/overview.md) |
 | FR/NFR, MVP vs mở rộng | [docs/requirements/requirements.md](docs/requirements/requirements.md) |
+| Bối cảnh thị trường, pain point; quy tắc nghiệp vụ (BC/BR), FR chi tiết, NFR đo được, tiêu chí nghiệm thu (AC) | [docs/ba/README.md](docs/ba/README.md) |
 | Câu hỏi chưa chốt (Region, hạn nộp, Chronos-2…) | [docs/requirements/open-questions.md](docs/requirements/open-questions.md) |
 | Ghi lại một quyết định kiến trúc | [docs/decisions/README.md](docs/decisions/README.md) |
 | Cách dùng và best practice từng phần stack (AgentCore, Strands/AG-UI, Bedrock, hạ tầng, ML, generative UI, frontend) | [docs/research/README.md](docs/research/README.md) |
