@@ -51,7 +51,7 @@ class ExtractedRow(BaseModel):
     description: str | None = None
     own_account_transfer: bool = Field(
         default=False,
-        description="nạp tiền hoặc chuyển giữa các tài khoản, ví, thẻ của chính người dùng",
+        description="nạp tiền hoặc chuyển giữa các tài khoản, ví, thẻ của chính người dùng, hoặc rút tiền mặt (ATM, tại quầy)",
     )
     tx_type: str | None = None
     jar_code: str | None = None
@@ -147,7 +147,10 @@ class CsvRowLabel(BaseModel):
         default=None, description="tên đơn vị hoặc người nhận ngắn gọn, bỏ mã tham chiếu"
     )
     is_person: bool | None = None
-    own_account_transfer: bool = False
+    own_account_transfer: bool = Field(
+        default=False,
+        description="nạp tiền hoặc chuyển giữa các tài khoản, ví, thẻ của chính người dùng, hoặc rút tiền mặt (ATM, tại quầy)",
+    )
     tx_type: str | None = None
     jar_code: str | None = None
     jar_confidence: float | None = None

@@ -157,6 +157,14 @@ _SELF_TOPUP = re.compile(
 _NOT_SELF_TOPUP = re.compile(
     r"\b(dien thoai|data|3g|4g|game|steam|sim|the cao|di dong|viettel|mobifone|vinaphone)\b"
 )
+#: rút tiền mặt (ATM, tại quầy): tiền thành tiền mặt của chính người dùng, ứng dụng không theo dõi tiền mặt nên không ghi thành khoản chi
+#: (quyết định của chủ dự án 24/11). "Thẻ ATM" (thanh toán bằng thẻ ghi nợ) không khớp vì phải có "rút tiền" hay "withdrawal".
+_CASH_WITHDRAWAL = re.compile(
+    r"\brut tien (mat\b|(\w+ ){0,3}(atm|quay)\b)|"
+    r"\b(atm|cash) withdrawal\b|\bwithdrawal\b.{0,20}\batm\b"
+)
+#: phí của lần rút tiền là khoản chi thật (phí ngân hàng), không loại
+_CASH_FEE = re.compile(r"\b(phi|fee|charge)\b")
 
 #: câu giống chỉ dẫn gửi cho trợ lý hay hệ thống (đã bỏ dấu, chữ thường); chỉ để GẮN CỜ, không bao giờ làm theo
 _INSTRUCTION = re.compile(
@@ -183,10 +191,13 @@ def looks_failed(*texts: str | None) -> bool:
 
 
 def looks_like_self_topup(*texts: str | None) -> bool:
-    """Nạp tiền vào ví từ thẻ hay tài khoản của chính người dùng (không phải chi tiêu hay thu nhập). Nạp điện thoại không tính."""
+    """Tiền chuyển sang chỗ khác của chính người dùng (không phải chi tiêu hay thu nhập): nạp tiền vào ví từ thẻ hay tài khoản của
+    mình, chuyển giữa tài khoản của mình, rút tiền mặt (ATM, tại quầy). Nạp điện thoại và phí rút tiền không tính."""
     for t in texts:
         f = folded(t)
         if f and _SELF_TOPUP.search(f) and not _NOT_SELF_TOPUP.search(f):
+            return True
+        if f and _CASH_WITHDRAWAL.search(f) and not _CASH_FEE.search(f):
             return True
     return False
 

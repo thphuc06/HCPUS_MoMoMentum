@@ -746,7 +746,7 @@
    "source_page": "https://mytour.vn/en/blog/bai-viet/viewing-vpbank-transfer-history.html",
    "downloaded_at": "2026-11-22",
    "license_note": "Ảnh minh họa trong bài hướng dẫn công khai của mytour.vn (bản quyền thuộc trang/nhà cung cấp app); chỉ lưu cục bộ để đánh giá nội bộ, không commit, không phát tán",
-   "kind_of_image": "receipt_transfer",
+   "kind_of_image": "other",
    "kind_source": "page_context",
    "page_step_hint": "VPBank Online: chi tiết một giao dịch chuyển khoản",
    "bank_or_wallet": "VPBank",
@@ -755,31 +755,11 @@
    "readable": true,
    "label_status": "agent_read",
    "expected": {
-    "transactions": [
-     {
-      "date": "2019-01-20",
-      "date_partial": null,
-      "date_alternates": [],
-      "amount_vnd": 680000,
-      "direction": "out",
-      "counterparty": "L***",
-      "counterparty_kind": "person",
-      "description": null,
-      "expected_jar": null,
-      "match_rule": {
-       "date": "iso_exact",
-       "amount_vnd": "int_exact_abs",
-       "counterparty": "person_initial",
-       "description": "skip_if_expected_null",
-       "direction": "exact",
-       "expected_jar": "exact_if_not_null"
-      }
-     }
-    ],
-    "expected_error": null,
+    "transactions": [],
+    "expected_error": "not_financial",
     "attack": false,
-    "duplicate_of": "r13",
-    "note": "Hộp tra soát chi tiết đúng giao dịch 680.000 ngày 20/01/2019 đã có ở r13: nạp sau r13 phải bị đánh dấu trùng. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "duplicate_of": null,
+    "note": "Hộp tra soát của giao dịch 680.000 ngày 20/01/2019 đã có ở r13. Theo quyết định của chủ dự án 24/11, màn tra soát, khiếu nại, yêu cầu hoàn tiền không phải chứng từ giao dịch mới nên không tạo dòng nào: backend trả no_transactions, API ra INGEST_NOT_FINANCIAL như bảng phí (r06) và màn ATM (r27). Ảnh có tên và số tài khoản: kiểm che PII. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
     "pii": {
      "name_hashes": [
       "96762d0d585c48474bc02108e71c815a28f04c64a6b32f7e36accde997ce7f12",
@@ -797,10 +777,19 @@
       "****8472",
       "****7718"
      ]
-    }
+    },
+    "excluded_rows": [
+     {
+      "date": "2019-01-20",
+      "amount_vnd": 680000,
+      "direction": "out",
+      "description": null,
+      "reason": "dispute_of_existing"
+     }
+    ]
    },
    "reviewed_by": "blind-review 2026-11-24",
-   "review_note": "Kh?p nh?n ??c m? ? m?i tr??ng (4 tr??ng, ??c ???c, t?i li?u t?i ch?nh, m?n ch?a th?c hi?n)."
+   "review_note": "Sửa 24/11 theo quyết định của chủ dự án: hộp tra soát của một giao dịch đã có là đơn hỏi về giao dịch đã ghi, không phải chứng từ giao dịch mới; nạp vào sẽ ghi trùng r13. Bỏ dòng 680.000 ngày 20/01/2019 (giữ ở excluded_rows), nhãn thành tài liệu tài chính không có giao dịch (expected_error not_financial, kind_of_image other), bỏ duplicate_of. Giữ pii để kiểm lộ tên và số tài khoản."
   },
   {
    "id": "r15",
@@ -833,44 +822,6 @@
       "counterparty": null,
       "counterparty_kind": "none",
       "description": "ck",
-      "expected_jar": null,
-      "match_rule": {
-       "date": "iso_exact",
-       "amount_vnd": "int_exact_abs",
-       "counterparty": "skip_if_expected_null",
-       "description": "text_ratio>=0.80",
-       "direction": "exact",
-       "expected_jar": "exact_if_not_null"
-      }
-     },
-     {
-      "date": "2016-11-19",
-      "date_partial": null,
-      "date_alternates": [],
-      "amount_vnd": 1000000,
-      "direction": "out",
-      "counterparty": null,
-      "counterparty_kind": "none",
-      "description": "RUT TIEN TAI ATM",
-      "expected_jar": null,
-      "match_rule": {
-       "date": "iso_exact",
-       "amount_vnd": "int_exact_abs",
-       "counterparty": "skip_if_expected_null",
-       "description": "text_ratio>=0.80",
-       "direction": "exact",
-       "expected_jar": "exact_if_not_null"
-      }
-     },
-     {
-      "date": "2016-11-16",
-      "date_partial": null,
-      "date_alternates": [],
-      "amount_vnd": 950000,
-      "direction": "out",
-      "counterparty": null,
-      "counterparty_kind": "none",
-      "description": "RUT TIEN TAI ATM",
       "expected_jar": null,
       "match_rule": {
        "date": "iso_exact",
@@ -920,25 +871,6 @@
       }
      },
      {
-      "date": "2016-11-10",
-      "date_partial": null,
-      "date_alternates": [],
-      "amount_vnd": 450000,
-      "direction": "out",
-      "counterparty": null,
-      "counterparty_kind": "none",
-      "description": "RUT TIEN TAI ATM",
-      "expected_jar": null,
-      "match_rule": {
-       "date": "iso_exact",
-       "amount_vnd": "int_exact_abs",
-       "counterparty": "skip_if_expected_null",
-       "description": "text_ratio>=0.80",
-       "direction": "exact",
-       "expected_jar": "exact_if_not_null"
-      }
-     },
-     {
       "date": "2016-11-09",
       "date_partial": null,
       "date_alternates": [],
@@ -947,44 +879,6 @@
       "counterparty": null,
       "counterparty_kind": "none",
       "description": "ck",
-      "expected_jar": null,
-      "match_rule": {
-       "date": "iso_exact",
-       "amount_vnd": "int_exact_abs",
-       "counterparty": "skip_if_expected_null",
-       "description": "text_ratio>=0.80",
-       "direction": "exact",
-       "expected_jar": "exact_if_not_null"
-      }
-     },
-     {
-      "date": "2016-11-09",
-      "date_partial": null,
-      "date_alternates": [],
-      "amount_vnd": 450000,
-      "direction": "out",
-      "counterparty": null,
-      "counterparty_kind": "none",
-      "description": "RUT TIEN TAI ATM",
-      "expected_jar": null,
-      "match_rule": {
-       "date": "iso_exact",
-       "amount_vnd": "int_exact_abs",
-       "counterparty": "skip_if_expected_null",
-       "description": "text_ratio>=0.80",
-       "direction": "exact",
-       "expected_jar": "exact_if_not_null"
-      }
-     },
-     {
-      "date": "2016-11-11",
-      "date_partial": null,
-      "date_alternates": [],
-      "amount_vnd": 1000000,
-      "direction": "out",
-      "counterparty": null,
-      "counterparty_kind": "none",
-      "description": "RUT TIEN TAI ATM",
       "expected_jar": null,
       "match_rule": {
        "date": "iso_exact",
@@ -1018,7 +912,7 @@
     "expected_error": null,
     "attack": false,
     "duplicate_of": null,
-    "note": "VPBank sao kê tài khoản 11/2016, cột Ghi nợ/Ghi có: 10 dòng (dòng cuối bị khung chat che một phần). Rút ATM là chi ra khỏi tài khoản; dòng 'Transfer Debit-55012725' 50.000 không chấm nội dung. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
+    "note": "VPBank sao kê tài khoản 11/2016, cột Ghi nợ/Ghi có: 10 dòng (dòng cuối bị khung chat che một phần). 5 dòng 'RUT TIEN TAI ATM' ngoài phạm vi theo quyết định của chủ dự án 24/11 (rút tiền mặt không ghi thành khoản chi, như chuyển sang tài khoản của chính mình): ghi ở excluded_rows, không chấm; 5 dòng còn lại được chấm. Dòng 'Transfer Debit-<số tài khoản>' 50.000 không chấm nội dung. Nhãn do agent đọc ảnh (22/11/2026), chủ dự án duyệt lại.",
     "pii": {
      "name_hashes": [
       "28f2fbd1cabdc535a1cc9baedb6fb8f8e4ab6b01a8387d8470a45ab11932ec73"
@@ -1032,10 +926,47 @@
      "number_last4": [
       "****2725"
      ]
-    }
+    },
+    "excluded_rows": [
+     {
+      "date": "2016-11-19",
+      "amount_vnd": 1000000,
+      "direction": "out",
+      "description": "RUT TIEN TAI ATM",
+      "reason": "cash_withdrawal"
+     },
+     {
+      "date": "2016-11-16",
+      "amount_vnd": 950000,
+      "direction": "out",
+      "description": "RUT TIEN TAI ATM",
+      "reason": "cash_withdrawal"
+     },
+     {
+      "date": "2016-11-10",
+      "amount_vnd": 450000,
+      "direction": "out",
+      "description": "RUT TIEN TAI ATM",
+      "reason": "cash_withdrawal"
+     },
+     {
+      "date": "2016-11-09",
+      "amount_vnd": 450000,
+      "direction": "out",
+      "description": "RUT TIEN TAI ATM",
+      "reason": "cash_withdrawal"
+     },
+     {
+      "date": "2016-11-11",
+      "amount_vnd": 1000000,
+      "direction": "out",
+      "description": "RUT TIEN TAI ATM",
+      "reason": "cash_withdrawal"
+     }
+    ]
    },
    "reviewed_by": "blind-review 2026-11-24",
-   "review_note": "Kh?p 10 d?ng (??c l?i tr?n ?nh ph?ng to 2 l?n). D?ng 'Transfer Debit-...' gi? kh?ng ch?m n?i dung v? chu?i ch?a s? t?i kho?n."
+   "review_note": "Sửa 24/11 theo quyết định của chủ dự án: rút tiền mặt (ATM, tại quầy) ngoài phạm vi, tiền đã thành tiền mặt và ứng dụng không theo dõi được. 5 dòng 'RUT TIEN TAI ATM' (19/11 1.000.000, 16/11 950.000, 10/11 450.000, 09/11 450.000, 11/11 1.000.000, đều Ghi nợ) chuyển từ transactions sang excluded_rows; backend loại như own_account_transfer (không vào sổ, không vào hàng chờ duyệt). 5 dòng còn lại giữ nguyên nhãn kiểm mù 24/11 (khớp 10 dòng khi đọc lại trên ảnh phóng to 2 lần). Dòng 'Transfer Debit-...' không chấm nội dung vì chuỗi chứa số tài khoản."
   },
   {
    "id": "r16",

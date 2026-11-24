@@ -10,3 +10,10 @@ Bộ thử F6 (nạp ảnh và CSV). Nội dung thư mục, cách tải ảnh th
   - Số: khoảng trắng, dấu chấm, gạch ngang nằm giữa hai chữ số được bỏ, rồi mọi dãy từ 8 chữ số được băm và so với `number_hashes`. Dạng đã che `****1234` không tính là lộ.
 - **Báo lỗi đúng** (`not_financial_error_ok`): so theo mã lỗi API mà người dùng nhận (`API_ERROR_CODE`, bản sao của `yofina_ingest.extract.ERROR_CODE_OF`, test giữ hai bảng khớp nhau). Không so theo mã chữ thường của backend. Backend trả `no_transactions` cho bảng phí, menu và màn ATM, còn job thì vẫn ra `INGEST_NOT_FINANCIAL` như ảnh `not_financial`, nên cả hai mã đều đạt khi nhãn là `not_financial`. Có dòng nào tự thêm (`auto_add`) thì vẫn trượt.
 - **Trùng lặp**: chế độ `eval` không có DB nên không đo được việc đánh dấu dòng trùng với sổ cái. Khử trùng thật kiểm bằng `tests/unit/ingest/test_dedupe.py` (sổ cái `vy` dựng lại và nhãn `s02`, `c01`) và `tests/local_pg`.
+
+## Quy ước nhãn
+
+- **Không phải giao dịch** (bảng phí, menu, quảng cáo, màn ATM, ảnh hướng dẫn): `transactions` rỗng, `expected_error: "not_financial"`, `kind_of_image: "other"`.
+- **Màn chưa thực hiện** (xác nhận, OTP, biểu mẫu trống): `transactions` rỗng, `no_auto_rows: true`.
+- **Chuyển sang tiền của chính mình** không phải thu hay chi: nạp ví từ thẻ hay tài khoản của mình, chuyển giữa tài khoản của mình, và rút tiền mặt (ATM, tại quầy; quyết định của chủ dự án 24/11, vì ứng dụng không theo dõi tiền mặt). Backend bỏ các dòng này (`own_account_transfer`), không vào sổ, không vào hàng chờ duyệt. Nhãn không đưa chúng vào `transactions`. Từ 24/11, các dòng này ghi ở `excluded_rows` (`date`, `amount_vnd`, `direction`, `description`, `reason`) để lưu lại điều đã thấy trên ảnh (r15). Script không chấm `excluded_rows`, và cũng không phạt dòng trích thừa. Phí rút tiền là khoản chi bình thường.
+- **Tra soát, khiếu nại, yêu cầu hoàn tiền** về một giao dịch đã có (quyết định 24/11): không phải chứng từ giao dịch mới, nạp vào sẽ ghi trùng. Nhãn theo quy ước "không phải giao dịch". Giao dịch gốc nếu cần thì ghi ở `excluded_rows` với `reason: "dispute_of_existing"` (r14).

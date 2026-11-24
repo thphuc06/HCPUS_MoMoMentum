@@ -156,7 +156,27 @@ def test_loi_nhac_anh_co_luat_cua_kiem_mu_24_11():
     assert "số tham chiếu, mã giao dịch" in system and 'không có chữ "thành công"' in system
     assert "TIÊU ĐỀ của cột chứa số tiền" in system and "cột số dư" in system
     assert "trích MỌI dòng giao dịch" in system
-    assert "Rút tiền mặt (ATM" in system and "own_account_transfer=false" in system
+    assert "Rút tiền mặt (ATM" in system
+
+
+def test_loi_nhac_rut_tien_mat_va_tra_soat_theo_quyet_dinh_24_11():
+    """Quyết định của chủ dự án 24/11 (file phase 5, mục "Tiêu chí 3"): rút tiền mặt ngoài phạm vi, đánh như chuyển sang tài khoản của
+    chính mình; màn tra soát, khiếu nại, yêu cầu hoàn tiền không tạo dòng giao dịch. Ảnh, CSV và mô tả trường schema gửi model cùng nói vậy."""
+    from yofina_ingest import prompts
+    from yofina_ingest.schemas import CsvRowLabel, ExtractedRow
+
+    system = prompts.image_system(ctx().jars, ctx().type_map, TODAY)
+    atm = next(line for line in system.splitlines() if line.startswith("- Rút tiền mặt (ATM"))
+    assert "KHÔNG phải khoản chi" in atm and "own_account_transfer=true" in atm
+    assert "phí rút tiền" in atm  # phí là khoản chi thật
+    assert "direction=out, own_account_transfer=false" not in system  # luật cũ (24/11 sáng) đã bỏ
+    dispute = next(line for line in system.splitlines() if "tra soát" in line)
+    assert "khiếu nại" in dispute and "yêu cầu hoàn tiền" in dispute
+    assert "KHÔNG tạo dòng giao dịch nào" in dispute and "rows rỗng" in dispute
+    labels = prompts.labels_system(ctx().jars, ctx().type_map)
+    assert "rút tiền mặt" in labels and "RUT TIEN TAI ATM" in labels
+    for model in (ExtractedRow, CsvRowLabel):
+        assert "rút tiền mặt" in model.model_fields["own_account_transfer"].description
 
 
 def test_che_pii_truoc_khi_luu_ten_stk_sdt(gateway_of):
@@ -193,6 +213,8 @@ def test_cua_hang_giu_ten_doanh_nghiep(gateway_of):
         row(own_account_transfer=True, direction="in", counterparty="Vietcombank"),
         row(description="Thanh toán Gojek không thành công"),
         row(description="Nạp tiền vào ví từ thẻ Vietcombank", direction="in"),
+        row(own_account_transfer=True, counterparty=None, description="RUT TIEN TAI ATM"),
+        row(counterparty=None, description="RUT TIEN TAI ATM"),  # model quên cờ, luật tất định loại
         row(amount_vnd=None),
         row(direction=None),
     ],
@@ -631,6 +653,96 @@ def test_extract_eval_man_chua_thuc_hien_khong_auto_add(gateway_of):
     gw, _ = gateway_of([doc([row(status="pending")], document_type="unexecuted_form")])
     res = ex.extract(PNG, filename="r09.png", content_type="image/png", ctx=ctx(), gateway=gw)
     assert res["rows"] == [] and mod.score_item(_item(mod, "r09"), res)["no_auto_rows_ok"] is True
+
+
+def _r15_model_rows(atm_flag: bool) -> list[dict]:
+    """Mười dòng của sao kê r15 theo nhãn manifest (5 dòng chấm và 5 dòng rút ATM ở `excluded_rows`), xếp như trên ảnh (mới trước)."""
+    mod = _eval_module()
+    exp = _item(mod, "r15")["expected"]
+    kept = [{**t, "own_account_transfer": False} for t in exp["transactions"]]
+    atm = [{**t, "own_account_transfer": atm_flag} for t in exp["excluded_rows"]]
+    assert {t["reason"] for t in exp["excluded_rows"]} == {"cash_withdrawal"}
+    rows = sorted(kept + atm, key=lambda t: t["date"], reverse=True)
+    return [
+        row(
+            date=t["date"],
+            amount_vnd=t["amount_vnd"],
+            direction=t["direction"],
+            counterparty=None,
+            counterparty_is_person=None,
+            description=t["description"],
+            own_account_transfer=t["own_account_transfer"],
+            tx_type=None,
+            jar_code=None,
+            jar_confidence=None,
+        )
+        for t in rows
+    ]
+
+
+@pytest.mark.parametrize("atm_flag", [True, False], ids=["model_dat_co", "model_quen_co"])
+def test_r15_rut_atm_ngoai_pham_vi_bi_loai_va_nhan_cham_5_dong(gateway_of, atm_flag):
+    """Nhãn r15 sau quyết định 24/11: 5 dòng chấm, 5 dòng rút ATM ở `excluded_rows`. Model đọc đúng 10 dòng (đặt hay quên cờ
+    `own_account_transfer`) thì 5 dòng ATM bị loại với lý do `own_account_transfer` như nạp ví từ thẻ của mình: không vào sổ, không vào
+    hàng chờ duyệt, và 5 dòng còn lại đủ bốn trường theo nhãn."""
+    mod = _eval_module()
+    item = _item(mod, "r15")
+    exp = item["expected"]
+    assert len(exp["transactions"]) == 5 and len(exp["excluded_rows"]) == 5
+    assert all(t["description"] != "RUT TIEN TAI ATM" for t in exp["transactions"])
+    gw, _ = gateway_of([doc(_r15_model_rows(atm_flag), document_type="bank_statement")])
+    res = ex.extract(PNG, filename="r15.png", content_type="image/png", ctx=ctx(), gateway=gw)
+    assert res["status"] == "ok" and len(res["rows"]) == 5
+    assert all(r["description"] != "RUT TIEN TAI ATM" for r in res["rows"])
+    assert [d["reason"] for d in res["dropped"]] == ["own_account_transfer"] * 5
+    scored = mod.score_item(item, res)
+    assert scored["all_four"] is True and all(f["direction"] for f in scored["tx"])
+
+
+def test_r14_hop_tra_soat_khong_tao_dong_nao(gateway_of):
+    """Nhãn r14 sau quyết định 24/11: hộp tra soát của giao dịch đã có (r13) không phải chứng từ mới. Model làm theo luật mới của lời
+    nhắc (`other_financial`, rows rỗng) thì job bị từ chối với mã API như bảng phí, và eval chấm đạt; model còn trích dòng cũ thì trượt."""
+    mod = _eval_module()
+    item = _item(mod, "r14")
+    exp = item["expected"]
+    assert exp["transactions"] == [] and exp["expected_error"] == "not_financial"
+    assert exp["duplicate_of"] is None
+    assert exp["excluded_rows"][0]["reason"] == "dispute_of_existing"
+    gw, _ = gateway_of([doc([], document_type="other_financial")])
+    res = ex.extract(PNG, filename="r14.png", content_type="image/png", ctx=ctx(), gateway=gw)
+    assert (res["status"], res["error_code"]) == ("error", "no_transactions")
+    scored = mod.score_item(item, res)
+    assert scored["expected_error_ok"] is True
+    assert "all_four" not in scored and "duplicate_flagged" not in scored
+    assert scored["pii_leak"] == {"name": False, "number": False}
+    old = exp["excluded_rows"][0]
+    old_row = row(
+        date=old["date"],
+        amount_vnd=old["amount_vnd"],
+        counterparty="L***",
+        counterparty_is_person=True,
+    )
+    gw, _ = gateway_of([doc([old_row])])
+    res = ex.extract(PNG, filename="r14.png", content_type="image/png", ctx=ctx(), gateway=gw)
+    assert res["status"] == "ok" and mod.score_item(item, res)["expected_error_ok"] is False
+
+
+def test_csv_rut_tien_mat_bi_loai_phi_rut_tien_van_la_khoan_chi(gateway_of):
+    """CSV: nhãn của model nhỏ không có cờ (hoặc lượt gắn nhãn hỏng) thì luật tất định vẫn loại dòng rút tiền mặt; dòng phí rút tiền và
+    dòng thanh toán bằng thẻ ATM giữ là khoản chi."""
+    data = (
+        "STT,Ngày giao dịch,Số tham chiếu,Số tiền ghi nợ,Số tiền ghi có,Số dư,Nội dung chi tiết\n"
+        '1,02/11/2026,1001 - 1,"1,000,000",,"5,000,000",RUT TIEN TAI ATM VCB NGUYEN HUE\n'
+        '2,02/11/2026,1001 - 2,"3,300",,"4,996,700",PHI RUT TIEN ATM\n'
+        '3,03/11/2026,1001 - 3,"45,000",,"4,951,700",THANH TOAN THE ATM HIGHLANDS COFFEE\n'
+        '4,04/11/2026,1001 - 4,"2,000,000",,"2,951,700",Rut tien mat tai quay\n'
+    ).encode()
+    res, _ = run_csv(gateway_of, "x.csv", data=data)
+    assert [c.source_row for c in res.candidates] == [2, 3]
+    assert [(d.reason, d.source_row) for d in res.dropped] == [
+        ("own_account_transfer", 1),
+        ("own_account_transfer", 4),
+    ]
 
 
 def test_extract_chi_chay_che_do_eval():
