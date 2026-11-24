@@ -2,15 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useApi } from '@/api/ApiProvider'
 import { ApiError } from '@/api/errors'
-import type { OpsSummaryResponse, OpsTraceQuery, OpsTraceSummary } from '@/api/phase5Schemas'
+import type { OpsDayModelCalls, OpsModelDayCalls, OpsSummaryResponse, OpsTraceQuery, OpsTraceSummary } from '@/api/phase5Schemas'
 import { useApiResource } from '@/api/resource'
 import { useIsOps } from '@/auth/AuthProvider'
 import { ListSkeleton } from '@/components/StateViews'
-import { StatusChip } from '@/components/StatusChip'
+import { StatusChip, type ChipKind } from '@/components/StatusChip'
 import { Button } from '@/components/ui/button'
 import { opsTracePath } from '@/features/explain/TraceIdRow'
 import { OpsError, OpsLayout } from '@/features/ops/OpsLayout'
-import { formatMs, OUTCOME_CHIP } from '@/features/ops/format'
+import { capLevel, formatMs, OUTCOME_CHIP, shortModelNames, type CapLevel } from '@/features/ops/format'
 import { formatDayMonth } from '@/lib/dates'
 import { formatDateTime, formatRatioPercent, formatVnd } from '@/lib/format'
 
@@ -28,7 +28,6 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
 }
 
 function SummaryView({ s }: { s: OpsSummaryResponse }) {
-  const n = (x: number) => x.toLocaleString('vi-VN')
   return (
     <section aria-labelledby="ops-summary-heading" className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -42,22 +41,92 @@ function SummaryView({ s }: { s: OpsSummaryResponse }) {
         <Kpi label="Luật chặn" value={n(s.rule_fails)} hint={`Chi phí ước tính ${formatVnd(s.est_cost_vnd)}`} />
       </dl>
       <div className="rounded-card bg-surface p-4 shadow-card">
-        <h3 className="text-subtitle font-semibold text-ink">Lượt gọi model theo ngày so với trần</h3>
+        <h3 className="text-subtitle font-semibold text-ink">Lượt gọi model theo ngày</h3>
         {s.model_calls_by_day.length === 0 ? (
           <p className="mt-2 text-small text-ink-2">Chưa có lượt gọi model nào trong khoảng này.</p>
         ) : (
-          <ul className="mt-2 space-y-2" aria-label="Lượt gọi model theo ngày">
-            {s.model_calls_by_day.map((d) => (
-              <li key={d.day} className="grid grid-cols-[56px_1fr_auto] items-center gap-3 text-small">
-                <span className="text-ink-2">{formatDayMonth(d.day)}</span>
-                <meter className="h-3 w-full" min={0} max={d.cap} value={Math.min(d.model_calls, d.cap)} aria-label={`Ngày ${formatDayMonth(d.day)}: ${d.model_calls} trên trần ${d.cap}`} />
-                <span className="num text-ink">{n(d.model_calls)} / {n(d.cap)}</span>
-              </li>
-            ))}
-          </ul>
+          <>
+            <p className="mt-1 text-note text-ink-2">Trần ngày tính riêng cho từng model, cảnh báo từ 80% trần.</p>
+            <ul className="mt-2 divide-y divide-line" aria-label="Lượt gọi model theo ngày">
+              {s.model_calls_by_day.map((d) => <DayRow key={d.day} d={d} />)}
+            </ul>
+          </>
         )}
       </div>
     </section>
+  )
+}
+
+const n = (x: number) => x.toLocaleString('vi-VN')
+
+const LEVEL: Record<CapLevel, { bar: string; chip?: { kind: ChipKind; label: string } }> = {
+  ok: { bar: 'bg-brand' },
+  near: { bar: 'bg-warn-line', chip: { kind: 'warn', label: 'Gần trần' } },
+  over: { bar: 'bg-bad-fg', chip: { kind: 'bad', label: 'Chạm trần' } },
+}
+
+/**
+ * Một ngày: tổng lượt gọi, rồi từng model so với trần của chính nó (`by_model`). Tổng ngày không so với `cap` của ngày vì đó là
+ * tổng trần mọi model. Không có `by_model` (số lấy từ bản ghi lượt) thì hiện tổng so với `cap` như trước.
+ */
+function DayRow({ d }: { d: OpsDayModelCalls }) {
+  const day = formatDayMonth(d.day)
+  if (!d.by_model) {
+    return (
+      <li data-day={d.day} className="grid grid-cols-[56px_1fr_auto] items-center gap-3 py-2 text-small">
+        <span className="text-ink-2">{day}</span>
+        <meter className="h-3 w-full" min={0} max={d.cap} value={Math.min(d.model_calls, d.cap)} aria-label={`Ngày ${day}: ${d.model_calls} trên trần ${d.cap}`} />
+        <span className="num text-ink">{n(d.model_calls)} / {n(d.cap)}</span>
+      </li>
+    )
+  }
+  const names = shortModelNames(d.by_model.map((m) => m.model))
+  return (
+    <li data-day={d.day} className="space-y-1.5 py-2 text-small">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-ink-2">{day}</span>
+        <span className="num font-semibold text-ink" data-testid="ops-day-total">{n(d.model_calls)} lượt</span>
+      </div>
+      {d.by_model.length > 0 && (
+        <ul className="space-y-1.5" aria-label={`Theo model ngày ${day}`}>
+          {d.by_model.map((m, i) => <ModelRow key={m.model} m={m} name={names[i]!} />)}
+        </ul>
+      )}
+    </li>
+  )
+}
+
+function ModelRow({ m, name }: { m: OpsModelDayCalls; name: string }) {
+  if (m.cap === undefined) {
+    return (
+      <li data-model={m.model} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 lg:grid-cols-[160px_minmax(0,1fr)_auto]">
+        <span className="truncate text-ink" title={m.model}>{name}</span>
+        <span className="hidden text-note text-ink-2 lg:block">Không còn trong cấu hình</span>
+        <span className="num text-right text-ink">{n(m.model_calls)} lượt</span>
+      </li>
+    )
+  }
+  const level = capLevel(m.model_calls, m.cap)
+  const { bar, chip } = LEVEL[level]
+  const pct = m.cap > 0 ? Math.min(100, Math.round((m.model_calls / m.cap) * 100)) : 100
+  return (
+    <li data-model={m.model} data-level={level} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 lg:grid-cols-[160px_minmax(0,1fr)_auto]">
+      <span className="truncate text-ink" title={m.model}>{name}</span>
+      <span
+        role="meter"
+        aria-label={`${name}: ${m.model_calls} trên trần ${m.cap}`}
+        aria-valuemin={0}
+        aria-valuemax={m.cap}
+        aria-valuenow={Math.min(m.model_calls, m.cap)}
+        className="col-span-2 row-start-2 h-2.5 rounded-full bg-surface-2 lg:col-span-1 lg:row-start-auto"
+      >
+        <span className={`block h-full rounded-full ${bar}`} style={{ width: `${m.model_calls > 0 ? Math.max(2, pct) : 0}%` }} />
+      </span>
+      <span className="flex items-center justify-end gap-2">
+        {chip && <StatusChip kind={chip.kind} className="h-6">{chip.label}</StatusChip>}
+        <span className="num text-ink">{n(m.model_calls)} / {n(m.cap)}</span>
+      </span>
+    </li>
   )
 }
 

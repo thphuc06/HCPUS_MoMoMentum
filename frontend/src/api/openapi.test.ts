@@ -62,6 +62,7 @@ import {
   NudgeFeedbackResponse,
   NudgeTodayResponse,
   OpsDayModelCalls,
+  OpsModelDayCalls,
   OpsSummaryResponse,
   OpsToolCall,
   OpsTraceDetail,
@@ -200,6 +201,7 @@ describe('khớp openapi.yaml', () => {
     ['OpsToolCall', OpsToolCall, schemas.OpsToolCall!.required!],
     ['OpsTraceDetail', OpsTraceDetail, schemas.OpsTraceDetail!.required!],
     ['OpsDayModelCalls', OpsDayModelCalls, schemas.OpsDayModelCalls!.required!],
+    ['OpsModelDayCalls', OpsModelDayCalls, schemas.OpsModelDayCalls!.required!],
     ['OpsSummaryResponse', OpsSummaryResponse, schemas.OpsSummaryResponse!.required!],
   ]
   for (const [name, zod, required] of pairs) {
@@ -229,6 +231,11 @@ describe('khớp openapi.yaml', () => {
   it('ConversationResponse và ConversationTurn (phát lại hội thoại) có đúng các trường bắt buộc', () => {
     expect(Object.keys(ConversationResponse.shape).sort()).toEqual([...schemas.ConversationResponse!.required!].sort())
     expect(Object.keys(StoredTurn.shape).sort()).toEqual([...schemas.ConversationTurn!.required!].sort())
+  })
+
+  it('lượt gọi model theo ngày: Zod có đủ mọi trường của hợp đồng (by_model không bị bỏ khi parse)', () => {
+    expect(Object.keys(OpsDayModelCalls.shape).sort()).toEqual(Object.keys(schemas.OpsDayModelCalls!.properties!).sort())
+    expect(Object.keys(OpsModelDayCalls.shape).sort()).toEqual(Object.keys(schemas.OpsModelDayCalls!.properties!).sort())
   })
 })
 
