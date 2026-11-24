@@ -615,8 +615,8 @@ async def _call_analyst(
     options = [o.model_copy(update={"proposal": normalize_proposal(o)}) for o in a.options]
     # nhãn, tóm tắt, hũ và số tiền của phương án "dùng hũ khác" theo hũ thật của đề xuất (Verifier kiểm chính chữ đã dựng này)
     options = [enforce_switch_jar(o, turn.jar_rows, spend_amount) for o in options]
-    # nhãn, tóm tắt, hũ và số tiền của phương án "dùng hũ khác" theo hũ thật của đề xuất (Verifier kiểm chính chữ đã dựng này)
-    options = [enforce_switch_jar(o, turn.jar_rows, spend_amount) for o in options]
+    # "trả ngay bằng tiền hũ" trả cả khoản mua: số tiền không nhỏ hơn giá món, chữ nói đúng hũ đủ hay không
+    options = [enforce_pay_now(o, turn.jar_rows, spend_amount) for o in options]
     return a.model_copy(update={"options": options})
 
 
@@ -634,7 +634,8 @@ def normalize_proposal(o: Any) -> Any:
     - Chuyển bù giữa hũ có hành động `move_between_jars`: tiền ra khỏi `from_jar`, đúng số `amount_vnd` của hành động. Model hay đặt
       `jar_code` là hũ ĐÍCH (Nghĩa vụ 1.000.000 ₫ nhận 2.550.000 ₫) nên luật kiểm nhầm hũ. Lấy hũ nguồn từ tham số hành động làm luật
       kiểm đúng hũ bị lấy tiền, kể cả khi hũ đó không đủ (vẫn bị chặn).
-    Các phương án có chi tiền (dùng hũ khác, trả ngay, giảm số tiền) giữ nguyên số và hũ của model: luật vẫn chặn nếu hũ không đủ.
+    Các phương án có chi tiền (dùng hũ khác, trả ngay, giảm số tiền) giữ nguyên số và hũ của model ở bước này; `enforce_switch_jar` và
+    `enforce_pay_now` sau đó đặt số tiền theo giá món của kịch bản. Giảm số tiền giữ số của model (luật vẫn chặn nếu hũ không đủ).
     """
     p = o.proposal
     update: dict[str, Any] = {"origin": "recommendation"}
@@ -669,10 +670,12 @@ def _balance(row: Mapping[str, Any] | None) -> int | None:
 def enforce_switch_jar(o: AnalysisOption, jar_rows: list[dict[str, Any]], spend_amount: int | None) -> AnalysisOption:
     """Phương án "dùng hũ khác" nhất quán bằng mã: hũ là hũ THẬT của đề xuất, nhãn và tóm tắt dựng từ hũ đó (mã quyết định, không tin model).
 
-    Hũ lấy từ `proposal.jar_code` (vắng thì `jar_code` của phương án); số tiền là `proposal.amount_vnd`, vắng thì số của khoản mua trong
-    kịch bản (dùng hũ khác là trả CẢ khoản bằng hũ đó), nên luật `source_jar_covers` kiểm được hũ có đủ không. Nhãn "Mua bằng hũ X" và tóm
-    tắt nêu số dư thật của X (đủ hay không đủ); hũ không đủ thì không được gợi ý. Model từng ghi nhãn "Mua bằng hũ Giải trí" cho đề xuất
-    lấy tiền hũ Dự phòng, kèm tóm tắt nói hũ Giải trí không đủ (đi cảnh 24/11). Không xác định được hũ thì giữ nguyên phương án.
+    Hũ lấy từ `proposal.jar_code` (vắng thì `jar_code` của phương án). Số tiền là GIÁ CỦA KHOẢN MUA trong kịch bản (`spend_amount`): dùng
+    hũ khác là trả CẢ khoản bằng hũ đó, nên số model tự điền vào `proposal.amount_vnd` bị bỏ qua khi đã biết giá. Model từng điền đúng số
+    dư của hũ (760.000 ₫ cho tai nghe 1.200.000 ₫, kiểm lại Runtime v22), khiến luật `source_jar_covers` và `jar_short_for_option` so số
+    dư với chính nó và gắn "Đủ". Chỉ khi kịch bản không có giá món mới dùng số của model. Nhãn "Mua bằng hũ X" và tóm tắt nêu số dư thật
+    của X (đủ hay không đủ); hũ không đủ thì không được gợi ý. Model từng ghi nhãn "Mua bằng hũ Giải trí" cho đề xuất lấy tiền hũ Dự
+    phòng, kèm tóm tắt nói hũ Giải trí không đủ (đi cảnh 24/11). Không xác định được hũ thì giữ nguyên phương án.
     """
     if o.kind != "switch_jar":
         return o
@@ -681,7 +684,7 @@ def enforce_switch_jar(o: AnalysisOption, jar_rows: list[dict[str, Any]], spend_
     row = _jar_row(code, jar_rows)
     if row is None:
         return o
-    amount = p.amount_vnd or spend_amount
+    amount = spend_amount or p.amount_vnd
     name = str(row.get("name") or code)
     update: dict[str, Any] = {
         "jar_code": code,
@@ -702,6 +705,40 @@ def enforce_switch_jar(o: AnalysisOption, jar_rows: list[dict[str, Any]], spend_
     except ValidationError:
         return o
     return o.model_copy(update=update)
+
+
+def enforce_pay_now(o: AnalysisOption, jar_rows: list[dict[str, Any]], spend_amount: int | None) -> AnalysisOption:
+    """Phương án "trả ngay bằng tiền hũ" (pay_now) lấy ra ít nhất giá của khoản mua (mã quyết định, không tin model).
+
+    Cùng lỗi với `enforce_switch_jar`: model điền `amount_vnd` bằng số dư của hũ thì luật và `jar_short_for_option` thấy hũ "đủ" cho
+    một khoản nhỏ hơn món thật. Trả ngay là trả cả khoản thay vì vay, nên số tiền là số lớn hơn giữa số của model và giá món (chi lặp
+    lại có thể trả trước nhiều kỳ). Khi số bị nâng hoặc hũ không đủ, tóm tắt dựng lại từ số dư thật của hũ (hũ không đủ thì bỏ gợi ý);
+    nhãn của model giữ nguyên. Nguồn tín dụng, kịch bản không có giá món hoặc số sai dạng thì giữ nguyên phương án.
+    """
+    if o.kind != "pay_now" or not spend_amount:
+        return o
+    p = o.proposal
+    if p.funding_source == "credit":
+        return o
+    model_amount = p.amount_vnd or 0
+    amount = max(model_amount, spend_amount)
+    code = p.jar_code or o.jar_code
+    row = _jar_row(code, jar_rows)
+    balance = _balance(row)
+    update: dict[str, Any] = {}
+    if amount != model_amount:
+        try:
+            update["proposal"] = type(p).model_validate({**p.model_dump(), "amount_vnd": amount, "funding_source": "jar"})
+        except ValidationError:
+            return o
+    if row is not None and balance is not None and (amount != model_amount or balance < amount):
+        enough = balance >= amount
+        name = str(row.get("name") or code)
+        template = notices.SWITCH_JAR_SUMMARY_ENOUGH if enough else notices.SWITCH_JAR_SUMMARY_SHORT
+        update["summary"] = template.format(name=name, amount=format_vnd(amount), balance=format_vnd(balance))[:200]
+        if not enough:
+            update["recommended"] = None
+    return o.model_copy(update=update) if update else o
 
 
 def jar_short_for_option(o: Any, jar_rows: list[dict[str, Any]]) -> bool:
