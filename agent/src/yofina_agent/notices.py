@@ -174,6 +174,50 @@ ROADMAP_PROPOSED_NEXT = (
     "Bản đang dùng vẫn là phiên bản {active}. Mở trang Lộ trình để so với bản đang dùng, rồi chọn Dùng bản mới "
     "hoặc Giữ bản cũ."
 )
+#: Lời kết của lượt lập lộ trình, dựng bằng mã từ dữ liệu khối (không cần lượt gọi model): bản này là gì, bản nào đang dùng,
+#: khả năng kịp mục tiêu và bước tiếp theo. {version}: phiên bản vừa lưu; {phases}, {steps}: số giai đoạn, số bước;
+#: {active}: phiên bản đang dùng; {goal}: mục tiêu người dùng nói ("1.000.000.000 ₫ cho hũ Du lịch trước 30/11/2026").
+ROADMAP_CLOSING_PROPOSED = (
+    "Đây là bản đề xuất phiên bản {version} ({phases} giai đoạn, {steps} bước), chưa thay lộ trình bạn đang dùng."
+)
+ROADMAP_CLOSING_IN_USE = "Bản đang dùng vẫn là phiên bản {active}."
+ROADMAP_CLOSING_ACTIVE = "Đây là lộ trình bạn đang dùng, phiên bản {version} ({phases} giai đoạn, {steps} bước)."
+ROADMAP_CLOSING_OTHER = "Đây là lộ trình phiên bản {version} ({phases} giai đoạn, {steps} bước)."
+ROADMAP_CLOSING_FEASIBILITY: dict[str, str] = {
+    "on_track": "Theo phương án phân bổ đề xuất, mục tiêu kịp hạn.",
+    "relaxed": "Mục tiêu chỉ kịp sau khi nới hạn hoặc mức, chi tiết ở thẻ.",
+    "infeasible": "Với thu nhập hiện tại, mục tiêu chưa khả thi trong hạn.",
+}
+ROADMAP_CLOSING_GOAL_INFEASIBLE = "Với thu nhập hiện tại, mục tiêu {goal} chưa khả thi."
+ROADMAP_CLOSING_GOAL_NOTE = "Mục tiêu {goal} chỉ dùng để lập lộ trình này, chưa lưu vào hũ."
+ROADMAP_CLOSING_GOAL_NOTE_SHORT = "Mục tiêu này chỉ dùng để lập lộ trình, chưa lưu vào hũ."
+ROADMAP_CLOSING_ALTERNATIVES = "Thẻ có {count} lựa chọn thay thế để bạn cân nhắc."
+ROADMAP_CLOSING_NEXT_COMPARE = (
+    "Bước tiếp theo: bấm So với bản đang dùng trên thẻ, rồi chọn Dùng bản mới hoặc Giữ bản cũ."
+)
+ROADMAP_CLOSING_NEXT_REVIEW = (
+    "Bước tiếp theo: mở trang Lộ trình để chấp nhận, sửa hoặc từ chối từng bước."
+)
+#: Người dùng muốn sửa một bước trong chat (chat chưa có tool sửa bước): chỉ ra bước khớp và chỗ sửa, không nói là đã sửa.
+#: {title}: tiêu đề bước; {detail}: số tiền và giai đoạn của bước; {version}: phiên bản đang dùng; {amount}: số tiền người
+#: dùng muốn; {titles}: các bước khớp; {about}: hũ người dùng nhắc.
+ROADMAP_EDIT_MATCH = "Bước khớp với yêu cầu của bạn là “{title}” ({detail}) trong lộ trình đang dùng, phiên bản {version}."
+ROADMAP_EDIT_MANY = "Có {count} bước khớp yêu cầu của bạn trong lộ trình đang dùng, phiên bản {version}: {titles}."
+ROADMAP_EDIT_HOW = (
+    "Mình chưa sửa được bước ngay trong chat nên chưa đổi gì. Bấm Mở trang Lộ trình trên thẻ, rồi bấm Sửa ở bước đó "
+    "để đổi số tiền hoặc ngày."
+)
+ROADMAP_EDIT_HOW_AMOUNT = (
+    "Mình chưa sửa được bước ngay trong chat nên chưa đổi gì. Bấm Mở trang Lộ trình trên thẻ, rồi bấm Sửa ở bước đó "
+    "và nhập số tiền mới {amount}."
+)
+ROADMAP_EDIT_NONE = (
+    "Lộ trình đang dùng (phiên bản {version}) không có bước nào khớp yêu cầu của bạn{about}, nên mình chưa đổi gì. "
+    "Bạn xem các bước trên thẻ; muốn sửa bước khác thì bấm Mở trang Lộ trình rồi bấm Sửa ở bước đó."
+)
+ROADMAP_EDIT_NO_ROADMAP = (
+    "Bạn chưa có lộ trình đang dùng nên chưa có bước nào để sửa. Muốn lập lộ trình, bạn nhắn “Lập lộ trình giúp mình” nhé."
+)
 
 # Gộp kịch bản trong một cuộc trò chuyện: khoản mới cùng hũ với khoản người dùng đã hỏi trước đó.
 # {previous}: nhãn các khoản trước (do engine dựng, ví dụ "mua giày 800k"); {jar}: tên hũ; {new}: nhãn khoản mới.

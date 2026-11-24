@@ -340,16 +340,16 @@ def test_lo_trinh_nhan_muc_tieu_trong_cau_va_khoi_infeasible(monkeypatch, action
     assert block["type"] == "roadmap"
     assert block["data"]["feasibility"] == "infeasible"
     assert [a["kind"] for a in block["data"]["alternatives"]] == ["delay_goal", "reduce_goal"]
-    # không hỏi lại; câu trả lời được nhắc số tiền mục tiêu người dùng nói (có căn cứ)
-    (call,) = writer.calls
-    assert call["compact"]["user_goal"] == {
-        "jar": "Du lịch",
-        "target_text": "1.000.000.000 ₫",
-        "target_short_text": "1 tỷ",
-        "target_date_text": "30/11/2026",
-        "target_day_month_text": "30/11",
-    }
-    assert texts_of(events) == ["Mục tiêu 1 tỷ cho hũ Du lịch trước 30/11/2026 chưa khả thi."]
+    # không hỏi lại; lời kết dựng bằng mã (không gọi writer) nhắc mục tiêu người dùng nói, nói rõ chưa khả thi và chưa lưu vào hũ
+    assert not writer.calls
+    (text,) = texts_of(events)
+    assert "mục tiêu 1.000.000.000 ₫ cho hũ Du lịch trước 30/11/2026 chưa khả thi" in text
+    assert "Thẻ có 2 lựa chọn thay thế" in text and "chưa lưu vào hũ" in text
+    assert text.startswith("Đây là bản đề xuất phiên bản ")
+    if reason == "user_request":  # lập lại: bản đang dùng (v2) đọc trước khi lưu
+        assert "Bản đang dùng vẫn là phiên bản 2." in text and "So với bản đang dùng" in text
+    else:
+        assert "Bản đang dùng" not in text and "mở trang Lộ trình" in text
 
 
 def test_router_hong_luat_du_phong_van_nhan_muc_tieu_lo_trinh(monkeypatch):

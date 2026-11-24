@@ -49,6 +49,9 @@ class AgentSettings:
     roadmap_max_steps: int
     roadmap_max_tool_calls_per_turn: int
     roadmap_draft_max_tokens: int
+    # bước đạt đủ khuôn (số giai đoạn, số bước) thì lưu, bỏ bước bị loại thay vì thêm vòng sửa; 0 là luôn sửa
+    roadmap_accept_min_phases: int
+    roadmap_accept_min_steps: int
     knowledge_tool_prefix: str
     audit_tool_prefix: str
     run_timeout_seconds: float
@@ -109,6 +112,8 @@ class AgentSettings:
             roadmap_max_steps=get("roadmap_max_steps", int),
             roadmap_max_tool_calls_per_turn=get("roadmap_max_tool_calls_per_turn", int),
             roadmap_draft_max_tokens=get("roadmap_draft_max_tokens", int),
+            roadmap_accept_min_phases=get("roadmap_accept_min_phases", int),
+            roadmap_accept_min_steps=get("roadmap_accept_min_steps", int),
             knowledge_tool_prefix=get("knowledge_tool_prefix"),
             audit_tool_prefix=get("audit_tool_prefix"),
             run_timeout_seconds=get("run_timeout_seconds", float),
