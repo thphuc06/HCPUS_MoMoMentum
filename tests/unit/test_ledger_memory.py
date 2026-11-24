@@ -528,6 +528,25 @@ def test_tom_tat_phien_chi_hien_ban_ca_phien_khong_hien_hai_lan(world, schema_ok
     assert cleared["deleted_records"] == 2 and chunk not in api.records and full not in api.records
 
 
+def test_display_text_bo_dau_thoi_gian_khong_co_chu_timestamp():
+    """Kiểm lại Runtime v22: tóm tắt phiên mới của `minh` hiện "Vào thời điểm [STK] (ước tính khoảng 2026-11-24, 08:43 UTC)"."""
+    xml = (
+        '<topic name="Mua tai nghe">\nVào thời điểm 1795508600000 (ước tính khoảng 2026-11-24, 08:43 UTC), '
+        "người dùng hỏi nếu mua tai nghe bằng Trả sau thì sao.\n</topic>"
+    )
+    assert (
+        display_text({"text": xml})
+        == "Mua tai nghe: Người dùng hỏi nếu mua tai nghe bằng Trả sau thì sao."
+    )
+    md = (
+        "## Tóm tắt phiên\n- **Yêu cầu:** Vào thời điểm 1795508600000 (ước tính khoảng 2026-11-24, 08:43 UTC), "
+        "người dùng hỏi hũ nào sắp cạn."
+    )
+    assert display_text({"text": md}) == "Tóm tắt phiên: - Yêu cầu: Người dùng hỏi hũ nào sắp cạn."
+    # số tài khoản thật trong bản ghi vẫn bị che
+    assert "[STK]" in display_text({"text": "Người dùng nhắc tới tài khoản 1780205123456."})
+
+
 # --- tham số khớp model dịch vụ thật (botocore Stubber) ----------------------------------------------
 def test_tham_so_list_get_delete_batch_khop_model_botocore():
     import boto3
