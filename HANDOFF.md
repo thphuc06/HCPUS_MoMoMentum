@@ -2,7 +2,7 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: **2026-11-24 trưa** (Claude Code điều phối các worker `kiro-cli`). Phase 4 đã đóng. Phase 5 đã code xong, đã deploy, **chưa đóng**: còn evals phase 5 và đi cảnh trên app.
+Cập nhật lần cuối: **2026-11-24 khuya** (Claude Code điều phối các worker `kiro-cli`). Phase 5 đã code xong, đã deploy, đã đo; **chưa đóng chính thức** (còn tiêu chí 3 OCR và đi lại 6 cảnh trên giao diện mới, xem mục B).
 
 ## Đang ở đâu trong kế hoạch
 
@@ -12,88 +12,102 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 |---|---|
 | 1. Nền và lát dọc | Xong 22/11 |
 | 2. Ví mô phỏng và dự báo | Xong 22/11 |
-| [3. What-if, kiểm tra trước khi chi](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | Đóng 23/11. Đi cảnh 2 trên Amplify ngày 23/11 tối: đạt (Học kiểm mục 8 trên điện thoại) |
-| [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | **Đóng 24/11**: bảng 9 tiêu chí ở mục "Đóng phase ngày 2026-11-24". Tiêu chí 6 đúng 92% nhưng tỷ lệ phải hỏi 17,4% (mục tiêu < 10%) |
-| [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) | **Code xong, đã deploy 24/11, chưa đóng**. RAG (luồng C) đã cắt theo quyết định của chủ dự án. Còn: evals phase 5, đi 6 cảnh, kiểm tay tiêu chí 1, 2, 5, 8, 9 |
+| [3. What-if, kiểm tra trước khi chi](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | Đóng 23/11 |
+| [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | Đóng 24/11 (tiêu chí 6: tỷ lệ phải hỏi 17,4%, mục tiêu < 10%) |
+| [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) | **Code xong, deploy Runtime v26, đo xong**. Kết quả từng đợt ở mục "Nghiệm thu 24/11" và các mục "Kiểm lại…", "Đo sau đợt sửa kiểm toán và bộ nhớ (Runtime v25)", "Sửa nhỏ sau v25". Còn: tiêu chí 3 (OCR), đi lại 6 cảnh trên UI mới, rồi điền bảng đóng phase |
 | [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) | Chưa bắt đầu |
+
+## Đã làm trong ngày 24/11 (chi tiết ở ai-log và file phase 5)
+
+- **Bộ nhớ (AgentCore Memory)** sửa gốc, không chặn câu chữ bằng mã: khối bộ nhớ đưa vào prompt dạng dữ liệu có cấu trúc, bỏ câu mẫu; trích xuất "built-in with overrides" bằng Nova Lite (tiếng Việt, chỉ lời khẳng định, giữ chữ thời hạn, câu đổi ý viết thành lời khẳng định mới); bỏ strategy tóm tắt phiên; không ghi lượt hỏi đáp thuần và lượt `profile_update`. Đổi ý đo thật: bản cũ mất hẳn, `DELETE /memory` xóa sạch mọi thứ API cho kiểm. Nghiên cứu: [long-term-memory-research.md](docs/research/long-term-memory-research.md), thiết kế: [agentcore-memory-design.md](docs/research/agentcore-memory-design.md).
+- **Kiểm toán prompt chống overfit** ([prompt-overfit-audit.md](docs/research/prompt-overfit-audit.md)): đã làm đợt 1–4, 6 (bỏ mã chết, writer không còn khuôn "đúng N câu", chặn hỏi lại bằng mã ở `clarify.CLARIFY_INTENTS`, router trích ý định phụ thay bảng từ khóa/regex, gom prompt ảnh). Có test CI cấm prompt chứa cụm 5 từ trùng câu eval. Bộ 18 câu diễn đạt lại cho router: 18/18.
+- **Luật suitability thứ bảy** `emergency_not_for_discretionary` (warn): không khuyên tiêu quỹ dự phòng cho khoản không thiết yếu.
+- **Nạp chứng từ ngoại tệ**: quy đổi sang VND theo tỷ giá bán Vietcombank theo ngày (API công khai), dòng vào hàng chờ duyệt, sửa được số VND; mã lỗi mới `INGEST_NO_TRANSACTIONS` kèm lý do. Tool Gateway `knowledge___get_exchange_rate` dùng chung `yofina_core.fx` cho agent chat. Rút tiền mặt ngoài phạm vi; màn tra soát không tạo dòng. [ingest-fx-rates.md](docs/research/ingest-fx-rates.md).
+- **Giao diện**: bảng màu mới, cảnh 1–4 có chuyển động, biểu đồ chi tiêu B1/B2/B3/B5/B6/B7 ([spending-visualization.md](docs/research/spending-visualization.md)), giảm chữ (luật §9) và "mỗi thông tin một nhà" (§10) trong [ui-design-review.md](docs/research/ui-design-review.md). REST mới `GET /cashflow`.
 
 ## Đang chạy trên AWS (`ap-southeast-1`)
 
-- Bảy stack `YofinaFoundation`, `YofinaData`, `YofinaIdentity`, `YofinaTools`, `YofinaAgent`, `YofinaFrontend`, `YofinaIngest`, đều `*_COMPLETE`. Danh sách tài nguyên đầy đủ: [docs/aws-resources.md](docs/aws-resources.md).
-- **Runtime `yofina_agent` v21**, **Amplify job 13**, migration tới **0053**. App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
-- Mới của phase 5: AgentCore Memory `yofina_memory` (ba strategy: sở thích, sự thật, tóm tắt phiên; tính phí theo lượt dùng); target Gateway `ingest` (3 tool) và tool `forecast___get_behavior_profile`; 11 route REST mới (`/profile/behavior`, `/nudges/*`, `/memory*`, `/me/delete-data*`, `/ops/*`); dashboard CloudWatch `yofina-ops` và 8 alarm (khoảng 0,90 USD/tháng); tài khoản `minh` thuộc nhóm Cognito `ops` (để mở màn trace).
-- Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. **Mật khẩu đã lộ trong lịch sử chat 23/11: đổi trước buổi chấm.**
-- Aurora `yofina-db` để min 0 ACU, tự ngủ sau 10 phút (lần gọi đầu chậm 15–20 giây). **Trước buổi demo** đưa lên 0,5 ACU: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`, demo xong trả về `-c dbMinAcu=0`.
+- Bảy stack đều `*_COMPLETE`. Danh sách tài nguyên: [docs/aws-resources.md](docs/aws-resources.md).
+- **Runtime `yofina_agent` v26**, **Amplify job 19**, migration tới **0054**. App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
+- Memory `yofina_memory` (id không đổi) với hai strategy override `preferences_vi`, `facts_vi` (Nova Lite trích xuất, tính theo lượt). Lambda nạp gọi ra API tỷ giá Vietcombank (không VPC, không NAT).
+- Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. **Mật khẩu đã lộ trong lịch sử chat 23/11: đổi trước buổi chấm.** `minh`, `giamkhao1` thuộc nhóm `ops`.
+- Aurora `yofina-db` min 0 ACU (lần gọi đầu chậm 15–20 giây). **Trước buổi demo** lên 0,5 ACU: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`, xong trả về `-c dbMinAcu=0`.
 
-Lệnh hay dùng (chi tiết ở `scripts/README.md`, `infra-cdk/README.md`): `uv run pytest tests/unit libs/yofina_core/tests -q`; `uv run pytest tests/integration -m integration`; `uv run scripts/cdk.py diff|deploy <Stack> --require-approval never`; `uv run scripts/agent_deploy.py` (có thể trả exit 1 dù đã READY, kiểm bằng `aws bedrock-agentcore-control get-agent-runtime`); `uv run scripts/migrate.py`; `uv run scripts/seed_demo.py <persona>`; frontend: `uv run scripts/print_env.py frontend --write`, `npm.cmd run build` trong `frontend/`, `uv run scripts/deploy_frontend.py frontend/dist`. Lệnh build zip từng Lambda: các hằng `*_BUILD_COMMAND` trong `infra-cdk/lib/` (ledger nay kèm `--keep-boto`, boto3 1.44.9).
+Lệnh hay dùng (chi tiết ở `scripts/README.md`, `infra-cdk/README.md`): `uv run pytest tests/unit libs/yofina_core/tests -q`; `uv run scripts/cdk.py diff|deploy <Stack> --require-approval never`; `uv run scripts/agent_deploy.py` (có thể exit 1 dù READY); `uv run scripts/migrate.py`; `uv run scripts/seed_demo.py <persona>`; frontend: `uv run scripts/print_env.py frontend --write`, `npm.cmd run build` trong `frontend/`, `uv run scripts/deploy_frontend.py frontend/dist`. Đặt `PYTHONIOENCODING=utf-8` khi chạy script in tiếng Việt trên Windows.
 
 ## Số đo mới nhất
 
-- Unit 3449 passed; local_pg 223; CDK 66/66; vitest 816.
-- Integration sau deploy phase 5 (24/11): `test_wallet_rest`, `test_phase4_live`, `test_phase3_engine`, `test_ingest_live`: 82/83. Ca đỏ là test cũ coi bảng `nudges` rỗng sau đặt lại; đã sửa test (chỉ đếm `source <> 'system'`) và chạy lại xanh trên AWS.
-- Phase 4 trên Runtime v18: golden 14/14, adversarial 12/12, golden phase 3 31/31. Evals phase 5 **chưa chạy**.
-- Lộ trình lập trong chat: sau bản sửa tốc độ (phân bổ trước khi phác thảo) đo cục bộ với Bedrock thật 1 lượt planner, 10–11 giây; **chưa đo trên Runtime v21** (lần đo trên v20: 35–54 giây).
-- `minh` sau batch: 3 nhận xét hành vi (Trả sau 2 lần 967.000 ₫ bằng 14% chi tiêu; cuối tuần 37% tổng chi trên 26% số ngày; 7 ngày đầu sau lương 40% tổng chi); bản tin hôm nay "Hũ Ăn uống dự kiến cạn ngày 23/11".
+- Unit 3871 passed; CDK 77/77; vitest 978.
+- Eval đầy đủ một lần trên Runtime v25: golden phase 3 31/31, phase 4 14/14, phase 5 11/15 (4 ca bộ nhớ trượt do lỗi script nạp bản ghi, đã sửa, chạy lại riêng: 3/4, ca còn lại là judge chấm sai, đã sửa judge và đạt ở v26); adversarial phase 3/4/5 16/16, 12/12, 14/14; router diễn đạt lại 18/18; OCR real 9/11 (r08 đã sửa và đạt ở v26, r12 sai ngày do ảnh mờ).
+- Chi phí một lượt eval đầy đủ khoảng **$2,2–2,5** (khoảng 80% là Sonnet 4.6). Vì vậy: **chỉ chạy eval đầy đủ khi đã deploy xong và ổn hẳn; bình thường chỉ chạy vài ca `--only`**.
 
 ## Việc kế tiếp
 
 ### A. Phúc / Claude Code (người điều phối)
 
-1. Chạy evals phase 5 MỘT lần: `uv run scripts/seed_demo.py minh`, `uv run python evals/run.py golden --phase 5 --min-interval 25`, rồi `adversarial --phase 5` (đặt lại `minh` trước mỗi bộ). Đo lại 4 ca lộ trình trên Runtime v21 (`golden --phase 4 --only roadmap-create-emergency-fund,roadmap-regenerate-after-spending-change,roadmap-infeasible-goal,roadmap-edit-one-step --redo`).
-2. Đóng phase 5: điền "Kết quả thực hiện" (bảng 10 tiêu chí) trong file phase 5 sau khi có kết quả của Học (mục B).
-3. Quyết định: bật CloudWatch Transaction Search không (có phí mức tài khoản; hiện không bật, màn trace đọc từ `audit_events`).
+1. Sau khi Học đi cảnh (mục B): điền bảng đóng phase 5; quyết tiêu chí 3 (OCR 9/11 hay 10/11 sau khi đo lại cả bộ một lần ở mốc đóng phase).
+2. Bộ nhớ còn lệch (ca `memory-state-preference` trượt ở v26): Nova Lite vẫn chép nguyên câu thành "sự thật" (ngôi thứ nhất, lặp sở thích) và bỏ chữ "tháng này". Hướng: override luôn bước hợp nhất (P1-6 trong nghiên cứu) hoặc thử model trích xuất mạnh hơn; đo bằng vài ca nhỏ.
+3. Đợt 5, 7, 8 của kiểm toán prompt (đo lại rồi bỏ lớp vá quanh lỗi ngoài phạm vi; chip mang ý định có cấu trúc; writer cho câu đang dựng bằng mã).
 4. Phase 6 (đánh giá, cứng hóa, đóng gói).
+5. Quyết định treo: bật CloudWatch Transaction Search không.
 
-### B. Học (cần người thật đăng nhập app hoặc dùng điện thoại)
+### B. Học
 
-Đăng nhập trên `https://main.dcrwn4u7vqklo.amplifyapp.com` (mật khẩu trong secret `yofina-demo-accounts`). Mỗi việc ghi kết quả (đạt / lỗi kèm ảnh chụp, giờ) vào mục "Kiểm sau" của file phase tương ứng hoặc gửi Phúc. Bấm "Đặt lại dữ liệu demo" (Hồ sơ) trước mỗi việc dùng `minh`.
+Đăng nhập trên máy tính (không cần điện thoại) ở `https://main.dcrwn4u7vqklo.amplifyapp.com`. Ghi kết quả (đạt / lỗi kèm ảnh chụp, giờ) vào mục "Kiểm sau" của file phase 5 hoặc gửi Phúc. Bấm "Đặt lại dữ liệu demo" (Hồ sơ) trước mỗi việc.
 
-1. **Đi trọn 6 cảnh** theo [figma-ui-design.md §8.2](docs/research/figma-ui-design.md) với `giamkhao1` vừa đặt lại (tiêu chí 10 của phase 5), bấm giờ từng cảnh so với [demo-script.md](docs/plan/demo-script.md), đối chiếu frame Figma (R1–R3, L1–L3, A1–A2, S1 Hồ sơ, X1 trace).
-2. **Cảnh 4, lộ trình lập trong chat**: hỏi "Lập lại lộ trình giúp mình". Ghi: mất bao nhiêu giây (mục tiêu khoảng 30), mấy giai đoạn và bước, bước có cụ thể (số tiền, hũ nguồn → hũ đích) không, có lời kết không, có báo "thay bản đề xuất phiên bản 3" không, nút sang trang Lộ trình có chạy không. Kiểm thẻ "Lộ trình thích ứng" mới trên tab Nhìn trước.
-3. **Cảnh 5, nạp dữ liệu trên điện thoại thật**: chụp/chọn ảnh thông báo chuyển khoản → tiến độ → duyệt dòng → độ phủ tăng → Chi tiết hũ có dự báo mới (tiêu chí 1). Nạp lại cùng ảnh: không ghi trùng. Nạp ảnh không phải tài liệu tài chính: báo lỗi rõ (tiêu chí 2). Hỏi trong chat "mình vừa nạp ảnh": ra trạng thái và bảng duyệt.
-4. **Bộ nhớ (tiêu chí 5)**: phiên 1 gõ "Đừng nhắc mình buổi sáng, mình ưu tiên hũ Du lịch". Đợi vài phút (trích xuất chạy nền), đăng xuất rồi đăng nhập lại (phiên mới), hỏi một câu what-if lấy tiền: câu trả lời có tránh hũ Du lịch hoặc nói rõ không. Mở Hồ sơ → Bộ nhớ của tôi: thấy sở thích; xóa thì hết.
-5. **Màn trace (tiêu chí 8, cảnh 6)**: đăng nhập `minh` (thuộc nhóm `ops`), chạy một what-if, mở "Vì sao" → hàng "Mã trace" → màn trace hiện đủ bước (router, từng tool kèm thời gian, verifier, luật). Đăng nhập `lan`: không thấy lối vào, gõ thẳng `#/ops/summary` bị từ chối.
-6. **Xóa dữ liệu của tôi (tiêu chí 9)**: CHỈ trên `khoa` hoặc `giamkhao2`. Hồ sơ → Xóa dữ liệu của tôi → xác nhận. Sau đó app không còn dữ liệu; báo Phúc để kiểm Aurora/S3/Memory, rồi bấm Đặt lại dữ liệu demo.
-7. **Hồ sơ hành vi và bản tin**: `minh` → Hồ sơ thấy 3 nhận xét; Tổng quan thấy thẻ bản tin; bấm "Ít nhắc loại này". Hỏi chat "Mình hay tiêu vào lúc nào?" ra khối nhận xét. Hỏi "Phí dịch vụ Trả sau mỗi tháng bao nhiêu?" ra số kèm khối trích dẫn nguồn.
+1. **Đi lại 6 cảnh trên giao diện mới** với `giamkhao1` (tiêu chí 10): theo [figma-ui-design.md §8.2](docs/research/figma-ui-design.md) và [demo-script.md](docs/plan/demo-script.md), bấm giờ từng cảnh. Giao diện đã đổi nhiều: Tổng quan chỉ còn "hôm nay" (lộ trình và Trả sau chỉ hiện khi có việc), "Hũ nào sắp cạn" chuyển về Nhìn trước, biểu đồ chi tiêu ở màn Hoạt động (Theo hũ / Theo ngày). Ghi chỗ nào khó tìm, chữ nào còn dài, chỗ nào còn lặp.
+2. **Nạp chứng từ ngoại tệ**: nạp một hóa đơn/biên lai bằng USD (ví dụ hóa đơn dịch vụ thu qua thẻ): dòng vào hàng chờ với số VND ước tính, mở dòng phụ thấy tỷ giá Vietcombank và ngày, sửa được số VND, chốt được. Nạp ảnh không phải chứng từ và ảnh màn xác nhận chưa chuyển: câu báo đúng lý do.
+3. **Hỏi agent tỷ giá**: "50 USD là bao nhiêu tiền Việt?", "Mua tai nghe 60 USD bằng hũ Giải trí có đủ không?" — số VND phải khớp tỷ giá Vietcombank của ngày mô phỏng.
+4. **Bộ nhớ**: phiên 1 gõ một sở thích (ví dụ ưu tiên một hũ). Đợi 1–2 phút, đăng xuất/đăng nhập lại, hỏi "Tháng này còn dư, nên để vào hũ nào?": câu trả lời dùng đúng sở thích, không gán cho mình điều chưa nói. Đổi ý ("giờ ưu tiên hũ khác") rồi xem Hồ sơ → Bộ nhớ của tôi: chỉ còn ý mới. Xóa một mục: biến mất ngay.
+5. **Biểu đồ chi tiêu** (`minh`, màn Hoạt động): số kỳ này khớp câu trả lời khi hỏi agent "Kỳ này mình tiêu bao nhiêu, so với kỳ trước?".
 
-Việc code nhỏ Học nhận được (mỗi việc một nhánh, chỉ unit test, gửi Phúc merge):
-8. Màn So với bản cũ (L3) ghi "Loại bước" và "Giai đoạn" bằng mã thô (`set_aside`, `phase_id`): sửa ở `gateway/tools/ledger/yofina_ledger/roadmap_logic.py` (hàm dựng diff) cho ra chữ tiếng Việt.
-9. Lambda sinh lại lộ trình (`pipelines/roadmap/`) lưu bản mới thì âm thầm bỏ bản đề xuất đang chờ (chat đã báo, Lambda thì chưa): ghi lý do vào bản mới hoặc phát notice.
-10. Router và tiện ích ngày chưa đọc "trong 6 tháng" (chỉ đọc "6 tháng nữa/tới/sau"); luật dự phòng không đọc được hũ có tên chứa "mua" ("Mua xe").
+Việc code nhỏ Học nhận (mỗi việc một nhánh, chỉ unit test, gửi Phúc merge; không chạy eval):
 
-### C. Việc để sau (đã ghi trong file phase 4, 5)
+6. Màn So với bản cũ (L3) ghi "Loại bước", "Giai đoạn" bằng mã thô (`set_aside`, `phase_id`): sửa ở `gateway/tools/ledger/yofina_ledger/roadmap_logic.py`.
+7. Lambda sinh lại lộ trình (`pipelines/roadmap/`) âm thầm bỏ bản đề xuất đang chờ: ghi lý do vào bản mới hoặc phát notice.
+8. Router/tiện ích ngày chưa đọc "trong 6 tháng"; luật dự phòng không đọc hũ tên chứa "mua" ("Mua xe").
+9. Bộ đọc số bằng mã (`router._code_params`) đọc "1200 USD" thành 1.200 ₫ khi router không trích `currency`; agent chưa truyền `date` cho `get_exchange_rate`.
 
-- `period_end` của lộ trình tính theo ngày hôm nay, chưa theo ngày lương (agent chưa đọc được payday).
-- Tỷ lệ phải hỏi của phân loại 17,4%: hai hướng (bỏ token mẫu QR khỏi chuỗi embedding; giảm trọng số lịch sử khi ghi chú rõ).
-- Bước lập lộ trình (`roadmap_agent.py`) chưa đọc bộ nhớ; chỉ câu trả lời của lượt lộ trình có.
-- "Bài học của agent" từ `feedback` vào Memory: để sau (cần bước trong batch đêm).
-- Câu tổng hồ sơ hành vi do model nhỏ viết có lúc bỏ sót ý Trả sau.
-- Guardrail `ApplyGuardrail` p50 446 ms > 400 ms (open-questions).
+### C. Việc để sau (ghi trong file phase 4, 5 và các file nghiên cứu)
+
+- `GET /cashflow`: phần tách khoản cố định/Trả sau đang cộng bằng mã (khoảng 10 truy vấn mỗi lần): chuyển thành hàm SQL bằng migration.
+- `turn_persist_timeout` xuất hiện mỗi ca eval, chưa rõ nguyên nhân; `numeric_ungrounded` 2 lần ở v25 (lời bị bỏ, ca vẫn đạt).
+- `period_end` của lộ trình chưa theo ngày lương; tỷ lệ phải hỏi của phân loại 17,4%.
+- Bước lập lộ trình chưa đọc bộ nhớ; học từ `feedback` (đếm loại đề xuất bị từ chối, P1-5 nghiên cứu bộ nhớ).
+- Guardrail `ApplyGuardrail` p50 446 ms > 400 ms.
+- Ghi chú duyệt nhãn của 25 ảnh thật bị lỗi mã (dấu thành `?`) từ commit a70b9a3; một số tài khoản 8 chữ số từng nằm trong ghi chú cũ (đã xóa khỏi file, còn trong lịch sử git — chủ dự án quyết có viết lại lịch sử không).
 
 ## Cách làm việc
 
-Claude Code là người điều phối: viết plan vào file phase, giao mỗi việc cho một worker `kiro-cli chat --no-interactive --trust-workspace --trust-all-tools --model claude-opus-5.5 --effort high` trong worktree riêng `C:\moMo-wt\<việc>` (nhánh riêng từ `main`), review diff, merge, chạy unit cả bộ; cuối đợt một worker deploy + integration + evals MỘT lần (evals tốn trần lượt gọi model trong ngày). **Không hardcode, không giả lập** ([master-plan mục 2](docs/plan/master-plan.md#2-quyết-định-áp-dụng-cho-mọi-phase)). Một luồng deploy tại một thời điểm; xem `cdk diff` trước mỗi deploy. Commit không Co-Authored-By.
+Claude Code là người điều phối: plan, giao mỗi việc cho một worker `kiro-cli chat --no-interactive --trust-workspace --trust-all-tools --model claude-opus-5.5 --effort high` trong worktree riêng `C:\moMo-wt\<việc>`, review diff, merge, chạy unit. Nhiều nhánh thì gộp lại, deploy một lần, eval một lần. Quy tắc của chủ dự án:
+
+- **Không hardcode, không giả lập** ([master-plan mục 2](docs/plan/master-plan.md#2-quyết-định-áp-dụng-cho-mọi-phase)).
+- **Không vá prompt/mã cho vừa vài ca eval** (không câu mẫu, không ví dụ chép từ eval, không lọc câu chữ của model bằng mã); lỗi hành vi thì tìm nguyên nhân gốc và sửa theo nguyên tắc chung.
+- **Eval tốn tiền** (~$2,3/lượt đầy đủ): chỉ chạy đầy đủ ở mốc deploy đã ổn; bình thường chỉ vài ca `--only`, mỗi ca một lần.
+- **Giao diện ít chữ**: chỉ để chữ cho phần quan trọng, phần giải thích thu vào mục bấm mở; mỗi thông tin một màn là nhà.
+- Một luồng deploy tại một thời điểm; `cdk diff` trước mỗi deploy. Commit không Co-Authored-By.
 
 ## Quyết định đã chốt
 
-- Region `ap-southeast-1`; không kéo FAST; frontend theo [ADR-0001](docs/decisions/0001-frontend-stack.md) và Figma; Cognito tắt tự đăng ký, tài khoản demo có nút đặt lại; bộ model (Sonnet 4.6, Nova 2 Lite hoặc Haiku 4.5, Kimi K3, Cohere); xác nhận bằng token dùng một lần do server cấp, Cedar là lớp phụ; sản phẩm trả sau mô phỏng; "Điểm chống chịu".
-- 24/11: cắt RAG (luồng C phase 5): mọi con số lấy từ bảng có cấu trúc; khối trích dẫn dựng từ nguồn của bảng phí. Cảnh 4 demo để agent lập lộ trình trực tiếp trong chat (bản seed v3 làm đường dự phòng). Bộ nhớ theo best practice AgentCore Memory: một Memory, namespace theo `sub`, ba strategy, `IngestData`, che PII, không lưu số tiền hay giao dịch ([thiết kế](docs/research/agentcore-memory-design.md)).
+- Region `ap-southeast-1`; không kéo FAST; frontend theo [ADR-0001](docs/decisions/0001-frontend-stack.md) và Figma; Cognito tắt tự đăng ký; bộ model (Sonnet 4.6, Nova 2 Lite, Kimi K3, Cohere); xác nhận bằng token dùng một lần do server cấp, Cedar là lớp phụ; sản phẩm trả sau mô phỏng.
+- 24/11: cắt RAG; cảnh 4 để agent lập lộ trình trong chat; bộ nhớ theo best practice AgentCore (một Memory, namespace theo `sub`, override trích xuất, `IngestData`, che PII, không lưu số tiền, không nhân bản dữ liệu Aurora); rút tiền mặt ngoài phạm vi; màn tra soát không tạo dòng; ngoại tệ quy đổi theo tỷ giá bán Vietcombank, người dùng duyệt.
 - Quyền với AWS: được tạo và sửa tài nguyên `yofina-*` (tag `project=yofina`, ghi vào aws-resources.md) ở `ap-southeast-1`; hỏi trước với thứ tính tiền theo giờ đáng kể và trước khi xóa thứ không do dự án tạo; không đụng `jars-dev*`, `Jars*`, `CDKToolkit`.
 
 ## Quyết định còn treo
 
 - Bật CloudWatch Transaction Search không.
+- Viết lại lịch sử git để xóa số tài khoản cũ trong ghi chú nhãn không.
 - Hạn nộp chính xác, trọng số chấm, giữ tên Yofina ([open-questions.md](docs/requirements/open-questions.md)).
 
 ## Môi trường (kiểm 24/11, tự kiểm lại mỗi phiên)
 
-- Windows 11, repo `C:\moMo` (Phúc), nhánh `main`, remote GitHub public. Python 3.13, uv, Node 24. `npm.ps1` bị chặn trong PowerShell: dùng `npm.cmd`.
-- AWS CLI đang dùng thông tin đăng nhập root qua `aws login` (phiên 12 giờ). Không ghi account ID vào tài liệu.
-- `kiro-cli` 3.5.0 đã cài, đăng nhập IAM Identity Center; model `claude-opus-5.5`.
+- Windows 11, repo `C:\moMo` (Phúc), nhánh `main`, remote GitHub public. Python 3.13, uv, Node 24. `npm.ps1` bị chặn trong PowerShell: dùng `npm.cmd`. Console mặc định cp1252: đặt `PYTHONIOENCODING=utf-8`.
+- AWS CLI dùng `aws login` (phiên 12 giờ). Không ghi account ID vào tài liệu.
+- `kiro-cli` 3.5.0, model `claude-opus-5.5`.
 - MCP: `aws-docs`, `agentcore`, `aws-mcp` (có lúc mất kết nối; dùng AWS CLI chỉ đọc thay thế).
 
 ## Lưu ý
 
 - Repo public: không commit account ID, ARN có account ID, secret, token, mật khẩu demo, email.
-- Mọi lời gọi model đi qua `yofina_core.llm` có giới hạn tốc độ và trần mỗi ngày (bảng `yofina-usage`, theo giờ Việt Nam); Claude 4.x khoảng 8–10 lượt/phút mỗi model. Hết trần thì ghi nhận, không chạy lại.
-- `evals/results/` không vào git.
+- Mọi lời gọi model đi qua `yofina_core.llm` có giới hạn tốc độ và trần mỗi ngày (bảng `yofina-usage`). Hết trần thì ghi nhận, không chạy lại.
+- `evals/results/`, `evals/ingest/results/` không vào git.
