@@ -5,7 +5,8 @@ Nối vào `rest_api._dispatch` bằng MỘT khối chuyển tiếp cho tiền t
 - `GET /nudges/today`: bản tin mà cổng giá trị của batch đêm đã ghi cho hôm nay mô phỏng (`app_get_today_nudge`), dựng thành khối
   `proactive_card` có `nudge_id` (`proactive.gate_card`). `suppressed` là danh sách loại cổng đã bỏ (lưu trong `gate_reason`). Giờ hiện
   tại (múi giờ ứng dụng) rơi vào giờ im lặng trong sở thích của người dùng (`service.nudge_preferences`, điểm móc
-  `proactive.NudgePreferenceSource`) thì KHÔNG trả thẻ và thêm `{kind, reason: quiet_hours}`. Không ghi gì, không gọi model.
+  `proactive.NudgePreferenceSource`; Lambda gắn `MemoryNudgePreferences`, đọc `memory_store.quiet_hours`) thì KHÔNG trả thẻ và thêm
+  `{kind, reason: quiet_hours}`. Bộ nhớ hỏng hay chưa cấu hình: coi như không có giờ im lặng, có log. Không ghi gì, không gọi model.
 - `POST /nudges/{nudge_id}/feedback {outcome, reason?}`: `app_set_nudge_outcome` (idempotent) cộng một dòng `feedback` (`block_id` là
   id thẻ, `option_id` là loại bản tin; `acted` là accepted, còn lại rejected). Không đổi số dư nên không qua token. Không phải bản tin
   của cổng của chính người gọi thì 404 `NUDGE_NOT_FOUND`.
@@ -13,14 +14,18 @@ Nối vào `rest_api._dispatch` bằng MỘT khối chuyển tiếp cho tiền t
 
 from __future__ import annotations
 
+import json
+import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from yofina_core.blocks import block_to_wire, format_instant
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.wallet import NUDGE_OUTCOMES
 from yofina_ledger import convert, proactive
+
+log = logging.getLogger("yofina.ledger.nudges")
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 FEEDBACK_FIELDS = frozenset({"outcome", "reason"})
@@ -34,6 +39,52 @@ SQL_UPSERT_FEEDBACK = (
     "ON CONFLICT (user_id, trace_id, block_id, option_id) DO UPDATE SET decision = EXCLUDED.decision, "
     "reason = EXCLUDED.reason, updated_at = now()"
 )
+
+
+def split_windows(windows: Iterable[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
+    """Khung giờ của `memory_store.QuietHours` (có thể vắt qua nửa đêm: `(22, 5)`) thành khung `[bắt đầu, kết thúc)` không vắt của
+    `proactive.NudgePreferences` (`(22, 24)`, `(0, 5)`). Khung rỗng (`bắt đầu == kết thúc`) bị bỏ, như `QuietHours.contains`."""
+    out: list[tuple[int, int]] = []
+    for start, end in windows:
+        if start == end:
+            continue
+        pieces = [(start, end)] if start < end else [(start, 24), (0, end)]
+        for w in pieces:
+            if w[0] < w[1] and w not in out:
+                out.append(w)
+    return tuple(sorted(out))
+
+
+class MemoryNudgePreferences:
+    """`proactive.NudgePreferenceSource` đọc từ bộ nhớ dài hạn: giờ im lặng là `memory_store.quiet_hours` (bản ghi SỞ THÍCH của chính
+    `sub`, `ListMemoryRecords`). Gắn vào `LedgerService.nudge_preferences` ở `handler.get_service`.
+
+    Không bao giờ ném lỗi: Memory chưa cấu hình, lỗi hay SDK cũ thì không có sở thích nào (bản tin vẫn hiện) và ghi log
+    `nudge_preferences_unavailable`. Nội dung bộ nhớ là dữ liệu không tin cậy: kết quả chỉ có thể ẨN bản tin, không thêm hay đổi việc gì.
+    """
+
+    def __init__(self, store: Any = None) -> None:
+        self._store = store  # None: dựng `MemoryStore.from_env()` lần đầu cần (giữ lại để cache id Memory và client)
+
+    def _get_store(self) -> Any:
+        if self._store is None:
+            from yofina_ledger.memory_store import MemoryStore
+
+            self._store = MemoryStore.from_env()
+        return self._store
+
+    def nudge_preferences(self, user_id: str) -> proactive.NudgePreferences:
+        from yofina_ledger.memory_store import quiet_hours
+
+        try:
+            q = quiet_hours(user_id, store=self._get_store())
+        except Exception as exc:  # quiet_hours đã tự nuốt lỗi của Memory; đây là lưới cuối (đọc cấu hình, nhập module)
+            log.warning(json.dumps({"msg": "nudge_preferences_unavailable", "reason": type(exc).__name__}))
+            return proactive.NO_PREFERENCES
+        if not q.available:
+            log.info(json.dumps({"msg": "nudge_preferences_unavailable", "reason": "memory_unavailable"}))
+            return proactive.NO_PREFERENCES
+        return proactive.NudgePreferences(quiet_hours=split_windows(q.windows))
 
 
 def dispatch(

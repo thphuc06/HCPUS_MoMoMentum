@@ -18,6 +18,7 @@ from yofina_core.db import DataApi
 from yofina_ledger.events import EventPublisher
 from yofina_ledger.forecast_client import ForecastClient
 from yofina_ledger.gateway_api import handle_gateway
+from yofina_ledger.nudges_rest import MemoryNudgePreferences
 from yofina_ledger.repo import LedgerRepo
 from yofina_ledger.rest_api import handle_http
 from yofina_ledger.service import LedgerService
@@ -46,6 +47,7 @@ def get_service() -> LedgerService:
                 if settings.forecast_function_name
                 else None
             ),
+            nudge_preferences=MemoryNudgePreferences(),  # giờ im lặng của bản tin, từ bộ nhớ dài hạn
         )
     return _SERVICE
 
