@@ -23,7 +23,7 @@ export function TabBar({ onOpenChat, chatOpen }: { onOpenChat: () => void; chatO
   return (
     <nav
       aria-label="Điều hướng chính"
-      className="absolute inset-x-0 bottom-0 z-20 flex items-end border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
+      className="absolute inset-x-0 bottom-0 z-20 flex items-end border-t border-line bg-surface px-3 pb-[max(env(safe-area-inset-bottom),6px)]"
     >
       <NavLink to="/" end className={itemClass}>
         <Home className="size-6" aria-hidden />
