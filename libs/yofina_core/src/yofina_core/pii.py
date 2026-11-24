@@ -4,7 +4,7 @@ phase cùng cần che nhưng khác chỗ gọi và khác cách che.
 **A. Lời người dùng gõ vào chat** (phase 3, harness L0 của `agent/`): `mask_pii`, `mask_text`. Che bằng thẻ giữ chỗ (`[SĐT]`,
 `[CCCD]`, `[STK]`, `[THẺ]`, `[EMAIL]`), không bao giờ bỏ chữ trống để câu vẫn đọc được. Số tiền KHÔNG được che: người dùng gõ
 "1200000" hay "15.000.000" là số tiền, nên dãy chữ số chỉ bị che khi có dạng đặc trưng (đầu số điện thoại Việt Nam, đúng 12 chữ số,
-từ 10 chữ số liền không phân tách) hoặc đi sau từ khóa ("stk", "số tài khoản", "cmnd"...). Đây là bộ lọc theo mẫu, không phải bảo
+từ 10 chữ số liền không phân tách, trừ dấu thời gian Unix có ngữ cảnh thời gian: is_epoch_at) hoặc đi sau từ khóa ("stk", "số tài khoản", "cmnd"...). Đây là bộ lọc theo mẫu, không phải bảo
 đảm tuyệt đối; lớp phòng thủ khác là agent không bao giờ ghi nội dung chat vào log.
 
 **B. Văn bản và đối tác trong dòng nạp từ ảnh/CSV** (phase 5, luồng nạp dữ liệu): `mask_row_text`, `mask_counterparty`,
@@ -71,10 +71,28 @@ _KEYWORD_ACCOUNT = re.compile(
 )
 _ID12 = re.compile(r"(?<![\d.,])\d{12}(?![\d])")
 _LONG = re.compile(r"(?<![\d.,])\d{10,19}(?![\d])")
-#: Từ khóa đứng ngay trước một dấu thời gian Unix (giây hoặc mili giây): dãy số sau nó không phải số tài khoản. Tóm tắt phiên của
-#: AgentCore Memory chép kiểu "timestamp 1795505552861" vào bản ghi; trước đây dãy này bị che thành `[STK]`.
-_EPOCH_LEAD = re.compile(r"\b(?:timestamp|epoch|unix(?:\s+time)?)\b\D{0,20}$", re.IGNORECASE)
+#: Dấu thời gian Unix (giây: 10 chữ số, mili giây: 13 chữ số) mà bước tóm tắt phiên của AgentCore Memory chép vào bản ghi. Strategy
+#: tóm tắt được dặn "Consider the timestamps" và thấy `contentTimestamp` của `IngestData` (bắt buộc, dạng số) cạnh mỗi lượt, nên viết
+#: "timestamp 1795505552861", "Vào thời điểm 1795508600000 (ước tính khoảng 2026-11-24, 08:43 UTC)"... Trước đây các dãy này bị che
+#: thành `[STK]`. Một dãy chỉ được coi là dấu thời gian khi giá trị rơi vào khoảng hợp lý VÀ có ngữ cảnh thời gian (từ khóa đứng trước,
+#: hoặc "ms"/ngoặc nêu ngày giờ ngay sau) VÀ không có từ khóa tài khoản/thẻ đứng trước: số tài khoản Agribank 13 chữ số bắt đầu bằng
+#: 17, 18 trùng khoảng giá trị của epoch mili giây năm 2026, nên giá trị một mình không đủ.
 _EPOCH_DIGITS = re.compile(r"\d{10}|\d{13}")
+#: khoảng hợp lý của dấu thời gian: 2000-01-01 tới 2100-01-01 (giây)
+_EPOCH_MIN_S, _EPOCH_MAX_S = 946_684_800, 4_102_444_800
+#: từ khóa thời gian đứng ngay trước dãy số (so trên chữ đã bỏ dấu, chữ thường)
+_EPOCH_LEAD = re.compile(
+    r"(?:\b(?:timestamp|epoch|unix(?:\s+time)?)\b\D{0,20}"
+    r"|\b(?:thoi diem|moc thoi gian|thoi gian|vao luc|luc|time|at)\b(?:\s+ghi nhan)?\s*:?\s*)$"
+)
+#: ngay sau dãy số: đơn vị "ms", hoặc một ngoặc nêu ngày giờ ("(ước tính khoảng 2026-11-24, 08:43 UTC)") (chữ đã bỏ dấu)
+_EPOCH_TRAIL = re.compile(
+    r"^\s*(?:\(\s*ms\s*\)|ms\b|\([^()\n]{0,100}?(?:\d{4}-\d{2}-\d{2}|\butc\b|uoc tinh|tuong duong|khoang|approx))"
+)
+#: từ khóa tài khoản, thẻ đứng trước dãy số: không bao giờ coi là dấu thời gian (chữ đã bỏ dấu)
+_ACCOUNT_LEAD = re.compile(
+    r"\b(?:stk|tk|tai khoan|account|acct|so the|card|ngan hang|bank|chuyen khoan|ck|cccd|cmnd)\b[^\n]{0,25}$"
+)
 
 
 @dataclass
@@ -124,16 +142,26 @@ def mask_pii(text: str) -> MaskResult:
     return MaskResult(out, counts)
 
 
-def _is_epoch(text: str, m: re.Match[str]) -> bool:
-    """Dãy 10 hoặc 13 chữ số ngay sau từ khóa "timestamp"/"epoch": dấu thời gian Unix, không phải số tài khoản."""
-    return bool(_EPOCH_DIGITS.fullmatch(m.group(0))) and bool(
-        _EPOCH_LEAD.search(text[max(0, m.start() - 40) : m.start()])
+def is_epoch_at(text: str, start: int, end: int) -> bool:
+    """`text[start:end]` (toàn chữ số) là một dấu thời gian Unix chứ không phải số tài khoản: 10 hoặc 13 chữ số, giá trị trong
+    2000–2100, có ngữ cảnh thời gian ở trước hoặc ngay sau, và không có từ khóa tài khoản, thẻ đứng trước."""
+    digits = text[start:end]
+    if not _EPOCH_DIGITS.fullmatch(digits):
+        return False
+    seconds = int(digits) // (1000 if len(digits) == 13 else 1)
+    if not _EPOCH_MIN_S <= seconds < _EPOCH_MAX_S:
+        return False
+    before = fold(text[max(0, start - 40) : start]) + (
+        " " if text[max(0, start - 1) : start].isspace() else ""
     )
+    if _ACCOUNT_LEAD.search(before):
+        return False
+    return bool(_EPOCH_LEAD.search(before) or _EPOCH_TRAIL.match(fold(text[end : end + 110])))
 
 
 def _sub_long(text: str, counts: Counter[str]) -> str:
     def repl(m: re.Match[str]) -> str:
-        if _is_epoch(text, m):
+        if is_epoch_at(text, m.start(), m.end()):
             return m.group(0)
         counts["account"] += 1
         return PLACEHOLDERS["account"]
@@ -143,7 +171,9 @@ def _sub_long(text: str, counts: Counter[str]) -> str:
 
 # Dấu thời gian Unix mà bước tóm tắt phiên của AgentCore Memory chép vào bản ghi ("(timestamp 1795505552861)", "Thời điểm:
 # timestamp 1795505692694 (ms), tương đương khoảng 2026-11-24 07:34 UTC", "*(Nguồn: timestamp ...)*"): vô nghĩa với người đọc.
-_TS_PAREN = re.compile(r"[ \t]*\*?\([^()\n]{0,40}?\btimestamp\b[^()\n]{0,100}\)\*?", re.IGNORECASE)
+_TS_PAREN = re.compile(
+    r"[ \t]*\*?\([^()\n]{0,40}?\b(?:timestamp|epoch|unix)\b[^()\n]{0,100}\)\*?", re.IGNORECASE
+)
 _TS_INLINE = re.compile(
     r"(?:,[ \t]*)?(?:\b(?:thời điểm|thoi diem|mốc thời gian|moc thoi gian)(?:[ \t]+ghi nhận)?[ \t]*:?[ \t]*)?"
     r"\btimestamp\b[^\d\n]{0,30}?\d{10,13}(?:[ \t]*\(?[ \t]*ms[ \t]*\)?)?"
@@ -151,14 +181,57 @@ _TS_INLINE = re.compile(
     re.IGNORECASE,
 )
 _EMPTY_BULLET = re.compile(r"^[ \t]*(?:[-*•][ \t]*)?[.,;:]?[ \t]*$")
+# Dạng không có chữ "timestamp" ("Vào thời điểm 1795508600000 (ước tính khoảng 2026-11-24, 08:43 UTC), người dùng hỏi"): dãy số dấu
+# thời gian kèm cụm dẫn đứng trước và đơn vị, ngoặc ước tính ngày giờ đứng sau. Ngày giờ trong ngoặc là giờ THẬT của máy chủ, không phải
+# `app_today` của ứng dụng mô phỏng, nên bỏ cả cụm chứ không giữ lại ngày.
+_EPOCH_NUM = re.compile(r"(?<![\w.,])(?:\d{13}|\d{10})(?![\w.,]\d|\d)")
+_EPOCH_PHRASE_BEFORE = re.compile(
+    r"(?:\b(?:vào|vao)[ \t]+(?:lúc[ \t]+|luc[ \t]+)?)?"
+    r"(?:\b(?:thời điểm|thoi diem|mốc thời gian|moc thoi gian|thời gian|thoi gian|lúc|luc|at|time|epoch|unix)(?:[ \t]+(?:ghi nhận|ghi nhan))?[ \t]*:?[ \t]*)$",
+    re.IGNORECASE,
+)
+_EPOCH_PHRASE_AFTER = re.compile(
+    r"^(?:[ \t]*(?:\([ \t]*ms[ \t]*\)|ms\b))?(?:[ \t]*\([^()\n]{0,100}\))?", re.IGNORECASE
+)
+_SENTENCE_START = re.compile(r"(?:^|[\n.!?:;>*•-])[ \t]*$")
+
+
+def _strip_bare_epochs(text: str) -> str:
+    out: list[str] = []
+    last = 0
+    capitalize = False
+    for m in _EPOCH_NUM.finditer(text):
+        if m.start() < last or not is_epoch_at(text, m.start(), m.end()):
+            continue
+        lead = _EPOCH_PHRASE_BEFORE.search(text[max(last, m.start() - 40) : m.start()])
+        start = m.start() - (len(lead.group(0)) if lead else 0)
+        tail = _EPOCH_PHRASE_AFTER.match(text[m.end() : m.end() + 120])
+        end = m.end() + (len(tail.group(0)) if tail else 0)
+        head = text[last:start]
+        if _SENTENCE_START.search(head) or (not out and not head.strip()):
+            # cụm đứng đầu câu: bỏ cả dấu phẩy sau nó và viết hoa chữ đầu phần còn lại
+            sep = re.match(r"[ \t]*[,;]?[ \t]*", text[end:])
+            end += len(sep.group(0)) if sep else 0
+            capitalize = True
+        else:
+            head = head.rstrip(" \t")  # giữa câu: bỏ khoảng trắng trước cụm, giữ phần sau
+        out.append(head)
+        last = end
+        if capitalize and last < len(text):
+            out.append(text[last].upper())
+            last += 1
+            capitalize = False
+    out.append(text[last:])
+    return "".join(out)
 
 
 def strip_epoch_timestamps(text: str) -> str:
-    """Bỏ các cụm dấu thời gian Unix ("timestamp 1795505552861") khỏi chữ một bản ghi bộ nhớ, rồi bỏ dòng gạch đầu dòng chỉ còn
-    dấu câu. Chữ khác giữ nguyên (cả xuống dòng)."""
-    if "timestamp" not in text.lower():
+    """Bỏ các cụm dấu thời gian Unix ("timestamp 1795505552861", "Vào thời điểm 1795508600000 (ước tính khoảng …)") khỏi chữ một bản
+    ghi bộ nhớ, rồi bỏ dòng gạch đầu dòng chỉ còn dấu câu. Chữ khác giữ nguyên (cả xuống dòng, ngày ISO 8601, số tài khoản)."""
+    if not _EPOCH_NUM.search(text):
         return text
     out = _TS_INLINE.sub("", _TS_PAREN.sub("", text))
+    out = _strip_bare_epochs(out)
     lines = [ln for ln in out.split("\n") if not (_EMPTY_BULLET.match(ln) and ln.strip())]
     return "\n".join(lines)
 
@@ -798,6 +871,7 @@ __all__ = [
     "PiiPolicy",
     "fold",
     "initial_mask",
+    "is_epoch_at",
     "looks_like_person",
     "mask_counterparty",
     "mask_names",
