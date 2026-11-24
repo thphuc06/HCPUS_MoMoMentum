@@ -1,0 +1,11 @@
+{
+  "_ghi_chu": "Cấu hình mặc định của bảng vận hành (/ops/*, yofina_ledger.ops). Ghi đè bằng biến môi trường YOFINA_OPS_PRICING (JSON cùng hình dạng khóa pricing) và YOFINA_OPS_DEFAULT_RANGE_DAYS. Giá theo bảng giá Claude Sonnet 4.6 (vai planner, model chính của agent), endpoint global, tra ngày 2026-11-24 tại https://platform.claude.com/docs/en/about-claude/pricing: 3 USD mỗi triệu token vào, 15 USD ra, 0,30 USD đọc cache. token_usage của bản ghi lượt không tách theo model nên đây là ước tính trên (lượt có gọi model nhỏ thì thực tế rẻ hơn). Tỷ giá là giả định để ước tính, không phải tỷ giá niêm yết.",
+  "pricing": {
+    "input_usd_per_mtok": 3,
+    "output_usd_per_mtok": 15,
+    "cache_read_usd_per_mtok": 0.3,
+    "vnd_per_usd": 26000
+  },
+  "default_range_days": 7,
+  "max_summary_days": 31
+}

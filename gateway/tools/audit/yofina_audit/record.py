@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from yofina_core.blocks import DataUsed, ExplainConfidence, RuleCheck
 from yofina_core.errors import ErrorCode, YofinaError
-from yofina_core.wallet import INTENTS
+from yofina_core.wallet import AUDIT_INTENTS
 
 TRACE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 OUTCOMES = ("ok", "rejected", "error")
@@ -30,8 +30,13 @@ class BlockRef(_Strict):
 
 
 class Step(_Strict):
+    """Một bước của lượt (`TraceStep`). Bước có `step` là tên đầy đủ của tool (`<target>___<tool>`) là MỘT lần gọi tool, kèm
+    `status` và `code` khi lỗi (phase 5: màn trace và tỷ lệ lỗi tool của bảng vận hành đọc từ đây)."""
+
     step: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")]
     ms: Annotated[int, Field(ge=0)]
+    status: Literal["ok", "error", "denied"] | None = None
+    code: Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=40)] | None = None
 
 
 class Usage(_Strict):
@@ -75,6 +80,6 @@ def parse_turn_record(args: Mapping[str, Any]) -> dict[str, Any]:
         raise YofinaError(ErrorCode.PARAMS_INVALID, "trace_id không hợp lệ.")
     if rec.outcome not in OUTCOMES:
         raise YofinaError(ErrorCode.PARAMS_INVALID, "outcome phải là ok, rejected hoặc error.")
-    if rec.intent is not None and rec.intent not in INTENTS:
+    if rec.intent is not None and rec.intent not in AUDIT_INTENTS:
         raise YofinaError(ErrorCode.PARAMS_INVALID, "intent không hợp lệ.")
     return rec.model_dump(mode="json", exclude_none=True)

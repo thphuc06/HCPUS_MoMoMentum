@@ -16,6 +16,7 @@ import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { YofinaConfig } from '../config/config';
 import { ClassifyConfig, ClassifyPipeline } from './classify';
 import { ForecastPipeline, ForecastPipelineConfig } from './forecast-pipeline';
+import { loadOpsDashboardConfig, OpsDashboard, OpsDashboardConfig } from './ops-dashboard';
 import { RoadmapRegen, RoadmapRegenConfig } from './roadmap-regen';
 import { publishParams } from './ssm-outputs';
 
@@ -122,6 +123,8 @@ export interface ToolsProps extends StackProps {
   readonly classify?: ClassifyConfig;
   /** Phase 4 (luồng C): Lambda sinh lại lộ trình `yofina-roadmap-regen`. Vắng thì không dựng. */
   readonly roadmap?: RoadmapRegenConfig;
+  /** Phase 5 (luồng D): dashboard `yofina-ops` và alarm. Vắng thì đọc từ context (`loadOpsDashboardConfig`). */
+  readonly ops?: OpsDashboardConfig;
 }
 
 /**
@@ -358,6 +361,10 @@ export class ToolsStack extends Stack {
       ['/roadmap/jobs/{job_id}', apigwv2.HttpMethod.GET],
       ['/review', apigwv2.HttpMethod.GET],
       ['/review/daily-ask/skip', apigwv2.HttpMethod.POST],
+      // phase 5 (x-lambda: ledger, x-required-group: ops): bảng vận hành; Lambda kiểm nhóm Cognito `ops`, người khác 403
+      ['/ops/traces', apigwv2.HttpMethod.GET],
+      ['/ops/traces/{trace_id}', apigwv2.HttpMethod.GET],
+      ['/ops/summary', apigwv2.HttpMethod.GET],
     ];
     for (const [routePath, method] of routes) {
       this.api.addRoutes({ path: routePath, methods: [method], integration });
@@ -398,6 +405,16 @@ export class ToolsStack extends Stack {
       evaluationPeriods: 1,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     }).addAlarmAction(new cwActions.SnsAction(alertTopic));
+
+    // --- Phase 5 luồng D: dashboard `yofina-ops`, alarm về SNS sẵn có, quyền đọc `yofina-usage` cho `/ops/summary` ----------
+    new OpsDashboard(this, 'Ops', {
+      cfg,
+      ops: props.ops ?? loadOpsDashboardConfig(this),
+      alertTopic,
+      ledger: this.ledger,
+      usageTableName: param('dynamodb/usage-table'),
+      apiId: this.api.apiId,
+    });
 
     const apiUrl = this.api.apiEndpoint;
     publishParams(this, {

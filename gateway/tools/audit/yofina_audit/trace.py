@@ -12,6 +12,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from yofina_audit.record import Step
 from yofina_core.blocks import (
     DataUsed,
     ExplainConfidence,
@@ -40,6 +41,11 @@ def _valid(model: type[Any], items: list[Any]) -> list[Any]:
         except ValidationError:
             continue
     return out
+
+
+def _steps(value: Any) -> list[dict[str, Any]]:
+    """`step_timings` đúng `TraceStep` (tối đa 30), giữ `status` và `code` của bước là một lần gọi tool; bước hỏng thì bỏ."""
+    return [s.model_dump(exclude_none=True) for s in _valid(Step, _list(value))][:30]
 
 
 def build_trace_data(
@@ -85,11 +91,7 @@ def build_trace_data(
             if isinstance(usage, Mapping)
             else {"input_tokens": 0, "output_tokens": 0, "model_calls": 0}
         ),
-        "step_timings": [
-            {"step": str(s["step"]), "ms": int(s["ms"])}
-            for s in _list(row.get("step_timings"))
-            if isinstance(s, Mapping) and "step" in s and "ms" in s
-        ][:30],
+        "step_timings": _steps(row.get("step_timings")),
         "duration_ms": int(row["duration_ms"]) if row.get("duration_ms") is not None else 0,
     }
     for key in ("input_tokens", "output_tokens", "model_calls"):
