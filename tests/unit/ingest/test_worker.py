@@ -11,12 +11,12 @@ from typing import Any
 
 import pytest
 from ingest_helpers import PNG, FakeBedrock, FakeLabelStore, make_gateway
-from yofina_ingest import fx
 from yofina_ingest.context import Rule
 from yofina_ingest.extract import Candidate
 from yofina_ingest.settings import IngestRuntime
 from yofina_ingest.worker import Worker, handle_sqs, parse_key, pick_matches, s3_records
 
+from yofina_core import fx
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.ingest import IngestSettings, content_sha256, row_dedupe_key
 from yofina_core.params import TxTypeInfo

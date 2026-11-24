@@ -1,4 +1,4 @@
-"""Quy đổi ngoại tệ (`yofina_ingest.fx`): đọc đúng định dạng của Vietcombank, làm tròn tới đồng, bộ nhớ đệm theo ngày, lùi ngày khi
+"""Quy đổi ngoại tệ (`yofina_core.fx`): đọc đúng định dạng của Vietcombank, làm tròn tới đồng, bộ nhớ đệm theo ngày, lùi ngày khi
 chưa có bảng, kẹp ngày tương lai, lỗi tra tỷ giá. Nguồn trong mã là nguồn thật; ở đây chỉ thay bằng nguồn giả đếm lượt gọi."""
 
 from __future__ import annotations
@@ -10,7 +10,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from yofina_ingest import fx
+
+from yofina_core import fx
 
 # Thân trả lời rút gọn của https://www.vietcombank.com.vn/api/exchangerates?date=2026-11-10 (gọi thật một lần ngày 24/11/2026,
 # bỏ trường `icon` và các ngoại tệ khác). DKK có `cash` 0.00: ô bằng 0 bị bỏ, ô `sell` vẫn dùng.

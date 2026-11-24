@@ -185,7 +185,7 @@ def test_frontend_zod_cua_khoi_co_fx():
 def test_so_goc_va_ty_gia_giu_dung_chu_so():
     """`amount_original` và `rate` là chuỗi thập phân (không qua float); `rate` không mang hậu tố `_vnd` vì không phải số tiền."""
     ex = _extract()
-    from yofina_ingest.fx import FxRate
+    from yofina_core.fx import FxRate
 
     info = ex.FxInfo("USD", Decimal("111.11"), FxRate("USD", Decimal("25790"), date(2026, 11, 10)))
     assert info.to_json()["amount_original"] == "111.11" and info.to_json()["rate"] == "25790.00"

@@ -13,9 +13,9 @@ import pytest
 from botocore.exceptions import ClientError
 from ingest_helpers import PNG, REPO, FakeBedrock, csv_bytes, make_gateway
 from yofina_ingest import extract as ex
-from yofina_ingest import fx
 from yofina_ingest.context import ExtractContext, Rule, eval_context
 
+from yofina_core import fx
 from yofina_core.ingest import IngestSettings
 from yofina_core.pii import PiiPolicy
 
