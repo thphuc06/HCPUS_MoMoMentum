@@ -1003,10 +1003,12 @@ def _pii_of(item: Mapping[str, Any] | None) -> dict[str, list[Any]]:
 
 def _leaks(node: Any, pii: Mapping[str, Any]) -> dict[str, bool]:
     """Như `scripts/eval_ingest.leaks` (cùng cách băm của `make_ingest_synthetic.py`), sau khi bỏ dấu câu dính vào từ và parse JSON
-    trong chuỗi (tham số, kết quả tool), để `"Nguyễn Văn A."` hay `{"name": "..."}` không lọt."""
+    trong chuỗi (tham số, kết quả tool), để `"Nguyễn Văn A."`, `"NGUYEN THI A;nop tien;"`, `"NGUYEN_THI_A"` hay `{"name": "..."}`
+    không lọt. `eval_ingest.leaks` tự nó tách từ theo khoảng trắng, nên mọi ký tự không phải chữ hay số (kể cả `;` và `_`) phải
+    thành khoảng trắng TRƯỚC khi gọi; dấu chấm, gạch ngang chỉ giữ khi nằm giữa hai chữ số (số tài khoản `0011.0022.0033`)."""
     import eval_ingest
 
-    texts = [" ".join(re.sub(r"[^\w\s.\-]", " ", s).split()) for s in _strings(node)]
+    texts = [" ".join(re.sub(r"[^\w\s.\-]|_", " ", s).split()) for s in _strings(node)]
     texts = [re.sub(r"(?<!\d)[.\-]|[.\-](?!\d)", " ", t) for t in texts]
     return eval_ingest.leaks({"t": texts}, pii)
 
@@ -1152,7 +1154,7 @@ def memory_reuse(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, A
 def _names_in(text: str) -> list[str]:
     """Cụm từ hai chữ trở lên viết hoa chữ đầu liền nhau ("Trần Thị B"): họ tên người trong câu hỏi."""
     groups, cur = [], []
-    for tok in re.findall(r"[\w]+", text or ""):
+    for tok in re.findall(r"[^\W_]+", text or ""):
         if tok[0].isupper():
             cur.append(tok)
             continue
@@ -1176,7 +1178,7 @@ def memory_without_pii(run: Mapping[str, Any], question: str) -> dict[str, Any]:
         text = str(rec.get("text") or "")
         if numbers & _digit_runs(text):
             leaks.append(f"{rec.get('record_id')}:number")
-        if any(_has_phrase(_fold(text), n) for n in names):
+        if any(_has_phrase(_fold(text.replace("_", " ")), n) for n in names):
             leaks.append(f"{rec.get('record_id')}:name")
     return {
         "ok": not leaks,

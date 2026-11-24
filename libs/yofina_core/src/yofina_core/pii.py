@@ -23,9 +23,11 @@ Quy tắc (contracts/README.md, mục "Phase 5 (F6)" -> "Che PII"):
 - **Số điện thoại Việt Nam**: `0` hoặc `+84` rồi 8 tới 10 chữ số (tổng 9 tới 11 số), ngăn bằng dấu cách, chấm hoặc gạch ->
   `****` + 4 số cuối.
 - **Tên người** trong văn bản tự do: dãy 2 tới 5 từ (chỉ chữ cái), từ đầu là họ Việt phổ biến, mọi từ viết hoa chữ đầu (hoặc viết
-  hoa toàn bộ), không từ nào là từ thông dụng -> chữ cái đầu + `***` (`chuyen tien cho NGUYEN VAN A` -> `chuyen tien cho N***`).
-  Ngay sau `cho`, `toi`, `gui`, `den` thì nhận cả tên viết thường. Đối tác mà người gọi biết là người (model báo, hoặc loại giao
-  dịch chuyển tiền cho người) thì che cả chuỗi bằng `mask_person`.
+  hoa toàn bộ), không từ nào là từ thông dụng, trừ tên đệm và tên riêng phổ biến (`NAME_WORDS`: "Thị", "Văn", "An", "Tiến" vẫn là
+  tên) -> chữ cái đầu + `***` (`chuyen tien cho NGUYEN VAN AN` -> `chuyen tien cho N***`, `NGUYEN THI A;nop tien;` ->
+  `N***;nop tien;`). Ngay sau `cho`, `toi`, `gui`, `den` thì nhận cả tên viết thường, nhưng từ kế tiếp họ phải là tên riêng phổ
+  biến (họ trùng đại từ hay từ thông dụng như "họ", "đó" thì phải là tên đệm), để "nhắc đến họ buổi sáng" không bị che. Đối tác mà
+  người gọi biết là người (model báo, hoặc loại giao dịch chuyển tiền cho người) thì che cả chuỗi bằng `mask_person`.
 - **Giữ nguyên tên doanh nghiệp**: chuỗi chứa từ khóa doanh nghiệp (công ty, cửa hàng, siêu thị, EVN...) hoặc tên thương hiệu người
   gọi truyền vào (`PiiPolicy.keep`, ví dụ tên cửa hàng đã biết) không bị coi là tên người. Tên của chính người dùng
   (`PiiPolicy.self_names`) được giữ.
@@ -69,6 +71,10 @@ _KEYWORD_ACCOUNT = re.compile(
 )
 _ID12 = re.compile(r"(?<![\d.,])\d{12}(?![\d])")
 _LONG = re.compile(r"(?<![\d.,])\d{10,19}(?![\d])")
+#: Từ khóa đứng ngay trước một dấu thời gian Unix (giây hoặc mili giây): dãy số sau nó không phải số tài khoản. Tóm tắt phiên của
+#: AgentCore Memory chép kiểu "timestamp 1795505552861" vào bản ghi; trước đây dãy này bị che thành `[STK]`.
+_EPOCH_LEAD = re.compile(r"\b(?:timestamp|epoch|unix(?:\s+time)?)\b\D{0,20}$", re.IGNORECASE)
+_EPOCH_DIGITS = re.compile(r"\d{10}|\d{13}")
 
 
 @dataclass
@@ -112,8 +118,49 @@ def mask_pii(text: str) -> MaskResult:
     out = _sub_keyword(_KEYWORD_ID, out, lambda _n: "national_id", counts)
     out = _sub_keyword(_KEYWORD_ACCOUNT, out, lambda _n: "account", counts)
     out = _sub(_ID12, out, "national_id", counts)  # đúng 12 chữ số liền: CCCD
-    out = _sub(_LONG, out, "account", counts)  # từ 10 chữ số liền không phân tách: số tài khoản
+    out = _sub_long(
+        out, counts
+    )  # từ 10 chữ số liền không phân tách: số tài khoản (trừ dấu thời gian có từ khóa)
     return MaskResult(out, counts)
+
+
+def _is_epoch(text: str, m: re.Match[str]) -> bool:
+    """Dãy 10 hoặc 13 chữ số ngay sau từ khóa "timestamp"/"epoch": dấu thời gian Unix, không phải số tài khoản."""
+    return bool(_EPOCH_DIGITS.fullmatch(m.group(0))) and bool(
+        _EPOCH_LEAD.search(text[max(0, m.start() - 40) : m.start()])
+    )
+
+
+def _sub_long(text: str, counts: Counter[str]) -> str:
+    def repl(m: re.Match[str]) -> str:
+        if _is_epoch(text, m):
+            return m.group(0)
+        counts["account"] += 1
+        return PLACEHOLDERS["account"]
+
+    return _LONG.sub(repl, text)
+
+
+# Dấu thời gian Unix mà bước tóm tắt phiên của AgentCore Memory chép vào bản ghi ("(timestamp 1795505552861)", "Thời điểm:
+# timestamp 1795505692694 (ms), tương đương khoảng 2026-11-24 07:34 UTC", "*(Nguồn: timestamp ...)*"): vô nghĩa với người đọc.
+_TS_PAREN = re.compile(r"[ \t]*\*?\([^()\n]{0,40}?\btimestamp\b[^()\n]{0,100}\)\*?", re.IGNORECASE)
+_TS_INLINE = re.compile(
+    r"(?:,[ \t]*)?(?:\b(?:thời điểm|thoi diem|mốc thời gian|moc thoi gian)(?:[ \t]+ghi nhận)?[ \t]*:?[ \t]*)?"
+    r"\btimestamp\b[^\d\n]{0,30}?\d{10,13}(?:[ \t]*\(?[ \t]*ms[ \t]*\)?)?"
+    r"(?:[ \t]*,?[ \t]*(?:tương đương|tuong duong)(?:[ \t]+khoảng)?[ \t]+\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?(?:[ \t]*UTC)?)?",
+    re.IGNORECASE,
+)
+_EMPTY_BULLET = re.compile(r"^[ \t]*(?:[-*•][ \t]*)?[.,;:]?[ \t]*$")
+
+
+def strip_epoch_timestamps(text: str) -> str:
+    """Bỏ các cụm dấu thời gian Unix ("timestamp 1795505552861") khỏi chữ một bản ghi bộ nhớ, rồi bỏ dòng gạch đầu dòng chỉ còn
+    dấu câu. Chữ khác giữ nguyên (cả xuống dòng)."""
+    if "timestamp" not in text.lower():
+        return text
+    out = _TS_INLINE.sub("", _TS_PAREN.sub("", text))
+    lines = [ln for ln in out.split("\n") if not (_EMPTY_BULLET.match(ln) and ln.strip())]
+    return "\n".join(lines)
 
 
 def mask_text(text: str) -> str:
@@ -334,6 +381,205 @@ COMMON_WORDS = frozenset(
 COMMON_WORDS |= frozenset({"mo" + "mo"})
 #: từ đứng ngay trước tên người viết thường ("chuyen tien cho nguyen van a")
 NAME_LEADS = frozenset({"cho", "toi", "gui", "den"})
+#: tên đệm và tên riêng phổ biến (đã bỏ dấu, chữ thường). Sau một họ, các từ này vẫn tính là tên dù trùng từ thông dụng ("thi" của
+#: siêu thị, "an" của ăn uống, "tien" của tiền): "NGUYEN THI A", "Nguyễn Văn An", "Trần Thị Thanh Hoa" được che trọn.
+NAME_WORDS = frozenset(
+    [
+        "an",
+        "anh",
+        "bach",
+        "bang",
+        "bao",
+        "bich",
+        "binh",
+        "cam",
+        "canh",
+        "chau",
+        "chi",
+        "chinh",
+        "cong",
+        "cuc",
+        "cuong",
+        "dai",
+        "dan",
+        "danh",
+        "dao",
+        "dat",
+        "diem",
+        "diep",
+        "dieu",
+        "dinh",
+        "doan",
+        "dong",
+        "duc",
+        "dung",
+        "duong",
+        "duy",
+        "duyen",
+        "gia",
+        "giang",
+        "giao",
+        "ha",
+        "hai",
+        "han",
+        "hanh",
+        "hang",
+        "hao",
+        "hau",
+        "hien",
+        "hieu",
+        "hoa",
+        "hoai",
+        "hoan",
+        "hoang",
+        "hong",
+        "hue",
+        "hung",
+        "huong",
+        "huu",
+        "huy",
+        "huyen",
+        "kha",
+        "khai",
+        "khang",
+        "khanh",
+        "khoa",
+        "khoi",
+        "khue",
+        "kien",
+        "kiet",
+        "kim",
+        "lam",
+        "lan",
+        "le",
+        "lien",
+        "linh",
+        "loan",
+        "loc",
+        "loi",
+        "long",
+        "luan",
+        "luong",
+        "ly",
+        "mai",
+        "man",
+        "manh",
+        "minh",
+        "my",
+        "nam",
+        "nga",
+        "ngan",
+        "nghia",
+        "ngoc",
+        "nguyet",
+        "nhan",
+        "nhat",
+        "nhi",
+        "nhien",
+        "nhu",
+        "nhung",
+        "oanh",
+        "phat",
+        "phong",
+        "phu",
+        "phuc",
+        "phung",
+        "phuong",
+        "quan",
+        "quang",
+        "que",
+        "quoc",
+        "quy",
+        "quyen",
+        "quynh",
+        "sang",
+        "son",
+        "sy",
+        "tai",
+        "tam",
+        "tan",
+        "thach",
+        "thai",
+        "thang",
+        "thanh",
+        "thao",
+        "thi",
+        "thien",
+        "thinh",
+        "tho",
+        "thoa",
+        "thu",
+        "thuan",
+        "thuc",
+        "thuong",
+        "thuy",
+        "tien",
+        "tinh",
+        "toan",
+        "tram",
+        "trang",
+        "tri",
+        "trieu",
+        "trinh",
+        "trong",
+        "truc",
+        "trung",
+        "truong",
+        "tu",
+        "tuan",
+        "tue",
+        "tung",
+        "tuong",
+        "tuyen",
+        "tuyet",
+        "uyen",
+        "van",
+        "viet",
+        "vinh",
+        "vu",
+        "vuong",
+        "vy",
+        "xuan",
+        "yen",
+    ]
+)
+#: tên đệm hay gặp: sau một họ viết thường mà họ đó cũng là từ thông dụng ("họ", "đó", "mai", "lại"...), chỉ nhận là tên khi từ kế
+#: tiếp là tên đệm ("cho mai thi lan" là tên, "nhắc đến họ buổi sáng" và "cho đồ ăn" thì không)
+MIDDLE_NAMES = frozenset(
+    [
+        "van",
+        "thi",
+        "duc",
+        "huu",
+        "ngoc",
+        "minh",
+        "thanh",
+        "quang",
+        "xuan",
+        "hoang",
+        "kim",
+        "gia",
+        "bao",
+        "dinh",
+        "cong",
+        "quoc",
+        "thu",
+        "hong",
+        "tuan",
+        "trung",
+    ]
+)
+#: cụm từ thông dụng mở đầu bằng một tên riêng ("THANH TOAN", "AN UONG", "TIEN NHA"): trong chữ in hoa toàn bộ hay viết thường thì dãy
+#: tên dừng trước cụm này ("NGUYEN VAN A THANH TOAN" chỉ che "NGUYEN VAN A")
+COMMON_PHRASES = frozenset(
+    {
+        ("thanh", "toan"), ("thanh", "cong"), ("thanh", "ly"), ("an", "uong"), ("an", "trua"), ("an", "sang"),
+        ("an", "toi"), ("an", "vat"), ("hoa", "don"), ("tien", "nha"), ("tien", "dien"), ("tien", "nuoc"),
+        ("tien", "an"), ("tien", "hoc"), ("tien", "phong"), ("tien", "tro"), ("tien", "mang"), ("tien", "thue"),
+        ("tien", "luong"), ("tien", "mat"), ("chi", "tieu"), ("tam", "ung"), ("sang", "nay"), ("hang", "thang"),
+        ("nam", "nay"), ("thang", "nay"), ("le", "phi"), ("tu", "thien"),
+    }
+)  # fmt: skip
 #: từ khóa doanh nghiệp (đã bỏ dấu, chữ thường): có trong chuỗi thì chuỗi là doanh nghiệp
 BUSINESS_KEYWORDS = (
     "cong ty", "cty", "tnhh", "co phan", "jsc", "corp", "company", "ltd", "llc", "inc", "cua hang", "sieu thi",
@@ -416,27 +662,53 @@ def _protected(words: list[re.Match[str]], policy: PiiPolicy) -> set[int]:
     return hit
 
 
+def _is_title(word: str) -> bool:
+    """Viết hoa chữ đầu, phần còn lại viết thường ("Thanh"; không phải "THANH" hay "thanh")."""
+    return word[:1].isupper() and (len(word) == 1 or word[1:].islower())
+
+
 def _name_spans(text: str, policy: PiiPolicy) -> list[tuple[int, int]]:
-    """Vị trí các dãy giống tên người Việt trong `text` (xem docstring module)."""
+    """Vị trí các dãy giống tên người Việt trong `text` (xem docstring module).
+
+    Một dãy bắt đầu ở một họ (viết hoa chữ đầu, hoặc viết thường ngay sau `cho`/`toi`/`gui`/`den`) và gom thêm tối đa bốn từ liền
+    nhau (chỉ cách bằng khoảng trắng). Từ gom thêm phải viết hoa chữ đầu (trừ khi dãy đứng sau từ dẫn) và không phải từ thông dụng,
+    TRỪ khi từ đó là tên đệm hay tên riêng phổ biến (`NAME_WORDS`: "Thị", "Văn", "An", "Tiến"...). Dãy dừng trước một cụm thông
+    dụng (`COMMON_PHRASES`, "THANH TOAN") khi chữ không viết kiểu tên riêng. Với dãy viết thường sau từ dẫn: từ kế tiếp họ phải là
+    tên riêng phổ biến, và nếu họ cũng là từ thông dụng ("họ", "đó", "mai") thì phải là tên đệm."""
     words = list(_WORD.finditer(text))
     folded = [fold(w.group(0)) for w in words]
     protected = _protected(words, policy)
     spans: list[tuple[int, int]] = []
+
+    def joined(j: int) -> bool:
+        return not text[words[j - 1].end() : words[j].start()].strip()
+
     i = 0
     while i < len(words):
-        lead = (
-            i > 0
-            and folded[i - 1] in NAME_LEADS
-            and not text[words[i - 1].end() : words[i].start()].strip()
-        )
-        cap_ok = words[i].group(0)[:1].isupper() or lead
-        if folded[i] in SURNAMES and cap_ok and i not in protected:
+        first = words[i].group(0)
+        lead = i > 0 and folded[i - 1] in NAME_LEADS and joined(i)
+        capital = first[:1].isupper()
+        if folded[i] in SURNAMES and (capital or lead) and i not in protected:
+            lower = not capital  # dãy viết thường sau từ dẫn
             j = i + 1
-            while j < len(words) and j - i < 5:
-                gap = text[words[j - 1].end() : words[j].start()]
-                if gap.strip() or j in protected or folded[j] in COMMON_WORDS:
+            while j < len(words) and j - i < 5 and joined(j) and j not in protected:
+                w, f = words[j].group(0), folded[j]
+                if not (w[:1].isupper() or lead):
                     break
-                if not (words[j].group(0)[:1].isupper() or lead):
+                single = len(f) == 1
+                if f in COMMON_WORDS and f not in NAME_WORDS and not single:
+                    break
+                if lower and j == i + 1:
+                    ambiguous = folded[i] in COMMON_WORDS or folded[i] in _AMBIGUOUS_SURNAMES
+                    if not (single or f in (MIDDLE_NAMES if ambiguous else NAME_WORDS)):
+                        break
+                if (
+                    f in COMMON_WORDS
+                    and j + 1 < len(words)
+                    and joined(j + 1)
+                    and (f, folded[j + 1]) in COMMON_PHRASES
+                    and not _is_title(w)
+                ):
                     break
                 j += 1
             if j - i >= 2:
@@ -447,6 +719,12 @@ def _name_spans(text: str, policy: PiiPolicy) -> list[tuple[int, int]]:
                 continue
         i += 1
     return spans
+
+
+#: họ trùng đại từ hay từ rất thông dụng khi viết thường ("họ", "đó"/"đồ", "tô", "ta", "mai", "hà"...)
+_AMBIGUOUS_SURNAMES = frozenset(
+    {"ho", "do", "to", "ta", "mai", "ha", "cao", "than", "lam", "thai", "tu"}
+)
 
 
 def mask_names(text: str, policy: PiiPolicy | None = None) -> str:
@@ -528,4 +806,5 @@ __all__ = [
     "mask_pii",
     "mask_row_text",
     "mask_text",
+    "strip_epoch_timestamps",
 ]
