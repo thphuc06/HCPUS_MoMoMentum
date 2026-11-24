@@ -1599,7 +1599,7 @@ def test_nap_ban_ghi_dung_namespace_cua_sub_dung_dang_strategy_va_tu_het_han():
     items = case5("golden", "memory-recall")["seed_memory"]
     out = seeder(client, {"preference": "preferences_vi-xyz"}).seed(items, case_id="memory-recall")
     (call,) = client.calls
-    assert call["memoryId"] == "yofina_memory-abcdefghij" and call["recordExpirySpecification"] == {"recordExpiryDurationDays": 1}
+    assert call["memoryId"] == "yofina_memory-abcdefghij" and call["recordExpirySpecification"] == {"recordExpiryDurationDays": 31}
     pref, fact = call["records"]
     assert pref["namespaces"] == [f"/yofina/users/{EVAL_SUB}/preferences/"]
     assert fact["namespaces"] == [f"/yofina/users/{EVAL_SUB}/facts/"]

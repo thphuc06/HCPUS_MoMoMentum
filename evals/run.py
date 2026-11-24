@@ -554,8 +554,8 @@ def run_prior_sessions(
 # --- bộ nhớ: nạp bản ghi trước cho ca DÙNG, chờ bản ghi mong đợi cho ca GHI (phase 5) -------------------
 #: Ngữ cảnh ghi kèm bản ghi sở thích nạp tay (trường `context` của JSON mà strategy sở thích tạo; agent và `GET /memory` không đọc nó).
 SEED_CONTEXT = "Người dùng tự nói trong một phiên trước (bản ghi do bộ đánh giá nạp)."
-#: Bản ghi nạp tay tự hết hạn sau 1 ngày (`recordExpirySpecification`), phòng khi bước dọn sau ca không chạy.
-SEED_EXPIRY_DAYS = 1
+#: Bản ghi nạp tay tự hết hạn sau 31 ngày (mức tối thiểu của API) (`recordExpirySpecification`), phòng khi bước dọn sau ca không chạy.
+SEED_EXPIRY_DAYS = 31  # tối thiểu API cho phép (recordExpiryDurationDays >= 31); bản ghi vẫn được dọn ngay sau ca
 
 
 def token_sub(token: str) -> str:
