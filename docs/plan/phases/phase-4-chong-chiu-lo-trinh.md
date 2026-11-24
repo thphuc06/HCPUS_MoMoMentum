@@ -119,7 +119,34 @@ Người điều phối (Claude Code trên máy Phúc) giao bốn gói cho bốn
 
 ## Kết quả thực hiện
 
-(Điền khi đóng phase.)
+### Đóng phase ngày 2026-11-24 (Runtime `yofina_agent` version 18)
+
+Chủ dự án quyết định đóng phase 4 ngày 24/11. Cách làm của đợt đóng: Claude Code điều phối, các worker `kiro-cli` (Claude Opus 5.5) viết code, deploy và chạy kiểm; Claude Code review, merge và tự đi cảnh 3, 4.
+
+| # | Tiêu chí | Kết quả | Dẫn chứng |
+|---|---|---|---|
+| 1 | Điểm chống chịu `minh`, ba cú sốc | Đạt | Đi trên Amplify 24/11: điểm 33/100 "Yếu", bốn thành phần có giải thích (Tiết kiệm 15, Chi tiêu 43, Vay nợ 10, Kế hoạch 94); "Mất việc 2 tháng" 33 → 13, trụ 31 ngày, hũ Dự phòng 13 ngày, thiếu 8.508.779 ₫ từ 23/12. Figma ghi 58 → 34, 27 ngày; dùng số engine (đã ghi ở quyết định 12). Hai cú sốc còn lại: integration test 03 |
+| 2 | Sau đặt lại có lộ trình "hành vi thay đổi", so bản cũ, chấp nhận bước | Đạt | Đi trên Amplify: v2 đang dùng + dải "Có phiên bản mới" → So với bản cũ (thêm 1, bỏ 1, đổi 1, lý do "Chi Ăn uống mỗi tuần tăng từ 520.000 ₫ lên 810.000 ₫…") → Dùng bản mới → Vì sao → Chấp nhận. Đổi số dư qua confirm và token: integration test 09, 12 |
+| 3 | Script lệch mức + batch đêm → điểm gãy, lộ trình mới; một khoản lớn không sinh lại | Đạt (trên `lan`, `--factor 4`) | Mục "Tiêu chí 3 (24/11)" bên dưới |
+| 4 | Mục tiêu không khả thi: nói thẳng, hai lựa chọn | Đạt | Golden `roadmap-infeasible-goal`: `feasibility` infeasible, đúng 2 `alternatives` (Runtime v18) |
+| 5 | Đối kháng: 0 lộ trình vi phạm suitability | Đạt | Adversarial phase 4 12/12, 0 bước vi phạm |
+| 6 | Phân loại ≥ 90% đúng, < 10% phải hỏi | Đúng đạt, tỷ lệ hỏi chưa đạt | 92% đúng trên phần tự gán; tỷ lệ hỏi 17,4% (ghi ở entry ai-log gói 4, 23/11) |
+| 7 | Đối tác mới trong 1 phút; "luôn luôn cho người này" | Đạt | Integration test 19–21 (45/45 trên v18) |
+| 8 | LP: ca vô nghiệm, nới, ưu tiên; thời gian | Đạt | Unit test LP; giải 3 ms, cả lượt 0,89 s (23/11) |
+| 9 | Cảnh 3, 4 trên Amplify | Đạt | Đi 24/11 ở khổ 390x844, tài khoản `minh` (chủ dự án tự đăng nhập). Hỏi "Nên mua cổ phiếu nào?" → "Ngoài phạm vi hiện tại", không mã chứng khoán |
+
+Số cuối cùng trên Runtime v18: golden phase 4 14/14, adversarial phase 4 12/12, golden phase 3 31/31 (gồm `whatif-bnpl2`), integration phase 3+4 45/45, unit 2902.
+
+Sửa trong đợt đóng (23–24/11): schema gửi model mất field `title`; goals sai hũ; Lambda sinh lại bỏ qua `profile.updated` có `onboarding`; phác thảo lộ trình thử lại khi sai schema, bỏ nhãn thứ tự khỏi grounding, đề xuất suitability khớp ledger, log bước bị loại; mục tiêu người dùng nói trong câu (`target_vnd`, `target_date`); luật `source_jar_covers` v2 (bước từ kỳ lương kế so với thu nhập tháng); Verifier what-if gửi proposal đúng hũ nguồn và giữ phương án khi rơi vào dự phòng.
+
+Lệch và việc để sau:
+- Đi cảnh 4 thấy: bước lộ trình hiện mã hũ thô ("giai_tri → an_uong"); chip gợi ý sau lời từ chối chưa có lối về chống chịu/lộ trình (đang giao sửa). "Vì sao" mở tại chỗ thay vì bảng riêng như Figma; trang lộ trình mở bản đang dùng (v2) kèm dải "Có phiên bản mới" thay vì mở thẳng v3.
+- `period_end` của lộ trình tính theo ngày hôm nay, chưa theo ngày lương (agent chưa có ngày lương từ tool).
+- Model đôi khi đề bước có phân bổ 0 ₫ (bị loại, lộ trình vẫn lưu các bước còn lại).
+- Golden `roadmap-edit-one-step` ra `infeasible`: có thể router đọc câu sửa bước thành mục tiêu mới; xem lại.
+- Seed `minh` có sẵn dấu hiệu `confirmed` nên tiêu chí 3 phải kiểm trên `lan`; docstring script ghi `--factor 2` nhưng cần khoảng 3–4.
+- local_pg `test_dat_lai_xoa_sach_du_lieu_moi_cua_0052_dung_nguoi` đỏ sẵn (đếm `tx_embeddings_labeled`).
+- Tỷ lệ hỏi của phân loại 17,4%: hai hướng giảm (bỏ token mẫu QR khỏi chuỗi embedding; giảm trọng số lịch sử khi ghi chú rõ).
 
 ### Tiêu chí 3 (24/11)
 
