@@ -39,6 +39,11 @@ Bảy ghi chú dưới đây do subagent (Claude Sonnet 5.5) viết ngày 2026-1
 
 [ui-design-review.md](ui-design-review.md): nguyên tắc rút từ skill frontend-design, UI UX Pro Max, Vercel Web Interface Guidelines, Apple HIG, Material 3; 15 vấn đề của giao diện hiện tại; bảng màu hồng mới (thay mã `#A50064` trùng logo MoMo) kèm tỷ lệ tương phản đã tính; chữ, khoảng cách, bo góc, bóng, chuyển động; khoảnh khắc chính cho 6 cảnh demo; việc P0/P1/P2. Bản xem trước tĩnh: [ui-design-preview.html](ui-design-preview.html).
 
+### Bộ nhớ dài hạn (2026-11-24)
+
+- [agentcore-memory-design.md](agentcore-memory-design.md): thiết kế AgentCore Memory đang chạy (namespace, strategy override, chính sách ghi, khối prompt, REST xem và xóa, IAM).
+- [long-term-memory-research.md](long-term-memory-research.md): nghiên cứu tối ưu bộ nhớ dài hạn cho Yofina (nên nhớ gì so với nguồn sự thật ở Aurora, ghi, hợp nhất khi sở thích đổi, đọc, nguyên tắc đưa bộ nhớ vào prompt, học từ phản hồi, bộ ca eval), kèm đề xuất triển khai P0/P1/P2.
+
 ### Kết quả chạy thử (spike, 2026-11-21)
 
 Bảy thử nghiệm đã **chạy thật** (subagent Claude Sonnet 5.5). Chỗ nào spike mâu thuẫn với ghi chú đọc tài liệu thì tin spike; các ghi chú ở trên đã được đánh dấu "[Đã chạy thử 2026-11-21]" tại chỗ. Code thử nằm trong `spikes/<tên>/` (có README chạy lại); đó là bản thử, không phải code sản phẩm.
