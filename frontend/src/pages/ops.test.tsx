@@ -31,8 +31,17 @@ describe('bảng vận hành /ops/summary', () => {
     expect(kpis).toHaveTextContent('2 / 96 lần gọi')
     expect(kpis).toHaveTextContent('27.500 ₫')
     const days = screen.getByRole('list', { name: 'Lượt gọi model theo ngày' })
-    expect(within(days).getAllByRole('listitem')).toHaveLength(3)
-    expect(within(days).getByText('61 / 500')).toBeInTheDocument()
+    expect(days.querySelectorAll(':scope > li')).toHaveLength(3)
+    // tổng ngày không so với tổng trần mọi model (7.800); từng model so với trần của chính nó
+    expect(days).not.toHaveTextContent('7.800')
+    const first = days.querySelector<HTMLElement>('[data-day="2026-12-08"]')!
+    expect(within(first).getByTestId('ops-day-total')).toHaveTextContent('61 lượt')
+    const models = within(within(first).getByRole('list', { name: 'Theo model ngày 08/12' })).getAllByRole('listitem')
+    expect(models.map((m) => m.textContent)).toEqual(['Nova 2 Lite46 / 2.000', 'Haiku 4.53 / 2.000', 'Sonnet 4.612 / 400'])
+    expect(models.every((m) => m.getAttribute('data-level') === 'ok')).toBe(true)
+    expect(within(first).getByText('Sonnet 4.6')).toHaveAttribute('title', 'global.anthropic.claude-sonnet-4-6')
+    expect(within(first).getByRole('meter', { name: 'Sonnet 4.6: 12 trên trần 400' })).toHaveAttribute('aria-valuemax', '400')
+    expect(screen.queryByText('Gần trần')).toBeNull()
 
     const table = await screen.findByRole('table')
     const rows = within(table).getAllByRole('row').slice(1)
@@ -55,6 +64,46 @@ describe('bảng vận hành /ops/summary', () => {
     expect(await screen.findByText('Chưa có lượt gọi model nào trong khoảng này.')).toBeInTheDocument()
     expect(screen.getByTestId('ops-kpis')).toHaveTextContent('Chưa có lượt')
     expect(await screen.findByText('Không có lượt nào.')).toBeInTheDocument()
+  })
+
+  it('model từ 80% trần của chính nó: cảnh báo "Gần trần"; chạm trần: "Chạm trần"; model ngoài cấu hình: chỉ số lượt', async () => {
+    const body = structuredClone(restFixture('OpsSummaryResponse.default')) as Record<string, any>
+    body.model_calls_by_day = [{
+      day: '2026-12-08',
+      model_calls: 4219,
+      cap: 7800,
+      by_model: [
+        { model: 'global.amazon.nova-2-lite-v1:0', model_calls: 1599, cap: 2000 },
+        { model: 'global.anthropic.claude-haiku-4-5-20251001-v1:0', model_calls: 2000, cap: 2000 },
+        { model: 'global.anthropic.claude-sonnet-4-6', model_calls: 320, cap: 400 },
+        { model: 'global.moonshotai.kimi-k3', model_calls: 300 },
+      ],
+    }]
+    mountApp(backend({ 'GET /ops/summary': body }), '/ops', config, OPS)
+    const list = await screen.findByRole('list', { name: 'Theo model ngày 08/12' })
+    const rows = within(list).getAllByRole('listitem')
+    expect(rows.map((r) => r.getAttribute('data-level'))).toEqual(['ok', 'over', 'near', null])
+    expect(rows[0]).not.toHaveTextContent('Gần trần')
+    expect(rows[1]).toHaveTextContent('Chạm trần')
+    expect(rows[1]!.querySelector('[data-chip="bad"]')).not.toBeNull()
+    expect(rows[2]).toHaveTextContent('Gần trần')
+    expect(rows[2]).toHaveTextContent('320 / 400')
+    expect(rows[2]!.querySelector('[data-chip="warn"]')).not.toBeNull()
+    expect(rows[3]).toHaveTextContent('Kimi K3')
+    expect(rows[3]).toHaveTextContent('300 lượt')
+    expect(within(rows[3]!).queryByRole('meter')).toBeNull()
+    expect(screen.getByTestId('ops-day-total')).toHaveTextContent('4.219 lượt')
+  })
+
+  it('không có by_model (số từ bản ghi lượt): hiện tổng so với trần như cũ', async () => {
+    const body = structuredClone(restFixture('OpsSummaryResponse.default')) as Record<string, any>
+    for (const d of body.model_calls_by_day) delete d.by_model
+    mountApp(backend({ 'GET /ops/summary': body }), '/ops', config, OPS)
+    const days = await screen.findByRole('list', { name: 'Lượt gọi model theo ngày' })
+    expect(days.querySelectorAll(':scope > li')).toHaveLength(3)
+    expect(within(days).getByText('61 / 7.800')).toBeInTheDocument()
+    expect(within(days).queryByRole('list')).toBeNull()
+    expect(screen.queryByTestId('ops-day-total')).toBeNull()
   })
 
   it('tài khoản không thuộc ops: không gọi /ops/*, hiện "Chỉ dành cho đội vận hành"', async () => {
@@ -100,6 +149,31 @@ describe('màn trace X1 /ops/traces/:id', () => {
     const steps = within(await screen.findByRole('list', { name: 'Các bước của lượt' })).getAllByRole('listitem')
     expect(steps[2]).toHaveTextContent('Lỗi · FORECAST_UNAVAILABLE')
     expect(screen.getByText('Cedar từ chối')).toBeInTheDocument()
+  })
+
+  it('bước tool lặp lại là các dòng riêng, giữ thứ tự, mỗi dòng có ms, trạng thái và mã', async () => {
+    const repeated = structuredClone(restFixture('OpsTraceDetail.what_if')) as Record<string, any>
+    repeated.steps = [
+      { step: 'router', ms: 480 },
+      { step: 'forecast___run_scenario', ms: 1500, status: 'ok' },
+      { step: 'forecast___run_scenario', ms: 1200, status: 'error', code: 'PARAMS_INVALID' },
+      { step: 'ledger___get_jar_balances', ms: 90, status: 'denied' },
+      { step: 'forecast___run_scenario', ms: 980, status: 'ok' },
+      { step: 'analyst', ms: 2600 },
+    ]
+    mountApp(backend({ [`GET /ops/traces/${detail.trace_id}`]: repeated }), `/ops/traces/${detail.trace_id}`, config, OPS)
+    const steps = within(await screen.findByRole('list', { name: 'Các bước của lượt' })).getAllByRole('listitem')
+    expect(steps.map((s) => s.getAttribute('data-step'))).toEqual(repeated.steps.map((s: { step: string }) => s.step))
+    expect(steps[1]).toHaveTextContent('forecast · run_scenario')
+    expect(steps[1]).toHaveTextContent('OK')
+    expect(steps[1]).toHaveTextContent('1,5 s')
+    expect(steps[2]).toHaveTextContent('Lỗi · PARAMS_INVALID')
+    expect(steps[2]).toHaveTextContent('1,2 s')
+    expect(steps[3]).toHaveTextContent('ledger · get_jar_balances')
+    expect(steps[3]).toHaveTextContent('Cedar từ chối')
+    expect(steps[3]).toHaveTextContent('90 ms')
+    expect(steps[4]).toHaveTextContent('980 ms')
+    expect(steps[5]).not.toHaveTextContent('OK')
   })
 
   it('không có trace: báo lỗi tiếng Việt; người không thuộc ops không gọi API', async () => {

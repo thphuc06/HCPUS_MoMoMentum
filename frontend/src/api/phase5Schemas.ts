@@ -253,7 +253,22 @@ export const OpsTraceDetail = z.object({
 })
 export type OpsTraceDetail = z.infer<typeof OpsTraceDetail>
 
-export const OpsDayModelCalls = z.object({ day: IsoDate, model_calls: z.int().min(0), cap: z.int().min(1) })
+/** Lượt gọi một model trong ngày; `cap` là trần ngày của chính model đó, vắng khi model không còn trong cấu hình. */
+export const OpsModelDayCalls = z.object({
+  model: z.string().min(1).max(200),
+  model_calls: z.int().min(0),
+  cap: z.int().min(0).optional(),
+})
+export type OpsModelDayCalls = z.infer<typeof OpsModelDayCalls>
+
+/** `cap` là tổng trần mọi model (chỉ để tham khảo); so với trần thì dùng `by_model`, vắng khi số lấy từ bản ghi lượt. */
+export const OpsDayModelCalls = z.object({
+  day: IsoDate,
+  model_calls: z.int().min(0),
+  cap: z.int().min(1),
+  by_model: z.array(OpsModelDayCalls).max(20).optional(),
+})
+export type OpsDayModelCalls = z.infer<typeof OpsDayModelCalls>
 
 export const OpsSummaryResponse = z.object({
   from: IsoDateTime,
