@@ -2004,8 +2004,9 @@ paths:
       description: |
         Trong khoảng `from`..`to` (thời điểm thật, mặc định 7 ngày gần nhất, tối đa 31 ngày): số lượt, độ trễ p50 và p95 của lượt, số lần
         gọi tool và tỷ lệ lỗi tool (từ `step_timings`), số lần luật chặn (luật `fail` trong `rules_checked`), lượt bị từ chối và lỗi, số
-        lượt gọi model theo ngày so với trần trong cấu hình (`llm_defaults.json`). Hàm `app_ops_summary` (SECURITY DEFINER) chỉ trả số
-        tổng hợp. Không thuộc nhóm `ops` thì 403 `FORBIDDEN`.
+        lượt gọi model theo ngày (ngày của múi giờ tính trần, bảng `yofina-usage`) so với trần trong cấu hình (`llm_defaults.json`), có
+        tách theo từng model (`by_model`). Hàm `app_ops_summary` (SECURITY DEFINER) chỉ trả số tổng hợp. Không thuộc nhóm `ops` thì 403
+        `FORBIDDEN`.
       parameters:
         - $ref: '#/components/parameters/Traceparent'
         - name: from
@@ -4181,19 +4182,55 @@ components:
         pii_masked:
           const: true
     OpsDayModelCalls:
+      description: |
+        Lượt gọi model của một ngày. Trần gọi model tính theo TỪNG model (`yofina_core.llm`), nên so với trần thì dùng `by_model`; `cap`
+        chỉ là tổng trần của mọi model, để tham khảo.
       type: object
       required: [day, model_calls, cap]
       additionalProperties: false
       properties:
         day:
-          description: Ngày theo UTC của thời điểm thật (trần gọi model tính theo ngày thật, không theo ngày mô phỏng).
+          description: |
+            Ngày theo múi giờ tính trần gọi model (`budget_timezone` của `llm_defaults.json`, hiện `Asia/Ho_Chi_Minh`), đúng khóa `day`
+            của bảng `yofina-usage`; theo thời điểm thật, không theo ngày mô phỏng. Khi không đọc được `yofina-usage`, số lấy từ bản ghi
+            lượt của agent (`app_ops_model_calls_by_day`, chỉ lượt gọi của agent nên thấp hơn số thật), ngày là ngày UTC và không có `by_model`.
           $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        model_calls:
+          description: Tổng lượt gọi model trong ngày (mọi model, mọi thành phần).
+          type: integer
+          minimum: 0
+        cap:
+          description: Tổng trần ngày của mọi model đang cấu hình (không phải trần của một model nào).
+          type: integer
+          minimum: 1
+        by_model:
+          description: |
+            Tách theo model id (khóa `model` của `yofina-usage`), chỉ model có lượt gọi trong ngày, xếp theo `model`. Tổng `model_calls`
+            bằng `model_calls` của ngày. Vắng khi số lấy từ bản ghi lượt (không đọc được `yofina-usage`).
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/OpsModelDayCalls'
+    OpsModelDayCalls:
+      description: Lượt gọi một model trong ngày so với trần ngày của chính model đó.
+      type: object
+      required: [model, model_calls]
+      additionalProperties: false
+      properties:
+        model:
+          description: Model id hoặc inference profile id của Bedrock như trong `llm_defaults.json` (ví dụ `global.amazon.nova-2-lite-v1:0`).
+          type: string
+          minLength: 1
+          maxLength: 200
         model_calls:
           type: integer
           minimum: 0
         cap:
+          description: |
+            Trần ngày của model này (lớn nhất trong các vai dùng nó, `daily_cap` của `llm_defaults.json` hoặc giá trị ghi đè). Vắng khi
+            model không còn trong cấu hình hiện tại.
           type: integer
-          minimum: 1
+          minimum: 0
     OpsSummaryResponse:
       description: Số tổng hợp trong `from`..`to`. `latency_ms` vắng khi không có lượt nào.
       type: object

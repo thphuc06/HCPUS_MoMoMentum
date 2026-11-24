@@ -29,6 +29,7 @@ from yofina_core.blocks import BLOCK_MODELS
 from yofina_core.confirm import hash_normalized_params
 from yofina_core.errors import HTTP_STATUS, ErrorCode
 from yofina_core.ingest import INGEST_TOOLS
+from yofina_core.llm import load_settings
 from yofina_core.params import ParamsError, normalize_params
 
 SPEC = yaml.safe_load((CONTRACTS / "rest" / "openapi.yaml").read_text(encoding="utf-8"))
@@ -455,6 +456,18 @@ def test_ops_fixture_nhat_quan():
     assert s["tool_error_rate"] == pytest.approx(s["tool_errors"] / s["tool_calls"], abs=1e-4)
     assert s["latency_ms"]["p50"] <= s["latency_ms"]["p95"]
     assert all(day["model_calls"] <= day["cap"] for day in s["model_calls_by_day"])
+    # trần tính theo từng model: tổng của `by_model` bằng số của ngày, mỗi model không quá trần của chính nó, `cap` của ngày là tổng trần
+    llm = load_settings(env={})
+    caps: dict[str, int] = {}
+    for specs in llm.roles.values():
+        for m in specs:
+            caps[m.id] = max(caps.get(m.id, 0), m.daily_cap)
+    for day in s["model_calls_by_day"]:
+        models = [m["model"] for m in day["by_model"]]
+        assert models == sorted(models) and set(models) <= set(caps)
+        assert sum(m["model_calls"] for m in day["by_model"]) == day["model_calls"]
+        assert all(m["cap"] == caps[m["model"]] and m["model_calls"] <= m["cap"] for m in day["by_model"])
+        assert day["cap"] == sum(caps.values())
     assert "latency_ms" not in fx("rest/OpsSummaryResponse.khong_co_luot.json")
 
 

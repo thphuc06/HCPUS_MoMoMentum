@@ -119,6 +119,8 @@ class FakeDb:
 
 
 class FakeDdb:
+    """`yofina-usage` giả: mỗi ngày là danh sách `count` (model `model-a`, `model-b`... theo thứ tự) hoặc cặp (model, count)."""
+
     def __init__(self, items_by_day=None, fail=False):
         self.items_by_day = items_by_day or {}
         self.fail = fail
@@ -129,7 +131,10 @@ class FakeDdb:
         if self.fail:
             raise RuntimeError("AccessDeniedException")
         day = kw["ExpressionAttributeValues"][":d"]["S"]
-        items = [{"count": {"N": str(n)}} for n in self.items_by_day.get(day, [])]
+        items = []
+        for i, entry in enumerate(self.items_by_day.get(day, [])):
+            model, n = entry if isinstance(entry, tuple) else (f"model-{chr(ord('a') + i)}", entry)
+            items.append({"model": {"S": model}, "count": {"N": str(n)}})
         if "ExclusiveStartKey" in kw:  # trang thứ hai: phần còn lại
             return {"Items": items[1:]}
         page = {"Items": items[:1]}  # trang thứ nhất: một mục, còn nữa thì có LastEvaluatedKey
@@ -376,10 +381,23 @@ def test_tong_hop_dung_hop_dong_va_doc_bang_usage(wired, schema_ok):
     assert (body["turns"], body["turns_rejected"], body["turns_error"]) == (42, 3, 1)
     assert body["tool_error_rate"] == round(2 / 96, 4) and body["rule_fails"] == 3
     assert body["est_cost_vnd"] == PRICING.cost_vnd(200_000, 30_000)
-    # ngày theo múi giờ của trần (Asia/Ho_Chi_Minh), chỉ ngày có lượt gọi; trần = tổng trần các model đang cấu hình
+    # ngày theo múi giờ của trần (Asia/Ho_Chi_Minh), chỉ ngày có lượt gọi; `cap` của ngày = tổng trần, trần thật ở từng model
     assert body["model_calls_by_day"] == [
-        {"day": "2026-12-08", "model_calls": 61, "cap": 2400},
-        {"day": "2026-12-10", "model_calls": 9, "cap": 2400},
+        {
+            "day": "2026-12-08",
+            "model_calls": 61,
+            "cap": 2400,
+            "by_model": [
+                {"model": "model-a", "model_calls": 40, "cap": 400},
+                {"model": "model-b", "model_calls": 21, "cap": 2000},
+            ],
+        },
+        {
+            "day": "2026-12-10",
+            "model_calls": 9,
+            "cap": 2400,
+            "by_model": [{"model": "model-a", "model_calls": 9, "cap": 400}],
+        },
     ]
     days = [
         c["ExpressionAttributeValues"][":d"]["S"]
@@ -389,7 +407,8 @@ def test_tong_hop_dung_hop_dong_va_doc_bang_usage(wired, schema_ok):
     assert days == [(date(2026, 12, 3) + timedelta(days=i)).isoformat() for i in range(8)]
     call = wired.ddb.calls[0]
     assert call["TableName"] == "yofina-usage" and call["KeyConditionExpression"] == "#d = :d"
-    assert call["ExpressionAttributeNames"] == {"#d": "day", "#c": "count"}
+    assert call["ExpressionAttributeNames"] == {"#d": "day", "#m": "model", "#c": "count"}
+    assert call["ProjectionExpression"] == "#m, #c"
     assert [c for c in wired.db.calls if c[0] == SQL_MODEL_CALLS_BY_DAY] == []
 
 
@@ -452,6 +471,24 @@ def test_usage_reader_phan_trang_cong_moi_model():
     ddb = FakeDdb({"2026-12-08": [40, 21, 3]})
     assert UsageReader("yofina-usage", ddb).calls_on(date(2026, 12, 8)) == 64
     assert len(ddb.calls) == 2
+    ddb = FakeDdb({"2026-12-08": [40, 21, 3]})
+    by = UsageReader("yofina-usage", ddb).calls_by_model_on(date(2026, 12, 8))
+    assert by == {"model-a": 40, "model-b": 21, "model-c": 3} and len(ddb.calls) == 2
+
+
+def test_tach_theo_model_moi_model_so_voi_tran_cua_chinh_no(schema_ok):
+    # model không còn trong cấu hình (đổi model giữa ngày): vẫn đếm vào tổng, không có `cap`; xếp theo model id
+    ddb = FakeDdb({"2026-12-09": [("model-b", 1990), ("model-cu", 5), ("model-a", 12)]})
+    body = make_ops(FakeDb({SQL_SUMMARY: []}), ddb).summary({})
+    schema_ok("OpsSummaryResponse", body)
+    (day,) = body["model_calls_by_day"]
+    assert day["day"] == "2026-12-09" and day["model_calls"] == 2007 and day["cap"] == 2400
+    assert day["by_model"] == [
+        {"model": "model-a", "model_calls": 12, "cap": 400},
+        {"model": "model-b", "model_calls": 1990, "cap": 2000},
+        {"model": "model-cu", "model_calls": 5},
+    ]
+    assert sum(m["model_calls"] for m in day["by_model"]) == day["model_calls"]
 
 
 # --- cấu hình -----------------------------------------------------------------------------------------------------------

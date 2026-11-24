@@ -6,15 +6,26 @@ Hình dạng khớp cột của migration `0010_what_if_audit.sql` (`audit_event
 
 from __future__ import annotations
 
+import re
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from yofina_agent.tools import ToolKind, ToolOutcome
 from yofina_core import blocks as B
+from yofina_core.errors import ErrorCode
 from yofina_core.suitability import SuitabilityVerdict
 
 _BAND_ORDER = {"high": 2, "medium": 1, "low": 0}
 _OUTCOME_RANK = {"fail": 3, "warn": 2, "pass": 1, "skipped": 0}
+
+#: `TraceStep` của contracts/tools/audit.results.schema.json (và `Step` của yofina_audit.record)
+MAX_STEPS = 30
+TOOL_SEP = "___"
+_STEP_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+_CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")
+_TOOL_STATUSES = frozenset({"ok", "error", "denied"})
 
 # nhãn hiển thị của nguồn dữ liệu theo tên tool (chuỗi giao diện của bảng "Vì sao")
 TOOL_LABELS: dict[str, str] = {
@@ -108,12 +119,83 @@ def confidence(bases: Sequence[Mapping[str, Any]], *, verified: bool | None = No
     return B.ExplainConfidence(band=band, reasons=reasons[:4]).model_dump()
 
 
-def step_timings(steps: Iterable[tuple[str, int]]) -> list[dict[str, Any]]:
-    """Cộng dồn các bước cùng tên, giữ thứ tự xuất hiện đầu tiên."""
-    acc: dict[str, int] = {}
-    for name, ms in steps:
-        acc[name] = acc.get(name, 0) + max(int(ms), 0)
-    return [{"step": k, "ms": v} for k, v in acc.items()][:30]
+@dataclass
+class TurnStep:
+    """Một bước đã đo của lượt, theo thứ tự BẮT ĐẦU (lượt tạo bước khi vào, điền `ms` khi ra).
+
+    Bước gọi tool có `step` là `<target>___<tool>`, `status` (`ok`, `error`, `denied`, đúng enum `TraceStep`) và `code` khi lỗi.
+    Không bao giờ chứa tham số hay kết quả của tool (PII, số tiền).
+    """
+
+    step: str
+    ms: int = 0
+    status: str | None = None
+    code: str | None = None
+
+
+def tool_step_name(target: str, short: str) -> str:
+    """Tên bước của một lần gọi tool: luôn `<target>___<tool>` theo target của Gateway (không theo tiền tố cấu hình)."""
+    return f"{target}{TOOL_SEP}{short}"
+
+
+def tool_status(outcome: ToolOutcome) -> tuple[str, str | None]:
+    """(`status`, `code`) của một lần gọi tool theo `ToolKind`. `TraceStep` chỉ có ok/error/denied: UNAVAILABLE (hết giờ, không kết nối,
+    vượt trần tool call) và BAD_RESULT là `error`, phân biệt bằng `code` (DATABASE_UNAVAILABLE, RATE_LIMITED, INTERNAL_ERROR...)."""
+    if outcome.ok:
+        return "ok", None
+    status = "denied" if outcome.kind is ToolKind.DENIED else "error"
+    code = outcome.code if isinstance(outcome.code, str) and _CODE_RE.fullmatch(outcome.code) else None
+    return status, code or ErrorCode.INTERNAL_ERROR.value
+
+
+def _as_step(s: TurnStep | tuple[str, int]) -> TurnStep:
+    return s if isinstance(s, TurnStep) else TurnStep(s[0], s[1])
+
+
+def _is_tool(row: Mapping[str, Any]) -> bool:
+    return TOOL_SEP in row["step"]
+
+
+def _fit(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Giữ trong `MAX_STEPS` (maxItems của `TraceStep[]`; ghi quá thì `record_turn` từ chối CẢ bản ghi). Bỏ lần gọi tool `ok` lặp nhiều
+    nhất trước (lần sau cùng của tool đó), nên mọi bước không phải tool, mọi lần lỗi và ít nhất một lần của mỗi tool còn lại; thứ tự giữ nguyên."""
+    keep = list(range(len(rows)))
+    while len(keep) > MAX_STEPS:
+        counts = Counter(rows[i]["step"] for i in keep if _is_tool(rows[i]) and rows[i].get("status") == "ok")
+        if not counts:
+            break
+        name = max(counts, key=lambda n: counts[n])
+        keep.remove(max(i for i in keep if rows[i]["step"] == name and rows[i].get("status") == "ok"))
+    return [rows[i] for i in keep][:MAX_STEPS]
+
+
+def step_timings(steps: Iterable[TurnStep | tuple[str, int]]) -> list[dict[str, Any]]:
+    """`step_timings` của bản ghi lượt, theo thứ tự bắt đầu.
+
+    Mỗi lần gọi tool là MỘT bước (hai lần gọi cùng tool là hai bước), kèm `status` và `code` khi lỗi. Bước khác (router, guardrail_out,
+    verifier...) cùng tên thì cộng dồn ở vị trí đầu tiên, như bảng "Vì sao" vẫn hiển thị. Bước sai mẫu tên bị bỏ (một bước sai làm
+    `record_turn` từ chối cả bản ghi). Tối đa `MAX_STEPS`.
+    """
+    rows: list[dict[str, Any]] = []
+    merged: dict[str, dict[str, Any]] = {}
+    for raw in steps:
+        s = _as_step(raw)
+        if not _STEP_RE.fullmatch(s.step):
+            continue
+        ms = max(int(s.ms), 0)
+        if TOOL_SEP in s.step:
+            row: dict[str, Any] = {"step": s.step, "ms": ms}
+            if s.status in _TOOL_STATUSES:
+                row["status"] = s.status
+                if s.status != "ok" and s.code and _CODE_RE.fullmatch(s.code):
+                    row["code"] = s.code
+            rows.append(row)
+        elif (prev := merged.get(s.step)) is not None:
+            prev["ms"] += ms
+        else:
+            merged[s.step] = {"step": s.step, "ms": ms}
+            rows.append(merged[s.step])
+    return _fit(rows)
 
 
 def token_usage(usage_by_model: Sequence[Mapping[str, Any]], model_calls: int) -> dict[str, Any]:
@@ -138,7 +220,7 @@ def build_record(
     blocks: Iterable[Mapping[str, Any]],
     usage_by_model: Sequence[Mapping[str, Any]],
     model_calls: int,
-    steps: Iterable[tuple[str, int]],
+    steps: Iterable[TurnStep | tuple[str, int]],
     duration_ms: int,
     verified: bool | None = None,
 ) -> dict[str, Any]:

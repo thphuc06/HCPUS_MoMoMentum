@@ -59,7 +59,14 @@ from yofina_agent.identity import Identity
 from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
 from yofina_agent.router import merge_pending, pending_params, route
-from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, Intent, IntentParams, IntentResult, Verdict
+from yofina_agent.schemas import (
+    ClarifyChipIn,
+    ClarifyRequest,
+    Intent,
+    IntentParams,
+    IntentResult,
+    Verdict,
+)
 from yofina_agent.settings import AgentSettings
 from yofina_agent.store import (
     TurnBlockStore,
@@ -178,7 +185,7 @@ class Turn:
         self._jar_rows: list[dict[str, Any]] = []
         # dấu vết cho bản ghi lượt
         self._t0 = time.perf_counter()
-        self.steps: list[tuple[str, int]] = []
+        self.steps: list[trace.TurnStep] = []  # theo thứ tự bắt đầu; mỗi lần gọi tool một bước (call_tool)
         self.tool_log: list[ToolOutcome] = []
         self.compacts: dict[str, dict[str, Any]] = {}
         self.bases: list[Mapping[str, Any]] = []
@@ -193,11 +200,14 @@ class Turn:
     # --- dấu vết ----------------------------------------------------------------------------
     @contextlib.contextmanager
     def step(self, name: str) -> Iterator[None]:
+        """Đo một bước; bước giữ chỗ trong `steps` lúc BẮT ĐẦU nên lần gọi tool bên trong (kể cả song song) đứng sau nó."""
+        entry = trace.TurnStep(name)
+        self.steps.append(entry)
         started = time.perf_counter()
         try:
             yield
         finally:
-            self.steps.append((name, int((time.perf_counter() - started) * 1000)))
+            entry.ms = int((time.perf_counter() - started) * 1000)
 
     def note_basis(self, basis: Mapping[str, Any] | None) -> None:
         """Ghi cơ sở của dự báo (độ tin cậy) và phát `notice` độ tin cậy thấp nếu dữ liệu ít hoặc chỉ là ước lượng ban đầu."""
@@ -408,6 +418,11 @@ class Turn:
         self.emit(ev.tool_call_end(tcid))
 
         self.tool_calls += 1
+        # một bước của bản ghi lượt cho MỖI lần gọi (giữ chỗ lúc bắt đầu, nên lượt song song vẫn theo thứ tự gọi); chỉ tên, thời lượng,
+        # trạng thái, mã lỗi: không tham số, không kết quả
+        tstep = trace.TurnStep(trace.tool_step_name(target, short_name))
+        self.steps.append(tstep)
+        started = time.perf_counter()
         if self.tool_calls > self.s.max_tool_calls_per_turn:
             outcome = ToolOutcome(
                 name,
@@ -422,7 +437,9 @@ class Turn:
                 outcome = await self.tools.call(name, args)
                 finished = True
             finally:
+                tstep.ms = int((time.perf_counter() - started) * 1000)
                 if not finished:  # bị hủy/hết giờ/lỗi bất ngờ giữa chừng: vẫn đóng tool call cho hợp lệ
+                    tstep.status, tstep.code = "error", ErrorCode.INTERNAL_ERROR.value
                     interrupted = {
                         "status": "ERROR",
                         "code": ErrorCode.INTERNAL_ERROR.value,
@@ -449,6 +466,7 @@ class Turn:
                     args=args,
                 )
                 built, compact_view = [], None
+        tstep.status, tstep.code = trace.tool_status(outcome)  # sau khi dựng khối: kết quả sai hợp đồng là `error`
         if outcome.payload and isinstance(outcome.payload.get("app_date"), str):
             with contextlib.suppress(ValueError):
                 self.app_date = date.fromisoformat(outcome.payload["app_date"])
@@ -648,6 +666,10 @@ class Turn:
             duration_ms=int((time.perf_counter() - self._t0) * 1000),
             verified=self.verified,
         )
+        tool_steps = sum(trace.TOOL_SEP in s.step for s in self.steps)
+        kept = sum(trace.TOOL_SEP in s["step"] for s in record["step_timings"])
+        if kept < tool_steps:  # quá maxItems của `TraceStep[]`: đã bỏ bớt lần gọi `ok` lặp lại (trace.step_timings)
+            log.info(json.dumps({"event": "trace_steps_truncated", "tool_calls": tool_steps, "kept": kept}))
         if self.intent == "resilience" and self.bases and not measured_bases:
             basis = self.bases[0]
             record["confidence"] = B.ExplainConfidence(
