@@ -49,7 +49,7 @@ export function JarsPage() {
                 <span className="num block text-body font-bold text-ink">{formatVnd(data.balance.other_income_vnd)}</span>
               </Link>
               <Link
-                to={unclassified ? `/jars/${unclassified.code}` : '/activity?review=1'}
+                to={unclassified ? `/jars/${unclassified.code}` : '/review'}
                 className="min-h-14 rounded-2xl bg-warn-bg px-3 py-2.5"
                 data-testid="unclassified-tile"
               >

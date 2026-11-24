@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button'
 import { FEASIBILITY } from './Roadmap'
 import { useRoadmapVersions } from './useRoadmapVersions'
 
-// Lối vào trang Lộ trình từ tab Nhìn trước (thẻ) và Tổng quan (một dòng). Chỉ đọc `GET /roadmap/versions` (danh sách gọn đã có
-// trạng thái, mức khả thi và số bước theo trạng thái), không tính gì thêm.
+// Lối vào trang Lộ trình từ tab Nhìn trước (nhà của lộ trình, ui-design-review.md §10). Tổng quan chỉ có một dòng "Việc cần làm" khi
+// lộ trình có việc (features/overview/TodoList.tsx). Chỉ đọc `GET /roadmap/versions` (danh sách gọn đã có trạng thái, mức khả thi và
+// số bước theo trạng thái), không tính gì thêm.
 
 export const ROADMAP_PATH = '/roadmap'
 /** Câu gửi vào chat khi chưa có lộ trình (người dùng bấm "Lập lộ trình"). */
@@ -101,40 +102,5 @@ export function RoadmapEntryCard() {
         </Link>
       )}
     </section>
-  )
-}
-
-/** Một dòng lối vào ở Tổng quan. Đang tải hoặc lỗi thì không hiện gì (Tổng quan không báo lỗi của phần phụ). */
-export function RoadmapEntryRow() {
-  const versions = useRoadmapVersions()
-  const start = useStartRoadmapChat()
-  if (!versions.data) return null
-  const summary = summarizeRoadmap(versions.data)
-  const icon = (
-    <span className="grid size-11 shrink-0 place-items-center rounded-full bg-tint text-brand-text">
-      <Route className="size-5" aria-hidden />
-    </span>
-  )
-  if (!summary) {
-    return (
-      <div className="mx-4 mt-3 flex min-h-16 items-center gap-3 rounded-card bg-surface p-4 shadow-card" data-testid="roadmap-row-empty">
-        {icon}
-        <span className="min-w-0 flex-1 text-subtitle font-semibold text-ink">Lộ trình thích ứng</span>
-        <Button type="button" size="sm" variant="soft" onClick={start}>Lập lộ trình</Button>
-      </div>
-    )
-  }
-  const f = FEASIBILITY[summary.feasibility]
-  const parts = [`Phiên bản ${summary.version}`, f.label, `${summary.pending} bước chờ`]
-  if (summary.hasProposed && summary.active) parts.push('Có phiên bản mới')
-  return (
-    <Link to={ROADMAP_PATH} data-testid="roadmap-row" className="mx-4 mt-3 flex min-h-16 items-center gap-3 rounded-card bg-surface p-4 shadow-card">
-      {icon}
-      <span className="min-w-0 flex-1">
-        <span className="block text-subtitle font-semibold text-ink">Lộ trình thích ứng</span>
-        <span className="block text-small text-ink-2">{parts.join(' · ')}</span>
-      </span>
-      <ChevronRight className="size-5 shrink-0 text-ink-2" aria-hidden />
-    </Link>
   )
 }

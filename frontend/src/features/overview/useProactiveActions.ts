@@ -45,7 +45,7 @@ export function useProactiveActions(
           go('/salary')
           break
         case 'review_unclassified':
-          go('/activity?review=1')
+          go('/review')
           break
         case 'open_obligations':
           go('/obligations')

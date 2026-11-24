@@ -124,7 +124,7 @@ describe('Tổng quan', () => {
     expect(screen.queryByRole('region', { name: 'Việc cần làm hôm nay' })).toBeNull()
   })
 
-  it('Gần đây, nghĩa vụ sắp đến hạn và lối vào Xem lại lấy từ server', async () => {
+  it('Gần đây, nghĩa vụ sắp đến hạn và việc xếp hũ lấy từ server', async () => {
     mountApp(backend())
     const recent = await screen.findByTestId('recent-transactions')
     expect(within(recent).getByText('Quán cơm')).toBeInTheDocument()
@@ -132,23 +132,25 @@ describe('Tổng quan', () => {
     const due = screen.getByTestId('obligations-due')
     expect(within(due).getByText('Tiền điện')).toBeInTheDocument()
     expect(within(due).getByText('Trả sau (mô phỏng)')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^Cần xem lại \(3\)/ })).toHaveAttribute('href', '/review')
+    // Không đọc được hàng chờ daily_ask: dòng Việc cần làm dùng số tổng needs_review_count của /overview
+    expect(await screen.findByRole('link', { name: /^3 giao dịch cần xem lại hũ/ })).toHaveAttribute('href', '/review')
   })
 
-  it('thẻ "Cần xem lại" hiện số N lấy từ needs_review_count của server', async () => {
+  it('dòng xếp hũ hiện số N lấy từ needs_review_count của server; không còn thẻ "Cần xem lại" riêng', async () => {
     mountApp(backend({ 'GET /overview': overview((o) => { o.needs_review_count = 7 }) }))
-    const card = await screen.findByRole('link', { name: /^Cần xem lại \(7\)/ })
-    expect(card).toHaveAttribute('href', '/review')
-    expect(within(card).getByText('Cần xem lại (7)')).toBeInTheDocument()
+    const row = await screen.findByRole('link', { name: /^7 giao dịch cần xem lại hũ/ })
+    expect(row).toHaveAttribute('href', '/review')
+    expect(row.closest('[data-todo]')).toHaveAttribute('data-todo', 'review')
+    expect(screen.queryByText(/^Cần xem lại \(/)).toBeNull()
   })
 
-  it('thẻ "Cần xem lại" ẩn khi needs_review_count bằng 0', async () => {
+  it('dòng xếp hũ ẩn khi needs_review_count bằng 0', async () => {
     mountApp(backend({ 'GET /overview': overview((o) => { o.needs_review_count = 0 }) }))
     expect(await screen.findByTestId('balance-total')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Cần xem lại/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Cần xem lại|xem lại hũ|xếp hũ/ })).toBeNull()
   })
 
-  it('hiện tổng chưa phân loại của cả tập từ daily_ask dù đã để sau câu hỏi', async () => {
+  it('đã để sau câu hỏi gộp: MỘT dòng việc cần làm với tổng chưa xếp hũ của cả tập (daily_ask), dẫn tới Xem lại', async () => {
     const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
     daily.data.count += 1
     daily.data.pending_total_vnd += daily.data.items[0]!.amount_vnd
@@ -156,16 +158,29 @@ describe('Tổng quan', () => {
     const { calls, router } = mountApp(backend({
       'GET /review': (_init, url) => url.searchParams.get('mode') === 'daily_ask' ? daily : restFixture('ReviewListResponse.review'),
     }))
-    const summary = await screen.findByRole('link', { name: /^3 giao dịch chưa phân loại · 240\.000\s₫$/ })
+    // needs_review_count 3 của /overview đều là giao dịch chưa xếp hũ: không có phần "cần xem lại"
+    const summary = await screen.findByRole('link', { name: /^3 giao dịch chưa xếp hũ 240\.000\s₫$/ })
     expect(summary).toHaveAttribute('href', '/review')
+    expect(screen.getAllByRole('link', { name: /xếp hũ|xem lại/i })).toHaveLength(1)
     expect(screen.queryByRole('region', { name: 'Chọn hũ cho giao dịch hôm nay' })).toBeNull()
     expect(callsTo(calls, 'GET', '/review').map(({ url }) => new URL(url).search)).toEqual(['?mode=daily_ask'])
     await userEvent.setup().click(summary)
     expect(await screen.findByRole('heading', { name: 'Xem lại' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/review')
+    expect(await screen.findByRole('region', { name: 'Giao dịch chưa xếp hũ' })).toBeInTheDocument()
   })
 
-  it.each(['zero', 'error'])('giữ Tổng quan và ẩn dòng chưa phân loại khi review trả %s', async (state) => {
+  it('câu hỏi gộp đang mở: thẻ chọn hũ hiện ngay, không kèm dòng tóm tắt trùng; phần "cần xem lại" còn lại thành một dòng', async () => {
+    const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
+    mountApp(backend({ 'GET /review': daily }))
+    const ask = await screen.findByRole('region', { name: 'Chọn hũ cho giao dịch hôm nay' })
+    expect(ask).toHaveTextContent(/2 giao dịch · 180\.000\s₫/)
+    expect(screen.queryByRole('link', { name: /chưa xếp hũ|chưa phân loại/ })).toBeNull()
+    // 3 (needs_review_count) − 2 (đang hỏi) = 1 giao dịch Yofina đã tự xếp
+    expect(screen.getByRole('link', { name: /^Xem lại 1 giao dịch Yofina đã tự xếp hũ/ })).toHaveAttribute('href', '/review')
+  })
+
+  it.each(['zero', 'error'])('giữ Tổng quan và không có dòng "chưa xếp hũ" khi review trả %s', async (state) => {
     const daily = ReviewListResponse.parse(restFixture('ReviewListResponse.daily_ask'))
     daily.data.ask!.status = 'answered'
     const empty = { ...daily, data: { ...daily.data, items: [], count: 0, pending_total_vnd: 0 } }
@@ -173,7 +188,7 @@ describe('Tổng quan', () => {
     await waitFor(() => expect(callsTo(calls, 'GET', '/review')).toHaveLength(1))
     expect(await screen.findByTestId('balance-total')).toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'Danh sách hũ' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /giao dịch chưa phân loại/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /chưa xếp hũ/ })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Chọn hũ cho giao dịch hôm nay' })).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -249,7 +264,7 @@ describe('Tổng quan', () => {
   })
 })
 
-describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2 hũ nào sắp cạn, B6 Trả sau', () => {
+describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2 (nay ở Nhìn trước), Trả sau và nghĩa vụ', () => {
   beforeEach(() => sessionStorage.clear())
 
   it('thẻ cảnh báo cạn: số lớn "6 ngày" (cạn 29/11, lương 05/12), dải 15 ô từ hôm nay 21/11, ô cạn và ô hũ trống khác nhau', async () => {
@@ -304,7 +319,6 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     expect(total.nextElementSibling).toHaveTextContent('7.900.000 ₫')
     const strip = screen.getByTestId('mini-timeline')
     expect(strip.innerHTML).not.toContain('animate-in')
-    expect(screen.getByTestId('jar-runway').innerHTML).not.toContain('animate-in')
   })
 
   it('không có ngày cạn trước kỳ lương (thẻ không phải cảnh báo cạn): không có số lớn, không có dải', async () => {
@@ -314,27 +328,43 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     expect(within(card).queryByTestId('mini-timeline')).toBeNull()
   })
 
-  it('B2: mỗi hũ chi tiêu và hũ nghĩa vụ một đường băng tới kỳ lương; hũ tiết kiệm không hiện; câu tóm tắt từ trạng thái server', async () => {
+  it('Tổng quan không còn B2, B6, lối vào lộ trình cố định (mỗi thông tin một nhà, ui-design-review.md §10)', async () => {
     mountApp(backend())
+    await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
+    await waitFor(() => expect(screen.getByTestId('todo-list')).toBeInTheDocument())
+    expect(screen.queryByTestId('jar-runway')).toBeNull()
+    expect(screen.queryByTestId('credit-usage')).toBeNull()
+    expect(screen.queryByText('Lộ trình thích ứng')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Hũ nào sắp cạn' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Đã dùng Trả sau bao nhiêu' })).toBeNull()
+  })
+
+  it('B2 ở tab Nhìn trước: đường băng tới kỳ lương cho hũ chi tiêu và nghĩa vụ, xếp theo mức cần chú ý; hũ tiết kiệm một dòng; câu tóm tắt từ server', async () => {
+    mountApp(backend(), '/foresight')
     const fig = await screen.findByTestId('jar-runway')
     expect(within(fig).getByRole('heading', { name: 'Hũ nào sắp cạn' })).toBeInTheDocument()
-    expect(fig).toHaveTextContent('14 ngày tới lương')
+    // Kỳ lương kế tiếp gộp vào đầu khối (không còn thẻ "Kỳ lương kế tiếp" riêng)
+    expect(within(fig).getByTestId('next-payday')).toHaveTextContent('Lương 05/12 · còn 14 ngày')
+    expect(screen.queryByText('Kỳ lương kế tiếp')).toBeNull()
     const caption = '2 hũ cần chú ý trước kỳ lương 05/12: Ăn uống dự kiến cạn 29/11, Hóa đơn sát.'
     // Câu tóm tắt: trình đọc màn hình đọc ngay (figcaption sr-only là mô tả của hình), bản nhìn thấy nằm trong "Chi tiết" đang đóng.
     expect(fig.querySelector('figcaption')).toHaveTextContent(caption)
     expect(fig).toHaveAccessibleDescription(caption)
     const more = within(fig).getByRole('button', { name: 'Chi tiết' })
     expect(more).toHaveAttribute('aria-expanded', 'false')
-    expect(document.getElementById(more.getAttribute('aria-controls')!)).toHaveTextContent('Hũ tiết kiệm không hiện ở đây')
-    // Mốc nghĩa vụ viết gọn trong "Chi tiết"
+    const panel = document.getElementById(more.getAttribute('aria-controls')!)!
+    // Chất lượng dự báo và lương dự kiến nằm trong "Chi tiết"; mốc nghĩa vụ viết gọn
+    expect(within(panel).getByTestId('forecast-quality')).toHaveTextContent('62%')
+    expect(panel).toHaveTextContent('Lương dự kiến 9.000.000 ₫')
     expect(within(fig).getByTestId('jar-runway-marks')).toHaveTextContent('Hóa đơn: Tiền điện 26/11 · 300.000–450.000 ₫')
-    const rows = within(fig).getByRole('list', { name: 'Các hũ từ hôm nay tới kỳ lương' })
-    expect([...rows.querySelectorAll('[data-runway]')].map((r) => r.getAttribute('data-runway'))).toEqual(['an_uong', 'di_lai', 'hoa_don', 'giai_tri', 'nghia_vu'])
+    const rows = within(fig).getByRole('list', { name: 'Hũ theo mức cần chú ý' })
+    expect([...rows.querySelectorAll('[data-runway]')].map((r) => r.getAttribute('data-runway'))).toEqual(['an_uong', 'hoa_don', 'di_lai', 'giai_tri', 'nghia_vu'])
     // Hũ hụt: đoạn hũ trống bắt đầu ở ngày cạn (29/11 là ngày 8 trên 14), chữ đầy đủ cho trình đọc màn hình, mở Chi tiết hũ
-    const an = within(rows).getByRole('link', { name: /^Ăn uống: hụt, dự kiến cạn 29\/11, 6 ngày trước kỳ lương, số dư 380\.000\s₫\.$/ })
+    const an = within(rows).getByRole('link', { name: /^Ăn uống: hụt, dự kiến cạn 29\/11, 6 ngày trước kỳ lương, số dư 380\.000\s₫, khả năng hụt 71%\.$/ })
     expect(an).toHaveAttribute('href', '/jars/an_uong')
     expect(parseFloat((an.querySelector('[data-part="empty"]') as HTMLElement).style.left)).toBeCloseTo((8 / 14) * 100, 2)
     expect(within(an).getByText('Hụt · cạn 29/11')).toBeInTheDocument()
+    expect(an).toHaveTextContent('Khả năng hụt 71%')
     // Hũ sát có mốc nghĩa vụ (tiền điện 26/11) bằng vạch và bằng chữ
     const hd = within(rows).getByRole('link', { name: /^Hóa đơn: sát, số dư 450\.000\s₫\. Sắp đến hạn: Tiền điện 26\/11 300\.000\s₫ đến 450\.000\s₫\.$/ })
     expect(hd.querySelectorAll('[data-tick]')).toHaveLength(1)
@@ -343,10 +373,21 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     const nv = within(rows).getByRole('link', { name: /^Nghĩa vụ: đủ tới kỳ lương, số dư 1\.000\.000\s₫\. Sắp đến hạn: Trả sau \(mô phỏng\) 05\/12 333\.000\s₫\.$/ })
     expect(nv.querySelectorAll('[data-tick]')).toHaveLength(1)
     expect(within(rows).queryByRole('link', { name: /^Du lịch/ })).toBeNull()
+    // Hũ tiết kiệm không "cạn" theo nghĩa này: một dòng (tên, nhãn, số dư), không có đường băng
+    const savings = within(fig).getByRole('list', { name: 'Hũ tiết kiệm' })
+    const dl = within(savings).getByRole('link', { name: /^Du lịch: số dư 1\.800\.000\s₫\.$/ })
+    expect(dl).toHaveAttribute('href', '/jars/du_lich')
+    expect(dl.querySelector('[data-track]')).toBeNull()
+  })
+
+  it('B2 ở Nhìn trước, giảm chuyển động: không có lớp chuyển động', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((q: string) => ({ matches: q === '(prefers-reduced-motion: reduce)', addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    mountApp(backend(), '/foresight')
+    expect((await screen.findByTestId('jar-runway')).innerHTML).not.toContain('animate-in')
   })
 
   it('B2: hũ cạn đúng ngày có mốc nghĩa vụ: vạch mốc vẽ dài hơn và nằm trên chấm cạn (không bị che)', async () => {
-    mountApp(backend({ 'GET /overview': overview((o) => { o.jars = o.jars.map((j: Json) => (j.code === 'hoa_don' ? { ...j, status: 'short', runout_date: '2026-11-26' } : j)) }) }))
+    mountApp(backend({ 'GET /overview': overview((o) => { o.jars = o.jars.map((j: Json) => (j.code === 'hoa_don' ? { ...j, status: 'short', runout_date: '2026-11-26' } : j)) }) }), '/foresight')
     const fig = await screen.findByTestId('jar-runway')
     const hd = within(fig).getByRole('link', { name: /^Hóa đơn: hụt, dự kiến cạn 26\/11/ })
     const tick = hd.querySelector('[data-tick]') as HTMLElement
@@ -360,39 +401,55 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     expect(nv.querySelector('[data-tick]')).not.toHaveAttribute('data-at-runout')
   })
 
-  it('B2: hũ chưa có dự báo ghi rõ; không có kỳ lương thì không vẽ', async () => {
-    mountApp(backend({ 'GET /overview': overview((o) => { o.jars = o.jars.map((j: Json) => (j.code === 'di_lai' ? { ...j, status: undefined } : j)) }) }))
+  it('B2: hũ chưa có dự báo ghi rõ; không có kỳ lương thì không vẽ đường băng, vẫn có danh sách hũ', async () => {
+    mountApp(backend({ 'GET /overview': overview((o) => { o.jars = o.jars.map((j: Json) => (j.code === 'di_lai' ? { ...j, status: undefined } : j)) }) }), '/foresight')
     const fig = await screen.findByTestId('jar-runway')
     expect(within(fig).getByRole('link', { name: /^Đi lại: chưa có dự báo/ })).toBeInTheDocument()
     cleanup()
-    mountApp(backend({ 'GET /overview': overview((o) => { o.next_payday = null; o.proactive_card = null }) }))
-    expect(await screen.findByTestId('balance-total')).toBeInTheDocument()
-    expect(screen.queryByTestId('jar-runway')).toBeNull()
+    mountApp(backend({ 'GET /overview': overview((o) => { o.next_payday = null; o.proactive_card = null }) }), '/foresight')
+    const plain = await screen.findByTestId('jar-runway')
+    expect(plain.querySelector('[data-track]')).toBeNull()
+    expect(within(plain).getAllByRole('link', { name: /số dư/ })).toHaveLength(7)
   })
 
-  it('B6: có dư nợ Trả sau thì có thẻ hạn mức đã dùng và khoản đến hạn gần nhất so với hũ Nghĩa vụ', async () => {
+  it('Trả sau ở Tổng quan: hũ trả đủ thì không có gì (B6 đầy đủ ở Nghĩa vụ)', async () => {
     mountApp(backend())
-    const card = await screen.findByTestId('credit-usage')
-    expect(within(card).getByRole('heading', { name: 'Đã dùng Trả sau bao nhiêu' })).toBeInTheDocument()
-    expect(within(card).getByRole('img', { name: /^Đã dùng 300\.000\s₫ trên hạn mức 5\.000\.000\s₫, còn 4\.700\.000\s₫$/ })).toBeInTheDocument()
-    expect(card).toHaveTextContent('Đang nợ gốc 300.000 ₫ trên hạn mức 5.000.000 ₫. Ngày 05/12 phải trả 333.000 ₫, hũ Nghĩa vụ đang có đủ.')
-    const due = within(card).getByTestId('credit-due')
-    expect(due).toHaveTextContent('Đến hạn 05/12')
-    expect(due).toHaveTextContent('Phải trả: gốc 300.000 ₫ + phí 33.000 ₫')
-    expect(due).toHaveTextContent(/Hũ Nghĩa vụ đang có\s*1\.000\.000 ₫/)
-    expect(within(due).getByTestId('credit-due-status')).toHaveTextContent('Đủ trả')
-    expect(within(card).getByRole('link', { name: /Xem các khoản Trả sau/ })).toHaveAttribute('href', '/obligations')
+    await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
+    await waitFor(() => expect(screen.getByTestId('todo-list')).toBeInTheDocument())
+    expect(document.querySelector('[data-todo="credit"]')).toBeNull()
+    expect(screen.queryByTestId('credit-usage')).toBeNull()
   })
 
-  it('B6: hũ trả có ít hơn số phải trả thì báo "Chưa đủ trả"; không có dư nợ thì không hiện thẻ ở Tổng quan', async () => {
+  it('Trả sau ở Tổng quan: hũ trả có ít hơn số phải trả thì một dòng Việc cần làm dẫn tới Nghĩa vụ', async () => {
     mountApp(backend({ 'GET /overview': overview((o) => { o.jars = o.jars.map((j: Json) => (j.code === 'nghia_vu' ? { ...j, balance_vnd: 200000 } : j)) }) }))
-    const card = await screen.findByTestId('credit-usage')
-    expect(within(card).getByTestId('credit-due-status')).toHaveTextContent('Chưa đủ trả')
-    expect(card).toHaveTextContent('hũ Nghĩa vụ đang có chưa đủ')
-    cleanup()
-    mountApp(backend({ 'GET /overview': overview((o) => { o.credit_line.outstanding_vnd = 0; o.credit_line.available_vnd = 5000000 }) }))
-    expect(await screen.findByTestId('balance-total')).toBeInTheDocument()
-    expect(screen.queryByTestId('credit-usage')).toBeNull()
+    const row = await screen.findByRole('link', { name: /^Hũ Nghĩa vụ chưa đủ trả Trả sau \(mô phỏng\)/ })
+    expect(row).toHaveAttribute('href', '/obligations')
+    expect(row).toHaveTextContent(/Đến hạn 05\/12 · hũ đang có 200\.000\s₫/)
+    // Số phải trả chỉ ở danh sách nghĩa vụ sắp đến hạn, không lặp ở dòng việc cần làm
+    expect(row).not.toHaveTextContent('333.000')
+    expect(within(screen.getByTestId('obligations-due')).getByText('333.000 ₫')).toBeInTheDocument()
+  })
+
+  it('nghĩa vụ sắp đến hạn: tối đa 3 dòng, "Xem tất cả" mở màn Nghĩa vụ', async () => {
+    mountApp(backend({
+      'GET /overview': overview((o) => {
+        const base = o.obligations_due[0]
+        o.obligations_due = [0, 1, 2, 3].map((i) => ({ ...base, id: `${base.id.slice(0, -1)}${i}`, name: `Khoản ${i}` }))
+      }),
+    }))
+    const due = await screen.findByTestId('obligations-due')
+    expect(within(due).getAllByRole('listitem')).toHaveLength(3)
+    expect(within(due).queryByText('Khoản 3')).toBeNull()
+    const title = screen.getByRole('heading', { name: 'Nghĩa vụ sắp đến hạn' }).parentElement!
+    expect(within(title).getByRole('link', { name: 'Xem tất cả' })).toHaveAttribute('href', '/obligations')
+  })
+
+  it('số dư: "Trong 7 hũ" cộng trừ các phần ra đúng tổng (có dấu, đọc được cho trình đọc màn hình)', async () => {
+    mountApp(backend())
+    const parts = await screen.findByTestId('balance-parts')
+    expect(parts).toHaveTextContent('Trong 7 hũ')
+    expect(within(parts).getByText('Tiền vào khác (chưa gán hũ)').parentElement).toHaveTextContent(/^\+cộng Tiền vào khác/)
+    expect(within(parts).getByText('Đã chi, chưa xếp hũ').parentElement).toHaveTextContent(/^−trừ Đã chi, chưa xếp hũ/)
   })
 })
 
@@ -442,6 +499,21 @@ describe('Chi tiết hũ', () => {
     expect(screen.getByRole('button', { name: 'Vì sao hũ này cạn?' })).toBeInTheDocument()
   })
 
+  it('nhãn Đủ/Sát/Hụt chỉ một lần: có khối dự báo thì đầu màn không có chip; payday chỉ trong khối dự báo', async () => {
+    mountApp(backend(), '/jars/an_uong')
+    const block = (await screen.findByTestId('forecast-summary')).closest('[data-block="forecast_timeline"]') as HTMLElement
+    expect(within(block).getByText('Hụt · cạn 29/11')).toBeInTheDocument()
+    expect(screen.getAllByText('Hụt · cạn 29/11')).toHaveLength(1)
+    expect(screen.getByRole('region', { name: 'Luật chia và mục tiêu' })).not.toHaveTextContent('Kỳ lương kế tiếp')
+  })
+
+  it('dự báo lỗi: chip trạng thái của hũ và kỳ lương vẫn có (từ /jars và /overview)', async () => {
+    mountApp(backend({ 'GET /forecasts/*': json(503, { error: { code: 'FORECAST_UNAVAILABLE', message: 'x' } }) }), '/jars/an_uong')
+    await screen.findByTestId('forecast-error')
+    expect(screen.getByText('Hụt · cạn 29/11')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Luật chia và mục tiêu' })).toHaveTextContent('Kỳ lương kế tiếp')
+  })
+
   it('"Hỏi Yofina về hũ này" mở chat và gửi câu hỏi về đúng hũ', async () => {
     const { calls } = mountApp(
       backend({
@@ -476,6 +548,7 @@ describe('Chi tiết hũ', () => {
     const { calls } = mountApp(backend({ 'GET /jars/*': restFixture('JarDetailResponse.unclassified') }), '/jars/chua_phan_loai')
     expect(await screen.findByTestId('jar-balance')).toHaveTextContent('−180.000 ₫')
     expect(screen.getByText(/Đã chi 180\.000 ₫ mà chưa xếp vào hũ nào/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Xếp hũ cho các giao dịch này' })).toHaveAttribute('href', '/review')
     expect(screen.getByText('Hũ hệ thống không có dự báo')).toBeInTheDocument()
     expect(callsTo(calls, 'GET', '/forecasts/chua_phan_loai')).toHaveLength(0)
     expect(screen.queryByRole('link', { name: 'Chuyển tiền vào hũ này' })).toBeNull()

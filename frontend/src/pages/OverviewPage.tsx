@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
-import { ArrowDownToLine, ArrowLeftRight, ChevronRight, ListChecks, Send } from 'lucide-react'
+import { ArrowDownToLine, ArrowLeftRight, Send } from 'lucide-react'
 import { BalanceCard } from '@/components/BalanceCard'
 import { MiniTimeline } from '@/components/MiniTimeline'
 import { Notice } from '@/components/Notice'
@@ -13,23 +13,23 @@ import { useOverview } from '@/api/OverviewProvider'
 import { parseProactiveCard, type OverviewResponse } from '@/api/schemas'
 import type { NudgeOutcome } from '@/api/phase5Schemas'
 import type { ProactiveCardBlock } from '@/contracts/blocks'
-import { CreditUsage } from '@/features/credit/CreditUsage'
-import { nearestBnpl, payJarFor } from '@/features/credit/select'
 import { JarCarousel } from '@/features/overview/JarCarousel'
-import { JarRunway } from '@/features/overview/JarRunway'
 import { emptyDaysBeforePayday, RunoutHero } from '@/features/overview/RunoutHero'
+import { creditTodo, reviewTodo, roadmapTodo, salaryTodo, TodoList } from '@/features/overview/TodoList'
 import { useProactiveActions, type ProactiveAction } from '@/features/overview/useProactiveActions'
 import { useTodayNudge } from '@/features/overview/useTodayNudge'
-import { RoadmapEntryRow } from '@/features/roadmap/RoadmapEntry'
+import { useRoadmapVersions } from '@/features/roadmap/useRoadmapVersions'
 import { useJarLookup } from '@/features/common/useJarLookup'
 import { DailyAskCard } from '@/features/review/DailyAskCard'
-import { UnclassifiedSummary } from '@/features/review/UnclassifiedSummary'
 import { useReview } from '@/features/review/useReview'
 import { formatDayMonth } from '@/lib/dates'
 import { formatRatioPercent, formatVnd, greetingNow } from '@/lib/format'
 import { useAnimateOnce } from '@/lib/motion'
 import { isCardHidden, nudgeKey } from '@/lib/nudgePrefs'
 import { displayName } from '@/lib/user'
+
+/** Nghĩa vụ sắp đến hạn ở Tổng quan: tối đa 3 dòng, danh sách đầy đủ ở màn Nghĩa vụ ("Xem tất cả"). */
+const DUE_ROWS = 3
 
 function Header({ name }: { name: string }) {
   return (
@@ -81,19 +81,6 @@ function SectionTitle({ children, to, linkLabel }: { children: ReactNode; to?: s
   )
 }
 
-function LinkCard({ to, title, subtitle, icon }: { to: string; title: string; subtitle?: string; icon: ReactNode }) {
-  return (
-    <Link to={to} className="mx-4 mt-3 flex min-h-16 items-center gap-3 rounded-card bg-surface p-4 shadow-card">
-      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-warn-bg text-warn-fg">{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-subtitle font-semibold text-ink">{title}</span>
-        {subtitle && <span className="block text-small text-ink-2">{subtitle}</span>}
-      </span>
-      <ChevronRight className="size-5 shrink-0 text-ink-2" aria-hidden />
-    </Link>
-  )
-}
-
 function ProactiveCardFor({ card, data, onAction, footer }: {
   card: ProactiveCardBlock
   data: OverviewResponse
@@ -117,16 +104,11 @@ function ProactiveCardFor({ card, data, onAction, footer }: {
 }
 
 /** Thẻ tất định của `GET /overview` (phase 2): "Để sau" và "Ít nhắc loại này" chỉ lưu phía giao diện. */
-function OverviewCardSection({ data }: { data: OverviewResponse }) {
-  const [, force] = useState(0)
-  const card = parseProactiveCard(data.proactive_card)
-  const hide = () => force((n) => n + 1)
+function OverviewCardSection({ data, card, onHide }: { data: OverviewResponse; card: ProactiveCardBlock | null; onHide: () => void }) {
   // Hook luôn được gọi (kể cả khi chưa có thẻ) để đúng quy tắc hooks.
   const fallback = card?.data ?? { kind: 'low_data' as const, status: 'ok' as const, title: '-', reason: '-', actions: [{ kind: 'snooze' as const, label: '-' }] }
-  const onAction = useProactiveActions(fallback, data.app_date, hide)
+  const onAction = useProactiveActions(fallback, data.app_date, onHide)
   if (!card) return null
-  const d = card.data
-  if (isCardHidden(nudgeKey(d.kind, d.jar_code), d.kind, data.app_date)) return null
   return <ProactiveCardFor card={card} data={data} onAction={onAction} />
 }
 
@@ -150,14 +132,51 @@ function NudgeCardSection({ card, appDate, data, nudge }: { card: ProactiveCardB
 }
 
 /**
- * MỘT việc cần làm hôm nay. Có bản tin của cổng giá trị thì ưu tiên nó (hợp đồng `GET /nudges/today`); người dùng đã gạt bản tin đi
- * thì không hiện thẻ nào; chưa có bản tin (hoặc chưa tải xong, hoặc lỗi) thì dùng thẻ tất định của `GET /overview`.
+ * "Việc cần làm" của hôm nay (ui-design-review.md §10). Thẻ chính là MỘT việc: có bản tin của cổng giá trị thì ưu tiên nó (hợp đồng
+ * `GET /nudges/today`); người dùng đã gạt bản tin đi thì không hiện thẻ nào; chưa có bản tin (hoặc chưa tải xong, hoặc lỗi) thì dùng
+ * thẻ tất định của `GET /overview`. Dưới thẻ là các dòng việc khác (lương chờ xác nhận, giao dịch chờ xếp hũ, Trả sau chưa đủ trả, lộ
+ * trình có việc) và câu hỏi gộp chọn hũ của hôm nay; loại nào đã là thẻ chính thì không lặp thành dòng.
  */
-function ProactiveSection({ data }: { data: OverviewResponse }) {
+function TodaySection({ data }: { data: OverviewResponse }) {
   const nudge = useTodayNudge()
-  if (nudge.state === 'hidden') return null
-  if (nudge.state === 'show' && nudge.card) return <NudgeCardSection card={nudge.card} appDate={nudge.appDate ?? data.app_date} data={data} nudge={nudge} />
-  return <OverviewCardSection data={data} />
+  const review = useReview('daily_ask')
+  const versions = useRoadmapVersions()
+  const [, force] = useState(0)
+  const [askSkipped, setAskSkipped] = useState(false)
+  const hide = useCallback(() => force((n) => n + 1), [])
+
+  const overviewCard = parseProactiveCard(data.proactive_card)
+  const showNudge = nudge.state === 'show' && !!nudge.card
+  const fallbackCard =
+    nudge.state !== 'hidden' && !showNudge && overviewCard && !isCardHidden(nudgeKey(overviewCard.data.kind, overviewCard.data.jar_code), overviewCard.data.kind, data.app_date)
+      ? overviewCard
+      : null
+  const main = showNudge ? nudge.card!.data.kind : fallbackCard?.data.kind ?? null
+
+  const daily = review.status === 'ready' ? review.data.data : undefined
+  const askShown = !!daily && daily.ask?.status === 'open' && daily.count > 0 && !askSkipped
+  return (
+    <>
+      {showNudge ? (
+        <NudgeCardSection card={nudge.card!} appDate={nudge.appDate ?? data.app_date} data={data} nudge={nudge} />
+      ) : (
+        <OverviewCardSection data={data} card={fallbackCard} onHide={hide} />
+      )}
+      <TodoList
+        items={[
+          salaryTodo(data, main),
+          reviewTodo(data.needs_review_count, daily, askShown, main),
+          creditTodo(data, main),
+          roadmapTodo(versions.data ?? undefined, main),
+        ]}
+      />
+      {askShown && (
+        <div className="mx-4 mt-3">
+          <DailyAskCard data={daily} refreshing={review.status === 'ready' && review.refreshing} onSkipped={() => setAskSkipped(true)} />
+        </div>
+      )}
+    </>
+  )
 }
 
 function ForecastNotes({ data }: { data: OverviewResponse }) {
@@ -182,20 +201,6 @@ function ForecastNotes({ data }: { data: OverviewResponse }) {
             : 'Dự báo chưa được cập nhật theo ngày mô phỏng hôm nay. Mở chi tiết một hũ để tính lại.'
         }
       />
-    </div>
-  )
-}
-
-function PendingReviewSection() {
-  const review = useReview('daily_ask')
-  if (review.status !== 'ready') return null
-  const { data } = review.data
-  if (data.count === 0 && data.ask?.status !== 'open') return null
-
-  return (
-    <div className="mx-4 mt-3 space-y-3">
-      <UnclassifiedSummary data={data} />
-      <DailyAskCard data={data} refreshing={review.refreshing} />
     </div>
   )
 }
@@ -225,7 +230,6 @@ export function OverviewPage() {
 
   if (data && !data.profile.onboarded) return <Navigate to="/onboarding" replace />
 
-  const bnplDue = data ? nearestBnpl(data.obligations_due) : undefined
   return (
     <>
       <Header name={name} />
@@ -234,25 +238,18 @@ export function OverviewPage() {
         <ErrorState className="px-4" error={ov.error} title="Chưa tải được tổng quan" onRetry={() => void ov.reload()} />
       )}
 
+      {/* Tổng quan là "hôm nay" (ui-design-review.md §10): số dư, việc cần làm, hũ, nghĩa vụ sắp đến hạn, giao dịch gần đây. Dự báo
+          nhiều hũ (B2) và lộ trình ở Nhìn trước; Trả sau đầy đủ (B6) ở Nghĩa vụ; chỉ thành một dòng "Việc cần làm" khi cần làm gì. */}
       {data && (
         <>
           <div className="px-4">
-            <BalanceCard balance={data.balance} appDate={data.app_date}>
+            <BalanceCard balance={data.balance} appDate={data.app_date} jarsCount={data.jars.length}>
               <QuickActions />
             </BalanceCard>
           </div>
 
-          {data.next_payday?.state === 'pending_confirmation' && parseProactiveCard(data.proactive_card)?.data.kind !== 'salary_pending' && (
-            <LinkCard
-              to="/salary"
-              title="Lương về, chờ bạn xác nhận"
-              subtitle="Một chạm để chia vào các hũ"
-              icon={<ListChecks className="size-5" aria-hidden />}
-            />
-          )}
-          <ProactiveSection data={data} />
+          <TodaySection data={data} />
           <ForecastNotes data={data} />
-          <PendingReviewSection />
 
           <SectionTitle to="/jars">Hũ của bạn</SectionTitle>
           {data.jars.length === 0 ? (
@@ -261,42 +258,11 @@ export function OverviewPage() {
             <JarCarousel jars={data.jars} />
           )}
 
-          <JarRunway
-            jars={data.jars}
-            appDate={data.app_date}
-            nextPayday={data.next_payday}
-            obligations={data.obligations_due}
-            forecast={data.forecast}
-          />
-
-          <RoadmapEntryRow />
-
-          {data.needs_review_count > 0 && (
-            <LinkCard
-              to="/review"
-              title={`Cần xem lại (${data.needs_review_count})`}
-              subtitle="Kiểm tra các hũ Yofina đã tự chọn"
-              icon={<ListChecks className="size-5" aria-hidden />}
-            />
-          )}
-
-          {data.credit_line && data.credit_line.outstanding_vnd > 0 && (
-            <div className="mx-4 mt-3">
-              <CreditUsage
-                line={data.credit_line}
-                due={bnplDue}
-                payJar={payJarFor(bnplDue, data.jars)}
-                to="/obligations"
-                testId="credit-usage"
-              />
-            </div>
-          )}
-
           {data.obligations_due.length > 0 && (
             <>
               <SectionTitle to="/obligations">Nghĩa vụ sắp đến hạn</SectionTitle>
               <ul className="mx-4 divide-y divide-line rounded-card bg-surface px-4 shadow-card" data-testid="obligations-due">
-                {data.obligations_due.map((o) => (
+                {data.obligations_due.slice(0, DUE_ROWS).map((o) => (
                   <li key={o.id} className="flex min-h-14 items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <p className="truncate text-body font-semibold text-ink">{o.name}</p>

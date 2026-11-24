@@ -292,7 +292,10 @@ describe('trang Lộ trình: danh sách phiên bản', () => {
     expect(items[0]).toHaveTextContent('Đề xuất · chờ bạn chọn')
     expect(items[0]).toHaveTextContent('5 bước chờ')
     expect(items[1]).toHaveTextContent('Phiên bản 2 (bản này)')
-    expect(items[1]).toHaveTextContent('Đang dùng')
+    // Bản đang hiện ở trên đã có trạng thái, mức khả thi, lý do, số bước: ở danh sách không lặp lại (ui-design-review.md §10).
+    expect(items[1]).not.toHaveTextContent('Đang dùng')
+    expect(items[1]).not.toHaveTextContent('bước chờ')
+    expect(items[1]).not.toHaveTextContent(versions.versions[1]!.reason_text)
     expect(items[1]).toHaveAttribute('aria-pressed', 'true')
     expect(items[2]).toHaveTextContent('Bản cũ · đã thay')
     expect(items[2]).toHaveTextContent('Chưa khả thi')

@@ -460,3 +460,60 @@ Chủ dự án: "chữ ít thôi, phần nào quan trọng thì để chữ, ưu
 | Chat, lời chữ dài | 9 dòng → 3 dòng | "Xem thêm" |
 
 Số của khối chat là hiệu giữa hai lần chụp liên tiếp, nên có lẫn câu hỏi thử và nhãn "Do AI tạo"; chỉ là ước lượng.
+
+## 10. Mỗi thông tin một nhà (đợt p5/ui-d, 25/11/2026)
+
+Chủ dự án thấy "trang Tổng quan có Lộ trình thích ứng, trang Nhìn trước cũng có" và yêu cầu rà lại mọi chỗ dư thừa. Luật chữ ở §9 vẫn áp dụng.
+
+**Nguyên tắc**
+
+- Mỗi loại thông tin có MỘT màn là nhà và hiện đầy đủ ở đó. Tổng quan là "hôm nay": số dư, việc cần làm, dải hũ, nghĩa vụ sắp đến hạn, giao dịch gần đây. Hũ là danh sách và chi tiết hũ. Nhìn trước là dự báo, chống chịu, cú sốc, lộ trình. Hồ sơ là cài đặt, hành vi, bộ nhớ, dữ liệu. Màn con có nhà riêng: Nghĩa vụ (Trả sau, B6), Xem lại (giao dịch chờ xếp hũ), Lộ trình (các phiên bản).
+- Ở màn khác, thông tin chỉ xuất hiện khi người dùng cần làm gì đó: một dòng trong "Việc cần làm", hoặc một dòng nhỏ có liên kết. Không lặp lại khối đầy đủ.
+- Không hiện cùng một con số hay trạng thái hai lần trên cùng một màn.
+- Khối trong chat đi theo câu hỏi nên không tính là trùng với tab. Chỉ sửa khi một khối tự lặp nội dung của chính nó.
+
+**Bảng kiểm kê** (rà trên `dev:mock` 390×844 với `minh` và đọc mã; bản thật `giamkhao1` do người điều phối đọc). Cột "Làm" ghi giữ, bỏ, hay thu thành liên kết.
+
+| Màn | Khối | Thông tin | Nhà | Làm |
+|---|---|---|---|---|
+| Tổng quan | Thẻ số dư | Tổng số dư; "Chi tiết số dư" có ba dòng | Tổng quan | Giữ. Ba dòng có dấu: "Trong 7 hũ", "+ Tiền vào khác (chưa gán hũ)", "− Đã chi, chưa xếp hũ". Trước đây không có dấu nên 7.730.000 + 350.000 + 180.000 không ra 7.900.000 |
+| Tổng quan | Thẻ "Việc cần làm hôm nay" | MỘT việc nặng nhất (cảnh 1: hũ sắp cạn, số ngày, dải ngày) | Tổng quan | Giữ, không đổi |
+| Tổng quan | Thẻ "Lương về, chờ bạn xác nhận" | Lương chờ chia | Lương về | Thu thành một dòng của danh sách "Việc cần làm khác" |
+| Tổng quan | Dòng "2 giao dịch chưa phân loại · 180.000 ₫" | Hàng chờ hũ Chưa phân loại | Xem lại | Bỏ. Khi câu hỏi gộp đang mở, thẻ chọn hũ đã ghi "2 giao dịch · 180.000 ₫". Khi đã "Để sau", hàng chờ thành một dòng việc cần làm |
+| Tổng quan | Thẻ câu hỏi gộp "Chọn hũ cho giao dịch hôm nay" | Chọn hũ ngay tại chỗ (A2) | Tổng quan (việc của hôm nay) | Giữ. Câu mở đầu của server (nhắc lại số và tổng tiền) chỉ còn cho trình đọc màn hình |
+| Tổng quan | Thẻ "Cần xem lại (N)" | `needs_review_count` | Xem lại | Bỏ. Gộp với hàng chờ chưa xếp hũ thành MỘT dòng việc cần làm (xem đoạn "Hai hàng chờ") |
+| Tổng quan | Dải "Hũ của bạn" | Số dư, nhãn Đủ/Sát/Hụt từng hũ | Hũ | Giữ (dải gọn, lối sang tab Hũ) |
+| Tổng quan | B2 "Hũ nào sắp cạn" | Đường băng tới kỳ lương, cùng hũ, số dư, nhãn với dải hũ | Nhìn trước | Bỏ khỏi Tổng quan; gộp với danh sách dự báo của Nhìn trước |
+| Tổng quan | Dòng "Lộ trình thích ứng" (luôn hiện) | Phiên bản, mức khả thi, số bước chờ | Nhìn trước, Lộ trình | Bỏ dòng cố định. Chỉ thành dòng việc cần làm khi có việc: "Lộ trình mới chờ bạn chọn" (có bản đề xuất) hoặc "Lộ trình: N bước chờ bạn". Thẻ chính hôm nay đã là bản tin lộ trình thì không có dòng |
+| Tổng quan | B6 "Đã dùng Trả sau bao nhiêu" | Hạn mức, đã dùng, còn, đến hạn, phải trả, hũ Nghĩa vụ có, đủ trả | Nghĩa vụ | Bỏ khỏi Tổng quan. Khi hũ trả chưa đủ: một dòng việc cần làm "Hũ Nghĩa vụ chưa đủ trả Trả sau (mô phỏng)", ghi ngày đến hạn và số hũ đang có (số phải trả nằm ở danh sách nghĩa vụ ngay dưới, không ghi lại) |
+| Tổng quan | "Nghĩa vụ sắp đến hạn" | Tên, ngày, số tiền | Nghĩa vụ | Giữ, tối đa 3 dòng, "Xem tất cả" mở Nghĩa vụ |
+| Tổng quan | "Gần đây" | 5 giao dịch; dòng có nhãn "Cần xem lại" | Hoạt động | Giữ. Nhãn ở từng dòng chỉ ra giao dịch nào, không phải con số đếm |
+| Hũ | "Tổng trong 7 hũ", ô "Tiền vào khác", ô "Đã chi, chưa xếp hũ" | Tiền theo nơi chứa | Hũ | Giữ: trả lời "tiền nằm ở hũ nào", khác "tổng có bao nhiêu" của Tổng quan. Cách gọi nay khớp với "Chi tiết số dư" (Trong 7 hũ, Tiền vào khác, Đã chi, chưa xếp hũ) |
+| Chi tiết hũ | Chip ở đầu màn và chip của khối dự báo | "Hụt · cạn 27/11" hai lần | Khối dự báo | Chip đầu màn chỉ hiện khi chưa có khối dự báo (đang tải, lỗi) |
+| Chi tiết hũ | "Luật chia và mục tiêu" | Dòng "Kỳ lương kế tiếp 05/12 · còn 14 ngày" | Khối dự báo ("8 ngày trước lương 05/12") | Dòng kỳ lương chỉ hiện khi chưa có khối dự báo |
+| Chi tiết hũ Chưa phân loại | "Đã chi … mà chưa xếp vào hũ nào" | Tiền chưa xếp hũ | Xem lại | Giữ, thêm lối "Xếp hũ cho các giao dịch này" |
+| Nhìn trước | Điểm chống chịu, Lộ trình thích ứng, Thử cú sốc | | Nhìn trước | Giữ đúng thứ tự (cảnh 3, cảnh 4). Thẻ lộ trình là lối vào chính của trang Lộ trình |
+| Nhìn trước | Dòng "2 giao dịch chưa phân loại" ở đầu | Hàng chờ | Xem lại | Thu thành một dòng nhỏ trong khối dự báo: "2 giao dịch (180.000 ₫) chưa xếp hũ, dự báo chưa tính. Xếp hũ". Lý do: giao dịch ở hũ Chưa phân loại không thuộc lịch sử hũ chi tiêu nào |
+| Nhìn trước | Thẻ "Kỳ lương kế tiếp", thẻ "Chất lượng dự báo", danh sách hũ dự báo | Ngày lương, còn mấy ngày, lương dự kiến; tin cậy, độ phủ, số ngày, cập nhật; số dư, khả năng hụt, nhãn | Nhìn trước | Gộp với B2 thành MỘT khối "Hũ nào sắp cạn": chip "Lương 05/12 · còn 14 ngày" ở đầu; mỗi hũ chi tiêu và nghĩa vụ một đường băng, xếp theo mức cần chú ý, hũ hụt hoặc sát ghi "Khả năng hụt …"; hũ tiết kiệm một dòng không có đường băng; lương dự kiến và chất lượng dự báo vào "Chi tiết" |
+| Lộ trình | Danh sách "Các phiên bản" | Dòng "(bản này)" lặp chip trạng thái, mức khả thi, lý do, số bước của khối ngay trên | Khối lộ trình | Dòng "(bản này)" chỉ còn số phiên bản. Áp cả cho danh sách phiên bản trong khối lộ trình ở chat (khối tự lặp) |
+| Nghĩa vụ | B6 và danh sách khoản | "Gốc 300.000 ₫ + phí 33.000 ₫" ở cả hai | B6 | Dòng của khoản Trả sau mà B6 đang nói không ghi lại gốc + phí; số phải trả vẫn ở dòng vì cộng vào "Tổng các khoản đang hoạt động" |
+| Hồ sơ | "Nhận xét hành vi" | Câu tổng ở đầu trùng câu của một nhận xét (bản thật: câu Trả sau) | Thẻ nhận xét | Không hiện câu tổng khi nó trùng (bỏ dấu câu, hoa thường) hoặc nằm trọn trong câu của một nhận xét |
+| Hồ sơ | "Việc nên làm" | Bước của hồ sơ hành vi | Hồ sơ | Giữ. Bản tin hành vi ở Tổng quan chỉ là một việc, có nút sang đây (`open_profile`) |
+| Hồ sơ | "Bộ nhớ của tôi": "Thói quen chi tiêu (hệ thống ghi)" | Điều trợ lý nhớ | Bộ nhớ | Giữ: là bản ghi bộ nhớ (xem, xóa được), không phải nhận xét |
+| Xem lại | Hai danh sách | Chưa xếp hũ (`daily_ask`) và Yofina đã tự xếp (`review`) | Xem lại | Trước đây chỉ có `review`, nên dòng "chưa phân loại" dẫn tới đây mà không thấy giao dịch nào. Nay có cả hai, chưa xếp hũ lên trước. Câu mở đầu của server chỉ cho trình đọc màn hình |
+| Hoạt động, Nạp dữ liệu, chat trống | | | | Không thấy trùng. Bảng vận hành và màn trace chỉ đọc mã (mock không có `/ops`): không thấy trùng |
+
+**Hai hàng chờ** (đọc `app_get_review_list`, migration 0052, và `needs_review_count`, migration 0050): giao dịch ở hũ Chưa phân loại (`daily_ask`, tiền đã chi mà chưa vào hũ nào, có tổng tiền) khác bản chất với giao dịch Yofina đã tự xếp ở mức tin cậy vừa (`review`). Nhưng cả hai là cùng một việc (chọn hoặc xác nhận hũ), cùng màn Xem lại, và `needs_review_count` của `/overview` là tổng của cả hai. Vì vậy Tổng quan có MỘT dòng: "Xếp hũ cho 3 giao dịch · 2 chưa xếp hũ · 180.000 ₫; 1 cần xem lại". Nếu chỉ có một loại thì dòng ghi "2 giao dịch chưa xếp hũ" hoặc "Xem lại 1 giao dịch". Phần "cần xem lại" là `needs_review_count − count` của `daily_ask`. Các nút "Xem lại" của thẻ chủ động và biên nhận (`review_unclassified`) nay mở Xem lại thay vì bộ lọc của Hoạt động, nơi không chọn hũ được.
+
+**Số khối trước → sau** (mỗi thẻ hoặc dòng nằm riêng một khối, với `minh` trên mock):
+
+| Tab | Trước | Sau |
+|---|---|---|
+| Tổng quan | 11: số dư, việc cần làm, dòng chưa phân loại, câu hỏi gộp, dải hũ, B2, lộ trình, cần xem lại, B6, nghĩa vụ sắp đến hạn, gần đây | 7: số dư, việc cần làm, việc cần làm khác (một danh sách), câu hỏi gộp, dải hũ, nghĩa vụ sắp đến hạn, gần đây |
+| Hũ | 2 | 2 |
+| Nhìn trước | 7: điểm chống chịu, lộ trình, cú sốc, dòng chưa phân loại, kỳ lương, chất lượng dự báo, danh sách hũ | 4: điểm chống chịu, lộ trình, cú sốc, khối dự báo hũ |
+| Hồ sơ | 7 | 7 (bỏ câu tổng khi trùng) |
+
+**Kịch bản demo**: cảnh 1 (thẻ sắp cạn, số ngày, dải ngày) vẫn là thẻ chính ở đầu Tổng quan. Cảnh 3 và 4 giữ thứ tự của Nhìn trước. Lộ trình có lối vào từ thẻ "Lộ trình thích ứng" ở Nhìn trước, từ dòng việc cần làm khi có bản mới, từ nút "Xem lộ trình thích ứng" của màn cú sốc và nút "Mở trang Lộ trình" trong chat.
+
+**Ảnh** (390×844, sáng, `dev:mock`, Chrome headless, giảm chuyển động) ở [ui-round1/](ui-round1/), hậu tố `-gonnha`: `overview-sodu` (số dư mở chi tiết, thẻ cảnh 1), `overview-viec` (dòng việc cần làm, câu hỏi gộp), `foresight` (khối dự báo gộp), `review`, `obligations`, `jar-detail`, `roadmap-versions`. Mock `/overview` đếm `needs_review_count` khác server (chỉ đếm cờ `needs_review`), nên ảnh Tổng quan không có phần "cần xem lại". Fixture hồ sơ hành vi không có câu tổng trùng, nên không có ảnh Hồ sơ; test `profile.test.tsx` kiểm trường hợp này.

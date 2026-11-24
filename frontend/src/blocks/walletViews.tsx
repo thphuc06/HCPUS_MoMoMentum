@@ -152,7 +152,7 @@ function FollowUpButton({ followUp }: { followUp: NonNullable<ReceiptActionBlock
   const launcher = useChatLauncher()
   const go = () => {
     launcher.close()
-    navigate(followUp.kind === 'confirm_salary' ? '/salary' : '/activity?review=1')
+    navigate(followUp.kind === 'confirm_salary' ? '/salary' : '/review')
   }
   return (
     <Button type="button" variant="soft" className="mt-3 w-full" onClick={go}>
