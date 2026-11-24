@@ -104,6 +104,30 @@ Sở hữu: `frontend/`.
 - Đọc log của Lambda nạp để chắc PII đã che trước lời gọi model.
 - Đi trọn 6 cảnh theo [figma-ui-design.md §8.2](../../research/figma-ui-design.md), bấm giờ từng cảnh so với [demo-script.md](../demo-script.md).
 
+## Kế hoạch thực hiện (chốt 24/11, Claude Code điều phối, worker `kiro-cli` Opus 5.5)
+
+Cách chạy: mỗi việc một worker trong worktree riêng `C:\moMo-wt\p5-<việc>` (nhánh `p5/<việc>` từ `main`), chỉ chạy unit test trong lúc làm; người điều phối review, merge theo thứ tự, chạy unit cả bộ; cuối đợt MỘT worker deploy + integration + eval. Không bật CloudWatch Transaction Search (cần chủ dự án quyết, có phí mức tài khoản); cắt sao kê PDF và FR14 theo thứ tự cắt của phase. Không tạo OpenSearch Serverless; không tài nguyên tính tiền theo giờ.
+
+**Bước 0 — hợp đồng (worker `p5-contracts`, làm trước, các luồng sau bắt đầu từ commit merge của nó).** Sở hữu `contracts/`, `db/migrations/0053_phase5.sql`, `libs/yofina_core/src/yofina_core/` (khối, model Pydantic, mã lỗi), `frontend/src/contracts/` (chỉ sinh bằng `scripts/gen_contracts.mjs`), `tests/unit/test_contracts*`, `evals/golden/phase5.jsonl`, `evals/adversarial/phase5.jsonl`.
+- Migration `0053`: `behavior_profiles` (đặc trưng, nhận xét kèm bằng chứng số, phiên bản, RLS FORCE); mở rộng `nudges` (kind, giá trị ước tính, outcome, lý do cổng); `kb_documents` + `kb_chunks` (metadata sản phẩm, ngày hiệu lực, `vector(1024)` Cohere, `tsvector`); `data_deletions` (nhật ký xóa dữ liệu, không chứa dữ liệu đã xóa). Theo khuôn RLS, hàm `app_*` của 0050–0052; `RESET_DELETES` cập nhật.
+- Tool: `forecast___get_behavior_profile`, `knowledge___search` (ba tool `ingest___*` đã có hợp đồng, chỉ rà lại).
+- Khối: `behavior_insight` (nhận xét + bằng chứng số + một việc cần làm), `citation` (đoạn trích, tên tài liệu, ngày hiệu lực, đường dẫn nguồn).
+- REST (OpenAPI): `GET /profile/behavior`; `GET /nudges/today`, `POST /nudges/{id}/feedback`; `GET /memory`, `DELETE /memory/{record_id}`, `DELETE /memory`; `POST /me/delete-data` (có token xác nhận); `GET /ops/traces`, `GET /ops/traces/{trace_id}`, `GET /ops/summary` (chỉ nhóm `ops`).
+- Fixture hợp lệ/không hợp lệ cho mọi thứ mới; golden phase 5 ≥ 10 câu, adversarial ≥ 10 ca theo mục "Bộ đánh giá".
+
+**Sau bước 0, sáu luồng song song** (mỗi luồng chỉ sửa file của mình; `agent/src/yofina_agent/turn.py`, `router.py`, `schemas.py` chỉ thêm một nhánh dispatch, một luật prompt, một intent — phần còn lại viết ở module mới; `infra-cdk/lib/*.ts` chỉ thêm khối của mình, người điều phối gỡ xung đột khi merge):
+
+| Worker | Luồng | Sở hữu | Kết quả cần có |
+|---|---|---|---|
+| `p5-ingest` | A còn lại | `gateway/tools/ingest/`, `pipelines/ingest/`, `agent/src/yofina_agent/ingest_chat.py` (mới), Cedar `gateway/policies/` cho `ingest___*`, target `ingest` trong `agent-stack.ts` | Ba tool `ingest___*` trên Gateway (Cedar ép user, `confirm_rows` qua token); intent "mình vừa nạp ảnh" → trạng thái job + khối `ingest_review`; dòng nạp dùng pipeline phân loại phase 4 (bảng → luật → k-NN → model nhỏ) thay bộ gán riêng |
+| `p5-behavior` | B: hồ sơ hành vi, bản tin | `ml/yofina_ml/behavior.py` (mới), `pipelines/forecast/yofina_forecast/behavior.py` (mới) + bước trong `batch.after_forecast`, `forecast___get_behavior_profile`, `gateway/tools/ledger/yofina_ledger/proactive.py` (cổng giá trị), REST `/profile/behavior`, `/nudges/*`, `forecast-pipeline.ts` (IAM model nhỏ) | Đặc trưng nhịp lương, giờ, thứ, trả sau; phân cụm đơn giản; model nhỏ tóm tắt qua NumericGrounding; ≥ 2 nhận xét cho `minh`; cổng chọn tối đa một việc/ngày theo thứ tự Học đề xuất (hũ thiết yếu sắp cạn → nghĩa vụ 3 ngày → lộ trình mới chờ chọn → hỏi gộp → điểm tụt nhóm), "Ít nhắc loại này" hạ một bậc; khối `behavior_insight` trong chat |
+| `p5-memory` | B: bộ nhớ, quyền riêng tư | `agent/src/yofina_agent/memory.py` (mới), Memory trong `agent-stack.ts`, REST `/memory*`, `/me/delete-data` (ledger + IAM S3/Memory) | AgentCore Memory (sở thích, sự thật, tóm tắt phiên; namespace theo `sub`; che PII; không lưu số dư hay giao dịch); router và Analyst đọc sở thích; xem/xóa; xóa dữ liệu của tôi xóa Aurora, S3, Memory (liệt kê namespace rồi xóa từng bản ghi) |
+| `p5-rag` | C | `knowledge-base/`, `scripts/sync_knowledge.py` (mới), `gateway/tools/ledger/yofina_ledger/knowledge*.py`, `agent/src/yofina_agent/knowledge_chat.py` (mới) | Ba kho nội dung có metadata, chia theo điều khoản; truy xuất lai pgvector + `tsvector` trên Aurora (Cohere embed), lọc metadata; khối `citation`; số phí vẫn lấy từ `get_fee_schedule` |
+| `p5-ops` | D | `gateway/tools/audit/`, `gateway/tools/ledger/yofina_ledger/ops*.py` (mới), route `/ops/*` + dashboard `yofina-ops` + alarm trong `tools-stack.ts` | `/ops/*` chỉ nhóm `ops` (403 cho người khác), dữ liệu đã che PII; tổng hợp p50/p95, lỗi tool, luật chặn, lượt model so với trần |
+| `p5-frontend` | E | `frontend/` (trừ `src/contracts/`) | Hồ sơ S1 (khai báo, nhận xét hành vi, bộ nhớ xem/xóa, đồng ý, xóa dữ liệu, đặt lại demo, đăng xuất); X1 trace desktop mở từ "Mã trace" (nhóm `ops`); view khối `behavior_insight`, `citation`; thẻ chủ động hiện bản tin. Code theo fixture |
+
+**Cuối đợt (worker `p5-deploy`)**: build zip, migration `0053`, `YofinaTools`, `YofinaAgent` (Memory, Gateway), Runtime, frontend; nạp kho tri thức; integration mới cho phase 5 + hồi quy phase 3–4; golden/adversarial phase 5 MỘT lần. Người điều phối tự đi tiêu chí 1, 2, 5, 8, 9 và 6 cảnh khi chủ dự án đăng nhập.
+
 ## Kết quả thực hiện
 
 ### Luồng A (F6 nạp dữ liệu) — xong và deploy 23/11; các luồng B, C, D, E (phần ngoài F6) chưa làm
