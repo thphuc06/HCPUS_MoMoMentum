@@ -1,5 +1,6 @@
-"""Hợp đồng phase 5 (hồ sơ hành vi, bản tin, bộ nhớ, RAG, xóa dữ liệu, trace): hai khối mới, hai tool mới, mười một endpoint REST mới,
-migration 0053, bộ đánh giá phase 5.
+"""Hợp đồng phase 5 (hồ sơ hành vi, bản tin, bộ nhớ, trích dẫn biểu phí, xóa dữ liệu, trace): hai khối mới, một tool mới, mười một
+endpoint REST mới, migration 0053, bộ đánh giá phase 5. Không có RAG (chủ dự án cắt luồng C ngày 24/11): khối `citation` dựng từ
+kết quả `knowledge___get_fee_schedule`.
 
 Phần schema và fixture dùng chung của khối nằm ở test_contracts_blocks.py (BLOCK_TYPES), tool ở test_contracts_tools.py, REST ở
 test_contracts_rest.py. File này kiểm thứ chỉ phase 5 có: bất biến liên trường mà JSON Schema (tập con của repo) không diễn đạt được
@@ -23,7 +24,7 @@ from pydantic import ValidationError
 from test_contracts_blocks import normalize, pydantic_tree
 
 from yofina_core import blocks as b
-from yofina_core import knowledge, memory, privacy, wallet
+from yofina_core import memory, privacy, wallet
 from yofina_core.blocks import BLOCK_MODELS
 from yofina_core.confirm import hash_normalized_params
 from yofina_core.errors import HTTP_STATUS, ErrorCode
@@ -92,7 +93,6 @@ def api_validator(registry, name: str) -> Draft202012Validator:
 def test_tap_gia_tri_khoi_moi_khop_hang_so():
     assert schema_enum("behavior_insight", "$defs", "BehaviorInsightKind") == wallet.BEHAVIOR_INSIGHT_KINDS == b.BehaviorInsightKind.__args__
     assert schema_enum("behavior_insight", "$defs", "BehaviorEvidence", "properties", "unit") == b.EvidenceUnit.__args__
-    assert schema_enum("citation", "$defs", "KnowledgeCorpus") == knowledge.KB_CORPORA == b.KnowledgeCorpus.__args__
     proactive = load_json(CONTRACTS / "blocks/proactive_card.schema.json")["$defs"]
     kinds = tuple(proactive["ProactiveCardData"]["properties"]["kind"]["enum"])
     assert kinds == b.ProactiveKind.__args__ and set(wallet.NUDGE_GATE_ORDER) <= set(kinds)  # mọi bản tin của cổng vẽ được thành thẻ
@@ -222,108 +222,121 @@ def test_hanh_dong_cua_viec_can_lam_dan_toi_tool_ghi_co_san():
 
 
 # =====================================================================================
-# Khối citation, knowledge___search
+# Khối citation: dựng từ kết quả knowledge___get_fee_schedule (không có RAG)
 # =====================================================================================
-SEARCH = fx("tools/search.ok.json")["data"]
+FEES = fx("tools/get_fee_schedule.ok.json")
+FEES_TWO = fx("tools/get_fee_schedule.ok_hai_nguon.json")
+CITATION = load_json(CONTRACTS / "blocks/citation.schema.json")
+FEE_RESULTS = load_json(CONTRACTS / "tools/knowledge.results.schema.json")["$defs"]
 
 
-def test_trich_dan_dung_lai_dung_doan_cua_ket_qua_search():
-    block = b.block_to_wire(
-        b.build_citation(items=[h["citation"] for h in SEARCH["hits"]], query=SEARCH["query"], source_tool="knowledge___search", **KW)
-    )
-    assert [i["chunk_id"] for i in block["data"]["items"]] == [h["citation"]["chunk_id"] for h in SEARCH["hits"]]
-    assert block["id"] == f"citation:{KW['trace_id']}"
-    one = fx("blocks/valid/citation.phi_tra_sau.json")
-    assert one["data"]["items"][0] == SEARCH["hits"][0]["citation"]
-    assert one["fallback_text"] == "Nguồn: Biểu phí Trả sau (mô phỏng), Điều 3.2, hiệu lực từ 31/03/2026."
-    # đoạn trích biểu phí trùng nguồn và ngày hiệu lực với bảng có cấu trúc (số để tính vẫn lấy từ get_fee_schedule)
-    fee = fx("tools/get_fee_schedule.ok.json")["data"]["fees"][0]
-    cit = SEARCH["hits"][0]["citation"]
-    assert (cit["source_name"], cit["effective_from"], cit["product_code"]) == (fee["source_name"], fee["effective_from"], "bnpl_sim")
-    assert f"'{cit['source_url']}'" in (REPO / "db/seed/fee_schedules.sql").read_text(encoding="utf-8")
-    many = b.build_citation(items=[cit] * 3 + [h["citation"] for h in SEARCH["hits"]], source_tool="knowledge___search", **KW)
-    assert len(many.data.items) == len(SEARCH["hits"])  # trùng chunk_id thì bỏ bản sau
+def test_trich_dan_dung_tu_ket_qua_get_fee_schedule():
+    built = b.block_to_wire(b.build_citation(result=FEES, trace_id=KW["trace_id"]))
+    assert built == fx("blocks/valid/citation.phi_tra_sau.json")
+    assert built["id"] == f"citation:{KW['trace_id']}"
+    assert built["source"] == {"tool": "knowledge___get_fee_schedule", "as_of": FEES["as_of"], "app_date": FEES["app_date"]}
+    fee = FEES["data"]["fees"][0]
+    item = built["data"]["items"][0]
+    assert (item["source_name"], item["source_url"], item["effective_from"]) == (fee["source_name"], fee["source_url"], fee["effective_from"])
+    assert item["fee_types"] == [fee["fee_type"]] and item["excerpt"] == fee["condition_note"]  # câu trích chép từ bảng, không do model viết
+    assert (built["data"]["product_code"], built["data"]["product_label"]) == (FEES["data"]["product_code"], FEES["data"]["product_label"])
+    assert built["fallback_text"] == f"Nguồn biểu phí Trả sau (mô phỏng): {fee['source_name']}, hiệu lực từ 31/03/2026."
+    assert "33.000" not in json.dumps(built, ensure_ascii=False)  # khối không mang số tiền: số nói ra lấy từ amount_vnd
+    two = b.block_to_wire(b.build_citation(result=FEES_TWO, trace_id=KW["trace_id"]))
+    assert two == fx("blocks/valid/citation.nhieu_nguon.json")
+    assert [i["fee_types"] for i in two["data"]["items"]] == [[f["fee_type"]] for f in FEES_TWO["data"]["fees"]]
+
+
+def test_trich_dan_loc_theo_loai_phi_va_gom_theo_nguon():
+    late = b.build_citation(result=FEES_TWO, trace_id=KW["trace_id"], fee_types=["late_payment_fee"])
+    assert [i.fee_types for i in late.data.items] == [["late_payment_fee"]]
+    assert late.data.items[0].source_url == FEES_TWO["data"]["fees"][1]["source_url"]
+    for bad in (["khong_co"], [], ["monthly_service_fee", "khong_co"]):
+        with pytest.raises(ValueError):  # không trích dẫn phí mà tool không trả
+            b.citation_data(FEES_TWO["data"], bad)
+    same = edited(FEES_TWO, *((("data", "fees", 1, k), FEES_TWO["data"]["fees"][0][k]) for k in ("source_name", "source_url", "effective_from")))
+    grouped = b.citation_data(same["data"])
+    assert len(grouped.items) == 1 and grouped.items[0].fee_types == ["monthly_service_fee", "late_payment_fee"]
+    assert grouped.items[0].excerpt is None  # nhiều loại phí chung một nguồn thì không chọn câu trích nào
+    with pytest.raises(ValidationError):  # kết quả lỗi của tool không dựng được khối
+        b.build_citation(result=fx("tools/get_fee_schedule.error_not_found.json"), trace_id=KW["trace_id"])
 
 
 def test_bat_bien_trich_dan():
-    item = SEARCH["hits"][0]["citation"]
+    item = fx("blocks/valid/citation.phi_tra_sau.json")["data"]["items"][0]
+    data = {"product_code": "bnpl_sim", "product_label": "Trả sau (mô phỏng)"}
+    b.CitationData.model_validate({**data, "items": [item]})
+    with pytest.raises(ValidationError):  # cùng một nguồn hai mục
+        b.CitationData.model_validate({**data, "items": [item, {**item, "fee_types": ["late_payment_fee"]}]})
+    with pytest.raises(ValidationError):  # một loại phí ở hai nguồn
+        b.CitationData.model_validate({**data, "items": [item, {**item, "source_url": "https://example.invalid/khac"}]})
     with pytest.raises(ValidationError):
-        b.CitationItem.model_validate({**item, "effective_to": "2026-01-01"})
-    with pytest.raises(ValidationError):
-        b.CitationData.model_validate({"items": [item, item]})
-    with pytest.raises(ValidationError):
-        b.CitationData.model_validate({"items": [item] * 6})
+        b.CitationData.model_validate({**data, "items": [{**item, "source_url": f"https://example.invalid/{n}", "fee_types": [f"f{n}"]} for n in range(6)]})
 
 
-def test_diem_rrf_va_bat_bien_ket_qua_search():
-    assert knowledge.rrf_score(1, 1) == pytest.approx(1.0)
-    assert knowledge.rrf_score(1, None) == pytest.approx(0.5)
-    assert knowledge.rrf_score(2, 3) < knowledge.rrf_score(1, 3) < knowledge.rrf_score(1, 1)
-    assert knowledge.match_of(1, None) == "vector" and knowledge.match_of(None, 2) == "text" and knowledge.match_of(1, 2) == "both"
-    with pytest.raises(ValueError):
-        knowledge.match_of(None, None)
-    for h in SEARCH["hits"]:
-        vr = None if h["match"] == "text" else 1
-        assert 0 < h["score"] <= 1 and (h["match"] != "both" or vr == 1)
-    ok = knowledge.KnowledgeSearchData.model_validate
-    ok(SEARCH)
-    ok(fx("tools/search.ok_chi_tu_khoa.json")["data"])
-    with pytest.raises(ValidationError):
-        ok(edited(SEARCH, (("hits", 0, "rank"), 2)))  # hạng phải liền nhau từ 1
-    with pytest.raises(ValidationError):
-        ok(edited(SEARCH, (("hits", 2, "score"), 0.99)))  # điểm không tăng theo hạng
-    with pytest.raises(ValidationError):
-        ok(edited(SEARCH, (("on_date",), "2026-01-01")))  # đoạn biểu phí chưa có hiệu lực ngày đó
-    with pytest.raises(ValidationError):
-        ok(edited(SEARCH, (("corpus",), "suitability")))
-    with pytest.raises(ValidationError):
-        ok(edited(SEARCH, (("degraded",), True)))  # chỉ từ khóa mà có kết quả đi đường vector
-    with pytest.raises(ValidationError):
-        ok(edited(SEARCH, (("product",), "the_tin_dung")))
+def test_khoi_trich_dan_chi_co_truong_cua_bang_phi():
+    """Khối không còn trường chỉ có nghĩa với tìm kiếm tài liệu (điểm, chunk, kho, câu truy vấn); trường nguồn cùng giới hạn với `FeeLine`."""
+    defs = CITATION["$defs"]
+    assert set(defs) == {"CitationItem", "CitationData"}
+    assert set(defs["CitationItem"]["properties"]) == {"fee_types", "source_name", "source_url", "effective_from", "excerpt"}
+    assert defs["CitationItem"]["required"] == ["fee_types", "source_name", "source_url", "effective_from"]
+    assert set(defs["CitationData"]["properties"]) == {"product_code", "product_label", "items"}
+    fee_line = FEE_RESULTS["FeeLine"]["properties"]
+    item = defs["CitationItem"]["properties"]
+    assert item["fee_types"]["items"]["pattern"] == fee_line["fee_type"]["pattern"]
+    assert item["source_name"]["maxLength"] == fee_line["source_name"]["maxLength"]
+    assert item["source_url"]["pattern"] == fee_line["source_url"]["pattern"]
+    assert item["excerpt"]["maxLength"] == fee_line["condition_note"]["maxLength"]
+    assert defs["CitationData"]["properties"]["product_code"] == FEE_RESULTS["FeeScheduleData"]["properties"]["product_code"]
+    text = json.dumps(CITATION, ensure_ascii=False)
+    assert "knowledge___get_fee_schedule" in text and "knowledge___search" not in text and "kb_" not in text
 
 
-def test_ket_qua_search_pydantic_khop_json_schema(registry):
-    hit = registry.resolver(base_uri=f"{BASE}/tools/").lookup("knowledge.results.schema.json#/$defs/KnowledgeSearchData")
-    assert pydantic_tree(knowledge.KnowledgeSearchData) == normalize(hit.contents, hit.resolver)
-    assert hit.contents["properties"]["hits"]["maxItems"] == knowledge.SEARCH_K_MAX
+@pytest.mark.parametrize("name", ["FeeLine", "FeeScheduleData", "GetFeeScheduleOk"])
+def test_ket_qua_get_fee_schedule_pydantic_khop_json_schema(registry, name):
+    hit = registry.resolver(base_uri=f"{BASE}/tools/").lookup(f"knowledge.results.schema.json#/$defs/{name}")
+    assert pydantic_tree(getattr(b, name)) == normalize(hit.contents, hit.resolver)
+
+
+def test_rag_da_cat_khoi_hop_dong():
+    """Chủ dự án cắt luồng C (RAG) ngày 24/11: không tool tìm kiếm, không fixture, không module, không bảng hay hàm trong 0053."""
+    assert list(KNOWLEDGE) == ["get_fee_schedule"] == list(wallet.KNOWLEDGE_TOOLS)
+    assert not {k for k in FEE_RESULTS if k.startswith("Knowledge")}
+    assert not list((FIX / "tools").glob("**/search.*.json"))
+    assert importlib.util.find_spec("yofina_core.knowledge") is None
+    assert "search" not in wallet.PHASE5_TOOLS
 
 
 # =====================================================================================
 # Tool
 # =====================================================================================
-def test_hai_tool_moi_o_cuoi_target_va_chua_cai():
-    assert wallet.FORECAST_TOOLS[-1] == "get_behavior_profile" and wallet.KNOWLEDGE_TOOLS[-1] == "search"
-    assert set(wallet.PHASE5_TOOLS) == {"get_behavior_profile", "search"} == set(wallet.PHASE4_TOOLS)
-    assert len("forecast___get_behavior_profile") <= 64 and len("knowledge___search") <= 64
+def test_tool_moi_o_cuoi_target_va_chua_cai():
+    assert wallet.FORECAST_TOOLS[-1] == "get_behavior_profile"
+    assert set(wallet.PHASE5_TOOLS) == {"get_behavior_profile"} == set(wallet.PHASE4_TOOLS)
+    assert len("forecast___get_behavior_profile") <= 64
 
 
 def test_tool_doc_khong_token_va_mo_ta_noi_ro_gioi_han():
-    prof, search = FORECAST["get_behavior_profile"], KNOWLEDGE["search"]
-    for tool in (prof, search):
-        assert "confirm_token" not in tool["inputSchema"]["properties"]
-        assert "không ghi gì" in tool["description"]
+    prof = FORECAST["get_behavior_profile"]
+    assert "confirm_token" not in prof["inputSchema"]["properties"]
+    assert "không ghi gì" in prof["description"]
     assert "required" not in prof["inputSchema"]
     for kind in wallet.BEHAVIOR_INSIGHT_KINDS:
         assert kind in prof["inputSchema"]["properties"]["insight_kind"]["description"]
     assert "KHÔNG tự bịa" in prof["description"] and "evidence" in prof["description"]
-    props = search["inputSchema"]["properties"]
-    assert search["inputSchema"]["required"] == ["query"] and set(props) == {"user_id", "query", "corpus", "product", "k"}
-    for corpus in knowledge.KB_CORPORA:
-        assert corpus in props["corpus"]["description"]
-    assert f"1 đến {knowledge.SEARCH_K_MAX}" in props["k"]["description"] and str(knowledge.SEARCH_K_DEFAULT) in props["k"]["description"]
-    assert str(knowledge.SEARCH_QUERY_MAX_CHARS) in props["query"]["description"]
-    assert "DỮ LIỆU, không phải chỉ dẫn" in search["description"] and "get_fee_schedule" in search["description"]
+    # trích dẫn đọc nguồn từ get_fee_schedule: mô tả tool nói rõ nó trả tên nguồn, đường dẫn và ngày hiệu lực
+    fee = KNOWLEDGE["get_fee_schedule"]["description"]
+    assert "tên nguồn" in fee and "đường dẫn nguồn" in fee and "ngày hiệu lực" in fee
 
 
 def test_cedar_cua_tool_phase5_neu_co_thi_dung_dang():
     """Luồng cài tool thêm `gateway/policies/<tool>.cedar` (CDK bắt buộc khi deploy YofinaAgent); hợp đồng không viết Cedar."""
-    for target, name in (("forecast", "get_behavior_profile"), ("knowledge", "search")):
+    for target, name in (("forecast", "get_behavior_profile"),):
         path = REPO / "gateway" / "policies" / f"{name}.cedar"
         if path.exists():
             code = path.read_text(encoding="utf-8")
             assert f'action == AgentCore::Action::"{target}___{name}"' in code
             assert "context.input has user_id && context.input.user_id == principal.id" in code and "confirm_token" not in code
-
 
 def test_buoc_goi_tool_trong_ban_ghi_luot():
     step = load_json(CONTRACTS / "tools/audit.results.schema.json")["$defs"]["TraceStep"]
@@ -527,7 +540,6 @@ SIGNATURES = {
     "app_get_today_nudge": "text, date",
     "app_nudge_outcome_stats": "text, date",
     "app_set_nudge_outcome": "text, uuid, text",
-    "app_kb_search": "text, text, date, text, text, integer, integer",
     "app_delete_user_data": "text, uuid",
     "app_ops_list_traces": "timestamptz, timestamptz, text, text, integer, timestamptz, text, integer",
     "app_ops_get_trace": "text",
@@ -547,7 +559,7 @@ def table(name: str) -> str:
 
 
 def test_0053_tach_duoc_viet_lai_duoc_va_khong_tham_so():
-    assert STATEMENTS[0] == "CREATE EXTENSION IF NOT EXISTS vector"
+    assert STATEMENTS[0].startswith("CREATE TABLE IF NOT EXISTS behavior_profiles ")  # không còn CREATE EXTENSION vector của RAG
     assert all(not _mod.named_params(s) for s in STATEMENTS)
     assert not re.search(r"(?<![:\w]):[A-Za-z_]", SQL)
     assert not re.search(r"ALTER\s+ROLE|PASSWORD\s+'|DROP\s+TABLE|TRUNCATE", SQL, re.I)
@@ -587,7 +599,7 @@ def test_0053_ham_quyen_va_security():
     assert "information_schema.columns" in delete and "<> 'data_deletions'" in delete
 
 
-def test_0053_rls_quyen_toi_thieu_va_kho_tri_thuc_chi_doc():
+def test_0053_rls_va_quyen_toi_thieu():
     expected = "user_id = current_setting('app.user_id', true)"
     for t in ("behavior_profiles", "data_deletions"):
         assert f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY" in STATEMENTS and f"ALTER TABLE {t} FORCE ROW LEVEL SECURITY" in STATEMENTS
@@ -596,32 +608,17 @@ def test_0053_rls_quyen_toi_thieu_va_kho_tri_thuc_chi_doc():
     assert re.search(r"user_id\s+text NOT NULL REFERENCES users \(id\) ON DELETE CASCADE", table("behavior_profiles"))
     assert "REFERENCES users" not in table("data_deletions")  # nhật ký sống lâu hơn dòng users
     assert "GRANT SELECT, INSERT, UPDATE ON data_deletions TO yofina_app" in STATEMENTS  # không DELETE
-    assert "GRANT SELECT ON kb_documents TO yofina_app" in STATEMENTS and "GRANT SELECT ON kb_chunks TO yofina_app" in STATEMENTS
-    for t in ("kb_documents", "kb_chunks"):
-        assert "user_id" not in table(t)
-        assert not any(s.startswith(f"ALTER TABLE {t}") and "ROW LEVEL" in s for s in STATEMENTS)
-        assert not any(re.match(rf"GRANT .*(INSERT|UPDATE|DELETE).* ON {t} ", s) for s in STATEMENTS)
 
 
-def test_0053_vector_tsvector_va_chi_muc():
-    chunks = table("kb_chunks")
-    assert re.search(r"embedding\s+vector\(1024\) NOT NULL", chunks) and wallet.EMBEDDING_DIMENSIONS == 1024
-    assert "GENERATED ALWAYS AS (to_tsvector('simple', app_fold_text(" in chunks and "STORED" in chunks
-    assert f"length(body) BETWEEN 1 AND {knowledge.CHUNK_MAX_CHARS}" in chunks
-    hnsw = next(s for s in STATEMENTS if "kb_chunks_hnsw_idx" in s)
-    assert "USING hnsw (embedding vector_cosine_ops)" in hnsw
-    assert any("kb_chunks_tsv_idx" in s and "USING gin (tsv)" in s for s in STATEMENTS)
-    search = FUNCS["app_kb_search"]
-    assert "STABLE SECURITY INVOKER" in search and "<=>" in search and "@@" in search
-    assert "(60 + v.rnk)" in search and knowledge.RRF_K == 60 and "(2.0 / 61)" in search
-    assert f"coalesce(p_k, {knowledge.SEARCH_K_DEFAULT})" in search and f", 1), {knowledge.SEARCH_K_MAX})" in search
-    assert f"coalesce(p_candidates, {knowledge.SEARCH_CANDIDATES})" in search
-    assert "d.status = 'active'" in search and "d.effective_to IS NULL OR d.effective_to >= p_on_date" in search
 
+def test_0053_khong_con_kho_tri_thuc():
+    """RAG đã cắt (24/11): không bảng kb_*, không hàm app_kb_search, không vector hay tsvector; migration chưa chạy ở đâu nên sửa thẳng."""
+    assert not re.search(r"\bkb_|app_kb_search|vector\(|tsvector|USING hnsw|CREATE EXTENSION", SQL)
+    tables = {re.match(r"CREATE TABLE IF NOT EXISTS (\w+)", s).group(1) for s in STATEMENTS if s.startswith("CREATE TABLE")}
+    assert tables == {"behavior_profiles", "data_deletions"}
 
 def test_0053_tap_gia_tri_khop_hang_so():
-    assert sql_set(table("kb_documents"), "corpus") == knowledge.KB_CORPORA
-    assert sql_set(table("kb_documents"), "status") == knowledge.KB_DOCUMENT_STATUSES
+
     assert sql_set(table("behavior_profiles"), "source") == wallet.BEHAVIOR_PROFILE_SOURCES
     assert sql_set(table("data_deletions"), "status") == privacy.DATA_DELETION_STATUSES
     assert sql_set(table("data_deletions"), "scope") == wallet.DATA_DELETION_SCOPES
@@ -673,10 +670,12 @@ def test_golden_phase5_du_nhom_cua_file_phase():
     reuse = [c for c in cases if c["category"] == "memory_reuse"]
     assert reuse and all(c["prior_sessions"] and c["forbid_reask"] for c in reuse)
     fee = next(c for c in cases if c["id"] == "knowledge-fee-citation")
-    assert {"get_fee_schedule", "search"} <= set(fee["tools_must"]) and "citation" in fee["blocks_must"]
+    assert fee["tools_must"] == ["get_fee_schedule"] and "citation" in fee["blocks_must"]
     for c in cases:
-        if "expect_citation_corpus" in c:
-            assert c["expect_citation_corpus"] in knowledge.KB_CORPORA and "citation" in c["blocks_must"]
+        if "citation" in c.get("blocks_must", []):  # trích dẫn chỉ dựng từ get_fee_schedule
+            assert "get_fee_schedule" in c["tools_must"], c["id"]
+        if "expect_citation_fee_types" in c:
+            assert "citation" in c["blocks_must"], c["id"]
         if "expect_insight_kind" in c:
             assert c["expect_insight_kind"] in wallet.BEHAVIOR_INSIGHT_KINDS
 

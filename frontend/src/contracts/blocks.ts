@@ -1255,34 +1255,25 @@ export const BehaviorInsightBlock = z.object({
 })
 export type BehaviorInsightBlock = z.infer<typeof BehaviorInsightBlock>
 
-/** Ba kho của knowledge-base: fees (biểu phí và điều khoản sản phẩm trả sau mô phỏng, có ngày hiệu lực), personal_finance (kiến thức tài chính cá nhân), suitability (bộ luật suitability kèm giải thích). */
-export const KnowledgeCorpus = z.enum(["fees", "personal_finance", "suitability"])
-export type KnowledgeCorpus = z.infer<typeof KnowledgeCorpus>
-
-/** Một đoạn trích. `excerpt` là văn bản gốc của đoạn (có thể cắt bớt ở ranh giới câu, không viết lại). `effective_to` vắng là còn hiệu lực. `product_code` chỉ có ở tài liệu gắn một sản phẩm (ví dụ bnpl_sim). */
+/** Một nguồn của biểu phí: `source_name`, `source_url`, `effective_from` chép nguyên từ các `FeeLine` có cùng ba giá trị đó; `fee_types` là loại phí của các dòng ấy, theo thứ tự trong kết quả tool. `excerpt` (tùy chọn) là câu ngắn chép nguyên từ dữ liệu bảng phí (`condition_note` của dòng khi nguồn chỉ có một loại phí), không do model viết. */
 export const CitationItem = z.object({
-  chunk_id: Uuid,
-  doc_key: z.string().regex(new RegExp("^[a-z0-9][a-z0-9_-]{0,63}$")),
-  title: z.string().min(1).max(120),
-  corpus: KnowledgeCorpus,
-  clause_ref: z.string().min(1).max(40).optional(),
-  heading: z.string().min(1).max(120).optional(),
-  excerpt: z.string().min(1).max(600),
-  product_code: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")).optional(),
-  effective_from: IsoDate,
-  effective_to: IsoDate.optional(),
+  fee_types: z.array(z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,39}$"))).min(1).max(20),
   source_name: z.string().min(1).max(200),
   source_url: z.string().max(500).regex(new RegExp("^https://")),
+  effective_from: IsoDate,
+  excerpt: z.string().min(1).max(200).optional(),
 })
 export type CitationItem = z.infer<typeof CitationItem>
 
+/** Sản phẩm của biểu phí (`product_code`, `product_label` của `FeeScheduleData`) và 1 đến 5 nguồn. Mỗi loại phí thuộc đúng một nguồn; mỗi bộ (tên nguồn, đường dẫn, ngày hiệu lực) một mục. */
 export const CitationData = z.object({
-  query: z.string().min(1).max(200).optional(),
+  product_code: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")),
+  product_label: z.string().min(1).max(60),
   items: z.array(CitationItem).min(1).max(5),
 })
 export type CitationData = z.infer<typeof CitationData>
 
-/** Trích dẫn nguồn cho một câu trả lời (RAG): 1 đến 5 đoạn trích lấy NGUYÊN VĂN từ kho tri thức (bảng `kb_chunks`, migration 0053) qua tool `knowledge___search`, kèm tên tài liệu, điều khoản, ngày hiệu lực và đường dẫn nguồn. Chỉ để giải thích: số để tính (phí, lãi) vẫn lấy từ `knowledge___get_fee_schedule`, không từ đoạn trích. Agent dựng bằng `build_citation` từ `hits[].citation` của kết quả tool (LLM không viết đoạn trích). Id khối `citation:{trace_id}`. */
+/** Trích dẫn nguồn của biểu phí Trả sau (mô phỏng) cho một câu trả lời về phí. Dựng TỪ CHÍNH kết quả `knowledge___get_fee_schedule` (bảng có cấu trúc `fee_schedules`): mỗi mục là một nguồn (tên nguồn, đường dẫn nguồn, ngày hiệu lực) kèm các loại phí lấy từ nguồn đó. Không có tìm kiếm tài liệu (chủ dự án cắt luồng RAG ngày 24/11). Số tiền KHÔNG nằm trong khối này: số để tính và để nói vẫn là `amount_vnd` của `FeeLine`. Agent dựng bằng `build_citation(result=...)` (LLM không viết tên nguồn, đường dẫn hay câu trích). Id khối `citation:{trace_id}`. */
 export const CitationBlock = z.object({
   v: SchemaVersion,
   id: BlockId,

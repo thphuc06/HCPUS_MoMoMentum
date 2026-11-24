@@ -26,7 +26,7 @@ test('blockSchemas có đủ hai mươi ba khối theo thứ tự của block.sc
   const phase5 = ['ingest_review', 'coverage_change']
   // phase 4: năm khối luồng D đã có view
   const phase4 = ['resilience_score', 'stress_result', 'roadmap', 'roadmap_diff', 'review_list']
-  // phase 5 (F7, RAG): hai khối CHƯA có view (luồng p5-frontend thêm vào REGISTERED_BY_FRONTEND khi đăng ký)
+  // phase 5 (F7, trích dẫn biểu phí): hai khối CHƯA có view (luồng p5-frontend thêm vào REGISTERED_BY_FRONTEND khi đăng ký)
   const phase5b = ['behavior_insight', 'citation']
   const registered = [...phase2, ...phase3, ...phase5]
   assert.deepEqual([...ALL_BLOCK_TYPES], [...registered, ...phase4, ...phase5b])

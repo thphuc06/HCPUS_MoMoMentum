@@ -37,7 +37,7 @@ const FILES = [
   'coverage_change', 'ingest_review',
   // phase 4 (F4, F5, F2): luồng frontend phase 4 thêm vào REGISTERED_BY_FRONTEND khi đăng ký view
   'resilience_score', 'stress_result', 'roadmap', 'roadmap_diff', 'review_list',
-  // phase 5 (F7, RAG): luồng frontend phase 5 thêm vào REGISTERED_BY_FRONTEND khi đăng ký view
+  // phase 5 (F7, trích dẫn biểu phí): luồng frontend phase 5 thêm vào REGISTERED_BY_FRONTEND khi đăng ký view
   'behavior_insight', 'citation',
 ]
 const UNION_FILE = 'block'

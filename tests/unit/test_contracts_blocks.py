@@ -1,4 +1,4 @@
-﻿"""Hợp đồng khối UI: JSON Schema <-> Pydantic <-> fixture dùng chung với test TypeScript."""
+"""Hợp đồng khối UI: JSON Schema <-> Pydantic <-> fixture dùng chung với test TypeScript."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ BLOCK_TYPES = [
     "roadmap",
     "roadmap_diff",
     "review_list",
-    # phase 5 (F7, RAG)
+    # phase 5 (F7, trích dẫn biểu phí)
     "behavior_insight",
     "citation",
 ]

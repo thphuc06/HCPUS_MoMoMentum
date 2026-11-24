@@ -1201,7 +1201,6 @@ BehaviorInsightKind = Literal[
     "payday_cycle", "weekday_pattern", "time_of_day", "bnpl_usage", "category_trend", "spending_cluster",
 ]  # fmt: skip
 EvidenceUnit = Literal["vnd", "percent", "ratio", "days", "count", "hour", "weekday"]
-KnowledgeCorpus = Literal["fees", "personal_finance", "suitability"]
 InsightHeadline = Annotated[str, Field(min_length=1, max_length=160)]
 
 
@@ -1328,39 +1327,63 @@ class BehaviorInsightBlock(_BlockBase):
     data: BehaviorInsightData
 
 
-class CitationItem(_Strict):
-    """Một đoạn trích nguyên văn của kho tri thức (bảng `kb_chunks`) kèm nguồn và ngày hiệu lực."""
+FeeType = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")]
+ProductCode = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
 
-    chunk_id: Uuid
-    doc_key: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
-    title: Annotated[str, Field(min_length=1, max_length=120)]
-    corpus: KnowledgeCorpus
-    clause_ref: Annotated[str, Field(min_length=1, max_length=40)] | None = None
-    heading: Annotated[str, Field(min_length=1, max_length=120)] | None = None
-    excerpt: Annotated[str, Field(min_length=1, max_length=600)]
-    product_code: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")] | None = None
+
+class FeeLine(_Strict):
+    """Một dòng biểu phí có cấu trúc (bảng `fee_schedules`), khớp `FeeLine` của `contracts/tools/knowledge.results.schema.json`."""
+
+    fee_type: FeeType
+    amount_vnd: Vnd | None = None
+    rate_percent: Annotated[float, Field(ge=0)] | None = None
+    period: Literal["per_month", "per_transaction", "once"]
+    condition_code: Literal["always", "month_has_transaction", "overdue"]
+    condition_note: Annotated[str, Field(max_length=200)] | None = None
+    source_name: Annotated[str, Field(max_length=200)]
+    source_url: Annotated[str, Field(pattern=r"^https://")]
     effective_from: IsoDate
-    effective_to: IsoDate | None = None
+
+
+class FeeScheduleData(_Strict):
+    """`data` của `knowledge___get_fee_schedule` (cũng là `fees` của `GET /credit-line`): đầu vào của `build_citation`."""
+
+    product_code: ProductCode
+    product_label: Annotated[str, Field(max_length=60)]
+    fees: Annotated[list[FeeLine], Field(min_length=1, max_length=20)]
+
+
+class GetFeeScheduleOk(_Strict):
+    status: Literal["OK"]
+    as_of: IsoDateTime
+    app_date: IsoDate
+    data: FeeScheduleData
+
+
+class CitationItem(_Strict):
+    """Một nguồn của biểu phí (chép từ các `FeeLine` cùng tên nguồn, đường dẫn và ngày hiệu lực) kèm các loại phí của nó."""
+
+    fee_types: Annotated[list[FeeType], Field(min_length=1, max_length=20)]
     source_name: Annotated[str, Field(min_length=1, max_length=200)]
     source_url: Annotated[str, Field(pattern=r"^https://", max_length=500)]
-
-    @model_validator(mode="after")
-    def _effective_window(self) -> CitationItem:
-        if self.effective_to is not None and self.effective_to < self.effective_from:
-            raise ValueError("effective_to không được trước effective_from")
-        return self
+    effective_from: IsoDate
+    excerpt: Annotated[str, Field(min_length=1, max_length=200)] | None = None
 
 
 class CitationData(_Strict):
-    query: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+    product_code: ProductCode
+    product_label: Annotated[str, Field(min_length=1, max_length=60)]
     items: Annotated[list[CitationItem], Field(min_length=1, max_length=5)]
 
     @model_validator(mode="after")
-    def _chunks_unique(self) -> CitationData:
-        if len({i.chunk_id for i in self.items}) != len(self.items):
-            raise ValueError("mỗi đoạn trích chỉ xuất hiện một lần")
+    def _sources_unique(self) -> CitationData:
+        keys = [(i.source_name, i.source_url, i.effective_from) for i in self.items]
+        if len(set(keys)) != len(keys):
+            raise ValueError("mỗi nguồn (tên, đường dẫn, ngày hiệu lực) chỉ một mục")
+        fee_types = [t for i in self.items for t in i.fee_types]
+        if len(set(fee_types)) != len(fee_types):
+            raise ValueError("mỗi loại phí thuộc đúng một nguồn")
         return self
-
 
 class CitationBlock(_BlockBase):
     type: Literal["citation"]
@@ -2298,36 +2321,65 @@ def build_behavior_insight(
     )
 
 
+#: Tool mà khối `citation` lấy nguồn (khối không có đường dẫn nào khác).
+CITATION_SOURCE_TOOL = "knowledge___get_fee_schedule"
+CITATION_MAX_ITEMS = 5
+
+
+def citation_data(fee_schedule: Mapping[str, Any] | FeeScheduleData, fee_types: Iterable[str] | None = None) -> CitationData:
+    """Rút `data` của khối `citation` từ `FeeScheduleData` (`data` của `knowledge___get_fee_schedule`): gom các dòng phí theo
+    (tên nguồn, đường dẫn, ngày hiệu lực) theo thứ tự xuất hiện, mỗi nhóm một mục với các loại phí của nó; tối đa 5 nguồn đầu.
+    `fee_types` (vắng: mọi dòng) chỉ giữ các loại phí câu trả lời nhắc tới; loại không có trong kết quả thì `ValueError` (agent
+    không trích dẫn được phí mà tool không trả). `excerpt` là `condition_note` của dòng khi nguồn chỉ có một loại phí."""
+    fs = _data_model(FeeScheduleData, fee_schedule)
+    lines = list(fs.fees)
+    if fee_types is not None:
+        wanted = list(dict.fromkeys(fee_types))
+        known = {f.fee_type for f in lines}
+        missing = [t for t in wanted if t not in known]
+        if missing or not wanted:
+            raise ValueError(f"không có loại phí {missing or wanted!r} trong kết quả get_fee_schedule")
+        lines = [f for f in lines if f.fee_type in wanted]
+    groups: dict[tuple[str, str, str], list[FeeLine]] = {}
+    for f in lines:
+        groups.setdefault((f.source_name, f.source_url, f.effective_from), []).append(f)
+    items = []
+    for (name, url, eff), fees in list(groups.items())[:CITATION_MAX_ITEMS]:
+        note = fees[0].condition_note if len(fees) == 1 else None
+        items.append(
+            CitationItem(
+                fee_types=[f.fee_type for f in fees],
+                source_name=name,
+                source_url=url,
+                effective_from=eff,
+                excerpt=note or None,
+            )
+        )
+    return CitationData(product_code=fs.product_code, product_label=fs.product_label, items=items)
+
+
 def build_citation(
     *,
-    items: Iterable[Mapping[str, Any] | CitationItem],
+    result: Mapping[str, Any] | GetFeeScheduleOk,
     trace_id: str,
-    source_tool: str,
-    as_of: datetime,
-    app_date: date,
-    query: str | None = None,
+    fee_types: Iterable[str] | None = None,
     block_id: str | None = None,
 ) -> CitationBlock:
-    """Dựng khối `citation` từ các đoạn trích (`hits[].citation` của `knowledge___search`, theo thứ tự hạng; tối đa 5, trùng
-    `chunk_id` thì bỏ bản sau). `fallback_text` nêu tài liệu đầu tiên, điều khoản và ngày hiệu lực."""
-    picked: list[CitationItem] = []
-    for raw in items:
-        item = _data_model(CitationItem, raw)
-        if all(x.chunk_id != item.chunk_id for x in picked):
-            picked.append(item)
-        if len(picked) == 5:
-            break
-    d = CitationData(query=_clip(query, 200) if query else None, items=picked)
+    """Dựng khối `citation` từ kết quả OK của `knowledge___get_fee_schedule` (cả `status`, `as_of`, `app_date`, `data`): nguồn
+    của khối là chính lần gọi tool đó, mục là `citation_data(result.data, fee_types)`. `fallback_text` nêu nguồn đầu tiên và
+    ngày hiệu lực; không có số tiền (số nằm ở câu trả lời, lấy từ `amount_vnd`)."""
+    r = _data_model(GetFeeScheduleOk, result)
+    d = citation_data(r.data, fee_types)
     first = d.items[0]
-    where = f", {first.clause_ref}" if first.clause_ref else ""
     more = f" và {len(d.items) - 1} nguồn khác" if len(d.items) > 1 else ""
-    text = f"Nguồn: {first.title}{where}, hiệu lực từ {'/'.join(reversed(first.effective_from.split('-')))}{more}."
+    since = "/".join(reversed(first.effective_from.split("-")))
+    text = f"Nguồn biểu phí {d.product_label}: {first.source_name}, hiệu lực từ {since}{more}."
     return CitationBlock(
         v=SCHEMA_VERSION,
         id=block_id or f"citation:{trace_id}",
         type="citation",
         trace_id=trace_id,
         fallback_text=_clip(text, 280),
-        source=_source(source_tool, as_of, app_date),
+        source=Source(tool=CITATION_SOURCE_TOOL, as_of=r.as_of, app_date=r.app_date),
         data=d,
     )

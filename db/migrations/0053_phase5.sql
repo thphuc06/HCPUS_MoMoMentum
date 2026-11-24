@@ -1,4 +1,5 @@
--- 0053_phase5: hồ sơ hành vi, bản tin của cổng giá trị, kho tri thức RAG, nhật ký xóa dữ liệu, đọc trace cho bảng vận hành (phase 5).
+-- 0053_phase5: hồ sơ hành vi, bản tin của cổng giá trị, nhật ký xóa dữ liệu, đọc trace cho bảng vận hành (phase 5). Không có kho tri thức
+-- RAG: chủ dự án cắt luồng C ngày 24/11; trích dẫn nguồn biểu phí dựng từ bảng có cấu trúc fee_schedules của 0005.
 --
 -- * behavior_profiles: hồ sơ hành vi theo NGÀY MÔ PHỎNG (F7): đặc trưng (`features`, jsonb object), nhóm hành vi (`segment`), nhận xét
 --   kèm bằng chứng số (`insights`, mảng tối đa 6), MỘT việc cần làm (`next_step`), phiên bản cấu hình (`config_version`). Một dòng mỗi
@@ -7,12 +8,6 @@
 --   DB bảo đảm bằng chỉ mục duy nhất một phần. Thêm giá trị ước tính (`value_vnd`), lý do cổng (`gate_reason`), tiêu đề và lý do hiển
 --   thị (`title`, `body`), phản hồi của người dùng (`outcome`, `outcome_at`). `kind` nới thêm ba loại chỉ cổng sinh; bản tin của cổng
 --   có `fire_on` = ngày tạo (CHECK cũ đòi sau ngày tạo nên được thay).
--- * kb_documents, kb_chunks: kho tri thức RAG DÙNG CHUNG (không theo người dùng, không có user_id, không RLS), như các bảng tra
---   tx_type_map, fee_schedules của 0005: yofina_app chỉ SELECT; nạp và sửa bằng script đồng bộ chạy secret MASTER (cùng cách nạp
---   db/seed). Lý do: nội dung là tài liệu công khai mô phỏng, giống nhau với mọi người dùng; không cho role ứng dụng ghi để một Lambda
---   bị chèn lệnh không đầu độc được kho trích dẫn. Đoạn (`kb_chunks`) có embedding vector(1024) (vai `embedding`, Cohere) với chỉ mục
---   HNSW cosine, và `tsv` (tsvector cấu hình simple trên văn bản đã bỏ dấu bằng app_fold_text của 0050, cột sinh STORED) với chỉ mục
---   GIN. Truy xuất lai: app_kb_search hợp nhất hai danh sách bằng Reciprocal Rank Fusion (k = 60), lọc kho, sản phẩm, ngày hiệu lực.
 -- * data_deletions: nhật ký "Xóa dữ liệu của tôi": trạng thái từng bước (s3, memory, aurora) và số lượng đã xóa, KHÔNG chứa dữ liệu đã
 --   xóa. Không có khóa ngoại tới users vì dòng nhật ký phải còn sau khi users của người đó bị xóa. RLS theo user_id; yofina_app không
 --   có DELETE.
@@ -29,11 +24,8 @@
 -- (như app_list_forecast_users của 0009): REVOKE khỏi PUBLIC, chỉ yofina_app được EXECUTE, SET search_path cố định.
 -- Quy ước như 0005 tới 0052 (db/README.md): chạy bằng secret MASTER, một transaction, tách bằng dòng "-- @@", viết lại được, RLS
 -- FORCE. Không viết dấu hai chấm dính liền chữ cái hoặc gạch dưới. Không sửa 0001 tới 0052 (migrator kiểm checksum). Đặt lại demo phải
--- xóa thêm behavior_profiles (RESET_DELETES ở gateway/tools/ledger, việc của luồng p5-behavior); data_deletions và kb_* không bị đặt lại.
+-- xóa thêm behavior_profiles (RESET_DELETES ở gateway/tools/ledger, việc của luồng p5-behavior); data_deletions không bị đặt lại.
 
-CREATE EXTENSION IF NOT EXISTS vector;
-
--- @@
 -- ===== behavior_profiles =====
 CREATE TABLE IF NOT EXISTS behavior_profiles (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -125,55 +117,6 @@ ALTER TABLE nudges ADD CONSTRAINT nudges_system_fields_check CHECK (source <> 's
 CREATE UNIQUE INDEX IF NOT EXISTS nudges_system_one_per_day_idx ON nudges (user_id, fire_on) WHERE source = 'system' AND status <> 'cancelled';
 
 -- @@
--- ===== kb_documents, kb_chunks: kho tri thức dùng chung =====
-CREATE TABLE IF NOT EXISTS kb_documents (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  doc_key         text NOT NULL CHECK (doc_key ~ '^[a-z0-9][a-z0-9_-]{0,63}$'),
-  version         integer NOT NULL DEFAULT 1 CHECK (version BETWEEN 1 AND 10000),
-  corpus          text NOT NULL CHECK (corpus IN ('fees', 'personal_finance', 'suitability')),
-  title           text NOT NULL CHECK (length(title) BETWEEN 1 AND 120),
-  product_code    text CHECK (product_code IS NULL OR product_code ~ '^[a-z][a-z0-9_]{0,31}$'),
-  effective_from  date NOT NULL,
-  effective_to    date,
-  source_name     text NOT NULL CHECK (length(source_name) BETWEEN 1 AND 200),
-  source_url      text NOT NULL CHECK (source_url ~ '^https://' AND length(source_url) <= 500),
-  lang            text NOT NULL DEFAULT 'vi' CHECK (lang IN ('vi', 'en')),
-  content_sha256  text NOT NULL CHECK (content_sha256 ~ '^[0-9a-f]{64}$'),
-  status          text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retired')),
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (doc_key, version),
-  CHECK (effective_to IS NULL OR effective_to >= effective_from)
-);
-
--- @@
--- Mỗi tài liệu một phiên bản đang dùng; phiên bản cũ thành retired (giữ để đọc lại trích dẫn cũ, không tìm thấy nữa).
-CREATE UNIQUE INDEX IF NOT EXISTS kb_documents_one_active_idx ON kb_documents (doc_key) WHERE status = 'active';
-
--- @@
-CREATE TABLE IF NOT EXISTS kb_chunks (
-  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  document_id   uuid NOT NULL REFERENCES kb_documents (id) ON DELETE CASCADE,
-  seq           integer NOT NULL CHECK (seq >= 0),
-  clause_ref    text CHECK (clause_ref IS NULL OR length(clause_ref) BETWEEN 1 AND 40),
-  heading       text CHECK (heading IS NULL OR length(heading) BETWEEN 1 AND 120),
-  body          text NOT NULL CHECK (length(body) BETWEEN 1 AND 4000),
-  token_count   integer CHECK (token_count IS NULL OR token_count >= 0),
-  embed_model   text NOT NULL CHECK (length(embed_model) BETWEEN 1 AND 80),
-  embedding     vector(1024) NOT NULL,
-  tsv           tsvector GENERATED ALWAYS AS (to_tsvector('simple', app_fold_text(coalesce(heading, '') || ' ' || body))) STORED,
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (document_id, seq)
-);
-
--- @@
--- HNSW cosine như tx_embeddings_labeled của 0052 (Aurora pgvector 0.8.2, bản cục bộ 0.6.2: chỉ dùng thứ có ở cả hai).
-CREATE INDEX IF NOT EXISTS kb_chunks_hnsw_idx ON kb_chunks USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
-
--- @@
-CREATE INDEX IF NOT EXISTS kb_chunks_tsv_idx ON kb_chunks USING gin (tsv);
-
--- @@
 -- ===== data_deletions: nhật ký xóa dữ liệu (không có khóa ngoại tới users, xem chú thích đầu file) =====
 CREATE TABLE IF NOT EXISTS data_deletions (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -202,7 +145,7 @@ ALTER TABLE audit_events DROP CONSTRAINT IF EXISTS audit_events_intent_check;
 ALTER TABLE audit_events ADD CONSTRAINT audit_events_intent_check CHECK (intent IS NULL OR intent IN ('lookup', 'what_if', 'affordability', 'profile_update', 'move', 'out_of_scope', 'chitchat', 'resilience', 'stress', 'roadmap', 'behavior', 'knowledge', 'ingest', 'memory'));
 
 -- @@
--- ===== RLS: ENABLE và FORCE, policy user_isolation theo app.user_id (kb_* dùng chung nên không có RLS) =====
+-- ===== RLS: ENABLE và FORCE, policy user_isolation theo app.user_id =====
 ALTER TABLE behavior_profiles ENABLE ROW LEVEL SECURITY;
 
 -- @@
@@ -233,13 +176,6 @@ CREATE POLICY user_isolation ON data_deletions
 -- @@
 -- ===== Quyền của yofina_app (tối thiểu) =====
 GRANT SELECT, INSERT, UPDATE, DELETE ON behavior_profiles TO yofina_app;
-
--- @@
--- Kho tri thức: chỉ đọc (nạp bằng secret MASTER).
-GRANT SELECT ON kb_documents TO yofina_app;
-
--- @@
-GRANT SELECT ON kb_chunks TO yofina_app;
 
 -- @@
 -- Nhật ký xóa: thêm và cập nhật trạng thái, không xóa.
@@ -336,83 +272,6 @@ BEGIN
            updated_at = now()
      WHERE n.user_id = p_user_id AND n.id = p_nudge_id AND n.source = 'system' AND n.status <> 'cancelled'
     RETURNING n.id, n.outcome, n.outcome_at;
-END
-$$;
-
--- @@
--- ===== Kho tri thức: truy xuất lai (SECURITY INVOKER, dữ liệu dùng chung nên không đặt app.user_id) =====
--- p_query_embedding là vector dạng chuỗi '[0.1,0.2,...]' (đúng 1024 số) hoặc NULL (khi không tính được embedding: chỉ còn từ khóa).
--- Từ khóa: bỏ dấu bằng app_fold_text rồi plainto_tsquery cấu hình simple, nối các từ bằng HOẶC (câu hỏi tự nhiên dài, đòi đủ mọi từ thì
--- gần như không khớp). Mỗi đường lấy p_candidates ứng viên trong các đoạn đủ điều kiện (tài liệu active, còn hiệu lực ở p_on_date, đúng
--- kho, đúng sản phẩm hoặc không gắn sản phẩm), rồi hợp nhất RRF: điểm = tổng 1/(60 + hạng) chia cho 2/61 (về 0..1, cùng công thức
--- yofina_core.knowledge.rrf_score). Trả tối đa p_k đoạn (1..8), điểm giảm dần.
-CREATE OR REPLACE FUNCTION app_kb_search(
-  p_query_text text, p_query_embedding text, p_on_date date, p_corpus text DEFAULT NULL, p_product text DEFAULT NULL,
-  p_k integer DEFAULT 4, p_candidates integer DEFAULT 40
-)
-RETURNS TABLE (
-  chunk_id uuid, document_id uuid, doc_key text, title text, corpus text, clause_ref text, heading text, chunk_text text,
-  product_code text, effective_from date, effective_to date, source_name text, source_url text,
-  vector_rank integer, text_rank integer, score double precision
-)
-LANGUAGE plpgsql STABLE SECURITY INVOKER
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-  v_k integer := LEAST(GREATEST(coalesce(p_k, 4), 1), 8);
-  v_c integer := LEAST(GREATEST(coalesce(p_candidates, 40), 1), 200);
-  v_vec vector(1024);
-  v_q tsquery;
-BEGIN
-  IF p_on_date IS NULL THEN
-    RAISE EXCEPTION 'PARAMS_INVALID: thiếu ngày hiệu lực';
-  END IF;
-  IF p_query_embedding IS NOT NULL THEN
-    v_vec := p_query_embedding::vector(1024);
-  END IF;
-  IF length(btrim(coalesce(p_query_text, ''))) > 0 THEN
-    v_q := nullif(replace(plainto_tsquery('simple', app_fold_text(p_query_text))::text, ' & ', ' | '), '')::tsquery;
-  END IF;
-  RETURN QUERY
-    WITH eligible AS (
-      SELECT c.id AS cid
-      FROM kb_chunks c JOIN kb_documents d ON d.id = c.document_id
-      WHERE d.status = 'active'
-        AND d.effective_from <= p_on_date AND (d.effective_to IS NULL OR d.effective_to >= p_on_date)
-        AND (p_corpus IS NULL OR d.corpus = p_corpus)
-        AND (p_product IS NULL OR d.product_code IS NULL OR d.product_code = p_product)
-    ),
-    vec AS (
-      SELECT x.cid, (row_number() OVER (ORDER BY x.dist, x.cid))::integer AS rnk
-      FROM (
-        SELECT c.id AS cid, c.embedding <=> v_vec AS dist
-        FROM kb_chunks c JOIN eligible e ON e.cid = c.id
-        WHERE v_vec IS NOT NULL
-        ORDER BY c.embedding <=> v_vec, c.id
-        LIMIT v_c
-      ) x
-    ),
-    txt AS (
-      SELECT x.cid, (row_number() OVER (ORDER BY x.rank_cd DESC, x.cid))::integer AS rnk
-      FROM (
-        SELECT c.id AS cid, ts_rank_cd(c.tsv, v_q) AS rank_cd
-        FROM kb_chunks c JOIN eligible e ON e.cid = c.id
-        WHERE v_q IS NOT NULL AND c.tsv @@ v_q
-        ORDER BY ts_rank_cd(c.tsv, v_q) DESC, c.id
-        LIMIT v_c
-      ) x
-    ),
-    fused AS (
-      SELECT coalesce(v.cid, t.cid) AS cid, v.rnk AS vr, t.rnk AS tr,
-             ((coalesce(1.0 / (60 + v.rnk), 0) + coalesce(1.0 / (60 + t.rnk), 0)) / (2.0 / 61))::double precision AS sc
-      FROM vec v FULL JOIN txt t ON t.cid = v.cid
-    )
-    SELECT c.id, d.id, d.doc_key, d.title, d.corpus, c.clause_ref, c.heading, c.body,
-           d.product_code, d.effective_from, d.effective_to, d.source_name, d.source_url,
-           f.vr, f.tr, f.sc
-    FROM fused f JOIN kb_chunks c ON c.id = f.cid JOIN kb_documents d ON d.id = c.document_id
-    ORDER BY f.sc DESC, c.id
-    LIMIT v_k;
 END
 $$;
 
@@ -613,9 +472,6 @@ REVOKE ALL ON FUNCTION app_nudge_outcome_stats(text, date) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_set_nudge_outcome(text, uuid, text) FROM PUBLIC;
 
 -- @@
-REVOKE ALL ON FUNCTION app_kb_search(text, text, date, text, text, integer, integer) FROM PUBLIC;
-
--- @@
 REVOKE ALL ON FUNCTION app_delete_user_data(text, uuid) FROM PUBLIC;
 
 -- @@
@@ -641,9 +497,6 @@ GRANT EXECUTE ON FUNCTION app_nudge_outcome_stats(text, date) TO yofina_app;
 
 -- @@
 GRANT EXECUTE ON FUNCTION app_set_nudge_outcome(text, uuid, text) TO yofina_app;
-
--- @@
-GRANT EXECUTE ON FUNCTION app_kb_search(text, text, date, text, text, integer, integer) TO yofina_app;
 
 -- @@
 GRANT EXECUTE ON FUNCTION app_delete_user_data(text, uuid) TO yofina_app;
