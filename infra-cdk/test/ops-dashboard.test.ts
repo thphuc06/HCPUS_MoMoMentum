@@ -1,5 +1,5 @@
 // Test template của construct OpsDashboard (phase 5 luồng D): `npm test` (node:test + tsx, không cần AWS).
-import { before, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -25,6 +25,7 @@ const LLM_DEFAULTS = {
 type Res = { Type: string; Properties: Record<string, any> };
 
 describe('OpsDashboard', () => {
+  let tmp: string;
   let llmFile: string;
   let template: Template;
 
@@ -50,11 +51,13 @@ describe('OpsDashboard', () => {
   }
 
   before(() => {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yofina-ops-test-'));
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yofina-ops-test-'));
     llmFile = path.join(tmp, 'llm_defaults.json');
     fs.writeFileSync(llmFile, JSON.stringify(LLM_DEFAULTS));
     template = build({});
   });
+
+  after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
   it('trần theo model: lớn nhất giữa các vai, trần riêng của model thắng trần của vai', () => {
     assert.deepEqual(
