@@ -10,6 +10,9 @@ overrides, bỏ tóm tắt phiên), 2.4 (chính sách ghi), 2.5 (khối prompt c
 nhãn rỗng), 2.12, 2.13, mục 3. Chủ dự án yêu cầu không chặn câu chữ trong mã (lọc cụm "theo điều bạn đã dặn", verifier bắt câu): lỗi được
 sửa ở thiết kế bộ nhớ và prompt.
 
+**Sửa 25/11 (worker `p5/mem-extract`, Kiro, Claude Opus 5.5): sửa gốc chất lượng trích xuất.** Mục 0, 2.2 (override cả bước hợp nhất,
+model Haiku 4.5, chi phí), 2.2a (chẩn đoán mới), 2.13, mục 3.
+
 Mã: `agent/src/yofina_agent/memory.py` (đọc, ghi, chính sách, ý định `memory`, khối prompt), `writer.py` (`MEMORY_GUIDE`), `whatif.py`
 (`ANALYST_MEMORY_GUIDE`), `turn.py` (`Turn.memory_block`), `gateway/tools/ledger/yofina_ledger/memory_store.py` (xem, xóa,
 `quiet_hours`), `gateway/tools/ledger/yofina_ledger/privacy_rest.py` (REST `/memory*`, `/me/delete-data*`), `infra-cdk/lib/memory.ts`
@@ -21,7 +24,7 @@ Mã: `agent/src/yofina_agent/memory.py` (đọc, ghi, chính sách, ý định `
 | Bước | Làm gì | Ở đâu | Vì sao |
 |---|---|---|---|
 | Ghi gì | Chỉ câu của người dùng, đã che PII, tên người khác, số tiền; chỉ lượt đã qua Guardrail đầu vào; không ghi lượt hỏi đáp thuần (tra cứu, what-if, kiểm tra trước khi chi, chống chịu, cú sốc, thói quen, biểu phí), ngoài phạm vi, nạp tệp, chuyển tiền, câu "bạn nhớ gì về mình", câu có dấu hiệu tấn công prompt | `memory.skip_reason`, `AgentMemory.ingest_request` (sau `RUN_FINISHED`, `IngestData`) | 2.4 |
-| Trích gì | Strategy sở thích và strategy sự thật, "built-in with overrides" cho bước trích xuất: chỉ điều người dùng KHẲNG ĐỊNH về bản thân (sở thích; hoàn cảnh, kế hoạch), bỏ câu hỏi và what-if, không số tiền hay số tài khoản, không tên người khác, sự thật không lặp sở thích, viết tiếng Việt; giữ chữ giới hạn thời gian của người dùng, câu đổi ý hay rút lại viết thành lời khẳng định đầy đủ về cùng một điều, lý do từ chối đề xuất là lời khẳng định (P0-3). Hợp nhất giữ mặc định. Không còn tóm tắt phiên | `infra-cdk/lib/memory.ts` (`USER_PREFERENCE_EXTRACTION_PROMPT`, `SEMANTIC_EXTRACTION_PROMPT`, `CHANGE_AND_SCOPE_RULES`) | 2.2 |
+| Trích gì | Strategy sở thích và strategy sự thật, "built-in with overrides" cho bước trích xuất: chỉ điều người dùng KHẲNG ĐỊNH về bản thân (sở thích; hoàn cảnh, kế hoạch), bỏ câu hỏi và what-if, không số tiền hay số tài khoản, không tên người khác, sự thật không lặp sở thích, viết tiếng Việt; giữ chữ giới hạn thời gian của người dùng, câu đổi ý hay rút lại viết thành lời khẳng định đầy đủ về cùng một điều, lý do từ chối đề xuất là lời khẳng định (P0-3). Hợp nhất cũng override (25/11): sở thích có thời hạn không bị bỏ, câu mới về cùng một điều thắng, sự thật không giữ sở thích, ngôi thứ ba, tiếng Việt. Cả hai bước chạy Claude Haiku 4.5 trong tài khoản. Không còn tóm tắt phiên | `infra-cdk/lib/memory.ts` (`USER_PREFERENCE_EXTRACTION_PROMPT`, `SEMANTIC_EXTRACTION_PROMPT`, `CHANGE_AND_SCOPE_RULES`, `*_CONSOLIDATION_PROMPT`, `CONSOLIDATION_RULES`, `MEMORY_MODEL_ID`) | 2.2, 2.2a |
 | Đọc gì | Mọi sở thích (`ListMemoryRecords`) và tối đa 3 sự thật liên quan tới câu hỏi (`RetrieveMemoryRecords`), song song với router, hạn 1,2 giây; khử trùng sở thích với sự thật | `AgentMemory.recall` | 2.5 |
 | Dùng ở bước nào | Người viết câu trả lời (các việc trong `MEMORY_TASKS`) và Analyst của what-if, dưới dạng khối JSON có cấu trúc (`so_thich[{noi_dung, hu, ngay_ghi}]`, `dieu_da_ke[{noi_dung, ngay_ghi}]`); `hu` là hũ thật do mã đối chiếu tên. Chỉ dẫn cách dùng nêu mục đích, lý do, giới hạn, không câu mẫu, và chỉ đi kèm khi khối khác rỗng (system prompt không nói về bộ nhớ). Không vào router (đọc song song), không vào bản gọn (không thành căn cứ số tiền). Ý định `memory` kể lại bản ghi; bản tin đọc `quiet_hours` | `MemoryContext.prompt_block` (`PROMPT_NOTICE`), `Turn.memory_block`, `writer.MEMORY_GUIDE`, `whatif.ANALYST_MEMORY_GUIDE` | 2.5 |
 | Hiển thị, xóa | `GET /memory` cùng hàm khử trùng với agent, bỏ mẩu nhãn rỗng; `DELETE /memory*`, "Xóa dữ liệu của tôi" | `memory_store.py` | 2.10 |
@@ -85,8 +88,10 @@ Tài liệu nêu đúng trường hợp này cho override: "Domain-specific extr
 information". Nay (`infra-cdk/lib/memory.ts`):
 
 - `preferences_vi` (USER_PREFERENCE) và `facts_vi` (SEMANTIC) là `customMemoryStrategy` có `userPreferenceOverride` / `semanticOverride`,
-  chỉ override bước **trích xuất**. Hợp nhất (consolidation) giữ mặc định của AWS: nó đã viết bản hợp nhất theo ngôn ngữ của bản ghi mới,
-  và không đổi tên thao tác `AddMemory`/`UpdateMemory` là điều kiện tài liệu đặt ra.
+  override cả bước **trích xuất** và (từ 25/11, `p5/mem-extract`, mục 2.2a) bước **hợp nhất** (consolidation). Trước đó hợp nhất giữ mặc
+  định của AWS; chẩn đoán sau v26 cho thấy chỉ dẫn hợp nhất mặc định ngược luật trích xuất ở bốn chỗ (bỏ sở thích có thời hạn như "trạng
+  thái tạm thời", "Preserve timestamps", "Update + Extend" giữ ý cũ khi đổi ý, ví dụ chủ ngữ "User") và bản ghi cuối là output của bước
+  hợp nhất. Tên thao tác `AddMemory`/`UpdateMemory`/`SkipMemory` giữ nguyên (điều kiện tài liệu đặt ra).
 - `appendToPrompt` THAY chỉ dẫn mặc định, nên văn bản là **nguyên văn chỉ dẫn mặc định của AWS (tra 25/11) cộng luật của Yofina**, đúng
   khuyến nghị "Build upon existing instructions". Không đụng output schema. Luật thêm:
   - chỉ trích điều người dùng KHẲNG ĐỊNH về bản thân: sở thích nói rõ về cách trợ lý giúp họ (hũ ưu tiên hay muốn giữ, giờ không muốn
@@ -112,25 +117,29 @@ information". Nay (`infra-cdk/lib/memory.ts`):
     Chỉ nêu nguyên tắc và lý do, không ví dụ (test CDK: không chứa chữ của bộ đánh giá). `cdk synth YofinaAgent` trước và sau: cùng
     logical id của Memory, chỉ `MemoryStrategies` đổi, tên strategy và namespace giữ nguyên, nên lần cập nhật là `modifyMemoryStrategies`
     tại chỗ.
-- **Model**: `apac.amazon.nova-lite-v1:0` (`EXTRACTION_MODEL_ID`, đổi được qua prop `extractionModelId`). Lý do: (1) override gọi model
-  TRONG tài khoản và ăn quota Bedrock của tài khoản; throttle thì lượt trích xuất thất bại ("Amazon Bedrock capacity for built-in with
-  overrides strategies"). Model nhỏ của agent là Nova 2 Lite `global.` (20 RPM ở Singapore, agent tự giới hạn 18) và Claude chỉ khoảng
-  10 RPM, nên dùng chung là tranh quota; Nova Lite v1 là xô quota riêng (20 RPM). (2) Gọi được từ Singapore qua profile `apac.`, dữ liệu
-  ở lại châu Á - Thái Bình Dương ([bedrock.md](bedrock.md) mục 2). (3) Rẻ nhất trong nhóm đã gọi được. Rủi ro: chất lượng làm theo chỉ dẫn
-  dài và đúng JSON schema của Nova Lite v1 chưa đo (mục 3).
+- **Model** (đổi 25/11, `p5/mem-extract`, chọn theo mục 2.2a): `global.anthropic.claude-haiku-4-5-20251001-v1:0` (`MEMORY_MODEL_ID`,
+  đổi được qua prop `modelId`), dùng cho cả trích xuất và hợp nhất của hai strategy. Trước đó là `apac.amazon.nova-lite-v1:0` cho riêng
+  trích xuất, chọn vì rẻ, xô quota riêng (20 RPM) và dữ liệu ở lại châu Á - Thái Bình Dương; chạy thử cho thấy Nova Lite v1 không theo
+  được chỉ dẫn (mục 2.2a). Đánh đổi của Haiku 4.5: giá cao hơn khoảng 25 lần mỗi lượt được ghi, profile `global.` (dữ liệu có thể xử lý
+  ngoài châu Á - Thái Bình Dương, như các model `global.` khác của agent), quota 10 RPM chung với vai `small` của agent (Haiku 4.5 ở đó chỉ
+  là model dự phòng; 6 lần gọi ngày 23/11). Override gọi model TRONG tài khoản và ăn quota Bedrock của tài khoản; throttle thì lượt trích
+  xuất thất bại ("Amazon Bedrock capacity for built-in with overrides strategies") và alarm `FailedExtraction` báo.
 - **Có ở `ap-southeast-1` không**: AgentCore Memory có ở Singapore; bảng vùng không tách riêng override; policy mẫu của AWS cho execution
-  role cho phép `inference-profile/*`, nên profile dùng được làm `modelId`. Chưa gọi sống (không deploy trong đợt này).
+  role cho phép `foundation-model/*` và `inference-profile/*`, nên mọi model hay profile mà role gọi được đều dùng làm `modelId` được.
+  Nova Lite v1 đã chạy thật ở Runtime v25, v26 (metric `AWS/Bedrock` `Invocations` có hai lượt gọi mỗi `IngestData`).
 - **Execution role**: L2 `Memory` luôn tạo role `ServiceRole` (trust `bedrock-agentcore.amazonaws.com`, điều kiện `aws:SourceAccount`) và
-  gắn vào `memoryExecutionRoleArn` (trước đây role rỗng). Role nay chỉ có `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`
-  trên đúng profile `apac.amazon.nova-lite-v1:0` của vùng và tài khoản, và `foundation-model/amazon.nova-lite-v1:0` ở mọi vùng (vùng
-  đích của profile), cùng mẫu với Runtime (`agent-stack.ts`); không quyền dữ liệu Memory (test CDK). Không dùng
+  gắn vào `memoryExecutionRoleArn` (trước đây role rỗng). Role chỉ có `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`
+  trên đúng profile `MEMORY_MODEL_ID` của vùng và tài khoản, và `foundation-model/<id gốc của model>` ở mọi vùng (vùng đích của profile),
+  cùng mẫu với Runtime (`agent-stack.ts`); không quyền dữ liệu Memory, không còn quyền gọi Nova Lite (test CDK). Không dùng
   `MemoryStrategy.usingSemantic({customExtraction})` của L2: L2 lấy `modelId` bằng `Arn.split(model.modelArn)`, ARN của profile có account
-  (token khi synth không có credential) và id có dấu `:` (`...-v1:0`), nên id tách bằng token mất đuôi `:0`. `ExtractionOverrideStrategy`
-  trong `memory.ts` render `modelId` là chuỗi literal và cấp quyền như trên.
-- **Chi phí theo lượt**: mỗi lượt được ghi (sau chính sách 2.4, chỉ lượt nói điều về bản thân) gây hai lần gọi trích xuất (sở thích, sự
-  thật), mỗi lần khoảng 2.000–3.000 token vào (chỉ dẫn 5.300 và 7.300 ký tự, khoảng 1.300–1.800 token, cộng output schema và hội thoại của phiên) và vài chục tới 200 token ra. Với
-  Nova Lite ở Singapore (khoảng $0,081 vào, $0,324 ra mỗi 1M token, Price List 21/11 trong [bedrock.md](bedrock.md)): khoảng $0,0003 mỗi lần,
-  dưới $0,001 mỗi lượt được ghi, khoảng $0,6 cho 1.000 lượt được ghi. Lưu bản ghi giảm từ $0,75 xuống $0,25 mỗi 1.000 bản ghi mỗi tháng
+  (token khi synth không có credential) và id có dấu `:` (`...-v1:0`), nên id tách bằng token mất đuôi `:0`. `BuiltInOverrideStrategy`
+  trong `memory.ts` render `modelId` là chuỗi literal cho cả hai bước và cấp quyền như trên.
+- **Chi phí theo lượt** (sửa 25/11): mỗi lượt được ghi (sau chính sách 2.4, chỉ lượt nói điều về bản thân) gây tối đa bốn lần gọi model:
+  trích xuất sở thích, trích xuất sự thật (mỗi lần khoảng 2.500–2.800 token vào, chỉ dẫn 7.700 và 10.200 ký tự cộng output schema), hợp
+  nhất sở thích (khoảng 3.100 token vào cộng bản ghi cũ liên quan) và hợp nhất sự thật (khoảng 1.500), tổng ra khoảng 500 token. Với Haiku
+  4.5 ở Singapore ($1 vào, $5 ra mỗi 1M token, AWS Price List API 25/11): khoảng $0,0099 + $0,0026 ≈ **$0,0125 mỗi lượt được ghi**,
+  khoảng $12,5 cho 1.000 lượt được ghi (Nova Lite cũ: hai lần gọi, khoảng $0,0005 mỗi lượt). Số token lấy từ lần chạy thử mục 2.2a;
+  bước hợp nhất có thể không chạy khi bước trích xuất trả danh sách rỗng. Lưu bản ghi override $0,25 mỗi 1.000 bản ghi mỗi tháng
   (trang giá). Bỏ tóm tắt phiên bớt một lượt trích của dịch vụ mỗi lượt và các bản ghi tóm tắt (mỗi phiên hai bản).
 - **Bỏ tóm tắt phiên**: agent không đọc tóm tắt (`RECALL_KINDS` chỉ có sở thích, sự thật), nó tốn lượt trích, sinh mẩu "Thời điểm: ," cùng
   số liệu chép từ lời trợ lý, và mỗi phiên ra hai bản ghi (`BASE` và `FULL_SESSION`). Bản ghi tóm tắt cũ vẫn xem và xóa được.
@@ -143,6 +152,91 @@ information". Nay (`infra-cdk/lib/memory.ts`):
 
 Không chọn self-managed strategy: phải tự dựng hàng đợi, S3, Lambda trích xuất và tự lo output schema, nhiều việc hơn hẳn cho cùng mục
 tiêu; override đủ cho "chỉ trích một số loại thông tin" theo tài liệu.
+
+### 2.2a Chẩn đoán chất lượng trích xuất sau Runtime v26 (25/11, nhánh `p5/mem-extract`)
+
+Lỗi cần giải thích (file phase 5, "Sửa nhỏ sau v25"): ca `memory-state-preference` ở v26 ra sở thích mất chữ giới hạn thời gian của
+người dùng, và sự thật là câu người dùng chép gần nguyên (ngôi thứ nhất, lặp cả hai sở thích) dù chỉ dẫn override cấm cả hai.
+
+**(a) Bản ghi cuối là output của bước nào.** Theo [memory-user-prompt](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-user-prompt.html)
+và [memory-system-prompt](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-system-prompt.html) (output schema của
+bước hợp nhất), bản ghi được lưu là output của **bước hợp nhất**: sở thích `AddMemory` đặt "the original new memory" vào `memory`,
+`UpdateMemory` viết `updated_memory`; sự thật `AddMemory` có `"memory": {"fact": "<content>"}` do model hợp nhất viết (ví dụ của tài liệu
+đổi "Name is John" thành "User's name is John"). Đầu vào của bước hợp nhất chỉ là bản mới cùng bản cũ liên quan, không có hội thoại
+([built-in-strategies](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/built-in-strategies.html): "Determines whether to
+write useful information to a new record or an existing record"). Suy ra:
+
+- Sự thật chép câu người dùng thì bản đó đã có từ bước trích xuất (bước hợp nhất không thấy câu gốc). Sửa trích xuất CÓ tác dụng với lỗi
+  này, nhưng chỉ dẫn hợp nhất mặc định không chặn lại, vì nó nhận mọi "fact" mới.
+- Sở thích mất chữ thời hạn có thể do trích xuất bỏ, hoặc do hợp nhất mặc định: chỉ dẫn đó định nghĩa AddMemory là "lasting
+  preferences", SkipMemory là "not worth storing as a permanent preference ... describes temporary states".
+- Bằng chứng dịch vụ: metric `AWS/Bedrock` `Invocations` của `apac.amazon.nova-lite-v1:0` có đúng 2 lượt gọi mỗi `IngestData` suốt
+  24/11 (lượt kiểm v26 lúc 22:25 +07: 2 lượt, 4.742 token vào, 217 token ra). Vậy hợp nhất mặc định không chạy bằng model trong tài
+  khoản (chạy phía dịch vụ, không xem được). Memory chưa bật log giao (`/aws/vendedlogs/bedrock-agentcore/memory/...` không có), và
+  theo [observability-memory-metrics](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-memory-metrics.html)
+  log đó chỉ có số bản ghi trích, hợp nhất, không có nội dung; Bedrock chưa bật model invocation logging. Không có log nào chứa output
+  của từng bước, nên phép đo dưới đây gọi thẳng model.
+
+**(b) `appendToPrompt` thay phần nào, còn xung đột nào.** [memory-custom-strategy](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-custom-strategy.html):
+"The content of `appendToPrompt` replaces the default instructions in the system prompt"; output schema giữ nguyên, mỗi bước override
+riêng. Sau v26 còn các chỗ ngược luật:
+
+| Ở đâu | Câu mặc định | Ngược luật nào | Sửa |
+|---|---|---|---|
+| Chỉ dẫn trích xuất sự thật (override, sửa được) | "implicit personal details, preferences, experiences, or facts" | Sự thật không lặp sở thích | Bỏ chữ "preferences" |
+| Output schema trích xuất sự thật (không sửa được) | "such as life events, personal experience, and preferences ... include relevant details such as specific numbers, locations, or dates" | Không lặp sở thích, không số, không ngày | `FACT_SCOPE_OVER_SCHEMA`: nói rõ luật thắng schema, viết bằng lời của mình, không chép câu, tự kiểm trước khi trả lời |
+| Chỉ dẫn hợp nhất sở thích (mặc định, chưa override) | AddMemory "lasting preferences"; SkipMemory "permanent preference", "describes temporary states" | Sở thích có thời hạn vẫn giữ (TIME LIMITS) | Sửa tại chỗ hai định nghĩa, thêm `CONSOLIDATION_RULES` |
+| Chỉ dẫn hợp nhất cả hai (mặc định) | "Preserve timestamps"; "Update + Extend" giữ thông tin cũ | Không ngày; đổi ý thì chỉ còn trạng thái hiện tại | Sửa tại chỗ, `NEWER STATEMENT WINS` |
+| Chỉ dẫn hợp nhất sự thật (mặc định) | Ví dụ "User's name is John"; khối ngôn ngữ "match the language" | Chủ ngữ ẩn, ngôi thứ ba, tiếng Việt | Thay khối `<language_requirement>`; SkipMemory thêm "bản mới nói sở thích" |
+| Output schema hợp nhất sở thích (không sửa được) | AddMemory "ongoing preferences", SkipMemory "temporary ... information" | Như trên | Câu riêng trong chỉ dẫn: giới hạn do người dùng đặt không làm sở thích thành "temporary" |
+
+**(c) Model hợp lệ, giá, quota.** Tài liệu cho chọn "the Amazon Bedrock model with which to invoke the prompt"; không có danh sách
+model riêng cho override; policy mẫu `AmazonBedrockAgentCoreMemoryBedrockModelInferenceExecutionRolePolicy` cho phép mọi
+`foundation-model/*` và `inference-profile/*` của tài khoản. Ở `ap-southeast-1` chỉ có một model gọi theo vùng on-demand, còn lại qua
+inference profile (`aws bedrock list-inference-profiles`). Giá từ AWS Price List API (`aws pricing get-products`, `regionCode
+ap-southeast-1`, 25/11), quota từ Service Quotas:
+
+| Model | Profile | Giá vào / ra mỗi 1M token | Quota RPM | Ai đang dùng |
+|---|---|---|---|---|
+| Nova Lite v1 (cũ) | `apac.amazon.nova-lite-v1:0` | $0,081 / $0,324 | 20 | chỉ Memory |
+| Nova Pro | `apac.amazon.nova-pro-v1:0` | $1,08 / $4,32 | 25 | không ai |
+| Nova 2 Lite | `global.amazon.nova-2-lite-v1:0` | $0,41 / $3,39 | 20 | model chính vai `small` của agent (rpm 18) |
+| Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | $1 / $5 | 10 | dự phòng vai `small`, `ingest_columns` (rpm 8) |
+| Claude Haiku 5.5 | `global.anthropic.claude-haiku-5-5` | $0,10 / $0,50 | hạn mức token của tài khoản 0 | không gọi được |
+
+**Chạy thử** (script tạm, không vào repo; gọi `Converse` với system = chỉ dẫn override + output schema mặc định chép từ tài liệu, user =
+khung `<past_conversation>`/`<current_conversation>` có một lượt `<user>`, như `IngestData` của agent chỉ gửi câu người dùng). Khung
+user của dịch vụ không công bố nên đây là xấp xỉ; số token vào của Nova Lite trong lần chạy thử (2.310–2.462 mỗi lần) khớp số dịch vụ
+ghi ở metric (khoảng 2.370 mỗi lần). Bốn câu viết riêng cho lần thử, không lấy từ bộ đánh giá, cùng dạng "sở thích có thời hạn", "hoàn
+cảnh kèm sở thích tạm", "sở thích có hạn theo sự kiện", "kế hoạch kèm sở thích":
+
+| Model, chỉ dẫn | Sở thích | Sự thật |
+|---|---|---|
+| Nova Lite, chỉ dẫn v26 | Gộp hai sở thích một bản ghi; câu thứ tư ghi kế hoạch du học thành sở thích tiếng Anh; `context` tiếng Anh | Lặp sở thích ở 2/4 câu; "Sang năm mình đi du học Nhật" (ngôi thứ nhất) |
+| Nova Pro, chỉ dẫn v26 | Đổi "đến khi trả xong" thành "sau khi trả xong" (ngược nghĩa); "Yêu cầu nhắc nhở về kế hoạch đi du học" | Lặp sở thích ở 3/4 câu; trả object thay vì list |
+| Haiku 4.5, chỉ dẫn v26 | Đúng ý 4/4, giữ chữ thời hạn; một lần sai chính tả tên hũ ("Tiết kiếm") | Lặp sở thích 1/4; thêm lời giải thích sau JSON |
+| Nova Lite, chỉ dẫn mới | Vẫn gộp hai sở thích; kế hoạch thành sở thích tiếng Anh | Vẫn lặp sở thích 2/4; "người này" |
+| Nova 2 Lite, chỉ dẫn mới | Bịa "Không muốn được nhắc sau 22 giờ" (chép ví dụ trong chỉ dẫn) cho câu nói "buổi chiều" | Lặp sở thích 1/4 |
+| **Haiku 4.5, chỉ dẫn mới** | Đúng ý 4/4: hai sở thích tách riêng, giữ "tuần này", "đến hết quý này", "cho đến khi trả xong khoản vay xe"; câu "tạm thời" viết thành "trong thời gian hiện tại" (còn giới hạn, không còn đúng chữ) | Đúng 4/4: `[]` cho câu chỉ có sở thích, "Mới chuyển sang làm ca đêm", "Dự định đi du học Nhật sang năm" |
+
+Bước hợp nhất, chạy thử theo khung input ví dụ của tài liệu (bản mới có thời hạn không có bản cũ; đổi ý về hũ ưu tiên; ba sự thật mới
+trong đó một bản là sở thích và một bản ngôi thứ nhất; đổi hoàn cảnh):
+
+- Chỉ dẫn hợp nhất **mặc định** với Haiku 4.5: `SkipMemory` sở thích "Không muốn nhận thông báo sau 21 giờ trong tuần này" (temporary),
+  sự thật nhận cả bản sở thích lẫn bản "mình"; đổi hoàn cảnh viết "(trước đây đang làm ca ngày ở nhà máy)". Với Nova Lite: chép qua
+  mọi bản, kể cả bản sở thích và "mình".
+- Chỉ dẫn hợp nhất **mới** bản đầu (chỉ thêm `CONSOLIDATION_RULES`, chưa sửa định nghĩa AddMemory/SkipMemory) với Haiku 4.5: `SkipMemory`
+  cả hai sở thích có thời hạn, hai lần chạy như nhau; model giải thích "temporary situation rather than an ongoing preference". Nguyên
+  nhân là định nghĩa mặc định ("lasting", "permanent") và chữ của output schema; sửa tại chỗ hai định nghĩa và thêm câu nói thẳng về
+  chữ của schema thì hai lần chạy đều `AddMemory` cả hai, giữ nguyên chữ thời hạn.
+- Chỉ dẫn hợp nhất mới với Haiku 4.5, hai lần chạy: đổi ý thành `UpdateMemory` "Ưu tiên hũ Sức khỏe" (không còn hũ cũ); bản sự thật nói
+  sở thích bị bỏ, bản "mình" viết lại "Đi du học Nhật sang năm"; đổi hoàn cảnh thành "Đang làm ca đêm ở nhà máy".
+
+**Kết luận.** Hai nguyên nhân cùng lúc: (1) năng lực model: Nova Lite v1 không theo được chỉ dẫn dài nhiều luật, kể cả khi chỉ dẫn đã sửa (Nova Pro
+với chỉ dẫn v26 và Nova 2 Lite với chỉ dẫn mới cũng không); (2) chỉ dẫn mặc định còn lại (bước hợp nhất, output schema) ngược luật của Yofina, đo được ngay với
+model theo được chỉ dẫn. Sửa: override bước hợp nhất của cả hai strategy với cùng nguyên tắc, sửa ba chỗ ngược của chỉ dẫn trích xuất,
+và đổi model của cả hai bước sang Haiku 4.5, model rẻ nhất trong nhóm gọi được mà theo đủ luật. Không đổi tên strategy, namespace hay
+output schema; không lọc chữ bằng mã.
 
 ### 2.3 Trích xuất: `IngestData`, không lưu event ngắn hạn
 
@@ -275,7 +369,7 @@ trong hợp đồng và REST đã liệt kê, xóa được loại này.
 | Role | Quyền | Tài nguyên |
 |---|---|---|
 | Runtime `yofina-agent-runtime` | `IngestData`, `RetrieveMemoryRecords`, `ListMemoryRecords` | ĐÚNG ARN của Memory (`memory.memoryArn`, cùng stack) |
-| Execution role của Memory (L2 tạo, trust `bedrock-agentcore.amazonaws.com` + `aws:SourceAccount`; thêm 25/11) | `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream` | Đúng `inference-profile/apac.amazon.nova-lite-v1:0` của vùng và tài khoản, `foundation-model/amazon.nova-lite-v1:0` (mọi vùng, vùng đích của profile) |
+| Execution role của Memory (L2 tạo, trust `bedrock-agentcore.amazonaws.com` + `aws:SourceAccount`; thêm 25/11) | `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream` | Đúng `inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0` của vùng và tài khoản, `foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0` (mọi vùng, vùng đích của profile); trước 25/11 (`p5/mem-extract`) là Nova Lite `apac.` |
 | Lambda `yofina-ledger` | `ListMemoryRecords`, `GetMemoryRecord`, `DeleteMemoryRecord`, `BatchDeleteMemoryRecords`, `ListSessions`, `ListEvents`, `DeleteEvent` | `memory/yofina_memory-*` (theo tên: YofinaTools deploy TRƯỚC YofinaAgent nên không đọc được ARN lúc deploy; tên Memory là duy nhất trong vùng nên mẫu khớp đúng một Memory) |
 | Lambda `yofina-ledger` | `s3:ListBucket` (điều kiện `s3:prefix` = `u/*`), `s3:DeleteObject` trên `bucket/u/*` | bucket nạp `yofina-ingest-<account>-<region>` (tên cố định của YofinaIngest); không Get/Put |
 | Lambda `yofina-ledger` | `ssm:GetParameter` | đúng một tham số `/yofina/memory/id` (YofinaAgent ghi; ledger đọc lúc chạy, chưa có thì coi Memory chưa cấu hình) |
@@ -338,7 +432,7 @@ ném lỗi.
 ### 2.13 Chi phí
 
 Theo lượt dùng, không theo giờ: mỗi lượt chat 1 `RetrieveMemoryRecords` (sự thật, $0,50/1.000 lượt truy xuất) cộng 1 `ListMemoryRecords` (sở thích; trang giá không nêu riêng);
-`IngestData` chỉ cho lượt được ghi (2.4); mỗi lượt được ghi gây 2 lần gọi Nova Lite trong tài khoản, dưới $0,001 (2.2); lưu bản ghi
+`IngestData` chỉ cho lượt được ghi (2.4); mỗi lượt được ghi gây tối đa 4 lần gọi Haiku 4.5 trong tài khoản (trích xuất và hợp nhất của hai strategy), khoảng $0,0125 (2.2, sửa 25/11); lưu bản ghi
 override $0,25/1.000 bản ghi/tháng (trước $0,75). Trang giá chưa nêu riêng giá của `IngestData` (chưa kiểm Billing). `quiet_hours` và REST
 dùng `ListMemoryRecords`.
 
@@ -380,7 +474,9 @@ mới), mỗi ca chạy một lần. Mọi ca có `seed_memory`, `prior_sessions
    của Nova Lite v1 với chỉ dẫn dài (đúng JSON schema, đúng luật "bỏ câu hỏi", tiếng Việt có dấu); độ trễ trích xuất. Sau deploy cần: xem
    `FailedExtraction` và `ListMemoryExtractionJobs`, nói một sở thích rồi đọc `GET /memory` (tiếng Việt, không có bản sự thật trùng), hỏi
    một câu what-if (không ra bản ghi), rồi chạy các ca golden bộ nhớ (mục 2.14). Nếu Nova Lite v1 không giữ được JSON schema thì đổi
-   `extractionModelId` (ví dụ Nova Pro `apac.`) và chấp nhận chi phí cao hơn.
+   `extractionModelId` (ví dụ Nova Pro `apac.`) và chấp nhận chi phí cao hơn. **Cập nhật 25/11**: đã chạy thật ở v25, v26; Nova Lite v1
+   giữ được JSON schema nhưng không theo luật (mục 2.2a), nên trích xuất và hợp nhất đổi sang Haiku 4.5 (prop `modelId`). Còn rủi ro:
+   quota 10 RPM của Haiku 4.5 chung với model dự phòng của agent; khung user message thật của dịch vụ khác khung chạy thử.
 2. **Bản ghi của strategy cũ**: lần cập nhật xóa ba strategy cũ và thêm hai strategy mới. Tài liệu không nói bản ghi của strategy đã xóa
    còn hay mất; namespace giữ nguyên nên nếu còn, agent và REST vẫn đọc, xóa được. Theo file phase 5, sau các lần kiểm 24/11 bộ nhớ của các tài khoản
    demo đã được dọn về 0, nên không mất dữ liệu cần giữ. Bản ghi tiếng Anh cũ (nếu còn) vẫn đi qua câu dặn "luôn trả lời bằng tiếng Việt".
