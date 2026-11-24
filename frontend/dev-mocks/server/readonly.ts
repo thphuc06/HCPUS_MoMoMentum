@@ -1,4 +1,4 @@
-// CHỈ cho `npm run dev:mock`: các GET chỉ đọc của phase 4 và 5 (chống chịu, lộ trình, bản tin, bộ nhớ, "Vì sao") trả thẳng
+// CHỈ cho `npm run dev:mock`: các GET chỉ đọc của phase 4 và 5 (chống chịu, lộ trình, bản tin, bộ nhớ, "Vì sao", dòng tiền) trả thẳng
 // fixture hợp đồng, để xem và chụp các màn này mà không cần backend. Không có trạng thái: ghi (chấp nhận bước, xóa bộ nhớ) trả 404.
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
@@ -17,6 +17,8 @@ const GET: Record<string, string> = {
   // Không có bản tin: Tổng quan dùng thẻ tất định của GET /overview (cảnh báo cạn của cảnh 1).
   '/nudges/today': 'NudgeTodayResponse.trong',
   '/memory': 'MemoryListResponse.minh',
+  // Biểu đồ chi tiêu ở Hoạt động (B1, B5, B7): số của minh sinh bằng mã Lambda thật trên PostgreSQL cục bộ.
+  '/cashflow': 'CashflowResponse.minh',
 }
 
 export function handleReadOnly(c: Ctx): Reply | null {

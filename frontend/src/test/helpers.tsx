@@ -5,6 +5,7 @@ import { OverviewProvider } from '@/api/OverviewProvider'
 import type { ApiClient } from '@/api/client'
 import type { ResilienceScoreResponse, ShocksResponse, StressResultResponse } from '@/api/resilienceSchemas'
 import type { RoadmapDiffResponse, RoadmapResponse, RoadmapVersionsResponse } from '@/api/roadmapSchemas'
+import type { CashflowResponse } from '@/api/cashflowSchemas'
 import type {
   BehaviorProfileResponse,
   DataDeletion,
@@ -71,6 +72,7 @@ export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
   return {
     getJars: vi.fn(async () => jarsFromFixture()),
     getOverview: vi.fn(async () => fx<OverviewResponse>('OverviewResponse.minh')),
+    getCashflow: vi.fn(async () => fx<CashflowResponse>('CashflowResponse.minh')),
     getProfile: vi.fn(async () => fx<ProfileResponse>('ProfileResponse.minh')),
     getJar: vi.fn(async () => fx<JarDetailResponse>('JarDetailResponse.an_uong')),
     getForecast: vi.fn(async () => validBlock('forecast_timeline.short') as unknown as ForecastResponse),

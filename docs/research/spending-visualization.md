@@ -14,6 +14,8 @@ Bản minh họa tĩnh khổ 390 px, sáng và tối, bằng số thật của p
 | B4 | Đã dùng Trả sau bao nhiêu | Thanh hạn mức đã dùng, khoản đến hạn so với hũ Nghĩa vụ | `GET /credit-line`, `GET /obligations`, `GET /overview` | Không |
 | B5 | Tháng này so với tháng trước | Đường lũy kế kỳ này và kỳ trước theo ngày của kỳ | Chưa có chuỗi theo ngày | Có: thêm `daily[]` vào `GET /cashflow` |
 
+**Đã làm (25/11, nhánh `p5/viz-p1`, chưa deploy)**: B1, B5, B7 ở đầu màn Hoạt động, dữ liệu từ route mới `GET /cashflow` (bản REST của `get_cashflow_summary`, cùng hàm SQL; `gateway/tools/ledger/yofina_ledger/cashflow_rest.py`). Khác đề xuất: không có tham số `from`/`to` hay `compare_previous` (server luôn trả kỳ lương hiện tại và kỳ trước cùng số ngày); phần tách nghĩa vụ và Trả sau cộng từ `app_list_transactions` vì đợt này không thêm hàm DB (mục "Biểu đồ chi tiêu" của contracts/README.md); chạm một hũ ở B1 mở Chi tiết hũ thay vì lọc danh sách; chưa có chip "Ẩn khoản cố định" và thẻ thu gọn ở Tổng quan (§10 của ui-design-review.md: Hoạt động là nhà). Ảnh `activity-cashflow-*`, `activity-theongay-cashflow-*` ở [ui-round1/](ui-round1/).
+
 ## 1. Hiện trạng
 
 ### 1.1 Dữ liệu đã có
@@ -94,6 +96,8 @@ Mỗi đề xuất ghi: câu hỏi, loại biểu đồ, dữ liệu, màn, tư�
 
 ### B1. Kỳ lương này tiêu vào đâu (kèm so với kỳ trước)
 
+> Đã làm 25/11 (`p5/viz-p1`), xem ghi chú dưới bảng tóm tắt.
+
 - **Câu hỏi**: "Tháng này tiêu vào đâu?", "Hũ nào tốn hơn kỳ trước?"
 - **Loại**: thanh ngang theo hũ, sắp giảm dần. Mỗi thanh chia ba phần: chi thường (màu hũ, đặc), Trả sau (chấm), cố định từ nghĩa vụ (gạch chéo xám). Một vạch đứng mảnh trên mỗi thanh là mức của kỳ trước tính tới cùng ngày của kỳ. Bên phải: số tiền và chênh lệch bằng chữ ("+1,71 triệu so với kỳ trước"). Hũ Chưa phân loại là thanh xám cuối danh sách, có nút "Xếp hũ".
 - **Dữ liệu**: `get_cashflow_summary(from=ngày lương gần nhất, to=hôm nay)` và lần gọi thứ hai cho kỳ trước cùng số ngày. Cần thêm vào hợp đồng:
@@ -138,6 +142,8 @@ Mỗi đề xuất ghi: câu hỏi, loại biểu đồ, dữ liệu, màn, tư�
 
 ### B5. So với kỳ trước (đường lũy kế)
 
+> Đã làm 25/11 (`p5/viz-p1`), xem ghi chú dưới bảng tóm tắt.
+
 - **Câu hỏi**: "Tháng này mình tiêu nhiều hơn tháng trước không?", "Nếu cứ thế này thì cuối kỳ hết bao nhiêu?"
 - **Loại**: hai đường lũy kế theo ngày của kỳ lương (ngày 1 là ngày lương): kỳ này đường đậm màu nhấn, kỳ trước đường đứt xám kéo hết kỳ. Mặc định là chi thường ngày (bỏ nghĩa vụ cố định) để tiền nhà ngày 6 không lấn cả biểu đồ. Điểm cuối kỳ này có nhãn số. Mẫu này giống Copilot.
 - **Dữ liệu**: cần thêm `daily[]` vào `GET /cashflow` (`{date, spent_vnd, obligation_vnd}`, tối đa 62 phần tử, có cho cả `previous`). Server cộng dồn hay giao diện cộng dồn từ `daily` đều được; đề xuất server trả cả `cumulative_vnd` để giao diện không tự cộng tiền.
@@ -157,6 +163,8 @@ Mỗi đề xuất ghi: câu hỏi, loại biểu đồ, dữ liệu, màn, tư�
 - **Khả năng tiếp cận**: `<meter>` hoặc `role="img"` với nhãn đủ ba số; trạng thái đủ hay thiếu khi đến hạn bằng chữ và biểu tượng. Từ trên giao diện là "Trả sau (mô phỏng)" như `product_label` (bundle check cấm chữ "Ví Trả Sau").
 
 ### B7. Thu và chi của kỳ
+
+> Đã làm 25/11 (`p5/viz-p1`), xem ghi chú dưới bảng tóm tắt.
 
 - **Câu hỏi**: "Lương về bao nhiêu, đã tiêu bao nhiêu, còn bao nhiêu?"
 - **Loại**: một thanh chồng ngang: lương 9.000.000 ₫ là cả thanh, phần đã chi 6.908.000 ₫, phần còn lại; dòng phụ "Tiền vào khác 350.000 ₫ (không tính là thu nhập)" để khớp quy ước của hợp đồng.
