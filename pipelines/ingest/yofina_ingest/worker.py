@@ -312,7 +312,7 @@ class Worker:
             ],
             window,
         )
-        best = pick_matches(matches)
+        best = pick_matches(matches, {c.seq: c.counterparty for c in cands}, window)
         rows = [to_row(c, sha, best.get(c.seq)) for c in cands]
         self.repo.update_job(uid, job_id, "processing", 85)
         ids = self.repo.insert_rows(uid, job_id, rows)
@@ -346,11 +346,43 @@ class Worker:
         self.repo.update_job(uid, job_id, "review", 100, patch)
 
 
-def pick_matches(matches: Sequence[Mapping[str, Any]]) -> dict[int, Mapping[str, Any]]:
-    """Giao dịch trùng gần ngày nhất cho từng ứng viên; đối tác khớp được ưu tiên (hàm DB đã sắp, đây chọn lại cho chắc)."""
+#: Dòng nạp KHÔNG có đối tác (chỉ có nội dung, ví dụ "CK tien phong T11"): chỉ coi là trùng một giao dịch đã có khi cùng ngày. Không có
+#: đối tác để so thì cùng số tiền trong cả cửa sổ là quá lỏng.
+NO_COUNTERPARTY_MAX_DAY_DIFF = 0
+
+
+def is_duplicate_match(m: Mapping[str, Any], candidate_counterparty: str | None, window_days: int) -> bool:
+    """Một giao dịch đã có (cùng chiều, cùng số tiền, lệch ngày trong cửa sổ, do `app_find_ingest_matches` lọc) có thật là CÙNG khoản không.
+
+    - Đối tác khớp (`counterparty_match`): trùng nếu lệch ngày trong cửa sổ khử trùng.
+    - Dòng nạp có đối tác mà không khớp: KHÔNG trùng. Cùng số tiền ở cửa hàng khác là khoản khác: sao kê `c01` có 5 dòng bị đánh trùng
+      giả theo cách cũ (Circle K 56.000 ₫ với GrabFood 56.000 ₫ hôm sau, Be 26.000 ₫ với GrabFood cùng ngày...). Đối tác ngắn hơn 3 ký tự
+      ("Be") hàm DB không so được nên không bao giờ khớp: dòng đó vào hàng chờ duyệt (người dùng tự bỏ nếu trùng), thay vì bị ẩn oan
+      như dòng trùng (dòng trùng không chốt được).
+    - Dòng nạp không có đối tác: chỉ trùng khi cùng ngày (`NO_COUNTERPARTY_MAX_DAY_DIFF`).
+    """
+    diff = abs(int(m["day_diff"]))
+    if diff > window_days:
+        return False
+    if bool(m["counterparty_match"]):
+        return True
+    if fold_text(candidate_counterparty or ""):
+        return False
+    return diff <= NO_COUNTERPARTY_MAX_DAY_DIFF
+
+
+def pick_matches(
+    matches: Sequence[Mapping[str, Any]],
+    counterparties: Mapping[int, str | None] | None = None,
+    window_days: int = 30,
+) -> dict[int, Mapping[str, Any]]:
+    """Giao dịch trùng gần ngày nhất cho từng ứng viên, chỉ trong các khớp được `is_duplicate_match` nhận; đối tác khớp được ưu tiên
+    (hàm DB đã sắp, đây chọn lại cho chắc). `counterparties`: đối tác của từng ứng viên theo `idx` (vắng: coi như không có đối tác)."""
     best: dict[int, Mapping[str, Any]] = {}
     for m in matches:
         idx = int(m["idx"])
+        if not is_duplicate_match(m, (counterparties or {}).get(idx), window_days):
+            continue
         cur = best.get(idx)
         key = (not bool(m["counterparty_match"]), abs(int(m["day_diff"])))
         if cur is None or key < (not bool(cur["counterparty_match"]), abs(int(cur["day_diff"]))):

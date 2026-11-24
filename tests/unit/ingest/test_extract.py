@@ -119,6 +119,34 @@ def test_anh_chuyen_khoan_cho_nguoi_che_ten_va_giu_hu_cua_model(gateway_of):
     assert res.model.endswith("claude-sonnet-4-6")
 
 
+def test_tien_phong_chuyen_cho_ca_nhan_theo_muc_dich_ra_hu_hoa_don(gateway_of):
+    """Ảnh `s02` (24/11): chuyển 1.500.000 ₫ tiền phòng cho một cá nhân không có hũ đề xuất. Prompt nay dặn chọn loại và hũ theo MỤC ĐÍCH
+    ghi trong lời nhắn, không theo việc người nhận là cá nhân; loại `rent` thì bảng loại giao dịch ra hũ Hóa đơn (không cần model đoán hũ)."""
+    payload = doc(
+        [
+            row(
+                date="2026-11-01",
+                amount_vnd=1_500_000,
+                counterparty="Nguyễn Văn An",
+                counterparty_is_person=True,
+                description="MINH CK tien phong thang 11",
+                tx_type="rent",
+                jar_code=None,
+                jar_confidence=None,
+            )
+        ]
+    )
+    res, client = run_image(gateway_of, payload)
+    (c,) = res.candidates
+    assert (c.jar_code, c.jar_source) == ("hoa_don", "type_map")
+    system = client.requests[0]["system"][0]["text"]
+    assert "MỤC ĐÍCH" in system and "không theo việc người nhận là cá nhân" in system
+    assert "rent" in system  # loại tiền thuê nhà có trong danh sách loại giao dịch gửi model
+    from yofina_ingest import prompts
+
+    assert "không theo việc người nhận là cá nhân" in prompts.labels_system(ctx().jars, ctx().type_map)  # CSV cũng vậy
+
+
 def test_che_pii_truoc_khi_luu_ten_stk_sdt(gateway_of):
     payload = doc(
         [

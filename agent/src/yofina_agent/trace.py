@@ -27,18 +27,43 @@ _STEP_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 _CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,39}$")
 _TOOL_STATUSES = frozenset({"ok", "error", "denied"})
 
-# nhãn hiển thị của nguồn dữ liệu theo tên tool (chuỗi giao diện của bảng "Vì sao")
+# nhãn hiển thị của nguồn dữ liệu theo tên tool (chuỗi giao diện của bảng "Vì sao"). Mọi tool trong `contracts/tools/*.json` phải có
+# nhãn (test `tests/unit/agent/test_tool_labels.py`), nếu không bảng "Vì sao" hiện mã tool thô.
 TOOL_LABELS: dict[str, str] = {
+    # ledger
     "get_jar_balances": "Số dư các hũ",
     "query_transactions": "Giao dịch gần đây",
     "get_cashflow_summary": "Dòng tiền",
     "get_obligations": "Nghĩa vụ sắp đến hạn",
+    "get_unclassified": "Giao dịch chưa phân loại",
+    "update_profile": "Thay đổi hồ sơ (chờ bạn xác nhận)",
+    "record_transaction": "Ghi giao dịch (chờ bạn xác nhận)",
+    "move_between_jars": "Chuyển tiền giữa hai hũ (chờ bạn xác nhận)",
+    "assign_jar": "Gán hũ cho giao dịch (chờ bạn xác nhận)",
+    "save_turn": "Lưu cuộc trò chuyện",
+    # forecast
     "get_forecast": "Dự báo hũ",
     "run_scenario": "Mô phỏng kịch bản",
     "list_scenarios": "Các khoản đang cân nhắc trong cuộc trò chuyện",
     "affordability_check": "Kiểm tra trước khi chi",
-    "get_fee_schedule": "Biểu phí",
+    "get_resilience_score": "Điểm chống chịu",
+    "stress_test": "Thử cú sốc tài chính",
+    "get_behavior_profile": "Hồ sơ hành vi chi tiêu",
+    # planner
     "check_suitability": "Kiểm tra luật phù hợp",
+    "schedule_nudge": "Lời nhắc (chờ bạn xác nhận)",
+    "optimize_allocation": "Phân bổ tiền vào các hũ",
+    "get_roadmap": "Lộ trình",
+    "save_roadmap": "Lưu bản lộ trình",
+    # knowledge
+    "get_fee_schedule": "Biểu phí",
+    # ingest
+    "start_job": "Tạo lượt nạp dữ liệu",
+    "get_job_status": "Tiến độ nạp dữ liệu",
+    "confirm_rows": "Chốt dòng đã nạp (chờ bạn xác nhận)",
+    # audit
+    "get_trace": "Bản ghi lượt trả lời",
+    "record_turn": "Ghi bản ghi lượt",
 }
 
 

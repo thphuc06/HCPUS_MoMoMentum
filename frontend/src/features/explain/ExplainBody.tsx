@@ -5,6 +5,7 @@ import { formatDateTime } from '@/lib/format'
 import type { TraceDetail } from '@/api/schemas'
 import type { ExplainBlock, RuleCheck } from '@/contracts/blocks'
 import { TraceIdRow } from './TraceIdRow'
+import { stepLabel } from './stepLabels'
 
 // Figma ExplainSheet (11:378) và H4: bảng "Vì sao" = dữ liệu đã dùng, luật đã kiểm, nhóm tin cậy Cao/Vừa/Thấp kèm lý do, mã
 // trace. Do CODE dựng từ bản ghi lượt (`GET /traces/{id}` hoặc khối `explain` do agent phát); giao diện chỉ vẽ.
@@ -113,9 +114,9 @@ export function ExplainBody({ block, detail }: { block: ExplainBlock; detail?: T
                 {detail.token_usage.input_tokens.toLocaleString('vi-VN')} / {detail.token_usage.output_tokens.toLocaleString('vi-VN')}
               </dd>
             </div>
-            {detail.step_timings.map((s) => (
-              <div key={s.step} className="flex justify-between gap-3">
-                <dt>Bước {s.step}</dt>
+            {detail.step_timings.map((s, i) => (
+              <div key={`${s.step}-${i}`} data-step={s.step} className="flex justify-between gap-3">
+                <dt>{stepLabel(s.step)}</dt>
                 <dd className="num text-ink">{s.ms.toLocaleString('vi-VN')} ms</dd>
               </div>
             ))}

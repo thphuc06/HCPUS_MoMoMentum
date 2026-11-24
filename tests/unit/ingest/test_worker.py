@@ -324,8 +324,8 @@ def test_dong_trung_so_cai_thanh_duplicate_khong_tu_chon(env):
     storage.objects[key] = PNG
     tx_far, tx_near = str(uuid.uuid4()), str(uuid.uuid4())
     repo.matches = [
-        {"idx": 1, "transaction_id": tx_far, "funding_source": "jar", "app_date": date(2026, 11, 20), "day_diff": 2, "counterparty_match": False},
-        {"idx": 1, "transaction_id": tx_near, "funding_source": "credit", "app_date": date(2026, 11, 18), "day_diff": 0, "counterparty_match": False},
+        {"idx": 1, "transaction_id": tx_far, "funding_source": "jar", "app_date": date(2026, 11, 20), "day_diff": 2, "counterparty_match": True},
+        {"idx": 1, "transaction_id": tx_near, "funding_source": "credit", "app_date": date(2026, 11, 18), "day_diff": 0, "counterparty_match": True},
     ]  # fmt: skip
     worker, _ = make([good_doc()])
     run(worker, sqs_event(key))
@@ -345,10 +345,57 @@ def test_dong_trung_so_cai_thanh_duplicate_khong_tu_chon(env):
 def test_pick_matches_uu_tien_doi_tac_roi_gan_ngay():
     a = {"idx": 1, "transaction_id": "a", "day_diff": 0, "counterparty_match": False}
     b = {"idx": 1, "transaction_id": "b", "day_diff": 2, "counterparty_match": True}
-    c = {"idx": 2, "transaction_id": "c", "day_diff": -1, "counterparty_match": False}
-    d = {"idx": 2, "transaction_id": "d", "day_diff": 3, "counterparty_match": False}
-    best = pick_matches([a, b, c, d])
+    c = {"idx": 2, "transaction_id": "c", "day_diff": -1, "counterparty_match": True}
+    d = {"idx": 2, "transaction_id": "d", "day_diff": 3, "counterparty_match": True}
+    best = pick_matches([a, b, c, d], {1: "Highlands Coffee", 2: "Grab"}, 3)
     assert best[1]["transaction_id"] == "b" and best[2]["transaction_id"] == "c"
+
+
+#: Sáu dòng của sao kê `c01` bị đánh trùng với giao dịch ví của `vy` ở lần nghiệm thu 24/11 (dựng lại bằng `data/personas` với ngày neo
+#: 21/11 và cửa sổ 3 ngày): (đối tác dòng nạp, lệch ngày, đối tác giao dịch ví có khớp không). Năm dòng là cửa hàng khác cùng số tiền.
+C01_FALSE = [
+    ("Circle K", 1, False),  # 56.000 ₫ ngày 26/10 với GrabFood 27/10
+    ("Grab", 3, False),  # 31.000 ₫ với Circle K
+    ("Phuc Long", 2, False),  # 59.000 ₫ với The Coffee House
+    ("Circle K", -3, False),  # 48.000 ₫ với Highlands Coffee
+    ("Be", 0, False),  # 26.000 ₫ với GrabFood cùng ngày
+]
+
+
+def test_cung_so_tien_khac_doi_tac_khong_phai_dong_trung():
+    matches = [
+        {"idx": i, "transaction_id": f"t{i}", "day_diff": dd, "counterparty_match": hit}
+        for i, (_, dd, hit) in enumerate(C01_FALSE, start=1)
+    ]
+    cps = {i: cp for i, (cp, _, _) in enumerate(C01_FALSE, start=1)}
+    assert pick_matches(matches, cps, 3) == {}
+
+
+def test_dong_khong_doi_tac_chi_trung_khi_cung_ngay():
+    # "CK tien phong T11" 1.500.000 ₫ của c01 (không đối tác) trùng dòng tiền phòng vừa chốt từ ảnh s02 cùng ngày 01/11
+    same_day = {"idx": 1, "transaction_id": "s02", "day_diff": 0, "counterparty_match": False}
+    other_day = {"idx": 2, "transaction_id": "x", "day_diff": 1, "counterparty_match": False}
+    best = pick_matches([same_day, other_day], {1: None, 2: ""}, 3)
+    assert set(best) == {1} and best[1]["transaction_id"] == "s02"
+
+
+def test_doi_tac_khop_nhung_ngoai_cua_so_khong_trung():
+    m = {"idx": 1, "transaction_id": "a", "day_diff": 4, "counterparty_match": True}
+    assert pick_matches([m], {1: "Highlands Coffee"}, 3) == {}
+
+
+def test_dong_nap_khac_doi_tac_vao_hang_cho_duyet_khong_bi_danh_trung(env):
+    repo, storage, make = env
+    jid, key = repo.add_job()
+    storage.objects[key] = PNG
+    repo.matches = [
+        {"idx": 1, "transaction_id": str(uuid.uuid4()), "funding_source": "jar", "app_date": date(2026, 11, 18), "day_diff": 0, "counterparty_match": False},
+    ]  # fmt: skip
+    worker, _ = make([good_doc()])  # Highlands Coffee 59.000 ₫; giao dịch ví cùng số tiền ở cửa hàng khác
+    run(worker, sqs_event(key))
+    (r,) = repo.rows[jid]
+    assert r["review_status"] != "duplicate" and "duplicate_of_transaction_id" not in r
+    assert repo.jobs[jid]["rows_duplicate"] == 0
 
 
 def test_moi_dong_da_co_thi_job_bi_tu_choi_trung_tep(env):

@@ -50,7 +50,7 @@ export function ObligationImpactView({ block }: BlockViewProps<ObligationImpactB
         <AiChip />
       </header>
       <div className="mt-2">
-        <ObligationImpactBody data={block.data} />
+        <ObligationImpactBody data={block.data} appDate={block.source.app_date} />
       </div>
       <div className="mt-1 flex justify-end">
         <WhyButton traceId={block.trace_id} />

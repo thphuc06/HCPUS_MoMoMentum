@@ -145,12 +145,30 @@ GUARDRAIL_OUTPUT_BLOCKED: tuple[str, str] = (
     "Chỉ hiện số liệu",
     "Phần lời giải thích không đạt kiểm tra an toàn nên mình chỉ hiện số liệu.",
 )
+#: Phương án "dùng hũ khác" (switch_jar) của what-if: nhãn và tóm tắt dựng bằng mã từ hũ THẬT của đề xuất (`proposal.jar_code`) và số dư
+#: của hũ đó, để tiêu đề và nội dung không lệch nhau (model từng ghi "Mua bằng hũ Giải trí" cho đề xuất lấy tiền hũ Dự phòng).
+#: {name}: tên hũ; {amount}: số tiền lấy ra; {balance}: số dư hiện tại của hũ (đều đã định dạng).
+SWITCH_JAR_LABEL = "Mua bằng hũ {name}"
+SWITCH_JAR_SUMMARY_ENOUGH = "Trả {amount} bằng tiền hũ {name}; hũ đang có {balance}, đủ cho khoản này."
+SWITCH_JAR_SUMMARY_SHORT = "Hũ {name} chỉ còn {balance}, không đủ trả {amount}."
 #: Tên hũ người dùng gõ không khớp hũ nào (hoặc khớp nhiều hũ): đúng một câu hỏi, chip là các hũ có thật.
 UNKNOWN_JAR_QUESTION = "Mình chưa thấy hũ “{name}” trong ví của bạn. Bạn muốn dùng hũ nào?"
 UNKNOWN_JAR_QUESTION_NO_NAME = "Mình chưa xác định được hũ bạn nói. Bạn muốn dùng hũ nào?"
 
 STRESS_QUESTION = "Bạn muốn thử cú sốc nào?"
 STRESS_CHIP_VALUE = "Thử cú sốc {label}"
+#: Câu trả lời "hũ nào sắp cạn?" dựng bằng mã từ dự báo của từng hũ (`compact.compact_forecast_overview`), không cần lượt gọi model.
+#: {jar}: tên hũ; {date}: ngày cạn dd/mm; {days}: số ngày trước kỳ lương; {payday}: ngày lương dd/mm; {items}: danh sách hũ và ngày cạn;
+#: {count}: số hũ; {names}: tên các hũ nối bằng dấu phẩy.
+FORECAST_OVERVIEW_ONE = "Hũ {jar} dự kiến cạn ngày {date}, sớm {days} ngày so với kỳ lương {payday}."
+FORECAST_OVERVIEW_MANY = "Trước kỳ lương {payday} có {count} hũ dự kiến cạn: {items}."
+FORECAST_OVERVIEW_ITEM = "{jar} ngày {date}"
+FORECAST_OVERVIEW_NONE = "Chưa hũ nào dự kiến cạn trước kỳ lương {payday}."
+FORECAST_OVERVIEW_NONE_NO_PAYDAY = "Chưa hũ nào dự kiến cạn trong khoảng dự báo."
+FORECAST_OVERVIEW_TIGHT = "Hũ {names} đang sát số dư trước kỳ lương."
+FORECAST_OVERVIEW_REST_OK = "Các hũ còn lại đủ tới kỳ lương."
+FORECAST_OVERVIEW_UNAVAILABLE = "Chưa có dự báo cho hũ {names}."
+FORECAST_OVERVIEW_CHART = "Biểu đồ bên dưới là của hũ {jar}."
 ROADMAP_UNBUILDABLE: tuple[str, str] = (
     "Chưa lập được lộ trình",
     "Mình chưa lập được lộ trình phù hợp với dữ liệu hiện có. Bạn có thể thử lại sau.",

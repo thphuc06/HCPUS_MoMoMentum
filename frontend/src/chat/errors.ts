@@ -66,22 +66,49 @@ export function chatErrorForCode(code: string | undefined, _message?: string): C
   }
 }
 
-/** Nhãn tiến độ cho từng công cụ; tên công cụ của Gateway có dạng `ledger___get_jar_balances`. */
+/** Nhãn tiến độ cho từng công cụ; tên công cụ của Gateway có dạng `ledger___get_jar_balances`. Mọi tool trong `contracts/tools/*.json`
+ * phải có nhãn ở đây (test `toolLabels.test.ts` và `tests/unit/agent/test_tool_labels.py`), để thẻ "Yofina đã làm" không hiện "Đã xử lý". */
 const TOOL_LABELS: Record<string, { running: string; done: string }> = {
+  // ledger
   get_jar_balances: { running: 'Đang đọc số dư các hũ…', done: 'Đã đọc số dư các hũ' },
   query_transactions: { running: 'Đang đọc lịch sử giao dịch…', done: 'Đã đọc lịch sử giao dịch' },
+  get_cashflow_summary: { running: 'Đang tổng hợp thu chi…', done: 'Đã tổng hợp thu chi' },
+  get_obligations: { running: 'Đang đọc các khoản nghĩa vụ…', done: 'Đã đọc các khoản nghĩa vụ' },
+  get_unclassified: { running: 'Đang đọc các khoản chưa phân loại…', done: 'Đã đọc các khoản chưa phân loại' },
+  update_profile: { running: 'Đang chuẩn bị thay đổi hồ sơ…', done: 'Đã chuẩn bị thay đổi hồ sơ' },
+  record_transaction: { running: 'Đang chuẩn bị ghi giao dịch…', done: 'Đã chuẩn bị ghi giao dịch' },
   move_between_jars: { running: 'Đang chuẩn bị chuyển tiền giữa hai hũ…', done: 'Đã chuẩn bị chuyển tiền giữa hai hũ' },
+  assign_jar: { running: 'Đang chuẩn bị gán hũ cho giao dịch…', done: 'Đã chuẩn bị gán hũ cho giao dịch' },
+  save_turn: { running: 'Đang lưu cuộc trò chuyện…', done: 'Đã lưu cuộc trò chuyện' },
+  // forecast
   get_forecast: { running: 'Đang đọc dự báo 30 ngày của hũ…', done: 'Đã đọc dự báo 30 ngày của hũ' },
   run_scenario: { running: 'Đang chạy kịch bản "nếu"…', done: 'Đã chạy kịch bản "nếu"' },
   list_scenarios: { running: 'Đang xem các khoản bạn đang cân nhắc…', done: 'Đã xem các khoản bạn đang cân nhắc' },
   affordability_check: { running: 'Đang kiểm tra trước khi trả…', done: 'Đã kiểm tra trước khi trả' },
-  get_fee_schedule: { running: 'Đang tra biểu phí…', done: 'Đã tra biểu phí' },
+  get_resilience_score: { running: 'Đang tính điểm chống chịu…', done: 'Đã tính điểm chống chịu' },
+  stress_test: { running: 'Đang thử cú sốc tài chính…', done: 'Đã thử cú sốc tài chính' },
+  get_behavior_profile: { running: 'Đang đọc thói quen chi tiêu…', done: 'Đã đọc thói quen chi tiêu' },
+  // planner
   check_suitability: { running: 'Đang kiểm tra các luật tài chính…', done: 'Đã kiểm tra các luật tài chính' },
-  get_obligations: { running: 'Đang đọc các khoản nghĩa vụ…', done: 'Đã đọc các khoản nghĩa vụ' },
-  get_cashflow_summary: { running: 'Đang tổng hợp thu chi…', done: 'Đã tổng hợp thu chi' },
-  get_unclassified: { running: 'Đang đọc các khoản chưa phân loại…', done: 'Đã đọc các khoản chưa phân loại' },
   schedule_nudge: { running: 'Đang chuẩn bị lời nhắc…', done: 'Đã chuẩn bị lời nhắc' },
+  optimize_allocation: { running: 'Đang tính cách phân bổ tiền vào các hũ…', done: 'Đã tính cách phân bổ tiền vào các hũ' },
+  get_roadmap: { running: 'Đang đọc lộ trình…', done: 'Đã đọc lộ trình' },
+  save_roadmap: { running: 'Đang lưu bản lộ trình…', done: 'Đã lưu bản lộ trình' },
+  // knowledge
+  get_fee_schedule: { running: 'Đang tra biểu phí…', done: 'Đã tra biểu phí' },
+  // ingest
+  start_job: { running: 'Đang tạo lượt nạp dữ liệu…', done: 'Đã tạo lượt nạp dữ liệu' },
+  get_job_status: { running: 'Đang xem tiến độ nạp dữ liệu…', done: 'Đã xem tiến độ nạp dữ liệu' },
+  confirm_rows: { running: 'Đang chuẩn bị chốt các dòng đã nạp…', done: 'Đã chuẩn bị chốt các dòng đã nạp' },
+  // audit
   get_trace: { running: 'Đang đọc bản ghi của lượt trả lời…', done: 'Đã đọc bản ghi của lượt trả lời' },
+  record_turn: { running: 'Đang ghi lại lượt trả lời…', done: 'Đã ghi lại lượt trả lời' },
+}
+
+/** Có nhãn riêng cho công cụ này không (test dùng để bắt tool mới chưa có nhãn). */
+export function hasToolLabel(name: string): boolean {
+  const short = name.includes('___') ? name.slice(name.lastIndexOf('___') + 3) : name
+  return short in TOOL_LABELS
 }
 
 export function toolLabel(name: string, status: 'running' | 'done'): string {

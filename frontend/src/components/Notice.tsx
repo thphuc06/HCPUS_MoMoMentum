@@ -39,7 +39,8 @@ export function Notice({
         <span>{title}</span>
       </h3>
       <p className="mt-1 text-small text-ink">{message}</p>
-      {code && <p className="mt-1 text-note text-ink-2">Mã: {code}</p>}
+      {/* Mã chỉ hiện với lỗi (để báo lỗi kèm mã); notice thông tin, suy giảm, ít dữ liệu không hiện mã nội bộ cho người dùng. */}
+      {code && kind === 'error' && <p className="mt-1 text-note text-ink-2">Mã: {code}</p>}
       {children}
       {onRetry && (
         <Button type="button" variant="soft" size="sm" className="mt-3 bg-surface" onClick={onRetry}>

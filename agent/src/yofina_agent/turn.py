@@ -48,6 +48,7 @@ from yofina_agent.compact import (
     compact_confirm,
     compact_confirm_action,
     compact_forecast,
+    compact_forecast_overview,
     compact_jars,
     compact_obligations,
     compact_resilience,
@@ -62,7 +63,7 @@ from yofina_agent.identity import Identity
 from yofina_agent.ingest_chat import on_ingest
 from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
-from yofina_agent.router import merge_pending, pending_params, route
+from yofina_agent.router import merge_pending, pending_params, route, route_runout_overview
 from yofina_agent.schemas import (
     ClarifyChipIn,
     ClarifyRequest,
@@ -760,6 +761,10 @@ class Turn:
             return
         # Câu trả lời cụt cho khối `clarify`: giữ tham số của câu đang chờ (số tiền, người nhận, hũ...) bằng mã, không trông vào model nhớ.
         routed = merge_pending(routed, question, self.pending_params_before(index))
+        # "Hũ nào sắp cạn?": dự báo mọi hũ, không hỏi lại hũ nào (router hay xếp vào tra số dư hoặc hỏi lại).
+        overview = route_runout_overview(routed, question)
+        if overview is not None and overview is not routed:
+            routed, self.intent = overview, overview.intent
         handler = self._intent_handlers()[routed.intent]
         # Handler tự kiểm mã cú sốc và chọn thao tác với lộ trình.
         if routed.intent not in ("stress", "roadmap") and (
@@ -888,7 +893,7 @@ class Turn:
                 Exception
             ) as exc:  # ModelBudgetExceeded, AllModelsFailed, StructuredOutputError, lỗi mạng...
                 self.llm_failed(exc)
-        fallback = classify_by_rules(question)
+        fallback = route_runout_overview(classify_by_rules(question), question)
         log.info(
             json.dumps(
                 {"event": "router_fallback", "intent": fallback.intent if fallback else None}
@@ -979,6 +984,10 @@ class Turn:
             question if self.llm_down else None
         )  # suy giảm: dò tên hũ trong cả câu
         match = resolve_jar(want, self._jar_rows) if want else JarMatch("empty")
+        if match.status != "ok" and not p.jar_text and match.status in ("empty", "none"):
+            # Không nói hũ nào ("hũ nào sắp cạn?", "dự báo các hũ"): đọc dự báo mọi hũ thay vì hỏi lại hũ nào.
+            await self.on_forecast_all()
+            return
         if match.status != "ok":
             await self.ask_which_jar("hũ cần xem dự báo", p.jar_text or "", match, question)
             return
@@ -995,6 +1004,50 @@ class Turn:
         assert res.compact is not None
         self.note_basis(_forecast_basis(res.outcome.payload))
         await self.write("forecast", question, res.compact)
+
+    async def on_forecast_all(self) -> None:
+        """Dự báo của MỌI hũ ("hũ nào sắp cạn?"): `get_forecast` song song cho từng hũ, câu trả lời dựng bằng mã từ số của tool
+        (hũ cạn trước kỳ lương theo ngày cạn sớm nhất, hũ sát, hũ đủ), biểu đồ của hũ cạn sớm nhất (hoặc hũ sát đầu tiên). Không hỏi lại."""
+        rows = self._jar_rows[: max(self.s.max_tool_calls_per_turn - self.tool_calls, 0)]
+        if not rows:
+            self.emit_jars_block()
+            return
+        results = await asyncio.gather(
+            *[
+                self.call_tool_retry(
+                    "get_forecast",
+                    {"jar": j["code"]},
+                    target="forecast",
+                    compact=lambda o: compact_forecast(o.payload or {}),
+                    block=forecast_block,
+                    emit=False,
+                )
+                for j in rows
+            ]
+        )
+        done = [(j, res) for j, res in zip(rows, results, strict=True) if res.outcome.ok and res.compact]
+        if not done:
+            self.tool_failure(results[0].outcome, empty_codes=_EMPTY_STATE_CODES)
+            return
+        missing = [str(j["name"]) for j, res in zip(rows, results, strict=True) if not (res.outcome.ok and res.compact)]
+        overview = compact_forecast_overview([res.compact for _, res in done if res.compact], missing)
+        self.compacts["get_forecast"] = overview
+        by_name = {res.compact["jar"]: res for _, res in done if res.compact}
+        shown_name = (
+            overview["runout_before_payday"][0]["jar"]
+            if overview["runout_before_payday"]
+            else (overview["tight"][0] if overview["tight"] else None)
+        )
+        shown = by_name.get(shown_name) if shown_name else None
+        for _, res in done:
+            basis = _forecast_basis(res.outcome.payload)
+            if res is shown:
+                self.note_basis(basis)  # notice độ tin cậy thấp chỉ cho hũ có biểu đồ
+            elif basis:
+                self.bases.append(basis)
+        if shown is not None and shown.block is not None:
+            self.emit_block(shown.block)
+        await self.emit_fixed_text(forecast_overview_text(overview, chart_jar=shown_name if shown else None))
 
     async def on_resilience(self, r: IntentResult, question: str) -> None:
         res = await self.call_tool_retry(
@@ -1532,6 +1585,37 @@ class Turn:
             "co_the_la": [names[c] for c in match.candidates if c in names],
         }
         await self.write("clarify", question, facts)
+
+
+def forecast_overview_text(overview: Mapping[str, Any], *, chart_jar: str | None = None) -> str:
+    """Câu trả lời "hũ nào sắp cạn?" dựng bằng mã từ `compact_forecast_overview` (chỉ chép tên hũ, ngày và số ngày của tool)."""
+    payday = (overview.get("payday") or {}).get("date_text")
+    runout = list(overview.get("runout_before_payday") or [])
+    tight = list(overview.get("tight") or [])
+    parts: list[str] = []
+    if len(runout) == 1:
+        r = runout[0]
+        parts.append(
+            notices.FORECAST_OVERVIEW_ONE.format(
+                jar=r["jar"], date=r["date_text"], days=r["days_before_payday"], payday=payday
+            )
+        )
+    elif runout:
+        items = ", ".join(notices.FORECAST_OVERVIEW_ITEM.format(jar=r["jar"], date=r["date_text"]) for r in runout)
+        parts.append(notices.FORECAST_OVERVIEW_MANY.format(payday=payday, count=len(runout), items=items))
+    else:
+        parts.append(
+            notices.FORECAST_OVERVIEW_NONE.format(payday=payday) if payday else notices.FORECAST_OVERVIEW_NONE_NO_PAYDAY
+        )
+    if tight:
+        parts.append(notices.FORECAST_OVERVIEW_TIGHT.format(names=", ".join(tight)))
+    if overview.get("enough") and (runout or tight):
+        parts.append(notices.FORECAST_OVERVIEW_REST_OK)
+    if overview.get("unavailable"):
+        parts.append(notices.FORECAST_OVERVIEW_UNAVAILABLE.format(names=", ".join(overview["unavailable"])))
+    if chart_jar and (len(runout) > 1 or (not runout and tight)):
+        parts.append(notices.FORECAST_OVERVIEW_CHART.format(jar=chart_jar))
+    return " ".join(parts)
 
 
 def _forecast_basis(payload: Mapping[str, Any] | None) -> dict[str, Any] | None:

@@ -2,19 +2,20 @@ import { AlertTriangle } from 'lucide-react'
 import { JarIcon } from '@/components/JarIcon'
 import { StatusChip } from '@/components/StatusChip'
 import { CONFIDENCE_LABEL, statusShortChip } from '@/lib/jar'
-import { formatDateTime, formatRatioPercent, formatVnd } from '@/lib/format'
+import { formatDateTime, formatRatioPercent, formatSimMoment, formatVnd } from '@/lib/format'
 import { formatDayMonth } from '@/lib/dates'
 import type { ForecastBasis, ObligationImpactData } from '@/contracts/blocks'
 
 /**
  * Chân thẻ số liệu: số này dựa trên dự báo nào (thời điểm tính, nhóm tin cậy, độ dài lịch sử) để "Vì sao" nói được và để
- * người dùng biết số cũ hay mới. Chỉ vẽ số server trả.
+ * người dùng biết số cũ hay mới. Chỉ vẽ số server trả. Thời điểm tính ghi theo NGÀY MÔ PHỎNG của khối (`appDate` là `source.app_date`)
+ * kèm giờ thật, như chân thẻ dự báo (`formatSimMoment`), để không hiện "24/11" cạnh ngày mô phỏng 21/11; vắng `appDate` thì ghi giờ thật.
  */
-export function BasisFooter({ basis }: { basis: ForecastBasis }) {
+export function BasisFooter({ basis, appDate }: { basis: ForecastBasis; appDate?: string }) {
   return (
     <div data-testid="basis" className="mt-3 border-t border-line pt-2 text-note text-ink-2">
       <p>
-        Dựa trên dự báo cập nhật {formatDateTime(basis.computed_at)} · {basis.history_days} ngày dữ liệu · nhóm tin cậy{' '}
+        Dựa trên dự báo cập nhật {appDate ? formatSimMoment(appDate, basis.computed_at) : formatDateTime(basis.computed_at)} · {basis.history_days} ngày dữ liệu · nhóm tin cậy{' '}
         <span className="font-semibold text-ink">{CONFIDENCE_LABEL[basis.confidence_band]}</span>
       </p>
       {basis.is_initial_estimate && <p className="mt-0.5 font-medium text-warn-fg">Mới là ước lượng ban đầu vì còn ít dữ liệu.</p>}
@@ -28,7 +29,7 @@ export function BasisFooter({ basis }: { basis: ForecastBasis }) {
  * phí phát sinh thêm nếu có) và "đến hạn phải trả" (`total_due_vnd`, cộng dồn với nghĩa vụ đã có). Giao diện chỉ vẽ,
  * không cộng trừ. Đủ/sát/hụt luôn kèm biểu tượng và chữ.
  */
-export function ObligationImpactBody({ data, showBasis = true }: { data: ObligationImpactData; showBasis?: boolean }) {
+export function ObligationImpactBody({ data, showBasis = true, appDate }: { data: ObligationImpactData; showBasis?: boolean; appDate?: string }) {
   const c = data.cost
   const chip = statusShortChip(data.status)
   return (
@@ -113,7 +114,7 @@ export function ObligationImpactBody({ data, showBasis = true }: { data: Obligat
         </ul>
       )}
 
-      {showBasis && <BasisFooter basis={data.basis} />}
+      {showBasis && <BasisFooter basis={data.basis} appDate={appDate} />}
     </div>
   )
 }
