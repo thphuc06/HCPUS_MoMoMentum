@@ -191,6 +191,12 @@ def _dispatch(
 
         return roadmap_rest.dispatch(route, event, sub, trace_id, service)
 
+    # --- bảng vận hành (FR15, phase 5): `ops_rest` (ba route /ops/*, chỉ nhóm Cognito ops) ------------------------------
+    if route.startswith("GET /ops/"):
+        from yofina_ledger import ops_rest
+
+        return ops_rest.dispatch(route, event, sub, trace_id, service)
+
     # --- ghi: một đường duy nhất (xác nhận rồi thực hiện) ------------------------------------------------
     if route == "POST /confirmations/cancel":
         body = _body(event)
