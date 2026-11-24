@@ -194,6 +194,19 @@ Chi tiết ở mục 5. Sở hữu `evals/`, `scripts/measure_*`, `docs/research
 | J4 | Phương án khi Bedrock throttle hoặc chạm trần: (1) chuỗi dự phòng Sonnet → Kimi K3 và thẻ số liệu tất định đã có, ghi vào runbook để người trình bày biết màn hình sẽ trông thế nào; (2) không chạy eval trong ngày chấm; (3) trần ngày đã kiểm ở J1, có lệnh nâng trần tạm qua SSM `/yofina/llm/*` (ghi, cần chủ dự án) kèm ghi lại; (4) tài khoản dự phòng `giamkhao2`, `giamkhao3`; (5) video quay sẵn và ảnh từng cảnh của G5 khi mạng hoặc dịch vụ hỏng | `docs/plan/demo-runbook.md` | Mục "Khi có sự cố" | Diễn tập một lần ở 8/12 với trần Sonnet về 0 trên tài khoản thử | 2 |
 | J5 | Theo dõi trong khung chấm: dashboard `yofina-ops`, alarm về SNS `yofina-alerts`, người trực đọc `/ops/summary` mỗi ngày | — | Ghi chú mỗi ngày | — | 0,5/ngày |
 
+### Luồng K — Agent như người tư vấn: lập luận hiện dần và kết luận có chính kiến [mới 24/11, chủ dự án duyệt]
+
+Lý do: người dùng hiện thấy chủ yếu thẻ (artifact) và dòng tiến độ gọi tool; phần suy luận của agent (Analyst cân phương án, Verifier chặn, sửa lại; planner chọn bước lộ trình; cá nhân hóa theo bộ nhớ và hồ sơ hành vi) không lộ ra, nên trải nghiệm giống đọc báo cáo hơn là nói chuyện với người tư vấn. Chủ dự án muốn hiện được lập luận. Nguyên tắc giữ nguyên: số chỉ từ dữ liệu, mọi con số trong lập luận qua NumericGrounding; KHÔNG hiện suy nghĩ thô của model (chuỗi suy nghĩ nội bộ), chỉ hiện lập luận có cấu trúc mà model trả về như dữ liệu; không câu mẫu, không vá cho ca eval; luật ít chữ (§9 ui-design-review).
+
+| ID | Việc | File / khu vực | Đầu ra | Cách kiểm | Ước công |
+|---|---|---|---|---|---|
+| K1 | Lập luận có cấu trúc: Analyst (what-if, kiểm tra trước khi chi) và planner lộ trình trả thêm danh sách bước lập luận ngắn (điều đã thấy từ kết quả tool → vì sao → ảnh hưởng tới quyết định), mỗi bước trỏ tới tool/luật làm căn cứ; Verifier chặn bước có số không có căn cứ. Phát dần qua sự kiện AG-UI cùng dòng tiến độ tool đang có, không thêm lượt gọi model (lấy từ chính lời gọi Analyst/planner, cân nhắc tách hiện theo từng chặng của luồng mã) | `agent/src/yofina_agent/whatif.py`, `roadmap_agent.py`, `turn.py` (phát sự kiện), hợp đồng sự kiện/khối nếu cần (`contracts/`) | Lập luận 2–5 bước hiện dần trong lượt what-if, affordability, lộ trình | Unit với LLM giả; xem trực tiếp trên app; `--only` 2–3 ca what-if/lộ trình một lần | 8 |
+| K2 | Kết luận có chính kiến, cá nhân hóa: một câu chốt nên làm gì và vì sao, dựa trên phương án đã kiểm, bộ nhớ (sở thích) và hồ sơ hành vi (ví dụ thói quen chi dồn đầu kỳ) khi liên quan; không nhắc điều người dùng chưa nói | Analyst/writer, `writer.py` (chỉ phần dữ liệu đưa vào), `behavior_profiles` qua tool có sẵn | Câu kết luận trên thẻ phương án/lộ trình | Như K1 | 4 |
+| K3 | Giao diện: lập luận hiện dần như lời người tư vấn trong khung chat; khi có kết luận thì thu gọn thành "Xem cách mình cân nhắc" (Disclosure); tôn trọng giảm chuyển động; trình đọc màn hình đọc được | `frontend/src/chat/` | Khung chat mới | vitest; xem trên app | 4 |
+| K4 | Gợi ý hỏi tiếp theo đúng tình huống (ví dụ hoãn thêm, đổi số tiền) dựng từ phương án và dữ liệu, không câu cố định | agent + chip chat | 1–3 gợi ý sau thẻ | Xem trên app | 3 (tùy chọn, làm nếu kịp) |
+
+K làm song song với D2 (độ trễ what-if): lập luận hiện dần làm 20–30 giây chờ thành lúc đọc agent suy nghĩ, nhưng không thay việc giảm độ trễ thật. K1 chạm `turn.py` cùng C1, D2: người điều phối gỡ xung đột khi merge.
+
 ## 5. Kế hoạch đánh giá cuối
 
 [đổi 24/11] Thay cho luồng A và một phần luồng C của bản 21/11.
@@ -271,14 +284,14 @@ Hạn trả lời đề xuất: 26/11 cho Q1–Q9 (ảnh hưởng đợt 1), 2/1
 
 | Ngày | Mốc | Việc |
 |---|---|---|
-| T4 25/11 | | A1 (Học đi 6 cảnh); chủ dự án trả lời Q1–Q9; mở worker B1, B2, C1, C2, E1–E5 + F1 (`p6-agent-polish`), D1, H2 |
+| T4 25/11 | | A1 (Học đi 6 cảnh); chủ dự án trả lời Q1–Q9; mở worker B1, B2, C1, C2, E1–E5 + F1 (`p6-agent-polish`), D1, H2, K1–K3 (`p6-advisor`) |
 | T5 26/11 | **M1: đóng phase 5** | A2–A5; A3 đo bộ nhớ; G1 bắt đầu theo ghi nhận A1 |
 | T6 27/11 | | B3, B4, B5, D4; review và merge nhánh xong |
-| T7 28/11 | **M2: deploy đợt 1** | Gồm A2, A3, B1, B3, B4, B5, C1, C2, E1–E5, F1, D4, G1 phần đã xong. `--only` các ca của phần đổi; C3 (3 phiên song song) |
+| T7 28/11 | **M2: deploy đợt 1** | Gồm A2, A3, B1, B3, B4, B5, C1, C2, E1–E5, F1, D4, G1, K1–K3 phần đã xong. `--only` các ca của phần đổi; C3 (3 phiên song song) |
 | CN 29/11 | | Đọc log sau đợt 1 (C1 hết `turn_persist_timeout` chưa); B7 |
 | T2 30/11 | | D2, D3, D5, G2, G3, H1, H3; I2 bắt đầu |
 | T3 1/12 | | Tiếp D2; E7 nếu còn thời gian; B6 viết test cấu hình |
-| T4 2/12 | **M3: deploy đợt 2** | D2, D3, D5, G1–G3, sửa mức cao của B7. `--only` what-if, ca đối kháng chủ đề cấm |
+| T4 2/12 | **M3: deploy đợt 2** | D2, D3, D5, G1–G3, K4 và chỉnh K theo đợt 1, sửa mức cao của B7. `--only` what-if, ca đối kháng chủ đề cấm |
 | T5 3/12 | **M4: code freeze** (tối) | Chỉ còn sửa lỗi chặn demo. Q5 (viết lại lịch sử git) nếu chọn, trước freeze |
 | T6 4/12 | **M5: RC và eval cuối** | Deploy RC (nếu có gì sau đợt 2); Aurora 0,5 ACU; lượt eval đầy đủ duy nhất (mục 5.1); đo event đầu và affordability; C4, C5, B6; trả Aurora về 0 |
 | T7 5/12 | | H3, H4 viết eval-report; I5 chi phí; quay màn hình 6 cảnh trên RC (I3) |
