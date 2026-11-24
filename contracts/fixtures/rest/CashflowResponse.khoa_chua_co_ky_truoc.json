@@ -1,0 +1,197 @@
+{
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "period": {
+    "kind": "pay_period",
+    "from_date": "2026-11-05",
+    "to_date": "2026-11-21",
+    "end_date": "2026-12-04",
+    "day_index": 17,
+    "days_total": 30
+  },
+  "current": {
+    "from_date": "2026-11-05",
+    "to_date": "2026-11-21",
+    "salary_income_vnd": 7000000,
+    "other_income_vnd": 0,
+    "spent_vnd": 1774000,
+    "net_vnd": 5226000,
+    "obligation_vnd": 200000,
+    "credit_vnd": 0,
+    "regular_spent_vnd": 1574000
+  },
+  "by_jar": [
+    {
+      "jar": "an_uong",
+      "name": "Ăn uống",
+      "spent_vnd": 1020000,
+      "tx_count": 20,
+      "obligation_vnd": 0,
+      "credit_vnd": 0
+    },
+    {
+      "jar": "hoa_don",
+      "name": "Hóa đơn",
+      "spent_vnd": 450000,
+      "tx_count": 4,
+      "obligation_vnd": 200000,
+      "credit_vnd": 0
+    },
+    {
+      "jar": "di_lai",
+      "name": "Đi lại",
+      "spent_vnd": 204000,
+      "tx_count": 5,
+      "obligation_vnd": 0,
+      "credit_vnd": 0
+    },
+    {
+      "jar": "giai_tri",
+      "name": "Giải trí",
+      "spent_vnd": 100000,
+      "tx_count": 3,
+      "obligation_vnd": 0,
+      "credit_vnd": 0
+    }
+  ],
+  "daily": [
+    {
+      "date": "2026-11-05",
+      "day_index": 1,
+      "spent_vnd": 104000,
+      "cumulative_vnd": 104000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 104000
+    },
+    {
+      "date": "2026-11-06",
+      "day_index": 2,
+      "spent_vnd": 53000,
+      "cumulative_vnd": 157000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 157000
+    },
+    {
+      "date": "2026-11-07",
+      "day_index": 3,
+      "spent_vnd": 332000,
+      "cumulative_vnd": 489000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 489000
+    },
+    {
+      "date": "2026-11-08",
+      "day_index": 4,
+      "spent_vnd": 374000,
+      "cumulative_vnd": 863000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 863000
+    },
+    {
+      "date": "2026-11-09",
+      "day_index": 5,
+      "spent_vnd": 33000,
+      "cumulative_vnd": 896000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 896000
+    },
+    {
+      "date": "2026-11-10",
+      "day_index": 6,
+      "spent_vnd": 36000,
+      "cumulative_vnd": 932000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 932000
+    },
+    {
+      "date": "2026-11-11",
+      "day_index": 7,
+      "spent_vnd": 31000,
+      "cumulative_vnd": 963000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 963000
+    },
+    {
+      "date": "2026-11-12",
+      "day_index": 8,
+      "spent_vnd": 255000,
+      "cumulative_vnd": 1218000,
+      "obligation_vnd": 200000,
+      "regular_cumulative_vnd": 1018000
+    },
+    {
+      "date": "2026-11-13",
+      "day_index": 9,
+      "spent_vnd": 24000,
+      "cumulative_vnd": 1242000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 1042000
+    },
+    {
+      "date": "2026-11-14",
+      "day_index": 10,
+      "spent_vnd": 105000,
+      "cumulative_vnd": 1347000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 1147000
+    },
+    {
+      "date": "2026-11-15",
+      "day_index": 11,
+      "spent_vnd": 221000,
+      "cumulative_vnd": 1568000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 1368000
+    },
+    {
+      "date": "2026-11-16",
+      "day_index": 12,
+      "spent_vnd": 30000,
+      "cumulative_vnd": 1598000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 1398000
+    },
+    {
+      "date": "2026-11-17",
+      "day_index": 13,
+      "spent_vnd": 29000,
+      "cumulative_vnd": 1627000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 1427000
+    },
+    {
+      "date": "2026-11-18",
+      "day_index": 14,
+      "spent_vnd": 57000,
+      "cumulative_vnd": 1684000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 1484000
+    },
+    {
+      "date": "2026-11-19",
+      "day_index": 15,
+      "spent_vnd": 66000,
+      "cumulative_vnd": 1750000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 1550000
+    },
+    {
+      "date": "2026-11-20",
+      "day_index": 16,
+      "spent_vnd": 24000,
+      "cumulative_vnd": 1774000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 1574000
+    },
+    {
+      "date": "2026-11-21",
+      "day_index": 17,
+      "spent_vnd": 0,
+      "cumulative_vnd": 1774000,
+      "obligation_vnd": 0,
+      "regular_cumulative_vnd": 1574000
+    }
+  ],
+  "unclassified_pending_vnd": 0,
+  "split_complete": true
+}

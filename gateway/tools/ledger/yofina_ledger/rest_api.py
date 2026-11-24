@@ -169,6 +169,11 @@ def _dispatch(
         )
     if route == "GET /credit-line":
         return 200, service.credit_line_response(sub)
+    # bản REST của tool get_cashflow_summary cho biểu đồ chi tiêu (B1, B5, B7): `cashflow_rest`
+    if route == "GET /cashflow":
+        from yofina_ledger import cashflow_rest
+
+        return cashflow_rest.dispatch(route, event, sub, trace_id, service)
     if route == "GET /salary-events":
         return 200, service.salary_events_response(sub, status=_query(event).get("status"))
     if route == "GET /jar-templates":
