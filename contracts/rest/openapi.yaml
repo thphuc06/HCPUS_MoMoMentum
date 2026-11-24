@@ -65,6 +65,10 @@ info:
     (không phải `sub`), không có câu hỏi, câu trả lời hay tên người nhận. `DELETE` là method mới của hợp đồng: CORS của HTTP API phải cho
     thêm `DELETE` (luồng hạ tầng).
 
+    **Biểu đồ chi tiêu** (đợt giao diện, 25/11): `GET /cashflow` (`x-lambda: ledger`) là bản REST của tool
+    `ledger___get_cashflow_summary` (cùng hàm SQL), thêm kỳ trước cùng thời điểm, chuỗi theo ngày và phần tách nghĩa vụ, Trả sau.
+    Chỉ đọc.
+
     Mã lỗi (`ErrorCode`) dùng chung với kết quả tool và `notice.data.code`; ánh xạ HTTP status ở
     `x-http-status`. Schema khối UI và tham số được tham chiếu tới `../blocks/*.schema.json` và
     `../tools/*.results.schema.json`.
@@ -2032,6 +2036,46 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /cashflow:
+    get:
+      tags: [wallet]
+      operationId: getCashflow
+      summary: Thu, chi và chi theo hũ của kỳ lương này so với kỳ trước cùng thời điểm (bản REST của get_cashflow_summary)
+      x-lambda: ledger
+      description: |
+        Bản REST của tool `ledger___get_cashflow_summary` cho ba biểu đồ chi tiêu của màn Hoạt động (B1 chi theo hũ, B5 đường lũy kế, B7
+        thu và chi; docs/research/spending-visualization.md). Không có tham số: kỳ là kỳ lương hiện tại theo ngày mô phỏng, từ ngày lương
+        gần nhất (ngày lương trong hồ sơ) tới hôm nay; chưa khai ngày lương thì như tool, từ mùng 1 của tháng (`period.kind` =
+        `calendar_month`). Mọi tổng thu, tổng chi, chi theo hũ đều do ĐÚNG hàm của tool (`app_get_cashflow_summary`) tính, nên trùng số
+        với tool: `spent_vnd` là chi của VÍ (nguồn jar và credit, kể cả Trả sau và khoản trả nghĩa vụ), không gồm chuyển hũ và chi ngoài ví.
+
+        - `previous`: kỳ lương trước TÍNH TỚI CÙNG SỐ NGÀY (ngày thứ `period.day_index` của kỳ trước, không quá ngày cuối kỳ trước), để so
+          công bằng. Vắng (cùng với `change` và `previous_daily`) khi chưa có giao dịch nào từ ngày đầu kỳ trước trở về trước: kỳ
+          trước chưa trọn dữ liệu thì phần thiếu sẽ bị so như chi 0 ₫.
+        - `daily`: chi từng ngày của kỳ này (cùng hàm với khoảng một ngày) và lũy kế; `previous_daily`: cả kỳ trước, để đường kỳ trước
+          kéo hết kỳ.
+        - Tách nghĩa vụ và Trả sau (`obligation_vnd`, `credit_vnd`, `regular_spent_vnd`, `regular_cumulative_vnd`, `change.regular_vnd`):
+          chỉ có khi `split_complete` đúng. Cộng từ các dòng chi của `app_list_transactions` cùng bộ lọc với tool; server chỉ trả khi đọc
+          hết và số dòng từng hũ khớp `tx_count` của tool. `obligation_vnd` là dòng có `obligation_id`; `credit_vnd` là dòng trả bằng
+          Trả sau không gắn nghĩa vụ; chi thường ngày `regular_spent_vnd` = `spent_vnd` − `obligation_vnd`.
+        - Chênh lệch (`change`, `by_jar[].change_vnd`) và `net_vnd` (lương trừ chi, không tính tiền vào khác) do server trừ.
+
+        Chỉ đọc, không qua model. Danh tính lấy từ `sub` của JWT; mọi hàm SQL đặt `app.user_id` nên RLS chỉ cho thấy dòng của người gọi.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Dòng tiền của kỳ lương này và kỳ trước cùng thời điểm.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashflowResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
         '503':
           $ref: '#/components/responses/Unavailable'
         '500':
@@ -4279,6 +4323,170 @@ components:
             $ref: '#/components/schemas/OpsDayModelCalls'
         est_cost_vnd:
           $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+    CashflowPeriod:
+      description: Kỳ đang xem. `day_index` là ngày thứ mấy của kỳ (ngày lương là 1); `days_total` là số ngày của cả kỳ.
+      type: object
+      required: [kind, from_date, to_date, end_date, day_index, days_total]
+      additionalProperties: false
+      properties:
+        kind:
+          description: '`pay_period` (theo ngày lương trong hồ sơ) hoặc `calendar_month` (chưa khai ngày lương).'
+          type: string
+          enum: [pay_period, calendar_month]
+        from_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        to_date:
+          description: Hôm nay (ngày mô phỏng).
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        end_date:
+          description: Ngày cuối của kỳ (hôm trước ngày lương kế tiếp).
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        day_index:
+          type: integer
+          minimum: 1
+          maximum: 31
+        days_total:
+          type: integer
+          minimum: 1
+          maximum: 31
+    CashflowTotals:
+      description: |
+        Tổng của một khoảng, cùng số với `data` của tool `get_cashflow_summary` cho đúng khoảng `from_date`..`to_date`. Ba trường tách
+        (`obligation_vnd`, `credit_vnd`, `regular_spent_vnd`) chỉ có khi `split_complete` đúng.
+      type: object
+      required: [from_date, to_date, salary_income_vnd, other_income_vnd, spent_vnd, net_vnd]
+      additionalProperties: false
+      properties:
+        from_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        to_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        end_date:
+          description: Chỉ ở `previous`, ngày cuối của cả kỳ trước (`previous_daily` kéo tới đây).
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        salary_income_vnd:
+          description: Tiền vào loại lương. Đây là thu nhập.
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        other_income_vnd:
+          description: Mọi tiền vào khác lương. KHÔNG tính là thu nhập.
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        spent_vnd:
+          description: Tổng chi của ví (như tool).
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        net_vnd:
+          description: Lương trừ chi (`salary_income_vnd` − `spent_vnd`), không tính tiền vào khác. Âm khi chi nhiều hơn lương.
+          $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+        obligation_vnd:
+          description: Phần chi là khoản trả nghĩa vụ (dòng có `obligation_id`).
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        credit_vnd:
+          description: Phần chi trả bằng Trả sau (mô phỏng), không gắn nghĩa vụ.
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        regular_spent_vnd:
+          description: Chi thường ngày = `spent_vnd` − `obligation_vnd` (gồm món mua bằng Trả sau).
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+    CashflowJar:
+      description: |
+        Chi của một hũ kỳ này (`spent_vnd`, `tx_count` như `by_jar` của tool), kèm kỳ trước cùng thời điểm khi có `previous`
+        (`previous_spent_vnd`, `change_vnd`, cùng có hoặc cùng vắng) và phần tách khi `split_complete`. Hũ chỉ có chi ở kỳ trước vẫn
+        có mặt với `spent_vnd` 0. Mảng sắp theo `spent_vnd` giảm dần.
+      type: object
+      required: [jar, name, spent_vnd, tx_count]
+      additionalProperties: false
+      properties:
+        jar:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        spent_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        tx_count:
+          type: integer
+          minimum: 0
+        obligation_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        credit_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        previous_spent_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        change_vnd:
+          description: '`spent_vnd` − `previous_spent_vnd`.'
+          $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+    CashflowDay:
+      description: Một ngày của kỳ. `cumulative_vnd` là lũy kế `spent_vnd` từ đầu kỳ; hai trường tách chỉ có khi `split_complete`.
+      type: object
+      required: [date, day_index, spent_vnd, cumulative_vnd]
+      additionalProperties: false
+      properties:
+        date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        day_index:
+          type: integer
+          minimum: 1
+          maximum: 31
+        spent_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        cumulative_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        obligation_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        regular_cumulative_vnd:
+          description: Lũy kế chi thường ngày (bỏ khoản trả nghĩa vụ).
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+    CashflowResponse:
+      type: object
+      required: [as_of, app_date, period, current, by_jar, daily, unclassified_pending_vnd, split_complete]
+      additionalProperties: false
+      properties:
+        as_of:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        period:
+          $ref: '#/components/schemas/CashflowPeriod'
+        current:
+          $ref: '#/components/schemas/CashflowTotals'
+        previous:
+          description: Kỳ trước tính tới cùng số ngày. Vắng khi chưa có giao dịch nào từ ngày đầu kỳ trước trở về trước.
+          $ref: '#/components/schemas/CashflowTotals'
+        change:
+          description: Kỳ này trừ kỳ trước cùng thời điểm. Có khi và chỉ khi có `previous`.
+          type: object
+          required: [spent_vnd]
+          additionalProperties: false
+          properties:
+            spent_vnd:
+              $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+            regular_vnd:
+              description: Chênh lệch chi thường ngày (chỉ khi `split_complete`).
+              $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+        by_jar:
+          type: array
+          maxItems: 40
+          items:
+            $ref: '#/components/schemas/CashflowJar'
+        daily:
+          description: Từ ngày đầu kỳ tới hôm nay, mỗi ngày một phần tử (ngày không chi có `spent_vnd` 0).
+          type: array
+          minItems: 1
+          maxItems: 31
+          items:
+            $ref: '#/components/schemas/CashflowDay'
+        previous_daily:
+          description: Cả kỳ trước, mỗi ngày một phần tử. Có khi và chỉ khi có `previous`.
+          type: array
+          minItems: 1
+          maxItems: 31
+          items:
+            $ref: '#/components/schemas/CashflowDay'
+        unclassified_pending_vnd:
+          description: Như tool. Đã chi nhưng đang ở hũ Chưa phân loại (giá trị tuyệt đối của số dư âm, số hiện tại, không theo kỳ).
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        split_complete:
+          description: Đúng khi có các trường tách nghĩa vụ và Trả sau (đọc hết và khớp tool ở cả hai kỳ).
+          type: boolean
   responses:
     BadRequest:
       description: PARAMS_INVALID (tham số sai định dạng hoặc vô lý).

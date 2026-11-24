@@ -10,13 +10,15 @@ import { ApiError } from '@/api/errors'
 import { useOverview } from '@/api/OverviewProvider'
 import type { Transaction } from '@/api/schemas'
 import { useJarLookup } from '@/features/common/useJarLookup'
+import { CashflowSection } from '@/features/spending/CashflowSection'
 import { cn } from '@/lib/cn'
 
 const PAGE = 20
 
 type Load = { status: 'loading' | 'ready' | 'error'; error: ApiError | null }
 
-// Figma S3 Hoạt động (31:2830) là khung giữ chỗ; bản này là danh sách giao dịch thật: lọc theo hũ hoặc "Cần xem lại",
+// Figma S3 Hoạt động (31:2830) là khung giữ chỗ; bản này mở đầu bằng chi tiêu của kỳ lương (GET /cashflow: thu và chi, theo hũ,
+// theo ngày), rồi danh sách giao dịch thật: lọc theo hũ hoặc "Cần xem lại",
 // phân trang bằng con trỏ (`next_cursor` của server, truyền lại nguyên văn), tải thêm khi cuộn tới cuối (hoặc bấm nút).
 export function ActivityPage() {
   const api = useApi()
@@ -103,6 +105,8 @@ export function ActivityPage() {
   return (
     <>
       <ScreenHeader title="Hoạt động" backTo="/" />
+      {/* Tiền đã đi đâu trong kỳ lương này (B7, B1, B5): màn Hoạt động là nhà của thông tin này (ui-design-review.md §10). */}
+      <CashflowSection className="mx-4 mb-4" />
       <nav aria-label="Lọc giao dịch" className="mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
         {chips.map((c) => (
           <button

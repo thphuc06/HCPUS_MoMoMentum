@@ -86,6 +86,8 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
         ("GET", "/ops/traces"),
         ("GET", "/ops/traces/{trace_id}"),
         ("GET", "/ops/summary"),
+        # đợt giao diện (biểu đồ chi tiêu B1, B5, B7): bản REST của tool get_cashflow_summary
+        ("GET", "/cashflow"),
     }
     assert SPEC["security"] == [{"bearerAuth": []}]
     scheme = SPEC["components"]["securitySchemes"]["bearerAuth"]

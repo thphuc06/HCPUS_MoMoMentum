@@ -42,6 +42,7 @@ import { ResilienceScoreResponse, ShocksResponse, StressRequest, StressResultRes
 import { createRoadmapApi } from './roadmapSchemas'
 import { createReviewApi } from './reviewSchemas'
 import { createPhase5Api } from './phase5Schemas'
+import { createCashflowApi } from './cashflowSchemas'
 
 /** Thời gian chờ mỗi lời gọi: dài hơn trần 30 giây của HTTP API nên lỗi hết giờ ở server luôn tới trước. */
 export const REQUEST_TIMEOUT_MS = 40_000
@@ -55,7 +56,7 @@ export type ApiClientDeps = {
   fetchImpl?: typeof fetch
 }
 
-export type ApiClient = ReturnType<typeof createRoadmapApi> & ReturnType<typeof createReviewApi> & ReturnType<typeof createPhase5Api> & {
+export type ApiClient = ReturnType<typeof createRoadmapApi> & ReturnType<typeof createReviewApi> & ReturnType<typeof createPhase5Api> & ReturnType<typeof createCashflowApi> & {
   getJars(): Promise<JarsResponse>
   getOverview(): Promise<OverviewResponse>
   getProfile(): Promise<ProfileResponse>
@@ -167,6 +168,7 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     ...createRoadmapApi(call),
     ...createReviewApi(call),
     ...createPhase5Api(call),
+    ...createCashflowApi(call),
     getJars: () => call('GET', '/jars', JarsResponse),
     getOverview: () => call('GET', '/overview', OverviewResponse),
     getProfile: () => call('GET', '/profile', ProfileResponse),

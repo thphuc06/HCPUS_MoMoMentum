@@ -71,6 +71,7 @@ import {
   parseNudgeCard,
 } from './phase5Schemas'
 import { restFixtureEntries, restInvalidEntries } from '@/test/fixtures'
+import { CashflowDay, CashflowJar, CashflowPeriod, CashflowResponse, CashflowTotals } from './cashflowSchemas'
 
 // Đối chiếu code frontend với contracts/rest/openapi.yaml (nguồn duy nhất của hợp đồng REST).
 const raw = Object.values(
@@ -128,6 +129,8 @@ describe('khớp openapi.yaml', () => {
       ['/ops/traces', 'get', 'listOpsTraces'],
       ['/ops/traces/{trace_id}', 'get', 'getOpsTrace'],
       ['/ops/summary', 'get', 'getOpsSummary'],
+      // biểu đồ chi tiêu (B1, B5, B7): bản REST của tool get_cashflow_summary
+      ['/cashflow', 'get', 'getCashflow'],
     ]
     for (const [path, method, op] of expected) expect(spec.paths[path]?.[method]?.operationId, `${method} ${path}`).toBe(op)
   })
@@ -203,6 +206,11 @@ describe('khớp openapi.yaml', () => {
     ['OpsDayModelCalls', OpsDayModelCalls, schemas.OpsDayModelCalls!.required!],
     ['OpsModelDayCalls', OpsModelDayCalls, schemas.OpsModelDayCalls!.required!],
     ['OpsSummaryResponse', OpsSummaryResponse, schemas.OpsSummaryResponse!.required!],
+    ['CashflowResponse', CashflowResponse, schemas.CashflowResponse!.required!],
+    ['CashflowPeriod', CashflowPeriod, schemas.CashflowPeriod!.required!],
+    ['CashflowTotals', CashflowTotals, schemas.CashflowTotals!.required!],
+    ['CashflowJar', CashflowJar, schemas.CashflowJar!.required!],
+    ['CashflowDay', CashflowDay, schemas.CashflowDay!.required!],
   ]
   for (const [name, zod, required] of pairs) {
     it(`${name}: trường bắt buộc khớp hợp đồng`, () => {
@@ -231,6 +239,17 @@ describe('khớp openapi.yaml', () => {
   it('ConversationResponse và ConversationTurn (phát lại hội thoại) có đúng các trường bắt buộc', () => {
     expect(Object.keys(ConversationResponse.shape).sort()).toEqual([...schemas.ConversationResponse!.required!].sort())
     expect(Object.keys(StoredTurn.shape).sort()).toEqual([...schemas.ConversationTurn!.required!].sort())
+  })
+
+  it('dòng tiền: Zod có đủ mọi trường của hợp đồng (trường tách nghĩa vụ, Trả sau, kỳ trước không bị bỏ khi parse)', () => {
+    const all: Array<[string, ZodObject<Record<string, ZodType>>]> = [
+      ['CashflowResponse', CashflowResponse],
+      ['CashflowPeriod', CashflowPeriod],
+      ['CashflowTotals', CashflowTotals],
+      ['CashflowJar', CashflowJar],
+      ['CashflowDay', CashflowDay],
+    ]
+    for (const [name, zod] of all) expect(Object.keys(zod.shape).sort(), name).toEqual(Object.keys(schemas[name]!.properties!).sort())
   })
 
   it('lượt gọi model theo ngày: Zod có đủ mọi trường của hợp đồng (by_model không bị bỏ khi parse)', () => {
@@ -281,6 +300,7 @@ describe('fixture REST của hợp đồng', () => {
     OpsTraceListResponse,
     OpsTraceDetail,
     OpsSummaryResponse,
+    CashflowResponse,
   }
 
   for (const [file, body] of restFixtureEntries()) {
@@ -305,6 +325,8 @@ describe('fixture REST của hợp đồng', () => {
     'NudgeFeedbackRequest.outcome_la',
     'DeleteDataConfirmationRequest.tool_khac',
     'DeleteDataRequest.scope_khac',
+    'CashflowResponse.tien_le',
+    'CashflowResponse.daily_rong',
   ])
   for (const [file, body] of restInvalidEntries()) {
     if (!MUST_REJECT.has(file)) continue

@@ -73,6 +73,8 @@ const REST_FIXTURES: Record<string, string> = {
   '/roadmap/versions': 'RoadmapVersionsResponse.minh',
   '/ops/summary': 'OpsSummaryResponse.default',
   '/ops/traces': 'OpsTraceListResponse.default',
+  // biểu đồ chi tiêu ở Hoạt động (B1, B5, B7)
+  '/cashflow': 'CashflowResponse.minh',
 }
 
 export function restDefault(url: string): Response {

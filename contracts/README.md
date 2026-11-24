@@ -20,7 +20,7 @@ Nguồn duy nhất cho **hợp đồng** giữa frontend, agent, Lambda tool, RE
 | `tools/ingest.json`, `tools/ingest.results.schema.json` | Ba tool của target `ingest` (phase 5) và kết quả | luồng A phase 5 (cài), agent |
 | `scenario/scenario_spec.schema.json` | `ScenarioSpec`: sáu loại kịch bản what-if (FR5), nguồn chung cho `run_scenario`, bảng `scenarios`, `yofina_core.scenario` | agent (dựng), luồng A (kiểm, chạy) |
 | `tools/{ledger,forecast,knowledge,planner,audit}.results.schema.json` | Kết quả JSON Lambda trả về cho từng tool; `ledger.results` còn chứa các $defs dùng chung với REST (`Transaction`, `Obligation`, `CreditLine`, `Payee`, `SalaryEvent`) | luồng A, C (trả), agent (đọc) |
-| `rest/openapi.yaml` | OpenAPI 3.1: 51 thao tác (xem mục "REST", "Phase 3", "Phase 5" và "Phase 4") | luồng A, C (cài), D (gọi) |
+| `rest/openapi.yaml` | OpenAPI 3.1: 52 thao tác (xem mục "REST", "Phase 3", "Phase 5", "Phase 4" và "Biểu đồ chi tiêu") | luồng A, C (cài), D (gọi) |
 | `events/*.schema.json` | `detail` của sự kiện trên EventBridge bus `yofina-bus`: `transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`, `forecast.updated`; phase 4 thêm `behavior.changed`, `roadmap.regeneration_requested` | luồng A (phát), C (nghe) |
 | `ml/forecast_io.schema.json` | Dạng JSON của đầu vào và đầu ra `yofina_ml.forecast_user` | luồng B, C |
 | `ml/{resilience_config,shock_set}.schema.json` | Định dạng của `resilience_defaults.json` (trọng số, ngưỡng điểm chống chịu) và `shocks.json` (ba cú sốc mẫu), hai file dữ liệu nằm trong `libs/yofina_core/src/yofina_core/` | luồng A (đọc) |
@@ -544,6 +544,17 @@ Bảng `behavior_profiles` (RLS FORCE, một dòng mỗi người dùng và ngà
 ### Bộ đánh giá
 
 `evals/golden/phase5.jsonl` (12 câu) và `evals/adversarial/phase5.jsonl` (14 ca), cùng định dạng phase 4. Trường mới mà `evals/run.py` CHƯA chấm (luồng deploy cài trước khi chạy): `prior_sessions` (các phiên trước, chạy với session id khác), `expect_memory_used`, `forbid_reask`, `expect_insight_kind`, `expect_citation_fee_types` (loại phí mà khối `citation` phải có), `upload_manifest_id` (id trong `evals/ingest/manifest.json`, tải lên trước câu hỏi), `forbid_auto_add_from_file`, `forbid_pii_from_manifest`, `expect_memory_without_pii`, `forbid_unretrieved_citation` (khối `citation` chỉ chứa nguồn và loại phí mà `get_fee_schedule` đã trả). Câu hỏi về phí có trích dẫn: `tools_must` = `get_fee_schedule`, `blocks_must` = `citation`.
+
+## Biểu đồ chi tiêu: `GET /cashflow` (đợt giao diện, 25/11/2026)
+
+Bản REST của tool `ledger___get_cashflow_summary` cho B1 (chi theo hũ), B5 (đường lũy kế) và B7 (thu và chi) của màn Hoạt động ([spending-visualization.md](../docs/research/spending-visualization.md)). `x-lambda: ledger`, `cashflow_rest.py`; route trong `infra-cdk/lib/tools-stack.ts` (`CASHFLOW_ROUTES`). Thêm một thao tác, không đổi tool, khối hay hàm DB.
+
+- **Một công thức**: tổng thu, tổng chi, chi theo hũ đều do `cashflow_result` của tool (SQL `app_get_cashflow_summary`, 0050) tính, nên `current` trùng số với tool gọi không tham số. Kỳ là kỳ lương hiện tại theo ngày mô phỏng và ngày lương trong hồ sơ; chưa khai ngày lương thì tháng dương lịch như tool.
+- **Kỳ trước cùng thời điểm**: `previous` là kỳ lương trước, từ ngày lương tới ngày thứ `period.day_index` (không quá cuối kỳ trước), cùng hàm. Vắng khi chưa có giao dịch nào từ ngày đầu kỳ trước trở về trước (persona `khoa`), vì phần thiếu sẽ bị so như chi 0 ₫.
+- **Theo ngày**: `daily` (kỳ này tới hôm nay) và `previous_daily` (cả kỳ trước) là cùng hàm gọi với khoảng một ngày, mọi ngày trong MỘT câu SQL (`generate_series`), kèm lũy kế `cumulative_vnd`.
+- **Tách nghĩa vụ và Trả sau** (`obligation_vnd`, `credit_vnd`, `regular_spent_vnd`, `regular_cumulative_vnd`, `change.regular_vnd`): hàm SQL của tool không tách, và đợt này không thêm hàm DB, nên phần này cộng từ `app_list_transactions` (cùng bộ lọc: `kind = expense`, bỏ `external`), phân trang con trỏ. Chỉ trả khi đọc hết trang và số dòng từng hũ đúng `tx_count` của tool; không thì `split_complete` sai và không có trường tách nào. Khi cần thay bằng một hàm SQL (một lần gọi) thì đó là migration mới.
+- **Chênh lệch do server trừ**: `change`, `by_jar[].change_vnd`, `net_vnd` (lương trừ chi, không tính tiền vào khác).
+- Fixture `fixtures/rest/CashflowResponse.minh.json` và `.khoa_chua_co_ky_truoc.json` sinh bằng chính mã Lambda trên PostgreSQL cục bộ (`tests/local_pg/test_cashflow_rest.py`), số khớp mục 1.4 của tài liệu nghiên cứu. Zod phía frontend viết tay ở `frontend/src/api/cashflowSchemas.ts` (như các REST khác; `gen_contracts.mjs` chỉ sinh từ `blocks/`).
 
 ## Cách chọn công cụ sinh
 
