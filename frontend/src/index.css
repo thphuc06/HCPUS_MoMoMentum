@@ -278,6 +278,20 @@
     transform: translateZ(0);
   }
 }
+/*
+  Màn trace và bảng vận hành (Figma X1, desktop 1280×800): trang có `data-layout="wide"` thì khung giãn thành khung desktop.
+  Điện thoại vẫn giữ khung 100% (bố cục một cột của chính trang).
+*/
+.phone-frame:has([data-layout="wide"]) {
+  max-width: none;
+}
+@media (min-width: 560px) {
+  .phone-frame:has([data-layout="wide"]) {
+    width: min(1280px, calc(100vw - 48px));
+    height: min(800px, calc(100dvh - 48px));
+    border-radius: 16px;
+  }
+}
 
 .phone-scroll {
   height: 100%;

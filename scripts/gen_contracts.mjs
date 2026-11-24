@@ -193,7 +193,7 @@ import { z } from 'zod'
 // Phase 5 (F6) đã đăng ký view cho ingest_review và coverage_change (sau 6 khối của phase 3).
 // Phase 4 thêm năm khối (resilience_score, stress_result, roadmap, roadmap_diff, review_list) vào hợp đồng nhưng CHƯA vào danh sách
 // dưới đây: luồng frontend phase 4 thêm chúng cùng lúc với việc đăng ký view trong registry.tsx.
-const REGISTERED_BY_FRONTEND = ['jar_summary', 'confirm', 'receipt', 'notice', 'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action', 'affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions', 'coverage_change', 'ingest_review', 'resilience_score', 'stress_result', 'roadmap', 'roadmap_diff', 'review_list']
+const REGISTERED_BY_FRONTEND = ['jar_summary', 'confirm', 'receipt', 'notice', 'forecast_timeline', 'proactive_card', 'confirm_action', 'receipt_action', 'affordability_card', 'obligation_impact', 'options', 'explain', 'clarify', 'suggestions', 'coverage_change', 'ingest_review', 'resilience_score', 'stress_result', 'roadmap', 'roadmap_diff', 'review_list', 'behavior_insight', 'citation']
 for (const t of REGISTERED_BY_FRONTEND) {
   if (!registry.some(([name]) => name === t)) throw new Error(`REGISTERED_BY_FRONTEND có type lạ: ${t}`)
 }

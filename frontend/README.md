@@ -4,6 +4,8 @@ Web app Yofina ưu tiên điện thoại (khung 390 px; trên màn rộng căn g
 
 Trạng thái: **phase 2, luồng D đã ghép với backend thật** ([các màn ví và dự báo](../docs/plan/phases/phase-2-vi-va-du-bao.md#luồng-d--frontend-các-màn-hình-ví-và-dự-báo)), xây trên phase 1; đã đi hết các màn với `minh`, `khoa`, `lan` trên API AWS thật. Có: đăng nhập Cognito SRP; **Tổng quan** (một lệnh `GET /overview`), **Hũ**, **Chi tiết hũ** với biểu đồ dự báo 30 ngày, **Nhìn trước**, **Chuyển tiền** (T1, T2, T4, T5), **Hoạt động**, **Onboarding** (O1–O3), **Nghĩa vụ** (thêm, sửa, xóa), **Tiền vào** và ô Tiền vào khác, **Lương về** (xác nhận một chạm), **Giữa hũ**, **Thêm hoặc sửa hũ**, **Hồ sơ** (sửa lương và ngày nhận, đặt lại dữ liệu, đăng xuất); sheet chat với tám khối (`jar_summary`, `confirm`, `receipt`, `notice`, `forecast_timeline`, `proactive_card`, `confirm_action`, `receipt_action`). Thẻ kiểm tra đủ/sát/hụt (T3) là phase 3; Quét QR và "Kiểm tra" ở Tổng quan là nút vô hiệu có nhãn "Sắp có".
 
+**Phase 5 (luồng E)**: Hồ sơ thay khung S1 (xem bảng dưới); thẻ chủ động ở Tổng quan ưu tiên bản tin của cổng giá trị (`GET /nudges/today`; "Để sau", "Ít nhắc loại này" và nút làm việc gửi `POST /nudges/{id}/feedback`, thẻ tất định của `/overview` chỉ còn khi không có bản tin); khối `behavior_insight` và `citation` trong registry (23 khối); bảng vận hành và màn trace X1 cho nhóm `ops`. Chưa có máy chủ giả trong `dev-mocks/` cho các REST phase 5 (`npm run dev:mock` hiện trạng thái lỗi ở các phần đó); email bắt đầu bằng `ops` ở `dev:mock` thuộc nhóm `ops`.
+
 **Màn hình và đường dẫn** (hash router; màn toàn khung không có tab bar):
 
 | Đường dẫn | Màn | Dữ liệu |
@@ -16,7 +18,9 @@ Trạng thái: **phase 2, luồng D đã ghép với backend thật** ([các mà
 | `/onboarding` | O1 lương + ngày nhận (bắt buộc), O2 hũ + tỷ lệ, O3 chi phí cố định | `update_profile`, `save_jars`, `GET /jar-templates` |
 | `/obligations`, `/obligations/new`, `/obligations/:id` | Nghĩa vụ và hạn mức Trả sau | `GET /obligations`, `/credit-line`; `update_profile` |
 | `/income`, `/salary`, `/move` | Tiền vào + Tiền vào khác; xác nhận lương về; chuyển giữa hũ | `record_transaction`, `confirm_salary`, `move_between_jars` |
-| `/profile` | Hồ sơ | `/overview`; `update_profile`; `POST /demo/reset` |
+| `/profile` | Hồ sơ: thông tin khai báo, nhận xét hành vi, bộ nhớ của trợ lý (xem, xóa từng mục, xóa hết), đồng ý theo nguồn nạp, đặt lại dữ liệu demo, xóa dữ liệu của tôi (token xác nhận), đăng xuất | `/overview`; `GET /profile/behavior`; `GET/DELETE /memory`; `GET /ingest/jobs`; `update_profile`; `POST /demo/reset`; `POST /me/delete-data/confirmations` + `POST /me/delete-data` |
+| `/roadmap`, `/roadmap/compare?from=&to=` | Lộ trình thích ứng (kèm danh sách phiên bản: bấm để xem từng bản, so với bản đang dùng); So với bản cũ. Lối vào: thẻ trên tab Nhìn trước, dòng ở Tổng quan | `GET /roadmap`, `/roadmap/versions`, `/roadmap/diff` |
+| `/ops/summary` (`/ops` chuyển về đây), `/ops/traces/:traceId` | Bảng vận hành và màn trace X1 (chỉ nhóm Cognito `ops`, đọc nhóm từ claim `cognito:groups` của access token; khung giãn thành desktop 1280×800 trên màn rộng). Lối vào: hàng "Mã trace" của bảng "Vì sao", dòng "Bảng vận hành" ở Hồ sơ | `GET /ops/summary`, `/ops/traces`, `/ops/traces/{id}` |
 
 ## Chạy
 

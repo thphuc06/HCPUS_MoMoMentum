@@ -6,6 +6,17 @@ import type { ApiClient } from '@/api/client'
 import type { ResilienceScoreResponse, ShocksResponse, StressResultResponse } from '@/api/resilienceSchemas'
 import type { RoadmapDiffResponse, RoadmapResponse, RoadmapVersionsResponse } from '@/api/roadmapSchemas'
 import type {
+  BehaviorProfileResponse,
+  DataDeletion,
+  DeleteDataConfirmationResponse,
+  MemoryClearResponse,
+  MemoryListResponse,
+  NudgeTodayResponse,
+  OpsSummaryResponse,
+  OpsTraceDetail,
+  OpsTraceListResponse,
+} from '@/api/phase5Schemas'
+import type {
   AffordabilityResponse,
   CreditLineResponse,
   FeedbackResponse,
@@ -112,6 +123,17 @@ export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
     applyIngestAction: vi.fn(async () => {
       throw new Error('applyIngestAction chưa được giả')
     }),
+    getBehaviorProfile: vi.fn(async () => fx<BehaviorProfileResponse>('BehaviorProfileResponse.minh')),
+    getTodayNudge: vi.fn(async () => fx<NudgeTodayResponse>('NudgeTodayResponse.trong')),
+    submitNudgeFeedback: vi.fn(async (nudgeId, req) => ({ nudge_id: nudgeId, outcome: req.outcome, recorded_at: '2026-12-10T03:00:00Z' })),
+    listMemory: vi.fn(async () => fx<MemoryListResponse>('MemoryListResponse.minh')),
+    deleteMemoryRecord: vi.fn(async (recordId) => ({ record_id: recordId, deleted: true as const })),
+    clearMemory: vi.fn(async () => fx<MemoryClearResponse>('MemoryClearResponse.default')),
+    createDeleteDataConfirmation: vi.fn(async () => fx<DeleteDataConfirmationResponse>('ConfirmationResponse.delete_my_data')),
+    deleteMyData: vi.fn(async () => fx<DataDeletion>('DataDeletion.done')),
+    listOpsTraces: vi.fn(async () => fx<OpsTraceListResponse>('OpsTraceListResponse.default')),
+    getOpsTrace: vi.fn(async () => fx<OpsTraceDetail>('OpsTraceDetail.what_if')),
+    getOpsSummary: vi.fn(async () => fx<OpsSummaryResponse>('OpsSummaryResponse.default')),
     ...over,
   }
 }

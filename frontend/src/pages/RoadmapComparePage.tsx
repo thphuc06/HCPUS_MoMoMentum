@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { useApi } from '@/api/ApiProvider'
 import { useApiResource } from '@/api/resource'
 import type { RoadmapResponse, RoadmapVersionDecisionRequest } from '@/api/roadmapSchemas'
@@ -9,10 +9,20 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Roadmap } from '@/features/roadmap/Roadmap'
 import { RoadmapDiff } from '@/features/roadmap/RoadmapDiff'
 import { useRoadmapMutation } from '@/features/roadmap/useStepDecision'
+import { RoadmapVersion } from '@/contracts/blocks'
+
+/** `?from=&to=` (mở từ danh sách phiên bản của trang Lộ trình); vắng hoặc sai thì để server chọn (bản đề xuất so với bản nó dựa vào). */
+function versionParam(raw: string | null): number | undefined {
+  const r = RoadmapVersion.safeParse(raw === null ? undefined : Number(raw))
+  return r.success ? r.data : undefined
+}
 
 export function RoadmapComparePage() {
   const api = useApi()
-  const diff = useApiResource((api) => api.getRoadmapDiff(), [])
+  const [search] = useSearchParams()
+  const from = versionParam(search.get('from'))
+  const to = versionParam(search.get('to'))
+  const diff = useApiResource((api) => api.getRoadmapDiff({ from_version: from, to_version: to }), [from, to])
   const [result, setResult] = useState<RoadmapResponse | null>(null)
   const mutation = useRoadmapMutation(diff.reload)
   const missing = diff.error?.code === 'ROADMAP_NOT_FOUND'

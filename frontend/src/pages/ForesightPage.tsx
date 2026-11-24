@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, ListSkeleton } from '@/components/StateViews'
 import { useOverview } from '@/api/OverviewProvider'
 import type { JarFull } from '@/api/schemas'
 import { ResilienceSection } from '@/features/resilience/ResilienceSection'
+import { RoadmapEntryCard } from '@/features/roadmap/RoadmapEntry'
 import { UnclassifiedSummary } from '@/features/review/UnclassifiedSummary'
 import { useReview } from '@/features/review/useReview'
 import { CONFIDENCE_LABEL } from '@/lib/jar'
@@ -38,7 +39,9 @@ export function ForesightPage() {
         <p className="text-small text-ink-2">Hũ nào dự kiến cạn trước kỳ lương</p>
       </header>
 
-      <ResilienceSection />
+      <ResilienceSection>
+        <RoadmapEntryCard />
+      </ResilienceSection>
 
       {ov.status === 'loading' && <ListSkeleton rows={4} label="Đang tải dự báo" />}
       {ov.status === 'error' && <ErrorState className="px-4" error={ov.error} title="Chưa tải được dự báo" onRetry={() => void ov.reload()} />}

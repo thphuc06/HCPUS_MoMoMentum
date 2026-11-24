@@ -7,7 +7,9 @@ const TTL_MS = 60 * 60_000
 
 function make(email: string): AuthSession {
   // Email nằm trong token để máy chủ giả giữ trạng thái riêng cho từng tài khoản ("trang..." = chưa khai, "moi..." = ít dữ liệu).
-  return { accessToken: `mock-access-token:${encodeURIComponent(email)}`, expiresAt: Date.now() + TTL_MS, email, displayName: undefined }
+  // Email bắt đầu "ops" thuộc nhóm `ops` (thấy lối vào màn trace và bảng vận hành).
+  const groups = email.toLowerCase().startsWith('ops') ? ['ops'] : []
+  return { accessToken: `mock-access-token:${encodeURIComponent(email)}`, expiresAt: Date.now() + TTL_MS, email, displayName: undefined, groups }
 }
 
 export class MockAuthClient implements AuthClient {

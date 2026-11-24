@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
 import { ArrowDownToLine, ArrowLeftRight, ChevronRight, ListChecks, Send, ShieldCheck } from 'lucide-react'
 import { BalanceCard } from '@/components/BalanceCard'
@@ -12,7 +12,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/auth/AuthProvider'
 import { useOverview } from '@/api/OverviewProvider'
 import { parseProactiveCard, type OverviewResponse } from '@/api/schemas'
-import { useProactiveActions } from '@/features/overview/useProactiveActions'
+import type { NudgeOutcome } from '@/api/phase5Schemas'
+import type { ProactiveCardBlock } from '@/contracts/blocks'
+import { useProactiveActions, type ProactiveAction } from '@/features/overview/useProactiveActions'
+import { useTodayNudge } from '@/features/overview/useTodayNudge'
+import { RoadmapEntryRow } from '@/features/roadmap/RoadmapEntry'
 import { useJarLookup } from '@/features/common/useJarLookup'
 import { DailyAskCard } from '@/features/review/DailyAskCard'
 import { UnclassifiedSummary } from '@/features/review/UnclassifiedSummary'
@@ -98,7 +102,28 @@ function LinkCard({ to, title, subtitle, icon }: { to: string; title: string; su
   )
 }
 
-function ProactiveSection({ data }: { data: OverviewResponse }) {
+function ProactiveCardFor({ card, data, onAction, footer }: {
+  card: ProactiveCardBlock
+  data: OverviewResponse
+  onAction: (a: ProactiveAction) => void
+  footer?: ReactNode
+}) {
+  const d = card.data
+  const jar = d.jar_code ? data.jars.find((j) => j.code === d.jar_code) : undefined
+  return (
+    <div className="mx-4 mt-4">
+      <ProactiveCard data={d} onAction={onAction}>
+        {d.kind === 'runout_warning' && data.next_payday && jar?.runout_date && (
+          <MiniTimeline today={data.app_date} paydayDate={data.next_payday.date} runoutDate={jar.runout_date} />
+        )}
+      </ProactiveCard>
+      {footer}
+    </div>
+  )
+}
+
+/** Thẻ tất định của `GET /overview` (phase 2): "Để sau" và "Ít nhắc loại này" chỉ lưu phía giao diện. */
+function OverviewCardSection({ data }: { data: OverviewResponse }) {
   const [, force] = useState(0)
   const card = parseProactiveCard(data.proactive_card)
   const hide = () => force((n) => n + 1)
@@ -108,16 +133,37 @@ function ProactiveSection({ data }: { data: OverviewResponse }) {
   if (!card) return null
   const d = card.data
   if (isCardHidden(nudgeKey(d.kind, d.jar_code), d.kind, data.app_date)) return null
-  const jar = d.jar_code ? data.jars.find((j) => j.code === d.jar_code) : undefined
+  return <ProactiveCardFor card={card} data={data} onAction={onAction} />
+}
+
+/** Bản tin của cổng giá trị (`GET /nudges/today`): phản hồi gửi về server để cổng tôn trọng "Ít nhắc loại này" ở các ngày sau. */
+function NudgeCardSection({ card, appDate, data, nudge }: { card: ProactiveCardBlock; appDate: string; data: OverviewResponse; nudge: ReturnType<typeof useTodayNudge> }) {
+  const { feedback } = nudge
+  const onFeedback = useCallback((outcome: NudgeOutcome) => void feedback(outcome), [feedback])
+  const onAction = useProactiveActions(card.data, appDate, undefined, onFeedback)
   return (
-    <div className="mx-4 mt-4">
-      <ProactiveCard data={d} onAction={onAction}>
-        {d.kind === 'runout_warning' && data.next_payday && jar?.runout_date && (
-          <MiniTimeline today={data.app_date} paydayDate={data.next_payday.date} runoutDate={jar.runout_date} />
-        )}
-      </ProactiveCard>
-    </div>
+    <ProactiveCardFor
+      card={card}
+      data={data}
+      onAction={onAction}
+      footer={nudge.error && (
+        <p role="alert" className="mt-2 rounded-2xl bg-bad-bg px-3 py-2 text-small font-semibold text-bad-fg">
+          Chưa ghi được lựa chọn của bạn. {nudge.error.message}
+        </p>
+      )}
+    />
   )
+}
+
+/**
+ * MỘT việc cần làm hôm nay. Có bản tin của cổng giá trị thì ưu tiên nó (hợp đồng `GET /nudges/today`); người dùng đã gạt bản tin đi
+ * thì không hiện thẻ nào; chưa có bản tin (hoặc chưa tải xong, hoặc lỗi) thì dùng thẻ tất định của `GET /overview`.
+ */
+function ProactiveSection({ data }: { data: OverviewResponse }) {
+  const nudge = useTodayNudge()
+  if (nudge.state === 'hidden') return null
+  if (nudge.state === 'show' && nudge.card) return <NudgeCardSection card={nudge.card} appDate={nudge.appDate ?? data.app_date} data={data} nudge={nudge} />
+  return <OverviewCardSection data={data} />
 }
 
 function ForecastNotes({ data }: { data: OverviewResponse }) {
@@ -228,6 +274,8 @@ export function OverviewPage() {
               ))}
             </ul>
           )}
+
+          <RoadmapEntryRow />
 
           {data.needs_review_count > 0 && (
             <LinkCard

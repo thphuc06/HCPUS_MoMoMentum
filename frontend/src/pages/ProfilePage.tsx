@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router'
 import { ChevronRight, LogOut, Pencil, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,7 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useAuth } from '@/auth/AuthProvider'
+import { useAuth, useIsOps } from '@/auth/AuthProvider'
 import { useApi, useRefreshAfterWrite } from '@/api/ApiProvider'
 import { useOverview } from '@/api/OverviewProvider'
 import { useWriteFlow } from '@/api/useWrite'
@@ -23,6 +23,10 @@ import { usePhoneFrame } from '@/layout/FrameContext'
 import { formatAppDate, formatVnd } from '@/lib/format'
 import { mutedKinds, unmuteAll } from '@/lib/nudgePrefs'
 import { displayName } from '@/lib/user'
+import { BehaviorSection } from '@/features/profile/BehaviorSection'
+import { ConsentSection } from '@/features/profile/ConsentSection'
+import { DeleteDataSection } from '@/features/profile/DeleteDataSection'
+import { MemorySection } from '@/features/profile/MemorySection'
 
 const RISK_LABEL: Record<string, string> = { low: 'Thấp', medium: 'Vừa', high: 'Cao' }
 
@@ -88,8 +92,8 @@ function NavRow({ to, label, hint }: { to: string; label: string; hint?: string 
   )
 }
 
-// Figma S1 Hồ sơ (31:2754) là khung giữ chỗ; bản này có tên và thông tin khai báo (sửa được), lối vào Nghĩa vụ và Hũ,
-// "Đặt lại dữ liệu" và đăng xuất.
+// Hồ sơ (thay khung giữ chỗ S1 `31:2754` của Figma): thông tin khai báo (sửa được), nhận xét hành vi, lối vào Nghĩa vụ và Hũ, bộ nhớ của
+// trợ lý (xem, xóa từng mục, xóa hết), đồng ý theo nguồn nạp, "Đặt lại dữ liệu" demo, "Xóa dữ liệu của tôi" (token xác nhận), đăng xuất.
 export function ProfilePage() {
   const { session, signOut } = useAuth()
   const api = useApi()
@@ -103,6 +107,14 @@ export function ProfilePage() {
   const [muted, setMuted] = useState(() => mutedKinds().length)
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
   const profile = ov.data?.profile
+  const ops = useIsOps()
+  const { hash } = useLocation()
+
+  // Lối vào từ thẻ chủ động hay khối nhận xét trong chat (#nhan-xet-hanh-vi): cuộn tới đúng phần.
+  useEffect(() => {
+    if (!hash) return
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView?.({ block: 'start' })
+  }, [hash])
   const name = profile?.display_name ?? displayName(session?.email, session?.displayName) ?? 'Tài khoản'
 
   const reset = async () => {
@@ -178,12 +190,19 @@ export function ProfilePage() {
           {profile && editing && <ProfileEditor profile={profile} onDone={() => setEditing(false)} />}
         </section>
 
+        <BehaviorSection />
+
         <section className="divide-y divide-line rounded-card bg-surface px-4 shadow-card" aria-label="Quản lý">
           <NavRow to="/obligations" label="Nghĩa vụ" hint="Tiền trọ, hóa đơn, thuê bao, khoản vay, Trả sau" />
           <NavRow to="/jars/edit" label="Thêm hoặc sửa hũ" hint="Tên, tỷ lệ chia lương" />
           <NavRow to="/income" label="Tiền vào" hint="Ghi nhận lương, gán Tiền vào khác vào hũ" />
           <NavRow to="/activity" label="Hoạt động" hint="Mọi giao dịch" />
+          {ops && <NavRow to="/ops/summary" label="Bảng vận hành" hint="Trace từng lượt, độ trễ, lỗi tool (nhóm vận hành)" />}
         </section>
+
+        <MemorySection />
+
+        <ConsentSection />
 
         {muted > 0 && (
           <section className="rounded-card bg-surface p-4 shadow-card" aria-label="Lời nhắc đã ẩn">
@@ -222,6 +241,8 @@ export function ProfilePage() {
             </p>
           )}
         </section>
+
+        <DeleteDataSection />
 
         <Button type="button" variant="soft" className="w-full" onClick={signOut}>
           <LogOut className="size-5" aria-hidden />

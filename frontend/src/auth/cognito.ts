@@ -25,14 +25,17 @@ function mapCognitoError(err: unknown): AuthError {
   return new AuthError(code)
 }
 
-function toSession(s: CognitoUserSession, fallbackEmail?: string): AuthSession {
+/** Phiên của app từ phiên Cognito; xuất ra để test đọc claim (email, tên, `cognito:groups`). */
+export function toSession(s: CognitoUserSession, fallbackEmail?: string): AuthSession {
   const access = s.getAccessToken()
   const idPayload = s.getIdToken().decodePayload() as { email?: string; name?: string }
+  const groups = (access.decodePayload() as { 'cognito:groups'?: unknown })['cognito:groups']
   return {
     accessToken: access.getJwtToken(),
     expiresAt: access.getExpiration() * 1000,
     email: idPayload.email ?? fallbackEmail ?? '',
     displayName: idPayload.name,
+    groups: Array.isArray(groups) ? groups.filter((g): g is string => typeof g === 'string') : [],
   }
 }
 

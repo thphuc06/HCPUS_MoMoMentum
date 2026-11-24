@@ -14,7 +14,7 @@ import { TabBar } from './TabBar'
 const ChatSheet = lazy(() => import('@/chat/ChatSheet').then((m) => ({ default: m.ChatSheet })))
 
 // Màn toàn khung (luồng chuyển tiền, onboarding, form...) không có tab bar, theo Figma T1–T5, O1–O3.
-const NO_TABBAR = /^\/(onboarding|transfer|activity|obligations|income|ingest|move|salary|jars\/edit)(\/|$)/
+const NO_TABBAR = /^\/(onboarding|transfer|activity|obligations|income|ingest|move|salary|jars\/edit|ops)(\/|$)/
 
 function Frame({ children }: { children: ReactNode }) {
   const chat = useChat()

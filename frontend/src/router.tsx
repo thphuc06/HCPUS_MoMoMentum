@@ -95,6 +95,15 @@ export function appRoutes(): RouteObject[] {
             { path: 'move', ...page(() => import('@/pages/MovePage'), 'MovePage') },
             { path: 'salary', ...page(() => import('@/pages/SalaryPage'), 'SalaryPage') },
             { path: 'profile', element: <ProfilePage /> },
+            {
+              // Bảng vận hành và màn trace X1 (chỉ nhóm Cognito `ops`; khung giãn thành desktop trên màn rộng).
+              path: 'ops',
+              children: [
+                { index: true, element: <Navigate to="/ops/summary" replace /> },
+                { path: 'summary', ...page(() => import('@/pages/OpsSummaryPage'), 'OpsSummaryPage') },
+                { path: 'traces/:traceId', ...page(() => import('@/pages/OpsTracePage'), 'OpsTracePage') },
+              ],
+            },
           ],
         },
         { path: '*', element: <Navigate to="/" replace /> },
