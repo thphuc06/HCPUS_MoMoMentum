@@ -262,6 +262,8 @@ K làm song song với D2 (độ trễ what-if): lập luận hiện dần làm 
 
 Hạn trả lời đề xuất: 26/11 cho Q1–Q9 (ảnh hưởng đợt 1), 2/12 cho phần còn lại.
 
+**Đã chốt 24/11 (chủ dự án): Q1–Q9 theo đúng cột "Đề xuất".** Q10–Q15 còn chờ.
+
 | # | Câu hỏi | Đề xuất |
 |---|---|---|
 | Q1 | NFR-03 (what-if p95 < 8 s) chưa đạt (trọn câu p95 28,2 s). Giữ chỉ tiêu và báo "chưa đạt", hay tách thành "khối số liệu đầu tiên p95 ≤ 8 s" và "trọn câu p95 ≤ 20 s"? | Tách hai chỉ tiêu. Proposal §12 đã mô tả "khối dòng thời gian hiện ở khoảng giây thứ 2, văn bản kết thúc trước giây thứ 8", tức điều người dùng cảm nhận là khối đến trước. Báo cáo ghi rõ cả hai số và phân rã D1 |
