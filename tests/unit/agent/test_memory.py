@@ -700,3 +700,100 @@ def test_namespace_cua_cdk_khop_yofina_core():
         k: MEMORY_NAMESPACE_TEMPLATES[k] for k in ("preference", "fact", "session_summary")
     }
     assert set(m.RECALL_KINDS) <= set(found)
+
+
+# --- khử trùng khi đọc (kiểm lại Runtime v22: câu kể bộ nhớ liệt kê mỗi sở thích hai lần) ---------------
+@pytest.mark.parametrize(
+    ("a", "b", "same"),
+    [
+        (
+            "Ưu tiên để dành cho hũ Du lịch",
+            "Người dùng muốn ưu tiên để dành tiền vào hũ Du lịch.",
+            True,
+        ),
+        (
+            "Không nhắc người dùng vào buổi sáng.",
+            "Người dùng không muốn được nhắc vào buổi sáng",
+            True,
+        ),
+        ("ĐỪNG NHẮC BUỔI SÁNG!", "đừng nhắc buổi sáng", True),
+        (
+            "Không nhắc vào buổi sáng",
+            "Không nhắc vào buổi tối",
+            False,
+        ),  # còn dấu: "tối" khác "sáng", khác "tôi"
+        (
+            "Ưu tiên để dành cho hũ Du lịch",
+            "Người dùng ưu tiên để dành tiền vào hũ Du lịch cho chuyến đi Đà Lạt tháng sau",
+            False,  # sự thật có thêm ý thì giữ
+        ),
+        ("Làm kỹ sư phần mềm", "Đừng nhắc buổi sáng", False),
+    ],
+)
+def test_same_meaning(a, b, same):
+    assert m.same_meaning(a, b) is same
+    assert m.same_meaning(b, a) is same
+
+
+def test_dedupe_giu_ban_preference_va_thu_tu():
+    items = (
+        m.RecalledItem("fact", "Người dùng muốn ưu tiên để dành tiền vào hũ Du lịch.", "mem-f1"),
+        m.RecalledItem("preference", "Ưu tiên để dành cho hũ Du lịch", "mem-p1"),
+        m.RecalledItem("fact", "Làm kỹ sư phần mềm", "mem-f2"),
+        m.RecalledItem("preference", "Không nhắc người dùng vào buổi sáng.", "mem-p2"),
+        m.RecalledItem("fact", "Người dùng không muốn được nhắc vào buổi sáng.", "mem-f3"),
+    )
+    assert [i.record_id for i in m.dedupe_items(items)] == ["mem-p1", "mem-p2", "mem-f2"]
+
+
+def test_recall_bo_su_that_lap_y_so_thich():
+    client = FakeMemoryClient(
+        {
+            ns("preference"): [
+                rec(ns("preference"), "Ưu tiên để dành cho hũ Du lịch", rid="mem-" + "1" * 40)
+            ],
+            ns("fact"): [
+                rec(
+                    ns("fact"),
+                    "Người dùng muốn ưu tiên để dành tiền vào hũ Du lịch.",
+                    rid="mem-" + "2" * 40,
+                ),
+                rec(ns("fact"), "Làm kỹ sư phần mềm", rid="mem-" + "3" * 40),
+            ],
+        }
+    )
+    ctx = asyncio.run(m.AgentMemory(settings(), client).recall(SUB, "mình nên để vào hũ nào?"))
+    assert ctx.preferences == ["Ưu tiên để dành cho hũ Du lịch"]
+    assert [i.text for i in ctx.of("fact")] == ["Làm kỹ sư phần mềm"]
+    assert ctx.prompt_block().count("Du lịch") == 1
+
+
+def test_luot_nho_gi_ke_moi_y_mot_lan():
+    client = FakeMemoryClient(
+        {
+            ns("preference"): [rec(ns("preference"), "Ưu tiên để dành cho hũ Du lịch")],
+            ns("fact"): [
+                rec(
+                    ns("fact"),
+                    "Người dùng muốn ưu tiên để dành tiền vào hũ Du lịch.",
+                    rid="mem-" + "e" * 40,
+                )
+            ],
+        }
+    )
+    events, _turn = run_memory_turn(
+        [route_response(intent="memory")], client, text="Bạn đang nhớ những gì về mình?"
+    )
+    said = "".join(e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT")
+    assert said.count("Du lịch") == 1 and "Ưu tiên để dành cho hũ Du lịch" in said
+
+
+def test_prompt_block_dan_tra_loi_tieng_viet_khi_ban_ghi_tieng_anh():
+    """Strategy có lúc viết sự thật bằng tiếng Anh: bản ghi vẫn vào prompt, kèm chỉ dẫn trả lời bằng tiếng Việt (không dịch bằng
+    model riêng)."""
+    ctx = m.MemoryContext(
+        items=(m.RecalledItem("fact", "The user works as a software engineer.", "mem-1"),)
+    )
+    block = ctx.prompt_block()
+    assert "The user works as a software engineer." in block
+    assert "luôn trả lời bằng tiếng Việt" in block
