@@ -32,7 +32,7 @@ from yofina_agent.turn import (
     _GOAL_UNKNOWN_JAR,
     Turn,
 )
-from yofina_agent.writer import build_writer_prompt
+from yofina_agent.writer import WRITER_SYSTEM, build_writer_prompt
 
 from yofina_core.errors import ErrorCode
 from yofina_core.resilience import load_shock_set
@@ -118,7 +118,8 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
         assert [(call["task"], call["compact"]) for call in writer.calls] == [(intent, compact)]
         assert types(events).index("TOOL_CALL_RESULT") < types(events).index("TEXT_MESSAGE_START")
         prompt = build_writer_prompt(intent, writer.calls[0]["question"], compact)
-        assert "Không" in prompt and "đầu tư hay vay tiền" in prompt
+        # "không khuyên đầu tư hay vay" nói một lần ở lời nhắc hệ thống của writer, áp cho mọi việc
+        assert "đầu tư hay vay tiền" in WRITER_SYSTEM
         if intent != "roadmap":
             assert "không phải điểm tín dụng" in prompt
 

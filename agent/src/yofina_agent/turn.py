@@ -1535,7 +1535,7 @@ class Turn:
             if ok and not (gr is not None and gr.blocked):
                 await self.emit_fixed_text(r.reply)
                 return
-        await self.write("chitchat", question, {})
+        await self.write("chitchat", question, {"viec_lam_duoc": list(notices.CAN_DO)})
 
     # --- hỏi lại ----------------------------------------------------------------------------
     async def jar_chips(self) -> list[ClarifyChipIn]:

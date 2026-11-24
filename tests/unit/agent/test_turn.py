@@ -382,9 +382,13 @@ def test_xa_giao_dung_cau_tra_loi_cua_router(monkeypatch):
 
 
 def test_xa_giao_khong_co_reply_thi_nho_writer(monkeypatch):
+    from yofina_agent import notices
+
     llm = make_llm([route_response(intent="chitchat")])
     _, _, writer = run_turn("chào", llm=llm, monkeypatch=monkeypatch)
     assert writer.calls[0]["task"] == "chitchat"
+    # danh sách việc làm được đi vào dữ liệu (một nguồn: notices.CAN_DO), không chép trong lời nhắc của việc
+    assert writer.calls[0]["compact"] == {"viec_lam_duoc": list(notices.CAN_DO)}
 
 
 # --- suy giảm có kiểm soát -------------------------------------------------------------------------

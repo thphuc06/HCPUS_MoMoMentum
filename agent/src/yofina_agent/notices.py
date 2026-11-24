@@ -47,6 +47,8 @@ CAN_DO: tuple[str, ...] = (
     "Thử kịch bản \"nếu mua...\" (cả bằng Trả sau)",
     "Kiểm tra trước khi chi hoặc chuyển tiền",
     "Chuyển tiền giữa các hũ, khai lương và nghĩa vụ",
+    "Điểm chống chịu, thử cú sốc và lộ trình tiết kiệm",
+    "Thói quen chi tiêu, phí Trả sau và nạp sao kê ngoài ví",
 )
 CANNOT_DO: tuple[str, ...] = (
     "Tư vấn mua cổ phiếu, quỹ, tiền mã hóa",
