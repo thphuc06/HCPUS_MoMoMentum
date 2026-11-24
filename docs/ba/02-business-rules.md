@@ -128,17 +128,17 @@ Bộ 7 hũ hiện tại có hai chỗ lẫn lộn:
 |---|---|---|---|---|---|
 | BR-14 | **Không chặn lúc thanh toán** để hỏi hũ. Người dùng trả trong app và tự chọn hũ nguồn thì bỏ qua phân loại | Proposal §10.3 | Code (tự chọn hũ) | — | FR1, FR2 |
 | BR-15 | Chống ghi trùng: gửi lại cùng mã tham chiếu thì không ghi lần hai. Dòng nạp từ tệp luôn có khóa chống trùng. Hai lần chi giống hệt nhau trong ngày mà không gửi mã tham chiếu vẫn hợp lệ | contracts/README | Code | — | FR1, FR9 |
-| BR-16 | Thứ tự phân loại khoản chi, **rẻ trước đắt sau**: (0) theo loại giao dịch (bảng tra) → (1) luật của người dùng → (2) giao dịch tương tự đã có nhãn (embedding) → (3) LLM nhỏ | Proposal §10.3 | Bước 0: Code; bước 1–3: Thiết kế (phase 4) | — | FR2 |
-| BR-17 | Xử lý theo độ tin cậy: **≥ 0,9** tự gán, không báo; **0,6 đến < 0,9** tự gán và đưa vào "Xem lại" (sửa một chạm); **< 0,6** vào Chưa phân loại, **hỏi gộp một lần mỗi ngày**, mỗi khoản kèm 2 gợi ý | Proposal §10.3 (ngưỡng minh họa) | Thiết kế; ngưỡng: Cần quyết sau khi đo | — | FR2 |
-| BR-18 | **Chỉ hỏi khi đáng hỏi**: khoản đủ lớn, hoặc người nhận có khả năng lặp lại. Khoản nhỏ một lần vào hũ "Khác", không hỏi | Proposal §10.3 | Thiết kế; **ngưỡng "đủ lớn": Cần quyết** | — | FR2 |
-| BR-19 | Người dùng sửa phân loại thì tạo luật, kèm phạm vi **"chỉ lần này"** hoặc **"luôn luôn cho người này"**. Sửa nhiều lần cho cùng một người nhận thì nâng ngưỡng tự gán của riêng người đó | Proposal §10.3 | Thiết kế | — | FR2 |
+| BR-16 | Thứ tự phân loại khoản chi, **rẻ trước đắt sau**: (0) theo loại giao dịch (bảng tra) → (1) luật của người dùng → (2) giao dịch tương tự đã có nhãn (embedding) → (3) LLM nhỏ | Proposal §10.3 | Code (phase 4): đủ bước 0–3 | — | FR2 |
+| BR-17 | Xử lý theo độ tin cậy: **≥ 0,9** tự gán, không báo; **0,6 đến < 0,9** tự gán và đưa vào "Xem lại" (sửa một chạm); **< 0,6** vào Chưa phân loại, **hỏi gộp một lần mỗi ngày**, mỗi khoản kèm 2 gợi ý | Proposal §10.3 (ngưỡng minh họa) | Code (phase 4); ngưỡng là cấu hình. Đo: đúng 92%, **phải hỏi 17,4%** (mục tiêu < 10%) | — | FR2 |
+| BR-18 | **Chỉ hỏi khi đáng hỏi**: khoản đủ lớn, hoặc người nhận có khả năng lặp lại. Khoản nhỏ một lần vào hũ "Khác", không hỏi | Proposal §10.3 | Code một phần (phase 4, hỏi gộp `review_asks`); **ngưỡng "đủ lớn": Cần quyết** (C-05) | — | FR2 |
+| BR-19 | Người dùng sửa phân loại thì tạo luật, kèm phạm vi **"chỉ lần này"** hoặc **"luôn luôn cho người này"**. Sửa nhiều lần cho cùng một người nhận thì nâng ngưỡng tự gán của riêng người đó | Proposal §10.3 | Code (phase 4, tiêu chí 7 đạt) | — | FR2 |
 
 ### B5. Nghĩa vụ và trả sau (mô phỏng)
 
 | ID | Quy tắc | Nguồn | Trạng thái | Tham số | FR |
 |---|---|---|---|---|---|
 | BR-20 | Nghĩa vụ do người dùng khai gồm: loại (vay, tiền trọ, hóa đơn, thuê bao), số tiền **hoặc khoảng**, phí, chu kỳ (một lần, tuần, tháng), ngày đến hạn, cờ thiết yếu. Khai khoảng thì dùng trung điểm làm tròn xuống | Proposal §4; contracts/README | Code | — | FR4 |
-| BR-21 | **Khoản thiết yếu** (ví dụ tiền trọ) không bao giờ bị gợi ý cắt | Proposal §4 | Thiết kế (phase 3–4) | — | FR4, FR5, FR8 |
+| BR-21 | **Khoản thiết yếu** (ví dụ tiền trọ) không bao giờ bị gợi ý cắt | Proposal §4 | Code (phase 3–4) | — | FR4, FR5, FR8 |
 | BR-22 | Mua bằng trả sau **không trừ hũ**. Giao dịch đó sinh mới hoặc cộng dồn vào **một nghĩa vụ trả sau** đến hạn vào **ngày 5 kế tiếp sau ngày mua**; mua đúng ngày 5 thì tính sang tháng sau | contracts/README | Code | `credit_lines.due_day` (mặc định 5) | FR4 |
 | BR-23 | Phí dịch vụ **33.000 ₫, tính một lần cho mỗi tháng có giao dịch** bằng hạn mức. Số phải trả = tổng gốc + phí. Phí lấy từ bảng biểu phí có nguồn và ngày hiệu lực | contracts/README; db/seed/fee_schedules.sql | Code | Bảng `fee_schedules` | FR4, FR6 |
 | BR-24 | **Không bịa phí khi chưa có nguồn công khai.** Hiện chưa có phí trả chậm trong biểu phí | db/seed/fee_schedules.sql | Code; **Cần quyết** (xem C-04) | — | FR4, FR6 |
@@ -162,12 +162,12 @@ Bộ 7 hũ hiện tại có hai chỗ lẫn lộn:
 
 | ID | Quy tắc | Nguồn | Trạng thái | Tham số | FR |
 |---|---|---|---|---|---|
-| BR-35 | Kết quả **đủ / sát / hụt** do **engine tất định** quyết định. LLM chỉ viết hai câu giải thích và phương án; LLM lỗi hoặc chậm quá 2 giây thì chỉ trả thẻ số liệu | Proposal §10.2 | Thiết kế (phase 3) | — | FR6 |
-| BR-36 | Trả bằng tiền trong hũ: **xanh** là đủ; **vàng** là sát (hũ cạn sớm hơn N ngày); **đỏ** là hụt M đồng trước kỳ lương | Proposal §10.2 | Thiết kế; **N: Cần quyết** | — | FR6 |
-| BR-37 | Trả bằng tín dụng: hiện **tổng chi phí thật** = gốc + phí dịch vụ (+ phạt nếu trễ, khi có nguồn), ngày đến hạn, và hũ nào hụt tháng sau. Tỷ lệ nghĩa vụ trên thu nhập vượt ngưỡng thì thẻ đỏ kèm "không khuyến khích" | Proposal §10.2 | Thiết kế; **ngưỡng: Cần quyết** | — | FR6 |
-| BR-38 | Phương án đưa ra: hoãn, đổi hũ, chia nhỏ, trả ngay. Người dùng chọn: vẫn trả, chọn phương án, hoặc bỏ qua. Bỏ qua nhiều lần thì **giảm tần suất nhắc loại đó** | Proposal §10.2 | Thiết kế | — | FR6 |
-| BR-39 | What-if hỗ trợ ít nhất **6 loại**: mua một lần, mua trả sau, đổi thu nhập, thêm khoản định kỳ, chuyển giữa hũ, lùi mục tiêu | Proposal §5 FR5 | Thiết kế (phase 3) | — | FR5 |
-| BR-40 | Thiếu tham số (ví dụ số tiền) thì **hỏi lại đúng một câu**, trả lời xong thì chạy tiếp | Proposal §10.1 | Thiết kế | — | FR5 |
+| BR-35 | Kết quả **đủ / sát / hụt** do **engine tất định** quyết định. LLM chỉ viết hai câu giải thích và phương án; LLM lỗi hoặc chậm quá 2 giây thì chỉ trả thẻ số liệu | Proposal §10.2 | Code (phase 3) | — | FR6 |
+| BR-36 | Trả bằng tiền trong hũ: **xanh** là đủ; **vàng** là sát (hũ cạn sớm hơn N ngày); **đỏ** là hụt M đồng trước kỳ lương | Proposal §10.2 | Code (phase 3); **code định nghĩa vàng khác BR-36**: vàng khi số dư kịch bản xấu (P10) xuống dưới `affordability_tight_p10_floor_vnd` (đang = 0), không theo "cạn sớm hơn N ngày"; N: Cần quyết (C-02) | — | FR6 |
+| BR-37 | Trả bằng tín dụng: hiện **tổng chi phí thật** = gốc + phí dịch vụ (+ phạt nếu trễ, khi có nguồn), ngày đến hạn, và hũ nào hụt tháng sau. Tỷ lệ nghĩa vụ trên thu nhập vượt ngưỡng thì thẻ đỏ kèm "không khuyến khích" | Proposal §10.2 | Code (phase 3); ngưỡng đang cấu hình chưa đối chiếu với C-03 | — | FR6 |
+| BR-38 | Phương án đưa ra: hoãn, đổi hũ, chia nhỏ, trả ngay. Người dùng chọn: vẫn trả, chọn phương án, hoặc bỏ qua. Bỏ qua nhiều lần thì **giảm tần suất nhắc loại đó** | Proposal §10.2 | Code (phase 3) | — | FR6 |
+| BR-39 | What-if hỗ trợ ít nhất **6 loại**: mua một lần, mua trả sau, đổi thu nhập, thêm khoản định kỳ, chuyển giữa hũ, lùi mục tiêu | Proposal §5 FR5 | Code (phase 3): golden đủ 6 loại | — | FR5 |
+| BR-40 | Thiếu tham số (ví dụ số tiền) thì **hỏi lại đúng một câu**, trả lời xong thì chạy tiếp | Proposal §10.1 | Code (phase 3, tiêu chí 6 đạt) | — | FR5 |
 | BR-41 | Mỗi lượt what-if dùng tối đa **4 lượt gọi model** (1 router + 2 planner + 1 diễn giải) | Master-plan §2; agent defaults | Code (trần chung) | `max_model_calls_per_turn` (4) | FR5 |
 
 ### B7a. Chi phí trả sau minh bạch (đề xuất 24/11)
@@ -185,35 +185,35 @@ Căn cứ và tính toán: [11-can-bang-chi-phi-va-loi-ich.md](11-can-bang-chi-p
 
 | ID | Quy tắc | Nguồn | Trạng thái | Tham số | FR |
 |---|---|---|---|---|---|
-| BR-42 | Thứ tự ưu tiên cố định: (1) **nghĩa vụ trước**; (2) **quỹ dự phòng trước đầu tư** (*đề xuất 24/11:* "quỹ dự phòng" = hũ đệm an toàn `buffer` đã đạt mục tiêu theo BR-64; thứ tự chi tiết ở BR-65, cổng dài hạn ở BR-68); (3) không vượt khẩu vị rủi ro đã khai; (4) **không khuyên vay để tiêu** | Proposal §9 | Thiết kế (phase 3) | — | FR12 |
-| BR-43 | Câu hỏi ngoài phạm vi (mã cổ phiếu, vay ở đâu) thì **nói rõ giới hạn** và gợi ý việc làm được. Không nêu mã chứng khoán nào | Proposal §10.1 | Thiết kế (phase 3) | — | FR12 |
-| BR-44 | Gợi ý vi phạm luật thì trả về cho agent sửa **tối đa 2 lần**; hết lượt thì chỉ trả thẻ số liệu tất định (what-if) hoặc bỏ hành động vi phạm và giữ phần hợp lệ (lộ trình) | Proposal §10.1, §10.5 | Thiết kế | — | FR5, FR8, FR12 |
+| BR-42 | Thứ tự ưu tiên cố định: (1) **nghĩa vụ trước**; (2) **quỹ dự phòng trước đầu tư** (*đề xuất 24/11:* "quỹ dự phòng" = hũ đệm an toàn `buffer` đã đạt mục tiêu theo BR-64; thứ tự chi tiết ở BR-65, cổng dài hạn ở BR-68); (3) không vượt khẩu vị rủi ro đã khai; (4) **không khuyên vay để tiêu** | Proposal §9 | Code (phase 3). Lỗ hổng hũ Dự phòng (T-01) **đã vá 24/11 khuya** bằng luật `emergency_not_for_discretionary` | — | FR12 |
+| BR-43 | Câu hỏi ngoài phạm vi (mã cổ phiếu, vay ở đâu) thì **nói rõ giới hạn** và gợi ý việc làm được. Không nêu mã chứng khoán nào | Proposal §10.1 | Code (phase 3, tiêu chí 5 đạt) | — | FR12 |
+| BR-44 | Gợi ý vi phạm luật thì trả về cho agent sửa **tối đa 2 lần**; hết lượt thì chỉ trả thẻ số liệu tất định (what-if) hoặc bỏ hành động vi phạm và giữ phần hợp lệ (lộ trình) | Proposal §10.1, §10.5 | Code (phase 3, Verifier) | — | FR5, FR8, FR12 |
 | BR-45 | **Mọi thay đổi số dư cần người dùng bấm xác nhận.** Agent chỉ tạo khối đề nghị. Bấm nút thì server cấp **token dùng một lần**, gắn với người dùng và đúng tham số đã hiển thị. LLM không nằm trên đường ghi | ADR-0002 | Chốt, Code | `confirm_token_ttl_seconds` (2 phút), `confirm_offer_ttl_seconds` | FR12 |
 | BR-46 | Đề nghị chưa bấm có hạn. Hết hạn, đã làm hoặc đã hủy thì không áp dụng được; người dùng phải hỏi lại | contracts/README | Code (chưa tách mã `OFFER_EXPIRED`) | `confirm_offer_ttl_seconds` | FR12 |
 | BR-47 | Bản **xem trước** do server tính: số dư từng hũ trước và sau, số phải trả kèm phí, hạn mức còn lại. Frontend không tự tính phí hay số dư | contracts/README | Code (chưa có cho sửa hồ sơ, `save_jars`, nghĩa vụ) | — | FR1, FR4, FR12 |
 | BR-48 | **Mọi con số đến từ engine hoặc tool**; LLM không tự tính. Số trong câu chữ phải khớp kết quả tool | Proposal §4, §7 | Code (khối UI); kiểm tự động: phase 3 | — | Mọi FR |
-| BR-49 | Mỗi gợi ý có bảng **"Vì sao"**: dữ liệu đã dùng, luật đã kiểm, độ tin cậy, `trace_id`. Người dùng chỉ xem được trace của chính mình | Proposal §5 FR11 | Thiết kế (phase 3) | — | FR11 |
-| BR-50 | Có thể **hoàn tác** một lần chuyển giữa hũ vừa làm (cũng qua xác nhận) | Phase 3 tiêu chí 2 | Thiết kế | — | FR12 |
+| BR-49 | Mỗi gợi ý có bảng **"Vì sao"**: dữ liệu đã dùng, luật đã kiểm, độ tin cậy, `trace_id`. Người dùng chỉ xem được trace của chính mình | Proposal §5 FR11 | Code (phase 3, đi cảnh 2 đạt) | — | FR11 |
+| BR-50 | Có thể **hoàn tác** một lần chuyển giữa hũ vừa làm (cũng qua xác nhận) | Phase 3 tiêu chí 2 | Code (phase 3, Hoàn tác đạt trên app) | — | FR12 |
 
 ### B9. Điểm chống chịu và lộ trình (F4, F5)
 
 | ID | Quy tắc | Nguồn | Trạng thái | FR |
 |---|---|---|---|---|
-| BR-51 | Điểm chống chịu từ 0 đến 100, gồm **4 thành phần** có giải thích, tính từ hành vi thật | Proposal §5 FR7 | Thiết kế (phase 4); **4 thành phần và trọng số: Cần quyết** | FR7 |
-| BR-52 | Có **3 cú sốc mẫu**: mất việc 2 tháng, tiền trọ tăng, ốm một tuần. Mỗi cú sốc cho điểm sau sốc và **số ngày trụ được** | Proposal §4, §15 | Thiết kế; **độ lớn từng cú sốc: Cần quyết** | FR7 |
-| BR-53 | Lộ trình có **phiên bản** và lý do sinh lại. Sinh lại khi lệch dự báo kéo dài (mức mới giữ khoảng **2 tuần**), đổi mục tiêu hoặc thu nhập, hoặc người dùng yêu cầu. **Một khoản lớn đơn lẻ không làm sinh lại lộ trình** | Proposal §10.3, §10.5 | Thiết kế (phase 4) | FR8 |
-| BR-54 | Mục tiêu không khả thi: nới ràng buộc mềm (lùi hạn, giảm hũ không thiết yếu) **một lần**; vẫn không được thì nói thẳng và đưa **2 lựa chọn** | Proposal §10.5 | Thiết kế | FR8 |
-| BR-55 | Người dùng duyệt **từng bước**: chấp nhận, sửa, từ chối. Sửa một bước thì lưu phiên bản mới, không sinh lại toàn bộ. Bước nào đổi số dư thì đi qua BR-45 | Proposal §10.5 | Thiết kế | FR8 |
+| BR-51 | Điểm chống chịu từ 0 đến 100, gồm **4 thành phần** có giải thích, tính từ hành vi thật | Proposal §5 FR7 | Code (phase 4): 4 thành phần Tiết kiệm, Chi tiêu, Vay nợ, Kế hoạch; trọng số trong cấu hình engine | FR7 |
+| BR-52 | Có **3 cú sốc mẫu**: mất việc 2 tháng, tiền trọ tăng, ốm một tuần. Mỗi cú sốc cho điểm sau sốc và **số ngày trụ được** | Proposal §4, §15 | Code (phase 4): độ lớn cú sốc trong `shocks.json` | FR7 |
+| BR-53 | Lộ trình có **phiên bản** và lý do sinh lại. Sinh lại khi lệch dự báo kéo dài (mức mới giữ khoảng **2 tuần**), đổi mục tiêu hoặc thu nhập, hoặc người dùng yêu cầu. **Một khoản lớn đơn lẻ không làm sinh lại lộ trình** | Proposal §10.3, §10.5 | Code (phase 4) | FR8 |
+| BR-54 | Mục tiêu không khả thi: nới ràng buộc mềm (lùi hạn, giảm hũ không thiết yếu) **một lần**; vẫn không được thì nói thẳng và đưa **2 lựa chọn** | Proposal §10.5 | Code (phase 4, tiêu chí 4 đạt) | FR8 |
+| BR-55 | Người dùng duyệt **từng bước**: chấp nhận, sửa, từ chối. Sửa một bước thì lưu phiên bản mới, không sinh lại toàn bộ. Bước nào đổi số dư thì đi qua BR-45 | Proposal §10.5 | Code (phase 4) | FR8 |
 
 ### B10. Nạp dữ liệu, hồ sơ hành vi, nhắc chủ động (F6, F7)
 
 | ID | Quy tắc | Nguồn | Trạng thái | FR |
 |---|---|---|---|---|
-| BR-56 | Ảnh chụp thông báo và CSV là MVP; sao kê PDF là mở rộng. Ảnh mờ hoặc không phải tài liệu tài chính thì báo lỗi rõ | Proposal §5, §10.6 | Thiết kế (phase 5) | FR9 |
-| BR-57 | **Nội dung tệp chỉ là dữ liệu, không phải lệnh.** Dòng độ tin cậy thấp vào hàng chờ người dùng duyệt; không dòng nào tự gọi thao tác ghi | Proposal §10.6, §13 | Thiết kế | FR9 |
-| BR-58 | Nạp xong thì cập nhật **điểm độ phủ dữ liệu** và tính lại dự báo | Proposal §10.6 | Thiết kế | FR9 |
-| BR-59 | Bộ nhớ dài hạn lưu **sở thích, mục tiêu, mẫu hành vi**, không lưu giao dịch thô. Người dùng xem và xóa được | Proposal §7 | Thiết kế (phase 5) | FR10 |
-| BR-60 | Nhắc chủ động **tối đa một lần mỗi ngày**, chỉ khi vượt ngưỡng giá trị. Thẻ chủ động chỉ nêu **một việc**, có "Hỏi vì sao", "Để sau", "Ít nhắc loại này" | Proposal §5 FR13; phase 2 luồng D | Thẻ: Code; bản tin: Thiết kế; **ngưỡng giá trị: Cần quyết** | FR13 |
+| BR-56 | Ảnh chụp thông báo và CSV là MVP; sao kê PDF là mở rộng. Ảnh mờ hoặc không phải tài liệu tài chính thì báo lỗi rõ | Proposal §5, §10.6 | Code (phase 5): ảnh và CSV; OCR ảnh thật đủ 4 trường 7/12 | FR9 |
+| BR-57 | **Nội dung tệp chỉ là dữ liệu, không phải lệnh.** Dòng độ tin cậy thấp vào hàng chờ người dùng duyệt; không dòng nào tự gọi thao tác ghi | Proposal §10.6, §13 | Code (phase 5, đối kháng 14/14) | FR9 |
+| BR-58 | Nạp xong thì cập nhật **điểm độ phủ dữ liệu** và tính lại dự báo | Proposal §10.6 | Code (phase 5) | FR9 |
+| BR-59 | Bộ nhớ dài hạn lưu **sở thích, mục tiêu, mẫu hành vi**, không lưu giao dịch thô. Người dùng xem và xóa được | Proposal §7 | Code (phase 5, AgentCore Memory); lỗi gán lời dặn (T-04) đã sửa 24/11 khuya | FR10 |
+| BR-60 | Nhắc chủ động **tối đa một lần mỗi ngày**, chỉ khi vượt ngưỡng giá trị. Thẻ chủ động chỉ nêu **một việc**, có "Hỏi vì sao", "Để sau", "Ít nhắc loại này" | Proposal §5 FR13; phase 2 luồng D | Code (phase 5): thẻ và bản tin; **ngưỡng giá trị: Cần quyết** (C-10) | FR13 |
 
 ### B11. Tài khoản demo
 
@@ -231,7 +231,7 @@ Căn cứ và tính toán: [11-can-bang-chi-phi-va-loi-ich.md](11-can-bang-chi-p
 | C-03 | Tỷ lệ nghĩa vụ trên thu nhập bao nhiêu thì thẻ đỏ "không khuyến khích"? | BR-37 | **Căn cứ (24/11):** Việt Nam chưa có trần tỷ lệ nợ trên thu nhập cho vay tiêu dùng; Thông tư 43/2016/TT-NHNN chỉ giới hạn khoản vay tối đa 100 triệu ₫ mỗi khách ở công ty tài chính. Singapore (MAS) đặt trần tổng nghĩa vụ trả nợ **55%** thu nhập gộp và **30%** cho khoản vay mua nhà ở xã hội ([MAS](https://www.mas.gov.sg/regulation/explainers/new-housing-loans/msr-and-tdsr-rules)). Đề xuất: **vàng từ 30%, đỏ từ 40%** thu nhập thực nhận. Lý do: ngưỡng MAS tính trên thu nhập gộp và cho người vay mua nhà; người 18–30 có quỹ đệm mỏng nên cần thấp hơn 55%. Cấu hình được |
 | C-04 | Có thêm **phí trả chậm** vào biểu phí mô phỏng không? | BR-24, BR-37 | **Đã có nguồn** (cập nhật 24/11): VCCI 28/10/2026 dẫn biểu phí MoMo công bố phí trả chậm 5,25–21% dư nợ quá hạn tùy số ngày chậm, thanh toán tối thiểu 15%, dư nợ chuyển kỳ chịu phí 6,3% ([01, nguồn #20](01-boi-canh-thi-truong.md#9-nguồn)). Đề xuất thêm vào `fee_schedules` kèm nguồn, sau khi đối chiếu bậc phí theo số ngày trên trang biểu phí gốc |
 | C-05 | Ngưỡng "đủ lớn để hỏi" khi phân loại chuyển khoản cá nhân | BR-18 | Cấu hình theo tỷ lệ thu nhập, ví dụ từ 2% lương tháng |
-| C-06 | Bốn thành phần của Điểm chống chịu, trọng số, và độ lớn ba cú sốc | BR-51, BR-52 | Có thể lấy cảm hứng từ cấu trúc chi tiêu, tiết kiệm, vay, kế hoạch (không dùng tên FinHealth). Cần chốt trước phase 4 |
+| C-06 | Bốn thành phần của Điểm chống chịu, trọng số, và độ lớn ba cú sốc **[24/11: kỹ thuật đã làm ở phase 4 với Tiết kiệm, Chi tiêu, Vay nợ, Kế hoạch; BA chỉ cần duyệt lại]** | BR-51, BR-52 | Có thể lấy cảm hứng từ cấu trúc chi tiêu, tiết kiệm, vay, kế hoạch (không dùng tên FinHealth). Cần chốt trước phase 4 |
 | C-07 | Tài khoản không có hũ loại nghĩa vụ (như `lan`) thì mốc trả sau hiện ở đâu? | BR-22, FR4 | Hiện trên dòng thời gian tổng quan; hoặc gợi ý tạo hũ Nghĩa vụ |
 | C-08 | Nhãn "do AI tạo" đặt ở đâu và viết thế nào | BC-05 | Dòng nhỏ dưới mỗi câu trả lời của trợ lý, cộng một dòng trong màn Giới thiệu |
 | C-09 | Công bố việc model xử lý dữ liệu ngoài Singapore | BC-06 | Một dòng trong màn quyền riêng tư; bản demo chỉ dùng dữ liệu tổng hợp |

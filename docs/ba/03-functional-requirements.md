@@ -1,27 +1,27 @@
 # Yêu cầu chức năng (FR)
 
 > Bản nháp để chủ dự án duyệt, tổng hợp ngày 22/11/2026. FR1–FR15 giữ đúng mã và phạm vi của proposal §5. File này viết chi tiết thêm phần proposal chỉ có một dòng: người dùng, luồng chính, ngoại lệ, quy tắc áp dụng ([BR](02-business-rules.md)), tiêu chí nghiệm thu ([AC](05-acceptance-criteria.md)).
-> Trạng thái thực hiện lấy theo [HANDOFF](../../HANDOFF.md) ngày 22/11/2026.
+> Trạng thái thực hiện lấy theo [HANDOFF](../../HANDOFF.md) và kết quả các phase, **cập nhật 24/11/2026 tối** (phase 5 đã deploy, chưa đóng). Bảng điều khiển tiến độ: [13-tien-do-technical.md](13-tien-do-technical.md).
 
 ## Tổng quan
 
 | FR | Tên | Tính năng | Mức | Phase | Trạng thái thực hiện |
 |---|---|---|---|---|---|
-| FR1 | Hồ sơ, hũ và sổ cái | nền | MVP | 1–2 | Code xong, đã deploy, chờ nghiệm thu phase 2 |
-| FR2 | Phân hũ tự động | nền | MVP | 2 (bước 0), 4 | Mới có bước 0 (theo loại giao dịch) |
-| FR3 | Dự báo theo hũ | F1 | MVP | 2 | Code xong, đã deploy, chờ nghiệm thu |
-| FR4 | Quản lý nghĩa vụ | nền, F1, F3 | MVP | 2 | Code xong, chờ nghiệm thu (C-07) |
-| FR5 | What-if hội thoại | F2 | MVP | 3 | Chưa làm |
-| FR6 | Kiểm tra trước khi quẹt | F3 | MVP | 3 | Chưa làm |
-| FR7 | Điểm chống chịu | F4 | MVP | 4 | Chưa làm |
-| FR8 | Lộ trình thích ứng | F5 | MVP | 4 | Chưa làm |
-| FR9 | Nạp dữ liệu ngoài ví | F6 | MVP một phần | 5 | Chưa làm |
-| FR10 | Hồ sơ hành vi và bộ nhớ | F7 | MVP | 5 | Chưa làm |
-| FR11 | Bảng "Vì sao" | xuyên suốt | MVP | 3, 5 | Chưa làm |
-| FR12 | Suitability và xác nhận | xuyên suốt | MVP | 1 (xác nhận), 3 (suitability) | Xác nhận: Code xong. Suitability: chưa làm |
-| FR13 | Bản tin chủ động | F7 | Mở rộng | 5 | Thẻ chủ động đã có; bản tin chưa làm |
-| FR14 | Cảnh báo khoản chuyển lệch thói quen | phụ | Mở rộng | 5 (nếu kịp) | Chưa làm |
-| FR15 | Bảng vận hành cho đội sản phẩm | vận hành | Mở rộng | 5 | Chưa làm |
+| FR1 | Hồ sơ, hũ và sổ cái | nền | MVP | 1–2 | ✅ Đạt (đóng phase 2, 22/11). Cơ cấu hũ mới (BR-63 đến 73) chưa code |
+| FR2 | Phân hũ tự động | nền | MVP | 2 (bước 0), 4 | ◐ Đủ 4 bước (phase 4, đóng 24/11): đúng 92%; **phải hỏi 17,4%**, chưa đạt < 10% |
+| FR3 | Dự báo theo hũ | F1 | MVP | 2 | ✅ Đạt (phase 2); backtest đạt NFR-10, 11 |
+| FR4 | Quản lý nghĩa vụ | nền, F1, F3 | MVP | 2 | ✅ Đạt (phase 2); C-07 chưa chốt |
+| FR5 | What-if hội thoại | F2 | MVP | 3 | ✅ Đạt (phase 3, đóng 23/11): golden 30/30; p95 28 giây chưa đạt NFR-03 |
+| FR6 | Kiểm tra trước khi quẹt | F3 | MVP | 3 | ◐ Chạy (phase 3): p95 282 ms; **dải "sát" hẹp và định nghĩa khác BR-36** (C-02) |
+| FR7 | Điểm chống chịu | F4 | MVP | 4 | ✅ Đạt (phase 4, đóng 24/11) |
+| FR8 | Lộ trình thích ứng | F5 | MVP | 4 | ✅ Đạt (phase 4); lập trong chat 20–26 giây |
+| FR9 | Nạp dữ liệu ngoài ví | F6 | MVP một phần | 5 | ◐ Đã deploy (phase 5, chưa đóng): CSV 50/50; OCR ảnh thật 9/11 (v25), chốt ở lượt RC |
+| FR10 | Hồ sơ hành vi và bộ nhớ | F7 | MVP | 5 | ◐ Đã deploy (phase 5): hồ sơ hành vi đạt; bộ nhớ đã sửa gốc (25/11), chờ đóng phase 5 |
+| FR11 | Bảng "Vì sao" | xuyên suốt | MVP | 3, 5 | ✅ Đạt (phase 3); trace mở qua REST (phase 5) |
+| FR12 | Suitability và xác nhận | xuyên suốt | MVP | 1 (xác nhận), 3 (suitability) | ✅ Xác nhận: Đạt (phase 1). Suitability: Đạt đối kháng (phase 3–5); lỗ hổng hũ Dự phòng đã vá bằng luật thứ bảy (25/11) |
+| FR13 | Bản tin chủ động | F7 | Mở rộng | 5 | ◐ Đã deploy (phase 5): thẻ và bản tin; chờ kiểm trên app |
+| FR14 | Cảnh báo khoản chuyển lệch thói quen | phụ | Mở rộng | 5 (nếu kịp) | ⏳ Chưa làm (phase 5 ghi "nếu kịp", nằm trong thứ tự cắt) |
+| FR15 | Bảng vận hành cho đội sản phẩm | vận hành | Mở rộng | 5 | ◐ Đã deploy (phase 5): trace qua REST đạt; Transaction Search chưa bật |
 
 **Vai trò:**
 - **Người dùng**: người 18–30 tuổi đang ở giai đoạn có thu nhập đều đặn đầu tiên, có dùng trả sau (BC-13), chia ba giai đoạn: sinh viên đi làm thêm, mới đi làm, đi làm ổn định. Persona chính là Minh, 22 tuổi, 9 triệu/tháng, giai đoạn mới đi làm.

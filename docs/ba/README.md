@@ -16,6 +16,7 @@ Tài liệu nghiệp vụ của Yofina Foresight, bắt đầu soạn ngày 22/1
 | [10-tac-dong-stakeholder.md](10-tac-dong-stakeholder.md) | Tác động tích cực và tiêu cực lên 6 stakeholder đã chốt (proposal §3), bản đồ ảnh hưởng, ma trận tính năng × stakeholder, xung đột lợi ích, chuỗi tác động | S1–S6, X1–X5, F-xx |
 | [11-can-bang-chi-phi-va-loi-ich.md](11-can-bang-chi-phi-va-loi-ich.md) | Pain point chi phí trả sau quy ra mỗi năm; bên cho vay lời từ đâu; 6 đòn bẩy G1–G6 giúp người dùng đỡ tốn mà MoMo và ngân hàng không thiệt; điểm hòa vốn của bên cho vay; BR-74 đến 76 | G1–G6, G-xx |
 | [12-tong-hop-va-viec-can-chot.md](12-tong-hop-va-viec-can-chot.md) | Tổng hợp kết luận của 01–11 và mọi câu hỏi đang mở, xếp theo thời điểm cần chốt (demo, slide, pilot, phase 4–5, kiểm trong app) | C-, D-, E-, F-, G-, H-, I-xx |
+| [13-tien-do-technical.md](13-tien-do-technical.md) | Bảng điều khiển tiến độ technical: trạng thái FR1–FR15, kịch bản demo, số đo hiện có, việc BA cần báo lại cho technical (T-01 đến T-07), cách cập nhật | T-xx |
 
 **Chuỗi truy vết:** pain point (P) → khoảng trống (G) → FR → BR → AC → tiêu chí trong file phase → test.
 

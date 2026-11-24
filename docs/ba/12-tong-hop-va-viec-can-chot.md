@@ -18,6 +18,8 @@
 | 10 | Chi phí người trẻ và lợi ích đối tác | Phí cố định 33.000 ₫/tháng tương đương khoảng 40–79%/năm trên dư nợ nhỏ. 6 đòn bẩy G1–G6. Bên cho vay có lời ròng nếu từ khoảng 1,9% ca trễ bị mất gốc, hoặc ngay lập tức nếu có G3 (chuyển trả góp) | [11](11-can-bang-chi-phi-va-loi-ich.md) |
 | 11 | CSKH và AI thay nhân lực | Tiết kiệm CSKH dễ chứng minh nhưng nhỏ (khoảng 10% phí nền), dùng làm bằng chứng sớm. **Không** tính cắt nhân sự vào ROI. Chuyển nhân viên sang vai trò "hỗ trợ trước hạn" | [06 mục 4.3c, 4.3d](06-mo-hinh-kinh-doanh.md#43-roi) |
 
+**Tiến độ bên technical** (đã đối chiếu 24/11 tối): [13-tien-do-technical.md](13-tien-do-technical.md). Mục 4 của file đó có 7 việc BA cần báo lại (T-01 đến T-07). Hai việc chốt sẽ gỡ được lỗi đang chạy: **C-02** (gỡ T-02) và **C-05** (gỡ T-03).
+
 ## 2. Việc cần chốt, xếp theo thời điểm
 
 Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Đối tác (cần số liệu từ bên ngoài).

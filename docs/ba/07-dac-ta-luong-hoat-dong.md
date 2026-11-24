@@ -91,15 +91,15 @@ flowchart LR
 | L07 | Lương về và chia lương | A | Đang chạy | FR1 |
 | L08 | Mua bằng trả sau, sinh nghĩa vụ | A | Đang chạy | FR4 |
 | L09 | Tính lại dự báo sau giao dịch (sự kiện) | C | Đang chạy | FR3 |
-| L10 | Batch đêm | C | Đang chạy (hiện chỉ dự báo) | FR3 |
+| L10 | Batch đêm | C | Đang chạy: dự báo, hồ sơ hành vi, điểm gãy và sinh lại lộ trình, bản tin | FR3, FR8, FR10, FR13 |
 | L11 | Suy giảm khi AI lỗi hoặc chạm trần | B | Đang chạy | NFR-15 |
 | L12 | Đặt lại dữ liệu demo | A | Đang chạy | — |
-| L13 | Hỏi "nếu thì" (harness đầy đủ, có Verifier) | B | Thiết kế (phase 3) | FR5 |
-| L14 | Kiểm tra trước khi quẹt | A, B | Thiết kế (phase 3) | FR6 |
-| L15 | Phân hũ tự động và hỏi gộp | C | Thiết kế (phase 4) | FR2 |
-| L16 | Sinh và sinh lại lộ trình | B, C | Thiết kế (phase 4) | FR8 |
-| L17 | Nạp ảnh và CSV | A, C | Thiết kế (phase 5) | FR9 |
-| L18 | Nhắc chủ động và bản tin | C | Thẻ đang chạy; bản tin: Thiết kế (phase 5) | FR13 |
+| L13 | Hỏi "nếu thì" (harness đầy đủ, có Verifier) | B | Đang chạy (phase 3, đóng 23/11) | FR5 |
+| L14 | Kiểm tra trước khi quẹt | A, B | Đang chạy (phase 3); dải "sát" hẹp (C-02) | FR6 |
+| L15 | Phân hũ tự động và hỏi gộp | C | Đang chạy (phase 4, đóng 24/11) | FR2 |
+| L16 | Sinh và sinh lại lộ trình | B, C | Đang chạy (phase 4); lập được trong chat | FR8 |
+| L17 | Nạp ảnh và CSV | A, C | Đã deploy (phase 5, chưa đóng); có quy đổi ngoại tệ | FR9 |
+| L18 | Nhắc chủ động và bản tin | C | Đã deploy (phase 5, chưa đóng) | FR13 |
 | L19 | **Chia tiền dư theo thứ tự ưu tiên, trích quỹ dồn, theo dõi hũ đệm** | A, C | Đề xuất 24/11 | FR3, FR7, FR8 |
 | L20 | **Gợi ý chuyển giai đoạn sống** | C → A | Đề xuất 24/11 | FR8 |
 
@@ -414,7 +414,7 @@ flowchart TD
 3. Ngày mô phỏng quay về ngày neo 21/11/2026; dự báo được tính đồng bộ ngay.
 4. Mất khoảng 6 giây. Trả `forecast_ready: true` để mở app là có số.
 
-## 4. Các luồng thiết kế (phase 3–5)
+## 4. Các luồng phase 3–5 (viết lúc còn là thiết kế; nay đã chạy, xem trạng thái ở mục 2)
 
 ### L13 — Hỏi "nếu thì" (harness đầy đủ)
 

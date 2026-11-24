@@ -124,16 +124,16 @@ Nhóm quyết định **không xét VNPAY là đối thủ**: VNPAY mạnh ở c
 - ✗ không thấy trên các trang chính thức đã đọc.
 - ? không đọc được trang.
 
-**Cột Yofina:** "Đã chạy" là đã có trên bản deploy; "Phase n" là sẽ làm ở phase đó.
+**Cột Yofina** (cập nhật 24/11 tối): "Đã chạy" là đã có trên bản deploy. Chi tiết và lỗi còn lại ở [13-tien-do-technical.md](13-tien-do-technical.md).
 
 | Tiêu chí | MoMo | ZaloPay | ShopeePay | Viettel Money | **Yofina** |
 |---|---|---|---|---|---|
 | **A. Nhìn lại** | | | | | |
 | Lịch sử theo danh mục, báo cáo | ✅ | ✅ | ✗ | ✗ | ✅ Đã chạy |
-| Tự phân loại | ✅ | ✗ | ✗ | ✗ | ◐ Bước 0 đã chạy; đủ 4 bước ở phase 4 |
+| Tự phân loại | ✅ | ✗ | ✗ | ✗ | ✅ Đã chạy đủ 4 bước (đúng 92%) |
 | Ngân sách và cảnh báo vượt | ✅ | ◐ Tự đặt mốc | ✗ | ◐ Chỉ nêu tên | Không làm. Thay bằng dự báo ngày cạn |
 | Chatbot AI về chi tiêu | ✅ Hỏi, ghi chép, thanh toán hóa đơn | ✗ | ✗ | ◐ Chỉ cho tiết kiệm | ✅ Đã chạy (số dư, giao dịch, dự báo) |
-| Ghi giao dịch ngoài ví | ✅ Nhập tay hoặc qua chat | ✗ | ✗ | ✗ | Phase 5: ảnh và CSV, chống trùng |
+| Ghi giao dịch ngoài ví | ✅ Nhập tay hoặc qua chat | ✗ | ✗ | ✗ | ✅ Đã chạy: ảnh và CSV, chống trùng (OCR ảnh thật còn yếu) |
 | **B. Hũ và lương** | | | | | |
 | Chia lương | ◐ Máy tính gợi ý, "không lưu lại" | ✗ | ✗ | ✗ | ✅ Chia thật một chạm khi lương về |
 | Hũ có số dư riêng | ✗ (có sản phẩm tiết kiệm riêng) | ✗ | ✗ | ✗ | ✅ |
@@ -141,15 +141,15 @@ Nhóm quyết định **không xét VNPAY là đối thủ**: VNPAY mạnh ở c
 | **C. Nhìn trước** | | | | | |
 | Dự báo ngày tiền cạn | ✗ ("Dự phóng" chỉ cho đầu tư) | ✗ | ✗ | ✗ | ✅ Đã chạy |
 | Nghĩa vụ nằm trong kế hoạch chi | ✗ | ✗ | ✗ | ✗ | ✅ Đã chạy |
-| Trước khi mua: tổng chi phí thật và ảnh hưởng tới các hũ | ◐ Mô phỏng trả góp (chỉ phí) | ◐ Xem dư nợ, phí sau khi phát sinh | ✗ (điều khoản giao cho người dùng tự cân nhắc) | ◐ Ví dụ phí trên trang | Phase 3. Phần xem trước gồm phí đã chạy |
-| Hỏi "nếu thì" | ✗ | ✗ | ✗ | ✗ | Phase 3 |
-| Cú sốc, điểm chống chịu | ✗ | ✗ | ✗ | ✗ | Phase 4 |
-| Lộ trình tự sửa | ◐ Chatbot giúp đặt mục tiêu | ✗ | ✗ | ◐ Chỉ nêu "đặt mục tiêu" | Phase 4 |
+| Trước khi mua: tổng chi phí thật và ảnh hưởng tới các hũ | ◐ Mô phỏng trả góp (chỉ phí) | ◐ Xem dư nợ, phí sau khi phát sinh | ✗ (điều khoản giao cho người dùng tự cân nhắc) | ◐ Ví dụ phí trên trang | ✅ Đã chạy |
+| Hỏi "nếu thì" | ✗ | ✗ | ✗ | ✗ | ✅ Đã chạy |
+| Cú sốc, điểm chống chịu | ✗ | ✗ | ✗ | ✗ | ✅ Đã chạy |
+| Lộ trình tự sửa | ◐ Chatbot giúp đặt mục tiêu | ✗ | ✗ | ◐ Chỉ nêu "đặt mục tiêu" | ✅ Đã chạy |
 | **D. Trả sau** | | | | | |
 | Có sản phẩm trả sau | ✅ đến 20 triệu | ✅ đến 30 triệu | ✅ đến 50 triệu | ✅ 2 triệu | ◐ Mô phỏng |
 | Nhắc hạn | ✅ trước 5 ngày | ✅ thông báo dư nợ | ✅ + tự động trả | ✅ hằng tháng | ✅ trước 3 ngày, gắn với số dư hũ |
 | **E. Minh bạch và an toàn của AI** | | | | | |
-| Giải thích vì sao có gợi ý | ◐ Lý do của quy tắc chia | ✗ | ✗ | ✗ | Phase 3: bảng "Vì sao" |
+| Giải thích vì sao có gợi ý | ◐ Lý do của quy tắc chia | ✗ | ✗ | ✗ | ✅ Đã chạy: bảng "Vì sao" và trace |
 | Bước xác nhận trước khi AI làm việc liên quan tới tiền | ✗ (trang không mô tả, dù chatbot thanh toán được hóa đơn) | — | — | — | ✅ Token dùng một lần (đã chạy) |
 | Miễn trừ, nhãn AI | ◐ "không mang tính tư vấn đầu tư" | ✗ | ✗ | ✗ | Đề xuất BC-05 |
 | **F. Thế mạnh mà Yofina không có** | | | | | |
