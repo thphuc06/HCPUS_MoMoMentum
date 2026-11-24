@@ -1,0 +1,23 @@
+{
+  "_ghi_chu": "Cấu hình bộ nhớ phía Lambda ledger (REST /memory*, xóa dữ liệu, quiet_hours cho bản tin). Ghi đè bằng biến môi trường YOFINA_<TÊN> (chữ hoa). day_parts: khung giờ theo giờ địa phương (app_timezone), [bắt đầu, kết thúc) theo giờ, có thể vắt qua nửa đêm; khóa là chữ đã bỏ dấu.",
+  "memory_list_max_pages": 50,
+  "memory_delete_batch_size": 100,
+  "memory_events_max_sessions": 200,
+  "privacy_deletion_lease_seconds": 120,
+  "privacy_s3_delete_batch_size": 1000,
+  "quiet_hours_max_records": 100,
+  "day_parts": {
+    "sang som": [5, 8],
+    "buoi sang": [5, 11],
+    "moi sang": [5, 11],
+    "buoi trua": [11, 13],
+    "gio trua": [11, 13],
+    "buoi chieu": [13, 18],
+    "buoi toi": [18, 22],
+    "moi toi": [18, 22],
+    "ban dem": [22, 5],
+    "dem khuya": [22, 5],
+    "khuya": [22, 5],
+    "nua dem": [0, 5]
+  }
+}
