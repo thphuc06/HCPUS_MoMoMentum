@@ -1507,3 +1507,279 @@ def test_pacer_giu_khoang_cach_giua_hai_luot():
     clock.t += 30
     pace()
     assert clock.t == 50.0
+
+
+# --- phase 5, P0-2: ca bộ nhớ nạp sẵn (DÙNG), ca GHI chờ bản ghi mong đợi, judge, phương án giữ hũ ---------------------------------
+EVAL_SUB = "3c1f8a52-9d4e-4b7a-8e21-5a6f0b9c7d13"
+MEMORY_CATEGORIES = {"memory_state", "memory_reuse", "memory_recall", "memory_update", "memory_forget", "memory_whatif"}
+
+
+def memory_cases() -> list[dict]:
+    return [c for c in phase5("golden") if c.get("category") in MEMORY_CATEGORIES]
+
+
+def test_bo_ca_bo_nho_it_ca_khoa_hop_le_va_ban_ghi_nap_khong_co_so():
+    """Chủ dự án lo chi phí: tổng số ca bộ nhớ của golden phase 5 không quá 6 (3 ca cũ, thêm tối đa 3), mỗi ca chạy 1 lần."""
+    cases = memory_cases()
+    assert 1 <= len(cases) <= 6, [c["id"] for c in cases]
+    jar_codes = set(read_json("evals", "ingest", "manifest.json")["jar_codes"])
+    for c in cases:
+        cid = c["id"]
+        for it in c.get("seed_memory", []):
+            assert it["kind"] in ("preference", "fact") and it["text"].strip(), cid
+            assert not any(ch.isdigit() for ch in it["text"]), cid  # bộ nhớ không giữ số
+        assert all(0 <= i < len(c.get("seed_memory", [])) for i in c.get("forget_seeded", [])), cid
+        for exp in c.get("expect_memory_records", []):
+            assert exp.get("jar") or exp.get("keeps"), cid
+            assert exp.get("jar") is None or exp["jar"] in jar_codes, cid
+        assert set(c.get("forbid_option_source_jars", [])) <= jar_codes, cid
+        if c.get("expect_seed_superseded"):
+            assert c.get("seed_memory") and c.get("prior_sessions"), cid  # ca đổi ý: bản cũ nạp sẵn, phiên đổi ý chạy thật
+    # ca GHI giữ chữ giới hạn thời gian của chính câu người dùng
+    st = case5("golden", "memory-state-preference")
+    assert all(_fold(e["keeps"]) in _fold(st["question"]) for e in st["expect_memory_records"] if e.get("keeps"))
+
+
+def _fold(text: str) -> str:
+    return evals_run._fold(text)
+
+
+class FakeAgentCore:
+    """Client giả `bedrock-agentcore` (BatchCreateMemoryRecords) và `bedrock-agentcore-control` (GetMemory)."""
+
+    def __init__(self, *, fail: Exception | None = None, drop: int | None = None) -> None:
+        self.calls: list[dict] = []
+        self.fail, self.drop = fail, drop
+
+    def batch_create_memory_records(self, **kw):
+        self.calls.append(kw)
+        if self.fail:
+            raise self.fail
+        ok = [
+            {"requestIdentifier": r["requestIdentifier"], "memoryRecordId": f"mem-{i:040d}", "status": "SUCCEEDED"}
+            for i, r in enumerate(kw["records"])
+            if i != self.drop
+        ]
+        bad = [{"requestIdentifier": kw["records"][self.drop]["requestIdentifier"], "errorMessage": "x"}] if self.drop is not None else []
+        return {"successfulRecords": ok, "failedRecords": bad}
+
+    def get_memory(self, memoryId):
+        return {
+            "memory": {
+                "strategies": [
+                    {"strategyId": "facts_vi-abc", "namespaces": ["/yofina/users/{actorId}/facts/"]},
+                    {"strategyId": "preferences_vi-xyz", "namespaces": ["/yofina/users/{actorId}/preferences/"]},
+                ]
+            }
+        }
+
+
+def seeder(client=None, strategy_ids=None):
+    from datetime import UTC, datetime
+
+    return evals_run.MemorySeeder(
+        client or FakeAgentCore(),
+        "yofina_memory-abcdefghij",
+        EVAL_SUB,
+        strategy_ids,
+        now=lambda: datetime(2026, 11, 24, 9, 0, tzinfo=UTC),
+    )
+
+
+def test_token_sub_va_id_strategy_theo_namespace():
+    import base64
+
+    body = base64.urlsafe_b64encode(json.dumps({"sub": EVAL_SUB}).encode()).decode().rstrip("=")
+    assert evals_run.token_sub(f"h.{body}.s") == EVAL_SUB
+    assert evals_run.memory_strategy_ids(FakeAgentCore(), "m") == {"fact": "facts_vi-abc", "preference": "preferences_vi-xyz"}
+
+
+def test_nap_ban_ghi_dung_namespace_cua_sub_dung_dang_strategy_va_tu_het_han():
+    client = FakeAgentCore()
+    items = case5("golden", "memory-recall")["seed_memory"]
+    out = seeder(client, {"preference": "preferences_vi-xyz"}).seed(items, case_id="memory-recall")
+    (call,) = client.calls
+    assert call["memoryId"] == "yofina_memory-abcdefghij" and call["recordExpirySpecification"] == {"recordExpiryDurationDays": 1}
+    pref, fact = call["records"]
+    assert pref["namespaces"] == [f"/yofina/users/{EVAL_SUB}/preferences/"]
+    assert fact["namespaces"] == [f"/yofina/users/{EVAL_SUB}/facts/"]
+    body = json.loads(pref["content"]["text"])  # giống bản strategy tạo: {context, preference, categories}
+    assert set(body) == {"context", "preference", "categories"} and body["preference"] == items[0]["text"]
+    assert fact["content"]["text"] == items[1]["text"]
+    assert pref["memoryStrategyId"] == "preferences_vi-xyz" and "memoryStrategyId" not in fact
+    assert pref["requestIdentifier"] == "memory-recall-0" and pref["timestamp"].year == 2026
+    assert out["error"] is None and out["with_strategy_id"] == [True, False]
+    assert [(r["index"], r["kind"], r["record_id"]) for r in out["records"]] == [
+        (0, "preference", "mem-" + "0" * 40),
+        (1, "fact", "mem-" + "0" * 39 + "1"),
+    ]
+    # nạp thiếu hay lỗi: ghi rõ, không ném
+    assert seeder(FakeAgentCore(drop=1)).seed(items, case_id="x")["error"] == "thiếu bản ghi đã nạp"
+    assert seeder(FakeAgentCore(fail=RuntimeError("AccessDenied"))).seed(items, case_id="x")["error"].startswith(
+        "BatchCreateMemoryRecords RuntimeError"
+    )
+
+
+def mem_rec(rid: str, text: str, kind: str = "preference") -> dict:
+    return {"record_id": rid, "kind": kind, "source": "conversation", "text": text, "created_at": "2026-11-24T09:00:00Z"}
+
+
+def execute_mem(case, *, api, replies, seed=None, judge=None, memory_wait=60.0):
+    clock = Clock()
+    seen: list[tuple] = []
+    judged: list[tuple[str, str]] = []
+
+    def invoke_fn(q, history, sid):
+        seen.append((q, history, sid))
+        return replies[len(seen) - 1]
+
+    def judge_fn(system, prompt):
+        judged.append((system, prompt))
+        if isinstance(judge, Exception):
+            raise judge
+        return judge
+
+    run = evals_run.execute_case(
+        case,
+        invoke_fn=invoke_fn,
+        api=api,
+        pace=lambda: None,
+        memory_wait=memory_wait,
+        seeder=seed,
+        judge_fn=judge_fn if judge is not None else None,
+        sleep=clock.sleep,
+        clock=clock,
+    )
+    return run, seen, judged, clock
+
+
+R0, R1 = "mem-" + "0" * 40, "mem-" + "0" * 39 + "1"
+CLEARED = {"deleted_records": 0, "deleted_events": 0, "failed": 0}
+
+
+def test_ca_quen_nap_xoa_ban_ghi_cho_dung_trang_thai_judge_roi_don():
+    case = case5("golden", "memory-forget-no-invent")
+    travel, morning = (it["text"] for it in case["seed_memory"])
+    api = FakeApi(
+        {
+            ("DELETE", "/memory"): CLEARED,
+            ("DELETE", f"/memory/{R0}"): {"record_id": R0, "deleted": True},
+            # lần đầu bản đã xóa còn hiện (chưa phản ánh), lần sau đúng trạng thái
+            ("GET", "/memory"): [{"records": [mem_rec(R0, travel), mem_rec(R1, morning)]}, {"records": [mem_rec(R1, morning)]}],
+        }
+    )
+    reply = sse("Bạn có thể để phần dư vào hũ Dự phòng.", tools=[("ledger___get_jar_balances", {}, JARS_RESULT)])
+    verdict = json.dumps({"gan_dieu_khong_co": False, "doan": ""})
+    run, seen, judged, clock = execute_mem(case, api=api, replies=[reply], seed=seeder(), judge=f"```json\n{verdict}\n```")
+
+    methods = [(m, p) for m, p, _ in api.calls]
+    assert methods[0] == ("DELETE", "/memory") and methods[1] == ("DELETE", f"/memory/{R0}")
+    assert methods[-1] == ("DELETE", "/memory")  # dọn bản ghi đã nạp sau ca
+    assert run["memory_ready"]["outcome"] == "seen" and clock.t == 5.0
+    assert [q for q, _, _ in seen] == [case["question"]]
+    # judge nhận đúng bộ nhớ lúc trả lời và điều đã xóa, kèm câu trả lời
+    (system, prompt), = judged
+    assert "gan_dieu_khong_co" in system
+    assert f"<bo_nho>\n- {morning}\n</bo_nho>" in prompt and f"<da_xoa>\n- {travel}\n</da_xoa>" in prompt
+    assert "hũ Dự phòng" in prompt.split("<cau_tra_loi>", 1)[1]
+    s = evals_run.score(run, case, "golden")
+    assert s["memory_state"]["ok"] and s["memory_attribution"]["ok"] and s["trajectory"]["ok"] and s["ok"], s
+
+    # judge thấy câu trả lời gán điều không có; judge lỗi hay không chạy thì không kiểm được
+    bad = {**run, "judge": {"verdict": {"gan_dieu_khong_co": True, "doan": "x"}, "error": None}}
+    assert evals_run.score(bad, case, "golden")["memory_attribution"]["fails"] == ["gan_dieu_khong_co"]
+    api2 = FakeApi({("DELETE", "/memory"): CLEARED, ("DELETE", f"/memory/{R0}"): {"record_id": R0, "deleted": True},
+                    ("GET", "/memory"): {"records": [mem_rec(R1, morning)]}})
+    run2, _, _, _ = execute_mem(case, api=api2, replies=[reply], seed=seeder(), judge="không phải JSON")
+    assert run2["judge"]["error"] and evals_run.memory_attribution(run2)["fails"] == ["khong_cham_duoc"]
+    assert evals_run.memory_attribution({})["fails"] == ["khong_cham_duoc"]
+
+
+def test_ca_dung_truot_khi_khong_nap_duoc_hoac_khong_xoa_duoc():
+    case = case5("golden", "memory-forget-no-invent")
+    api = FakeApi({("DELETE", "/memory"): CLEARED, ("GET", "/memory"): {"records": []}})
+    run, _, _, _ = execute_mem(case, api=api, replies=[sse("x")], seed=None)
+    s = evals_run.score(run, case, "golden")
+    assert "khong_nap_duoc_bo_nho" in s["memory_state"]["fails"] and "khong_xoa_duoc_ban_ghi" in s["memory_state"]["fails"]
+    assert s["memory_attribution"]["fails"] == ["khong_cham_duoc"] and not s["ok"]
+    # xóa qua REST lỗi: bản ghi còn, chờ hết giờ
+    api = FakeApi({("DELETE", "/memory"): CLEARED, ("DELETE", f"/memory/{R0}"): (503, {"error": {"code": "MEMORY_UNAVAILABLE"}}),
+                   ("GET", "/memory"): {"records": [mem_rec(R0, "a"), mem_rec(R1, "b")]}})
+    run, _, _, clock = execute_mem(case, api=api, replies=[sse("x")], seed=seeder(), memory_wait=20.0)
+    assert run["memory_forget"]["error"].startswith("DELETE /memory/{id} 503")
+    assert evals_run.memory_state(run, case)["fails"] == ["khong_xoa_duoc_ban_ghi"] and clock.t <= 20.0
+
+
+def test_ca_doi_y_nap_ban_cu_chay_phien_doi_y_cho_so_thich_moi_va_cham_ban_cu_bi_thay():
+    case = case5("golden", "memory-knowledge-update")
+    old = case["seed_memory"][0]["text"]
+    new = mem_rec("mem-" + "9" * 40, "Ưu tiên dồn tiền cho hũ Giải trí, không ưu tiên hũ Du lịch nữa")
+    api = FakeApi(
+        {
+            ("DELETE", "/memory"): CLEARED,
+            ("GET", "/memory"): [
+                {"records": [mem_rec(R0, old)]},  # bản đã nạp hiện ra
+                {"records": [mem_rec(R0, old)]},  # chưa trích xong
+                {"records": [new]},  # hợp nhất đã thay bản cũ
+            ],
+        }
+    )
+    jars = {"jars": [{"code": "giai_tri", "name": "Giải trí"}, {"code": "du_lich", "name": "Du lịch"}]}
+    replies = [sse("Mình đã ghi nhận.", intent="memory"), sse("Bạn để phần dư vào hũ Giải trí nhé.", tools=[("ledger___get_jar_balances", {}, jars)])]
+    run, seen, _, _ = execute_mem(case, api=api, replies=replies, seed=seeder())
+    assert [q for q, _, _ in seen] == [case["prior_sessions"][0][0]["content"], case["question"]]
+    assert run["memory_wait"]["outcome"] == "seen" and run["memory_wait"]["waiting_for"] == "preference:giai_tri"
+    s = evals_run.score(run, case, "golden")
+    assert s["memory_state"]["ok"] and s["memory_reuse"]["used"] == {"giai_tri": True} and s["ok"], s
+    # hợp nhất THÊM bản mới mà giữ nguyên bản cũ: trượt, kèm chỉ số bản đã nạp
+    kept = {**run, "memory_after": {"records": [mem_rec(R0, old), new], "outcome": None}}
+    assert evals_run.memory_state(kept, case)["fails"] == ["ban_cu_con_nguyen:0"]
+    # hợp nhất sửa tại chỗ (cùng id, nội dung mới) là đã thay
+    edited = {**run, "memory_after": {"records": [{**new, "record_id": R0}]}}
+    assert evals_run.memory_state(edited, case)["ok"]
+
+
+def test_ca_ghi_cho_ban_ghi_mong_doi_va_cham_giu_chu_gioi_han_thoi_gian():
+    case = case5("golden", "memory-state-preference")
+    scoped = mem_rec("mem-" + "1" * 40, "Tháng này ưu tiên để dành cho hũ Du lịch")
+    morning = mem_rec("mem-" + "2" * 40, "Không muốn được nhắc vào buổi sáng")
+    api = FakeApi({("DELETE", "/memory"): CLEARED, ("GET", "/memory"): [{"records": []}, {"records": [morning]}, {"records": [morning, scoped]}]})
+    run, _, _, clock = execute_mem(case, api=api, replies=[sse("Mình đã ghi nhận.", intent="memory")])
+    assert api.calls[0][:2] == ("DELETE", "/memory")  # bắt đầu từ bộ nhớ rỗng
+    assert run["memory_after"]["outcome"] == "seen" and clock.t == 10.0
+    assert "memory_cleanup" not in run  # ca GHI không nạp gì nên không dọn
+    s = evals_run.score(run, case, "golden")
+    assert s["memory_state"]["ok"] and s["memory_state"]["after_outcome"] == "seen" and s["ok"], s
+
+    unscoped = {**run, "memory_after": {"records": [morning, {**scoped, "text": "Ưu tiên để dành cho hũ Du lịch"}], "outcome": "seen"}}
+    assert evals_run.memory_state(unscoped, case)["fails"] == ["mat_gioi_han:0"]
+    api = FakeApi({("DELETE", "/memory"): CLEARED, ("GET", "/memory"): {"records": [morning]}})
+    run, _, _, clock = execute_mem(case, api=api, replies=[sse("x", intent="memory")], memory_wait=30.0)
+    assert run["memory_after"]["outcome"] == "timeout" and clock.t <= 30.0
+    assert evals_run.memory_state(run, case)["fails"] == ["thieu_ban_ghi:0"]
+
+
+def options_block(*opts) -> dict:
+    return {"type": "options", "id": "options:t", "data": {"options": list(opts)}}
+
+
+def opt(oid: str, kind: str, **kw) -> dict:
+    return {"option_id": oid, "kind": kind, "label": oid, "summary": "s", "status": "ok", **kw}
+
+
+def test_phuong_an_khong_lay_tien_hu_nguoi_dung_muon_giu():
+    case = case5("golden", "memory-whatif-protect-jar")
+    ok = run_with(options_block(opt("defer_purchase", "defer"), opt("switch_giai_tri", "switch_jar")))
+    assert evals_run.option_sources(ok, case)["ok"]
+    switch = run_with(options_block(opt("defer_purchase", "defer"), opt("switch_du_lich", "switch_jar")))
+    assert evals_run.option_sources(switch, case)["fails"] == ["lay_tien_hu:du_lich"]
+    confirm = {"type": "confirm", "id": "confirm:t:1", "data": {"tool": "move_between_jars", "params": {"from_jar": "du_lich", "to_jar": "an_uong"}}}
+    move = run_with(options_block(opt("move_1", "move_between_jars", action={"kind": "confirm", "block_id": "confirm:t:1"}), opt("skip", "skip")), confirm)
+    assert evals_run.option_sources(move, case)["fails"] == ["lay_tien_hu:du_lich"]
+    into = {**confirm, "data": {**confirm["data"], "params": {"from_jar": "giai_tri", "to_jar": "du_lich"}}}
+    move_in = run_with(options_block(opt("move_1", "move_between_jars", action={"kind": "confirm", "block_id": "confirm:t:1"}), opt("skip", "skip")), into)
+    assert evals_run.option_sources(move_in, case)["ok"]  # dồn tiền VÀO hũ thì không phải lấy tiền
+    assert evals_run.option_sources(run_with(), case)["fails"] == ["khong_co_phuong_an"]
+    s = evals_run.score(switch, case, "golden")
+    assert not s["option_sources"]["ok"] and "memory_state" in s  # ca nạp sẵn: chấm cả trạng thái bộ nhớ
+    assert evals_run.summarize([{"case": case, "score": s}], "golden")["option_sources"] == "0/1"
