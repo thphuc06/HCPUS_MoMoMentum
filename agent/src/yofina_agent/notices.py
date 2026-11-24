@@ -53,6 +53,10 @@ CANNOT_DO: tuple[str, ...] = (
     "Tự ghi hay chuyển tiền khi bạn chưa xác nhận",
 )
 SUGGESTION_ITEMS: tuple[dict[str, str], ...] = (
+    # Hai chip đầu đưa người dùng quay về chống chịu (intent resilience) và lộ trình đang dùng (intent roadmap, xem):
+    # cảnh 4 của kịch bản demo (docs/research/figma-ui-design.md §8.2, frame H7 → R1, L1).
+    {"id": "resilience", "label": "Điểm chống chịu của mình", "prompt": "Điểm chống chịu tài chính của mình hiện là bao nhiêu?"},
+    {"id": "roadmap", "label": "Xem lộ trình", "prompt": "Cho mình xem lộ trình tiết kiệm đang dùng"},
     {"id": "balances", "label": "Xem số dư các hũ", "prompt": "Số dư các hũ của mình"},
     {"id": "forecast", "label": "Hũ nào sắp cạn?", "prompt": "Hũ nào của mình sắp cạn?"},
     {"id": "what_if", "label": "Thử kịch bản mua sắm", "prompt": "Nếu mua tai nghe 1,2 triệu bằng Trả sau thì sao?"},
