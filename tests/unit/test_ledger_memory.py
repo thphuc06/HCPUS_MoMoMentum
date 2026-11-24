@@ -56,32 +56,53 @@ class FakeMemoryApi:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.leak: list[str] = []
         self.error: str | None = None
+        self.op_errors: dict[str, str] = {}  # lỗi riêng một thao tác: tên thao tác -> mã lỗi
         self.fail_ids: set[str] = set()
 
-    def add(self, n: int, kind: str, sub: str, text: str, session: str | None = None) -> str:
+    def add(
+        self,
+        n: int,
+        kind: str,
+        sub: str,
+        text: str,
+        session: str | None = None,
+        record_type: str | None = None,
+    ) -> str:
         r = rid(n)
         ns = (
             namespace_for(kind, sub, session)
             if kind == "session_summary"
             else namespace_for(kind, sub)
         )
-        self.records[r] = {"ns": ns, "text": text, "created": T0 + timedelta(minutes=n)}
+        self.records[r] = {
+            "ns": ns,
+            "text": text,
+            "created": T0 + timedelta(minutes=n),
+            "record_type": record_type,
+        }
         return r
 
     def _summary(self, r: str) -> dict[str, Any]:
         x = self.records[r]
-        return {
+        out = {
             "memoryRecordId": r,
             "content": {"text": x["text"]},
             "namespaces": [x["ns"]],
             "createdAt": x["created"],
             "memoryStrategyId": "s",
         }
+        if x.get("record_type"):  # metadata hệ thống như dịch vụ thật trả (BASE hoặc FULL_SESSION)
+            out["metadata"] = {
+                "x-amz-agentcore-memory-recordType": {"stringValue": x["record_type"]}
+            }
+        return out
 
     def _maybe_fail(self, op: str, kw: dict[str, Any]) -> None:
         self.calls.append((op, kw))
         if self.error:
             raise ClientError(self.error)
+        if op in self.op_errors:
+            raise ClientError(self.op_errors[op])
 
     def list_memory_records(self, **kw: Any) -> dict[str, Any]:
         self._maybe_fail("list_memory_records", kw)
@@ -127,6 +148,9 @@ class FakeMemoryApi:
     def list_sessions(self, **kw: Any) -> dict[str, Any]:
         self._maybe_fail("list_sessions", kw)
         sessions = sorted({s for (a, s) in self.events if a == kw["actorId"]})
+        if not sessions:
+            # Như dịch vụ thật (log yofina-ledger 24/11): actor chưa từng có sự kiện ngắn hạn thì "Actor ... not found".
+            raise ClientError("ResourceNotFoundException")
         return {
             "sessionSummaries": [
                 {"sessionId": s, "actorId": kw["actorId"], "createdAt": T0} for s in sessions
@@ -439,6 +463,71 @@ def test_cors_va_method_delete_di_vao_dung_route(world):
     assert status == 200
 
 
+def test_xoa_het_khi_chua_tung_co_su_kien_ngan_han_thi_200_khong_phai_500(world, schema_ok):
+    """Nghiệm thu 24/11, lỗi 2: agent ghi bằng IngestData nên actor thường chưa có sự kiện nào, và ListSessions ném
+    ResourceNotFoundException ("Actor ... not found"); trước đây lỗi thô này làm `DELETE /memory` trả 500 sau khi đã xóa bản ghi."""
+    api = world["api"]
+    api.events.clear()
+    status, body = req(world, "DELETE", "/memory", sub=MINH)
+    assert status == 200, body
+    schema_ok("MemoryClearResponse", body)
+    assert body == {"deleted_records": 3, "deleted_events": 0, "failed": 0}
+    assert [op for op, _ in api.calls].count("list_sessions") == 1
+    assert not any(op == "list_events" for op, _ in api.calls)
+
+
+@pytest.mark.parametrize("op", ["list_sessions", "list_memory_records"])
+def test_xoa_het_loi_khac_cua_dich_vu_thi_503_khong_phai_500(world, schema_ok, op):
+    world["api"].op_errors[op] = (
+        "ValidationException" if op == "list_memory_records" else "ThrottledException"
+    )
+    status, body = req(world, "DELETE", "/memory", sub=MINH)
+    assert status == 503 and body["error"]["code"] == "MEMORY_UNAVAILABLE", body
+    schema_ok("ErrorResponse", body)
+
+
+def test_phien_het_su_kien_giua_chung_khong_tinh_la_loi(world):
+    world["api"].op_errors["list_events"] = "ResourceNotFoundException"
+    status, body = req(world, "DELETE", "/memory", sub=MINH)
+    assert status == 200 and body["failed"] == 0 and body["deleted_events"] == 0
+
+
+def test_tom_tat_phien_chi_hien_ban_ca_phien_khong_hien_hai_lan(world, schema_ok):
+    """Nghiệm thu 24/11: mỗi tóm tắt phiên xuất hiện hai lần. Không phải ghi trùng: strategy tóm tắt sinh các đoạn (BASE, XML) VÀ một
+    bản tóm tắt cả phiên (FULL_SESSION, markdown) cùng namespace (devguide summary-strategy, "Full session summary")."""
+    api = world["api"]
+    api.records.clear()
+    chunk = api.add(
+        5,
+        "session_summary",
+        MINH,
+        '<topic name="Mô phỏng">\n- Người dùng hỏi mua tai nghe.\n</topic>\n<topic name="Thời gian">\n'
+        "- Timestamp bản ghi: 1795505552861.\n</topic>",
+        session="sess-2",
+        record_type="BASE",
+    )
+    full = api.add(
+        6,
+        "session_summary",
+        MINH,
+        "## Mô phỏng mua tai nghe\n\n- **Yêu cầu:** Người dùng hỏi mua tai nghe. *(Nguồn: timestamp 1795505552861)*\n"
+        "- Timestamp của bản ghi: 1795505552861.",
+        session="sess-2",
+        record_type="FULL_SESSION",
+    )
+    status, body = req(world, "GET", "/memory", sub=MINH)
+    assert status == 200, body
+    schema_ok("MemoryListResponse", body)
+    assert [r["record_id"] for r in body["records"]] == [full]
+    text = body["records"][0]["text"]
+    assert text == "Mô phỏng mua tai nghe: - Yêu cầu: Người dùng hỏi mua tai nghe."
+    assert "[STK]" not in text and "1795" not in text and "**" not in text and "#" not in text
+    # xóa hết vẫn xóa cả đoạn tóm tắt lẫn bản cả phiên
+    api.events.clear()
+    _, cleared = req(world, "DELETE", "/memory", sub=MINH)
+    assert cleared["deleted_records"] == 2 and chunk not in api.records and full not in api.records
+
+
 # --- tham số khớp model dịch vụ thật (botocore Stubber) ----------------------------------------------
 def test_tham_so_list_get_delete_batch_khop_model_botocore():
     import boto3
@@ -613,6 +702,18 @@ def test_xoa_du_lieu_dung_nguoi_ca_ba_noi(world, schema_ok):
         world, "POST", "/me/delete-data", sub=MINH, body={**BODY, "confirm_token": token}
     )
     assert status == 409 and again["error"]["code"] == "TOKEN_REUSED"
+
+
+def test_xoa_du_lieu_khi_chua_co_su_kien_ngan_han_buoc_memory_done(world):
+    """Nghiệm thu 24/11 (`khoa`): bước Memory bị đánh `failed` `MEMORY_UNAVAILABLE` dù đã xóa hết bản ghi, vì ListSessions ném
+    ResourceNotFoundException cho actor chưa có sự kiện."""
+    world["api"].events.clear()
+    status, body = req(
+        world, "POST", "/me/delete-data", sub=MINH, body={**BODY, "confirm_token": token_for(world)}
+    )
+    assert status == 200 and body["status"] == "done", body
+    assert body["steps"]["memory"] == {"status": "done", "deleted": 3}
+    assert {x["ns"] for x in world["api"].records.values()} == {namespace_for("preference", LAN)}
 
 
 def test_token_cua_nguoi_khac_khong_dung_duoc(world):
