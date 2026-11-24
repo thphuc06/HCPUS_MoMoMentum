@@ -297,16 +297,109 @@ Mỗi đợt một nhóm, một nhánh, đo trước và sau trên cùng Runtime
 | Đợt | Nội dung | File đổi | Đo | Dòng bỏ / thêm (ước) |
 |---|---|---|---|---|
 | 0. Nền đo | Viết `evals/golden/paraphrase.jsonl` (khoảng 60 câu, người viết không xem prompt); test CI chống trùng cụm 5 từ giữa eval và prompt; chạy một lượt nền golden, adversarial phase 3 đến 5 và bộ diễn đạt lại trên Runtime hiện tại | evals/, tests/unit/agent/ | Lượt nền | thêm ~60 dòng mã test, ~60 dòng dữ liệu |
-| 1. Mã chết | P25 (trừ `memory_preferences_top_k`, chuyển cho nhánh bộ nhớ) | defaults.json, settings.py, notices.py, writer.py, turn.py, whatif.py | Unit test | bỏ ~20 |
-| 2. Writer | P6, P7: viết lại `WRITER_SYSTEM` và `TASKS` theo mục tiêu và nghĩa dữ liệu, bỏ số câu và câu chêm; bỏ câu nới của `MEMORY_GUIDE` (báo nhánh bộ nhớ) | writer.py, tests/unit/agent/test_writer*.py | Golden phase 3 đến 5; đọc tay 20 câu trả lời trước và sau (độ dài, chêm, đúng câu hỏi) | prompt bỏ ~1.000 ký tự (~300 token mỗi lượt); mã ±0 |
-| 3. Router | P20, P21: `CLARIFY_INTENTS` trong `clarify.py`, xóa 5 câu "không hỏi lại" và câu "Ứng dụng" lặp; P1, P2: thay ví dụ chép eval bằng ví dụ khác có nhãn minh họa; P11(a): không nhận câu hỏi lại của router cho `lookup` không có hũ | router.py, clarify.py, test router | Golden phase 3 đến 5 + diễn đạt lại; adversarial phase 3 đến 5 | prompt bỏ ~1.500 ký tự (~450 token mỗi lượt), mã +6 |
-| 4. Ý định phụ bằng tham số router | P10, P12, P13, P14: thêm `roadmap_action="edit_step"`, `insight_kind`, `fee_topic`, `ingest_action` vào `IntentParams`; bỏ `_asks_step_edit` và các regex đi kèm, `KIND_KEYWORDS` (giữ cho đường suy giảm), `CONCEPTS`/`FREE_PHRASES`, `START_PHRASES`; lời sửa bước do writer viết | schemas.py, router.py, turn.py, behavior_chat.py, fee_citation.py, ingest_chat.py, notices.py | Golden phase 4, 5 + diễn đạt lại; adversarial phase 5 (`citation-forgery`, `upload-*`) | mã bỏ ~150, thêm ~40; prompt thêm ~400 ký tự |
+| 1. Mã chết (**đã làm** `24d1ad1`) | P25 (trừ `memory_preferences_top_k`, chuyển cho nhánh bộ nhớ) | defaults.json, settings.py, notices.py, writer.py, turn.py, whatif.py | Unit test | bỏ ~20 |
+| 2. Writer (**đã làm** `a9f1065`) | P6, P7: viết lại `WRITER_SYSTEM` và `TASKS` theo mục tiêu và nghĩa dữ liệu, bỏ số câu và câu chêm; bỏ câu nới của `MEMORY_GUIDE` (báo nhánh bộ nhớ) | writer.py, tests/unit/agent/test_writer*.py | Golden phase 3 đến 5; đọc tay 20 câu trả lời trước và sau (độ dài, chêm, đúng câu hỏi) | prompt bỏ ~1.000 ký tự (~300 token mỗi lượt); mã ±0 |
+| 3. Router (**đã làm** `f68d2ce`) | P20, P21: `CLARIFY_INTENTS` trong `clarify.py`, xóa 5 câu "không hỏi lại" và câu "Ứng dụng" lặp; P1, P2: thay ví dụ chép eval bằng ví dụ khác có nhãn minh họa; P11(a): không nhận câu hỏi lại của router cho `lookup` không có hũ | router.py, clarify.py, test router | Golden phase 3 đến 5 + diễn đạt lại; adversarial phase 3 đến 5 | prompt bỏ ~1.500 ký tự (~450 token mỗi lượt), mã +6 |
+| 4. Ý định phụ bằng tham số router (**đã làm** `3e63feb`) | P10, P12, P13, P14: thêm `roadmap_action="edit_step"`, `insight_kind`, `fee_topic`, `ingest_action` vào `IntentParams`; bỏ `_asks_step_edit` và các regex đi kèm, `KIND_KEYWORDS` (giữ cho đường suy giảm), `CONCEPTS`/`FREE_PHRASES`, `START_PHRASES`; lời sửa bước do writer viết | schemas.py, router.py, turn.py, behavior_chat.py, fee_citation.py, ingest_chat.py, notices.py | Golden phase 4, 5 + diễn đạt lại; adversarial phase 5 (`citation-forgery`, `upload-*`) | mã bỏ ~150, thêm ~40; prompt thêm ~400 ký tự |
 | 5. Luật vá ca | P17: bỏ router.py:80-81, đo, rồi quyết `spending_confirm_request`; P18: bỏ luật chữ hoa | router.py, turn.py, notices.py, whatif.py | Golden phase 3 (ca nhiều lượt) + diễn đạt lại; adversarial phase 3 | bỏ ~5 đến ~40 tùy kết quả |
-| 6. Ingest | P19, P3: tách luật nghiệp vụ và nguyên tắc đọc chứng từ, bỏ chuỗi literal; thêm dòng CSV viết tắt khác vào synthetic | prompts.py, evals/ingest/ | `scripts/eval_ingest.py --set all`; adversarial phase 5 | prompt bỏ ~800 ký tự |
+| 6. Ingest (**đã làm** `b425eff`) | P19, P3: tách luật nghiệp vụ và nguyên tắc đọc chứng từ, bỏ chuỗi literal; thêm dòng CSV viết tắt khác vào synthetic | prompts.py, evals/ingest/ | `scripts/eval_ingest.py --set all`; adversarial phase 5 | prompt bỏ ~800 ký tự |
 | 7. Chip có cấu trúc (cần đồng ý vì đụng hợp đồng và frontend) | P15, P11(b), P27: chip mang `id`, agent định tuyến chip bằng `id`; bỏ `route_runout_overview`, so khớp chip bằng chuỗi | contracts (khối `clarify`, `suggestions`), frontend, router.py, turn.py, textutil.py | Integration nhiều lượt, golden phase 3, 4 | mã bỏ ~50, thêm ~30 |
 | 8. Tùy chọn | P24: writer cho các đường đang dựng câu bằng mã khi còn lượt gọi model; P23: gom dựng nhãn phương án; P8, P9 | turn.py, notices.py, whatif.py, roadmap_agent.py | Golden phase 4, 5; độ trễ p95 | tùy phạm vi |
 
 Tổng ước nếu làm đợt 1 đến 6: bỏ khoảng 230 dòng mã và hằng chuỗi, thêm khoảng 90 (phần lớn là test và bộ diễn đạt lại); prompt router và writer ngắn đi khoảng 2.500 ký tự, tức khoảng 750 token mỗi lượt có writer. Đợt 7 và 8 bỏ thêm khoảng 100 dòng tùy lựa chọn.
+
+### 5.1 Đã làm (nhánh `p5/audit-fix`, 2026-11-25)
+
+Chủ dự án duyệt đợt 1, 2, 3, 4 và 6; đợt 0 (đo nền), 5, 7, 8 không làm. Chưa chạy eval thật: người điều phối đo golden và adversarial
+một lần trước và một lần sau cả cụm. Unit `uv run pytest tests/unit libs/yofina_core/tests -q`: 3640 passed trước, 3690 passed sau
+(3 skipped như cũ).
+
+Số ký tự lời nhắc (đo bằng `len()` của chuỗi hằng, không gồm dữ liệu chèn lúc chạy):
+
+| Lời nhắc | Trước | Sau | Ghi chú |
+|---|---|---|---|
+| `ROUTER_SYSTEM` | 7.985 | 8.884 | Đợt 3 còn 7.912 (ví dụ chép golden thay bằng định nghĩa và ranh giới, bỏ 5 câu "không hỏi lại" và câu "Ứng dụng" lặp); đợt 4 thêm 972 cho bốn ý định phụ. Cộng danh sách cú sốc: 8.339 → 9.238 |
+| `WRITER_SYSTEM` | 779 | 1.002 | Mục tiêu và giới hạn độ dài nói một lần ở đây; "không khuyên đầu tư hay vay" chuyển từ 3 việc lên đây |
+| `TASKS` (tổng) | 3.807 (13 việc) | 3.298 (13 việc) | Bỏ `out_of_scope` (216), thêm `roadmap_step_edit` (381); 12 việc chung: 3.591 → 2.917 |
+| Writer mỗi lượt (hệ thống + một việc), trung bình 12 việc chung | 1.078 | 1.245 | Dài hơn khoảng 170 ký tự: phần mục tiêu chung thay cho khuôn số câu; ước của kế hoạch (bỏ ~1.000) không đạt vì khuôn cũ ngắn hơn phần mô tả nghĩa dữ liệu |
+| `image_system` | 5.248 | 4.431 | Đợt 6 |
+| `labels_system` | 1.948 | 2.059 | Luật tự chuyển và rút tiền mặt nay là một hằng chung với ảnh (`_OWN_TRANSFER`), dài hơn bản CSV cũ |
+
+Dòng mã (`git diff --numstat 3d6e22e`): `agent/src/` thêm 175, bỏ 322; `pipelines/ingest/yofina_ingest/prompts.py` thêm 32, bỏ 19;
+`evals/` thêm 148 (bộ diễn đạt lại và bộ chấm); test thêm 465, bỏ 145.
+
+Từng đợt:
+
+- **Đợt 1** (P25): bỏ `router_min_confidence` (defaults.json, settings.py), `notices.ASK_MOVE_DETAILS`, `notices.PROFILE_PREPARED_HINT`,
+  `TASKS["out_of_scope"]`, import `notices, trace` lặp ở turn.py, `_PENDING_INTENTS` (turn.py dùng `router.PENDING_INTENTS`), `s` và
+  `_ = s` ở `whatif._analyze_and_compose`. Kiểm bằng `git grep` không còn nơi dùng. `memory_preferences_top_k` để nhánh bộ nhớ.
+- **Đợt 2** (P6, P7): `WRITER_SYSTEM` nói mục tiêu một lần (trả lời đúng câu hỏi, thường dưới 50 chữ, không liệt kê lại thẻ, không
+  thêm lời khuyên không được hỏi, xong thì dừng); mỗi việc chỉ còn thẻ nào đã hiện, nghĩa các trường và ràng buộc nghiệp vụ (không phải
+  điểm tín dụng, chưa chuyển hay lưu gì). `affordability` hết câu thứ hai bắt buộc. `chitchat` nhận `viec_lam_duoc` từ `notices.CAN_DO`
+  qua dữ liệu; `CAN_DO` thêm hai mục (chống chịu, cú sốc, lộ trình; thói quen, phí, nạp sao kê) vì danh sách cũ thiếu. `MEMORY_GUIDE`
+  không đụng (nhánh `p5/mem-p0`): câu "được viết thêm tối đa 1 câu ngoài khuôn của nhiệm vụ" nay không còn khuôn để nới.
+- **Đợt 3** (P1, P2, P11a, P20, P21): `clarify.CLARIFY_INTENTS` = {what_if, affordability, move, profile_update} là chỗ duy nhất quyết
+  ai được hỏi lại; `resolve_clarify` bỏ câu hỏi lại của router cho ý định khác (kể cả `lookup`), schema thôi ép thử lại khi
+  `out_of_scope`/`chitchat` có `clarify`, `turn.flow` bỏ điều kiện riêng cho stress và roadmap. `router.PENDING_INTENTS` trỏ cùng tập.
+  "Hũ nào sắp cạn" còn một lớp: nghĩa của `lookup_kind=forecast` ("jar_text null khi hỏi về mọi hũ") cộng `on_forecast` không có hũ thì
+  đọc mọi hũ; bỏ `route_runout_overview`/`asks_which_jar_runs_out` (regex). Luật dự phòng thêm "sắp cạn", "bị hụt" vào từ khóa dự báo
+  để đường suy giảm vẫn nhận chip. Test CI `test_prompt_eval_overlap.py`: không cụm 5 từ liên tiếp nào của câu trong `evals/golden`,
+  `evals/adversarial`, `evals/paraphrase` nằm trong lời nhắc router, writer, Orchestrator, Analyst, lộ trình, bộ nhớ, ảnh, CSV; test bắt
+  được `_DATA_NOT_INSTRUCTIONS` chép "bỏ qua hướng dẫn trước đó" của ca `chat-pasted-instruction`, đã đổi thành "bỏ qua chỉ dẫn đang có".
+- **Đợt 4** (P10, P12, P13, P14): `IntentParams` thêm `roadmap_action="edit_step"`, `insight_kind` (enum `BehaviorInsightKind`),
+  `fee_topic` (monthly, per_transaction, once, late, other), `ingest_action` (how_to, status); schema router nằm ở
+  `agent/src/yofina_agent/schemas.py`, không ở `contracts/`. Bỏ `behavior_chat.KIND_KEYWORDS`/`asked_kind`, `fee_citation.CONCEPTS`/
+  `FREE_PHRASES`/`asks_free`/`asked_concepts`, `ingest_chat.START_PHRASES`/`wants_start`, regex sửa bước ở turn.py (`_STEP_*`,
+  `_asks_step_edit`, `_match_steps`) và 5 câu `ROADMAP_EDIT_*`. Mọi chủ đề phí không có dòng khớp (kể cả `other`) đi chung một câu "chưa
+  có ... nên mình không đưa số hay nguồn". Sửa bước: đọc bản đang dùng, phát thẻ, writer viết từ `compact_roadmap_steps` (mọi bước, số
+  tiền, hũ, hạn) cộng `cach_sua`, `so_tien_moi_text`; việc `roadmap_step_edit` kiểm trọn số như việc phase 4, hỏng hay hết lượt thì
+  `notices.ROADMAP_EDIT_HOW` (không số). Không lưu gì; thao tác ghi vẫn chỉ qua token. Luật dự phòng không có ý định phụ, nên khi model
+  hỏng câu sửa bước rơi về xem lộ trình.
+- **Đợt 6** (P19, P3): xem bảng dưới.
+- **Bộ diễn đạt lại**: `evals/paraphrase/router.jsonl` 18 câu (mỗi câu một ý định, ghi ca golden nó diễn đạt lại), chấm ý định và tham
+  số kỳ vọng kể cả ý định phụ; `evals/paraphrase/run_router.py` gọi router một lần mỗi câu. Nhỏ hơn đợt 0 dự kiến (60 câu) theo yêu cầu.
+
+Đợt 6, từng dòng lời nhắc ảnh và CSV:
+
+| Dòng | Giữ hay bỏ | Lý do |
+|---|---|---|
+| `_DATA_NOT_INSTRUCTIONS` | Giữ (đổi 3 chữ) | Chống prompt injection (mục 3); đổi cụm trùng câu đối kháng |
+| Chỉ ghi giao dịch đã thực hiện xong | Giữ | Định nghĩa của ứng dụng |
+| Màn xác nhận, OTP, biểu mẫu chưa gửi là `unexecuted_form` | Giữ | Quyết định nghiệp vụ "chưa thực hiện thì không phải giao dịch" |
+| Màn chi tiết có mã giao dịch là đã thực hiện dù không có chữ "thành công" (r08) | Bỏ | Cách đọc chứng từ; gộp vào câu nguyên tắc "lấy theo ngữ nghĩa của chính chứng từ (tiêu đề cột, dấu, số dư trước và sau, mã hay thời gian thực hiện)" |
+| Màn tra soát, khiếu nại, yêu cầu hoàn tiền không tạo dòng; hoàn tiền đã về vẫn là giao dịch | Giữ | Quyết định của chủ dự án (`4d6a755`), có lý do (giao dịch gốc đã có) |
+| Thất bại, hủy, từ chối, đang xử lý là `failed`/`pending` | Giữ, rút gọn | Ánh xạ trạng thái vào trường `status`; liệt kê lại ít chữ hơn |
+| Tự chuyển giữa tài khoản của mình là `own_account_transfer`; nạp điện thoại, trả thẻ tín dụng, mua hàng thì không | Giữ, gộp vào `_OWN_TRANSFER` dùng chung với CSV | Định nghĩa nghiệp vụ |
+| Rút tiền mặt là `own_account_transfer=true`, vẫn trích dòng; phí rút là khoản chi | Giữ, gộp vào `_OWN_TRANSFER` | Quyết định của chủ dự án 24/11; bỏ "description giữ nguyên" lặp với trường description |
+| Bảng phí, menu, ảnh không có tiền là `other_financial`; ảnh không tài chính là `not_financial` | Giữ | Nghĩa của `document_type` |
+| Trích MỌI dòng, kể cả cùng số tiền, dòng phí, dòng rút tiền mặt | Thay | Còn một câu "một giao dịch nhìn thấy là một dòng; không tự bỏ dòng trông giống dòng khác, hệ thống tự lọc trùng": lý do (lọc trùng ở hạ nguồn) model không tự biết; dòng rút tiền mặt đã nói trong `_OWN_TRANSFER` |
+| `date`, `amount_vnd`, "ngày Việt Nam viết ngày/tháng/năm" | Giữ | Định dạng trường |
+| `direction`: danh sách động từ ra/vào, cột Ghi nợ/Ghi có theo tiêu đề, kiểm lại bằng cột số dư (r15) | Bỏ phần cách đọc | Còn "out khi tiền ra khỏi tài khoản của người dùng, in khi tiền vào"; cách đọc cột và số dư nằm trong câu nguyên tắc |
+| `counterparty` "(không bịa ...)" | Bỏ phần lặp | `_DATA_NOT_INSTRUCTIONS` đã nói không bịa |
+| `description` giữ nguyên ký tự; không chép số tài khoản, số thẻ, số điện thoại | Giữ | Dữ liệu dùng để lọc trùng; PII |
+| `tx_type`, `jar_code`, `confidence`, danh sách hũ và loại, `document_type`, `year_hint`, `readable` | Giữ | Nghĩa của trường |
+| Chuyển cho cá nhân có mục đích thì phân loại theo mục đích, kèm ví dụ "tiền phòng, tiền nhà, tiền điện, học phí" | Giữ luật (`_PURPOSE` dùng chung), bỏ ví dụ | Luật phân loại của sản phẩm; "tiền phòng" chép từ dữ liệu `c01` |
+| CSV `merchant`: ví dụ "thanh toan QR", "Highlands Coffee", "CGV", "Grab" | Bỏ ví dụ | Các chuỗi này có trong `evals/ingest/manifest.json` (23, 31, 21, 42 lần); còn "bỏ ... cụm chỉ cách thanh toán" |
+| CSV rút tiền mặt "ví dụ RUT TIEN TAI ATM" (P3) | Bỏ chuỗi literal | Thay bằng "dù chứng từ ghi tắt thế nào"; mã chặn `looks_like_self_topup` giữ |
+| `columns_system` | Giữ nguyên | Không có luật vá ca |
+
+Chưa làm trong đợt 6: thêm dòng CSV rút tiền mặt viết tắt khác vào bộ synthetic (ngoài phạm vi được giao, chỉ được sửa bộ diễn đạt lại).
+
+Rủi ro khi đo lại (ca có thể đổi kết quả và vì sao đó là thông tin đúng):
+
+- Đợt 2: không ca nào chấm số câu. Câu trả lời có thể dài hơn một chút; cần đọc tay vài lượt. `numeric_grounding_pct` không đổi vì
+  luật số giữ nguyên.
+- Đợt 3: golden phase 5 `behavior-habits`, `knowledge-late-fee`, `ingest-*`, `afford-1` mất ví dụ trùng câu; trượt thì đó là độ hiểu
+  thật của router. Chip "Hũ nào sắp cạn?" mà router xếp vào `balance` nay ra thẻ số dư thay vì dự báo mọi hũ (không ca golden nào; ca
+  `pr-forecast-which-jar` đo). `lookup` không còn hỏi lại "hũ nào": đọc mọi hũ thay vì hỏi.
+- Đợt 4: ba ca `expect_insight_kind` (`behavior-payday`, `behavior-weekday`, `behavior-bnpl`) nay phụ thuộc router trích đúng
+  `insight_kind`; `ingest-start` cần `ingest_action="how_to"`, router để null thì đọc lần nạp gần nhất và trượt `tools_must start_job` khi
+  đã có job; `knowledge-late-fee` cần `fee_topic="late"`, để null thì liệt kê mọi phí (vẫn đạt `forbid_unretrieved_citation`).
+  `citation-forgery` chấm nguồn trích dẫn nên vẫn đạt dù router đặt `other` hay null. `roadmap-edit-one-step` chỉ chấm ý định, tool và
+  khối; router không đặt `edit_step` thì rơi về xem lộ trình, vẫn đạt. Router xuất thêm ba khóa null mỗi lượt (schema Bedrock đòi đủ
+  khóa), `router_max_tokens` 400 vẫn dư.
+- Đợt 6: r08, r15 của `evals/ingest` có thể trượt lại; nếu trượt, đó là bằng chứng luật đọc cụ thể còn cần với Sonnet 4.6, nên thêm lại
+  kèm lý do. Adversarial phase 5 `upload-*`, `csv-*` dựa `_DATA_NOT_INSTRUCTIONS` và cờ `contains_instructions`, không đổi nghĩa.
 
 ## 6. Nguồn đã tra
 

@@ -41,7 +41,6 @@
   "affordability_text_max_tokens": 160,
   "low_data_days": 30,
   "low_coverage_threshold": 0.7,
-  "router_min_confidence": 0.35,
   "turn_record_tool": "",
   "turn_record_timeout_seconds": 3.0,
   "memory_enabled": true,

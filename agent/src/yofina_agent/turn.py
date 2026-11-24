@@ -29,7 +29,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
@@ -41,7 +40,6 @@ from ag_ui.core import BaseEvent, RunAgentInput
 from yofina_agent import behavior_chat, notices, trace
 from yofina_agent import events as ev
 from yofina_agent import memory as agent_memory
-from yofina_agent import notices, trace
 from yofina_agent.clarify import resolve_clarify
 from yofina_agent.compact import (
     compact_affordability,
@@ -53,6 +51,7 @@ from yofina_agent.compact import (
     compact_obligations,
     compact_resilience,
     compact_roadmap,
+    compact_roadmap_steps,
     compact_stress,
     compact_transactions,
 )
@@ -63,7 +62,7 @@ from yofina_agent.identity import Identity
 from yofina_agent.ingest_chat import on_ingest
 from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
-from yofina_agent.router import merge_pending, pending_params, route, route_runout_overview
+from yofina_agent.router import PENDING_INTENTS, merge_pending, pending_params, route
 from yofina_agent.schemas import (
     ClarifyChipIn,
     ClarifyRequest,
@@ -134,7 +133,6 @@ _DEGRADED_REASON = {
     ErrorCode.INTERNAL_ERROR.value: "model_error",
     "NUMERIC_UNVERIFIED": "verifier_failed",
 }
-_PENDING_INTENTS = {"what_if", "affordability", "move", "profile_update"}
 
 
 @dataclass
@@ -775,15 +773,9 @@ class Turn:
             return
         # Câu trả lời cụt cho khối `clarify`: giữ tham số của câu đang chờ (số tiền, người nhận, hũ...) bằng mã, không trông vào model nhớ.
         routed = merge_pending(routed, question, self.pending_params_before(index))
-        # "Hũ nào sắp cạn?": dự báo mọi hũ, không hỏi lại hũ nào (router hay xếp vào tra số dư hoặc hỏi lại).
-        overview = route_runout_overview(routed, question)
-        if overview is not None and overview is not routed:
-            routed, self.intent = overview, overview.intent
         handler = self._intent_handlers()[routed.intent]
-        # Handler tự kiểm mã cú sốc và chọn thao tác với lộ trình.
-        if routed.intent not in ("stress", "roadmap") and (
-            req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed)
-        ):
+        # Chỉ ý định có ô bắt buộc mới hỏi lại (clarify.CLARIFY_INTENTS); handler khác tự xử lý phần còn thiếu.
+        if req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed):
             await self.emit_clarify(req, routed)
             return
         await handler(routed, question)
@@ -907,7 +899,7 @@ class Turn:
                 Exception
             ) as exc:  # ModelBudgetExceeded, AllModelsFailed, StructuredOutputError, lỗi mạng...
                 self.llm_failed(exc)
-        fallback = route_runout_overview(classify_by_rules(question), question)
+        fallback = classify_by_rules(question)
         log.info(
             json.dumps(
                 {"event": "router_fallback", "intent": fallback.intent if fallback else None}
@@ -1112,8 +1104,8 @@ class Turn:
         await self.write("stress", question, res.compact)
 
     async def on_roadmap(self, r: IntentResult, question: str) -> None:
-        # Muốn sửa một bước ("giảm số tiền ở bước ..."): chat chưa có tool sửa bước, nên chỉ ra bước khớp và chỗ sửa.
-        if _asks_step_edit(question):
+        # Muốn sửa một bước (router: roadmap_action="edit_step"): chat chưa có tool sửa bước, nên chỉ ra bước và chỗ sửa.
+        if r.params.roadmap_action == "edit_step":
             await self.on_roadmap_step_edit(r, question)
             return
         # Người dùng nói mục tiêu trong câu: lập lộ trình theo mục tiêu đó (roadmap không bao giờ hỏi lại).
@@ -1145,8 +1137,9 @@ class Turn:
         await self.write("roadmap", question, res.compact)
 
     async def on_roadmap_step_edit(self, r: IntentResult, question: str) -> None:
-        """Đọc lộ trình ĐANG DÙNG (trang Lộ trình mở đúng bản này và có nút Sửa từng bước), chỉ ra bước khớp câu người dùng bằng mã
-        rồi nói sửa ở đâu. Không lưu gì, không nói là đã sửa; không khớp bước nào thì nói rõ. Lời đáp dựng bằng mã."""
+        """Đọc lộ trình ĐANG DÙNG (trang Lộ trình mở đúng bản này và có nút Sửa từng bước) và phát thẻ của nó; writer chỉ ra bước người
+        dùng nói tới từ bản gọn các bước và nói sửa ở đâu. Không lưu gì, không nói là đã sửa. Writer không viết được (hết lượt gọi
+        model, số không có căn cứ) thì một câu cố định không có số nói chỗ sửa."""
         res = await self.call_tool_retry(
             "get_roadmap",
             {"which": "active"},
@@ -1157,33 +1150,20 @@ class Turn:
         if res.outcome.code == ErrorCode.ROADMAP_NOT_FOUND.value:
             await self.emit_fixed_text(notices.ROADMAP_EDIT_NO_ROADMAP)
             return
-        if not res.outcome.ok or (roadmap := _roadmap_of(res.outcome)) is None:
+        if not res.outcome.ok or _roadmap_of(res.outcome) is None:
             self.tool_failure(res.outcome)
             return
-        await self.ensure_jars()  # tên hũ để khớp câu người dùng; đọc hỏng thì vẫn khớp được theo loại bước hoặc số thứ tự
+        await self.ensure_jars()  # tên hũ thật cho bản gọn các bước; đọc hỏng thì giữ mã hũ
         names = {str(j["code"]): str(j["name"]) for j in self._jar_rows}
-        matches, mentioned = _match_steps(roadmap, question, names)
-        wanted = r.params.amount_vnd or parse_amount_vnd(question)
-        amount = format_vnd(wanted) if wanted else None
-        if not matches:
-            about = f" (bước có hũ {', '.join(names[c] for c in mentioned)})" if mentioned else ""
-            await self.emit_fixed_text(
-                notices.ROADMAP_EDIT_NONE.format(version=roadmap.version, about=about)
-            )
-            return
-        if len(matches) == 1:
-            phase, step = matches[0]
-            detail = (f"{format_vnd(step.amount_vnd)}, " if step.amount_vnd else "") + f"giai đoạn “{phase.title}”"
-            head = notices.ROADMAP_EDIT_MATCH.format(title=step.title, detail=detail, version=roadmap.version)
-        else:
-            titles = "; ".join(f"“{step.title}”" for _, step in matches[:3])
-            head = notices.ROADMAP_EDIT_MANY.format(
-                count=len(matches), version=roadmap.version, titles=titles
-            )
-        how = (
-            notices.ROADMAP_EDIT_HOW_AMOUNT.format(amount=amount) if amount else notices.ROADMAP_EDIT_HOW
-        )
-        await self.emit_fixed_text(f"{head} {how}")
+        facts = compact_roadmap_steps(res.outcome.payload or {}, names)
+        facts["sua_trong_chat"] = False
+        facts["cach_sua"] = notices.ROADMAP_EDIT_HOW
+        if r.params.amount_vnd:
+            facts["so_tien_moi_text"] = format_vnd(r.params.amount_vnd)
+        said = len(self.assistant_parts)
+        await self.write("roadmap_step_edit", question, facts)
+        if len(self.assistant_parts) == said:
+            await self.emit_fixed_text(notices.ROADMAP_EDIT_HOW)
 
     async def roadmap_base(self, latest: ToolOutcome) -> tuple[ToolOutcome, _RoadmapVersions]:
         """Bản gốc cho lần lập lại và các phiên bản liên quan, đọc TRƯỚC khi lưu.
@@ -1537,7 +1517,7 @@ class Turn:
             if ok and not (gr is not None and gr.blocked):
                 await self.emit_fixed_text(r.reply)
                 return
-        await self.write("chitchat", question, {})
+        await self.write("chitchat", question, {"viec_lam_duoc": list(notices.CAN_DO)})
 
     # --- hỏi lại ----------------------------------------------------------------------------
     async def jar_chips(self) -> list[ClarifyChipIn]:
@@ -1584,7 +1564,7 @@ class Turn:
                 source_tool="agent",
                 as_of=self.d.now(),
                 app_date=self.block_app_date(),
-                pending_intent=r.intent if r.intent in _PENDING_INTENTS else None,
+                pending_intent=r.intent if r.intent in PENDING_INTENTS else None,
                 allow_free_text=True,
             )
         )
@@ -1729,63 +1709,6 @@ def _roadmap_closing(
         notices.ROADMAP_CLOSING_NEXT_COMPARE if proposed_with_active else notices.ROADMAP_CLOSING_NEXT_REVIEW
     )
     return " ".join(parts)
-
-
-# --- người dùng muốn sửa một bước của lộ trình (chỉ handler roadmap dùng) ------------------------------
-#: câu nói về MỘT bước và có động từ sửa ("giảm số tiền ở bước ...", "sửa bước ..."), so trên chữ đã bỏ dấu. Câu có "lập" là lập
-#: (lại) lộ trình, không phải sửa bước.
-_STEP_WORD_RE = re.compile(r"\bbuoc\b")
-_EDIT_VERB_RE = re.compile(r"\b(?:sua|chinh|doi|giam|tang|bot|xoa|bo)\b")
-_CREATE_WORD_RE = re.compile(r"\blap\b")
-_STEP_ORDINAL_RE = re.compile(r"\bbuoc (?:thu )?(\d{1,2})\b")
-#: từ chỉ loại bước (chữ đã bỏ dấu) -> các `kind` khớp; chỉ dùng để thu hẹp khi nhiều bước cùng khớp hũ.
-_STEP_KIND_WORDS: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
-    (re.compile(r"\b(?:de danh|danh|tiet kiem|chuyen)\b"), frozenset({"set_aside", "pay_obligation"})),
-    (re.compile(r"\b(?:tra|nghia vu|den han)\b"), frozenset({"pay_obligation"})),
-    (re.compile(r"\b(?:giam chi|cat giam|bot chi)\b"), frozenset({"cut_spending"})),
-    (re.compile(r"\bty le\b"), frozenset({"adjust_split"})),
-    (re.compile(r"\bnhac\b"), frozenset({"remind"})),
-    (re.compile(r"\b(?:muc tieu|lui han)\b"), frozenset({"review_goal"})),
-)
-
-
-def _asks_step_edit(question: str) -> bool:
-    text = normalize(question)
-    return bool(
-        _STEP_WORD_RE.search(text) and _EDIT_VERB_RE.search(text) and not _CREATE_WORD_RE.search(text)
-    )
-
-
-def _match_steps(
-    roadmap: Roadmap, question: str, jar_names: Mapping[str, str]
-) -> tuple[list[tuple[Any, Any]], list[str]]:
-    """Các bước (giai đoạn, bước) khớp câu người dùng, bằng mã: số thứ tự "bước N", rồi hũ được nhắc (hũ nhận trước hũ nguồn), rồi
-    loại bước để thu hẹp. Trả kèm mã các hũ được nhắc (để nói rõ khi không khớp)."""
-    text = f" {normalize(question)} "
-    steps = [(phase, step) for phase in roadmap.phases for step in phase.steps]
-    if (ordinal := _STEP_ORDINAL_RE.search(text)) is not None:
-        index = int(ordinal.group(1)) - 1
-        return ([steps[index]] if 0 <= index < len(steps) else []), []
-    mentioned = [
-        code
-        for code, name in jar_names.items()
-        if (norm := normalize(name)) and len(norm) >= 3 and f" {norm} " in text
-    ]
-    kinds: set[str] = set()
-    for pattern, matched in _STEP_KIND_WORDS:
-        if pattern.search(text):
-            kinds |= matched
-    if mentioned:
-        scored = [
-            (2 if step.to_jar_code in mentioned else 1 if step.jar_code in mentioned else 0, phase, step)
-            for phase, step in steps
-        ]
-        best = max(score for score, _, _ in scored)
-        candidates = [(phase, step) for score, phase, step in scored if best and score == best]
-    else:
-        candidates = [(phase, step) for phase, step in steps if kinds and step.kind in kinds]
-    narrowed = [(phase, step) for phase, step in candidates if step.kind in kinds]
-    return (narrowed or candidates), mentioned
 
 
 def _match_obligation(name: str, payload: Mapping[str, Any] | None) -> Mapping[str, Any] | None:

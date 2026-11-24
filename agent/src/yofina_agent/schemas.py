@@ -21,7 +21,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from yofina_core.blocks import ActionToolName, ClarifySlot, JarCode, OptionKind, RuleId
+from yofina_core.blocks import ActionToolName, BehaviorInsightKind, ClarifySlot, JarCode, OptionKind, RuleId
 from yofina_core.scenario import SCENARIO_ADAPTER, ScenarioSpec
 from yofina_core.suitability import Proposal, SuitabilityVerdict
 from yofina_core.wallet import INTENTS
@@ -115,10 +115,15 @@ class IntentParams(_Model):
     due_day: Annotated[int, Field(ge=1, le=31)] | None = None
     # what_if: người dùng vừa trả lời câu "vẫn giữ khoản trước để tính gộp không": true giữ, false bỏ, null khi không có câu hỏi đó
     keep_previous: bool | None = None
-    shock_id: str | None = None  # stress: handler kiểm mã theo cấu hình cú sốc
-    # roadmap: xem hoặc lập/lập lại. Mục tiêu người dùng nói dùng lại amount_vnd (số tiền mục tiêu), jar_text (hũ, giữ chữ họ gõ)
-    # và date_text (cụm chỉ hạn họ nói, ví dụ "cuối tháng này"); handler đổi hũ và ngày bằng mã.
-    roadmap_action: Literal["view", "create"] | None = None
+    shock_id: str | None = None  # stress: handler kiểm mã cú sốc theo cấu hình cú sốc
+    # roadmap: xem, lập/lập lại, hoặc sửa một bước của bản đang dùng. Mục tiêu người dùng nói dùng lại amount_vnd (số tiền mục tiêu),
+    # jar_text (hũ, giữ chữ họ gõ) và date_text (cụm chỉ hạn họ nói, ví dụ "cuối tháng này"); handler đổi hũ và ngày bằng mã.
+    # Sửa bước: amount_vnd là số tiền mới người dùng muốn (nếu nói).
+    roadmap_action: Literal["view", "create", "edit_step"] | None = None
+    # Ý định phụ do router trích (thay cho đoán bằng từ khóa trên chữ): loại nhận xét hành vi, loại phí được hỏi, hỏi cách nạp hay lần nạp.
+    insight_kind: BehaviorInsightKind | None = None  # behavior; null khi hỏi chung về thói quen
+    fee_topic: Literal["monthly", "per_transaction", "once", "late", "other"] | None = None  # knowledge; null khi hỏi chung biểu phí
+    ingest_action: Literal["how_to", "status"] | None = None  # ingest; null thì xem lần nạp gần nhất
 
 
 class IntentResult(_Model):
@@ -190,8 +195,6 @@ class IntentResult(_Model):
             p.from_jar_text = p.to_jar_text = None
         if self.needs_clarification != (self.clarify is not None):
             raise ValueError("needs_clarification đúng khi và chỉ khi có `clarify`")
-        if self.needs_clarification and self.intent in ("out_of_scope", "chitchat"):
-            raise ValueError("ngoài phạm vi và chitchat không hỏi lại")
         return self
 
 

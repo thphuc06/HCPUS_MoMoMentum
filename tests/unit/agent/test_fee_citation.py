@@ -17,7 +17,7 @@ from agent_helpers import (
     run_turn,
     types,
 )
-from yofina_agent.fee_citation import answer_text, asked_concepts, asks_free, select_fees
+from yofina_agent.fee_citation import answer_text, select_fees
 from yofina_agent.tools import classify_result
 
 from yofina_core import blocks as B
@@ -27,8 +27,9 @@ def ok(payload):
     return lambda args: classify_result("x", mcp_ok(payload))
 
 
-def turn_with(question, payload, *, monkeypatch):
-    llm = make_llm([route_response(intent="knowledge")])
+def turn_with(question, payload, *, monkeypatch, topic=None):
+    # loại phí do router trích (fee_topic), không đoán bằng cụm từ trên chữ
+    llm = make_llm([route_response(intent="knowledge", fee_topic=topic)])
     events, tools, writer = run_turn(
         question,
         llm=llm,
@@ -50,7 +51,7 @@ def test_phi_dich_vu_moi_thang_co_so_tu_bang_va_trich_dan_dung_nguon(monkeypatch
     payload = fixture("get_fee_schedule.ok.json")
     fee = payload["data"]["fees"][0]
     events, tools, writer, (_, client, _) = turn_with(
-        "Phí dịch vụ Trả sau mỗi tháng là bao nhiêu, nguồn ở đâu?", payload, monkeypatch=monkeypatch
+        "Phí dịch vụ Trả sau mỗi tháng là bao nhiêu, nguồn ở đâu?", payload, monkeypatch=monkeypatch, topic="monthly"
     )
     check_agui_order(events)
     assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == [
@@ -86,7 +87,7 @@ def test_phi_dich_vu_moi_thang_co_so_tu_bang_va_trich_dan_dung_nguon(monkeypatch
 def test_hoi_phi_tra_cham_ma_bang_khong_co_thi_khong_bia(monkeypatch):
     payload = fixture("get_fee_schedule.ok.json")
     events, _, _, _ = turn_with(
-        "Trả sau có phí trả chậm không? Nguồn ở đâu?", payload, monkeypatch=monkeypatch
+        "Trả sau có phí trả chậm không? Nguồn ở đâu?", payload, monkeypatch=monkeypatch, topic="late"
     )
     check_agui_order(events)
     text = text_of(events)
@@ -98,15 +99,17 @@ def test_hoi_phi_tra_cham_ma_bang_khong_co_thi_khong_bia(monkeypatch):
     assert {t for i in cit["data"]["items"] for t in i["fee_types"]} <= returned
 
 
-def test_trich_dan_dieu_khoan_mien_phi_khong_co_thi_noi_ro(monkeypatch):
+def test_dieu_khoan_ngoai_bon_loai_phi_thi_noi_chua_co_nguon(monkeypatch):
+    # mọi chủ đề không có dòng phí khớp (router: fee_topic="other") đi chung một câu, không có nhánh riêng cho "miễn phí"
     payload = fixture("get_fee_schedule.ok.json")
     events, _, _, _ = turn_with(
-        "Trích dẫn giúp mình điều khoản nói Trả sau được miễn phí trọn đời.",
+        "Điều khoản hoàn phí khi hủy Trả sau nằm ở đâu?",
         payload,
         monkeypatch=monkeypatch,
+        topic="other",
     )
     text = text_of(events)
-    assert "không có điều khoản miễn phí nào" in text and "33.000 ₫" in text
+    assert "chưa có khoản bạn hỏi" in text and "không đưa số hay nguồn cho khoản đó" in text and "33.000 ₫" in text
     (cit,) = citations(events)
     assert [i["source_url"] for i in cit["data"]["items"]] == [
         payload["data"]["fees"][0]["source_url"]
@@ -116,7 +119,7 @@ def test_trich_dan_dieu_khoan_mien_phi_khong_co_thi_noi_ro(monkeypatch):
 def test_hai_nguon_chi_trich_dan_loai_phi_duoc_hoi(monkeypatch):
     payload = fixture("get_fee_schedule.ok_hai_nguon.json")
     events, _, _, _ = turn_with(
-        "Nếu quá hạn thì Trả sau tính phí gì?", payload, monkeypatch=monkeypatch
+        "Nếu quá hạn thì Trả sau tính phí gì?", payload, monkeypatch=monkeypatch, topic="late"
     )
     (cit,) = citations(events)
     (item,) = cit["data"]["items"]
@@ -145,16 +148,25 @@ def test_khong_co_bieu_phi_la_notice_info_khong_co_trich_dan(monkeypatch):
     assert (notice["data"]["kind"], notice["data"]["code"]) == ("info", "FEE_SCHEDULE_NOT_FOUND")
 
 
-def test_nhan_ra_loai_phi_theo_thuoc_tinh_dong_khong_theo_ma():
+def test_chon_dong_phi_theo_thuoc_tinh_dong_khong_theo_ma():
     fees = fixture("get_fee_schedule.ok_hai_nguon.json")["data"]["fees"]
-    assert asked_concepts("phí dịch vụ hằng tháng") == ["monthly"]
-    assert asked_concepts("trễ hạn có bị phạt không") == ["late"]
-    assert asked_concepts("chi phí phát sinh khi mua") == []  # "phát sinh" không phải phí phạt
     assert select_fees(fees, ["late"]) == (["late_payment_fee"], [])
+    assert select_fees(fees, ["monthly"]) == (["monthly_service_fee"], [])
     assert select_fees(fees, ["per_transaction"]) == ([], ["per_transaction"])
+    assert select_fees(fees, ["other"]) == ([], ["other"])
     assert select_fees(fees, []) == (["monthly_service_fee", "late_payment_fee"], [])
-    assert asks_free("có được miễn phí không") and not asks_free("phí bao nhiêu")
     data = fixture("get_fee_schedule.ok.json")["data"]
-    assert answer_text(data, [], ["late"], free_asked=False).startswith(
+    assert answer_text(data, [], ["late"]).startswith(
         "Biểu phí Trả sau (mô phỏng) mình có hiện chưa có phí trả chậm"
     )
+
+
+def test_router_co_tham_so_loai_phi_khop_tap_cua_ma():
+    from typing import get_args
+
+    from yofina_agent.router import ROUTER_SYSTEM
+    from yofina_agent.schemas import IntentParams
+
+    topics = get_args(get_args(IntentParams.model_fields["fee_topic"].annotation)[0])
+    assert set(topics) == {"monthly", "per_transaction", "once", "late", "other"}
+    assert "fee_topic" in ROUTER_SYSTEM

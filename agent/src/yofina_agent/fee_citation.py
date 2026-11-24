@@ -3,13 +3,13 @@
 Luồng (mã điều khiển, KHÔNG có lượt model nào):
 
     `knowledge___get_fee_schedule` (biểu phí CÓ CẤU TRÚC, bảng `fee_schedules`)
-      -> chọn các dòng phí câu hỏi nhắc tới (theo thuộc tính của dòng: chu kỳ, điều kiện; không gắn cứng mã phí)
+      -> chọn các dòng phí theo `fee_topic` router trích (khớp THUỘC TÍNH của dòng: chu kỳ, điều kiện; không gắn cứng mã phí)
       -> khối `citation` (`yofina_core.blocks.build_citation`): tên nguồn, đường dẫn, ngày hiệu lực CHÉP từ chính các dòng đó
       -> câu trả lời dựng bằng mã: số tiền và điều kiện lấy từ `amount_vnd`, `rate_percent`, `condition_note` của dòng
 
-Câu hỏi về một loại phí mà bảng không có (ví dụ phí trả chậm khi bảng chưa có dòng nào điều kiện `overdue`), hay về điều khoản "miễn phí"
-mà bảng không ghi: nói rõ là chưa có nguồn cho khoản đó, KHÔNG bịa số hay nguồn; vẫn liệt kê các phí đang hiệu lực kèm trích dẫn của
-chúng (khối `citation` chỉ chứa nguồn và loại phí mà tool đã trả).
+Câu hỏi về một loại phí mà bảng không có dòng nào khớp (ví dụ phí trả chậm khi bảng chưa có dòng điều kiện `overdue`), hay về một
+điều khoản ngoài bốn loại (`fee_topic="other"`): nói rõ là chưa có nguồn cho khoản đó, KHÔNG bịa số hay nguồn; vẫn liệt kê các phí đang
+hiệu lực kèm trích dẫn của chúng (khối `citation` chỉ chứa nguồn và loại phí mà tool đã trả).
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from yofina_agent.textutil import normalize
 from yofina_agent.tools import ToolOutcome
 from yofina_core import blocks as B
 from yofina_core.errors import ErrorCode
@@ -27,32 +26,16 @@ if TYPE_CHECKING:
     from yofina_agent.schemas import IntentResult
     from yofina_agent.turn import Turn
 
-#: loại phí người dùng có thể hỏi, nhận ra bằng cụm từ (đã bỏ dấu) và khớp với dòng phí bằng THUỘC TÍNH của dòng
-CONCEPTS: dict[str, tuple[str, ...]] = {
-    "late": ("tra cham", "tre han", "qua han", "cham tra", "bi phat", "tien phat"),
-    "monthly": ("hang thang", "moi thang", "phi thang", "phi dich vu", "dich vu"),
-    "per_transaction": ("moi giao dich", "moi lan", "tung giao dich"),
-    "once": ("mot lan", "phi mo", "kich hoat"),
-}
-#: câu hỏi về điều khoản miễn phí (bảng phí không có cột nào như vậy)
-FREE_PHRASES = ("mien phi", "khong mat phi", "khong ton phi", "free")
+#: `fee_topic` của router -> `period` của dòng phí (phí trả chậm khớp theo điều kiện `overdue`; "other" không khớp dòng nào)
+_TOPIC_PERIOD = {"monthly": "per_month", "per_transaction": "per_transaction", "once": "once"}
 _PERIOD_TEXT = {"per_month": "mỗi tháng", "per_transaction": "mỗi giao dịch", "once": "một lần"}
 _CONCEPT_LABEL = {
     "late": "phí trả chậm",
     "monthly": "phí hằng tháng",
     "per_transaction": "phí theo từng giao dịch",
     "once": "phí một lần",
+    "other": "khoản bạn hỏi",
 }
-
-
-def asked_concepts(question: str) -> list[str]:
-    q = f" {normalize(question)} "
-    return [c for c, phrases in CONCEPTS.items() if any(f" {p} " in q for p in phrases)]
-
-
-def asks_free(question: str) -> bool:
-    q = f" {normalize(question)} "
-    return any(f" {p} " in q for p in FREE_PHRASES)
 
 
 def matches(fee: Mapping[str, Any], concept: str) -> bool:
@@ -60,9 +43,7 @@ def matches(fee: Mapping[str, Any], concept: str) -> bool:
         return fee["condition_code"] == "overdue"
     if fee["condition_code"] == "overdue":
         return False
-    return {"monthly": "per_month", "per_transaction": "per_transaction", "once": "once"}[
-        concept
-    ] == fee["period"]
+    return _TOPIC_PERIOD.get(concept) == fee["period"]
 
 
 def select_fees(
@@ -98,9 +79,7 @@ def fee_sentence(fee: Mapping[str, Any]) -> str:
     return text
 
 
-def answer_text(
-    data: Mapping[str, Any], cited: Sequence[str], missing: Sequence[str], *, free_asked: bool
-) -> str:
+def answer_text(data: Mapping[str, Any], cited: Sequence[str], missing: Sequence[str]) -> str:
     """Câu trả lời từ đúng các dòng phí đã trích dẫn: số, chu kỳ, điều kiện, tên nguồn và ngày hiệu lực đều của tool."""
     product = data["product_label"]
     by_type = {f["fee_type"]: f for f in data["fees"]}
@@ -110,11 +89,9 @@ def answer_text(
         parts.append(
             f"Biểu phí {product} mình có hiện chưa có {names}, nên mình không đưa số hay nguồn cho khoản đó."
         )
-    if free_asked:
-        parts.append(f"Biểu phí {product} không có điều khoản miễn phí nào để trích dẫn.")
     lines = [by_type[t] for t in cited]
     if lines:
-        lead = "Các phí đang hiệu lực" if (missing or free_asked or len(lines) > 1) else "Phí"
+        lead = "Các phí đang hiệu lực" if (missing or len(lines) > 1) else "Phí"
         body = "; ".join(fee_sentence(f) for f in lines)
         parts.append(f"{lead} của {product}: {body}.")
         sources = list(dict.fromkeys((f["source_name"], f["effective_from"]) for f in lines))
@@ -129,12 +106,12 @@ def citation_for(outcome: ToolOutcome, trace_id: str, fee_types: Sequence[str]) 
 
 
 async def on_knowledge(turn: Turn, r: IntentResult, question: str) -> None:
-    concepts, free = asked_concepts(question), asks_free(question)
+    concepts = [r.params.fee_topic] if r.params.fee_topic else []
 
     def pick(outcome: ToolOutcome) -> tuple[list[str], list[str]]:
         fees = (outcome.payload or {})["data"]["fees"]
         cited, missing = select_fees(fees, concepts)
-        if missing or free:
+        if missing:
             # hỏi khoản bảng không có: vẫn trích dẫn các phí đang hiệu lực (không bao giờ trích nguồn cho khoản không có)
             cited = cited or [f["fee_type"] for f in fees]
         return cited, missing
@@ -154,7 +131,7 @@ async def on_knowledge(turn: Turn, r: IntentResult, question: str) -> None:
         return
     cited, missing = pick(res.outcome)
     data = (res.outcome.payload or {})["data"]
-    await turn.emit_fixed_text(answer_text(data, cited, missing, free_asked=free))
+    await turn.emit_fixed_text(answer_text(data, cited, missing))
 
 
 def _compact(data: Mapping[str, Any]) -> dict[str, Any]:

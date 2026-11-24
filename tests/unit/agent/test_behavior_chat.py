@@ -60,16 +60,20 @@ def test_hoi_chung_ra_khoi_nhan_xet_quan_trong_nhat(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("question", "insight_id"),
+    ("kind", "insight_id"),
     [
-        ("Mình dùng Trả sau nhiều không?", "tra_sau_5_lan"),
-        ("Cuối tuần mình tiêu nhiều không?", "thu_bay_an_uong"),
-        ("Mình có chi dồn sau ngày lương không?", "chi_don_sau_luong"),
+        ("bnpl_usage", "tra_sau_5_lan"),
+        ("weekday_pattern", "thu_bay_an_uong"),
+        ("payday_cycle", "chi_don_sau_luong"),
     ],
 )
-def test_hoi_dung_chu_de_thi_lay_dung_nhan_xet(monkeypatch, question, insight_id):
+def test_router_tra_loai_nhan_xet_thi_lay_dung_nhan_xet(monkeypatch, kind, insight_id):
+    # loại nhận xét do router trích (insight_kind), không đoán bằng từ khóa trên chữ: câu hỏi ở đây không nhắc từ nào của loại đó
     events, _, _ = run_turn(
-        question, llm=make_llm([route_response(intent="behavior")]), tools=gateway(PROFILE), monkeypatch=monkeypatch
+        "Cho mình biết thêm về chuyện này",
+        llm=make_llm([route_response(intent="behavior", insight_kind=kind)]),
+        tools=gateway(PROFILE),
+        monkeypatch=monkeypatch,
     )
     (block,) = blocks_of(events)
     B.BehaviorInsightBlock.model_validate(block)
@@ -80,7 +84,7 @@ def test_hoi_dung_chu_de_thi_lay_dung_nhan_xet(monkeypatch, question, insight_id
 def test_hoi_chu_de_ho_so_khong_co_thi_noi_ro_va_lay_nhan_xet_noi_bat(monkeypatch):
     events, _, _ = run_turn(
         "Mình hay tiêu vào buổi tối không?",
-        llm=make_llm([route_response(intent="behavior")]),
+        llm=make_llm([route_response(intent="behavior", insight_kind="time_of_day")]),
         tools=gateway(PROFILE),
         monkeypatch=monkeypatch,
     )
@@ -132,6 +136,12 @@ def test_ho_so_sai_hop_dong_thi_bao_loi_khong_phat_khoi(monkeypatch):
 
 
 def test_router_co_luat_cho_y_dinh_behavior():
-    assert "- behavior:" in ROUTER_SYSTEM and "Các ý định (intent):" in ROUTER_SYSTEM
-    assert behavior_chat.asked_kind("Mình có hay xài trả sau không") == "bnpl_usage"
-    assert behavior_chat.asked_kind("số lượng giao dịch của mình") is None  # "lượng" không phải "lương"
+    assert "- behavior:" in ROUTER_SYSTEM and "Các ý định (intent)" in ROUTER_SYSTEM
+    # mọi loại nhận xét router có thể trả đều có tên để nói rõ khi hồ sơ chưa có (enum của schema = loại của hợp đồng khối)
+    from typing import get_args
+
+    from yofina_core.blocks import BehaviorInsightKind
+
+    assert set(behavior_chat.TOPIC_TEXT) == set(get_args(BehaviorInsightKind))
+    for kind in get_args(BehaviorInsightKind):
+        assert kind in ROUTER_SYSTEM

@@ -29,6 +29,8 @@ _FORECAST = (
     "can tien",
     "du toi ky luong",
     "du den ky luong",
+    "sap can",
+    "bi hut",
 )
 _FORECAST_WHEN = re.compile(r"\b(?:khi nao|bao gio)\b.*\b(?:can|het)\b")  # "khi nào hũ X cạn"
 _WHAT_IF = re.compile(

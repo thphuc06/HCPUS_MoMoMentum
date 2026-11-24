@@ -549,7 +549,6 @@ def _step_call(turn: Turn, st: PlanStep) -> Any:
 
 
 async def _analyze_and_compose(turn: Turn, question: str, scenario_res: Any, st: WhatIfState) -> None:
-    s = turn.s
     compact = dict(scenario_res.compact or {})
     obligations = turn.compact_of("get_obligations")
     if obligations:
@@ -582,7 +581,6 @@ async def _analyze_and_compose(turn: Turn, question: str, scenario_res: Any, st:
             return
         log.info(json.dumps({"event": "verifier_retry", "attempt": attempt, "failed_rules": verdict.failed_rules, "ungrounded": len(verdict.grounding.ungrounded)}))
         feedback, previous = verdict.feedback, analysis
-        _ = s
 
 
 def _spend_amount(spec: Mapping[str, Any] | None) -> int | None:

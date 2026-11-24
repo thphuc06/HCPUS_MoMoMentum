@@ -154,8 +154,12 @@ def test_schema_router_phang_va_day_du():
     assert params["properties"]["shock_id"] == {"type": ["string", "null"]}
     assert params["properties"]["roadmap_action"] == {
         "type": ["string", "null"],
-        "enum": ["view", "create", None],
+        "enum": ["view", "create", "edit_step", None],
     }
+    # ý định phụ có cấu trúc (kiểm toán prompt đợt 4): enum cố định, null khi không áp dụng
+    assert params["properties"]["insight_kind"]["enum"][-1] is None
+    assert params["properties"]["fee_topic"]["enum"] == ["monthly", "per_transaction", "once", "late", "other", None]
+    assert params["properties"]["ingest_action"]["enum"] == ["how_to", "status", None]
 
 
 def test_prompt_router_gui_danh_sach_cu_soc_tu_file():

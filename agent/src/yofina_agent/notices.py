@@ -47,6 +47,8 @@ CAN_DO: tuple[str, ...] = (
     "Thử kịch bản \"nếu mua...\" (cả bằng Trả sau)",
     "Kiểm tra trước khi chi hoặc chuyển tiền",
     "Chuyển tiền giữa các hũ, khai lương và nghĩa vụ",
+    "Điểm chống chịu, thử cú sốc và lộ trình tiết kiệm",
+    "Thói quen chi tiêu, phí Trả sau và nạp sao kê ngoài ví",
 )
 CANNOT_DO: tuple[str, ...] = (
     "Tư vấn mua cổ phiếu, quỹ, tiền mã hóa",
@@ -216,22 +218,11 @@ ROADMAP_CLOSING_NEXT_COMPARE = (
 ROADMAP_CLOSING_NEXT_REVIEW = (
     "Bước tiếp theo: mở trang Lộ trình để chấp nhận, sửa hoặc từ chối từng bước."
 )
-#: Người dùng muốn sửa một bước trong chat (chat chưa có tool sửa bước): chỉ ra bước khớp và chỗ sửa, không nói là đã sửa.
-#: {title}: tiêu đề bước; {detail}: số tiền và giai đoạn của bước; {version}: phiên bản đang dùng; {amount}: số tiền người
-#: dùng muốn; {titles}: các bước khớp; {about}: hũ người dùng nhắc.
-ROADMAP_EDIT_MATCH = "Bước khớp với yêu cầu của bạn là “{title}” ({detail}) trong lộ trình đang dùng, phiên bản {version}."
-ROADMAP_EDIT_MANY = "Có {count} bước khớp yêu cầu của bạn trong lộ trình đang dùng, phiên bản {version}: {titles}."
+#: Người dùng muốn sửa một bước trong chat (chat chưa có tool sửa bước): chỗ sửa trên giao diện. Vừa là dữ kiện `cach_sua` cho writer
+#: (writer chỉ ra bước người dùng nói tới từ bản gọn các bước), vừa là lời đáp khi writer không viết được. Không chứa số.
 ROADMAP_EDIT_HOW = (
     "Mình chưa sửa được bước ngay trong chat nên chưa đổi gì. Bấm Mở trang Lộ trình trên thẻ, rồi bấm Sửa ở bước đó "
     "để đổi số tiền hoặc ngày."
-)
-ROADMAP_EDIT_HOW_AMOUNT = (
-    "Mình chưa sửa được bước ngay trong chat nên chưa đổi gì. Bấm Mở trang Lộ trình trên thẻ, rồi bấm Sửa ở bước đó "
-    "và nhập số tiền mới {amount}."
-)
-ROADMAP_EDIT_NONE = (
-    "Lộ trình đang dùng (phiên bản {version}) không có bước nào khớp yêu cầu của bạn{about}, nên mình chưa đổi gì. "
-    "Bạn xem các bước trên thẻ; muốn sửa bước khác thì bấm Mở trang Lộ trình rồi bấm Sửa ở bước đó."
 )
 ROADMAP_EDIT_NO_ROADMAP = (
     "Bạn chưa có lộ trình đang dùng nên chưa có bước nào để sửa. Muốn lập lộ trình, bạn nhắn “Lập lộ trình giúp mình” nhé."
@@ -260,7 +251,6 @@ SCENARIO_UNBUILDABLE: tuple[str, str] = (
     "Chưa dựng được kịch bản",
     "Mình chưa hiểu đủ để dựng kịch bản này. Bạn nói rõ món gì, bao nhiêu tiền và trả bằng cách nào nhé.",
 )
-PROFILE_PREPARED_HINT = "Đã chuẩn bị thay đổi hồ sơ; chưa lưu gì cho tới khi bạn bấm Xác nhận."
 
 # Tiêu đề cho lỗi của tool (nội dung lấy từ chính thông điệp tiếng Việt của tool).
 ERROR_TITLES: dict[str, str] = {
@@ -283,7 +273,4 @@ FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này."
 SESSION_EXPIRED_MESSAGE = "Phiên đăng nhập đã hết hạn. Bạn đăng nhập lại rồi hỏi tiếp nhé."
 UNAVAILABLE_MESSAGE = "Dịch vụ dữ liệu đang tạm thời không phản hồi. Bạn thử lại sau ít phút nhé."
 
-ASK_MOVE_DETAILS = (
-    "Bạn muốn chuyển bao nhiêu tiền, từ hũ nào sang hũ nào?"  # hỏi lại khi router không trả reply
-)
 EMPTY_INPUT_MESSAGE = "Không thấy câu hỏi nào của người dùng trong yêu cầu."

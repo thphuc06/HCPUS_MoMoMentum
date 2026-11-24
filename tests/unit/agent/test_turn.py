@@ -382,9 +382,13 @@ def test_xa_giao_dung_cau_tra_loi_cua_router(monkeypatch):
 
 
 def test_xa_giao_khong_co_reply_thi_nho_writer(monkeypatch):
+    from yofina_agent import notices
+
     llm = make_llm([route_response(intent="chitchat")])
     _, _, writer = run_turn("chào", llm=llm, monkeypatch=monkeypatch)
     assert writer.calls[0]["task"] == "chitchat"
+    # danh sách việc làm được đi vào dữ liệu (một nguồn: notices.CAN_DO), không chép trong lời nhắc của việc
+    assert writer.calls[0]["compact"] == {"viec_lam_duoc": list(notices.CAN_DO)}
 
 
 # --- suy giảm có kiểm soát -------------------------------------------------------------------------
@@ -681,7 +685,8 @@ def test_hoi_du_bao_mot_hu_goi_tool_forecast_phat_khoi_timeline_va_nho_writer(mo
     assert result_of(events)["intent"] == "lookup" and result_of(events)["tool_calls"] == 2
 
 
-def test_du_bao_khong_nhom_hu_nao_thi_hoi_lai_khong_goi_tool_forecast(monkeypatch):
+def test_du_bao_khong_noi_hu_nao_thi_doc_moi_hu_khong_hoi_lai(monkeypatch):
+    # router lỡ hỏi lại "hũ nào": tra cứu không có ô bắt buộc nên mã bỏ câu hỏi đó và đọc dự báo của mọi hũ
     llm = make_llm(
         [
             route_response(
@@ -692,9 +697,8 @@ def test_du_bao_khong_nhom_hu_nao_thi_hoi_lai_khong_goi_tool_forecast(monkeypatc
     )
     events, tools, _ = run_turn("dự báo giúp mình", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert forecast_calls(tools) == []
-    (clarify,) = blocks_of(events)
-    assert clarify["type"] == "clarify" and clarify["data"]["question"] == "Bạn muốn xem dự báo hũ nào?"
+    assert len(forecast_calls(tools)) > 1
+    assert "clarify" not in block_types(events)
 
 
 def test_du_bao_hu_khong_co_thi_hien_so_du_that_va_hoi_lai(monkeypatch):

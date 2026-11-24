@@ -86,7 +86,6 @@ class AgentSettings:
     affordability_text_max_tokens: int
     low_data_days: int
     low_coverage_threshold: float
-    router_min_confidence: float
     turn_record_tool: str
     turn_record_timeout_seconds: float
 
@@ -149,7 +148,6 @@ class AgentSettings:
             affordability_text_max_tokens=get("affordability_text_max_tokens", int),
             low_data_days=get("low_data_days", int),
             low_coverage_threshold=get("low_coverage_threshold", float),
-            router_min_confidence=get("router_min_confidence", float),
             turn_record_tool=get("turn_record_tool"),
             turn_record_timeout_seconds=get("turn_record_timeout_seconds", float),
         )

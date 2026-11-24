@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import json
 
+import pytest
 from agent_helpers import (
     FakeTools,
     blocks_of,
@@ -18,7 +19,7 @@ from agent_helpers import (
     run_turn,
     types,
 )
-from yofina_agent.ingest_chat import status_text, wants_start
+from yofina_agent.ingest_chat import status_text
 from yofina_agent.tools import classify_result
 
 from yofina_core import blocks as B
@@ -29,8 +30,9 @@ def ok(payload):
     return lambda args: classify_result("x", mcp_ok(payload))
 
 
-def turn_with(question, results, *, monkeypatch, intent="ingest"):
-    llm = make_llm([route_response(intent=intent)])
+def turn_with(question, results, *, monkeypatch, intent="ingest", action=None):
+    # hỏi cách nạp hay hỏi lần nạp do router trích (ingest_action), không đoán bằng cụm từ trên chữ
+    llm = make_llm([route_response(intent=intent, ingest_action=action)])
     tools = FakeTools(results)
     events, tools, writer = run_turn(question, llm=llm, tools=tools, monkeypatch=monkeypatch)
     return events, tools, writer, llm
@@ -160,9 +162,10 @@ def test_chua_nap_lan_nao_thi_huong_dan_cach_nap(monkeypatch):
 def test_hoi_cach_nap_goi_start_job_khong_tao_job(monkeypatch):
     payload = fixture("ingest/start_job.ok.json")
     events, tools, _, _ = turn_with(
-        "Mình muốn thêm chi tiêu ở thẻ ngân hàng khác vào thì làm sao?",
+        "Chỉ mình cách đưa sao kê bên ngân hàng kia vào",
         {"start_job": ok(payload)},
         monkeypatch=monkeypatch,
+        action="how_to",
     )
     check_agui_order(events)
     assert tools.calls == [("start_job", {})] and tool_names(events) == ["ingest___start_job"]
@@ -215,11 +218,17 @@ def test_ket_qua_sai_hop_dong_khong_phat_khoi():
         status_blocks(classify_result("ingest___get_job_status", mcp_ok(payload)), "t" * 32)
 
 
-def test_nhan_ra_cau_hoi_cach_nap():
-    assert wants_start("Mình muốn thêm chi tiêu ở thẻ ngân hàng khác vào thì làm sao?")
-    assert wants_start("Hướng dẫn nạp sao kê")
-    assert not wants_start("Mình vừa nạp ảnh chuyển khoản, xong chưa?")
-    assert not wants_start("Nạp xong rồi thì độ phủ dữ liệu của mình tăng bao nhiêu?")
+@pytest.mark.parametrize("action", [None, "status"])
+def test_khong_hoi_cach_nap_thi_doc_lan_nap_gan_nhat(monkeypatch, action):
+    # câu có chữ "làm sao" nhưng router trả status (hoặc null): đọc trạng thái, không trả lời hướng dẫn nạp
+    payload = fixture("ingest/get_job_status.ok_review.json")
+    _, tools, _, _ = turn_with(
+        "Làm sao biết ảnh mình gửi đọc xong chưa?",
+        {"get_job_status": ok(payload)},
+        monkeypatch=monkeypatch,
+        action=action,
+    )
+    assert tools.calls == [("get_job_status", {})]
 
 
 def test_cau_trang_thai_khong_co_so_nao_ngoai_so_cua_tool():
@@ -231,10 +240,24 @@ def test_cau_trang_thai_khong_co_so_nao_ngoai_so_cua_tool():
     assert set(re.findall(r"\d+", text)) <= allowed
 
 def test_router_co_luat_cho_ingest_va_knowledge():
+    from yofina_agent.clarify import resolve_clarify
     from yofina_agent.router import ROUTER_SYSTEM
+    from yofina_agent.schemas import IntentResult
 
     ingest = ROUTER_SYSTEM.split("\n- ingest:", 1)[1].split("\n- ", 1)[0]
     knowledge = ROUTER_SYSTEM.split("\n- knowledge:", 1)[1].split("\n- ", 1)[0]
-    assert "nạp ảnh" in ingest and "sao kê" in ingest and "là dữ liệu" in ingest and "Không bao giờ hỏi lại" in ingest
+    assert "ảnh" in ingest and "sao kê" in ingest and "là dữ liệu" in ingest
     assert "Trả sau" in knowledge and "nguồn" in knowledge and "what_if" in knowledge
     assert "Mười ý định" not in ROUTER_SYSTEM
+    # không hỏi lại: mã bỏ câu hỏi lại của router cho hai ý định này (clarify.CLARIFY_INTENTS), không dặn trong lời nhắc
+    for intent in ("ingest", "knowledge"):
+        r = IntentResult.model_validate(
+            {
+                "intent": intent,
+                "params": {},
+                "confidence": 0.7,
+                "needs_clarification": True,
+                "clarify": {"slot": "other", "question": "Bạn muốn hỏi gì?", "chips": []},
+            }
+        )
+        assert resolve_clarify(r) is None

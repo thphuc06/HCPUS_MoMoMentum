@@ -2,8 +2,8 @@
 
 Luồng (mã điều khiển, KHÔNG có lượt model nào):
 
-    câu hỏi cách nạp ("làm sao thêm chi tiêu ở thẻ khác")  -> `ingest___start_job` -> câu hướng dẫn (màn Nạp dữ liệu, loại tệp, giới hạn)
-    còn lại                                                -> `ingest___get_job_status` (lần nạp gần nhất)
+    hỏi cách nạp (router: `ingest_action="how_to"`)  -> `ingest___start_job` -> câu hướng dẫn (màn Nạp dữ liệu, loại tệp, giới hạn)
+    còn lại                                          -> `ingest___get_job_status` (lần nạp gần nhất)
         đang đọc     -> câu tiến độ
         chờ duyệt    -> khối `ingest_review` + câu đếm dòng (chọn sẵn, cần duyệt, trùng)
         đã chốt      -> khối `ingest_review` + khối `coverage_change` + câu độ phủ trước và sau
@@ -31,7 +31,6 @@ from pydantic import ValidationError
 
 from yofina_agent import events as ev
 from yofina_agent import notices
-from yofina_agent.textutil import normalize
 from yofina_agent.tools import ContractMismatch, ToolKind, ToolOutcome
 from yofina_core import blocks as B
 from yofina_core.errors import ErrorCode
@@ -43,21 +42,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("yofina.agent.ingest")
 
-#: câu hỏi CÁCH nạp (không hỏi về một lần nạp đã có): so trên chữ đã bỏ dấu, hạ thường
-START_PHRASES = (
-    "lam sao",
-    "lam the nao",
-    "the nao de",
-    "cach nap",
-    "cach them",
-    "huong dan",
-    "muon nap",
-    "muon them",
-    "nap o dau",
-    "them o dau",
-    "co nap duoc",
-    "nap duoc khong",
-)
 _TRANSIENT = {
     ErrorCode.DATABASE_UNAVAILABLE.value,
     ErrorCode.INTERNAL_ERROR.value,
@@ -80,12 +64,6 @@ _JOB_ERROR_TEXT = {
     ErrorCode.MODEL_BUDGET_EXCEEDED.value: "hôm nay đã hết lượt đọc tệp bằng AI",
 }
 _DEFAULT_JOB_ERROR = "mình chưa xử lý được tệp này"
-
-
-def wants_start(question: str) -> bool:
-    """Người dùng hỏi CÁCH nạp (chưa nói về một lần nạp cụ thể)."""
-    q = f" {normalize(question)} "
-    return any(f" {p} " in q for p in START_PHRASES)
 
 
 def _mb(n: int) -> str:
@@ -354,7 +332,7 @@ async def _start(turn: Turn, *, no_job: bool) -> None:
 
 
 async def on_ingest(turn: Turn, r: IntentResult, question: str) -> None:
-    if wants_start(question):
+    if r.params.ingest_action == "how_to":
         await _start(turn, no_job=False)
         return
     outcome, _ = await call_ingest_tool(

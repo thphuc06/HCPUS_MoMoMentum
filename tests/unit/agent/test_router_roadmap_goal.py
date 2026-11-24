@@ -14,8 +14,19 @@ def test_prompt_router_day_trich_muc_tieu_lo_trinh_va_khong_tu_doi_ngay():
     for key in ("amount_vnd", "jar_text", "date_text", '"create"'):
         assert key in rule
     assert "không tự đổi thành ngày" in rule
-    # roadmap vẫn không bao giờ hỏi lại
-    assert "stress và roadmap không bao giờ hỏi lại" in ROUTER_SYSTEM
+    # roadmap vẫn không bao giờ hỏi lại: mã bỏ câu hỏi lại của router (clarify.CLARIFY_INTENTS)
+    from yofina_agent.clarify import resolve_clarify
+
+    asked = IntentResult.model_validate(
+        {
+            "intent": "roadmap",
+            "params": {"roadmap_action": "create"},
+            "confidence": 0.8,
+            "needs_clarification": True,
+            "clarify": {"slot": "other", "question": "Mục tiêu là gì?", "chips": []},
+        }
+    )
+    assert resolve_clarify(asked) is None
 
 
 def test_route_tra_tham_so_muc_tieu_lo_trinh():

@@ -3,8 +3,8 @@
 Luồng một lượt (không gọi model ngoài router):
 
 1. `forecast___get_behavior_profile` (chỉ đọc hồ sơ batch đêm đã tính; mỗi số trong câu nhận xét đã qua kiểm căn cứ lúc tính).
-2. Chọn MỘT nhận xét bằng mã: câu hỏi nhắc tới Trả sau, cuối tuần, kỳ lương, buổi tối hay ngày chi đậm thì lấy nhận xét đúng loại đó;
-   không nhắc gì thì lấy nhận xét quan trọng nhất (đầu danh sách).
+2. Chọn MỘT nhận xét bằng mã theo `insight_kind` router trích từ câu hỏi (khía cạnh thói quen được hỏi): có nhận xét đúng loại
+   thì lấy nhận xét đó; hỏi chung (null) thì lấy nhận xét quan trọng nhất (đầu danh sách).
 3. Phát khối `behavior_insight` (`yofina_core.blocks.build_behavior_insight`) TRƯỚC kết quả tool, rồi một câu chữ do mã dựng từ chính
    câu nhận xét và việc cần làm của hồ sơ (không có số nào ngoài số của hồ sơ, nên không cần Writer hay Verifier).
 
@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Any
 from yofina_agent.tools import ContractMismatch, ToolOutcome
 from yofina_core import blocks as B
 from yofina_core.errors import ErrorCode
-from yofina_core.pii import fold
 
 if TYPE_CHECKING:
     from yofina_agent.schemas import IntentResult
@@ -33,27 +32,15 @@ TARGET = "forecast"
 EMPTY_CODES = frozenset({ErrorCode.PROFILE_INCOMPLETE.value})
 NOT_READY_TITLE = "Chưa đủ dữ liệu về thói quen chi tiêu"
 
-#: từ khóa (đã bỏ dấu) -> loại nhận xét; thứ tự là thứ tự ưu tiên khi câu nhắc nhiều chủ đề
-KIND_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("bnpl_usage", ("tra sau", "bnpl", "mua truoc", "vi tra sau")),
-    ("weekday_pattern", ("cuoi tuan", "thu bay", "chu nhat", "ngay nao trong tuan", "thu may", "ngay trong tuan")),
-    ("payday_cycle", ("ky luong", "ngay luong", "nhan luong", "sau luong", "luong ve", "dau thang", "dau ky", "cuoi thang")),
-    ("time_of_day", ("buoi toi", "ban dem", "khuya", "gio nao", "luc nao trong ngay", "buoi sang", "buoi trua")),
-    ("spending_cluster", ("chi dam", "ngay chi nhieu", "chi manh", "vung tay")),
-)
+#: tên khía cạnh để nói rõ khi hồ sơ chưa có nhận xét đúng loại được hỏi (mọi giá trị của `BehaviorInsightKind`)
 TOPIC_TEXT = {
     "bnpl_usage": "việc dùng Trả sau",
     "weekday_pattern": "ngày trong tuần",
     "payday_cycle": "nhịp chi theo kỳ lương",
     "time_of_day": "giờ chi tiêu trong ngày",
     "spending_cluster": "những ngày chi đậm",
+    "category_trend": "xu hướng của một nhóm chi tiêu",
 }
-
-
-def asked_kind(question: str) -> str | None:
-    """Loại nhận xét mà câu hỏi nhắc tới (None: hỏi chung)."""
-    q = fold(question)
-    return next((kind for kind, words in KIND_KEYWORDS if any(w in q for w in words)), None)
 
 
 def pick_insight(data: Mapping[str, Any], kind: str | None) -> tuple[Mapping[str, Any], bool]:
@@ -124,7 +111,7 @@ def answer_text(data: Mapping[str, Any], kind: str | None) -> str:
 
 async def answer(turn: Turn, r: IntentResult, question: str) -> None:
     """Bộ xử lý ý định `behavior` của `Turn`."""
-    kind = asked_kind(question)
+    kind = r.params.insight_kind
     res = await turn.call_tool_retry(
         TOOL,
         {},
@@ -149,4 +136,4 @@ async def answer(turn: Turn, r: IntentResult, question: str) -> None:
     await turn.emit_fixed_text(answer_text(data, kind))
 
 
-__all__ = ["KIND_KEYWORDS", "answer", "answer_text", "asked_kind", "compact_profile", "insight_block", "pick_insight"]
+__all__ = ["TOPIC_TEXT", "answer", "answer_text", "compact_profile", "insight_block", "pick_insight"]

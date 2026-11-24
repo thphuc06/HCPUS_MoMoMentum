@@ -1,0 +1,18 @@
+{"id": "pr-balance-total", "question": "Tổng cộng trong ví mình giờ còn mấy đồng?", "intent": "lookup", "params": {"lookup_kind": "balance"}, "paraphrases": "lookup-balance"}
+{"id": "pr-forecast-which-jar", "question": "Trước ngày nhận lương, trong mấy hũ của mình thì hũ nào dễ cạn đáy nhất?", "intent": "lookup", "params": {"lookup_kind": "forecast", "jar_text": null}, "paraphrases": "lookup-forecast"}
+{"id": "pr-transactions-week", "question": "Tuần rồi mình đã quẹt những khoản gì?", "intent": "lookup", "params": {"lookup_kind": "transactions"}, "paraphrases": "lookup-tx"}
+{"id": "pr-whatif-bnpl-camera", "question": "Giả dụ mình lấy cái máy ảnh 4 triệu theo kiểu Trả sau thì các hũ sẽ ra sao?", "intent": "what_if", "params": {"scenario_kind": "bnpl_purchase"}, "paraphrases": "whatif-bnpl"}
+{"id": "pr-afford-birthday", "question": "Tối nay mình định chi 300 nghìn ăn sinh nhật bạn, như vậy có an toàn không?", "intent": "affordability", "params": {}, "paraphrases": "afford-2"}
+{"id": "pr-move-travel-food", "question": "Dời 200 nghìn từ hũ Du lịch qua hũ Ăn uống giúp mình nhé.", "intent": "move", "params": {}, "paraphrases": "move-1"}
+{"id": "pr-profile-salary", "question": "Từ tháng này công ty trả mình 11 triệu, vào ngày 10.", "intent": "profile_update", "params": {}, "paraphrases": "profile-salary"}
+{"id": "pr-resilience-level", "question": "Nếu chấm điểm độ vững tài chính thì mình đang ở mức nào?", "intent": "resilience", "params": {}, "paraphrases": "resilience-current-score"}
+{"id": "pr-stress-no-income", "question": "Lỡ mấy tháng liền mình không có đồng thu nhập nào thì ví có gánh nổi không?", "intent": "stress", "params": {}, "paraphrases": "stress-job-loss"}
+{"id": "pr-roadmap-edit-step", "question": "Trong kế hoạch đang theo, chỗ chuyển tiền sang hũ Du lịch mình muốn hạ xuống 150 nghìn.", "intent": "roadmap", "params": {"roadmap_action": "edit_step"}, "paraphrases": "roadmap-edit-one-step"}
+{"id": "pr-behavior-time", "question": "Mình thường xài tiền nhiều vào khung giờ nào?", "intent": "behavior", "params": {"insight_kind": "time_of_day"}, "paraphrases": "behavior-weekday"}
+{"id": "pr-behavior-bnpl", "question": "Dạo này mình có lạm dụng mua trước trả sau không nhỉ?", "intent": "behavior", "params": {"insight_kind": "bnpl_usage"}, "paraphrases": "behavior-bnpl"}
+{"id": "pr-knowledge-overdue", "question": "Lỡ quá hạn thanh toán Ví Trả Sau thì bị tính thêm tiền gì, có văn bản nào ghi không?", "intent": "knowledge", "params": {"fee_topic": "late"}, "paraphrases": "knowledge-late-fee"}
+{"id": "pr-ingest-how-to", "question": "Mình xài thêm thẻ của một ngân hàng nữa, có cách nào đưa các khoản chi bên đó vào đây không?", "intent": "ingest", "params": {"ingest_action": "how_to"}, "paraphrases": "ingest-start"}
+{"id": "pr-ingest-status", "question": "Tấm hình biên lai mình gửi lúc nãy xử lý tới đâu rồi?", "intent": "ingest", "params": {"ingest_action": "status"}, "paraphrases": "ingest-status"}
+{"id": "pr-memory-state", "question": "Ghi nhớ giúp mình là đừng gợi ý cắt tiền ăn sáng nhé.", "intent": "memory", "params": {}, "paraphrases": "memory-state-preference"}
+{"id": "pr-oos-gold", "question": "Có nên bỏ tiền vào vàng lúc này không?", "intent": "out_of_scope", "params": {}, "paraphrases": "oos-crypto"}
+{"id": "pr-chitchat-thanks", "question": "Cảm ơn nha, hôm nay vậy là đủ rồi.", "intent": "chitchat", "params": {}, "paraphrases": "chitchat"}

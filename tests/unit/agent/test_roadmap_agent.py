@@ -12,6 +12,8 @@ import pytest
 from agent_helpers import (
     FakeRecords,
     FakeTools,
+    FakeUsage,
+    FakeWriter,
     agent_settings,
     blocks_of,
     check_agui_order,
@@ -1326,65 +1328,66 @@ def test_log_thoi_luong_tung_chang(caplog):
     assert "₫" not in logged and "Bù hũ" not in logged
 
 
-def edit_turn(monkeypatch, question, *, active="ok", amount_vnd=None):
+def edit_turn(monkeypatch, question, *, active="ok", amount_vnd=None, writer=None, usage=None):
+    """Lượt "sửa một bước": router trả roadmap_action="edit_step" (ý định phụ có cấu trúc, không đoán bằng regex trên chữ)."""
     tools = scripted_tools(latest=(active,))
-    llm = make_llm([route_response(intent="roadmap", roadmap_action="view", amount_vnd=amount_vnd)])
-    events, _, writer = run_turn(question, llm=llm, tools=tools, monkeypatch=monkeypatch)
+    routed = route_response(intent="roadmap", roadmap_action="edit_step", amount_vnd=amount_vnd)
+    llm = make_llm([routed], usage) if usage is not None else make_llm([routed])
+    events, _, writer = run_turn(question, llm=llm, tools=tools, monkeypatch=monkeypatch, writer=writer)
     check_agui_order(events)
     assert args_for(tools, "get_roadmap") == [{"which": "active"}]
     assert not args_for(tools, "save_roadmap") and not args_for(tools, "optimize_allocation")
-    assert not writer.calls and len(llm[1].calls) == 1  # chỉ router
-    return events
+    return events, writer
 
 
-def test_sua_mot_buoc_chi_ra_buoc_khop_va_cho_sua(monkeypatch):
-    events = edit_turn(
-        monkeypatch, "Mình muốn giảm số tiền ở bước bù cho hũ Ăn uống xuống còn 80 nghìn", amount_vnd=80_000
+def test_sua_mot_buoc_writer_chi_ra_buoc_tu_ban_gon_va_cho_sua(monkeypatch):
+    said = "Bước “Bù 100.000 ₫ mỗi tuần cho Ăn uống” chưa đổi; bạn mở trang Lộ trình và bấm Sửa để đặt 80.000 ₫."
+    events, writer = edit_turn(
+        monkeypatch, "Đổi khoản bù cho Ăn uống còn 80 nghìn thôi", amount_vnd=80_000, writer=FakeWriter(said)
     )
     (block,) = blocks_of(events)
     assert block["type"] == "roadmap" and block["data"]["status"] == "active"
-    (text,) = texts_of(events)
-    assert text.startswith("Bước khớp với yêu cầu của bạn là “Bù 100.000 ₫ mỗi tuần cho Ăn uống”")
-    assert "(100.000 ₫, giai đoạn “Ổn định tháng này”)" in text and "phiên bản 2" in text
-    assert "chưa đổi gì" in text and "Mở trang Lộ trình" in text and "bấm Sửa" in text
-    assert "80.000 ₫" in text
+    (call,) = writer.calls
+    facts = call["compact"]
+    assert call["task"] == "roadmap_step_edit" and facts["sua_trong_chat"] is False
+    assert facts["cach_sua"] == notices.ROADMAP_EDIT_HOW and facts["so_tien_moi_text"] == "80.000 ₫"
+    assert facts["version"] == 2 and len(facts["steps"]) == sum(len(ph["steps"]) for ph in block["data"]["phases"])
+    first = facts["steps"][0]
+    step0 = block["data"]["phases"][0]["steps"][0]
+    assert first["title"] == step0["title"] and first["phase"] == block["data"]["phases"][0]["title"]
+    assert "amount_vnd" not in first and first.get("amount_text", "").endswith("₫")
+    assert {first.get("from_jar"), first.get("to_jar")} & {"Ăn uống", "Giải trí", "Nghĩa vụ", "Dự phòng", "Du lịch"}
+    assert texts_of(events) == [said]
 
 
-def test_sua_buoc_theo_so_thu_tu_va_khong_khop_thi_noi_ro(monkeypatch):
-    events = edit_turn(monkeypatch, "Sửa bước 3 giúp mình")
-    (text,) = texts_of(events)
-    assert "“Cắt 50.000 ₫ mỗi tuần hũ Giải trí”" in text
-    # câu của ca golden roadmap-edit-one-step: lộ trình đang dùng không có bước nào cho hũ Dự phòng
-    events = edit_turn(
-        monkeypatch,
-        "Mình muốn giảm số tiền ở bước để dành cho hũ Dự phòng xuống còn 200 nghìn. Mở lộ trình đang dùng để mình sửa"
-        " riêng bước đó nhé.",
+def test_sua_buoc_writer_viet_so_khong_can_cu_thi_chi_noi_cho_sua(monkeypatch):
+    events, _ = edit_turn(monkeypatch, "Bỏ bớt khoản giữ cho hũ Giải trí", writer=FakeWriter("Mình đã giảm còn 15.000 ₫ rồi."))
+    assert texts_of(events) == [notices.ROADMAP_EDIT_HOW]
+    assert "đã sửa" not in notices.ROADMAP_EDIT_HOW and "chưa đổi gì" in notices.ROADMAP_EDIT_HOW
+
+
+def test_sua_buoc_khi_het_luot_model_van_noi_cho_sua(monkeypatch):
+    usage = FakeUsage(caps_hit={"m-small-a", "m-small-b"})
+    tools = scripted_tools(latest=("ok",))
+    # model hết lượt: luật dự phòng không có ý định phụ, nên không vào đường sửa bước; lượt xem lộ trình vẫn có thẻ
+    events, _, writer = run_turn(
+        "Sửa bước 3 của lộ trình giúp mình", llm=make_llm([], usage), tools=tools, monkeypatch=monkeypatch
     )
-    (text,) = texts_of(events)
-    assert text.startswith("Lộ trình đang dùng (phiên bản 2) không có bước nào khớp yêu cầu của bạn (bước có hũ Dự phòng)")
-    assert "chưa đổi gì" in text and "đã sửa" not in text
+    assert not writer.calls and "roadmap" in [b["type"] for b in blocks_of(events)]
 
 
 def test_sua_buoc_khi_chua_co_lo_trinh_khong_lap_moi(monkeypatch):
-    events = edit_turn(monkeypatch, "Sửa bước để dành cho hũ Dự phòng", active="error_not_found")
+    events, writer = edit_turn(monkeypatch, "Sửa bước để dành cho hũ Dự phòng", active="error_not_found")
     assert texts_of(events) == [notices.ROADMAP_EDIT_NO_ROADMAP]
-    assert not blocks_of(events)
+    assert not blocks_of(events) and not writer.calls
 
 
-@pytest.mark.parametrize(
-    ("question", "edit"),
-    [
-        ("Mình muốn giảm số tiền ở bước để dành cho hũ Dự phòng xuống còn 200 nghìn.", True),
-        ("Sửa bước nhắc Du lịch giúp mình", True),
-        ("Cho mình xem lộ trình tiết kiệm đang dùng, mình muốn đọc lại các bước.", False),
-        ("Lập lại lộ trình, giảm bớt các bước giúp mình", False),
-        ("Lập giúp mình một lộ trình tiết kiệm theo từng giai đoạn để tăng quỹ dự phòng.", False),
-    ],
-)
-def test_nhan_ra_cau_sua_mot_buoc(question, edit):
-    from yofina_agent.turn import _asks_step_edit
-
-    assert _asks_step_edit(question) is edit
+def test_router_xem_lo_trinh_thi_khong_vao_duong_sua_du_cau_co_chu_buoc(monkeypatch):
+    # trước đây regex trên chữ ("bước" + động từ sửa) ép vào đường sửa bước; nay chỉ tham số router quyết định
+    tools = scripted_tools(latest=("ok",))
+    llm = make_llm([route_response(intent="roadmap", roadmap_action="view")])
+    _, _, writer = run_turn("Sửa bước 3 giúp mình", llm=llm, tools=tools, monkeypatch=monkeypatch)
+    assert [c["task"] for c in writer.calls] == ["roadmap"]
 
 
 def test_buoc_bi_loai_ma_phan_con_lai_du_khuon_thi_luu_khong_them_vong_sua(caplog):
