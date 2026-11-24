@@ -2,6 +2,7 @@ import { useId, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ChevronRight } from 'lucide-react'
 import { StatusChip } from '@/components/StatusChip'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { jarColor } from '@/components/jarTheme'
 import type { CreditLine, JarFull, Obligation } from '@/api/schemas'
 import { formatDayMonth } from '@/lib/dates'
@@ -64,7 +65,8 @@ function DueCompare({ due, payJar }: { due: Obligation; payJar?: Pick<JarFull, '
           </Track>
           <p className="mt-2 flex flex-wrap items-center gap-2" data-testid="credit-due-status">
             <StatusChip kind={enough ? 'ok' : 'bad'}>{enough ? 'Đủ trả' : 'Chưa đủ trả'}</StatusChip>
-            <span className="text-small text-ink-2">
+            {/* Chip đã nói đủ hay chưa: câu đầy đủ chỉ cho trình đọc màn hình. */}
+            <span className="sr-only">
               {enough ? `Hũ ${payJar.name} đủ cho khoản này.` : `Hũ ${payJar.name} đang có ít hơn số phải trả.`}
             </span>
           </p>
@@ -104,7 +106,8 @@ export function CreditUsage({ line, due, payJar, to, testId = 'credit-line', chi
         {line.status === 'suspended' && <StatusChip kind="warn">Tạm khóa</StatusChip>}
         <span className="inline-flex h-7 items-center rounded-full bg-surface-2 px-2.5 text-note font-semibold text-ink-2">{line.product_label}</span>
       </div>
-      <p className="mt-2 text-body text-ink">{lead}</p>
+      {/* Câu tóm tắt nhắc lại hai thanh bên dưới: trình đọc màn hình đọc ngay, người nhìn mở "Chi tiết" (Luật chữ §9). */}
+      <p className="sr-only">{lead}</p>
       <div className="mt-3">
         <div className="flex justify-between gap-3 text-small text-ink">
           <span className="num">
@@ -121,6 +124,9 @@ export function CreditUsage({ line, due, payJar, to, testId = 'credit-line', chi
         <p className="mt-1 text-note text-ink-2">Hạn mức {formatVnd(line.limit_vnd)}</p>
       </div>
       {due && <DueCompare due={due} payJar={payJar} />}
+      <Disclosure label="Chi tiết" className="mt-1" panelClassName="pb-1 text-small text-ink-2">
+        <p aria-hidden>{lead}</p>
+      </Disclosure>
       {children}
       {to && (
         <Link to={to} className="mt-2 -mb-2 flex min-h-11 items-center justify-between text-small font-semibold text-brand-text">

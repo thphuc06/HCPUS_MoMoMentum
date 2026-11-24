@@ -76,14 +76,17 @@ describe('lộ trình', () => {
     expect(screen.getAllByText('Hũ Du lịch')).toHaveLength(2)
     expect(screen.getByText('300.000 ₫')).toBeInTheDocument()
 
-    const why = screen.getAllByText('Vì sao')[0]!
-    const details = why.closest('details')!
-    expect(details).not.toHaveAttribute('open')
+    const why = screen.getAllByRole('button', { name: /^Vì sao: / })[0]!
+    const panel = document.getElementById(why.getAttribute('aria-controls')!)!
+    expect(why).toHaveAttribute('aria-expanded', 'false')
+    expect(panel).toHaveAttribute('inert')
     await user.click(why)
-    expect(details).toHaveAttribute('open')
-    expect(within(details).getByText(/^Khoản Trả sau/)).toBeVisible()
+    expect(why).toHaveAttribute('aria-expanded', 'true')
+    expect(within(panel).getByText(/^Khoản Trả sau/)).toBeVisible()
     await user.click(why)
-    expect(details).not.toHaveAttribute('open')
+    expect(why).toHaveAttribute('aria-expanded', 'false')
+    // Lý do lập lại phiên bản thu gọn sau "Vì sao có bản này?"
+    expect(screen.getByRole('button', { name: 'Vì sao có bản này?' })).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('hiện đủ trạng thái bước bằng chữ trên phiên bản đang dùng', () => {

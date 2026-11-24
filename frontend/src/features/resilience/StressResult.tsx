@@ -1,5 +1,6 @@
 import { JarIcon } from '@/components/JarIcon'
 import { StatusChip } from '@/components/StatusChip'
+import { Disclosure } from '@/components/ui/Disclosure'
 import type { StressResultData } from '@/contracts/blocks'
 import { formatAppDate, formatVnd } from '@/lib/format'
 import { statusShortChip } from '@/lib/jar'
@@ -34,7 +35,8 @@ export function StressResult({
           <Heading className="text-subtitle font-semibold text-ink">{data.shock.label}</Heading>
           <StatusChip kind={status.kind}>{status.label}</StatusChip>
         </header>
-        <p className="text-small text-ink-2">{data.headline}</p>
+        {/* Câu tóm tắt nhắc lại đồng hồ và thanh bên dưới: chỉ cho trình đọc màn hình (Luật chữ, ui-design-review.md §9). */}
+        <p className="sr-only">{data.headline}</p>
       </div>
 
       <div className="text-center" data-testid="stress-score">
@@ -66,6 +68,13 @@ export function StressResult({
           <dd className="num font-semibold text-ink">{formatVnd(data.shortfall_vnd)}</dd>
         </div>
       </dl>
+      {/* Giả định của cú sốc và cách tính: căn cứ của các số trên, mặc định thu gọn. */}
+      <Disclosure label="Giả định" className="-mt-2" panelClassName="space-y-1 pb-1 text-small text-ink-2">
+        <p data-testid="stress-assumption">{data.shock.description}</p>
+        <p className="num">
+          Mô phỏng Monte Carlo {data.n_paths.toLocaleString('vi-VN')} đường trong {data.horizon_days} ngày, cùng dãy số ngẫu nhiên với dự báo nền.
+        </p>
+      </Disclosure>
     </section>
   )
 }

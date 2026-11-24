@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/button'
+import { DisclosureButton, DisclosurePanel, useDisclosure } from '@/components/ui/Disclosure'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import type { RoadmapStep as RoadmapStepData } from '@/contracts/blocks'
 import { usePhoneFrame } from '@/layout/FrameContext'
@@ -78,10 +79,9 @@ function StepMenu({ entries, disabled, title }: { entries: MenuEntry[]; disabled
         aria-expanded={open}
         aria-label={`${label} (bước ${title})`}
         onClick={() => setOpen(true)}
-        className="inline-flex h-11 items-center gap-1 rounded-full px-3 text-small font-bold text-brand-text outline-none hover:bg-tint focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+        className="inline-flex h-11 shrink-0 items-center rounded-full px-2 text-small font-bold whitespace-nowrap text-brand-text outline-none hover:bg-tint focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
       >
         {label}
-        <ChevronDown className="size-4" aria-hidden />
       </button>
       {open && (
         <Drawer open onOpenChange={(next) => { if (!next) setOpen(false) }}>
@@ -138,6 +138,7 @@ export function RoadmapStep({ step, index, last = false, jarNames, onAccept, onR
         ? { label: 'Thực hiện', run: () => onExecute(step) }
         : null
   const entries: MenuEntry[] = []
+  const why = useDisclosure()
   if (onEdit) entries.push({ key: 'edit', label: 'Sửa', onSelect: () => onEdit(step) })
   if (onReject && step.status !== 'rejected') entries.push({ key: 'reject', label: 'Từ chối', onSelect: () => onReject(step) })
 
@@ -164,19 +165,21 @@ export function RoadmapStep({ step, index, last = false, jarNames, onAccept, onR
           {jars.length > 0 && <span>Hũ {jars.join(' → ')}</span>}
           {step.due_date && <span>Hạn {formatDayMonth(step.due_date)}</span>}
         </div>
-        {/* Một hàng: nút chính, thao tác phụ, "Vì sao". Mở "Vì sao" thì lý do xuống dòng riêng, rộng hết bước. */}
-        <div className="flex flex-wrap items-center gap-x-2">
+        {/* Một hàng gọn ở 390 px: nút chính, thao tác phụ, "Vì sao". Lý do mở ra ở dòng riêng bên dưới, rộng hết bước. */}
+        <div className="flex flex-nowrap items-center gap-x-1">
           {primary && (
             <Button type="button" size="sm" disabled={disabled} onClick={primary.run}>
               {primary.label}
             </Button>
           )}
           {entries.length > 0 && <StepMenu entries={entries} disabled={disabled} title={step.title} />}
-          <details className="open:basis-full">
-            <summary className="min-h-11 w-fit min-w-11 cursor-pointer px-1 py-3 text-small font-semibold text-brand-text">Vì sao</summary>
-            <p className="pb-1 text-small text-ink-2">{step.reason}</p>
-          </details>
+          <DisclosureButton state={why} label={`Vì sao: ${step.title}`} className="ml-auto shrink-0">
+            Vì sao
+          </DisclosureButton>
         </div>
+        <DisclosurePanel state={why} className="pb-1 text-small text-ink-2">
+          <p>{step.reason}</p>
+        </DisclosurePanel>
       </div>
     </li>
   )

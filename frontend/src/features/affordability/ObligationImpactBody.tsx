@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react'
 import { JarIcon } from '@/components/JarIcon'
 import { StatusChip } from '@/components/StatusChip'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { CONFIDENCE_LABEL, statusShortChip } from '@/lib/jar'
 import { formatDateTime, formatRatioPercent, formatSimMoment, formatVnd } from '@/lib/format'
 import { formatDayMonth } from '@/lib/dates'
@@ -13,13 +14,16 @@ import type { ForecastBasis, ObligationImpactData } from '@/contracts/blocks'
  */
 export function BasisFooter({ basis, appDate }: { basis: ForecastBasis; appDate?: string }) {
   return (
-    <div data-testid="basis" className="mt-3 border-t border-line pt-2 text-note text-ink-2">
-      <p>
-        Dựa trên dự báo cập nhật {appDate ? formatSimMoment(appDate, basis.computed_at) : formatDateTime(basis.computed_at)} · {basis.history_days} ngày dữ liệu · nhóm tin cậy{' '}
-        <span className="font-semibold text-ink">{CONFIDENCE_LABEL[basis.confidence_band]}</span>
-      </p>
-      {basis.is_initial_estimate && <p className="mt-0.5 font-medium text-warn-fg">Mới là ước lượng ban đầu vì còn ít dữ liệu.</p>}
-      {basis.stale && <p className="mt-0.5 font-medium text-warn-fg">Số liệu dự báo chưa theo kịp hôm nay.</p>}
+    <div data-testid="basis" className="mt-3 border-t border-line pt-1 text-note text-ink-2">
+      {basis.is_initial_estimate && <p className="mt-1 font-medium text-warn-fg">Mới là ước lượng ban đầu vì còn ít dữ liệu.</p>}
+      {basis.stale && <p className="mt-1 font-medium text-warn-fg">Số liệu dự báo chưa theo kịp hôm nay.</p>}
+      {/* Dự báo nào đứng sau các số: căn cứ, mặc định thu gọn (Luật chữ, ui-design-review.md §9). */}
+      <Disclosure label="Căn cứ" panelClassName="pb-1">
+        <p>
+          Dựa trên dự báo cập nhật {appDate ? formatSimMoment(appDate, basis.computed_at) : formatDateTime(basis.computed_at)} · {basis.history_days} ngày dữ liệu · nhóm tin cậy{' '}
+          <span className="font-semibold text-ink">{CONFIDENCE_LABEL[basis.confidence_band]}</span>
+        </p>
+      </Disclosure>
     </div>
   )
 }
@@ -69,12 +73,16 @@ export function ObligationImpactBody({ data, showBasis = true, appDate }: { data
         )}
       </dl>
 
-      {c.fee && (
-        <p className="mt-2 text-note text-ink-2">
-          Phí {formatVnd(c.fee.amount_vnd)} theo {c.fee.source_name} (hiệu lực từ {formatDayMonth(c.fee.effective_from)}).
-        </p>
+      {(c.fee || (c.late_penalty_vnd !== undefined && c.late_penalty_vnd > 0)) && (
+        <Disclosure label="Phí và nguồn" className="mt-1" panelClassName="space-y-1 pb-1 text-note text-ink-2">
+          {c.fee && (
+            <p>
+              Phí {formatVnd(c.fee.amount_vnd)} theo {c.fee.source_name} (hiệu lực từ {formatDayMonth(c.fee.effective_from)}).
+            </p>
+          )}
+          {c.late_penalty_vnd !== undefined && c.late_penalty_vnd > 0 && <p>Trả trễ hạn bị phạt {formatVnd(c.late_penalty_vnd)}.</p>}
+        </Disclosure>
       )}
-      {c.late_penalty_vnd !== undefined && c.late_penalty_vnd > 0 && <p className="mt-1 text-note text-ink-2">Trả trễ hạn bị phạt {formatVnd(c.late_penalty_vnd)}.</p>}
 
       <ul className="mt-3 space-y-2" aria-label="Hũ trả nghĩa vụ ngày đến hạn">
         {data.at_due.map((j) => {

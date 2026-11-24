@@ -54,10 +54,10 @@ describe('Tổng quan', () => {
     expect(cards).toHaveLength(7)
     const an = list.querySelector('[data-jar="an_uong"]') as HTMLElement
     expect(an).toHaveAttribute('data-status', 'short')
-    expect(within(an).getByText('Cạn ngày 29/11')).toBeInTheDocument()
+    expect(within(an).getByText('Hụt · cạn 29/11')).toBeInTheDocument()
     expect(within(an).getByTestId('forecast-mark')).toBeInTheDocument()
-    expect(within(list.querySelector('[data-jar="di_lai"]') as HTMLElement).getByText('Đủ tới kỳ lương')).toBeInTheDocument()
-    expect(within(list.querySelector('[data-jar="hoa_don"]') as HTMLElement).getByText('Sát, cần nhắc')).toBeInTheDocument()
+    expect(within(list.querySelector('[data-jar="di_lai"]') as HTMLElement).getByText('Đủ')).toBeInTheDocument()
+    expect(within(list.querySelector('[data-jar="hoa_don"]') as HTMLElement).getByText('Sát')).toBeInTheDocument()
     expect(list.querySelectorAll('[data-testid="forecast-mark"]')).toHaveLength(1)
   })
 
@@ -203,7 +203,7 @@ describe('Tổng quan', () => {
     expect(await screen.findByText('Chưa có dự báo', { selector: 'h3 span' })).toBeInTheDocument()
     const list = screen.getByRole('list', { name: 'Danh sách hũ' })
     expect(within(list).getAllByText('Chưa có dự báo')).toHaveLength(7)
-    expect(within(list).queryByText('Đủ tới kỳ lương')).toBeNull()
+    expect(within(list).queryByText('Đủ')).toBeNull()
   })
 
   it('ước lượng ban đầu và số liệu cũ được báo rõ', async () => {
@@ -264,8 +264,27 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     const cells = strip.querySelectorAll<HTMLElement>('[data-day]')
     expect(cells[0]!.className).toContain('motion-safe:animate-in')
     expect(cells[3]!.style.getPropertyValue('--tw-animation-delay')).toBe('96ms')
-    // Lý do của server vẫn hiện, sau phần vẽ
-    expect(within(card).getByText(/Còn 380\.000 ₫, còn 6 ngày tới kỳ lương 05\/12/)).toBeInTheDocument()
+    // Lý do của server ("Còn …, còn … ngày tới kỳ lương") nhắc lại dải ngày: không mất, nằm trong "Chi tiết" đang đóng
+    const reason = within(card).getByText(/Còn 380\.000 ₫, còn 6 ngày tới kỳ lương 05\/12/)
+    expect(reason.closest('[data-disclosure-panel]')).toHaveAttribute('data-disclosure-panel', 'closed')
+    const more = within(card).getByRole('button', { name: 'Chi tiết' })
+    await userEvent.setup().click(more)
+    expect(reason.closest('[data-disclosure-panel]')).toHaveAttribute('data-disclosure-panel', 'open')
+  })
+
+  it('thẻ chủ động không có số lớn (không phải cảnh báo cạn): lý do hiện ngay, không thu gọn', async () => {
+    mountApp(backend({ 'GET /overview': overview((o) => { o.proactive_card.data.kind = 'low_data'; o.proactive_card.data.status = 'ok' }) }))
+    const card = await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
+    expect(within(card).getByTestId('proactive-reason').closest('[data-disclosure-panel]')).toBeNull()
+    expect(within(card).queryByRole('button', { name: 'Chi tiết' })).toBeNull()
+  })
+
+  it('số dư: bảng ba dòng thu gọn sau "Chi tiết số dư"; nền thẻ dùng --gradient-hero', async () => {
+    mountApp(backend())
+    const parts = await screen.findByTestId('balance-parts')
+    expect(parts.closest('[data-disclosure-panel]')).toHaveAttribute('data-disclosure-panel', 'closed')
+    expect(screen.getByRole('button', { name: 'Chi tiết số dư' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('region', { name: 'Tổng số dư' }).getAttribute('style')).toContain('var(--gradient-hero)')
   })
 
   it('số dư: trình đọc màn hình nhận ngay số cuối của server; số đang đếm chỉ để nhìn', async () => {
@@ -300,14 +319,22 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     const fig = await screen.findByTestId('jar-runway')
     expect(within(fig).getByRole('heading', { name: 'Hũ nào sắp cạn' })).toBeInTheDocument()
     expect(fig).toHaveTextContent('14 ngày tới lương')
-    expect(within(fig).getByText('2 hũ cần chú ý trước kỳ lương 05/12: Ăn uống dự kiến cạn 29/11, Hóa đơn sát.')).toBeInTheDocument()
+    const caption = '2 hũ cần chú ý trước kỳ lương 05/12: Ăn uống dự kiến cạn 29/11, Hóa đơn sát.'
+    // Câu tóm tắt: trình đọc màn hình đọc ngay (figcaption sr-only là mô tả của hình), bản nhìn thấy nằm trong "Chi tiết" đang đóng.
+    expect(fig.querySelector('figcaption')).toHaveTextContent(caption)
+    expect(fig).toHaveAccessibleDescription(caption)
+    const more = within(fig).getByRole('button', { name: 'Chi tiết' })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    expect(document.getElementById(more.getAttribute('aria-controls')!)).toHaveTextContent('Hũ tiết kiệm không hiện ở đây')
+    // Mốc nghĩa vụ viết gọn trong "Chi tiết"
+    expect(within(fig).getByTestId('jar-runway-marks')).toHaveTextContent('Hóa đơn: Tiền điện 26/11 · 300.000–450.000 ₫')
     const rows = within(fig).getByRole('list', { name: 'Các hũ từ hôm nay tới kỳ lương' })
     expect([...rows.querySelectorAll('[data-runway]')].map((r) => r.getAttribute('data-runway'))).toEqual(['an_uong', 'di_lai', 'hoa_don', 'giai_tri', 'nghia_vu'])
     // Hũ hụt: đoạn hũ trống bắt đầu ở ngày cạn (29/11 là ngày 8 trên 14), chữ đầy đủ cho trình đọc màn hình, mở Chi tiết hũ
     const an = within(rows).getByRole('link', { name: /^Ăn uống: hụt, dự kiến cạn 29\/11, 6 ngày trước kỳ lương, số dư 380\.000\s₫\.$/ })
     expect(an).toHaveAttribute('href', '/jars/an_uong')
     expect(parseFloat((an.querySelector('[data-part="empty"]') as HTMLElement).style.left)).toBeCloseTo((8 / 14) * 100, 2)
-    expect(within(an).getByText('Hụt')).toBeInTheDocument()
+    expect(within(an).getByText('Hụt · cạn 29/11')).toBeInTheDocument()
     // Hũ sát có mốc nghĩa vụ (tiền điện 26/11) bằng vạch và bằng chữ
     const hd = within(rows).getByRole('link', { name: /^Hóa đơn: sát, số dư 450\.000\s₫\. Sắp đến hạn: Tiền điện 26\/11 300\.000\s₫ đến 450\.000\s₫\.$/ })
     expect(hd.querySelectorAll('[data-tick]')).toHaveLength(1)
@@ -316,6 +343,21 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     const nv = within(rows).getByRole('link', { name: /^Nghĩa vụ: đủ tới kỳ lương, số dư 1\.000\.000\s₫\. Sắp đến hạn: Trả sau \(mô phỏng\) 05\/12 333\.000\s₫\.$/ })
     expect(nv.querySelectorAll('[data-tick]')).toHaveLength(1)
     expect(within(rows).queryByRole('link', { name: /^Du lịch/ })).toBeNull()
+  })
+
+  it('B2: hũ cạn đúng ngày có mốc nghĩa vụ: vạch mốc vẽ dài hơn và nằm trên chấm cạn (không bị che)', async () => {
+    mountApp(backend({ 'GET /overview': overview((o) => { o.jars = o.jars.map((j: Json) => (j.code === 'hoa_don' ? { ...j, status: 'short', runout_date: '2026-11-26' } : j)) }) }))
+    const fig = await screen.findByTestId('jar-runway')
+    const hd = within(fig).getByRole('link', { name: /^Hóa đơn: hụt, dự kiến cạn 26\/11/ })
+    const tick = hd.querySelector('[data-tick]') as HTMLElement
+    const dot = hd.querySelector('[data-part="runout"]') as HTMLElement
+    expect(tick).toHaveAttribute('data-at-runout')
+    expect(tick.style.left).toBe(dot.style.left)
+    expect(tick.className).toMatch(/\bz-10\b/)
+    expect(tick.className).toMatch(/-top-2\b/)
+    // Hũ khác không trùng ngày: vạch thường
+    const nv = within(fig).getByRole('link', { name: /^Nghĩa vụ:/ })
+    expect(nv.querySelector('[data-tick]')).not.toHaveAttribute('data-at-runout')
   })
 
   it('B2: hũ chưa có dự báo ghi rõ; không có kỳ lương thì không vẽ', async () => {
@@ -364,7 +406,7 @@ describe('tab Hũ', () => {
     expect(screen.getByTestId('unclassified-tile')).toHaveTextContent('180.000 ₫')
     const list = screen.getByRole('list', { name: 'Các hũ' })
     expect(within(list).getAllByRole('listitem')).toHaveLength(7)
-    expect(within(list).getByText('Cạn ngày 29/11')).toBeInTheDocument()
+    expect(within(list).getByText('Hụt · cạn 29/11')).toBeInTheDocument()
     await userEvent.setup().click(within(list).getByRole('link', { name: 'Mở hũ Ăn uống' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/jars/an_uong'))
   })

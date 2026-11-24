@@ -14,7 +14,7 @@ import { useRoadmapVersions } from './useRoadmapVersions'
 // (so với bản đang dùng, xem các phiên bản). Chọn Dùng bản mới hay Giữ bản cũ làm ở trang So với bản cũ, không làm trong chat.
 
 const STATUS_HINT: Record<RoadmapData['status'], string> = {
-  proposed: 'Đây là bản đề xuất, chưa thay lộ trình bạn đang dùng. So với bản đang dùng rồi chọn Dùng bản mới hoặc Giữ bản cũ.',
+  proposed: 'Đây là bản đề xuất, chưa thay lộ trình bạn đang dùng.',
   active: 'Đây là lộ trình bạn đang dùng.',
   superseded: 'Bản này đã được thay bằng một phiên bản mới hơn.',
   discarded: 'Bản đề xuất này đã bị bỏ, không còn để chọn.',

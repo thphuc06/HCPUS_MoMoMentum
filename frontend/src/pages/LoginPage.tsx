@@ -63,7 +63,7 @@ export function LoginPage() {
     <div className="flex h-full flex-col overflow-y-auto bg-background">
       <header
         className="rounded-b-[40px] px-7 pt-[max(56px,env(safe-area-inset-top))] pb-10 text-white"
-        style={{ background: 'linear-gradient(135deg, var(--brand-deep), var(--brand-primary))' }}
+        style={{ background: 'var(--gradient-hero)' }}
       >
         <Logo />
         <h1 className="mt-5 text-[40px] leading-[44px] font-extrabold">Yofina</h1>

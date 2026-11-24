@@ -15,7 +15,8 @@ export function ShockCard({ shock }: { shock: ShockSummary }) {
     >
       <span className="min-w-0 flex-1">
         <span className="block text-subtitle font-semibold text-ink">{shock.label}</span>
-        <span id={descriptionId} className="mt-0.5 block text-small text-ink-2">{shock.description}</span>
+        {/* Mô tả giả định chỉ cho trình đọc màn hình ở danh sách; màn kết quả có mục "Giả định" để mở xem. */}
+        <span id={descriptionId} className="sr-only">{shock.description}</span>
       </span>
       <ChevronRight className="size-5 shrink-0 text-ink-2" aria-hidden />
     </Link>

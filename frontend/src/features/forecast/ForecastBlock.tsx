@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo, useState } from 'react'
 import { AlertTriangle, Info } from 'lucide-react'
 import { JarIcon } from '@/components/JarIcon'
 import { StatusChip } from '@/components/StatusChip'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CONFIDENCE_LABEL, jarStatusChip, statusShortChip } from '@/lib/jar'
 import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd, formatVndShort } from '@/lib/format'
@@ -33,6 +34,22 @@ export function forecastSummary(d: ForecastTimelineData): string {
   if (d.status === 'tight')
     return `Hũ ${name} sát: dự kiến còn rất ít tiền trước kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
   return `Hũ ${name} dự kiến đủ tới kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
+}
+
+/**
+ * Dòng chính hiện ngay (Luật chữ, ui-design-review.md §9: tối đa khoảng 12 từ). Câu đầy đủ của `forecastSummary` nằm trong
+ * "Chi tiết dự báo". Số lấy từ khối; khoảng trống từ ngày cạn tới lương là hiệu hai ngày server trả.
+ */
+export function forecastHeadline(d: ForecastTimelineData): string {
+  const payday = formatDayMonth(d.payday.date)
+  if (d.start_balance_vnd <= 0) return `Đang hết tiền, ${d.payday.days_until} ngày nữa tới lương ${payday}.`
+  if (d.runout_date) {
+    if (d.runout_date < d.payday.date) return `Cạn ${formatDayMonth(d.runout_date)}, ${diffDays(d.runout_date, d.payday.date)} ngày trước lương ${payday}.`
+    return `Cạn ${formatDayMonth(d.runout_date)}, sau lương ${payday}.`
+  }
+  if (d.status === 'short') return `Có khả năng hụt trước lương ${payday}.`
+  if (d.status === 'tight') return `Còn rất ít tiền trước lương ${payday}.`
+  return `Đủ tới lương ${payday}, còn ${d.payday.days_until} ngày.`
 }
 
 /**
@@ -106,7 +123,9 @@ export function CompareSummary({ data, compare }: { data: ForecastTimelineData; 
         )}
       </ul>
       {compare.common_random_numbers && (
-        <p className="mt-1 text-note text-ink-2">Hai đường dùng cùng dãy số ngẫu nhiên ({compare.n_paths.toLocaleString('vi-VN')} đường mô phỏng) nên chênh lệch không do nhiễu.</p>
+        <Disclosure label="Vì sao so được?" className="mt-1" panelClassName="pb-1 text-note text-ink-2">
+          <p>Hai đường dùng cùng dãy số ngẫu nhiên ({compare.n_paths.toLocaleString('vi-VN')} đường mô phỏng) nên chênh lệch không do nhiễu.</p>
+        </Disclosure>
       )}
     </div>
   )
@@ -150,8 +169,8 @@ export function ForecastBlock({
       {compare ? (
         <CompareSummary data={data} compare={compare} />
       ) : (
-        <p className="mt-3 text-body font-medium text-ink" data-testid="forecast-summary">
-          {forecastSummary(data)}
+        <p className="mt-3 text-body font-medium text-ink" data-testid="forecast-headline">
+          {forecastHeadline(data)}
         </p>
       )}
 
@@ -164,13 +183,13 @@ export function ForecastBlock({
       {data.is_initial_estimate && (
         <p className="mt-1.5 flex items-start gap-1.5 text-small text-ink-2">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn-fg" aria-hidden />
-          <span>Mới có {data.history_days} ngày dữ liệu nên đây mới là ước lượng sơ bộ; càng ghi nhiều, dự báo càng sát.</span>
+          <span>Mới có {data.history_days} ngày dữ liệu.</span>
         </p>
       )}
       {data.stale && (
         <p className="mt-1.5 flex items-start gap-1.5 text-small text-ink-2">
           <Info className="mt-0.5 size-4 shrink-0 text-warn-fg" aria-hidden />
-          <span>Số liệu dự báo chưa được cập nhật theo ngày mô phỏng hôm nay. Mở lại màn này hoặc thử lại sau để tính lại.</span>
+          <span>Số liệu dự báo chưa được cập nhật theo ngày mô phỏng hôm nay.</span>
         </p>
       )}
 
@@ -192,7 +211,7 @@ export function ForecastBlock({
             <span className="num">{formatVndShort(row.p90)}</span>
           </>
         ) : (
-          <>Chạm vào biểu đồ hoặc kéo thanh bên dưới để xem số dư từng ngày. Dải màu là khoảng 80% khả năng.</>
+          <>Chạm vào biểu đồ để xem từng ngày.</>
         )}
       </div>
 
@@ -236,6 +255,15 @@ export function ForecastBlock({
         )}
       </ul>
 
+      {/* Câu tóm tắt đầy đủ, mốc tiền và chỉ số chất lượng: chữ phụ, thu gọn (ui-design-review.md §3.2 #10, §9). */}
+      <Disclosure label="Chi tiết dự báo" className="mt-2 border-t border-line pt-1" panelClassName="pb-1">
+      {!compare && (
+        <p className="pt-1 text-small text-ink" data-testid="forecast-summary">
+          {forecastSummary(data)}
+        </p>
+      )}
+      {data.is_initial_estimate && <p className="mt-2 text-small text-ink-2">Đây mới là ước lượng sơ bộ; càng ghi nhiều giao dịch, dự báo càng sát.</p>}
+      {data.stale && <p className="mt-2 text-small text-ink-2">Mở lại màn này hoặc thử lại sau để tính lại.</p>}
       {extraEvents.length > 0 && (
         <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-small" aria-label="Mốc phát sinh thêm do kịch bản" data-testid="forecast-extra-events">
           {extraEvents.map((e) => (
@@ -296,6 +324,7 @@ export function ForecastBlock({
           <dd className="num font-semibold text-ink">{data.history_days} ngày</dd>
         </div>
       </dl>
+      </Disclosure>
 
       <footer className="mt-3 flex items-center justify-between gap-3 text-note text-ink-2">
         <span>Cập nhật {formatSimMoment(data.origin_date, data.computed_at)} · Ví mô phỏng</span>

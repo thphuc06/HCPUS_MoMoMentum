@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Lightbulb } from 'lucide-react'
 import { AiChip, StatusChip, type ChipKind } from '@/components/StatusChip'
+import { Disclosure } from '@/components/ui/Disclosure'
 import type { BehaviorInsight, BehaviorNextStep } from '@/contracts/blocks'
 import { CONFIDENCE_LABEL } from '@/lib/jar'
 import { EvidenceBars } from './EvidenceBars'
@@ -27,8 +28,10 @@ export function BehaviorInsightCard({ insight, nextStep, footer, as: Tag = 'sect
         {insight.ai_generated && <AiChip>AI tóm tắt</AiChip>}
       </header>
       <p className="text-subtitle font-semibold text-ink">{insight.headline}</p>
-      {insight.detail && <p className="text-small text-ink-2">{insight.detail}</p>}
       <EvidenceBars evidence={insight.evidence} />
+      {/* Câu giải thích và bảng bằng chứng: căn cứ của nhận xét, mặc định thu gọn (Luật chữ, ui-design-review.md §9). */}
+      <Disclosure label="Xem căn cứ" className="-my-1" panelClassName="space-y-2 pb-1">
+      {insight.detail && <p className="text-small text-ink-2">{insight.detail}</p>}
       <dl aria-label="Bằng chứng" className="divide-y divide-line rounded-xl bg-surface-2 px-3">
         {insight.evidence.map((e) => {
           const period = formatEvidencePeriod(e)
@@ -43,6 +46,7 @@ export function BehaviorInsightCard({ insight, nextStep, footer, as: Tag = 'sect
           )
         })}
       </dl>
+      </Disclosure>
       {nextStep && <NextStep step={nextStep} />}
       {footer}
     </Tag>
@@ -57,8 +61,10 @@ export function NextStep({ step, children }: { step: BehaviorNextStep; children?
       <div className="min-w-0 flex-1">
         <p className="text-note font-semibold text-brand-text">Việc nên làm</p>
         <p className="text-small font-semibold text-ink">{step.label}</p>
-        <p className="text-small text-ink-2">{step.reason}</p>
         {children}
+        <Disclosure label="Vì sao?" panelClassName="pb-1 text-small text-ink-2">
+          <p>{step.reason}</p>
+        </Disclosure>
       </div>
     </div>
   )

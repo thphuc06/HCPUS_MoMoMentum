@@ -54,7 +54,7 @@ describe('ForecastBlock: nội dung hiển thị', () => {
     await mount(d)
     expect(screen.getByTestId('forecast-summary')).toHaveTextContent(forecastSummary(d))
     expect(screen.getByTestId('forecast-summary')).toHaveTextContent('Ăn uống dự kiến cạn ngày 29/11')
-    expect(screen.getByText('Cạn ngày 29/11')).toBeInTheDocument() // chip trạng thái có chữ
+    expect(screen.getByText('Hụt · cạn 29/11')).toBeInTheDocument() // chip trạng thái có chữ
     expect(screen.getByTestId('p-shortfall')).toHaveTextContent('71%')
     expect(screen.getByTestId('confidence-band')).toHaveTextContent('Vừa')
     expect(screen.queryByText(/Chưa đủ cơ sở để nêu xác suất/)).toBeNull()
@@ -65,9 +65,15 @@ describe('ForecastBlock: nội dung hiển thị', () => {
     expect(screen.queryByText('Số liệu cũ')).toBeNull()
   })
 
-  it('liệt kê mốc dưới biểu đồ (tương đương văn bản của biểu đồ)', async () => {
+  it('liệt kê mốc dưới biểu đồ (tương đương văn bản của biểu đồ), thu gọn trong "Chi tiết dự báo"', async () => {
     const d = data('forecast_timeline.short')
     await mount(d)
+    const toggle = screen.getByRole('button', { name: 'Chi tiết dự báo' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    // Đang đóng: mốc vẫn nằm trong DOM nhưng ẩn khỏi cây trợ năng; dòng chính ngắn hiện ngay.
+    expect(screen.queryAllByRole('listitem', { name: undefined }).filter((li) => li.closest('[data-testid="forecast-events"]'))).toHaveLength(0)
+    expect(screen.getByTestId('forecast-headline')).toHaveTextContent('Cạn 29/11, 6 ngày trước lương 05/12.')
+    fireEvent.click(toggle)
     const list = screen.getByTestId('forecast-events')
     expect(within(list).getAllByRole('listitem')).toHaveLength(d.events.length)
     expect(list).toHaveTextContent('Lương về · 05/12')

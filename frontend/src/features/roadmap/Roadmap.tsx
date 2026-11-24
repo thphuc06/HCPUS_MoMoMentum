@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/Disclosure'
 import type { RoadmapAlternative, RoadmapData } from '@/contracts/blocks'
 import { useJarNames } from '@/features/common/useJarLookup'
 import { RoadmapStep, STEP_STATUS, type StepActions } from './RoadmapStep'
@@ -54,17 +55,20 @@ export function Roadmap({ data, onAlternative, footer, ...actions }: Props) {
           <StatusChip kind={feasibility.kind}>{feasibility.label}</StatusChip>
         </div>
         <p className="text-small text-ink">{data.headline}</p>
-        <p className="text-small text-ink-2">{data.reason.text}</p>
-        {!!data.reason.detail?.length && (
-          <dl className="space-y-1 text-small text-ink-2">
-            {data.reason.detail.map((detail, i) => (
-              <div key={i} className="flex flex-wrap justify-between gap-x-3">
-                <dt>{detail.label}</dt>
-                <dd className="num">{detail.before && `${detail.before} → `}{detail.after}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+        {/* Lý do lập lại và số trước → sau: căn cứ, mặc định thu gọn (Luật chữ, ui-design-review.md §9). */}
+        <Disclosure label="Vì sao có bản này?" panelClassName="space-y-1 pb-1 text-small text-ink-2">
+          <p>{data.reason.text}</p>
+          {!!data.reason.detail?.length && (
+            <dl className="space-y-1">
+              {data.reason.detail.map((detail, i) => (
+                <div key={i} className="flex flex-wrap justify-between gap-x-3">
+                  <dt>{detail.label}</dt>
+                  <dd className="num">{detail.before && `${detail.before} → `}{detail.after}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </Disclosure>
         <ul aria-label="Số bước theo trạng thái" className="flex flex-wrap gap-x-3 gap-y-1 text-note text-ink-2">
           {(['pending', 'accepted', 'rejected'] as const).map((status) => (
             <li key={status}>{STEP_STATUS[status].label} <strong className="num text-ink">{data.counts[status]}</strong></li>

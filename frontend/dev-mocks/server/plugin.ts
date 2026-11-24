@@ -6,6 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import { APP_DATE, forecastBlockFor, handleWallet, jarsOf, paramsHash } from './wallet.ts'
 import { MOCK_S3_PREFIX, handleIngest, receiveUpload } from './ingest.ts'
+import { blockFixture, handleReadOnly } from './readonly.ts'
 
 export const MOCK_ENV: Record<string, string> = {
   VITE_AWS_REGION: 'ap-southeast-1',
@@ -163,6 +164,19 @@ async function agent(req: IncomingMessage, res: ServerResponse) {
     emit({ type: 'RUN_ERROR', message: 'boom', code: 'INTERNAL_ERROR' })
     return void res.end()
   }
+  // "khoi <tên fixture>" (ví dụ "khoi forecast_timeline.what_if"): phát đúng khối mẫu đó, để xem từng khối trong chat.
+  const fixtureName = /^khoi ([a-z_]+\.[a-z0-9_]+)$/.exec(q.trim())?.[1]
+  const fixture = fixtureName ? blockFixture(fixtureName) : null
+  if (fixture) {
+    block({ ...fixture, id: `mock:${fixtureName}:${trace}` })
+    await say('m1', `Khối mẫu ${fixtureName}.`)
+    return end()
+  }
+  // "van ban dai": lời dài cỡ phần giải thích what-if (2 đến 4 câu, tối đa khoảng 450 ký tự) để xem "Xem thêm" của khung chat.
+  if (q.includes('van ban dai')) {
+    await say('m1', 'Nếu mua tai nghe 1,2 triệu bằng Trả sau, hũ Nghĩa vụ ngày 05/12 cần 1.233.000 ₫ trong khi đang có 1.000.000 ₫, nên sẽ hụt 233.000 ₫. Hũ Giải trí vẫn đủ tới kỳ lương vì món này chưa trừ ngay. Bạn có thể bù phần hụt từ hũ Du lịch trước ngày 05/12, hoặc hoãn mua tới sau kỳ lương để không phát sinh phí. Đây là mô phỏng, chưa có giao dịch nào được ghi.')
+    return end()
+  }
   if (q.includes('khoi la')) {
     await say('m1', 'Đây là một khối mà ứng dụng chưa biết.')
     block({ v: 1, id: `hologram:${trace}`, type: 'hologram_3d', trace_id: trace, fallback_text: 'Một khối mới mà bản này chưa hiển thị được.', source: source('agent'), data: { x: 1 } })
@@ -207,7 +221,7 @@ function rest(req: IncomingMessage, res: ServerResponse, url: string, query: URL
     if (!String(req.headers.authorization ?? '').startsWith('Bearer ')) return err(res, 401, 'UNAUTHENTICATED', 'Thiếu token.')
     const method = req.method ?? 'GET'
     const ctx = { method, path: url, query, body: method === 'POST' ? await body(req) : {}, email: emailOf(req), trace: traceOf(req) }
-    const reply = url.startsWith('/ingest/') ? handleIngest(ctx) : handleWallet(ctx)
+    const reply = url.startsWith('/ingest/') ? handleIngest(ctx) : (handleWallet(ctx) ?? handleReadOnly(ctx))
     if (reply) return json(res, reply.status, reply.body)
     return err(res, 404, 'PARAMS_INVALID', 'Không có đường dẫn này.')
   })()

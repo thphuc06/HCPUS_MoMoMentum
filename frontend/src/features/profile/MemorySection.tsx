@@ -5,6 +5,7 @@ import { ApiError } from '@/api/errors'
 import type { MemoryClearResponse, MemoryKind, MemoryRecord } from '@/api/phase5Schemas'
 import { ErrorState, ListSkeleton } from '@/components/StateViews'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { AlertDialog, AlertDialogClose, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { usePhoneFrame } from '@/layout/FrameContext'
 import { formatDateTime } from '@/lib/format'
@@ -98,7 +99,9 @@ export function MemorySection() {
           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setConfirmClear(true)}>Xóa hết</Button>
         )}
       </div>
-      <p className="text-small text-ink-2">Những điều trợ lý nhớ để không phải hỏi lại. Bộ nhớ không chứa số dư hay giao dịch của bạn.</p>
+      <Disclosure label="Bộ nhớ là gì?" className="-mt-2" panelClassName="pb-1 text-small text-ink-2">
+        <p>Những điều trợ lý nhớ để không phải hỏi lại. Bộ nhớ không chứa số dư hay giao dịch của bạn.</p>
+      </Disclosure>
       {list.status === 'loading' && <ListSkeleton rows={2} rowClass="h-14" label="Đang tải bộ nhớ" />}
       {list.status === 'error' && list.error && <ErrorState error={list.error} title="Chưa tải được bộ nhớ" onRetry={() => void list.reload()} />}
       {actionError && (
