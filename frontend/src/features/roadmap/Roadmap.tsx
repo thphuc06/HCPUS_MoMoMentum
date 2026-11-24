@@ -1,14 +1,15 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/button'
 import type { RoadmapAlternative, RoadmapData } from '@/contracts/blocks'
 import { useJarNames } from '@/features/common/useJarLookup'
 import { RoadmapStep, STEP_STATUS, type StepActions } from './RoadmapStep'
 
-const VERSION_STATUS = {
+// Nhãn trạng thái phiên bản: nói rõ bản đề xuất CHƯA thay bản đang dùng và đang chờ người dùng chọn.
+export const VERSION_STATUS = {
   active: { kind: 'ok', label: 'Đang dùng' },
-  proposed: { kind: 'info', label: 'Bản đề xuất' },
-  superseded: { kind: 'info', label: 'Đã thay thế' },
+  proposed: { kind: 'info', label: 'Đề xuất · chờ bạn chọn' },
+  superseded: { kind: 'info', label: 'Bản cũ · đã thay' },
   discarded: { kind: 'info', label: 'Đã bỏ' },
 } as const
 
@@ -21,9 +22,11 @@ const FEASIBILITY = {
 type Props = StepActions & {
   data: RoadmapData
   onAlternative?: (option: RoadmapAlternative) => void
+  /** Phần cuối khối (ví dụ lối sang trang Lộ trình khi khối hiện trong chat). */
+  footer?: ReactNode
 }
 
-export function Roadmap({ data, onAlternative, ...actions }: Props) {
+export function Roadmap({ data, onAlternative, footer, ...actions }: Props) {
   const version = VERSION_STATUS[data.status]
   const feasibility = FEASIBILITY[data.feasibility]
   // Bước chỉ mang mã hũ: tên lấy từ mục tiêu của khối, còn lại từ danh sách hũ của người dùng (Tổng quan).
@@ -85,6 +88,7 @@ export function Roadmap({ data, onAlternative, ...actions }: Props) {
           </li>
         ))}
       </ol>
+      {footer}
     </section>
   )
 }
