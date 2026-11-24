@@ -34,6 +34,10 @@ Bảy ghi chú dưới đây do subagent (Claude Sonnet 5.5) viết ngày 2026-1
 
 [figma-ui-design.md](figma-ui-design.md): link file Figma, bảng màu (tông hồng–magenta), danh mục component, 40 frame theo luồng demo và ánh xạ màn hình ↔ cảnh demo ↔ tính năng. Frame tĩnh, chưa nối prototype.
 
+### Rà soát thiết kế UI cho demo (2026-11-24)
+
+[ui-design-review.md](ui-design-review.md): nguyên tắc rút từ skill frontend-design, UI UX Pro Max, Vercel Web Interface Guidelines, Apple HIG, Material 3; 15 vấn đề của giao diện hiện tại; bảng màu hồng mới (thay mã `#A50064` trùng logo MoMo) kèm tỷ lệ tương phản đã tính; chữ, khoảng cách, bo góc, bóng, chuyển động; khoảnh khắc chính cho 6 cảnh demo; việc P0/P1/P2. Bản xem trước tĩnh: [ui-design-preview.html](ui-design-preview.html).
+
 ### Kết quả chạy thử (spike, 2026-11-21)
 
 Bảy thử nghiệm đã **chạy thật** (subagent Claude Sonnet 5.5). Chỗ nào spike mâu thuẫn với ghi chú đọc tài liệu thì tin spike; các ghi chú ở trên đã được đánh dấu "[Đã chạy thử 2026-11-21]" tại chỗ. Code thử nằm trong `spikes/<tên>/` (có README chạy lại); đó là bản thử, không phải code sản phẩm.
