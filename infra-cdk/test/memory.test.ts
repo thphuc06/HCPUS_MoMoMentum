@@ -90,6 +90,31 @@ describe('YofinaMemory', () => {
     assert.ok(!SEMANTIC_EXTRACTION_PROMPT.includes('Identify the main language'));
   });
 
+  it('chỉ dẫn trích xuất (P0-3): giữ chữ giới hạn thời gian, đổi ý thành lời khẳng định đầy đủ, lý do từ chối là lời khẳng định; không ví dụ của bộ đánh giá', () => {
+    for (const prompt of [SEMANTIC_EXTRACTION_PROMPT, USER_PREFERENCE_EXTRACTION_PROMPT]) {
+      assert.ok(prompt.length <= 30000, 'giới hạn appendToPrompt của API');
+      // giữ nguyên chữ giới hạn thời gian của người dùng, không đổi thành ngày (số bị che khi đọc), câu có thời hạn vẫn đáng trích
+      assert.match(prompt, /TIME LIMITS: .*Keep the user's own words for that limit/s);
+      assert.match(prompt, /do not drop them, shorten them or turn them\s+into a date/);
+      assert.match(prompt, /A statement\s+that holds only for a while is still worth extracting/);
+      // câu đổi ý, rút lại: một lời khẳng định đầy đủ về CÙNG một điều (kể cả phủ định) để bước hợp nhất thay được bản cũ
+      assert.match(prompt, /CHANGES AND WITHDRAWALS: .*write one complete statement of what is true NOW about that same subject/s);
+      assert.match(prompt, /affirmative or negative statement/);
+      assert.match(prompt, /Do not return an empty list just because the message removes something/);
+      assert.match(prompt, /replaces the\s+old memory only when the new memory states the current position on the same subject/);
+      // lý do từ chối là lời khẳng định về bản thân, thao tác từ chối thì ứng dụng tự lưu
+      assert.match(prompt, /REASONS FOR DECLINING: .*the reason is a statement about themselves/s);
+      assert.match(prompt, /do not record that a suggestion was declined/);
+      // nguyên tắc, không ví dụ chứa dữ liệu của bộ đánh giá (evals/golden/phase5.jsonl)
+      for (const evalWord of ['tháng này', 'Tết', 'Du lịch', 'Giải trí', 'Dự phòng', 'tai nghe']) {
+        assert.ok(!prompt.includes(evalWord), evalWord);
+      }
+    }
+    // mỗi strategy giữ phần của mình trong lý do từ chối: sự thật là hoàn cảnh, sở thích là điều muốn giữ hay ưu tiên
+    assert.match(SEMANTIC_EXTRACTION_PROMPT, /this memory keeps the part about the user's situation/);
+    assert.match(USER_PREFERENCE_EXTRACTION_PROMPT, /this memory keeps what the user wants to protect, avoid or prioritise/);
+  });
+
   it('execution role của Memory chỉ được gọi đúng model trích xuất (inference profile và foundation model của nó)', () => {
     const { t } = memoryStack();
     const roles = Object.values(t.findResources('AWS::IAM::Role')) as any[];
