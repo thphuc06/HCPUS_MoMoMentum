@@ -515,7 +515,8 @@ def test_tom_tat_dem_hinh_dang_lo_trinh():
 
 # --- mọi khóa của bộ câu đều có bộ chấm; ca cũ không đổi điểm --------------------------------------
 def all_cases() -> list[tuple[str, dict]]:
-    paths = sorted((ROOT / "evals").glob("*/phase*.jsonl"))
+    # chỉ hai thư mục bộ câu; evals/results/ (kết quả chạy, không vào git) cũng có file phase*.jsonl
+    paths = sorted(p for d in ("golden", "adversarial") for p in (ROOT / "evals" / d).glob("phase*.jsonl"))
     return [(f"{p.parent.name}/{p.name}", c) for p in paths for c in evals_run.load(p)]
 
 
