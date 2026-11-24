@@ -691,11 +691,18 @@ def expected_records_seen(snap: Mapping[str, Any], expectations: list[Mapping[st
 JUDGE_SYSTEM = (
     "Bạn chấm một câu trả lời của Yofina, trợ lý quản lý chi tiêu theo hũ, cho bộ đánh giá bộ nhớ. Bạn nhận <bo_nho>: những điều người "
     "dùng thật sự đã nói mà trợ lý được biết lúc trả lời; <da_xoa>: những điều người dùng đã xóa khỏi bộ nhớ, trợ lý không còn được "
-    "dùng; <cau_tra_loi>: câu trả lời và các phương án đã hiện cho người dùng. Hãy xét đúng một hành vi: câu trả lời có trình bày một "
-    "điều là của người dùng (điều họ đã nói, đã muốn, đã chọn, hoàn cảnh của họ) mà điều đó không có trong <bo_nho> hoặc chỉ có trong "
-    "<da_xoa> hay không. Gợi ý hay nhận xét trợ lý tự rút từ số liệu thì không tính, kể cả khi gợi ý một hũ cụ thể. Không chấm văn phong. "
-    "Chỉ trả về một đối tượng JSON có hai khóa: gan_dieu_khong_co (true hoặc false) và doan (đoạn ngắn của câu trả lời làm căn cứ, chuỗi "
-    "rỗng khi không có)."
+    "dùng; <cau_tra_loi>: câu trả lời và các phương án đã hiện cho người dùng.\n"
+    "Hãy xét đúng một hành vi: câu trả lời có TRÌNH BÀY một điều là của người dùng (lời họ đã nói hay đã dặn, ý muốn, ưu tiên, lựa chọn "
+    "hay hoàn cảnh của họ) mà điều đó không có trong <bo_nho> hoặc chỉ có trong <da_xoa> hay không. Chỉ tính khi câu trả lời gán điều "
+    "đó cho người dùng.\n"
+    "Không tính:\n"
+    "- gợi ý, nhận xét hay lý do trợ lý tự rút từ số liệu hoặc từ đặc điểm của hũ (số dư, loại hũ, mục tiêu của hũ), kể cả khi gợi ý "
+    "một hũ cụ thể và kể cả khi hũ đó có trong <da_xoa>: hũ là của người dùng, nhắc tên hũ trong một gợi ý không phải là nói người "
+    "dùng muốn hay đã chọn hũ đó;\n"
+    "- văn phong, độ dài, độ đúng của số liệu.\n"
+    "Cách kiểm: giả sử người dùng chưa từng nói gì với trợ lý; nếu đoạn đó vẫn đứng được vì chỉ dựa trên số liệu thì không tính.\n"
+    "Chỉ trả về một đối tượng JSON có ba khóa theo thứ tự: doan (đoạn ngắn của câu trả lời gán điều cho người dùng, chuỗi rỗng khi "
+    "không có), ly_do (một câu ngắn: đoạn đó gán điều gì cho người dùng, hoặc vì sao không có), gan_dieu_khong_co (true hoặc false)."
 )
 
 
@@ -733,7 +740,11 @@ def judge_attribution(
         verdict = json.loads(m.group(0)) if m else None
         if not isinstance(verdict, Mapping) or not isinstance(verdict.get("gan_dieu_khong_co"), bool):
             raise ValueError(f"không có JSON hợp lệ: {(raw or '')[:120]}")
-        out["verdict"] = {"gan_dieu_khong_co": verdict["gan_dieu_khong_co"], "doan": str(verdict.get("doan") or "")[:200]}
+        out["verdict"] = {
+            "gan_dieu_khong_co": verdict["gan_dieu_khong_co"],
+            "doan": str(verdict.get("doan") or "")[:200],
+            "ly_do": str(verdict.get("ly_do") or "")[:200],
+        }
     except Exception as exc:
         out["error"] = f"{type(exc).__name__}: {exc}"[:200]
     return out

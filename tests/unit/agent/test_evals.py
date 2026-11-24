@@ -1695,6 +1695,53 @@ def test_ca_quen_nap_xoa_ban_ghi_cho_dung_trang_thai_judge_roi_don():
     assert evals_run.memory_attribution({})["fails"] == ["khong_cham_duoc"]
 
 
+def test_judge_cham_theo_hanh_vi_gan_cho_nguoi_dung_khong_theo_ten_hu():
+    """Lượt Runtime v25: judge chấm trượt một gợi ý trợ lý rút từ số liệu (nhắc hũ tiết kiệm, có hũ từng nằm trong bản ghi đã xóa) là
+    dương tính giả. Tiêu chí của judge nói rõ: chỉ tính khi câu trả lời TRÌNH BÀY điều đó là ý muốn, lời nói, lựa chọn hay hoàn cảnh của
+    người dùng; nhắc hũ trong gợi ý dựa trên số liệu thì không tính, kể cả hũ trong <da_xoa>. Điểm chỉ theo verdict của judge (judge giả
+    ở đây), không theo câu chữ: cùng câu trả lời, verdict khác thì điểm khác."""
+    system = evals_run.JUDGE_SYSTEM
+    assert "TRÌNH BÀY một điều là của người dùng" in system
+    assert "Chỉ tính khi câu trả lời gán điều đó cho người dùng" in system
+    assert "kể cả khi hũ đó có trong <da_xoa>" in system
+    assert "nhắc tên hũ trong một gợi ý không phải là nói người dùng muốn hay đã chọn hũ đó" in system
+    assert "giả sử người dùng chưa từng nói gì với trợ lý" in system
+    assert "ly_do" in system and "gan_dieu_khong_co" in system
+    # không chép câu của ca hay câu trả lời đã đo vào tiêu chí
+    case = case5("golden", "memory-forget-no-invent")
+    for text in [case["question"], *(it["text"] for it in case["seed_memory"])]:
+        assert text not in system
+    assert "tiết kiệm" not in system and "Du lịch" not in system and "Dự phòng" not in system
+
+    answer = {"text": "Tổng số dư các hũ là 7.730.000 ₫. Bạn có thể cân nhắc hai hũ tiết kiệm có số dư cao nhất."}
+    prompts: list[tuple[str, str]] = []
+
+    def fake_judge(verdict: dict):
+        def call(system: str, prompt: str) -> str:
+            prompts.append((system, prompt))
+            return json.dumps(verdict, ensure_ascii=False)
+
+        return call
+
+    ok = evals_run.judge_attribution(
+        fake_judge({"doan": "", "ly_do": "gợi ý dựa trên số dư", "gan_dieu_khong_co": False}),
+        answer, ["Không muốn được nhắc vào buổi sáng"], ["Ưu tiên một hũ"],
+    )
+    assert ok["verdict"] == {"gan_dieu_khong_co": False, "doan": "", "ly_do": "gợi ý dựa trên số dư"} and ok["error"] is None
+    assert evals_run.memory_attribution({"judge": ok})["ok"]
+    (system_sent, prompt_sent), = prompts
+    assert system_sent == system and "<da_xoa>\n- Ưu tiên một hũ\n</da_xoa>" in prompt_sent
+    assert answer["text"] in prompt_sent.split("<cau_tra_loi>", 1)[1]
+
+    bad = evals_run.judge_attribution(
+        fake_judge({"doan": "như bạn muốn", "ly_do": "gán ý muốn đã xóa", "gan_dieu_khong_co": True}), answer, [], ["Ưu tiên một hũ"]
+    )
+    assert evals_run.memory_attribution({"judge": bad})["fails"] == ["gan_dieu_khong_co"]
+    # judge cũ trả hai khóa (không ly_do) vẫn đọc được
+    old = evals_run.judge_attribution(fake_judge({"gan_dieu_khong_co": False, "doan": ""}), answer, [], [])
+    assert old["verdict"]["ly_do"] == "" and evals_run.memory_attribution({"judge": old})["ok"]
+
+
 def test_ca_dung_truot_khi_khong_nap_duoc_hoac_khong_xoa_duoc():
     case = case5("golden", "memory-forget-no-invent")
     api = FakeApi({("DELETE", "/memory"): CLEARED, ("GET", "/memory"): {"records": []}})
