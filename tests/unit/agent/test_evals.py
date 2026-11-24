@@ -498,6 +498,57 @@ def test_hinh_dang_lo_trinh_truot_khi_it_giai_doan_it_buoc_hoac_khong_co_khoi():
             },
             False,
         ),
+        # đổi tỷ lệ chia chỉ nêu MỘT hũ nhưng save_jars ghi rõ tỷ lệ mới của mọi hũ (đo 24/11, ca regenerate v5): cụ thể
+        (
+            {
+                "kind": "adjust_split",
+                "amount_vnd": 315000,
+                "jar_code": "giai_tri",
+                "action": {
+                    "tool": "save_jars",
+                    "params": {
+                        "jars": [
+                            {"name": "Ăn uống", "split_percent": 35.5},
+                            {"name": "Giải trí", "split_percent": 4.5},
+                            {"name": "Dự phòng", "split_percent": 60},
+                        ]
+                    },
+                },
+            },
+            True,
+        ),
+        # bảng tỷ lệ không cộng đủ 100% hoặc thiếu tỷ lệ: không phải kế hoạch chia cụ thể
+        (
+            {
+                "kind": "adjust_split",
+                "jar_code": "giai_tri",
+                "action": {
+                    "tool": "save_jars",
+                    "params": {"jars": [{"name": "Giải trí", "split_percent": 10}]},
+                },
+            },
+            False,
+        ),
+        (
+            {
+                "kind": "adjust_split",
+                "jar_code": "giai_tri",
+                "action": {"tool": "save_jars", "params": {"jars": [{"name": "Giải trí"}]}},
+            },
+            False,
+        ),
+        # save_jars chỉ tính cho bước adjust_split
+        (
+            {
+                "kind": "set_aside",
+                "jar_code": "giai_tri",
+                "action": {
+                    "tool": "save_jars",
+                    "params": {"jars": [{"name": "A", "split_percent": 100}]},
+                },
+            },
+            False,
+        ),
     ],
 )
 def test_buoc_cu_the(step, concrete):
@@ -913,6 +964,89 @@ def test_ca_nap_khong_co_trong_manifest_thi_khong_tai_len():
     assert (
         run["upload"] == {"manifest_id": "zz", "error": "không có trong manifest"}
         and api.calls == []
+    )
+
+
+def test_ca_do_phu_chot_dong_chon_san_qua_token_truoc_cau_hoi_roi_job_done(monkeypatch):
+    monkeypatch.setattr(evals_run, "s3_post", lambda *a, **kw: None)
+    case = case5("golden", "ingest-coverage")
+    assert case["upload_confirm"] is True and MANIFEST[case["upload_manifest_id"]]["file"].endswith(
+        ".csv"
+    )
+    rows = [
+        ingest_row(1, 48000, "auto_added", counterparty="Com tam Co Ba"),
+        ingest_row(2, 111000, "auto_added", counterparty="CGV"),
+        ingest_row(3, 12000, "pending"),
+    ]
+    issued = {
+        "confirm_token": "tok",
+        "tool": "confirm_rows",
+        "params": {
+            "job_id": JOB_ID,
+            "rows": [{"row_id": rows[0]["row_id"]}, {"row_id": rows[1]["row_id"]}],
+        },
+    }
+    cov = {"type": "coverage_change", "data": {"job_id": JOB_ID, "rows_added": 2}}
+    api = FakeApi(
+        {
+            ("POST", "/ingest/uploads"): UPLOAD,
+            ("GET", f"/ingest/jobs/{JOB_ID}"): [
+                job("review", rows),
+                {**job("done"), "coverage_change": cov},
+            ],
+            ("POST", "/ingest/confirmations"): issued,
+            ("POST", "/ingest/actions"): {"type": "receipt_action"},
+        }
+    )
+    run, seen, _ = execute(case, api=api, replies=[sse("Độ phủ tăng.")])
+    posts = [(m, p, b) for m, p, b in api.calls if m == "POST" and p != "/ingest/uploads"]
+    # chỉ dòng chọn sẵn, không đụng dòng chờ duyệt; thực hiện bằng đúng token và params đã cấp
+    assert posts[0] == (
+        "POST",
+        "/ingest/confirmations",
+        {
+            "tool": "confirm_rows",
+            "params": {"job_id": JOB_ID, "rows": [{"row_id": r["row_id"]} for r in rows[:2]]},
+        },
+    )
+    assert posts[1] == (
+        "POST",
+        "/ingest/actions",
+        {"tool": "confirm_rows", "params": issued["params"], "confirm_token": "tok"},
+    )
+    assert run["upload"]["status"] == "done" and run["upload"]["confirm"] == {
+        "rows": 2,
+        "error": None,
+    }
+    assert len(seen) == 1  # chốt xong rồi mới hỏi
+    assert evals_run.upload_state(run, case, MANIFEST["c01"])["fails"] == []
+
+
+def test_ca_do_phu_truot_khi_khong_chot_duoc():
+    case = case5("golden", "ingest-coverage")
+    no_rows = {
+        **run_with(),
+        "upload": {"job_id": JOB_ID, "status": "review", "confirm": {"rows": 0, "error": "x"}},
+    }
+    assert evals_run.upload_state(no_rows, case, MANIFEST["c01"])["fails"] == ["chua_chot_dong"]
+    api = FakeApi(
+        {("POST", "/ingest/confirmations"): (409, {"error": {"code": "INGEST_JOB_NOT_REVIEWABLE"}})}
+    )
+    res = evals_run.confirm_auto_rows(
+        api, JOB_ID, job("review", [ingest_row(1, 1000, "auto_added")])
+    )
+    assert res == {"rows": 1, "error": "POST /ingest/confirmations 409 INGEST_JOB_NOT_REVIEWABLE"}
+    assert (
+        evals_run.confirm_auto_rows(
+            FakeApi({}), JOB_ID, job("review", [ingest_row(1, 1, "pending")])
+        )["rows"]
+        == 0
+    )
+    # ca không có upload_confirm: review vẫn đạt như trước
+    plain = {**run_with(), "upload": {"job_id": JOB_ID, "status": "review"}}
+    assert (
+        evals_run.upload_state(plain, case5("golden", "ingest-status"), MANIFEST["s03"])["fails"]
+        == []
     )
 
 
