@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { AUTH_MESSAGES, AuthError, type AuthClient, type AuthSession } from './types'
+import { AUTH_MESSAGES, AuthError, OPS_GROUP, type AuthClient, type AuthSession } from './types'
 
 /** Làm mới access token khi còn ít hơn khoảng này (access token sống 60 phút). */
 export const REFRESH_LEAD_MS = 5 * 60_000
@@ -114,4 +114,13 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth phải nằm trong <AuthProvider>')
   return ctx
+}
+
+/**
+ * Người đang đăng nhập có thuộc nhóm `ops` không (đọc nhóm từ token). Không có AuthProvider (khối vẽ riêng trong test) thì sai.
+ * Chỉ quyết định có hiện lối vào màn trace hay không; quyền thật do server kiểm.
+ */
+export function useIsOps(): boolean {
+  const ctx = useContext(AuthContext)
+  return !!ctx?.session?.groups?.includes(OPS_GROUP)
 }

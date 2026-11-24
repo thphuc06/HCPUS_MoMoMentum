@@ -221,3 +221,47 @@ describe('bảng mã lỗi', () => {
     expect(apiErrorFromResponse(429, undefined).code).toBe('RATE_LIMITED')
   })
 })
+
+describe('lớp REST phase 5', () => {
+  it('bộ nhớ: GET /memory có limit và cursor; DELETE /memory/{id} và DELETE /memory không có thân', async () => {
+    const { api, calls } = setup([
+      json(200, restFixture('MemoryListResponse.minh')),
+      json(200, restFixture('MemoryRecordDeleteResponse.default')),
+      json(200, restFixture('MemoryClearResponse.default')),
+    ])
+    await api.listMemory({ limit: 50, cursor: 'abc' })
+    await api.deleteMemoryRecord('mem-0f3b7c2a-9d41-4e8b-a6c5-1e2f3a4b5c01')
+    await api.clearMemory()
+    expect(calls.map((c) => [c.init.method, c.url.replace(BASE, '')])).toEqual([
+      ['GET', '/memory?limit=50&cursor=abc'],
+      ['DELETE', '/memory/mem-0f3b7c2a-9d41-4e8b-a6c5-1e2f3a4b5c01'],
+      ['DELETE', '/memory'],
+    ])
+    expect(calls[1]!.init.body).toBeUndefined()
+  })
+
+  it('mã bản ghi hay mã bản tin sai dạng: không gọi server', async () => {
+    const { api, calls } = setup([])
+    await expect(api.deleteMemoryRecord('../ops/summary')).rejects.toMatchObject({ code: 'PARAMS_INVALID' })
+    await expect(api.submitNudgeFeedback('khong-phai-uuid', { outcome: 'snoozed' })).rejects.toMatchObject({ code: 'PARAMS_INVALID' })
+    expect(calls).toHaveLength(0)
+  })
+
+  it('xóa dữ liệu: /me/delete-data/confirmations rồi /me/delete-data kèm token, đúng thân của hợp đồng', async () => {
+    const { api, calls } = setup([json(200, restFixture('ConfirmationResponse.delete_my_data')), json(200, restFixture('DataDeletion.done'))])
+    const issued = await api.createDeleteDataConfirmation()
+    const r = await api.deleteMyData(issued.confirm_token)
+    expect(r.status).toBe('done')
+    expect(calls.map((c) => c.url.replace(BASE, ''))).toEqual(['/me/delete-data/confirmations', '/me/delete-data'])
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual(restFixture('DeleteDataConfirmationRequest.all'))
+    expect(JSON.parse(String(calls[1]!.init.body))).toEqual(restFixture('DeleteDataRequest.co_token'))
+  })
+
+  it('MEMORY_UNAVAILABLE: thông báo tiếng Việt, thử lại được', async () => {
+    const { api } = setup([json(503, { error: { code: 'MEMORY_UNAVAILABLE' } })])
+    const err = (await api.listMemory().catch((e) => e)) as ApiError
+    expect(err.code).toBe('MEMORY_UNAVAILABLE')
+    expect(err.retryable).toBe(true)
+    expect(err.message).toBe(ERROR_MESSAGES.MEMORY_UNAVAILABLE)
+  })
+})

@@ -46,6 +46,29 @@ import { createApiClient } from './client'
 import { IngestJobListResponse, IngestJobResponse, IngestJobSummary, IngestRowJarRequest, IngestRowJarResponse, IngestUploadRequest, IngestUploadResponse } from './ingestSchemas'
 import { IngestReviewBlock, CoverageChangeBlock } from '@/contracts/blocks'
 import { jarsFromFixture } from '@/test/helpers'
+import {
+  BehaviorProfileResponse,
+  DataDeletion,
+  DeleteDataConfirmationRequest,
+  DeleteDataConfirmationResponse,
+  DeleteDataRequest,
+  DeletionStep,
+  MemoryClearResponse,
+  MemoryListResponse,
+  MemoryRecord,
+  MemoryRecordDeleteResponse,
+  Nudge,
+  NudgeFeedbackRequest,
+  NudgeFeedbackResponse,
+  NudgeTodayResponse,
+  OpsDayModelCalls,
+  OpsSummaryResponse,
+  OpsToolCall,
+  OpsTraceDetail,
+  OpsTraceListResponse,
+  OpsTraceSummary,
+  parseNudgeCard,
+} from './phase5Schemas'
 import { restFixtureEntries, restInvalidEntries } from '@/test/fixtures'
 
 // Đối chiếu code frontend với contracts/rest/openapi.yaml (nguồn duy nhất của hợp đồng REST).
@@ -92,6 +115,18 @@ describe('khớp openapi.yaml', () => {
       ['/ingest/rows/{row_id}/jar', 'post', 'setIngestRowJar'],
       ['/ingest/confirmations', 'post', 'createIngestConfirmation'],
       ['/ingest/actions', 'post', 'applyIngestAction'],
+      // phase 5 (F7, quyền riêng tư, trace)
+      ['/profile/behavior', 'get', 'getBehaviorProfile'],
+      ['/nudges/today', 'get', 'getTodayNudge'],
+      ['/nudges/{nudge_id}/feedback', 'post', 'submitNudgeFeedback'],
+      ['/memory', 'get', 'listMemory'],
+      ['/memory', 'delete', 'clearMemory'],
+      ['/memory/{record_id}', 'delete', 'deleteMemoryRecord'],
+      ['/me/delete-data/confirmations', 'post', 'createDeleteDataConfirmation'],
+      ['/me/delete-data', 'post', 'deleteMyData'],
+      ['/ops/traces', 'get', 'listOpsTraces'],
+      ['/ops/traces/{trace_id}', 'get', 'getOpsTrace'],
+      ['/ops/summary', 'get', 'getOpsSummary'],
     ]
     for (const [path, method, op] of expected) expect(spec.paths[path]?.[method]?.operationId, `${method} ${path}`).toBe(op)
   })
@@ -147,6 +182,25 @@ describe('khớp openapi.yaml', () => {
     ['CreditLine', CreditLine, ledgerResults.$defs.CreditLine!.required!],
     ['Payee', Payee, ledgerResults.$defs.Payee!.required!],
     ['SalaryEvent', SalaryEvent, ledgerResults.$defs.SalaryEvent!.required!],
+    ['Nudge', Nudge, schemas.Nudge!.required!],
+    ['NudgeTodayResponse', NudgeTodayResponse, schemas.NudgeTodayResponse!.required!],
+    ['NudgeFeedbackRequest', NudgeFeedbackRequest, schemas.NudgeFeedbackRequest!.required!],
+    ['NudgeFeedbackResponse', NudgeFeedbackResponse, schemas.NudgeFeedbackResponse!.required!],
+    ['MemoryRecord', MemoryRecord, schemas.MemoryRecord!.required!],
+    ['MemoryListResponse', MemoryListResponse, schemas.MemoryListResponse!.required!],
+    ['MemoryRecordDeleteResponse', MemoryRecordDeleteResponse, schemas.MemoryRecordDeleteResponse!.required!],
+    ['MemoryClearResponse', MemoryClearResponse, schemas.MemoryClearResponse!.required!],
+    ['DeleteDataConfirmationRequest', DeleteDataConfirmationRequest, schemas.DeleteDataConfirmationRequest!.required!],
+    ['DeleteDataConfirmationResponse', DeleteDataConfirmationResponse, schemas.ConfirmationResponse!.required!],
+    ['DeleteDataRequest', DeleteDataRequest, schemas.DeleteDataRequest!.required!],
+    ['DeletionStep', DeletionStep, schemas.DeletionStep!.required!],
+    ['DataDeletion', DataDeletion, schemas.DataDeletion!.required!],
+    ['OpsTraceSummary', OpsTraceSummary, schemas.OpsTraceSummary!.required!],
+    ['OpsTraceListResponse', OpsTraceListResponse, schemas.OpsTraceListResponse!.required!],
+    ['OpsToolCall', OpsToolCall, schemas.OpsToolCall!.required!],
+    ['OpsTraceDetail', OpsTraceDetail, schemas.OpsTraceDetail!.required!],
+    ['OpsDayModelCalls', OpsDayModelCalls, schemas.OpsDayModelCalls!.required!],
+    ['OpsSummaryResponse', OpsSummaryResponse, schemas.OpsSummaryResponse!.required!],
   ]
   for (const [name, zod, required] of pairs) {
     it(`${name}: trường bắt buộc khớp hợp đồng`, () => {
@@ -207,6 +261,19 @@ describe('fixture REST của hợp đồng', () => {
     IngestJobListResponse,
     IngestRowJarRequest,
     IngestRowJarResponse,
+    BehaviorProfileResponse,
+    NudgeTodayResponse,
+    NudgeFeedbackRequest,
+    NudgeFeedbackResponse,
+    MemoryListResponse,
+    MemoryRecordDeleteResponse,
+    MemoryClearResponse,
+    DeleteDataConfirmationRequest,
+    DeleteDataRequest,
+    DataDeletion,
+    OpsTraceListResponse,
+    OpsTraceDetail,
+    OpsSummaryResponse,
   }
 
   for (const [file, body] of restFixtureEntries()) {
@@ -225,6 +292,12 @@ describe('fixture REST của hợp đồng', () => {
     'TransactionsResponse.hon_50_dong',
     'CreditLineResponse.http_source',
     'JarDetailResponse.thieu_obligations',
+    'BehaviorProfileResponse.evidence_rong',
+    'MemoryListResponse.record_id_sai',
+    'OpsTraceListResponse.user_ref_la_sub',
+    'NudgeFeedbackRequest.outcome_la',
+    'DeleteDataConfirmationRequest.tool_khac',
+    'DeleteDataRequest.scope_khac',
   ])
   for (const [file, body] of restInvalidEntries()) {
     if (!MUST_REJECT.has(file)) continue
@@ -259,6 +332,26 @@ describe('fixture REST của hợp đồng', () => {
     await api.createConfirmation({ tool: 'assign_jar', params: {} }).catch(() => {})
     await api.applyAction({ tool: 'assign_jar', params: {}, confirm_token: 'a.b' }).catch(() => {})
     expect(urls).toEqual(['/ingest/confirmations', '/ingest/actions', '/confirmations', '/actions'])
+  })
+
+  it('ConfirmationResponse của /me/delete-data/confirmations: tool delete_my_data, có preview của server', () => {
+    const r = DeleteDataConfirmationResponse.parse(Object.fromEntries(restFixtureEntries())['ConfirmationResponse.delete_my_data'])
+    expect(r.tool).toBe('delete_my_data')
+    expect(r.preview?.warnings?.length).toBeGreaterThan(0)
+  })
+
+  it('NudgeTodayResponse: thẻ có nudge_id đúng bản tin thì dùng; vắng hoặc không phải proactive_card thì bỏ', () => {
+    const entries = Object.fromEntries(restFixtureEntries())
+    const card = parseNudgeCard(NudgeTodayResponse.parse(entries['NudgeTodayResponse.co_ban_tin']))
+    expect(card?.data.nudge_id).toBe('2d4e6f80-1a3c-4e5b-8d7f-9a1b3c5d7e9f')
+    expect(parseNudgeCard(NudgeTodayResponse.parse(entries['NudgeTodayResponse.trong']))).toBeNull()
+    const wrong = Object.fromEntries(restInvalidEntries())['NudgeTodayResponse.card_khong_phai_the']
+    expect(parseNudgeCard(NudgeTodayResponse.parse(wrong))).toBeNull()
+  })
+
+  it('OpsTraceDetail có user_id (sai hợp đồng): phía đọc bỏ trường lạ, giao diện không bao giờ thấy user_id', () => {
+    const parsed = OpsTraceDetail.parse(Object.fromEntries(restInvalidEntries())['OpsTraceDetail.co_user_id'])
+    expect(parsed).not.toHaveProperty('user_id')
   })
 
   it('IngestJobListResponse: parse được dạng rỗng và dạng có phần tử không kèm review', () => {

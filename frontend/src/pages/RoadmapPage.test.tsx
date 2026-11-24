@@ -48,10 +48,12 @@ describe('lộ trình thích ứng', () => {
   it('hiện phiên bản, lý do, thay đổi trước sau và counts từ server', async () => {
     const { calls } = mountApp(backend({ 'GET /roadmap': v3, 'GET /roadmap/versions': versions }), '/roadmap')
     expect(await screen.findByRole('heading', { name: 'Lộ trình · Phiên bản 3' })).toBeVisible()
-    expect(screen.getByText(v3.data.headline)).toBeVisible()
-    expect(screen.getByText(v3.data.reason.text)).toBeVisible()
-    expect(screen.getByText(v3.data.reason.detail![0]!.label)).toBeVisible()
-    expect(screen.getByText('Khả thi sau điều chỉnh')).toBeVisible()
+    // Danh sách phiên bản bên dưới cũng có lý do và mức khả thi của từng bản: kiểm trong khối lộ trình đang hiện.
+    const shown = within(screen.getByRole('heading', { name: 'Lộ trình · Phiên bản 3' }).closest('[data-block="roadmap"]') as HTMLElement)
+    expect(shown.getByText(v3.data.headline)).toBeVisible()
+    expect(shown.getByText(v3.data.reason.text)).toBeVisible()
+    expect(shown.getByText(v3.data.reason.detail![0]!.label)).toBeVisible()
+    expect(shown.getByText('Khả thi sau điều chỉnh')).toBeVisible()
     const counts = within(screen.getByRole('list', { name: 'Số bước theo trạng thái' })).getAllByRole('listitem')
     expect(counts.map((item) => item.textContent)).toEqual([
       `Chờ ${v3.data.counts.pending}`,
@@ -261,5 +263,64 @@ describe('lộ trình thích ứng', () => {
     await pollOnce()
     expect(callsTo(calls, 'GET', path)).toHaveLength(1)
     expect(callsTo(calls, 'POST', '/roadmap/regenerate')).toHaveLength(0)
+  })
+})
+
+describe('trang Lộ trình: danh sách phiên bản', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  // Bản cũ (v1, đã thay) dựng từ khối v2 của fixture, đổi số phiên bản và trạng thái.
+  const v1 = structuredClone(v2)
+  v1.id = v1.id.replace(/v2$/, 'v1')
+  v1.data.version = 1
+  v1.data.status = 'superseded'
+  delete v1.data.based_on_version
+
+  it('liệt kê đủ phiên bản (đề xuất, đang dùng, đã thay) với trạng thái, mức khả thi và số bước chờ', async () => {
+    mountApp(backend({ 'GET /roadmap': v2, 'GET /roadmap/versions': versions }), '/roadmap')
+    const list = await screen.findByRole('list', { name: 'Các phiên bản lộ trình' })
+    const items = within(list).getAllByRole('button')
+    expect(items).toHaveLength(versions.versions.length)
+    expect(items[0]).toHaveTextContent('Phiên bản 3')
+    expect(items[0]).toHaveTextContent('Đề xuất · chờ bạn chọn')
+    expect(items[0]).toHaveTextContent('5 bước chờ')
+    expect(items[1]).toHaveTextContent('Phiên bản 2 (bản này)')
+    expect(items[1]).toHaveTextContent('Đang dùng')
+    expect(items[1]).toHaveAttribute('aria-pressed', 'true')
+    expect(items[2]).toHaveTextContent('Bản cũ · đã thay')
+    expect(items[2]).toHaveTextContent('Chưa khả thi')
+  })
+
+  it('bấm một bản: tải đúng phiên bản đó để xem (chỉ đọc) và có lối so với bản đang dùng', async () => {
+    const user = userEvent.setup()
+    const { calls } = mountApp(backend({
+      'GET /roadmap': (_init, url) => (url.searchParams.get('version') === '1' ? v1 : v2),
+      'GET /roadmap/versions': versions,
+      'GET /roadmap/diff': restFixture('RoadmapDiffResponse.v2_v3'),
+    }), '/roadmap')
+    const list = await screen.findByRole('list', { name: 'Các phiên bản lộ trình' })
+    await user.click(within(list).getByRole('button', { name: /Phiên bản 1/ }))
+    const view = await screen.findByTestId('roadmap-version-view')
+    expect(await within(view).findByRole('heading', { name: 'Lộ trình · Phiên bản 1' })).toBeVisible()
+    expect(within(view).queryByRole('button', { name: /Chấp nhận|Từ chối|Sửa|Thực hiện/ })).toBeNull()
+    expect(callsTo(calls, 'GET', '/roadmap').map(({ url }) => new URL(url).search)).toContain('?version=1')
+    const compare = within(view).getByRole('link', { name: 'So với bản đang dùng' })
+    expect(compare).toHaveAttribute('href', '/roadmap/compare?from=1&to=2')
+    await user.click(compare)
+    await screen.findByRole('heading', { name: 'So với bản cũ' })
+    await vi.waitFor(() => expect(callsTo(calls, 'GET', '/roadmap/diff').map(({ url }) => new URL(url).search)).toEqual(['?from_version=1&to_version=2']))
+  })
+
+  it('bấm lại bản đang mở thì đóng; bấm bản đang hiện ở trên không mở thêm gì', async () => {
+    const user = userEvent.setup()
+    mountApp(backend({ 'GET /roadmap': (_init, url) => (url.searchParams.get('version') === '3' ? v3 : v2), 'GET /roadmap/versions': versions }), '/roadmap')
+    const list = await screen.findByRole('list', { name: 'Các phiên bản lộ trình' })
+    await user.click(within(list).getByRole('button', { name: /Phiên bản 2/ }))
+    expect(screen.queryByTestId('roadmap-version-view')).toBeNull()
+    await user.click(within(list).getByRole('button', { name: /Phiên bản 3/ }))
+    const view = await screen.findByTestId('roadmap-version-view')
+    expect(within(view).getByRole('link', { name: 'So với bản đang dùng' })).toHaveAttribute('href', '/roadmap/compare?from=2&to=3')
+    await user.click(within(list).getByRole('button', { name: /Phiên bản 3/ }))
+    expect(screen.queryByTestId('roadmap-version-view')).toBeNull()
   })
 })

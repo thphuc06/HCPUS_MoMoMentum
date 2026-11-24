@@ -1,0 +1,150 @@
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { createMemoryRouter, RouterProvider } from 'react-router'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { OpsTraceDetail, OpsTraceListResponse } from '@/api/phase5Schemas'
+import { TraceResponse } from '@/api/schemas'
+import { ChatLauncherContext } from '@/chat/launcher'
+import { ExplainBody } from '@/features/explain/ExplainBody'
+import { restFixture } from '@/test/fixtures'
+import { Providers, fakeApi, fakeAuth, session } from '@/test/helpers'
+import { backend, callsTo, config, json, mountApp } from '@/test/mountApp'
+
+// Màn trace X1 và bảng vận hành: chỉ nhóm Cognito `ops` (đọc nhóm từ token); người khác không thấy lối vào và không gọi `/ops/*`.
+
+afterEach(() => vi.unstubAllGlobals())
+
+const OPS = { session: { groups: ['ops'] } }
+const detail = OpsTraceDetail.parse(restFixture('OpsTraceDetail.what_if'))
+const traces = OpsTraceListResponse.parse(restFixture('OpsTraceListResponse.default'))
+
+describe('bảng vận hành /ops/summary', () => {
+  it('số tổng hợp, lượt gọi model theo ngày so với trần, các lượt gần đây dẫn tới màn trace', async () => {
+    const user = userEvent.setup()
+    const { calls, router } = mountApp(backend(), '/ops', config, OPS)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/ops/summary'))
+    const kpis = await screen.findByTestId('ops-kpis')
+    expect(kpis).toHaveTextContent('42')
+    expect(kpis).toHaveTextContent('3 bị từ chối · 1 lỗi')
+    expect(kpis).toHaveTextContent('4,2 s / 9,8 s')
+    expect(kpis).toHaveTextContent('2%')
+    expect(kpis).toHaveTextContent('2 / 96 lần gọi')
+    expect(kpis).toHaveTextContent('27.500 ₫')
+    const days = screen.getByRole('list', { name: 'Lượt gọi model theo ngày' })
+    expect(within(days).getAllByRole('listitem')).toHaveLength(3)
+    expect(within(days).getByText('61 / 500')).toBeInTheDocument()
+
+    const table = await screen.findByRole('table')
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(traces.traces.length)
+    expect(rows[1]).toHaveTextContent('FORECAST_UNAVAILABLE')
+    expect(rows[1]).toHaveTextContent(traces.traces[1]!.user_ref)
+    // tab bar ẩn ở màn vận hành, khung giãn thành desktop
+    expect(screen.queryByRole('navigation', { name: 'Điều hướng chính' })).toBeNull()
+    expect(document.querySelector('[data-layout="wide"]')).not.toBeNull()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Kết quả' }), 'error')
+    await waitFor(() => expect(callsTo(calls, 'GET', '/ops/traces').map((c) => new URL(c.url).searchParams.get('outcome'))).toEqual([null, 'error']))
+
+    await user.click(within(await screen.findByRole('table')).getAllByRole('link')[0]!)
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/ops/traces/${traces.traces[0]!.trace_id}`))
+  })
+
+  it('không có lượt nào: nói thật, không vẽ số giả', async () => {
+    mountApp(backend({ 'GET /ops/summary': restFixture('OpsSummaryResponse.khong_co_luot'), 'GET /ops/traces': { traces: [] } }), '/ops', config, OPS)
+    expect(await screen.findByText('Chưa có lượt gọi model nào trong khoảng này.')).toBeInTheDocument()
+    expect(screen.getByTestId('ops-kpis')).toHaveTextContent('Chưa có lượt')
+    expect(await screen.findByText('Không có lượt nào.')).toBeInTheDocument()
+  })
+
+  it('tài khoản không thuộc ops: không gọi /ops/*, hiện "Chỉ dành cho đội vận hành"', async () => {
+    const { calls } = mountApp(backend(), '/ops')
+    expect(await screen.findByRole('heading', { name: 'Chỉ dành cho đội vận hành' })).toBeInTheDocument()
+    expect(calls.filter((c) => new URL(c.url).pathname.startsWith('/ops'))).toHaveLength(0)
+  })
+
+  it('token có nhóm ops nhưng server từ chối (403): cũng hiện màn không có quyền', async () => {
+    mountApp(backend({ 'GET /ops/summary': json(403, { error: { code: 'FORBIDDEN' } }) }), '/ops', config, OPS)
+    expect(await screen.findByRole('heading', { name: 'Chỉ dành cho đội vận hành' })).toBeInTheDocument()
+  })
+})
+
+describe('màn trace X1 /ops/traces/:id', () => {
+  it('tóm tắt lượt, mọi bước theo thứ tự (lần gọi tool có trạng thái), luật, dữ liệu đã dùng, khối đã phát', async () => {
+    const { calls } = mountApp(backend(), `/ops/traces/${detail.trace_id}`, config, OPS)
+    expect(await screen.findByTestId('ops-trace-id')).toHaveTextContent(detail.trace_id)
+    expect(callsTo(calls, 'GET', `/ops/traces/${detail.trace_id}`)).toHaveLength(1)
+    expect(screen.getByTestId('ops-duration')).toHaveTextContent('5,4 s')
+    expect(screen.getByTestId('ops-tokens')).toHaveTextContent('5.200 / 640')
+    expect(screen.getByTestId('ops-cost')).toHaveTextContent('655 ₫')
+    const steps = within(screen.getByRole('list', { name: 'Các bước của lượt' })).getAllByRole('listitem')
+    expect(steps.map((s) => s.getAttribute('data-step'))).toEqual(detail.steps.map((s) => s.step))
+    expect(steps[1]).toHaveTextContent('ledger · get_jar_balances')
+    expect(steps[1]).toHaveTextContent('OK')
+    expect(steps[0]).toHaveTextContent('router')
+    expect(steps[0]).toHaveTextContent('480 ms')
+    const rules = screen.getByRole('region', { name: 'Luật đã kiểm' })
+    expect(rules.querySelector('[data-rule="obligation_to_income"]')).toHaveAttribute('data-outcome', 'warn')
+    expect(within(screen.getByRole('region', { name: 'Dữ liệu đã dùng' })).getByText('760.000 ₫')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Khối đã phát' })).getByText('options')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: `Lần gọi tool (${detail.tool_calls.length})` })).toBeInTheDocument()
+    // logo "Yofina · Trace" về Tổng quan
+    expect(screen.getByRole('link', { name: 'Yofina · Trace, về Tổng quan' })).toHaveAttribute('href', '/')
+  })
+
+  it('lần gọi tool lỗi hoặc bị Cedar từ chối: có mã lỗi', async () => {
+    const failing = structuredClone(restFixture('OpsTraceDetail.what_if')) as Record<string, any>
+    failing.steps[2] = { step: 'forecast___get_forecast', ms: 310, status: 'error', code: 'FORECAST_UNAVAILABLE' }
+    failing.tool_calls[1] = { target: 'forecast', tool: 'get_forecast', ms: 310, status: 'denied' }
+    mountApp(backend({ [`GET /ops/traces/${detail.trace_id}`]: failing }), `/ops/traces/${detail.trace_id}`, config, OPS)
+    const steps = within(await screen.findByRole('list', { name: 'Các bước của lượt' })).getAllByRole('listitem')
+    expect(steps[2]).toHaveTextContent('Lỗi · FORECAST_UNAVAILABLE')
+    expect(screen.getByText('Cedar từ chối')).toBeInTheDocument()
+  })
+
+  it('không có trace: báo lỗi tiếng Việt; người không thuộc ops không gọi API', async () => {
+    mountApp(backend({ [`GET /ops/traces/${detail.trace_id}`]: json(404, { error: { code: 'TRACE_NOT_FOUND' } }) }), `/ops/traces/${detail.trace_id}`, config, OPS)
+    expect(await screen.findByText('Chưa mở được trace')).toBeInTheDocument()
+  })
+
+  it('người không thuộc ops mở thẳng đường dẫn: không gọi API', async () => {
+    const { calls } = mountApp(backend(), `/ops/traces/${detail.trace_id}`)
+    expect(await screen.findByRole('heading', { name: 'Chỉ dành cho đội vận hành' })).toBeInTheDocument()
+    expect(callsTo(calls, 'GET', `/ops/traces/${detail.trace_id}`)).toHaveLength(0)
+  })
+})
+
+describe('hàng "Mã trace" của bảng "Vì sao"', () => {
+  const trace = TraceResponse.parse(restFixture('TraceResponse.what_if'))
+
+  function renderExplain(groups: string[]) {
+    const launcher = { open: vi.fn(), close: vi.fn() }
+    const router = createMemoryRouter([
+      { path: '/', element: <ExplainBody block={trace.explain} detail={trace.detail} /> },
+      { path: '/ops/traces/:traceId', element: <p>MÀN TRACE</p> },
+    ])
+    render(
+      <ChatLauncherContext.Provider value={launcher}>
+        <Providers api={fakeApi()} auth={fakeAuth(session({ groups }))}>
+          <RouterProvider router={router} />
+        </Providers>
+      </ChatLauncherContext.Provider>,
+    )
+    return { router, launcher }
+  }
+
+  it('nhóm ops: bấm hàng Mã trace thì đóng chat và mở màn trace của đúng lượt', async () => {
+    const { router, launcher } = renderExplain(['ops'])
+    const open = await screen.findByRole('button', { name: `Mở màn trace của lượt ${trace.explain.data.subject_trace_id}` })
+    await userEvent.setup().click(open)
+    expect(launcher.close).toHaveBeenCalled()
+    expect(await screen.findByText('MÀN TRACE')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe(`/ops/traces/${trace.explain.data.subject_trace_id}`)
+  })
+
+  it('không thuộc ops: chỉ thấy mã, không có lối vào', async () => {
+    renderExplain([])
+    expect(await screen.findByTestId('explain-trace-id')).toHaveTextContent(trace.explain.data.subject_trace_id)
+    expect(screen.queryByRole('button', { name: /Mở màn trace/ })).toBeNull()
+  })
+})

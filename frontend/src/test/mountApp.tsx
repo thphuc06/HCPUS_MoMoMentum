@@ -5,7 +5,8 @@ import { AuthProvider } from '@/auth/AuthProvider'
 import { ConfigContext } from '@/AppContext'
 import type { Config } from '@/lib/config'
 import { appRoutes } from '@/router'
-import { fakeAuth } from './helpers'
+import type { AuthSession } from '@/auth/types'
+import { fakeAuth, session } from './helpers'
 import { restFixture, validBlock } from './fixtures'
 
 // Mount cả ứng dụng (router + khung + provider) với fetch giả ở mức REST/Runtime. Đây là test: mock chỉ sống ở đây và
@@ -29,7 +30,8 @@ export function json(status: number, body?: unknown) {
   return new Response(body === undefined ? '' : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
-export function mountApp(handler: Handler, initial = '/', cfg: Config = config) {
+/** `opts.session` ghi đè phiên đăng nhập giả (ví dụ `{ groups: ['ops'] }` cho tài khoản nhóm vận hành). */
+export function mountApp(handler: Handler, initial = '/', cfg: Config = config, opts: { session?: Partial<AuthSession> } = {}) {
   const calls: Call[] = []
   vi.stubGlobal(
     'fetch',
@@ -39,7 +41,7 @@ export function mountApp(handler: Handler, initial = '/', cfg: Config = config) 
     }),
   )
   const router = createMemoryRouter(appRoutes(), { initialEntries: [initial] })
-  const auth = fakeAuth()
+  const auth = fakeAuth(session(opts.session))
   render(
     <ConfigContext.Provider value={cfg}>
       <AuthProvider client={auth}>
@@ -64,11 +66,19 @@ const REST_FIXTURES: Record<string, string> = {
   '/jar-templates': 'JarTemplatesResponse.default',
   '/resilience': 'ResilienceScoreResponse.minh',
   '/resilience/shocks': 'ShocksResponse.default',
+  // phase 5: bản tin trống (Tổng quan dùng thẻ tất định), hồ sơ hành vi, bộ nhớ, các phiên bản lộ trình của minh
+  '/nudges/today': 'NudgeTodayResponse.trong',
+  '/profile/behavior': 'BehaviorProfileResponse.minh',
+  '/memory': 'MemoryListResponse.minh',
+  '/roadmap/versions': 'RoadmapVersionsResponse.minh',
+  '/ops/summary': 'OpsSummaryResponse.default',
+  '/ops/traces': 'OpsTraceListResponse.default',
 }
 
 export function restDefault(url: string): Response {
   const path = new URL(url).pathname
   if (path.startsWith('/forecasts/')) return json(200, validBlock('forecast_timeline.short'))
+  if (path.startsWith('/ops/traces/')) return json(200, restFixture('OpsTraceDetail.what_if'))
   const name = path.startsWith('/jars/') ? 'JarDetailResponse.an_uong' : REST_FIXTURES[path]
   return name ? json(200, restFixture(name)) : json(404)
 }

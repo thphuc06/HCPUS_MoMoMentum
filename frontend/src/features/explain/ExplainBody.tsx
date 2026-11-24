@@ -4,6 +4,7 @@ import { CONFIDENCE_LABEL } from '@/lib/jar'
 import { formatDateTime } from '@/lib/format'
 import type { TraceDetail } from '@/api/schemas'
 import type { ExplainBlock, RuleCheck } from '@/contracts/blocks'
+import { TraceIdRow } from './TraceIdRow'
 
 // Figma ExplainSheet (11:378) và H4: bảng "Vì sao" = dữ liệu đã dùng, luật đã kiểm, nhóm tin cậy Cao/Vừa/Thấp kèm lý do, mã
 // trace. Do CODE dựng từ bản ghi lượt (`GET /traces/{id}` hoặc khối `explain` do agent phát); giao diện chỉ vẽ.
@@ -86,9 +87,7 @@ export function ExplainBody({ block, detail }: { block: ExplainBlock; detail?: T
         )}
       </section>
 
-      <p className="text-small text-ink-2">
-        Mã trace <span className="num font-semibold text-ink" data-testid="explain-trace-id">{d.subject_trace_id}</span>
-      </p>
+      <TraceIdRow traceId={d.subject_trace_id} />
 
       {detail && (
         <details className="rounded-card bg-surface-2 px-3 py-2.5 text-small" data-testid="explain-detail">

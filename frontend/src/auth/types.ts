@@ -7,7 +7,15 @@ export type AuthSession = {
   expiresAt: number
   email: string
   displayName?: string
+  /**
+   * Nhóm Cognito của người dùng (claim `cognito:groups` của access token). Chỉ để giao diện ẩn hay hiện lối vào (ví dụ màn trace
+   * của nhóm `ops`); server tự kiểm nhóm ở mọi lời gọi `/ops/*` (403 nếu không thuộc nhóm).
+   */
+  groups?: string[]
 }
+
+/** Nhóm Cognito được xem bảng vận hành và màn trace (`x-required-group: ops` của hợp đồng REST). */
+export const OPS_GROUP = 'ops'
 
 export type AuthErrorCode =
   | 'INVALID_CREDENTIALS'

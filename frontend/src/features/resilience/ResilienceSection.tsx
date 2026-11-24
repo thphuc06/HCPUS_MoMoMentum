@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { EmptyState, ErrorState, ListSkeleton } from '@/components/StateViews'
 import { buttonVariants } from '@/components/ui/button'
@@ -7,7 +8,8 @@ import { useResilience, useShocks } from './useResilience'
 
 const DETAIL_PATH = '/foresight/resilience'
 
-export function ResilienceSection() {
+/** children nằm giữa khối Điểm chống chịu và "Thử cú sốc tài chính" (ví dụ lối vào Lộ trình của tab Nhìn trước). */
+export function ResilienceSection({ children }: { children?: ReactNode }) {
   const score = useResilience()
   const shocks = useShocks()
   const data = score.data?.data
@@ -39,6 +41,8 @@ export function ResilienceSection() {
           </div>
         )}
       </section>
+
+      {children}
 
       <section aria-labelledby="shocks-heading" className="space-y-2">
         <h2 id="shocks-heading" className="px-4 text-section font-bold text-ink">Thử cú sốc tài chính</h2>

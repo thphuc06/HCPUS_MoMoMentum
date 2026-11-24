@@ -13,7 +13,7 @@ export const VERSION_STATUS = {
   discarded: { kind: 'info', label: 'Đã bỏ' },
 } as const
 
-const FEASIBILITY = {
+export const FEASIBILITY = {
   on_track: { kind: 'ok', label: 'Kịp hạn' },
   relaxed: { kind: 'warn', label: 'Khả thi sau điều chỉnh' },
   infeasible: { kind: 'bad', label: 'Chưa khả thi' },

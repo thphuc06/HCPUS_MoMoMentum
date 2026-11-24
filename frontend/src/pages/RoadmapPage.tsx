@@ -11,6 +11,7 @@ import { Roadmap } from '@/features/roadmap/Roadmap'
 import { EditStepDrawer, ExecuteStepDrawer, RejectStepDialog } from '@/features/roadmap/RoadmapStepDialogs'
 import { useRoadmap } from '@/features/roadmap/useRoadmap'
 import { useRoadmapJob } from '@/features/roadmap/useRoadmapJob'
+import { RoadmapVersionBrowser } from '@/features/roadmap/RoadmapVersionBrowser'
 import { useRoadmapVersions } from '@/features/roadmap/useRoadmapVersions'
 import { useRoadmapMutation, useStepDecision } from '@/features/roadmap/useStepDecision'
 
@@ -142,6 +143,7 @@ export function RoadmapPage() {
             </Button>
           </>
         )}
+        {versions.data && <RoadmapVersionBrowser versions={versions.data} shownVersion={data?.version} />}
       </div>
       {dialog?.kind === 'reject' && (
         <RejectStepDialog
