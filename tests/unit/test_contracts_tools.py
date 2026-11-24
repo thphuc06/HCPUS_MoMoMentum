@@ -64,7 +64,7 @@ def test_cac_target_phase_3_khop_hang_so():
         "get_forecast", "run_scenario", "list_scenarios", "affordability_check",
         "get_resilience_score", "stress_test", "get_behavior_profile",
     ]  # fmt: skip
-    assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == ["get_fee_schedule"]
+    assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == ["get_fee_schedule", "get_exchange_rate"]
     assert [t["name"] for t in PLANNER] == list(wallet.PLANNER_TOOLS)
     assert [t["name"] for t in AUDIT] == list(wallet.AUDIT_TOOLS) == ["get_trace", "record_turn"]
 
@@ -235,6 +235,7 @@ RESULT_FILE = {name: "ledger" for name in wallet.LEDGER_TOOLS}
 RESULT_FILE["get_forecast"] = "forecast"
 RESULT_FILE.update(
     run_scenario="forecast", list_scenarios="forecast", affordability_check="forecast", get_fee_schedule="knowledge",
+    get_exchange_rate="knowledge",
     check_suitability="planner", schedule_nudge="planner", get_trace="audit", record_turn="audit",
     get_resilience_score="forecast", stress_test="forecast",
     optimize_allocation="planner", save_roadmap="planner", get_roadmap="planner",
@@ -256,6 +257,7 @@ RESULT_DEF = {
     "list_scenarios": "ListScenariosResult",
     "affordability_check": "AffordabilityCheckResult",
     "get_fee_schedule": "GetFeeScheduleResult",
+    "get_exchange_rate": "GetExchangeRateResult",
     "check_suitability": "CheckSuitabilityResult",
     "schedule_nudge": "ScheduleNudgeResult",
     "get_trace": "GetTraceResult",

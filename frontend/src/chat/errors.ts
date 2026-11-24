@@ -96,6 +96,7 @@ const TOOL_LABELS: Record<string, { running: string; done: string }> = {
   save_roadmap: { running: 'Đang lưu bản lộ trình…', done: 'Đã lưu bản lộ trình' },
   // knowledge
   get_fee_schedule: { running: 'Đang tra biểu phí…', done: 'Đã tra biểu phí' },
+  get_exchange_rate: { running: 'Đang tra tỷ giá…', done: 'Đã tra tỷ giá' },
   // ingest
   start_job: { running: 'Đang tạo lượt nạp dữ liệu…', done: 'Đã tạo lượt nạp dữ liệu' },
   get_job_status: { running: 'Đang xem tiến độ nạp dữ liệu…', done: 'Đã xem tiến độ nạp dữ liệu' },

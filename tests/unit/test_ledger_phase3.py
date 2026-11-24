@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -166,6 +166,99 @@ def test_get_fee_schedule_loi(svc):
         with pytest.raises(YofinaError) as e:
             service.fee_schedule_result(U, **kw)
         assert e.value.code == code
+
+
+# --- knowledge: tỷ giá ngoại tệ (cùng hàm với pipeline nạp) -----------------------------------------------
+class FakeRates:
+    """Nguồn tỷ giá giả (mã dùng nguồn thật `fx.VietcombankSource`): bảng theo ngày, vắng là chưa có bảng; `fail` thì như mất mạng."""
+
+    def __init__(self, tables=None, fail=False):
+        self.tables = tables or {}
+        self.fail = fail
+        self.calls: list[date] = []
+
+    def fetch(self, day):
+        from yofina_core import fx
+
+        self.calls.append(day)
+        if self.fail:
+            raise fx.RateUnavailable("network")
+        rates = self.tables.get(day)
+        return None if rates is None else fx.RateTable(day=day, rates=rates)
+
+
+def _with_rates(service, source):
+    from yofina_core import fx
+
+    service.fx = fx.FxConverter(source, now=lambda: datetime(2026, 11, 24, 11, 30, tzinfo=UTC))
+    return service
+
+
+USD = {"USD": Decimal("25790.00"), "EUR": Decimal("29506.30")}
+
+
+def test_get_exchange_rate_quy_doi_so_tien_lam_tron_toi_dong_qua_gateway(svc, registry):
+    from ledger_fakes import gateway_context
+
+    service, _, _ = svc
+    src = FakeRates({date(2026, 11, 10): USD})
+    _with_rates(service, src)
+    ev = {"user_id": U, "currency": "usd", "date": "2026-11-10", "amount": 111.11}
+    res = handle_gateway(ev, gateway_context("knowledge___get_exchange_rate"), service)
+    validate(registry, "knowledge", "GetExchangeRateResult", res)
+    assert res["status"] == "OK"
+    assert res["data"] == {
+        "currency": "USD", "rate": "25790.00", "rate_type": "sell", "rate_source": "vietcombank",
+        "rate_date": "2026-11-10", "requested_date": "2026-11-10", "amount_original": "111.11", "amount_vnd": 2_865_527,
+    }  # fmt: skip
+    # 111,11 × 25.790 = 2.865.526,9 -> 2.865.527 đồng; gọi lại cùng ngày dùng bộ nhớ đệm, không gọi nguồn lần nữa
+    again = handle_gateway({**ev, "amount": "20"}, gateway_context("knowledge___get_exchange_rate"), service)
+    assert again["data"]["amount_vnd"] == 515_800 and src.calls == [date(2026, 11, 10)]
+
+
+def test_get_exchange_rate_mac_dinh_ngay_mo_phong_va_lui_ngay_khi_chua_co_bang(svc, registry):
+    service, _, _ = svc
+    today = service._app_date(service.repo.clock_offset(U), service.now())
+    src = FakeRates({today - timedelta(days=1): USD})
+    res = _with_rates(service, src).exchange_rate_result(U, currency="EUR")
+    validate(registry, "knowledge", "GetExchangeRateResult", res)
+    d = res["data"]
+    assert d["requested_date"] == res["app_date"] == today.isoformat()  # ngày mô phỏng của người gọi (app_today)
+    assert d["rate_date"] == (today - timedelta(days=1)).isoformat() and d["rate"] == "29506.30"
+    assert "amount_vnd" not in d and "amount_original" not in d  # không đưa số tiền thì chỉ có tỷ giá
+
+
+@pytest.mark.parametrize(
+    ("kw", "code"),
+    [
+        ({"currency": "VND"}, ErrorCode.PARAMS_INVALID),
+        ({"currency": "US"}, ErrorCode.PARAMS_INVALID),
+        ({}, ErrorCode.PARAMS_INVALID),
+        ({"currency": "USD", "date": "10/11/2026"}, ErrorCode.PARAMS_INVALID),
+        ({"currency": "USD", "amount": -5}, ErrorCode.PARAMS_INVALID),
+        ({"currency": "USD", "amount": True}, ErrorCode.PARAMS_INVALID),
+        ({"currency": "USD", "amount": "1.23456"}, ErrorCode.PARAMS_INVALID),
+        ({"currency": "XAU"}, ErrorCode.PARAMS_INVALID),  # nguồn không có ngoại tệ này
+    ],
+)
+def test_get_exchange_rate_tham_so_sai(svc, kw, code):
+    service, _, _ = svc
+    _with_rates(service, FakeRates({date(2026, 11, 10): USD}))
+    with pytest.raises(YofinaError) as e:
+        service.exchange_rate_result(U, **{"date": "2026-11-10", **kw})
+    assert e.value.code == code
+
+
+def test_get_exchange_rate_nguon_loi_la_loi_tam_thoi_khong_doan_so(svc, registry):
+    from ledger_fakes import gateway_context
+
+    service, _, _ = svc
+    _with_rates(service, FakeRates(fail=True))
+    res = handle_gateway(
+        {"user_id": U, "currency": "USD", "amount": 10}, gateway_context("knowledge___get_exchange_rate"), service
+    )
+    validate(registry, "knowledge", "GetExchangeRateResult", res)
+    assert res["status"] == "ERROR" and res["code"] == "INTERNAL_ERROR" and "tỷ giá" in res["message"]
 
 
 # --- planner: check_suitability ---------------------------------------------------------------------

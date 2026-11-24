@@ -122,9 +122,9 @@ FORECAST_TOOLS = (
     "stress_test",
     "get_behavior_profile",
 )
-#: Phase 5 không thêm tool vào target `knowledge` (chủ dự án cắt luồng RAG ngày 24/11): khối `citation` dựng từ kết quả
-#: `get_fee_schedule`.
-KNOWLEDGE_TOOLS = ("get_fee_schedule",)
+#: Phase 5 không thêm tool tìm kiếm vào target `knowledge` (chủ dự án cắt luồng RAG ngày 24/11): khối `citation` dựng từ kết quả
+#: `get_fee_schedule`. `get_exchange_rate` (25/11): tỷ giá bán theo ngày, cùng hàm và nguồn với pipeline nạp (`yofina_core.fx`).
+KNOWLEDGE_TOOLS = ("get_fee_schedule", "get_exchange_rate")
 #: Phase 4 thêm `optimize_allocation`, `save_roadmap`, `get_roadmap` ở cuối target `planner`. `save_roadmap` là tool GHI nhưng
 #: KHÔNG qua token (không đổi số dư; quyết định số 3 của phase 4), nên KHÔNG nằm trong `PLANNER_WRITE_TOOLS` hay `ACTION_TOOLS`.
 PLANNER_TOOLS = (

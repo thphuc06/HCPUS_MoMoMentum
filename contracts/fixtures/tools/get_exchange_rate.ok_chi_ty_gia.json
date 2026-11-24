@@ -1,0 +1,13 @@
+{
+  "status": "OK",
+  "as_of": "2026-11-24T11:30:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "currency": "EUR",
+    "rate": "29506.30",
+    "rate_type": "sell",
+    "rate_source": "vietcombank",
+    "rate_date": "2026-11-20",
+    "requested_date": "2026-11-21"
+  }
+}

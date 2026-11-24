@@ -57,6 +57,7 @@ TOOL_LABELS: dict[str, str] = {
     "save_roadmap": "Lưu bản lộ trình",
     # knowledge
     "get_fee_schedule": "Biểu phí",
+    "get_exchange_rate": "Tỷ giá ngoại tệ",
     # ingest
     "start_job": "Tạo lượt nạp dữ liệu",
     "get_job_status": "Tiến độ nạp dữ liệu",
