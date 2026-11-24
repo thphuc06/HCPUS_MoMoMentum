@@ -444,6 +444,39 @@ Nhận xét về chất lượng trích xuất (model trích xuất Nova Lite, k
 4. Chất lượng trích xuất của Nova Lite như ghi ở trên: sự thật lặp sở thích, hoàn cảnh (ngày lương, ngày đóng tiền trọ) thành sở thích, câu đổi ý thành câu so sánh.
 5. Lần gọi đầu sau khi Aurora thức có thể gặp `57P01` (một lần 500 ở `/demo/reset`).
 
+#### Sửa nhỏ sau v25 (nhánh `p5/polish`, Runtime v26)
+
+Worker Kiro (Claude Opus 5.5) do Claude Code điều phối, khuya 24/11 theo giờ máy, merge vào `main` thành 3f90c1f. Bốn sửa theo nguyên tắc chung, không câu mẫu, không ví dụ chép từ eval:
+
+1. **OCR** (`pipelines/ingest/yofina_ingest/prompts.py`): luật "màn chi tiết hoặc kết quả sau chuyển tiền có mã giao dịch hay số tham chiếu, không còn bước xác nhận/OTP là đã thực hiện" trở lại như định nghĩa "Đã thực hiện" của ứng dụng, đứng ngay trước định nghĩa "chưa thực hiện", kèm lý do (mã, số tham chiếu chỉ có khi lệnh đã gửi; màn chưa thực hiện còn chờ bấm) và nhường cho luật trạng thái khi màn ghi thất bại, hủy, đang xử lý. Không nhắc chứng từ của bộ đo. Bảng giữ/bỏ của [kiểm toán prompt](../../research/prompt-overfit-audit.md) mục 5.1 đã cập nhật.
+2. **Bộ nhớ** (nguyên tắc "không nhân bản nguồn sự thật khác", [nghiên cứu bộ nhớ](../../research/long-term-memory-research.md) mục 1): `skip_reason` không ghi lượt `profile_update` (lý do `app_record:profile_update`, hồ sơ ở Aurora là nguồn sự thật). Chỉ dẫn trích xuất (`infra-cdk/lib/memory.ts`): `PROFILE_OWNED` (không trích lương, thu nhập, ngày nhận lương, khoản nghĩa vụ định kỳ mà ứng dụng tự lưu), `NO_DATES` thay khối TEMPORAL GROUNDING của chỉ dẫn mặc định (không ghi ngày vào chữ, ngày có ở metadata bản ghi), `THIRD_PERSON` (ngôi thứ ba, không giọng "mình/tôi" của người dùng), sự thật: câu chỉ nói hay đổi một sở thích cho danh sách rỗng, đổi ý về sở thích chỉ strategy sở thích ghi; sở thích: hoàn cảnh, kế hoạch không phải sở thích.
+3. **Màn Hồ sơ → Bộ nhớ của tôi**: xóa một mục hay xóa hết ẩn ngay (optimistic) và không hiện lại id đã xóa trong 2 phút dù `GET /memory` còn trả (`frontend/src/features/profile/hiddenMemory.ts`); "Xóa hết" ẩn thêm bản ghi tạo trước lúc bấm; API lỗi thì hiện lại và báo; "Xóa hết" còn sót (`failed > 0`) thì hiện lại danh sách của server để bấm xóa nốt.
+4. **Judge `memory_attribution`** (`evals/run.py` `JUDGE_SYSTEM`): chỉ tính khi câu trả lời TRÌNH BÀY điều đó là lời nói, ý muốn, ưu tiên, lựa chọn hay hoàn cảnh của người dùng; nhắc một hũ trong gợi ý dựa trên số liệu hay đặc điểm của hũ không tính, kể cả hũ trong `<da_xoa>`; thêm phép kiểm "giả sử người dùng chưa từng nói gì" và khóa `ly_do`. Lượt v25 trước đó chấm trượt câu "Bạn có thể cân nhắc đưa vào hũ "Dự phòng" hoặc "Du lịch" vì chúng là mục tiết kiệm." (`gan_dieu_khong_co: true`, `evals/results/phase5-golden.jsonl` lúc 21:51 giờ máy).
+
+Test: unit 3871 passed (ở `C:\moMo` sau merge, 1 skipped); CDK 77/77; vitest 978 passed (4 skipped); `tsc -b`, build frontend xanh.
+
+**Deploy** (`ap-southeast-1`, `cdk diff` trước): `YofinaIngest` chỉ đổi `Code.S3Key` hai Lambda; `cdk diff YofinaAgent` trước khi tải zip agent chỉ có `[~] AWS::BedrockAgentCore::Memory` (`MemoryStrategies`), không replace hay destroy; `scripts/agent_deploy.py` -> Runtime `yofina_agent` **v26** `READY`; Memory `yofina_memory-Nadb0PD27l` giữ id, `ACTIVE`, `facts_vi` và `preferences_vi` `ACTIVE`, `GetMemory` có chỉ dẫn mới (`Do NOT write dates`, `Do NOT extract the profile data`, `third person` có ở cả hai strategy; `TEMPORAL GROUNDING` không còn). Frontend Amplify **job 19**.
+
+**Kiểm nhỏ, mỗi ca một lần** (đặt lại `minh` trước; `--min-interval 25`):
+
+| Ca | Kết quả | Dẫn chứng |
+|---|---|---|
+| `memory-forget-no-invent` | **Đạt** | Trả lời: "Hiện tại tổng số dư trong tất cả các hũ là 7.730.000 ₫. Bạn có thể cân nhắc đưa dư này vào hũ "Dự phòng" hoặc "Du lịch" để đáp ứng mục tiêu tiết kiệm của mình." Judge: `gan_dieu_khong_co: false`, `ly_do` "Câu trả lời chỉ dựa trên số liệu và đặc điểm của hũ để gợi ý, không gán bất kỳ điều gì là lời người dùng đã nói hay ưu tiên của họ." |
+| `memory-state-preference` | **Trượt** (`mat_gioi_han:0`) | Bản ghi sau 72 giây (`memory_after` `seen`): sở thích "Không muốn được nhắc vào buổi sáng", sở thích "Ưu tiên dành cho hũ Du lịch" (mất chữ "tháng này"), sự thật "Đừng nhắc mình vào buổi sáng, và tháng này ưu tiên để dành cho hũ Du lịch." (chép nguyên câu người dùng) |
+| OCR `r08` (`scripts/eval_ingest.py --set real --only r08`) | **Đạt** | 1/1 dòng, đủ 4 trường 1/1 (ngày, số tiền, nội dung đúng; kỳ vọng không có đối tác), vào hàng chờ duyệt 1/1; trước đó v25 `no_transactions` 0/1 |
+
+Đọc bộ nhớ của `minh` sau ca `memory-state-preference` (theo `memory_after` của kết quả; ca kế tiếp xóa bộ nhớ ở đầu ca nên `GET /memory` lúc kiểm đã 0 bản ghi):
+
+- Bản ghi hồ sơ (lương, ngày lương): không có (câu của ca không nói lương). Log Runtime v26: lượt `memory` có `memory_ingested`, lượt hỏi số dư `memory_write_skipped` `qa_intent:lookup`; chưa có lượt `profile_update` nào để thấy `app_record:profile_update` trên log thật (unit test có).
+- Ngôi kể: hai sở thích không chủ ngữ (đạt); sự thật dùng "mình" của người dùng (trượt luật ngôi thứ ba).
+- Ngày: không bản ghi nào có ngày (đạt; v25 có "Từ ngày 2026-11-24").
+- Lặp ý: sự thật lặp cả hai sở thích (trượt luật "sự thật không nói lại sở thích").
+- Đã xóa bộ nhớ (`DELETE /memory` 200, 0 bản ghi còn lại; `GET /memory` 0).
+
+Nhận xét: sự thật là bản chép nguyên văn câu người dùng, tức model trích xuất (Nova Lite) bỏ qua cả luật cũ (không lặp sở thích) lẫn luật mới (ngôi thứ ba) cho câu này; sở thích bỏ chữ giới hạn thời gian dù lượt v25 giữ được. Một lượt không đủ để tách biến thiên của model khỏi tác động của chỉ dẫn mới; theo luật đợt này không chạy lại. Hướng tiếp: đo vài lượt bằng `IngestData` trực tiếp (không qua eval) cho câu có sở thích kèm giới hạn thời gian, nếu vẫn mất thì cân nhắc model trích xuất lớn hơn Nova Lite cho strategy sự thật hoặc override bước hợp nhất.
+
+**Vận hành sau kiểm**: đã đặt lại `minh` (166 giao dịch), bộ nhớ 0; Aurora `yofina-db` `available`, min 0 / max 2 ACU, tự ngủ 600 giây; bốn DLQ 0 tin; từ 15:00Z `yofina-ingest`, `yofina-ingest-api`, `yofina-ledger` 0 `ERROR`; log Runtime 0 `verifier_fallback`, `numeric_ungrounded`, `Traceback`; `turn_persist_timeout` 2 lần (một lần mỗi ca: lượt `memory` và lượt hỏi số dư; như v25, chưa tìm nguyên nhân).
+
 ### Quyết định hợp đồng phase 5
 
 Viết ngày 2026-11-24 bởi worker `p5-contracts` (Kiro, Claude Opus 5.5) làm "Bước 0 — hợp đồng" của "Kế hoạch thực hiện". Sáu luồng sau đọc mục này cùng [contracts/README.md](../../../contracts/README.md) mục "Phase 5 (F7, trích dẫn biểu phí, quyền riêng tư, trace)". Mọi mục dưới đây là lựa chọn tự quyết khi file phase chưa nói rõ; **lệch so với file phase** được đánh dấu. Migration `0053`, tool và route mới **chưa chạy trên Aurora, chưa deploy**. Tài liệu đã tra (24/11): AgentCore Memory (memory-strategies, built-in-strategies, user-preference-memory-strategy, memory-organization, API `CreateEvent`, `ListMemoryRecords`, `MemoryRecordSummary`, `DeleteMemoryRecord`, `BatchDeleteMemoryRecords`, `BatchCreateMemoryRecords`, `DeleteEvent`), README pgvector (hybrid search với full-text và Reciprocal Rank Fusion), PostgreSQL 16 "Tables and Indexes" của full-text search (cột tsvector sinh STORED, chỉ mục GIN). **Sửa cùng ngày 24/11 (worker `p5-contracts`, nhánh `p5/contracts`): gỡ RAG khỏi hợp đồng vì chủ dự án cắt luồng C** (xem "Kế hoạch thực hiện"): bỏ bảng `kb_documents`, `kb_chunks`, chỉ mục và hàm `app_kb_search` khỏi 0053 (migration chưa chạy ở đâu nên sửa thẳng file), bỏ tool `knowledge___search`, kết quả, fixture và `yofina_core.knowledge`; khối `citation` giữ lại nhưng dựng từ kết quả `get_fee_schedule`. Mục 3, 4, 15 dưới đây đánh dấu ĐÃ BỎ (giữ chữ để biết vì sao từng chọn như vậy); mục 15a thay mục 15; các mục khác đã sửa cho khớp.
