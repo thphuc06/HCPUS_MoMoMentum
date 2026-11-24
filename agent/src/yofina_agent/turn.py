@@ -259,6 +259,20 @@ class Turn:
     def jar_rows(self) -> list[dict[str, Any]]:
         return self._jar_rows
 
+    def jar_names(self, compact: Mapping[str, Any] | None = None) -> list[str] | None:
+        """Tên các hũ thật của người dùng đã đọc trong lượt (danh sách hũ của lượt, hoặc `jars` trong bản gọn của tra cứu số dư).
+        None khi lượt chưa đọc hũ nào: khối bộ nhớ khi đó không đánh dấu sở thích nói về hũ nào."""
+        rows = list(self._jar_rows)
+        if compact is not None and isinstance(compact.get("jars"), list):
+            rows += [j for j in compact["jars"] if isinstance(j, Mapping)]
+        names = [str(j["name"]) for j in rows if isinstance(j.get("name"), str) and j["name"]]
+        return list(dict.fromkeys(names)) or None
+
+    async def memory_block(self, compact: Mapping[str, Any] | None = None) -> str:
+        """Khối `<bo_nho_nguoi_dung>` cho người viết và Analyst: sở thích đánh dấu theo hũ thật của lượt, ngày ghi theo ngày mô phỏng.
+        Khối không vào bản gọn nên không bao giờ là căn cứ cho số tiền."""
+        return await self.memory.prompt_block(jar_names=self.jar_names(compact), app_date=self.app_date)
+
     def model_calls_left(self) -> int:
         if self.llm_down:
             return 0
@@ -542,7 +556,7 @@ class Turn:
                 task, question, compact, timeout=None, max_tokens=self.s.writer_max_tokens
             )
             return
-        memory = await self.memory.prompt_block() if task in MEMORY_TASKS else ""
+        memory = await self.memory_block(compact) if task in MEMORY_TASKS else ""
         try:
             text = await self.emit_text(
                 write_stream(
@@ -570,7 +584,7 @@ class Turn:
         """Kiểm trọn phần lời trước khi phát. Bỏ phần lời nếu quá hạn hoặc gặp lỗi."""
         if self.llm_down or self.model_calls_left() < 1:
             return
-        memory = await self.memory.prompt_block() if task in MEMORY_TASKS else ""
+        memory = await self.memory_block(compact) if task in MEMORY_TASKS else ""
 
         async def collect() -> str:
             parts = []

@@ -18,7 +18,12 @@ from agent_helpers import (
     tool_response,
 )
 from yofina_agent.schemas import AnalysisOption
-from yofina_agent.whatif import enforce_pay_now, enforce_switch_jar, jar_short_for_option
+from yofina_agent.whatif import (
+    enforce_pay_now,
+    enforce_switch_jar,
+    jar_short_for_option,
+    unique_option_ids,
+)
 
 Q = "Nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao"
 ROUTE = {
@@ -109,7 +114,7 @@ def _run(monkeypatch, analysis: dict[str, Any]):
 
 def test_tieu_de_va_noi_dung_theo_hu_that_cua_de_xuat(monkeypatch):
     events, tools = _run(monkeypatch, _analysis("du_phong"))
-    o = _options(events)["switch"]
+    o = _options(events)["switch_du_phong"]  # id theo hũ thật, không theo chữ model đặt
     assert (
         o["label"] == "Mua bằng hũ Dự phòng"
     )  # không còn "Giải trí" cho đề xuất lấy tiền hũ Dự phòng
@@ -133,7 +138,7 @@ def test_tieu_de_va_noi_dung_theo_hu_that_cua_de_xuat(monkeypatch):
 def test_hu_khong_du_thi_khong_gan_du_va_khong_goi_y(monkeypatch):
     # check_suitability giả luôn trả đạt (như khi luật không bắt được): mã vẫn chặn "Đủ" theo số dư thật của hũ
     events, _ = _run(monkeypatch, _analysis("giai_tri"))
-    o = _options(events)["switch"]
+    o = _options(events)["switch_giai_tri"]
     assert o["label"] == "Mua bằng hũ Giải trí"
     assert o["summary"] == "Hũ Giải trí chỉ còn 760.000 ₫, không đủ trả 1.200.000 ₫."
     assert o["status"] == "short" and o.get("recommended") is None
@@ -186,7 +191,7 @@ def test_model_dien_so_tien_bang_so_du_hu_van_khong_gan_du(monkeypatch):
         "Trả 760.000 ₫ bằng tiền hũ Giải trí; hũ đang có 760.000 ₫, đủ cho khoản này."
     )
     events, tools = _run(monkeypatch, analysis)
-    o = _options(events)["switch"]
+    o = _options(events)["switch_giai_tri"]
     assert o["status"] == "short" and o.get("recommended") is None
     assert o["summary"] == "Hũ Giải trí chỉ còn 760.000 ₫, không đủ trả 1.200.000 ₫."
     assert "đủ cho khoản này" not in o["summary"]
@@ -250,3 +255,16 @@ def test_pay_now_giu_nguyen_khi_khong_can_sua():
     assert enforce_pay_now(credit, JARS, 1_200_000) is credit
     defer = AnalysisOption.model_validate(_analysis("du_phong")["options"][0])
     assert enforce_pay_now(defer, JARS, 1_200_000) is defer
+
+def test_option_id_cua_dung_hu_khac_dung_theo_hu_that_va_duy_nhat():
+    """Kiểm lại Runtime v23: phương án "Mua bằng hũ Dự phòng" mang `option_id` `pay_giai_tri` (id model đặt theo hũ khác). Id nay dựng
+    từ hũ thật của đề xuất; hai phương án cùng hũ vẫn có id khác nhau."""
+    raw = _analysis("du_phong")["options"][1]
+    raw = {**raw, "option_id": "pay_giai_tri"}
+    fixed = enforce_switch_jar(AnalysisOption.model_validate(raw), JARS, 1_200_000)
+    assert fixed.option_id == "switch_du_phong" and fixed.label == "Mua bằng hũ Dự phòng"
+    twin = enforce_switch_jar(AnalysisOption.model_validate({**raw, "option_id": "khac"}), JARS, 1_200_000)
+    defer = AnalysisOption.model_validate(_analysis("du_phong")["options"][0])
+    ids = [o.option_id for o in unique_option_ids([defer, fixed, twin])]
+    assert ids == ["defer", "switch_du_phong", "switch_du_phong_2"]
+    assert all(len(i) <= 32 for i in ids)

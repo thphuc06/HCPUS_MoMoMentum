@@ -316,6 +316,43 @@ PASSED = GuardrailResult(blocked=False, latency_ms=10)
             },
             "injection_pattern",
         ),
+        # hỏi đáp thuần: câu hỏi không phải điều người dùng khẳng định về mình (chính sách ghi)
+        (
+            {
+                "intent": "what_if",
+                "guardrail_input": PASSED,
+                "user_text": "Nếu mua tai nghe 1,2 triệu bằng Trả sau thì sao?",
+            },
+            "qa_intent:what_if",
+        ),
+        (
+            {
+                "intent": "lookup",
+                "guardrail_input": PASSED,
+                "user_text": "Tháng này còn dư một ít, mình nên để vào hũ nào?",
+            },
+            "qa_intent:lookup",
+        ),
+        (
+            {"intent": "affordability", "guardrail_input": PASSED, "user_text": "mua giày 800k được không"},
+            "qa_intent:affordability",
+        ),
+        (
+            {"intent": "behavior", "guardrail_input": PASSED, "user_text": "mình hay tiêu lúc nào"},
+            "qa_intent:behavior",
+        ),
+        (
+            {"intent": "knowledge", "guardrail_input": PASSED, "user_text": "phí trả chậm bao nhiêu"},
+            "qa_intent:knowledge",
+        ),
+        (
+            {"intent": "roadmap", "guardrail_input": PASSED, "user_text": "lập lộ trình để dành đi Đà Lạt"},
+            None,
+        ),
+        (
+            {"intent": "profile_update", "guardrail_input": PASSED, "user_text": "mình mới đổi việc"},
+            None,
+        ),
     ],
 )
 def test_chi_ghi_luot_da_qua_guardrail_va_khong_rui_ro(kw, reason):
@@ -574,6 +611,19 @@ def test_luot_binh_thuong_doc_va_ghi_theo_sub_cua_jwt_khong_theo_payload():
     assert "Chào bạn, mình giúp gì được?" not in json.dumps(ing, ensure_ascii=False, default=str)
 
 
+def test_luot_tra_cuu_doc_bo_nho_nhung_khong_ghi_cau_hoi_vao_bo_nho():
+    """Câu hỏi phiên mới "nên để vào hũ nào?" từng được `IngestData` (log Runtime v23 16:35:24) như mọi câu khác. Câu hỏi không phải điều
+    người dùng khẳng định về mình nên không ghi; lượt vẫn đọc bộ nhớ."""
+    client = FakeMemoryClient({ns("preference"): [rec(ns("preference"), "Ưu tiên hũ Du lịch")]})
+    events, turn = run_memory_turn(
+        [route_response(intent="lookup", lookup_kind="balance")],
+        client,
+        text="Tháng này còn dư một ít, mình nên để vào hũ nào?",
+    )
+    assert turn.intent == "lookup" and types(events)[-1] == "RUN_FINISHED"
+    assert client.reads and client.ingests == []
+
+
 def test_luot_bi_guardrail_chan_thi_khong_ghi():
     client = FakeMemoryClient()
     events, turn = run_memory_turn(
@@ -685,7 +735,8 @@ def test_cau_hoi_nho_gi_va_cau_noi_so_thich():
 
 
 def test_namespace_cua_cdk_khop_yofina_core():
-    """CDK (infra-cdk/lib/memory.ts) và Python (yofina_core.memory) dùng cùng chuỗi namespace cho ba strategy."""
+    """CDK (infra-cdk/lib/memory.ts) và Python (yofina_core.memory) dùng cùng chuỗi namespace cho hai strategy (sở thích, sự thật);
+    tóm tắt phiên đã bỏ khỏi CDK, namespace `sessions/` chỉ còn ở yofina_core để xem và xóa bản ghi cũ."""
     import re
     from pathlib import Path
 
@@ -697,9 +748,9 @@ def test_namespace_cua_cdk_khop_yofina_core():
     block = ts.split("export const MEMORY_NAMESPACES", 1)[1].split("} as const", 1)[0]
     found = dict(re.findall(r"(\w+): '([^']+)'", block))
     assert found == {
-        k: MEMORY_NAMESPACE_TEMPLATES[k] for k in ("preference", "fact", "session_summary")
+        k: MEMORY_NAMESPACE_TEMPLATES[k] for k in ("preference", "fact")
     }
-    assert set(m.RECALL_KINDS) <= set(found)
+    assert set(m.RECALL_KINDS) == set(found)
 
 
 # --- khử trùng khi đọc (kiểm lại Runtime v22: câu kể bộ nhớ liệt kê mỗi sở thích hai lần) ---------------

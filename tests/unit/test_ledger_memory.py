@@ -361,6 +361,48 @@ def test_sub_chi_tu_jwt_khong_tu_query(world):
     assert [r["text"] for r in body["records"]] == ["Sở thích của Lan"]
 
 
+def test_liet_ke_khu_trung_so_thich_va_su_that_bang_ham_cua_agent(world, schema_ok):
+    """Kiểm lại Runtime v23: `GET /memory` liệt kê "Ưu tiên để dành tiền cho hũ Du lịch" (sở thích) và "Người dùng muốn ưu tiên để dành
+    tiền cho hũ Du lịch." (sự thật) dù câu kể của agent đã khử trùng. Nay dùng cùng `yofina_core.memory_text.dedupe_by_meaning`."""
+    from yofina_agent.memory import RecalledItem, dedupe_items
+
+    api = world["api"]
+    api.add(10, "fact", MINH, "Người dùng muốn ưu tiên để dành tiền cho hũ Du lịch.")  # mới hơn sở thích
+    api.add(9, "preference", MINH, '{"context":"c","preference":"Ưu tiên để dành tiền cho hũ Du lịch","categories":[]}')
+    status, body = req(world, "GET", "/memory", sub=MINH)
+    assert status == 200, body
+    schema_ok("MemoryListResponse", body)
+    texts = [(r["kind"], r["text"]) for r in body["records"]]
+    assert ("preference", "Ưu tiên để dành tiền cho hũ Du lịch") in texts
+    assert all("hũ Du lịch" not in t for k, t in texts if k == "fact")
+    assert [r["record_id"] for r in body["records"]] == [rid(9), rid(3), rid(2), rid(1)]  # vẫn mới nhất trước
+    # agent bỏ đúng những bản REST bỏ
+    agent_kept = dedupe_items(
+        [RecalledItem(r["kind"], r["text"], r["record_id"]) for r in body["records"] if r["kind"] in ("preference", "fact")]
+        + [RecalledItem("fact", "Người dùng muốn ưu tiên để dành tiền cho hũ Du lịch.", rid(10))]
+    )
+    assert {i.record_id for i in agent_kept} == {r["record_id"] for r in body["records"] if r["kind"] != "session_summary"}
+    # "Xóa hết" vẫn xóa cả bản bị ẩn
+    status, body = req(world, "DELETE", "/memory", sub=MINH)
+    assert status == 200 and body["deleted_records"] == 5
+
+
+@pytest.mark.parametrize(
+    ("raw", "want"),
+    [
+        (
+            "## Tóm tắt\n- **Thời điểm:** epoch 1795505552861 (mili giây).\n- **Nội dung:** hỏi số dư hũ Ăn uống",
+            "Tóm tắt: - Nội dung: hỏi số dư hũ Ăn uống",
+        ),
+        ("Thời điểm: , ước tính khoảng 24/11/2026 (UTC). Người dùng hỏi về hũ Du lịch.", "Người dùng hỏi về hũ Du lịch."),
+        ("Thời điểm: (mili giây). Hỏi số dư.", "Hỏi số dư."),
+    ],
+)
+def test_display_text_bo_mau_nhan_rong_sau_dau_thoi_gian(raw, want):
+    """Tóm tắt phiên cũ còn "Thời điểm: , ước tính khoảng 24/11/2026 (UTC)." và "Thời điểm: (mili giây)." sau khi bỏ dấu thời gian."""
+    assert display_text({"text": raw}) == want
+
+
 def test_loc_theo_kind_va_phan_trang(world, schema_ok):
     status, body = req(world, "GET", "/memory", sub=MINH, query={"kind": "session_summary"})
     assert status == 200 and [r["kind"] for r in body["records"]] == ["session_summary"]

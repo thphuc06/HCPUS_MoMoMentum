@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -32,6 +33,8 @@ from yofina_agent.writer import MEMORY_GUIDE, MEMORY_TASKS, WRITER_SYSTEM, build
 
 TRAVEL_PREF = "Ưu tiên hũ Du lịch, đừng lấy tiền từ hũ Du lịch"
 OPEN_TAG, CLOSE_TAG = f"<{m.PROMPT_TAG}>", f"</{m.PROMPT_TAG}>"
+#: giờ thật lúc chạy lượt; ngày mô phỏng của fixture `get_jar_balances` là 21/11/2026 (lệch -3 ngày)
+NOW = datetime(2026, 11, 24, 9, 0, tzinfo=UTC)
 
 
 def travel_client(**kw: Any) -> FakeMemoryClient:
@@ -57,7 +60,7 @@ def run_with_memory(
         store=UnconfiguredTurnBlockStore(),
         tools_factory=lambda identity: tools,  # type: ignore[arg-type,return-value]
         guardrail=None,
-        memory=m.AgentMemory(mem_settings or settings(), client),
+        memory=m.AgentMemory(mem_settings or settings(), client, now=lambda: NOW),
     )
     turn = Turn(
         deps,
@@ -79,6 +82,22 @@ def prompt_text(call: dict[str, Any]) -> str:
     return json.dumps(call.get("messages"), ensure_ascii=False)
 
 
+def raw_prompt(call: dict[str, Any]) -> str:
+    """Chữ thô của các tin gửi model (không qua json.dumps)."""
+    return "\n".join(
+        c["text"]
+        for msg in call.get("messages") or []
+        for c in msg.get("content") or []
+        if isinstance(c, dict) and isinstance(c.get("text"), str)
+    )
+
+
+def memory_entries(text: str) -> dict[str, Any]:
+    """JSON các mục trong khối `<bo_nho_nguoi_dung>` của một prompt (dòng cuối của khối)."""
+    inner = text.split(OPEN_TAG, 1)[1].split(CLOSE_TAG, 1)[0]
+    return json.loads([ln for ln in inner.splitlines() if ln.strip()][-1])
+
+
 # --- what-if: Analyst -------------------------------------------------------------------------------
 def test_what_if_dua_so_thich_vao_analyst_doc_mot_lan_khong_them_luot_model(monkeypatch):
     client = travel_client()
@@ -94,7 +113,10 @@ def test_what_if_dua_so_thich_vao_analyst_doc_mot_lan_khong_them_luot_model(monk
     assert len(client.lists) == 1 and len(client.retrieves) == 1
     assert all(c["namespace"].startswith(f"/yofina/users/{SUB}/") for c in client.reads)
     assert text_of(events).startswith("Nếu mua tai nghe")  # Verifier vẫn cho qua: bộ nhớ không đổi căn cứ số liệu
-    assert "bo_nho_nguoi_dung" in ANALYST_SYSTEM and "hũ Du lịch" in ANALYST_SYSTEM
+    # chỉ dẫn trung tính: không có tên hũ mẫu, dùng `hu` do mã đối chiếu
+    assert "bo_nho_nguoi_dung" in ANALYST_SYSTEM and "`hu`" in ANALYST_SYSTEM and "Du lịch" not in ANALYST_SYSTEM
+    entries = memory_entries(raw_prompt(analyst))
+    assert entries["so_thich"][0]["hu"] == ["Du lịch"]
 
 
 def test_analyst_prompt_dat_bo_nho_truoc_cau_hoi_va_khong_dua_vao_du_lieu():
@@ -124,19 +146,58 @@ def test_tra_cuu_so_du_nguoi_viet_nhan_khoi_bo_nho(monkeypatch):
     assert len(client.lists) == 1 and len(client.retrieves) == 1
 
 
-def test_phien_moi_hoi_nen_de_vao_hu_nao_nguoi_viet_nhan_so_thich_va_chi_dan_dung_no(monkeypatch):
-    """Tiêu chí 5, ca golden `memory-reuse-new-session` (trượt 24/11): câu hỏi không giống nghĩa với sở thích, router xếp vào tra cứu
-    số dư, và khuôn "đúng 1 câu tổng số dư" của việc `balance` không có chỗ cho sở thích. Nay: sở thích luôn được đọc (liệt kê), và
-    prompt người viết có chỉ dẫn gọi tên hũ ưu tiên khi người dùng hỏi nên để tiền vào đâu."""
+def test_phien_moi_hoi_nen_de_vao_hu_nao_nguoi_viet_nhan_so_thich_co_cau_truc_va_chi_dan_trung_tinh(monkeypatch):
+    """Tiêu chí 5, ca golden `memory-reuse-new-session`. Trượt lần 1 (24/11 trưa): khuôn "đúng 1 câu" của `balance` không có chỗ cho
+    sở thích. Trượt lần 2 (Runtime v23): chỉ dẫn có câu mẫu "theo điều bạn đã dặn, ..." nên Nova 2 Lite chép câu mẫu với hũ Dự phòng.
+    Nay: sở thích vào khối dưới dạng JSON, `hu` là hũ THẬT do mã đối chiếu, ngày ghi theo ngày mô phỏng; chỉ dẫn không có câu mẫu."""
     client = FakeMemoryClient({ns("preference"): [rec(ns("preference"), "Ưu tiên để dành tiền cho hũ Du lịch.")]})
     q = "Tháng này còn dư một ít, mình nên để vào hũ nào?"
-    _, _, writer, _ = run_with_memory(q, [route_response(intent="lookup", lookup_kind="balance")], client, monkeypatch)
+    _, turn, writer, _ = run_with_memory(q, [route_response(intent="lookup", lookup_kind="balance")], client, monkeypatch)
     call = writer.calls[0]
-    assert call["task"] == "balance" and "hũ Du lịch" in call["memory"]
+    assert call["task"] == "balance"
+    entries = memory_entries(call["memory"])
+    # bản ghi tạo 24/11 giờ thật; ngày mô phỏng hôm nay 21/11 trong khi ngày thật 24/11, nên ngày ghi là 21/11 theo ứng dụng
+    assert entries == {"so_thich": [{"noi_dung": "Ưu tiên để dành tiền cho hũ Du lịch.", "hu": ["Du lịch"], "ngay_ghi": "21/11/2026"}]}
+    assert turn.app_date.isoformat() == "2026-11-21"
     prompt = build_writer_prompt(call["task"], q, {"jars_total_text": "7.730.000 ₫"}, call["memory"])
     assert MEMORY_GUIDE in prompt and prompt.index(CLOSE_TAG) < prompt.index(MEMORY_GUIDE) < prompt.index("<cau_hoi>")
-    assert "nên để" in MEMORY_GUIDE and "không có con số" in MEMORY_GUIDE
+    # chỉ dẫn trung tính: không có câu mẫu để chép, có điều kiện "trực tiếp trả lời câu hỏi", ví dụ âm, và cấm số từ bộ nhớ
+    assert "ví dụ: theo điều bạn đã dặn" not in MEMORY_GUIDE.lower()
+    assert "trực tiếp trả lời câu hỏi" in MEMORY_GUIDE and "Ví dụ âm" in MEMORY_GUIDE and "`hu`" in MEMORY_GUIDE
+    assert "không nhắc tới bộ nhớ" in MEMORY_GUIDE and "Không lấy con số" in MEMORY_GUIDE
     assert MEMORY_GUIDE not in build_writer_prompt("balance", q, {"jars_total_text": "7.730.000 ₫"})
+    # căn cứ số tiền vẫn chỉ là bản gọn
+    assert allowed_amounts({"jars_total_text": "7.730.000 ₫"}) == {7_730_000}
+
+
+def test_bo_nho_khong_co_so_thich_ve_hu_thi_khoi_noi_ro_hu_rong(monkeypatch):
+    """Ca trượt Runtime v23: lúc hỏi, bộ nhớ có thể chỉ có sở thích không nói về hũ và một "sự thật" rác từ lượt what-if. Khối phải cho
+    model thấy rõ không mục nào nói về hũ (`hu` rỗng) để chỉ dẫn "không nhắc tới bộ nhớ" áp dụng được, không phải đoán."""
+    client = FakeMemoryClient(
+        {
+            ns("preference"): [rec(ns("preference"), "Không nhắc mình vào buổi sáng")],
+            ns("fact"): [rec(ns("fact"), "Đang cân nhắc mua tai nghe bằng Trả sau", rid="mem-" + "f" * 40)],
+        }
+    )
+    q = "Tháng này còn dư một ít, mình nên để vào hũ nào?"
+    _, _, writer, _ = run_with_memory(q, [route_response(intent="lookup", lookup_kind="balance")], client, monkeypatch)
+    entries = memory_entries(writer.calls[0]["memory"])
+    assert [e["hu"] for e in entries["so_thich"]] == [[]]
+    assert "hu" not in entries["dieu_da_ke"][0]  # sự thật không được gắn hũ
+    assert all(e["ngay_ghi"] == "21/11/2026" for k in entries for e in entries[k])
+
+
+def test_khoi_bo_nho_chi_gan_hu_that_cua_nguoi_dung():
+    items = (
+        m.RecalledItem("preference", "Ưu tiên dồn tiền cho hũ Mua nhà", "r1"),
+        m.RecalledItem("preference", "Đừng lấy tiền từ hũ du lich nhé", "r2"),
+        m.RecalledItem("preference", "Thích câu trả lời ngắn", "r3"),
+    )
+    ctx = m.MemoryContext(items=items)
+    got = ctx.prompt_entries(jar_names=["Du lịch", "Dự phòng", "Ăn uống"])
+    assert [e["hu"] for e in got["so_thich"]] == [[], ["Du lịch"], []]
+    assert all("hu" not in e for e in ctx.prompt_entries()["so_thich"])  # không biết hũ nào: không đoán
+    assert "ngay_ghi" not in got["so_thich"][0]  # không có createdAt hay ngày mô phỏng thì không có ngày
 
 
 def test_kiem_tra_truoc_khi_chi_nguoi_viet_nhan_khoi_bo_nho(monkeypatch):
