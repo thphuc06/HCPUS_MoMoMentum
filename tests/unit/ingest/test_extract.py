@@ -150,16 +150,34 @@ def test_tien_phong_chuyen_cho_ca_nhan_theo_muc_dich_ra_hu_hoa_don(gateway_of):
 
 
 def test_loi_nhac_anh_neu_nguyen_tac_doc_chung_tu_mot_lan():
-    """Kiểm toán prompt đợt 6: luật "cách đọc chứng từ" thêm theo từng ảnh trượt 24/11 (r08 màn chi tiết có mã giao dịch, r15 cột Ghi
-    nợ/Ghi có và số dư) là kiến thức chung của model đọc ảnh, nay thay bằng MỘT câu nguyên tắc. Điều model không tự biết vẫn nói rõ: hệ
-    thống tự lọc trùng nên không tự bỏ dòng giống nhau, và dòng rút tiền mặt vẫn được trích."""
+    """Kiểm toán prompt đợt 6: luật "cách đọc chứng từ" thêm theo từng ảnh trượt 24/11 (r15 cột Ghi nợ/Ghi có và số dư) là kiến thức
+    chung của model đọc ảnh, nay thay bằng MỘT câu nguyên tắc. Điều model không tự biết vẫn nói rõ: hệ thống tự lọc trùng nên không tự
+    bỏ dòng giống nhau, và dòng rút tiền mặt vẫn được trích."""
     from yofina_ingest import prompts
 
     system = prompts.image_system(ctx().jars, ctx().type_map, TODAY)
     assert "ngữ nghĩa của chính chứng từ" in system and "số dư trước và sau" in system
     assert "hệ thống tự lọc trùng" in system and "vẫn được trích" in system
-    for dropped in ('không có chữ "thành công"', "TIÊU ĐỀ của cột chứa số tiền", "trích MỌI dòng giao dịch"):
+    for dropped in ("TIÊU ĐỀ của cột chứa số tiền", "trích MỌI dòng giao dịch"):
         assert dropped not in system
+
+
+def test_loi_nhac_anh_dinh_nghia_da_thuc_hien_canh_chua_thuc_hien():
+    """Đo Runtime v25 (file phase 5, "Đo sau đợt sửa kiểm toán và bộ nhớ"): sau khi đợt 6 gộp luật "màn chi tiết có mã giao dịch là đã
+    thực hiện" vào câu nguyên tắc, ảnh thật màn chi tiết sau chuyển tiền ra `no_transactions`. Luật trở lại như ĐỊNH NGHĨA nghiệp vụ, kèm
+    lý do, đứng ngay trước định nghĩa "chưa thực hiện" (hai định nghĩa là hai mặt của một ranh giới), và nhường cho luật trạng thái khi
+    màn ghi thất bại, hủy hay đang xử lý."""
+    from yofina_ingest import prompts
+
+    lines = prompts.image_system(ctx().jars, ctx().type_map, TODAY).splitlines()
+    done = next(i for i, line in enumerate(lines) if line.startswith("- Đã thực hiện:"))
+    assert lines[done + 1].startswith("- Chưa thực hiện thì không phải giao dịch")
+    rule = lines[done]
+    assert "mã giao dịch hoặc số tham chiếu" in rule and "không còn bước xác nhận, OTP" in rule
+    assert "status=completed" in rule and "kể cả khi không có chữ báo thành công" in rule
+    assert "Lý do:" in rule and "chỉ được cấp khi lệnh đã gửi đi" in rule
+    assert "thất bại, hủy hay đang xử lý" in rule
+    assert not re.search(r"vpbank|r08", rule, re.I)  # định nghĩa chung, không nhắc chứng từ của bộ đo
 
 
 def test_loi_nhac_rut_tien_mat_va_tra_soat_theo_quyet_dinh_24_11():

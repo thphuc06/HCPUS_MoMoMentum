@@ -366,7 +366,7 @@ Từng đợt:
 | `_DATA_NOT_INSTRUCTIONS` | Giữ (đổi 3 chữ) | Chống prompt injection (mục 3); đổi cụm trùng câu đối kháng |
 | Chỉ ghi giao dịch đã thực hiện xong | Giữ | Định nghĩa của ứng dụng |
 | Màn xác nhận, OTP, biểu mẫu chưa gửi là `unexecuted_form` | Giữ | Quyết định nghiệp vụ "chưa thực hiện thì không phải giao dịch" |
-| Màn chi tiết có mã giao dịch là đã thực hiện dù không có chữ "thành công" (r08) | Bỏ | Cách đọc chứng từ; gộp vào câu nguyên tắc "lấy theo ngữ nghĩa của chính chứng từ (tiêu đề cột, dấu, số dư trước và sau, mã hay thời gian thực hiện)" |
+| Màn chi tiết có mã giao dịch là đã thực hiện dù không có chữ "thành công" (r08) | Bỏ (đợt 6), **thêm lại 25/11 như định nghĩa** | Đợt 6 gộp vào câu nguyên tắc "lấy theo ngữ nghĩa của chính chứng từ (tiêu đề cột, dấu, số dư trước và sau, mã hay thời gian thực hiện)"; đo Runtime v25 r08 trượt lại (`no_transactions`, mục 5.2), nên luật trở lại (nhánh `p5/polish`) như định nghĩa "Đã thực hiện" của ứng dụng, đứng ngay trước định nghĩa "chưa thực hiện", kèm lý do (mã giao dịch, số tham chiếu chỉ có khi lệnh đã gửi; màn chưa thực hiện còn chờ bấm) và nhường cho luật trạng thái khi màn ghi thất bại, hủy, đang xử lý; không nhắc chứng từ của bộ đo |
 | Màn tra soát, khiếu nại, yêu cầu hoàn tiền không tạo dòng; hoàn tiền đã về vẫn là giao dịch | Giữ | Quyết định của chủ dự án (`4d6a755`), có lý do (giao dịch gốc đã có) |
 | Thất bại, hủy, từ chối, đang xử lý là `failed`/`pending` | Giữ, rút gọn | Ánh xạ trạng thái vào trường `status`; liệt kê lại ít chữ hơn |
 | Tự chuyển giữa tài khoản của mình là `own_account_transfer`; nạp điện thoại, trả thẻ tín dụng, mua hàng thì không | Giữ, gộp vào `_OWN_TRANSFER` dùng chung với CSV | Định nghĩa nghiệp vụ |
@@ -431,7 +431,8 @@ lại. Chi tiết, dẫn chứng và phân loại từng ca: file phase 5, mục
   phase 4, việc `resilience` ở adversarial phase 4; câu người viết bị bỏ, ca vẫn đạt). Lượt này chạy thêm ba bộ so với lượt nền nên chưa
   so được tỷ lệ; theo dõi ở lượt sau.
 
-Kết luận theo luật giữ hay lùi: giữ đợt 1 đến 4; giữ đợt 6 nhưng thêm lại luật đọc màn chi tiết có mã giao dịch (r08).
+Kết luận theo luật giữ hay lùi: giữ đợt 1 đến 4; giữ đợt 6 nhưng thêm lại luật đọc màn chi tiết có mã giao dịch (r08). Đã thêm lại ở
+nhánh `p5/polish` (bảng đợt 6 ở mục 5.1); kết quả đo lại r08 ở file phase 5, mục "Sửa nhỏ sau v25".
 
 ## 6. Nguồn đã tra
 
