@@ -143,6 +143,8 @@ def test_schema_router_phang_va_day_du():
         "resilience",
         "stress",
         "roadmap",
+        "knowledge",
+        "ingest",
     ]
     assert set(schema["required"]) == set(IntentResult.model_fields)
     params = schema["properties"]["params"]

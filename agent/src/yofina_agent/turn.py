@@ -53,8 +53,10 @@ from yofina_agent.compact import (
     compact_transactions,
 )
 from yofina_agent.fallback import classify_by_rules
+from yofina_agent.fee_citation import on_knowledge
 from yofina_agent.guardrail import Guardrail, GuardrailResult
 from yofina_agent.identity import Identity
+from yofina_agent.ingest_chat import on_ingest
 from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
 from yofina_agent.router import merge_pending, pending_params, route
@@ -739,6 +741,8 @@ class Turn:
             "resilience": self.on_resilience,
             "stress": self.on_stress,
             "roadmap": self.on_roadmap,
+            "knowledge": lambda r, q: on_knowledge(self, r, q),
+            "ingest": lambda r, q: on_ingest(self, r, q),
         }
 
     def pending_params_before(self, index: int) -> dict[str, Any] | None:
