@@ -26,12 +26,12 @@ from yofina_core.scenario import SCENARIO_ADAPTER, ScenarioSpec
 from yofina_core.suitability import Proposal, SuitabilityVerdict
 from yofina_core.wallet import INTENTS
 
-# Phase 3 có bảy ý định; phase 4 thêm `resilience`, `stress`, `roadmap`; phase 5 thêm `memory` (đã vào `wallet.INTENTS`) và
-# `knowledge`, `ingest` (còn thuộc `wallet.PHASE5_INTENTS`).
+# Phase 3 có bảy ý định; phase 4 thêm `resilience`, `stress`, `roadmap`; phase 5 thêm `behavior`, `knowledge`, `ingest`, `memory`
+# (khớp `wallet.INTENTS`, cùng thứ tự với CHECK của migration 0053).
 Intent = Literal[
     "lookup", "what_if", "affordability", "profile_update", "move", "out_of_scope", "chitchat",
-    "resilience", "stress", "roadmap", "memory",
-    "knowledge", "ingest",
+    "resilience", "stress", "roadmap",
+    "behavior", "knowledge", "ingest", "memory",
 ]  # fmt: skip
 
 #: Tool ĐỌC mà Orchestrator được đặt vào kế hoạch (tên đầy đủ qua Gateway). Tool ghi KHÔNG ở đây: ghi luôn đi qua khối

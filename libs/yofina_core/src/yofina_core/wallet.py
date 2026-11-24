@@ -95,7 +95,9 @@ AGENT_WRITE_TOOLS = (UPDATE_PROFILE, RECORD_TRANSACTION, MOVE_BETWEEN_JARS, ASSI
 PLANNER_WRITE_TOOLS = (SCHEDULE_NUDGE,)
 #: Tool ghi dùng khối `confirm_action` / `receipt_action` (move_between_jars giữ `confirm` / `receipt` của phase 1), gồm
 #: cả tool của `ingest`.
-GENERIC_ACTION_TOOLS = tuple(t for t in ACTION_TOOLS + INGEST_ACTION_TOOLS if t != MOVE_BETWEEN_JARS)
+GENERIC_ACTION_TOOLS = tuple(
+    t for t in ACTION_TOOLS + INGEST_ACTION_TOOLS if t != MOVE_BETWEEN_JARS
+)
 
 #: Tool đọc của target `ledger` và target `forecast` (đúng thứ tự trong contracts/tools/*.json).
 LEDGER_TOOLS = (
@@ -132,9 +134,9 @@ PLANNER_TOOLS = (
     "save_roadmap",
     "get_roadmap",
 )
-#: Tool phase 5 mà hợp đồng đã khai báo nhưng Lambda chưa cài: `forecast___get_behavior_profile` (luồng p5-behavior). Luồng
-#: cài xong thì xóa tên khỏi đây và thêm vào `_ARG_KEYS` của Lambda.
-PHASE5_TOOLS: tuple[str, ...] = ("get_behavior_profile",)
+#: Tool phase 5 mà hợp đồng đã khai báo nhưng Lambda chưa cài. Rỗng từ 24/11: `forecast___get_behavior_profile` đã cài (luồng
+#: p5-behavior, `yofina_forecast.behavior`). Luồng cài tool mới thì xóa tên khỏi đây và thêm vào `_ARG_KEYS` của Lambda.
+PHASE5_TOOLS: tuple[str, ...] = ()
 #: Tool đã khai báo trong hợp đồng mà Lambda chưa cài (test `test_ledger_wallet` dùng tập này để khỏi đòi `_ARG_KEYS` có chúng).
 #: Năm tool phase 4 đã cài từ 23/11; tên giữ nguyên cho test cũ, nay là "tool chưa cài" của mọi phase, tức `PHASE5_TOOLS`.
 PHASE4_TOOLS: tuple[str, ...] = PHASE5_TOOLS
@@ -194,17 +196,15 @@ INTENTS_PHASE3 = (
 #: Ý định của router (L1) tới hết phase 4: bảy ý định phase 3 và ba ý định phase 4 (`resilience`: hỏi điểm chống chịu, `stress`: bấm
 #: hoặc hỏi một cú sốc, `roadmap`: xin hoặc hỏi lộ trình). Migration 0052 nới CHECK của `audit_events.intent` đúng thành tập này.
 INTENTS_PHASE4 = (*INTENTS_PHASE3, "resilience", "stress", "roadmap")
-#: Ý định router chọn được (khớp `Intent` của `agent/.../schemas.py`): mười ý định tới phase 4 và các ý định phase 5 đã có bộ xử lý
-#: (`memory`: luồng p5-memory cài). Luồng nào cài thì chuyển ý định của mình từ `PHASE5_INTENTS` sang đây.
-INTENTS = (*INTENTS_PHASE4, "memory")
-#: Ý định của phase 5 CHƯA có bộ xử lý (router chưa chọn được): `behavior` (hỏi về thói quen chi tiêu, nhận xét hành vi), `knowledge`
-#: (hỏi biểu phí kèm trích dẫn: số từ `get_fee_schedule`, khối `citation` dựng từ nguồn của chính bảng phí; không có tìm kiếm tài
-#: liệu), `ingest` ("mình vừa nạp ảnh": trạng thái lần nạp và bảng duyệt). `memory` (người dùng nói một sở thích để nhớ, hoặc hỏi trợ
-#: lý nhớ gì về mình) đã chuyển vào `INTENTS`.
-PHASE5_INTENTS = ("behavior", "knowledge", "ingest")
-#: Ý định mà cột `audit_events.intent` chấp nhận (migration 0053 nới CHECK), theo ĐÚNG thứ tự của 0053 và không phụ thuộc luồng nào đã
-#: cài: mười ý định tới phase 4 rồi bốn ý định phase 5, để `audit___record_turn` không vỡ ở lượt có ý định mới.
-AUDIT_INTENTS = (*INTENTS_PHASE4, "behavior", "knowledge", "ingest", "memory")
+#: Bốn ý định của phase 5, ĐÃ có bộ xử lý ở agent (24/11): `behavior` (hỏi về thói quen chi tiêu, `behavior_chat`), `knowledge` (hỏi
+#: biểu phí kèm trích dẫn: số từ `get_fee_schedule`, khối `citation` dựng từ nguồn của chính bảng phí; không có tìm kiếm tài liệu),
+#: `ingest` ("mình vừa nạp ảnh": trạng thái lần nạp và bảng duyệt), `memory` (nói một sở thích để nhớ, hoặc hỏi trợ lý nhớ gì về
+#: mình). Thứ tự theo CHECK của migration 0053.
+PHASE5_INTENTS = ("behavior", "knowledge", "ingest", "memory")
+#: Ý định router chọn được (khớp `Intent` của `agent/.../schemas.py`).
+INTENTS = (*INTENTS_PHASE4, *PHASE5_INTENTS)
+#: Ý định mà cột `audit_events.intent` chấp nhận (migration 0053 nới CHECK): trùng `INTENTS`.
+AUDIT_INTENTS = INTENTS
 #: Loại phương án của khối `options` và `affordability_card`.
 OPTION_KINDS = (
     "defer",
@@ -300,7 +300,13 @@ ALLOCATION_RELAXATION_KINDS = ("goal_delayed", "discretionary_reduced")
 ALTERNATIVE_KINDS = ("delay_goal", "reduce_goal", "cut_discretionary")
 ROADMAP_JOB_STATUSES = ("queued", "running", "done", "failed")
 ROADMAP_JOB_STAGES = ("context", "draft", "allocate", "suitability", "save")
-ROADMAP_JOB_TRIGGERS = ("user_request", "behavior_changed", "goal_changed", "income_changed", "forecast_drift")
+ROADMAP_JOB_TRIGGERS = (
+    "user_request",
+    "behavior_changed",
+    "goal_changed",
+    "income_changed",
+    "forecast_drift",
+)
 ROADMAP_DECISIONS = ("accepted", "rejected", "pending")
 ROADMAP_VERSION_DECISIONS = ("adopt", "keep_previous")
 ROADMAP_WHICH = ("active", "proposed", "latest")

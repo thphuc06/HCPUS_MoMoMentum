@@ -163,6 +163,7 @@ RESET_DELETES = (
     "DELETE FROM roadmap_jobs WHERE user_id = :uid",
     "DELETE FROM roadmaps WHERE user_id = :uid",
     "DELETE FROM resilience_scores WHERE user_id = :uid",
+    "DELETE FROM behavior_profiles WHERE user_id = :uid",
     "DELETE FROM review_asks WHERE user_id = :uid",
     "DELETE FROM forecast_runs WHERE user_id = :uid",
     "DELETE FROM salary_events WHERE user_id = :uid",

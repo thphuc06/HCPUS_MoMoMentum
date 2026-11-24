@@ -85,45 +85,85 @@ def schema_enum(file: str, *path: str) -> tuple[str, ...]:
 
 
 def api_validator(registry, name: str) -> Draft202012Validator:
-    return Draft202012Validator({"$ref": f"{OPENAPI_URI}#/components/schemas/{name}"}, registry=registry)
+    return Draft202012Validator(
+        {"$ref": f"{OPENAPI_URI}#/components/schemas/{name}"}, registry=registry
+    )
 
 
 # =====================================================================================
 # Tập giá trị khớp giữa các nơi
 # =====================================================================================
 def test_tap_gia_tri_khoi_moi_khop_hang_so():
-    assert schema_enum("behavior_insight", "$defs", "BehaviorInsightKind") == wallet.BEHAVIOR_INSIGHT_KINDS == b.BehaviorInsightKind.__args__
-    assert schema_enum("behavior_insight", "$defs", "BehaviorEvidence", "properties", "unit") == b.EvidenceUnit.__args__
+    assert (
+        schema_enum("behavior_insight", "$defs", "BehaviorInsightKind")
+        == wallet.BEHAVIOR_INSIGHT_KINDS
+        == b.BehaviorInsightKind.__args__
+    )
+    assert (
+        schema_enum("behavior_insight", "$defs", "BehaviorEvidence", "properties", "unit")
+        == b.EvidenceUnit.__args__
+    )
     proactive = load_json(CONTRACTS / "blocks/proactive_card.schema.json")["$defs"]
     kinds = tuple(proactive["ProactiveCardData"]["properties"]["kind"]["enum"])
-    assert kinds == b.ProactiveKind.__args__ and set(wallet.NUDGE_GATE_ORDER) <= set(kinds)  # mọi bản tin của cổng vẽ được thành thẻ
-    assert tuple(proactive["ProactiveAction"]["properties"]["kind"]["enum"]) == b.ProactiveActionKind.__args__
-    assert {"open_roadmap", "open_resilience", "open_profile"} <= set(b.ProactiveActionKind.__args__)
+    assert kinds == b.ProactiveKind.__args__ and set(wallet.NUDGE_GATE_ORDER) <= set(
+        kinds
+    )  # mọi bản tin của cổng vẽ được thành thẻ
+    assert (
+        tuple(proactive["ProactiveAction"]["properties"]["kind"]["enum"])
+        == b.ProactiveActionKind.__args__
+    )
+    assert {"open_roadmap", "open_resilience", "open_profile"} <= set(
+        b.ProactiveActionKind.__args__
+    )
 
 
 def test_tap_gia_tri_rest_khop_hang_so():
     assert tuple(SCHEMAS["NudgeKind"]["enum"]) == wallet.ALL_NUDGE_KINDS
-    assert wallet.ALL_NUDGE_KINDS[: len(wallet.NUDGE_KINDS)] == wallet.NUDGE_KINDS  # loại cũ giữ nguyên thứ tự
-    assert not {"roadmap_proposed", "resilience_drop", "behavior_insight"} & set(wallet.NUDGE_KINDS)  # schedule_nudge không tạo được
+    assert (
+        wallet.ALL_NUDGE_KINDS[: len(wallet.NUDGE_KINDS)] == wallet.NUDGE_KINDS
+    )  # loại cũ giữ nguyên thứ tự
+    assert not {"roadmap_proposed", "resilience_drop", "behavior_insight"} & set(
+        wallet.NUDGE_KINDS
+    )  # schedule_nudge không tạo được
     assert tuple(SCHEMAS["NudgeOutcome"]["enum"]) == wallet.NUDGE_OUTCOMES
     reasons = SCHEMAS["NudgeSuppressed"]["properties"]["reason"]["enum"]
     assert tuple(reasons) == wallet.NUDGE_SUPPRESS_REASONS
     assert tuple(SCHEMAS["MemoryKind"]["enum"]) == memory.MEMORY_KINDS == memory.MemoryKind.__args__
     assert tuple(SCHEMAS["MemoryRecord"]["properties"]["source"]["enum"]) == memory.MEMORY_SOURCES
     assert set(memory.MEMORY_SOURCE_OF_KIND) == set(memory.MEMORY_KINDS)
-    assert tuple(SCHEMAS["DataDeletion"]["properties"]["status"]["enum"]) == privacy.DATA_DELETION_STATUSES
-    assert tuple(SCHEMAS["DeletionStep"]["properties"]["status"]["enum"]) == privacy.DELETION_STEP_STATUSES
-    assert set(SCHEMAS["DataDeletion"]["properties"]["steps"]["required"]) == set(privacy.DATA_DELETION_STEPS)
-    assert tuple(SCHEMAS["PrivacyToolName"]["enum"]) == wallet.PRIVACY_ACTION_TOOLS == ("delete_my_data",)
-    assert tuple(SCHEMAS["DeleteMyDataParams"]["properties"]["scope"]["enum"]) == wallet.DATA_DELETION_SCOPES
+    assert (
+        tuple(SCHEMAS["DataDeletion"]["properties"]["status"]["enum"])
+        == privacy.DATA_DELETION_STATUSES
+    )
+    assert (
+        tuple(SCHEMAS["DeletionStep"]["properties"]["status"]["enum"])
+        == privacy.DELETION_STEP_STATUSES
+    )
+    assert set(SCHEMAS["DataDeletion"]["properties"]["steps"]["required"]) == set(
+        privacy.DATA_DELETION_STEPS
+    )
+    assert (
+        tuple(SCHEMAS["PrivacyToolName"]["enum"])
+        == wallet.PRIVACY_ACTION_TOOLS
+        == ("delete_my_data",)
+    )
+    assert (
+        tuple(SCHEMAS["DeleteMyDataParams"]["properties"]["scope"]["enum"])
+        == wallet.DATA_DELETION_SCOPES
+    )
 
 
-def test_y_dinh_phase5_chua_vao_router_nhung_ban_ghi_luot_nhan():
-    # `memory` đã có bộ xử lý (luồng p5-memory) nên đã chuyển vào INTENTS; ba ý định còn lại chờ luồng của chúng.
-    assert wallet.PHASE5_INTENTS == ("behavior", "knowledge", "ingest")
-    assert not set(wallet.PHASE5_INTENTS) & set(wallet.INTENTS)  # agent Intent khớp INTENTS, luồng cài thì chuyển sang
-    assert set(wallet.INTENTS) | set(wallet.PHASE5_INTENTS) == set(wallet.AUDIT_INTENTS)
-    assert wallet.AUDIT_INTENTS == (*wallet.INTENTS_PHASE4, "behavior", "knowledge", "ingest", "memory")  # thứ tự của 0053
+def test_y_dinh_phase5_da_vao_router_va_ban_ghi_luot_nhan():
+    # cả bốn ý định phase 5 đã có bộ xử lý (24/11): nằm cuối INTENTS, đúng thứ tự của CHECK trong 0053
+    assert wallet.PHASE5_INTENTS == ("behavior", "knowledge", "ingest", "memory")
+    assert wallet.INTENTS[10:] == wallet.PHASE5_INTENTS
+    assert wallet.AUDIT_INTENTS == (
+        *wallet.INTENTS_PHASE4,
+        "behavior",
+        "knowledge",
+        "ingest",
+        "memory",
+    )  # thứ tự của 0053
     desc = AUDIT["record_turn"]["inputSchema"]["properties"]["intent"]["description"]
     assert all(i in desc for i in wallet.AUDIT_INTENTS)
 
@@ -148,9 +188,14 @@ PROFILE = fx("tools/get_behavior_profile.ok.json")["data"]
 
 def test_ho_so_cung_mot_data_cho_tool_va_rest():
     assert fx("rest/BehaviorProfileResponse.minh.json") == PROFILE
-    assert fx("rest/BehaviorProfileResponse.chua_san_sang.json") == fx("tools/get_behavior_profile.ok_chua_san_sang.json")["data"]
+    assert (
+        fx("rest/BehaviorProfileResponse.chua_san_sang.json")
+        == fx("tools/get_behavior_profile.ok_chua_san_sang.json")["data"]
+    )
     p = b.BehaviorProfileData.model_validate(PROFILE)
-    assert p.ready and len(p.insights) >= 2  # tiêu chí 6: minh có ít nhất hai nhận xét kèm bằng chứng
+    assert (
+        p.ready and len(p.insights) >= 2
+    )  # tiêu chí 6: minh có ít nhất hai nhận xét kèm bằng chứng
     assert all(i.evidence for i in p.insights)
 
 
@@ -160,20 +205,35 @@ def test_moi_so_trong_cau_nhan_xet_co_trong_bang_chung():
         values = set()
         for e in ins["evidence"]:
             v = e["value"]
-            values |= {str(v), f"{int(v):,}".replace(",", ".") if v == int(v) else str(v).replace(".", ",")}
+            values |= {
+                str(v),
+                f"{int(v):,}".replace(",", ".") if v == int(v) else str(v).replace(".", ","),
+            }
         nums = re.findall(r"\d[\d.,]*\d|\d", ins["headline"])
         assert nums and all(n in values for n in nums), (ins["insight_id"], nums, values)
 
 
 def test_khoi_dung_lai_tu_ho_so_bang_builder():
     built = b.block_to_wire(
-        b.build_behavior_insight(data=b.behavior_insight_data(PROFILE), source_tool="forecast___get_behavior_profile", **KW)
+        b.build_behavior_insight(
+            data=b.behavior_insight_data(PROFILE),
+            source_tool="forecast___get_behavior_profile",
+            **KW,
+        )
     )
     assert built == fx("blocks/valid/behavior_insight.chi_don_sau_luong.json")
-    assert built["id"] == f"behavior_insight:{KW['trace_id']}:{PROFILE['insights'][0]['insight_id']}"
-    assert built["fallback_text"].startswith(PROFILE["insights"][0]["headline"]) and PROFILE["next_step"]["label"] in built["fallback_text"]
+    assert (
+        built["id"] == f"behavior_insight:{KW['trace_id']}:{PROFILE['insights'][0]['insight_id']}"
+    )
+    assert (
+        built["fallback_text"].startswith(PROFILE["insights"][0]["headline"])
+        and PROFILE["next_step"]["label"] in built["fallback_text"]
+    )
     second = b.behavior_insight_data(PROFILE, "thu_bay_an_uong")
-    assert second.insight.jar_code == "an_uong" and second.next_step.label == PROFILE["next_step"]["label"]
+    assert (
+        second.insight.jar_code == "an_uong"
+        and second.next_step.label == PROFILE["next_step"]["label"]
+    )
     with pytest.raises(ValueError):
         b.behavior_insight_data(PROFILE, "khong_co")
     with pytest.raises(ValueError):
@@ -182,7 +242,17 @@ def test_khoi_dung_lai_tu_ho_so_bang_builder():
 
 @pytest.mark.parametrize(
     ("unit", "value"),
-    [("vnd", 1200.5), ("vnd", -1), ("count", 2.5), ("percent", 101), ("ratio", 1.2), ("hour", 24), ("weekday", 0), ("weekday", 8), ("days", -3)],
+    [
+        ("vnd", 1200.5),
+        ("vnd", -1),
+        ("count", 2.5),
+        ("percent", 101),
+        ("ratio", 1.2),
+        ("hour", 24),
+        ("weekday", 0),
+        ("weekday", 8),
+        ("days", -3),
+    ],
 )
 def test_bang_chung_sai_don_vi_bi_pydantic_tu_choi(unit, value):
     ev = {"key": "x", "label": "x", "value": value, "unit": unit}
@@ -203,15 +273,25 @@ def test_bat_bien_ho_so_va_nhan_xet():
     with pytest.raises(ValidationError):  # chưa sẵn sàng mà có nhận xét
         ok(edited(PROFILE, (("ready",), False), (("min_history_days",), 21)))
     with pytest.raises(ValidationError):  # chưa sẵn sàng phải nói cần bao nhiêu ngày
-        ok(edited(fx("rest/BehaviorProfileResponse.chua_san_sang.json"), (("min_history_days",), DEL)))
+        ok(
+            edited(
+                fx("rest/BehaviorProfileResponse.chua_san_sang.json"), (("min_history_days",), DEL)
+            )
+        )
     ins = PROFILE["insights"][0]
     with pytest.raises(ValidationError):
-        b.BehaviorInsight.model_validate(edited(ins, (("evidence", 1, "key"), ins["evidence"][0]["key"])))
+        b.BehaviorInsight.model_validate(
+            edited(ins, (("evidence", 1, "key"), ins["evidence"][0]["key"]))
+        )
     with pytest.raises(ValidationError):
-        b.BehaviorEvidence.model_validate({**ins["evidence"][0], "period_from": "2026-12-01", "period_to": "2026-11-01"})
+        b.BehaviorEvidence.model_validate(
+            {**ins["evidence"][0], "period_from": "2026-12-01", "period_to": "2026-11-01"}
+        )
     blk = fx("blocks/valid/behavior_insight.thu_bay_chuyen_hu.json")
     with pytest.raises(ValidationError):  # hành động không mang user_id hay token
-        b.parse_block(edited(blk, (("data", "next_step", "action", "params", "user_id"), "sub-khac")))
+        b.parse_block(
+            edited(blk, (("data", "next_step", "action", "params", "user_id"), "sub-khac"))
+        )
     assert blk["data"]["next_step"]["action"]["tool"] in wallet.ROADMAP_STEP_ACTION_TOOLS
 
 
@@ -237,32 +317,67 @@ def test_trich_dan_dung_tu_ket_qua_get_fee_schedule():
     built = b.block_to_wire(b.build_citation(result=FEES, trace_id=KW["trace_id"]))
     assert built == fx("blocks/valid/citation.phi_tra_sau.json")
     assert built["id"] == f"citation:{KW['trace_id']}"
-    assert built["source"] == {"tool": "knowledge___get_fee_schedule", "as_of": FEES["as_of"], "app_date": FEES["app_date"]}
+    assert built["source"] == {
+        "tool": "knowledge___get_fee_schedule",
+        "as_of": FEES["as_of"],
+        "app_date": FEES["app_date"],
+    }
     fee = FEES["data"]["fees"][0]
     item = built["data"]["items"][0]
-    assert (item["source_name"], item["source_url"], item["effective_from"]) == (fee["source_name"], fee["source_url"], fee["effective_from"])
-    assert item["fee_types"] == [fee["fee_type"]] and item["excerpt"] == fee["condition_note"]  # câu trích chép từ bảng, không do model viết
-    assert (built["data"]["product_code"], built["data"]["product_label"]) == (FEES["data"]["product_code"], FEES["data"]["product_label"])
-    assert built["fallback_text"] == f"Nguồn biểu phí Trả sau (mô phỏng): {fee['source_name']}, hiệu lực từ 31/03/2026."
-    assert "33.000" not in json.dumps(built, ensure_ascii=False)  # khối không mang số tiền: số nói ra lấy từ amount_vnd
+    assert (item["source_name"], item["source_url"], item["effective_from"]) == (
+        fee["source_name"],
+        fee["source_url"],
+        fee["effective_from"],
+    )
+    assert (
+        item["fee_types"] == [fee["fee_type"]] and item["excerpt"] == fee["condition_note"]
+    )  # câu trích chép từ bảng, không do model viết
+    assert (built["data"]["product_code"], built["data"]["product_label"]) == (
+        FEES["data"]["product_code"],
+        FEES["data"]["product_label"],
+    )
+    assert (
+        built["fallback_text"]
+        == f"Nguồn biểu phí Trả sau (mô phỏng): {fee['source_name']}, hiệu lực từ 31/03/2026."
+    )
+    assert "33.000" not in json.dumps(
+        built, ensure_ascii=False
+    )  # khối không mang số tiền: số nói ra lấy từ amount_vnd
     two = b.block_to_wire(b.build_citation(result=FEES_TWO, trace_id=KW["trace_id"]))
     assert two == fx("blocks/valid/citation.nhieu_nguon.json")
-    assert [i["fee_types"] for i in two["data"]["items"]] == [[f["fee_type"]] for f in FEES_TWO["data"]["fees"]]
+    assert [i["fee_types"] for i in two["data"]["items"]] == [
+        [f["fee_type"]] for f in FEES_TWO["data"]["fees"]
+    ]
 
 
 def test_trich_dan_loc_theo_loai_phi_va_gom_theo_nguon():
-    late = b.build_citation(result=FEES_TWO, trace_id=KW["trace_id"], fee_types=["late_payment_fee"])
+    late = b.build_citation(
+        result=FEES_TWO, trace_id=KW["trace_id"], fee_types=["late_payment_fee"]
+    )
     assert [i.fee_types for i in late.data.items] == [["late_payment_fee"]]
     assert late.data.items[0].source_url == FEES_TWO["data"]["fees"][1]["source_url"]
     for bad in (["khong_co"], [], ["monthly_service_fee", "khong_co"]):
         with pytest.raises(ValueError):  # không trích dẫn phí mà tool không trả
             b.citation_data(FEES_TWO["data"], bad)
-    same = edited(FEES_TWO, *((("data", "fees", 1, k), FEES_TWO["data"]["fees"][0][k]) for k in ("source_name", "source_url", "effective_from")))
+    same = edited(
+        FEES_TWO,
+        *(
+            (("data", "fees", 1, k), FEES_TWO["data"]["fees"][0][k])
+            for k in ("source_name", "source_url", "effective_from")
+        ),
+    )
     grouped = b.citation_data(same["data"])
-    assert len(grouped.items) == 1 and grouped.items[0].fee_types == ["monthly_service_fee", "late_payment_fee"]
-    assert grouped.items[0].excerpt is None  # nhiều loại phí chung một nguồn thì không chọn câu trích nào
+    assert len(grouped.items) == 1 and grouped.items[0].fee_types == [
+        "monthly_service_fee",
+        "late_payment_fee",
+    ]
+    assert (
+        grouped.items[0].excerpt is None
+    )  # nhiều loại phí chung một nguồn thì không chọn câu trích nào
     with pytest.raises(ValidationError):  # kết quả lỗi của tool không dựng được khối
-        b.build_citation(result=fx("tools/get_fee_schedule.error_not_found.json"), trace_id=KW["trace_id"])
+        b.build_citation(
+            result=fx("tools/get_fee_schedule.error_not_found.json"), trace_id=KW["trace_id"]
+        )
 
 
 def test_bat_bien_trich_dan():
@@ -270,19 +385,42 @@ def test_bat_bien_trich_dan():
     data = {"product_code": "bnpl_sim", "product_label": "Trả sau (mô phỏng)"}
     b.CitationData.model_validate({**data, "items": [item]})
     with pytest.raises(ValidationError):  # cùng một nguồn hai mục
-        b.CitationData.model_validate({**data, "items": [item, {**item, "fee_types": ["late_payment_fee"]}]})
+        b.CitationData.model_validate(
+            {**data, "items": [item, {**item, "fee_types": ["late_payment_fee"]}]}
+        )
     with pytest.raises(ValidationError):  # một loại phí ở hai nguồn
-        b.CitationData.model_validate({**data, "items": [item, {**item, "source_url": "https://example.invalid/khac"}]})
+        b.CitationData.model_validate(
+            {**data, "items": [item, {**item, "source_url": "https://example.invalid/khac"}]}
+        )
     with pytest.raises(ValidationError):
-        b.CitationData.model_validate({**data, "items": [{**item, "source_url": f"https://example.invalid/{n}", "fee_types": [f"f{n}"]} for n in range(6)]})
+        b.CitationData.model_validate(
+            {
+                **data,
+                "items": [
+                    {**item, "source_url": f"https://example.invalid/{n}", "fee_types": [f"f{n}"]}
+                    for n in range(6)
+                ],
+            }
+        )
 
 
 def test_khoi_trich_dan_chi_co_truong_cua_bang_phi():
     """Khối không còn trường chỉ có nghĩa với tìm kiếm tài liệu (điểm, chunk, kho, câu truy vấn); trường nguồn cùng giới hạn với `FeeLine`."""
     defs = CITATION["$defs"]
     assert set(defs) == {"CitationItem", "CitationData"}
-    assert set(defs["CitationItem"]["properties"]) == {"fee_types", "source_name", "source_url", "effective_from", "excerpt"}
-    assert defs["CitationItem"]["required"] == ["fee_types", "source_name", "source_url", "effective_from"]
+    assert set(defs["CitationItem"]["properties"]) == {
+        "fee_types",
+        "source_name",
+        "source_url",
+        "effective_from",
+        "excerpt",
+    }
+    assert defs["CitationItem"]["required"] == [
+        "fee_types",
+        "source_name",
+        "source_url",
+        "effective_from",
+    ]
     assert set(defs["CitationData"]["properties"]) == {"product_code", "product_label", "items"}
     fee_line = FEE_RESULTS["FeeLine"]["properties"]
     item = defs["CitationItem"]["properties"]
@@ -290,14 +428,23 @@ def test_khoi_trich_dan_chi_co_truong_cua_bang_phi():
     assert item["source_name"]["maxLength"] == fee_line["source_name"]["maxLength"]
     assert item["source_url"]["pattern"] == fee_line["source_url"]["pattern"]
     assert item["excerpt"]["maxLength"] == fee_line["condition_note"]["maxLength"]
-    assert defs["CitationData"]["properties"]["product_code"] == FEE_RESULTS["FeeScheduleData"]["properties"]["product_code"]
+    assert (
+        defs["CitationData"]["properties"]["product_code"]
+        == FEE_RESULTS["FeeScheduleData"]["properties"]["product_code"]
+    )
     text = json.dumps(CITATION, ensure_ascii=False)
-    assert "knowledge___get_fee_schedule" in text and "knowledge___search" not in text and "kb_" not in text
+    assert (
+        "knowledge___get_fee_schedule" in text
+        and "knowledge___search" not in text
+        and "kb_" not in text
+    )
 
 
 @pytest.mark.parametrize("name", ["FeeLine", "FeeScheduleData", "GetFeeScheduleOk"])
 def test_ket_qua_get_fee_schedule_pydantic_khop_json_schema(registry, name):
-    hit = registry.resolver(base_uri=f"{BASE}/tools/").lookup(f"knowledge.results.schema.json#/$defs/{name}")
+    hit = registry.resolver(base_uri=f"{BASE}/tools/").lookup(
+        f"knowledge.results.schema.json#/$defs/{name}"
+    )
     assert pydantic_tree(getattr(b, name)) == normalize(hit.contents, hit.resolver)
 
 
@@ -315,7 +462,10 @@ def test_rag_da_cat_khoi_hop_dong():
 # =====================================================================================
 def test_tool_moi_o_cuoi_target_va_chua_cai():
     assert wallet.FORECAST_TOOLS[-1] == "get_behavior_profile"
-    assert set(wallet.PHASE5_TOOLS) == {"get_behavior_profile"} == set(wallet.PHASE4_TOOLS)
+    # luồng p5-behavior đã cài `get_behavior_profile` (yofina_forecast.behavior) nên không còn tool phase 5 nào chưa cài
+    assert "get_behavior_profile" not in wallet.PHASE5_TOOLS and set(wallet.PHASE5_TOOLS) == set(
+        wallet.PHASE4_TOOLS
+    )
     assert len("forecast___get_behavior_profile") <= 64
 
 
@@ -339,11 +489,17 @@ def test_cedar_cua_tool_phase5_neu_co_thi_dung_dang():
         if path.exists():
             code = path.read_text(encoding="utf-8")
             assert f'action == AgentCore::Action::"{target}___{name}"' in code
-            assert "context.input has user_id && context.input.user_id == principal.id" in code and "confirm_token" not in code
+            assert (
+                "context.input has user_id && context.input.user_id == principal.id" in code
+                and "confirm_token" not in code
+            )
+
 
 def test_buoc_goi_tool_trong_ban_ghi_luot():
     step = load_json(CONTRACTS / "tools/audit.results.schema.json")["$defs"]["TraceStep"]
-    assert step["required"] == ["step", "ms"] and {"status", "code"} <= set(step["properties"])  # tương thích ngược
+    assert step["required"] == ["step", "ms"] and {"status", "code"} <= set(
+        step["properties"]
+    )  # tương thích ngược
     assert tuple(step["properties"]["status"]["enum"]) == ("ok", "error", "denied")
     assert re.fullmatch(step["properties"]["step"]["pattern"], "forecast___get_behavior_profile")
     item = AUDIT["record_turn"]["inputSchema"]["properties"]["step_timings"]["items"]
@@ -366,7 +522,11 @@ def test_muoi_mot_endpoint_moi_va_lambda_phuc_vu():
     assert op("GET", "/profile/behavior")["x-lambda"] == "forecast"
     for m, p in NEW_OPS - {("GET", "/profile/behavior")}:
         assert op(m, p)["x-lambda"] == "ledger", (m, p)
-    assert {m for m, _ in operations()} == {"GET", "POST", "DELETE"}  # không PATCH; DELETE mới ở phase 5 (CORS phải cho thêm)
+    assert {m for m, _ in operations()} == {
+        "GET",
+        "POST",
+        "DELETE",
+    }  # không PATCH; DELETE mới ở phase 5 (CORS phải cho thêm)
     assert "DELETE" in SPEC["info"]["description"] and "CORS" in SPEC["info"]["description"]
 
 
@@ -376,7 +536,12 @@ def test_ops_chi_nhom_ops_va_khong_lo_danh_tinh():
     for p in ops:
         o = op("GET", p)
         assert o["x-required-group"] == "ops" and "403" in o["responses"]
-    assert not any("x-required-group" in o for p, item in SPEC["paths"].items() if not p.startswith("/ops/") for o in item.values())
+    assert not any(
+        "x-required-group" in o
+        for p, item in SPEC["paths"].items()
+        if not p.startswith("/ops/")
+        for o in item.values()
+    )
 
     def names(schema, seen=()):
         if isinstance(schema, dict):
@@ -396,7 +561,14 @@ def test_ops_chi_nhom_ops_va_khong_lo_danh_tinh():
 
     for s in ("OpsTraceListResponse", "OpsTraceDetail", "OpsSummaryResponse"):
         fields = set(names(SCHEMAS[s]))
-        assert not fields & {"user_id", "conversation_id", "user_text", "assistant_text", "sub", "email"}, s
+        assert not fields & {
+            "user_id",
+            "conversation_id",
+            "user_text",
+            "assistant_text",
+            "sub",
+            "email",
+        }, s
     assert re.fullmatch(SCHEMAS["UserRef"]["pattern"], "3f9a0c1d2e4b")
     assert SCHEMAS["OpsTraceDetail"]["properties"]["pii_masked"] == {"const": True}
 
@@ -404,29 +576,48 @@ def test_ops_chi_nhom_ops_va_khong_lo_danh_tinh():
 def test_xoa_du_lieu_qua_token_xoa_bo_nho_va_phan_hoi_ban_tin_thi_khong():
     dd = op("POST", "/me/delete-data")
     assert {"403", "409", "428"} <= set(dd["responses"])
-    assert SCHEMAS["DeleteDataRequest"]["required"] == ["tool", "params"]  # token tùy chọn: vắng thì 428 do code quyết định
+    assert SCHEMAS["DeleteDataRequest"]["required"] == [
+        "tool",
+        "params",
+    ]  # token tùy chọn: vắng thì 428 do code quyết định
     assert "confirm_token" in SCHEMAS["DeleteDataRequest"]["properties"]
-    assert "user_id" not in SCHEMAS["DeleteDataRequest"]["properties"] and SCHEMAS["DeleteDataRequest"]["additionalProperties"] is False
+    assert (
+        "user_id" not in SCHEMAS["DeleteDataRequest"]["properties"]
+        and SCHEMAS["DeleteDataRequest"]["additionalProperties"] is False
+    )
     conf = op("POST", "/me/delete-data/confirmations")
-    assert conf["responses"]["200"]["content"]["application/json"]["schema"] == {"$ref": "#/components/schemas/ConfirmationResponse"}
+    assert conf["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ConfirmationResponse"
+    }
     tool_of = SCHEMAS["ConfirmationResponse"]["properties"]["tool"]["anyOf"]
     assert {"$ref": "#/components/schemas/PrivacyToolName"} in tool_of
-    assert wallet.DELETE_MY_DATA not in wallet.ACTION_TOOLS and wallet.DELETE_MY_DATA not in wallet.GENERIC_ACTION_TOOLS
+    assert (
+        wallet.DELETE_MY_DATA not in wallet.ACTION_TOOLS
+        and wallet.DELETE_MY_DATA not in wallet.GENERIC_ACTION_TOOLS
+    )
     assert wallet.DELETE_MY_DATA not in SCHEMAS["ToolName"]["enum"]
-    for m, p in (("POST", "/nudges/{nudge_id}/feedback"), ("DELETE", "/memory"), ("DELETE", "/memory/{record_id}")):
+    for m, p in (
+        ("POST", "/nudges/{nudge_id}/feedback"),
+        ("DELETE", "/memory"),
+        ("DELETE", "/memory/{record_id}"),
+    ):
         assert "428" not in op(m, p)["responses"], (m, p)
         assert "token" in op(m, p)["description"]
 
 
 def test_chuan_hoa_delete_my_data_idempotent_va_hash_cua_fixture():
     assert normalize_params("delete_my_data", {}) == {"scope": "all"}
-    assert normalize_params("delete_my_data", {"scope": " all ", "user_id": "x"}) == {"scope": "all"}
+    assert normalize_params("delete_my_data", {"scope": " all ", "user_id": "x"}) == {
+        "scope": "all"
+    }
     n = normalize_params("delete_my_data", {"scope": "all"})
     assert normalize_params("delete_my_data", n) == n
     with pytest.raises(ParamsError):
         normalize_params("delete_my_data", {"scope": "transactions"})
     resp = fx("rest/ConfirmationResponse.delete_my_data.json")
-    assert resp["tool"] == "delete_my_data" and resp["params_hash"] == hash_normalized_params("delete_my_data", resp["params"])
+    assert resp["tool"] == "delete_my_data" and resp["params_hash"] == hash_normalized_params(
+        "delete_my_data", resp["params"]
+    )
     assert fx("rest/DeleteDataRequest.co_token.json")["params"] == resp["params"]
 
 
@@ -434,7 +625,11 @@ def test_ban_tin_va_the_chu_dong_di_cung_nhau():
     full = fx("rest/NudgeTodayResponse.co_ban_tin.json")
     nudge, card = full["nudge"], full["card"]
     assert b.parse_block(card).data.nudge_id == nudge["nudge_id"]
-    assert (card["data"]["kind"], card["data"]["title"], card["data"]["reason"]) == (nudge["kind"], nudge["title"], nudge["reason"])
+    assert (card["data"]["kind"], card["data"]["title"], card["data"]["reason"]) == (
+        nudge["kind"],
+        nudge["title"],
+        nudge["reason"],
+    )
     assert nudge["kind"] in wallet.NUDGE_GATE_ORDER
     assert nudge["gate"]["score"] > nudge["gate"]["threshold"]  # chỉ chọn khi vượt ngưỡng
     assert nudge["gate"]["rank"] == wallet.NUDGE_GATE_ORDER.index(nudge["kind"]) + 1
@@ -448,12 +643,27 @@ def test_ops_fixture_nhat_quan():
     d = fx("rest/OpsTraceDetail.what_if.json")
     tools = [s for s in d["steps"] if "___" in s["step"]]
     assert [f"{c['target']}___{c['tool']}" for c in d["tool_calls"]] == [s["step"] for s in tools]
-    assert all(c["status"] == s["status"] and c["ms"] == s["ms"] for c, s in zip(d["tool_calls"], tools, strict=True))
-    assert {c["target"] for c in d["tool_calls"]} <= {"ledger", "forecast", "knowledge", "planner", "audit", "ingest"}
+    assert all(
+        c["status"] == s["status"] and c["ms"] == s["ms"]
+        for c, s in zip(d["tool_calls"], tools, strict=True)
+    )
+    assert {c["target"] for c in d["tool_calls"]} <= {
+        "ledger",
+        "forecast",
+        "knowledge",
+        "planner",
+        "audit",
+        "ingest",
+    }
     trace = fx("rest/TraceResponse.what_if.json")
-    assert d["trace_id"] == trace["trace_id"] and d["rules_checked"] == trace["explain"]["data"]["rules_checked"]
+    assert (
+        d["trace_id"] == trace["trace_id"]
+        and d["rules_checked"] == trace["explain"]["data"]["rules_checked"]
+    )
     lst = fx("rest/OpsTraceListResponse.default.json")["traces"]
-    assert lst[0]["tool_calls"] == len(d["tool_calls"]) and lst[0]["est_cost_vnd"] == d["est_cost_vnd"]
+    assert (
+        lst[0]["tool_calls"] == len(d["tool_calls"]) and lst[0]["est_cost_vnd"] == d["est_cost_vnd"]
+    )
     s = fx("rest/OpsSummaryResponse.default.json")
     assert s["tool_error_rate"] == pytest.approx(s["tool_errors"] / s["tool_calls"], abs=1e-4)
     assert s["latency_ms"]["p50"] <= s["latency_ms"]["p95"]
@@ -468,7 +678,9 @@ def test_ops_fixture_nhat_quan():
         models = [m["model"] for m in day["by_model"]]
         assert models == sorted(models) and set(models) <= set(caps)
         assert sum(m["model_calls"] for m in day["by_model"]) == day["model_calls"]
-        assert all(m["cap"] == caps[m["model"]] and m["model_calls"] <= m["cap"] for m in day["by_model"])
+        assert all(
+            m["cap"] == caps[m["model"]] and m["model_calls"] <= m["cap"] for m in day["by_model"]
+        )
         assert day["cap"] == sum(caps.values())
     assert "latency_ms" not in fx("rest/OpsSummaryResponse.khong_co_luot.json")
 
@@ -490,8 +702,12 @@ def test_namespace_theo_nguoi_dung_dung_mau_agentcore():
         assert NS_RE.fullmatch(ns) and ns.startswith(root)
         assert memory.kind_of_namespace(ns, SUB) == kind
     other = memory.namespace_for("preference", "sub-khac")
-    assert memory.kind_of_namespace(other, SUB) is None  # bản ghi của người khác không bao giờ được trả hay xóa
-    assert memory.kind_of_namespace(f"/yofina/users/{SUB}x/preferences/", SUB) is None  # không trùng tiền tố
+    assert (
+        memory.kind_of_namespace(other, SUB) is None
+    )  # bản ghi của người khác không bao giờ được trả hay xóa
+    assert (
+        memory.kind_of_namespace(f"/yofina/users/{SUB}x/preferences/", SUB) is None
+    )  # không trùng tiền tố
     assert memory.kind_of_namespace(f"{root}lạ/", SUB) is None
     for bad in ("", "a/b", "a:b", "../x", "x" * 129):
         with pytest.raises(ValueError):
@@ -519,10 +735,14 @@ def test_model_pydantic_khop_openapi(registry, model, schema):
 
 def test_fixture_rest_moi_qua_pydantic_va_bat_bien_lan_xoa():
     memory.MemoryListResponse.model_validate(fx("rest/MemoryListResponse.minh.json"))
-    assert {r["kind"] for r in fx("rest/MemoryListResponse.minh.json")["records"]} == set(memory.MEMORY_KINDS)
+    assert {r["kind"] for r in fx("rest/MemoryListResponse.minh.json")["records"]} == set(
+        memory.MEMORY_KINDS
+    )
     for r in fx("rest/MemoryListResponse.minh.json")["records"]:
         assert memory.MEMORY_SOURCE_OF_KIND[r["kind"]] == r["source"]
-        assert not re.search(r"\d{4,}|₫", r["text"])  # không số dư, không giao dịch thô, không số tài khoản
+        assert not re.search(
+            r"\d{4,}|₫", r["text"]
+        )  # không số dư, không giao dịch thô, không số tài khoản
     done = privacy.DataDeletion.model_validate(fx("rest/DataDeletion.done.json"))
     part = privacy.DataDeletion.model_validate(fx("rest/DataDeletion.partial.json"))
     assert done.status == "done" and part.status == "partial"
@@ -536,20 +756,37 @@ def test_fixture_rest_moi_qua_pydantic_va_bat_bien_lan_xoa():
     ):
         with pytest.raises(ValidationError):
             privacy.DataDeletion.model_validate(edited(ok, *edits))
-    running = edited(ok, (("status",), "running"), (("finished_at",), DEL), (("steps", "aurora"), {"status": "pending"}))
+    running = edited(
+        ok,
+        (("status",), "running"),
+        (("finished_at",), DEL),
+        (("steps", "aurora"), {"status": "pending"}),
+    )
     assert privacy.DataDeletion.model_validate(running).status == "running"
 
 
 # =====================================================================================
 # Migration 0053 (kiểm tĩnh; chạy thật trên PostgreSQL cục bộ)
 # =====================================================================================
-_spec = importlib.util.spec_from_file_location("migrator_sqlsplit5", REPO / "infra-cdk" / "lambdas" / "migrator" / "sqlsplit.py")
+_spec = importlib.util.spec_from_file_location(
+    "migrator_sqlsplit5", REPO / "infra-cdk" / "lambdas" / "migrator" / "sqlsplit.py"
+)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 SQL = (REPO / "db/migrations/0053_phase5.sql").read_text(encoding="utf-8")
 STATEMENTS = _mod.split_migration(SQL)
-FUNCS = {re.search(r"FUNCTION (\w+)\(", s).group(1): s for s in STATEMENTS if s.startswith("CREATE OR REPLACE FUNCTION")}
-DEFINERS = {"app_delete_user_data", "app_ops_list_traces", "app_ops_get_trace", "app_ops_summary", "app_ops_model_calls_by_day"}
+FUNCS = {
+    re.search(r"FUNCTION (\w+)\(", s).group(1): s
+    for s in STATEMENTS
+    if s.startswith("CREATE OR REPLACE FUNCTION")
+}
+DEFINERS = {
+    "app_delete_user_data",
+    "app_ops_list_traces",
+    "app_ops_get_trace",
+    "app_ops_summary",
+    "app_ops_model_calls_by_day",
+}
 SIGNATURES = {
     "app_get_behavior_profile": "text, date",
     "app_get_today_nudge": "text, date",
@@ -574,7 +811,9 @@ def table(name: str) -> str:
 
 
 def test_0053_tach_duoc_viet_lai_duoc_va_khong_tham_so():
-    assert STATEMENTS[0].startswith("CREATE TABLE IF NOT EXISTS behavior_profiles ")  # không còn CREATE EXTENSION vector của RAG
+    assert STATEMENTS[0].startswith(
+        "CREATE TABLE IF NOT EXISTS behavior_profiles "
+    )  # không còn CREATE EXTENSION vector của RAG
     assert all(not _mod.named_params(s) for s in STATEMENTS)
     assert not re.search(r"(?<![:\w]):[A-Za-z_]", SQL)
     assert not re.search(r"ALTER\s+ROLE|PASSWORD\s+'|DROP\s+TABLE|TRUNCATE", SQL, re.I)
@@ -601,52 +840,86 @@ def test_0053_ham_quyen_va_security():
             assert "SECURITY INVOKER" in f
         if "p_user_id" in f:
             assert "PERFORM set_config('app.user_id', p_user_id, true);" in f, name
-        assert "LIMIT" in f or name in ("app_delete_user_data", "app_set_nudge_outcome"), name  # hai hàm ghi theo khóa
+        assert "LIMIT" in f or name in ("app_delete_user_data", "app_set_nudge_outcome"), (
+            name
+        )  # hai hàm ghi theo khóa
         assert f"REVOKE ALL ON FUNCTION {name}({SIGNATURES[name]}) FROM PUBLIC" in STATEMENTS
         assert f"GRANT EXECUTE ON FUNCTION {name}({SIGNATURES[name]}) TO yofina_app" in STATEMENTS
-    for name in DEFINERS - {"app_delete_user_data"}:  # bảng vận hành: không trả user_id hay conversation_id
+    for name in DEFINERS - {
+        "app_delete_user_data"
+    }:  # bảng vận hành: không trả user_id hay conversation_id
         returns = re.search(r"RETURNS TABLE \((.*?)\)\s*LANGUAGE", FUNCS[name], re.S).group(1)
         assert "user_id" not in returns and "conversation_id" not in returns, name
     for name in ("app_ops_list_traces", "app_ops_get_trace"):
         assert "left(encode(sha256(convert_to(a.user_id, 'UTF8')), 'hex'), 12)" in FUNCS[name]
     delete = FUNCS["app_delete_user_data"]
-    assert "x.status = 'running'" in delete and "DELETE FROM audit_events" in delete and "DELETE FROM users" in delete
+    assert (
+        "x.status = 'running'" in delete
+        and "DELETE FROM audit_events" in delete
+        and "DELETE FROM users" in delete
+    )
     assert "information_schema.columns" in delete and "<> 'data_deletions'" in delete
 
 
 def test_0053_rls_va_quyen_toi_thieu():
     expected = "user_id = current_setting('app.user_id', true)"
     for t in ("behavior_profiles", "data_deletions"):
-        assert f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY" in STATEMENTS and f"ALTER TABLE {t} FORCE ROW LEVEL SECURITY" in STATEMENTS
+        assert (
+            f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY" in STATEMENTS
+            and f"ALTER TABLE {t} FORCE ROW LEVEL SECURITY" in STATEMENTS
+        )
         pol = next(s for s in STATEMENTS if s.startswith(f"CREATE POLICY user_isolation ON {t}"))
         assert f"USING ({expected})" in pol and f"WITH CHECK ({expected})" in pol
-    assert re.search(r"user_id\s+text NOT NULL REFERENCES users \(id\) ON DELETE CASCADE", table("behavior_profiles"))
+    assert re.search(
+        r"user_id\s+text NOT NULL REFERENCES users \(id\) ON DELETE CASCADE",
+        table("behavior_profiles"),
+    )
     assert "REFERENCES users" not in table("data_deletions")  # nhật ký sống lâu hơn dòng users
-    assert "GRANT SELECT, INSERT, UPDATE ON data_deletions TO yofina_app" in STATEMENTS  # không DELETE
-
+    assert (
+        "GRANT SELECT, INSERT, UPDATE ON data_deletions TO yofina_app" in STATEMENTS
+    )  # không DELETE
 
 
 def test_0053_khong_con_kho_tri_thuc():
     """RAG đã cắt (24/11): không bảng kb_*, không hàm app_kb_search, không vector hay tsvector; migration chưa chạy ở đâu nên sửa thẳng."""
     assert not re.search(r"\bkb_|app_kb_search|vector\(|tsvector|USING hnsw|CREATE EXTENSION", SQL)
-    tables = {re.match(r"CREATE TABLE IF NOT EXISTS (\w+)", s).group(1) for s in STATEMENTS if s.startswith("CREATE TABLE")}
+    tables = {
+        re.match(r"CREATE TABLE IF NOT EXISTS (\w+)", s).group(1)
+        for s in STATEMENTS
+        if s.startswith("CREATE TABLE")
+    }
     assert tables == {"behavior_profiles", "data_deletions"}
+
 
 def test_0053_tap_gia_tri_khop_hang_so():
 
     assert sql_set(table("behavior_profiles"), "source") == wallet.BEHAVIOR_PROFILE_SOURCES
     assert sql_set(table("data_deletions"), "status") == privacy.DATA_DELETION_STATUSES
     assert sql_set(table("data_deletions"), "scope") == wallet.DATA_DELETION_SCOPES
-    kind = next(s for s in STATEMENTS if s.startswith("ALTER TABLE nudges ADD CONSTRAINT nudges_kind_check"))
+    kind = next(
+        s for s in STATEMENTS if s.startswith("ALTER TABLE nudges ADD CONSTRAINT nudges_kind_check")
+    )
     assert sql_set(kind, "kind") == wallet.ALL_NUDGE_KINDS
     outcome = next(s for s in STATEMENTS if "ADD COLUMN IF NOT EXISTS outcome text" in s)
     assert sql_set(outcome, "outcome") == wallet.NUDGE_OUTCOMES
-    intent = next(s for s in STATEMENTS if s.startswith("ALTER TABLE audit_events ADD CONSTRAINT audit_events_intent_check"))
+    intent = next(
+        s
+        for s in STATEMENTS
+        if s.startswith("ALTER TABLE audit_events ADD CONSTRAINT audit_events_intent_check")
+    )
     assert sql_set(intent, "intent") == wallet.AUDIT_INTENTS
-    assert "ALTER TABLE audit_events DROP CONSTRAINT IF EXISTS audit_events_intent_check" in STATEMENTS
-    fire = next(s for s in STATEMENTS if s.startswith("ALTER TABLE nudges ADD CONSTRAINT nudges_fire_on_check"))
+    assert (
+        "ALTER TABLE audit_events DROP CONSTRAINT IF EXISTS audit_events_intent_check" in STATEMENTS
+    )
+    fire = next(
+        s
+        for s in STATEMENTS
+        if s.startswith("ALTER TABLE nudges ADD CONSTRAINT nudges_fire_on_check")
+    )
     assert "source = 'system' AND fire_on = created_app_date" in fire
-    assert any("nudges_system_one_per_day_idx" in s and "WHERE source = 'system'" in s for s in STATEMENTS)
+    assert any(
+        "nudges_system_one_per_day_idx" in s and "WHERE source = 'system'" in s for s in STATEMENTS
+    )
     assert "jsonb_array_length(insights) <= 6" in table("behavior_profiles")
 
 
@@ -654,11 +927,21 @@ def test_0053_tap_gia_tri_khop_hang_so():
 # Bộ đánh giá phase 5
 # =====================================================================================
 def load_suite(name: str) -> list[dict]:
-    return [json.loads(line) for line in (REPO / "evals" / name / "phase5.jsonl").read_text(encoding="utf-8").splitlines()]
+    return [
+        json.loads(line)
+        for line in (REPO / "evals" / name / "phase5.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
 
 
 ALL_TOOLS = set(
-    wallet.LEDGER_TOOLS + wallet.FORECAST_TOOLS + wallet.KNOWLEDGE_TOOLS + wallet.PLANNER_TOOLS + wallet.AUDIT_TOOLS + tuple(INGEST_TOOLS)
+    wallet.LEDGER_TOOLS
+    + wallet.FORECAST_TOOLS
+    + wallet.KNOWLEDGE_TOOLS
+    + wallet.PLANNER_TOOLS
+    + wallet.AUDIT_TOOLS
+    + tuple(INGEST_TOOLS)
 )
 
 
@@ -674,13 +957,20 @@ def test_dinh_dang_bo_danh_gia_phase5(suite, minimum):
         assert {t.removesuffix(":token") for t in c.get("tools_forbid", [])} <= ALL_TOOLS, c["id"]
         assert set(c.get("blocks_must", [])) <= BLOCK_MODELS.keys(), c["id"]
         for session in c.get("prior_sessions", []):
-            assert [m["role"] for m in session] == ["user", "assistant"][: len(session)] and all(m["content"].strip() for m in session)
+            assert [m["role"] for m in session] == ["user", "assistant"][: len(session)] and all(
+                m["content"].strip() for m in session
+            )
 
 
 def test_golden_phase5_du_nhom_cua_file_phase():
     cases = load_suite("golden")
     cats = {c["category"] for c in cases}
-    assert {"behavior", "memory_reuse", "knowledge_fee", "ingest_status"} <= cats  # thói quen, sở thích phiên trước, biểu phí, nạp
+    assert {
+        "behavior",
+        "memory_reuse",
+        "knowledge_fee",
+        "ingest_status",
+    } <= cats  # thói quen, sở thích phiên trước, biểu phí, nạp
     assert {c["intent"] for c in cases if "intent" in c} >= set(wallet.PHASE5_INTENTS)
     reuse = [c for c in cases if c["category"] == "memory_reuse"]
     assert reuse and all(c["prior_sessions"] and c["forbid_reask"] for c in reuse)
@@ -711,4 +1001,8 @@ def test_adversarial_phase5_du_ca_va_tham_chieu_tep_that():
             assert item["expected"]["attack"] or item["expected"].get("rejected_rows"), c["id"]
         if c["attack"] == "pii_other_person":
             assert item["expected"].get("pii") and c["forbid_pii_from_manifest"]
-    assert all(c.get("forbid_other_user_data") for c in cases if c["attack"] in ("other_user_memory", "other_user_data"))
+    assert all(
+        c.get("forbid_other_user_data")
+        for c in cases
+        if c["attack"] in ("other_user_memory", "other_user_data")
+    )

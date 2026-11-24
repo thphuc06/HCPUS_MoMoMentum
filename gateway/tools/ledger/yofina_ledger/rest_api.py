@@ -201,6 +201,11 @@ def _dispatch(
         from yofina_ledger import privacy_rest
 
         return privacy_rest.dispatch(route, event, sub, trace_id, service)
+    # --- bản tin chủ động của cổng giá trị (FR13, phase 5): `nudges_rest` (`/nudges/today`, `/nudges/{nudge_id}/feedback`) -------
+    if route.startswith(("GET /nudges", "POST /nudges")):
+        from yofina_ledger import nudges_rest
+
+        return nudges_rest.dispatch(route, event, sub, trace_id, service)
 
     # --- ghi: một đường duy nhất (xác nhận rồi thực hiện) ------------------------------------------------
     if route == "POST /confirmations/cancel":

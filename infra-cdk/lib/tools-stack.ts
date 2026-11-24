@@ -377,6 +377,9 @@ export class ToolsStack extends Stack {
       ['/ops/summary', apigwv2.HttpMethod.GET],
       // phase 5 luồng B (x-lambda: ledger): bộ nhớ của tôi, xóa dữ liệu của tôi (privacy_rest)
       ...PRIVACY_ROUTES,
+      // phase 5 luồng B (x-lambda: ledger): bản tin của cổng giá trị
+      ['/nudges/today', apigwv2.HttpMethod.GET],
+      ['/nudges/{nudge_id}/feedback', apigwv2.HttpMethod.POST],
     ];
     for (const [routePath, method] of routes) {
       this.api.addRoutes({ path: routePath, methods: [method], integration });
@@ -389,6 +392,8 @@ export class ToolsStack extends Stack {
       ['/resilience', apigwv2.HttpMethod.GET],
       ['/resilience/shocks', apigwv2.HttpMethod.GET],
       ['/resilience/stress', apigwv2.HttpMethod.POST],
+      // phase 5 luồng B: hồ sơ hành vi (cùng data với tool forecast___get_behavior_profile)
+      ['/profile/behavior', apigwv2.HttpMethod.GET],
     ];
     for (const [routePath, method] of forecastRoutes) {
       this.api.addRoutes({ path: routePath, methods: [method], integration: forecastIntegration });
