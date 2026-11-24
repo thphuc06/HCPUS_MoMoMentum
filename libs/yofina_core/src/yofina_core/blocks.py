@@ -1977,9 +1977,12 @@ def build_proactive_card(
     app_date: date,
     jar_code: str | None = None,
     block_id: str | None = None,
+    nudge_id: str | None = None,
 ) -> ProactiveCardBlock:
     """Thẻ chủ động (một việc). `title` và `reason` do code dựng từ số liệu thật, không do LLM viết;
-    `actions` đứng đầu là hành động chính (mỗi phần tử: kind, label, jar_code tùy chọn, prompt tùy chọn)."""
+    `actions` đứng đầu là hành động chính (mỗi phần tử: kind, label, jar_code tùy chọn, prompt tùy chọn).
+    `nudge_id` (phase 5): id dòng `nudges` khi thẻ là bản tin của cổng giá trị, để "Để sau" và "Ít nhắc loại này" gửi phản hồi;
+    thẻ chọn theo luật của Tổng quan (phase 2) không có."""
     return ProactiveCardBlock(
         v=SCHEMA_VERSION,
         id=block_id or f"proactive_card:{trace_id}:{kind}",
@@ -1993,6 +1996,7 @@ def build_proactive_card(
             title=title,
             reason=reason,
             jar_code=jar_code,
+            nudge_id=nudge_id,
             actions=[ProactiveAction(**a) for a in actions],
         ),
     )

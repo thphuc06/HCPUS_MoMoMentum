@@ -354,7 +354,7 @@ Test: `tests/local_pg/test_external_funding.py` (PostgreSQL 16 cục bộ, role 
 
 ### Tool target `ingest`
 
-`tools/ingest.json` (định dạng `inlinePayload`, không `enum`/`minimum`/`pattern`; `user_id` "hệ thống tự điền"), kết quả ở `tools/ingest.results.schema.json`, model Pydantic ở `yofina_core.ingest` (`RESULT_MODELS`), thứ tự ở `yofina_core.ingest.INGEST_TOOLS`. Tên qua Gateway: `ingest___start_job` (18 ký tự), `ingest___get_job_status` (23), `ingest___confirm_rows` (21). Chưa tạo target Gateway (không sửa `agent/`, YofinaAgent).
+`tools/ingest.json` (định dạng `inlinePayload`, không `enum`/`minimum`/`pattern`; `user_id` "hệ thống tự điền"), kết quả ở `tools/ingest.results.schema.json`, model Pydantic ở `yofina_core.ingest` (`RESULT_MODELS`), thứ tự ở `yofina_core.ingest.INGEST_TOOLS`. Tên qua Gateway: `ingest___start_job` (18 ký tự), `ingest___get_job_status` (23), `ingest___confirm_rows` (21). Target Gateway `ingest` đã có trong `YofinaAgent` (p5/ingest, merge 24/11; chưa deploy lúc ghi): trỏ Lambda `yofina-ingest-api`, Cedar ép `user_id`, `confirm_rows` chỉ ghi khi có token.
 
 | Tool | Việc |
 |---|---|
@@ -506,7 +506,9 @@ Hợp đồng bước 0 cho các luồng song song của [phase 5](../docs/plan/
 
 | Tool | Loại | Bắt buộc | Kết quả |
 |---|---|---|---|
-| `forecast___get_behavior_profile` | ĐỌC bảng `behavior_profiles` | không (`insight_kind`, `jar` để lọc) | `GetBehaviorProfileResult`: `data` = `BehaviorProfileData`; chưa sẵn sàng là OK với `ready` sai |
+| `forecast___get_behavior_profile` | ĐỌC bảng `behavior_profiles` | không (`insight_kind`, `jar` để lọc) | `GetBehaviorProfileResult`: `data` = `BehaviorProfileData`; chưa sẵn sàng là OK với `ready` sai. Lọc còn nhận xét thì chỉ bớt `insights`; lọc hết (kể cả `jar` lạ) thì `ready` sai, `headline` là lý do, `history_days` của hồ sơ |
+
+**Lọc hết nhận xét (quyết định 24/11, sau khi cài)**: hợp đồng theo cách cài của `BehaviorEngine.get` (lọc không còn nhận xét nào thì `ready` sai kèm lý do) thay vì cho hồ sơ sẵn sàng có `insights` rỗng. Lý do: bất biến "sẵn sàng thì có ít nhất một nhận xét và một việc cần làm" giữ nguyên ở cả ba nơi (CHECK của `behavior_profiles`, Pydantic `BehaviorProfileData`, mô tả JSON Schema), agent và màn Hồ sơ không phải xử lý thêm trạng thái "sẵn sàng mà rỗng". `jar` không phải hũ của người dùng cũng đi đường này, không trả `JAR_NOT_FOUND` (mô tả cũ của `GetBehaviorProfileResult` đã sửa).
 
 Ba tool `ingest___*` giữ nguyên hợp đồng (đã rà). **Cedar**: CDK đòi `gateway/policies/<tool>.cedar` cho mọi tool trong `forecast.json` và `knowledge.json` khi deploy `YofinaAgent`; hợp đồng không viết `get_behavior_profile.cedar` (luồng p5-behavior thêm khi cài, chỉ ép `user_id`). `knowledge___get_fee_schedule` giữ nguyên (phase 3); Pydantic của kết quả (`FeeLine`, `FeeScheduleData`, `GetFeeScheduleOk`) nay ở `yofina_core.blocks` vì là đầu vào của khối `citation`. Bản ghi lượt: bước của `step_timings` có `step` là tên đầy đủ `<target>___<tool>` là MỘT lần gọi tool, kèm `status` (`ok`, `error`, `denied`) và `code` tùy chọn (`TraceStep`, `record_turn`); không thêm cột.
 
@@ -525,13 +527,17 @@ Ba tool `ingest___*` giữ nguyên hợp đồng (đã rà). **Cedar**: CDK đò
 
 `DELETE` là method mới: CORS của HTTP API `yofina-api` phải thêm `DELETE` (luồng hạ tầng). `delete_my_data` KHÔNG thuộc `wallet.ACTION_TOOLS` hay `ToolName` (như `confirm_rows`), chuẩn hóa ở `params.normalize_delete_my_data`. Mã lỗi mới (thêm cuối): `MEMORY_RECORD_NOT_FOUND` (404), `MEMORY_UNAVAILABLE` (503); `frontend/src/api/errors.ts` chưa có hai mã này (luồng p5-frontend thêm).
 
+### Ý định
+
+`wallet.INTENTS` có mười bốn giá trị: mười của phase 4 cộng bốn ý định phase 5 `behavior`, `knowledge`, `ingest`, `memory` (`wallet.PHASE5_INTENTS`). Bước 0 để bốn ý định này ngoài `INTENTS` cho tới khi agent có bộ xử lý (quyết định 12 của file phase); sau khi merge p5/ingest, p5/memory, p5/behavior ngày 24/11 cả bốn đã vào `INTENTS`, khớp `Intent` của `agent/src/yofina_agent/schemas.py`, và `AUDIT_INTENTS` (CHECK `audit_events.intent` của 0053, `record_turn`) trùng `INTENTS`.
+
 ### Bộ nhớ (`yofina_core.memory`)
 
 Gốc namespace của một người dùng `/yofina/users/{actorId}/` (`actorId` = `sub`); theo loại: `preferences/`, `facts/`, `sessions/{sessionId}/`, `behavior/`, `lessons/`. Ba loại đầu do chiến lược có sẵn của AgentCore trích từ hội thoại (user preference, semantic, summarization), hai loại sau là bản ghi tự tạo (`BatchCreateMemoryRecords`). `kind_of_namespace(ns, sub)` trả None cho namespace không thuộc người gọi: Lambda bỏ bản ghi đó. Xóa: không có API xóa theo người dùng, nên liệt kê `ListMemoryRecords` với `namespacePath` = gốc (tối đa 100 mỗi trang) rồi `BatchDeleteMemoryRecords` (tối đa 100), và `ListSessions`, `ListEvents`, `DeleteEvent` cho sự kiện ngắn hạn.
 
 ### Migration 0053
 
-Bảng `behavior_profiles` (RLS FORCE, một dòng mỗi người dùng và ngày mô phỏng), `data_deletions` (RLS FORCE, không khóa ngoại tới `users`, không DELETE); `nudges` thêm `value_vnd`, `gate_reason`, `title`, `body`, `outcome`, `outcome_at`, nới `kind` (`wallet.ALL_NUDGE_KINDS`) và CHECK ngày (bản tin của cổng hiện trong ngày tạo), tối đa một bản tin của cổng mỗi ngày; `audit_events.intent` nới thành `wallet.AUDIT_INTENTS`. Hàm SECURITY INVOKER `app_get_behavior_profile`, `app_get_today_nudge`, `app_nudge_outcome_stats`, `app_set_nudge_outcome`; SECURITY DEFINER `app_delete_user_data`, `app_ops_list_traces`, `app_ops_get_trace`, `app_ops_summary`, `app_ops_model_calls_by_day`. Không có bảng, chỉ mục hay hàm của kho tri thức (RAG đã cắt 24/11; file sửa thẳng vì chưa chạy ở đâu). Đã chạy thật trên PostgreSQL 16 cục bộ (pgserver): chạy lại được, RLS, bản tin một mỗi ngày, ops không lộ `user_id`, xóa dữ liệu không còn dòng nào của người đó và không đụng người khác. `RESET_DELETES` (ledger) cần thêm `behavior_profiles`.
+Bảng `behavior_profiles` (RLS FORCE, một dòng mỗi người dùng và ngày mô phỏng), `data_deletions` (RLS FORCE, không khóa ngoại tới `users`, không DELETE); `nudges` thêm `value_vnd`, `gate_reason`, `title`, `body`, `outcome`, `outcome_at`, nới `kind` (`wallet.ALL_NUDGE_KINDS`) và CHECK ngày (bản tin của cổng hiện trong ngày tạo), tối đa một bản tin của cổng mỗi ngày; `audit_events.intent` nới thành `wallet.AUDIT_INTENTS`. Hàm SECURITY INVOKER `app_get_behavior_profile`, `app_get_today_nudge`, `app_nudge_outcome_stats`, `app_set_nudge_outcome`; SECURITY DEFINER `app_delete_user_data`, `app_ops_list_traces`, `app_ops_get_trace`, `app_ops_summary`, `app_ops_model_calls_by_day`. Không có bảng, chỉ mục hay hàm của kho tri thức (RAG đã cắt 24/11; file sửa thẳng vì chưa chạy ở đâu). Đã chạy thật trên PostgreSQL 16 cục bộ (pgserver): chạy lại được, RLS, bản tin một mỗi ngày, ops không lộ `user_id`, xóa dữ liệu không còn dòng nào của người đó và không đụng người khác. `RESET_DELETES` (ledger) đã có `behavior_profiles`. Kiểm lại 24/11 bằng mã thật của Lambda (repo, REST, batch) trên PostgreSQL cục bộ: `tests/local_pg/test_phase5_flow.py` (chi tiết ở [db/README.md](../db/README.md) mục "Schema phase 5").
 
 ### Bộ đánh giá
 

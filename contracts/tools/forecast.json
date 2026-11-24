@@ -256,7 +256,7 @@
   },
   {
     "name": "get_behavior_profile",
-    "description": "Lấy hồ sơ hành vi chi tiêu của người dùng do batch đêm tính: các nhận xét (chi dồn sau ngày lương, ngày trong tuần, giờ trong ngày, mức dùng Trả sau, hũ tăng giảm rõ, nhóm hành vi), mỗi nhận xét kèm bằng chứng số lấy từ sổ cái, và MỘT việc cần làm. Chỉ đọc, không ghi gì, không cần xác nhận. Chưa đủ lịch sử thì ready sai và không có nhận xét: nói rõ cần thêm dữ liệu, KHÔNG tự bịa nhận xét. Số trong câu trả lời chỉ lấy từ evidence. Dùng cho 'mình hay tiêu vào lúc nào', 'thói quen chi tiêu của mình thế nào', 'vì sao cuối tháng hay hụt'.",
+    "description": "Lấy hồ sơ hành vi chi tiêu của người dùng do batch đêm tính: các nhận xét (chi dồn sau ngày lương, ngày trong tuần, giờ trong ngày, mức dùng Trả sau, hũ tăng giảm rõ, nhóm hành vi), mỗi nhận xét kèm bằng chứng số lấy từ sổ cái, và MỘT việc cần làm. Chỉ đọc, không ghi gì, không cần xác nhận. Chưa đủ lịch sử thì ready sai và không có nhận xét: nói rõ cần thêm dữ liệu, KHÔNG tự bịa nhận xét. Lọc insight_kind hoặc jar mà không còn nhận xét nào khớp thì cũng ready sai, headline nêu lý do: nói chưa có nhận xét loại đó, không phải thiếu dữ liệu. Số trong câu trả lời chỉ lấy từ evidence. Dùng cho 'mình hay tiêu vào lúc nào', 'thói quen chi tiêu của mình thế nào', 'vì sao cuối tháng hay hụt'.",
     "inputSchema": {
       "type": "object",
       "properties": {
