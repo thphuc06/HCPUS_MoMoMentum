@@ -7,6 +7,7 @@ trò chuyện hoặc câu hỏi lại, một câu ngắn. Kiểm tra bằng mã 
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from functools import cache
 from typing import Any
@@ -15,7 +16,7 @@ from pydantic import ValidationError
 
 from yofina_agent.clarify import missing_slot
 from yofina_agent.fallback import _CREDIT, _has, _jar_phrase, classify_by_rules
-from yofina_agent.schemas import IntentResult
+from yofina_agent.schemas import IntentParams, IntentResult
 from yofina_agent.textutil import normalize, parse_amount_vnd
 from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
 from yofina_core.resilience import load_shock_set
@@ -25,7 +26,8 @@ Bạn chỉ phân loại và trích tham số, bằng cách gọi tool `route`. 
 
 Các ý định (intent):
 - lookup: tra cứu số liệu hiện có. params.lookup_kind: balance (số dư các hũ hoặc một hũ), transactions (giao dịch gần đây), \
-forecast (dự báo MỘT hũ: trụ được bao lâu, khi nào cạn, có đủ tới kỳ lương không), obligations (khoản sắp đến hạn, nợ).
+forecast (dự báo: một hũ trụ được bao lâu, khi nào cạn, có đủ tới kỳ lương không; hoặc HŨ NÀO sắp cạn, hũ nào không đủ tới kỳ lương: \
+khi đó để jar_text null, hệ thống tự đọc dự báo mọi hũ, không hỏi lại), obligations (khoản sắp đến hạn, nợ).
 - what_if: mô phỏng "nếu ... thì sao" trước khi làm thật. params.scenario_kind: one_time_purchase (mua một lần bằng tiền hũ), \
 bnpl_purchase (mua bằng Trả sau, còn gọi Ví Trả Sau hay BNPL), income_change (lương đổi: lương MỚI mỗi tháng đặt ở amount_vnd, \
 không đặt ở salary_vnd vì salary_vnd chỉ dành cho profile_update), \
@@ -234,6 +236,38 @@ def merge_pending(
     ):
         merged = merged.model_copy(update={"clarify": routed.clarify, "needs_clarification": True})
     return merged
+
+
+# --- "hũ nào sắp cạn": hỏi về MỌI hũ, không phải một hũ (bằng mã) -------------------------------------------------
+#: Cụm hỏi chọn trong các hũ ("hũ nào", "những hũ nào", "các hũ") đi cùng ý cạn/hụt/không đủ, theo cả hai thứ tự. Chữ đã `normalize`.
+_WHICH_JAR = r"(?:hu nao|nhung hu|cac hu|hu gi)"
+_RUNOUT = r"(?:can|het tien|het|hut|khong du|du toi ky luong|du den ky luong|tru duoc|tru toi|tru den)"
+_WHICH_JAR_RUNOUT = re.compile(rf"\b{_WHICH_JAR}\b.*\b{_RUNOUT}\b|\b{_RUNOUT}\b.*\b{_WHICH_JAR}\b")
+#: Ý định mà câu "hũ nào sắp cạn" có thể bị xếp nhầm vào (tra số dư, xã giao); ý định khác (what-if, chống chịu...) giữ nguyên.
+_RUNOUT_OVERRIDABLE = frozenset({"lookup", "chitchat"})
+
+
+def asks_which_jar_runs_out(text: str) -> bool:
+    """Người dùng hỏi hũ NÀO sắp cạn hay không đủ tới kỳ lương (cần dự báo mọi hũ), ví dụ chip "Hũ nào sắp cạn?"."""
+    return bool(_WHICH_JAR_RUNOUT.search(normalize(text)))
+
+
+def route_runout_overview(routed: IntentResult | None, question: str) -> IntentResult | None:
+    """Câu hỏi "hũ nào sắp cạn" luôn là tra dự báo của mọi hũ, không hỏi lại hũ nào.
+
+    Router hay xếp câu này vào tra số dư hoặc dự báo kèm câu hỏi lại "hũ nào", và luật dự phòng không nhận ra nó. Mã ép thành
+    `lookup`/`forecast` không có hũ (handler đọc dự báo từng hũ). Ý định khác của router (what-if có món, chống chịu...) giữ nguyên.
+    """
+    if not asks_which_jar_runs_out(question):
+        return routed
+    if routed is not None and routed.intent not in _RUNOUT_OVERRIDABLE:
+        return routed
+    return IntentResult(
+        intent="lookup",
+        params=IntentParams(lookup_kind="forecast"),
+        confidence=routed.confidence if routed is not None else 0.3,
+        needs_clarification=False,
+    )
 
 
 async def route(

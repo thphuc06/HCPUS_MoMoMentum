@@ -549,7 +549,7 @@ async def _analyze_and_compose(turn: Turn, question: str, scenario_res: Any, st:
     while True:
         attempt += 1
         st.attempts = attempt
-        analysis = await _call_analyst(turn, question, compact, feedback, previous)
+        analysis = await _call_analyst(turn, question, compact, feedback, previous, spend_amount=_spend_amount(st.spec))
         if analysis is None:  # model lỗi hoặc hết trần: giữ khối số liệu + notice suy giảm (flush ở cuối lượt)
             st.degraded = True
             return
@@ -572,8 +572,22 @@ async def _analyze_and_compose(turn: Turn, question: str, scenario_res: Any, st:
         _ = s
 
 
+def _spend_amount(spec: Mapping[str, Any] | None) -> int | None:
+    """Số tiền của khoản chi trong kịch bản (mua một lần, Trả sau, chi lặp lại): số mà phương án "dùng hũ khác" phải trả."""
+    if not spec or spec.get("kind") not in BUNDLE_KINDS:
+        return None
+    amount = spec.get("amount_vnd")
+    return amount if isinstance(amount, int) and not isinstance(amount, bool) and amount > 0 else None
+
+
 async def _call_analyst(
-    turn: Turn, question: str, compact: Mapping[str, Any], feedback: list[str] | None, previous: Analysis | None
+    turn: Turn,
+    question: str,
+    compact: Mapping[str, Any],
+    feedback: list[str] | None,
+    previous: Analysis | None,
+    *,
+    spend_amount: int | None = None,
 ) -> Analysis | None:
     memory = await turn.memory.prompt_block()  # đã đọc song song với router; kết quả lưu lại nên vòng sửa không đọc lại
     try:
@@ -599,6 +613,10 @@ async def _call_analyst(
     a: Analysis = res.value
     # origin do mã đặt, không tin model: phương án do hệ thống đề xuất luôn bị kiểm nghiêm hơn lời người dùng tự hỏi
     options = [o.model_copy(update={"proposal": normalize_proposal(o)}) for o in a.options]
+    # nhãn, tóm tắt, hũ và số tiền của phương án "dùng hũ khác" theo hũ thật của đề xuất (Verifier kiểm chính chữ đã dựng này)
+    options = [enforce_switch_jar(o, turn.jar_rows, spend_amount) for o in options]
+    # nhãn, tóm tắt, hũ và số tiền của phương án "dùng hũ khác" theo hũ thật của đề xuất (Verifier kiểm chính chữ đã dựng này)
+    options = [enforce_switch_jar(o, turn.jar_rows, spend_amount) for o in options]
     return a.model_copy(update={"options": options})
 
 
@@ -635,6 +653,64 @@ def normalize_proposal(o: Any) -> Any:
 
 #: loại phương án chính là việc vay (thực hiện khoản Trả sau của kịch bản): chỉ phương án này mang nghĩa vụ mới của kịch bản
 CREDIT_OPTION_KINDS = frozenset({"use_credit", "proceed"})
+#: loại phương án chi NGAY bằng tiền của một hũ (dùng hũ khác, trả ngay, giảm số tiền): hũ đó phải đủ tiền mới được gắn "Đủ"
+JAR_SPEND_OPTION_KINDS = frozenset({"switch_jar", "pay_now", "reduce_amount"})
+
+
+def _jar_row(code: str | None, jar_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    return next((j for j in jar_rows if code and j.get("code") == code), None)
+
+
+def _balance(row: Mapping[str, Any] | None) -> int | None:
+    b = (row or {}).get("balance_vnd")
+    return b if isinstance(b, int) and not isinstance(b, bool) else None
+
+
+def enforce_switch_jar(o: AnalysisOption, jar_rows: list[dict[str, Any]], spend_amount: int | None) -> AnalysisOption:
+    """Phương án "dùng hũ khác" nhất quán bằng mã: hũ là hũ THẬT của đề xuất, nhãn và tóm tắt dựng từ hũ đó (mã quyết định, không tin model).
+
+    Hũ lấy từ `proposal.jar_code` (vắng thì `jar_code` của phương án); số tiền là `proposal.amount_vnd`, vắng thì số của khoản mua trong
+    kịch bản (dùng hũ khác là trả CẢ khoản bằng hũ đó), nên luật `source_jar_covers` kiểm được hũ có đủ không. Nhãn "Mua bằng hũ X" và tóm
+    tắt nêu số dư thật của X (đủ hay không đủ); hũ không đủ thì không được gợi ý. Model từng ghi nhãn "Mua bằng hũ Giải trí" cho đề xuất
+    lấy tiền hũ Dự phòng, kèm tóm tắt nói hũ Giải trí không đủ (đi cảnh 24/11). Không xác định được hũ thì giữ nguyên phương án.
+    """
+    if o.kind != "switch_jar":
+        return o
+    p = o.proposal
+    code = p.jar_code or o.jar_code
+    row = _jar_row(code, jar_rows)
+    if row is None:
+        return o
+    amount = p.amount_vnd or spend_amount
+    name = str(row.get("name") or code)
+    update: dict[str, Any] = {
+        "jar_code": code,
+        "label": notices.SWITCH_JAR_LABEL.format(name=name)[:60],
+    }
+    proposal = {**p.model_dump(), "jar_code": code, "funding_source": "jar"}
+    balance = _balance(row)
+    if amount is not None and amount > 0:
+        proposal["amount_vnd"] = amount
+        if balance is not None:
+            enough = balance >= amount
+            template = notices.SWITCH_JAR_SUMMARY_ENOUGH if enough else notices.SWITCH_JAR_SUMMARY_SHORT
+            update["summary"] = template.format(name=name, amount=format_vnd(amount), balance=format_vnd(balance))[:200]
+            if not enough:
+                update["recommended"] = None
+    try:
+        update["proposal"] = type(p).model_validate(proposal)
+    except ValidationError:
+        return o
+    return o.model_copy(update=update)
+
+
+def jar_short_for_option(o: Any, jar_rows: list[dict[str, Any]]) -> bool:
+    """Phương án chi ngay bằng tiền một hũ mà hũ đó không đủ số tiền của đề xuất (chặn bằng mã, không trông riêng vào luật)."""
+    p = o.proposal
+    if o.kind not in JAR_SPEND_OPTION_KINDS or p.funding_source == "credit" or not p.amount_vnd:
+        return False
+    balance = _balance(_jar_row(p.jar_code or getattr(o, "jar_code", None), jar_rows))
+    return balance is not None and balance < p.amount_vnd
 
 
 def adds_scenario_obligation(o: Any) -> bool:
@@ -743,6 +819,7 @@ async def _emit_options(turn: Turn, checked: list[tuple[Any, SuitabilityVerdict]
     pending_blocks: list[Any] = []
     for o, verdict in checked:
         action, metrics = None, None
+        short = jar_short_for_option(o, turn.jar_rows)
         if o.action is not None:
             prepared = await _prepare_action(turn, o)
             if prepared is not None:
@@ -754,8 +831,9 @@ async def _emit_options(turn: Turn, checked: list[tuple[Any, SuitabilityVerdict]
                 kind=o.kind,
                 label=o.label,
                 summary=o.summary,
-                status=suitability_status(verdict),  # type: ignore[arg-type]
-                recommended=True if o.recommended else None,
+                # hũ của phương án không đủ tiền thì không bao giờ "Đủ" hay "Gợi ý", kể cả khi luật không bắt được
+                status="short" if short else suitability_status(verdict),  # type: ignore[arg-type]
+                recommended=True if o.recommended and not short else None,
                 metrics=metrics,
                 checked_rules=passed_rules(verdict) or None,
                 action=action,

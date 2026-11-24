@@ -153,6 +153,45 @@ def compact_forecast(payload: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+def compact_forecast_overview(
+    forecasts: list[Mapping[str, Any]], unavailable: list[str] | None = None
+) -> dict[str, Any]:
+    """Dự báo của MỌI hũ ("hũ nào sắp cạn?") từ các bản gọn `compact_forecast` của từng hũ.
+
+    Hũ cạn TRƯỚC kỳ lương (runout.days_before_payday > 0) xếp theo ngày cạn sớm nhất; hũ không cạn trước kỳ lương nhưng trạng thái
+    sát đứng riêng; còn lại là đủ. `unavailable`: tên hũ không lấy được dự báo. Chỉ chép số và ngày của tool, không tính thêm.
+    """
+    runout: list[dict[str, Any]] = []
+    tight: list[str] = []
+    ok: list[str] = []
+    for f in forecasts:
+        r = f.get("runout")
+        if r and int(r["days_before_payday"]) > 0:
+            runout.append(
+                {
+                    "jar": f["jar"],
+                    "date_text": r["date_text"],
+                    "days_from_today": r["days_from_today"],
+                    "days_before_payday": r["days_before_payday"],
+                }
+            )
+        elif f.get("status") == _STATUS_VI["tight"] or f.get("status") == _STATUS_VI["short"]:
+            tight.append(f["jar"])
+        else:
+            ok.append(f["jar"])
+    runout.sort(key=lambda x: (x["days_from_today"], x["jar"]))
+    first = forecasts[0] if forecasts else {}
+    return {
+        "app_date": first.get("app_date"),
+        "payday": first.get("payday"),
+        "jars_checked": len(forecasts),
+        "runout_before_payday": runout,
+        "tight": tight,
+        "enough": ok,
+        "unavailable": list(unavailable or []),
+    }
+
+
 def allowed_amounts(compact: Mapping[str, Any]) -> set[int]:
     """Mọi số tiền (VND) xuất hiện trong bản gọn: căn cứ để kiểm số model viết ra."""
     found: set[int] = set()
