@@ -1217,7 +1217,7 @@ export const BehaviorSegment = z.object({
 })
 export type BehaviorSegment = z.infer<typeof BehaviorSegment>
 
-/** Hồ sơ hành vi của người dùng ở ngày mô phỏng `app_date` (một dòng `behavior_profiles`). `ready` sai khi chưa đủ lịch sử hoặc batch đêm chưa chạy: khi đó không có nhận xét và `headline` nói cần thêm bao nhiêu ngày (`min_history_days`). Đây không phải lỗi. `ready` đúng thì có `computed_at`, `config_version`, `features`, `next_step` (MỘT việc cần làm của cả hồ sơ) và ít nhất một nhận xét (Pydantic kiểm). Cùng `data` cho tool `forecast___get_behavior_profile` và `GET /profile/behavior`. */
+/** Hồ sơ hành vi của người dùng ở ngày mô phỏng `app_date` (một dòng `behavior_profiles`). `ready` sai khi chưa đủ lịch sử hoặc batch đêm chưa chạy: khi đó không có nhận xét và `headline` nói cần thêm bao nhiêu ngày (`min_history_days`). Tool lọc theo `insight_kind` hoặc `jar` mà không còn nhận xét nào cũng trả `ready` sai, `headline` là lý do và `history_days` của hồ sơ. Đây không phải lỗi. `ready` đúng thì có `computed_at`, `config_version`, `features`, `next_step` (MỘT việc cần làm của cả hồ sơ) và ít nhất một nhận xét (Pydantic kiểm). Cùng `data` cho tool `forecast___get_behavior_profile` và `GET /profile/behavior`. */
 export const BehaviorProfileData = z.object({
   ready: z.boolean(),
   app_date: IsoDate,

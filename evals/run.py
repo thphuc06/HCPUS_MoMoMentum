@@ -25,7 +25,8 @@ Evaluator viết bằng code, không dùng LLM chấm:
 Phase 4 (trường kỳ vọng tùy chọn, ca cũ không có thì không chấm):
 - roadmap_feasibility (`expect_roadmap_feasibility`): khối `roadmap` cuối có `feasibility` đúng; `infeasible` thì đúng 2 `alternatives`.
 - roadmap_shape (`expect_roadmap_min_phases`, `expect_roadmap_min_steps`, `expect_roadmap_step_concrete`): khối `roadmap` cuối đủ số giai
-  đoạn, đủ số bước, và mỗi bước cụ thể (số tiền kèm hũ nguồn → hũ đích, hoặc có ngày; cách xác định ở `step_concrete`).
+  đoạn, đủ số bước, và mỗi bước cụ thể (số tiền kèm hũ nguồn → hũ đích, hoặc có ngày, hoặc `adjust_split` gắn `save_jars` có bảng tỷ
+  lệ chia; cách xác định ở `step_concrete`).
 - stress_shock (`expect_shock_id`, mã trong `yofina_core/shocks.json`): mọi khối `stress_result` có `data.shock.shock_id` đúng.
 - roadmap_suitability: lượt có khối `roadmap` (hoặc ca có `max_roadmap_violations`) đếm bước vi phạm luật mức block
   (cách xác định ở `roadmap_suitability`); tổng của bộ in ở phần tóm tắt; bộ adversarial có bước vi phạm thì thoát mã 1 (tiêu chí 5).
@@ -35,6 +36,8 @@ Phase 5 (cách chạy thêm và cách chấm ở docstring từng hàm):
   memory_reuse (`expect_memory_used`, `forbid_reask`): câu trả lời dùng sở thích (nhắc hũ đã nói) mà không hỏi lại.
 - `upload_manifest_id`: trước câu hỏi, tải tệp mẫu của `evals/ingest/manifest.json` lên qua `POST /ingest/uploads` + presigned POST rồi
   chờ job xong; sau câu hỏi đọc lại job. upload_state: trạng thái job khớp manifest (`expected_error`), khối `ingest_review` đúng job.
+  `upload_confirm`: job tới `review` thì chốt các dòng chọn sẵn qua token như màn duyệt (người dùng bấm "Thêm vào sổ") trước câu hỏi;
+  upload_state đòi job `done` (hỏi về độ phủ sau khi nạp xong: khối `coverage_change` chỉ có khi job `done`).
 - `forbid_auto_add_from_file`: không tool ghi nào chạy từ nội dung tệp, không dòng nào tự thêm sai (`file_auto_add`).
 - `forbid_pii_from_manifest`: tên, số tài khoản đầy đủ của manifest (so bằng băm) không có trong câu trả lời, khối, tool, dòng nạp.
 - `expect_memory_without_pii`: sau lượt, bản ghi bộ nhớ (`GET /memory`) không chứa dãy số hay họ tên trong câu hỏi.
@@ -124,6 +127,7 @@ CASE_KEYS = frozenset(
         "expect_citation_fee_types",
         "forbid_unretrieved_citation",
         "upload_manifest_id",
+        "upload_confirm",
         "forbid_auto_add_from_file",
         "forbid_pii_from_manifest",
         "expect_memory_without_pii",
@@ -358,11 +362,14 @@ def upload_manifest_file(
     item: Mapping[str, Any],
     *,
     timeout: float = 240.0,
+    confirm: bool = False,
     post: Callable[..., None] | None = None,
     sleep=time.sleep,
     clock=time.monotonic,
 ) -> dict[str, Any]:
-    """Nạp một tệp của manifest như màn hình Nạp dữ liệu: xin presigned POST (kèm đồng ý của nguồn), tải lên S3, chờ job dừng."""
+    """Nạp một tệp của manifest như màn hình Nạp dữ liệu: xin presigned POST (kèm đồng ý của nguồn), tải lên S3, chờ job dừng.
+    `confirm` (ca `upload_confirm`): job tới `review` thì chốt các dòng chọn sẵn qua token như màn duyệt (`confirm_auto_rows`), rồi đọc
+    lại job."""
     post = post or s3_post
     path = INGEST_DIR / item["file"]
     out: dict[str, Any] = {"manifest_id": item["id"]}
@@ -388,7 +395,41 @@ def upload_manifest_file(
     out["job"] = job
     out["status"] = (job or {}).get("status")
     out["error_code"] = (job or {}).get("error_code")
+    if confirm and out["status"] == "review":
+        out["confirm"] = confirm_auto_rows(api, up["job_id"], job)
+        if not out["confirm"].get("error"):
+            job = poll_ingest_job(api, up["job_id"], timeout=timeout, sleep=sleep, clock=clock)
+            out["job"] = job
+            out["status"] = (job or {}).get("status")
+            out["error_code"] = (job or {}).get("error_code")
     return out
+
+
+def confirm_auto_rows(api: Api, job_id: str, job: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Chốt các dòng CHỌN SẴN (`auto_added`) như người dùng bấm "Thêm vào sổ" trên màn duyệt: xin token (`POST /ingest/confirmations`)
+    rồi thực hiện (`POST /ingest/actions`). Không chốt dòng chờ duyệt (`pending`): đó là việc người dùng chọn hũ. Ca `upload_confirm`."""
+    rows = [r for r in _job_rows(job) if r.get("review_status") == "auto_added" and r.get("row_id")]
+    if not rows:
+        return {"rows": 0, "error": "không có dòng chọn sẵn để chốt"}
+    req = {
+        "tool": "confirm_rows",
+        "params": {"job_id": job_id, "rows": [{"row_id": r["row_id"]} for r in rows]},
+    }
+    status, issued = api.call("POST", "/ingest/confirmations", req)
+    if status != 200 or not isinstance(issued, Mapping) or not issued.get("confirm_token"):
+        return {
+            "rows": len(rows),
+            "error": f"POST /ingest/confirmations {status} {_err_code(issued)}",
+        }
+    body = {
+        "tool": "confirm_rows",
+        "params": issued["params"],
+        "confirm_token": issued["confirm_token"],
+    }
+    status, receipt = api.call("POST", "/ingest/actions", body)
+    if status != 200:
+        return {"rows": len(rows), "error": f"POST /ingest/actions {status} {_err_code(receipt)}"}
+    return {"rows": len(rows), "error": None}
 
 
 def memory_snapshot(api: Api, *, max_pages: int = 5) -> dict[str, Any]:
@@ -495,7 +536,14 @@ def execute_case(
     if mid:
         item = manifest.get(mid)
         ctx["upload"] = (
-            upload_manifest_file(api, item, timeout=upload_timeout, sleep=sleep, clock=clock)
+            upload_manifest_file(
+                api,
+                item,
+                timeout=upload_timeout,
+                confirm=bool(case.get("upload_confirm")),
+                sleep=sleep,
+                clock=clock,
+            )
             if item
             else {"manifest_id": mid, "error": "không có trong manifest"}
         )
@@ -621,11 +669,36 @@ ROADMAP_SHAPE_KEYS = (
 )
 
 
+def _split_plan(params: Mapping[str, Any]) -> bool:
+    """Tham số `save_jars` là một bảng tỷ lệ chia cụ thể: danh sách hũ không rỗng, mỗi hũ có `split_percent` là số, tổng 100%."""
+    jars = params.get("jars")
+    if not isinstance(jars, list) or not jars:
+        return False
+    total = 0.0
+    for j in jars:
+        pct = j.get("split_percent") if isinstance(j, Mapping) else None
+        if isinstance(pct, bool):
+            return False
+        try:
+            total += float(pct)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return False
+    return abs(total - 100.0) < 0.01
+
+
 def step_concrete(step: Mapping[str, Any]) -> bool:
     """Bước cụ thể: có số tiền dương kèm hũ nguồn và hũ đích khác nhau (trường của bước `amount_vnd`, `jar_code`, `to_jar_code`, hoặc
-    tham số `move_between_jars` của `action`), HOẶC có ngày (`due_date` của bước hay `fire_on` của nhắc `schedule_nudge`)."""
+    tham số `move_between_jars` của `action`), HOẶC có ngày (`due_date` của bước hay `fire_on` của nhắc `schedule_nudge`), HOẶC là bước
+    `adjust_split` gắn `save_jars` có bảng tỷ lệ chia mới (`_split_plan`): bước đổi tỷ lệ chỉ nêu MỘT hũ (`jar_code`, không có hũ
+    đích) nhưng hành động đã ghi rõ phần trăm của từng hũ, nên vẫn là việc làm được ngay."""
     action = step.get("action") or {}
     params = action.get("params") or {}
+    if (
+        step.get("kind") == "adjust_split"
+        and action.get("tool") == "save_jars"
+        and _split_plan(params)
+    ):
+        return True
     move = action.get("tool") == "move_between_jars"
     amount = step.get("amount_vnd") or (params.get("amount_vnd") if move else None)
     src = step.get("jar_code") or (params.get("from_jar") if move else None)
@@ -877,6 +950,10 @@ def upload_state(
         fails.append("tep_da_nap_truoc_do")
     elif status not in ("review", "done"):
         fails.append("sai_trang_thai")
+    elif case.get("upload_confirm") and (
+        status != "done" or (up.get("confirm") or {}).get("error")
+    ):
+        fails.append("chua_chot_dong")
     if up.get("job_id") and any(
         b["data"].get("job_id") != up["job_id"] for b in _blocks_of(run, "ingest_review")
     ):

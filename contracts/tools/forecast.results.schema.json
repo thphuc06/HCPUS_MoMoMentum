@@ -263,7 +263,7 @@
       }
     },
     "GetBehaviorProfileOk": {
-      "description": "`data` là đúng `BehaviorProfileData` (cùng `data` của `GET /profile/behavior`); agent dựng khối `behavior_insight` bằng `behavior_insight_data` rồi `build_behavior_insight`. Lọc `insight_kind` hoặc `jar` chỉ bớt `insights`, không đổi phần còn lại. Hồ sơ chưa sẵn sàng (`ready` sai) là kết quả OK, không phải lỗi.",
+      "description": "`data` là đúng `BehaviorProfileData` (cùng `data` của `GET /profile/behavior`); agent dựng khối `behavior_insight` bằng `behavior_insight_data` rồi `build_behavior_insight`. Lọc `insight_kind` hoặc `jar` chỉ bớt `insights` khi còn ít nhất một nhận xét khớp, phần còn lại giữ nguyên. Lọc không còn nhận xét nào (kể cả `jar` không có nhận xét hay không phải hũ của người dùng) thì trả hồ sơ CHƯA SẴN SÀNG: `ready` sai, `insights` rỗng, không có `next_step`, `headline` là lý do (\"Hồ sơ hành vi chưa có nhận xét nào khớp yêu cầu này.\"), `history_days` giữ của hồ sơ, có `min_history_days`; lý do: hồ sơ sẵn sàng luôn có ít nhất một nhận xét và một việc cần làm (CHECK của `behavior_profiles`, Pydantic `BehaviorProfileData`). Hồ sơ chưa sẵn sàng (`ready` sai) là kết quả OK, không phải lỗi.",
       "type": "object",
       "required": ["status", "as_of", "app_date", "data"],
       "additionalProperties": false,
@@ -275,7 +275,7 @@
       }
     },
     "GetBehaviorProfileResult": {
-      "description": "Đọc bản mới nhất của `behavior_profiles` không sau hôm nay mô phỏng. Mã lỗi có thể gặp: PROFILE_INCOMPLETE (chưa khai lương và ngày nhận), JAR_NOT_FOUND (`jar` không phải hũ của người dùng), PARAMS_INVALID.",
+      "description": "Đọc bản mới nhất của `behavior_profiles` không sau hôm nay mô phỏng. Mã lỗi có thể gặp: PROFILE_INCOMPLETE (chưa khai lương và ngày nhận), PARAMS_INVALID (`insight_kind` ngoài danh sách, `jar` không phải chuỗi 1 đến 32 ký tự). `jar` không phải hũ của người dùng KHÔNG là lỗi: không có nhận xét khớp nên `ready` sai như trên.",
       "oneOf": [
         { "$ref": "#/$defs/GetBehaviorProfileOk" },
         { "$ref": "ledger.results.schema.json#/$defs/ToolError" }

@@ -124,7 +124,7 @@ Phía Lambda (log `rest_request`, ms trong handler, tài khoản `minh`, Lambda 
 ## Đóng gói, deploy, kiểm
 
 ```bash
-uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas
+uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --keep-boto --extra data/personas:personas --extra gateway/tools/planner/yofina_planner:yofina_planner --extra gateway/tools/planner/rules:rules --extra gateway/tools/knowledge/yofina_knowledge:yofina_knowledge --extra gateway/tools/audit/yofina_audit:yofina_audit   # LEDGER_BUILD_COMMAND của infra-cdk/lib/tools-stack.ts; --keep-boto: boto3 ghim trong requirements.txt
 uv run scripts/migrate.py                                              # 0007_wallet_ops (và --seed khi đổi bảng tra)
 uv run scripts/cdk.py deploy YofinaTools --require-approval never      # cần zip ở build/lambda/ledger-arm64.zip
 uv run scripts/cdk.py deploy YofinaAgent --require-approval never      # target 10 tool + Cedar mỗi tool (khi đổi contracts/tools/ledger.json)

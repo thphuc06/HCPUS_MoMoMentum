@@ -1,1 +1,6 @@
 pyyaml>=6.0
+# Ghim SDK trong zip (build với --keep-boto, LEDGER_BUILD_COMMAND của infra-cdk/lib/tools-stack.ts): REST /memory* và "Xóa dữ liệu
+# của tôi" gọi ListMemoryRecords(namespacePath=...) của bedrock-agentcore, có từ botocore 1.42.90. Bản boto3 có sẵn trong runtime
+# Lambda tùy phiên bản runtime và Region, AWS không công bố trước; AWS khuyên đóng SDK vào gói. Cùng bản với agent và uv.lock.
+boto3==1.44.9
+botocore==1.44.9

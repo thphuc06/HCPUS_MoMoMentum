@@ -361,3 +361,19 @@ def test_builder_proactive_card_cat_van_ban_dai_trong_fallback():
         as_of=datetime(2026, 12, 10, tzinfo=UTC), app_date=date(2026, 11, 21),
     )  # fmt: skip
     assert len(card.fallback_text) <= 280 and card.id == "proactive_card:t1:low_data"
+    assert card.data.nudge_id is None  # thẻ theo luật của Tổng quan không có nudge_id
+
+
+def test_builder_proactive_card_nhan_nudge_id_cua_ban_tin_va_kiem_dang_uuid(registry):
+    kw = dict(
+        kind="review_needed", status="ok", title="2 giao dịch chờ bạn chọn hũ", reason="Tổng 180.000 ₫.",
+        actions=[{"kind": "review_unclassified", "label": "Trả lời ngay"}], trace_id="t1", source_tool="x",
+        as_of=datetime(2026, 12, 10, tzinfo=UTC), app_date=date(2026, 11, 21),
+    )  # fmt: skip
+    nid = "0b6f7a52-2d7e-4a0e-9a59-3f1c2b7d8e90"
+    card = b.build_proactive_card(nudge_id=nid, **kw)
+    wire = b.block_to_wire(card)
+    assert wire["data"]["nudge_id"] == nid
+    assert errors(registry, "block.schema.json", wire) == []
+    with pytest.raises(ValueError):
+        b.build_proactive_card(nudge_id="khong-phai-uuid", **kw)

@@ -299,9 +299,10 @@ def test_dat_lai_xoa_sach_du_lieu_moi_cua_0052_dung_nguoi(minh):
                 "VALUES (%s, %s, 'abc', 'm', %s::vector) ON CONFLICT DO NOTHING",
                 (tx_id, user, vec),
             )
+            # nhãn do người dùng xác nhận (`user`): đặt lại xóa mọi nhãn rồi chỉ nạp lại bộ seed của persona (`classify_seed`)
             m.execute(
                 "INSERT INTO tx_embeddings_labeled (user_id, text_norm, jar_code, source, model, embedding) "
-                "VALUES (%s, 'abc', 'an_uong', 'seed', 'm', %s::vector)",
+                "VALUES (%s, 'abc', 'an_uong', 'user', 'm', %s::vector)",
                 (user, vec),
             )
             m.execute(
@@ -322,12 +323,17 @@ def test_dat_lai_xoa_sach_du_lieu_moi_cua_0052_dung_nguoi(minh):
     tables = (
         "tx_embeddings", "tx_embeddings_labeled", "review_asks", "resilience_scores", "roadmap_jobs",
     )  # fmt: skip
+    # bảng nhãn còn có nhãn k-NN seed của persona (nạp lại khi đặt lại): chỉ đếm dòng test vừa thêm
+    marker = {"tx_embeddings_labeled": "text_norm = 'abc'"}
     for t in tables:
-        assert count(env, t, MINH) == 1 and count(env, t, LAN) == 1, t
+        w = marker.get(t, "true")
+        assert count(env, t, MINH, w) == 1 and count(env, t, LAN, w) == 1, t
     env.reset(MINH)
     for t in tables:
-        assert count(env, t, MINH) == 0, t
-        assert count(env, t, LAN) == 1, t  # người khác nguyên vẹn
+        w = marker.get(t, "true")
+        assert count(env, t, MINH, w) == 0, t
+        assert count(env, t, LAN, w) == 1, t  # người khác nguyên vẹn
+    assert count(env, "tx_embeddings_labeled", MINH, "source <> 'seed'") == 0
     assert count(env, "behavior_flags", MINH) == 1  # đúng một dấu hiệu seed, không nhân đôi
 
 
