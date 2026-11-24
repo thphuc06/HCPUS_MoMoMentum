@@ -31,6 +31,10 @@ Bảy ghi chú dưới đây do subagent (Claude Sonnet 5.5) viết ngày 2026-1
 | [frontend-fintech-ui.md](frontend-fintech-ui.md) | Stack frontend đề xuất, mẫu thiết kế app ngân hàng, biểu đồ, nhận diện |
 | [spending-visualization.md](spending-visualization.md) | Biểu đồ chi tiêu (theo hũ, hũ sắp cạn, cuối tuần, Trả sau, so kỳ trước): dữ liệu từ endpoint/tool nào, khoảng trống hợp đồng, khối chat, thư viện, ưu tiên P0/P1/P2; minh họa [spending-visualization-preview.html](spending-visualization-preview.html) |
 
+### Kiểm toán prompt tìm overfit (2026-11-25)
+
+[prompt-overfit-audit.md](prompt-overfit-audit.md): kiểm kê mọi prompt gửi model (file:dòng, model, độ dài, số luật), 27 phát hiện câu mẫu trùng ca eval, khuôn "đúng N câu", nhánh khớp chuỗi, luật vá ca, trùng lặp, mã chết (kèm commit và ca liên quan); các mục trông đáng ngờ nhưng hợp lệ; đánh giá bộ chấm eval; kế hoạch sửa theo đợt với cách đo.
+
 ### Thiết kế giao diện (Figma, 2026-11-21)
 
 [figma-ui-design.md](figma-ui-design.md): link file Figma, bảng màu (tông hồng–magenta), danh mục component, 40 frame theo luồng demo và ánh xạ màn hình ↔ cảnh demo ↔ tính năng. Frame tĩnh, chưa nối prototype.
