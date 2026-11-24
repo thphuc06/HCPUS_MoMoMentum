@@ -29,6 +29,7 @@ Bảy ghi chú dưới đây do subagent (Claude Sonnet 5.5) viết ngày 2026-1
 | [ml-forecasting.md](ml-forecasting.md) | Dự báo theo hũ, conformal, Monte Carlo, điểm gãy, phân bổ LP, phân loại giao dịch |
 | [agentic-ui-generative-ui.md](agentic-ui-generative-ui.md) | Khối UI từ JSON, hợp đồng khối, luồng xác nhận, UX cho agent |
 | [frontend-fintech-ui.md](frontend-fintech-ui.md) | Stack frontend đề xuất, mẫu thiết kế app ngân hàng, biểu đồ, nhận diện |
+| [spending-visualization.md](spending-visualization.md) | Biểu đồ chi tiêu (theo hũ, hũ sắp cạn, cuối tuần, Trả sau, so kỳ trước): dữ liệu từ endpoint/tool nào, khoảng trống hợp đồng, khối chat, thư viện, ưu tiên P0/P1/P2; minh họa [spending-visualization-preview.html](spending-visualization-preview.html) |
 
 ### Thiết kế giao diện (Figma, 2026-11-21)
 
