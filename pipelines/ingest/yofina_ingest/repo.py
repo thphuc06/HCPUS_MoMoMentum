@@ -114,6 +114,20 @@ SQL_REJECT_REST = (
     "WHERE job_id = CAST(:job AS uuid) AND user_id = :uid AND review_status IN ('auto_added', 'pending') RETURNING id) "
     "SELECT count(*) AS n FROM u"
 )
+# Bộ phân loại phase 4 cho dòng nạp (`yofina_ingest.classify`): số giao dịch chi trước đó theo (đối tác, hũ) và số luật `once` theo khóa đối
+# tác, cho MỌI đối tác của một tệp trong một câu (cùng định nghĩa với `SQL_CONTEXT` của `yofina_classify.repo`, chỉ khác là gom nhiều đối tác).
+SQL_MERCHANT_HISTORY = (
+    "SELECT lower(t.merchant) AS merchant, t.jar_code, count(*) AS n FROM transactions t "
+    "JOIN jars j ON j.user_id = t.user_id AND j.code = t.jar_code "
+    "WHERE t.user_id = :uid AND t.kind = 'expense' AND j.system_role IS NULL "
+    "AND lower(t.merchant) IN (SELECT lower(x) FROM jsonb_array_elements_text(CAST(:merchants AS jsonb)) AS x) "
+    "GROUP BY lower(t.merchant), t.jar_code LIMIT 2000"
+)
+SQL_MERCHANT_CORRECTIONS = (
+    "SELECT merchant_key, count(*) AS n FROM category_rules WHERE user_id = :uid AND scope = 'once' "
+    "AND merchant_key IN (SELECT x FROM jsonb_array_elements_text(CAST(:keys AS jsonb)) AS x) "
+    "GROUP BY merchant_key LIMIT 500"
+)
 SQL_AUDIT = (
     "INSERT INTO audit_events (user_id, trace_id, event_type, tool, outcome, code, params, details) "
     "VALUES (:uid, :trace_id, 'confirm_rows', 'confirm_rows', 'ok', NULL, CAST(:params AS jsonb), CAST(:details AS jsonb))"
@@ -281,6 +295,10 @@ class IngestRepo:
         return self.db.query(
             SQL_GRANT_CONSENT, {"uid": uid, "source": source, "version": version}, max_rows=1
         )[0]
+
+    # --- bộ phân loại phase 4 -------------------------------------------------------------------------------------------------
+    def label_store(self) -> IngestLabelStore:
+        return IngestLabelStore(self.db)
 
     # --- độ phủ và tự chữa ----------------------------------------------------------------------------------------------------
     def coverage_facts(self, uid: str, now: datetime, tz: str, window_days: int) -> Row | None:
@@ -451,6 +469,42 @@ class IngestRepo:
     def _facts(tx: Any, uid: str, now: datetime, tz: str, window_days: int) -> Row | None:
         rows = tx.execute(SQL_COVERAGE, {"uid": uid, "now": now, "tz": tz, "win": window_days})
         return rows[0] if rows else None
+
+
+class IngestLabelStore:
+    """`yofina_ingest.classify.LabelStore` trên Aurora: nhãn k-NN qua `app_find_labeled_exact`, `app_knn_labeled` (0052, cùng
+    `PgLabelIndex` của Lambda phân loại), lịch sử và số lần sửa theo đối tác bằng một câu cho cả tệp (RLS theo `app.user_id`)."""
+
+    def __init__(self, db: DataApi) -> None:
+        from yofina_classify.repo import PgLabelIndex
+
+        self.db = db
+        self._index = PgLabelIndex(db)
+
+    def find_exact(self, user_id: str, text_norm: str) -> list[Any]:
+        return self._index.find_exact(user_id, text_norm)
+
+    def knn(self, user_id: str, vector: Sequence[float], k: int) -> list[Any]:
+        return self._index.knn(user_id, vector, k)
+
+    def history(self, user_id: str, merchants: Sequence[str]) -> dict[str, dict[str, int]]:
+        unique = sorted({m.lower() for m in merchants if m})[:500]
+        if not unique:
+            return {}
+        with self.db.transaction(user_id) as tx:
+            rows = tx.execute(SQL_MERCHANT_HISTORY, {"uid": user_id, "merchants": unique})
+        out: dict[str, dict[str, int]] = {}
+        for r in rows:
+            out.setdefault(str(r["merchant"]), {})[str(r["jar_code"])] = int(r["n"])
+        return out
+
+    def corrections(self, user_id: str, merchant_keys: Sequence[str]) -> dict[str, int]:
+        unique = sorted({k for k in merchant_keys if k})[:500]
+        if not unique:
+            return {}
+        with self.db.transaction(user_id) as tx:
+            rows = tx.execute(SQL_MERCHANT_CORRECTIONS, {"uid": user_id, "keys": unique})
+        return {str(r["merchant_key"]): int(r["n"]) for r in rows}
 
 
 def _date_text(value: date | str) -> str:

@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from ingest_helpers import PNG, FakeBedrock, make_gateway
+from ingest_helpers import PNG, FakeBedrock, FakeLabelStore, make_gateway
 from yofina_ingest.context import Rule
 from yofina_ingest.settings import IngestRuntime
 from yofina_ingest.worker import Worker, handle_sqs, parse_key, pick_matches, s3_records
@@ -52,6 +52,7 @@ class FakeRepo:
     """Cùng giao diện với `IngestRepo` phần worker dùng, cùng máy trạng thái của `app_update_ingest_job`."""
 
     def __init__(self) -> None:
+        self.labels = FakeLabelStore()
         self.jobs: dict[str, dict[str, Any]] = {}
         self.rows: dict[str, list[dict[str, Any]]] = {}
         self.matches: list[dict[str, Any]] = []
@@ -122,6 +123,9 @@ class FakeRepo:
 
     def rules(self, uid):
         return [Rule("grab", "di_lai")]
+
+    def label_store(self):
+        return self.labels
 
     def find_matches(self, uid, candidates, window):
         self.window = window

@@ -14,6 +14,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { YofinaConfig } from '../config/config';
+import { loadClassifyConfig } from './classify';
 import { publishParams } from './ssm-outputs';
 import { ToolsConfig } from './tools-stack';
 
@@ -47,21 +48,27 @@ export interface IngestConfig {
   readonly uploadPrefix: string;
   /**
    * Vai model trong `llm_defaults.json` mà worker được gọi (quyền Bedrock lấy từ chuỗi model của các vai này): `ingest` (đọc ảnh:
-   * Sonnet 4.6, dự phòng Kimi K3) và `ingest_columns` (ánh xạ cột và gắn nhãn CSV: model nhỏ). Vai chưa có trong file thì bỏ qua kèm
-   * cảnh báo; không vai nào có thì stack báo lỗi (không có model nào để cấp quyền).
+   * Sonnet 4.6, dự phòng Kimi K3), `ingest_columns` (ánh xạ cột và gắn nhãn CSV: model nhỏ) và `embedding` (Cohere Embed, bước k-NN
+   * của bộ phân loại phase 4 khi gán hũ cho dòng nạp). Vai chưa có trong file thì bỏ qua kèm cảnh báo; không vai nào có thì stack báo
+   * lỗi (không có model nào để cấp quyền).
    */
   readonly llmRoles: string[];
   /** Cửa sổ lịch sử của độ phủ dữ liệu (ngày): CÙNG context `forecastHistoryWindowDays` với pipeline dự báo, để hai bên cùng một công thức. */
   readonly forecastHistoryWindowDays: number;
   /** Đường dẫn `llm_defaults.json` (mặc định là file của yofina_core; test đổi bằng context `ingestLlmDefaults`). */
   readonly llmDefaults: string;
+  /**
+   * Ghi đè ngưỡng của bộ phân loại phase 4 (CÙNG context `classifyThresholds` với Lambda `yofina-classify`, xem `classify.ts`): worker
+   * gán hũ cho dòng nạp bằng đúng bộ phân loại đó, nên hai Lambda phải cùng ngưỡng. Vào worker dưới dạng `YOFINA_CLASSIFY_<TÊN HOA>`.
+   */
+  readonly classifyThresholdOverrides: Record<string, string>;
 }
 
 /** Lệnh đóng zip của hai Lambda ingest (luồng backend xác nhận). */
 export const INGEST_BUILD_COMMAND =
   'uv run scripts/build_lambda.py gateway/tools/ingest --arch arm64 --name ingest ' +
   '--extra pipelines/ingest/yofina_ingest:yofina_ingest --extra gateway/tools/ledger/yofina_ledger:yofina_ledger ' +
-  '--extra db/seed:seed';
+  '--extra pipelines/classify/yofina_classify:yofina_classify --extra db/seed:seed';
 
 /** Route REST của F6. Chỉ GET/POST: CORS preflight của `yofina-api` (YofinaTools) chỉ cho GET, POST, OPTIONS. */
 export const INGEST_ROUTES: ReadonlyArray<readonly [method: 'GET' | 'POST', path: string]> = [
@@ -104,7 +111,7 @@ export function loadIngestConfig(app: App): IngestConfig {
     abortMultipartDays: ctxNum(app, 'ingestAbortMultipartDays', 1),
     uploadPrefix: prefix,
     forecastHistoryWindowDays: ctxNum(app, 'forecastHistoryWindowDays', 330),
-    llmRoles: ctxStr(app, 'ingestLlmRoles', 'ingest,ingest_columns')
+    llmRoles: ctxStr(app, 'ingestLlmRoles', 'ingest,ingest_columns,embedding')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
@@ -113,6 +120,7 @@ export function loadIngestConfig(app: App): IngestConfig {
       '..',
       ctxStr(app, 'ingestLlmDefaults', '../libs/yofina_core/src/yofina_core/llm_defaults.json'),
     ),
+    classifyThresholdOverrides: loadClassifyConfig(app).thresholdOverrides,
   };
 }
 
@@ -334,6 +342,10 @@ export class IngestStack extends Stack {
       ingest.workerTimeoutSeconds,
       ingest.workerReservedConcurrency > 0 ? { reservedConcurrentExecutions: ingest.workerReservedConcurrency } : {},
     );
+    // Bộ phân loại phase 4 (gán hũ cho dòng nạp) đọc ngưỡng từ classify_defaults.json; ghi đè bằng đúng biến của yofina-classify.
+    for (const [k, v] of Object.entries(ingest.classifyThresholdOverrides)) {
+      this.worker.addEnvironment(`YOFINA_CLASSIFY_${k.toUpperCase()}`, v);
+    }
     this.worker.addEventSource(
       new lambdaEventSources.SqsEventSource(this.queue, {
         batchSize: 1,

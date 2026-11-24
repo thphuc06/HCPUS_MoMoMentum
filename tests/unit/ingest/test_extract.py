@@ -12,7 +12,7 @@ import pytest
 from botocore.exceptions import ClientError
 from ingest_helpers import PNG, REPO, FakeBedrock, csv_bytes, make_gateway
 from yofina_ingest import extract as ex
-from yofina_ingest.context import ExtractContext, Rule, eval_context, resolve_jar
+from yofina_ingest.context import ExtractContext, Rule, eval_context
 
 from yofina_core.ingest import IngestSettings
 from yofina_core.pii import PiiPolicy
@@ -293,19 +293,13 @@ def test_thu_tu_gan_hu_luat_nguoi_dung_roi_bang_loai_roi_model(gateway_of):
     assert r4.candidates[0].jar_code is None and not r4.candidates[0].auto_add
 
 
-def test_resolve_jar_dong_thu_khong_co_hu():
-    assert (
-        resolve_jar(
-            kind="income",
-            counterparty="X",
-            description=None,
-            tx_type="salary",
-            model_jar="an_uong",
-            model_jar_confidence=0.9,
-            ctx=ctx(),
-        )
-        is None
+def test_dong_thu_khong_co_hu_du_model_de_xuat(gateway_of):
+    res, _ = run_image(
+        gateway_of,
+        doc([row(direction="in", tx_type="salary", description="luong", jar_code="an_uong")]),
     )
+    c = res.candidates[0]
+    assert c.kind == "income" and (c.jar_code, c.jar_source, c.jar_confidence) == (None, None, None)
 
 
 def test_tx_type_sai_chieu_bi_bo(gateway_of):
