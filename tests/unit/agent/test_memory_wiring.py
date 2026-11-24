@@ -29,7 +29,13 @@ from yofina_agent.identity import Identity
 from yofina_agent.store import UnconfiguredTurnBlockStore
 from yofina_agent.turn import Turn, TurnDeps
 from yofina_agent.whatif import ANALYST_MEMORY_GUIDE, ANALYST_SYSTEM, analyst_prompt
-from yofina_agent.writer import MEMORY_GUIDE, MEMORY_TASKS, TASKS, WRITER_SYSTEM, build_writer_prompt
+from yofina_agent.writer import (
+    MEMORY_GUIDE,
+    MEMORY_TASKS,
+    TASKS,
+    WRITER_SYSTEM,
+    build_writer_prompt,
+)
 
 TRAVEL_PREF = "Ưu tiên hũ Du lịch, đừng lấy tiền từ hũ Du lịch"
 OPEN_TAG, CLOSE_TAG = f"<{m.PROMPT_TAG}>", f"</{m.PROMPT_TAG}>"
