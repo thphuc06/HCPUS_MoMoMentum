@@ -16,7 +16,7 @@ import logging
 import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from yofina_core.blocks import (
     ConfirmBlock,
@@ -50,6 +50,9 @@ from yofina_ledger.repo import ConfirmClaim, LedgerRepo, MoveResult
 from yofina_ledger.settings import LedgerSettings
 from yofina_ledger.wallet_reads import WalletReads
 from yofina_ledger.wallet_writes import WalletWrites
+
+if TYPE_CHECKING:
+    from yofina_ledger.proactive import NudgePreferenceSource
 
 log = logging.getLogger("yofina.ledger")
 
@@ -197,6 +200,7 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         ref: ReferenceData | None = None,
         events: EventPublisher | None = None,
         forecast: ForecastClient | None = None,
+        nudge_preferences: NudgePreferenceSource | None = None,
     ) -> None:
         self.repo = repo
         self.confirm = confirm
@@ -205,6 +209,8 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         self.ref = ref or ReferenceData(repo, settings.reference_cache_seconds)  # type: ignore[arg-type]
         self.events = events
         self.forecast = forecast
+        #: điểm móc sở thích bản tin (`GET /nudges/today` ẩn thẻ trong giờ im lặng); None: không có sở thích nào
+        self.nudge_preferences = nudge_preferences
 
     # --- tiện ích -------------------------------------------------------------------
     def now(self) -> datetime:

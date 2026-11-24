@@ -94,7 +94,13 @@ from yofina_agent.tools import (
 )
 from yofina_agent.verifier import Allowed, NumericGrounding
 from yofina_agent.whatif import WhatIfState, run_what_if
-from yofina_agent.writer import PHASE4_TASKS, check_grounding, has_ungrounded_numbers, write_stream
+from yofina_agent.writer import (
+    MEMORY_TASKS,
+    PHASE4_TASKS,
+    check_grounding,
+    has_ungrounded_numbers,
+    write_stream,
+)
 from yofina_core import blocks as B
 from yofina_core.clock import app_timezone
 from yofina_core.errors import ErrorCode
@@ -535,6 +541,7 @@ class Turn:
                 task, question, compact, timeout=None, max_tokens=self.s.writer_max_tokens
             )
             return
+        memory = await self.memory.prompt_block() if task in MEMORY_TASKS else ""
         try:
             text = await self.emit_text(
                 write_stream(
@@ -546,6 +553,7 @@ class Turn:
                     max_tokens=self.s.writer_max_tokens,
                     turn_limit=self.s.writer_turn_limit,
                     output_token_limit=self.s.writer_output_token_limit,
+                    memory=memory,
                 )
             )
         except Exception as exc:
@@ -561,6 +569,7 @@ class Turn:
         """Kiểm trọn phần lời trước khi phát. Bỏ phần lời nếu quá hạn hoặc gặp lỗi."""
         if self.llm_down or self.model_calls_left() < 1:
             return
+        memory = await self.memory.prompt_block() if task in MEMORY_TASKS else ""
 
         async def collect() -> str:
             parts = []
@@ -573,6 +582,7 @@ class Turn:
                 max_tokens=max_tokens,
                 turn_limit=self.s.writer_turn_limit,
                 output_token_limit=self.s.writer_output_token_limit,
+                memory=memory,
             ):
                 parts.append(delta)
             return "".join(parts)

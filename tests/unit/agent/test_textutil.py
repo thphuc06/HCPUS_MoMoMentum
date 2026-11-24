@@ -50,6 +50,38 @@ def test_kiem_can_cu_so_tien():
     assert ungrounded_amounts("Bạn có 7 hũ, 30% là ăn uống, tính đến 2026-11-21.", allowed) == []
     assert ungrounded_amounts("còn 390.000 ₫", allowed) == [390_000]
 
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # "dòng" bỏ dấu trùng "đồng": có dấu mà không có chữ "đ" thì không phải tiền
+        ("2 dòng chờ duyệt", []),
+        ("5 dòng", []),
+        ("Còn 3 dòng chưa phân loại, hũ Ăn uống 380.000 ₫", [380_000]),
+        # có chữ "đ" là tiền, kể cả số nhỏ
+        ("5 đồng", [5]),
+        ("5 Đồng", [5]),
+        ("5đ", [5]),
+        ("250.000 đồng", [250_000]),
+        # gõ không dấu: là tiền khi số từ 1.000 (mức tiền nhỏ nhất còn tiêu được), số nhỏ hơn có thể là "dòng"
+        ("5 dong", []),
+        ("5d", []),
+        ("50000 dong", [50_000]),
+        ("50.000 dong", [50_000]),
+        ("5000d", [5_000]),
+        # "vnd", "vnđ", "₫" không nhầm được với chữ nào khác
+        ("12 vnd", [12]),
+        ("5 vnđ", [5]),
+    ],
+)
+def test_don_vi_dong_khong_nham_voi_dong(text, expected):
+    assert [v for v, _ in extract_amounts(text)] == expected
+
+
+def test_so_dong_cho_duyet_khong_thanh_so_tien_la():
+    assert ungrounded_amounts("Bạn có 2 dòng chờ duyệt.", {380_000}) == []
+    assert parse_amount_vnd("5 dòng") is None and parse_amount_vnd("5 đồng") == 5
+
 # --- hạn mục tiêu (chuyển từ test_phase4_handlers cùng hàm `_roadmap_goal_date` cũ của turn.py) ---------------
 TODAY = date(2026, 11, 21)  # ngày mô phỏng của test
 

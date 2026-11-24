@@ -67,14 +67,35 @@ def _to_decimal(num: str, *, has_unit: bool) -> tuple[Decimal, int] | None:
     return Decimal(num), 0
 
 
+#: Số nhỏ nhất được coi là tiền khi đơn vị gõ KHÔNG DẤU ("dong", "d"): cùng ngưỡng với số không đơn vị.
+PLAIN_DONG_MIN_VND = 1_000
+
+
+def _is_dong_unit(typed: str, value: Decimal) -> bool:
+    """Đơn vị "d"/"dong" (sau khi bỏ dấu) có thật là "đồng" không, xét chữ người dùng gõ `typed`.
+
+    Bỏ dấu thì "dòng" (5 dòng chờ duyệt) trùng "đồng", nên:
+    - có chữ "đ" ("đồng", "đ", "Đ"): là tiền;
+    - có dấu nhưng không có "đ" ("dòng", "dông"): không phải tiền;
+    - không dấu ("dong", "d"): là tiền chỉ khi giá trị từ 1.000 đồng, mức tiền nhỏ nhất còn tiêu được. "5 dong" có thể là "5 dòng"
+      gõ không dấu, còn "50000 dong" thì không thể là số dòng nào hợp lý.
+    """
+    if "đ" in typed.lower():
+        return True
+    if not typed.isascii():
+        return False
+    return value >= PLAIN_DONG_MIN_VND
+
+
 def extract_amounts(text: str) -> list[tuple[int, float]]:
     """Mọi số tiền trong `text`, theo thứ tự xuất hiện, dạng (giá trị VND, sai số do làm tròn).
 
     Sai số: số có đơn vị làm tròn tới nhiều nhất một chữ số thập phân của đơn vị
     (`format_vnd_short`), số đầy đủ chính xác tới 0,5 đồng. Bỏ qua số không đơn vị nhỏ hơn 1.000
-    (số đếm, phần trăm, ngày), số trong ngày tháng và năm.
+    (số đếm, phần trăm, ngày), số trong ngày tháng và năm. Đơn vị "đồng"/"đ" phải có chữ "đ", hoặc gõ không dấu
+    với giá trị từ 1.000 (`_is_dong_unit`): "5 dòng" không phải 5 ₫.
     """
-    t = strip_accents(text)
+    t, pos = _mapped(text, collapse=False)
     found: list[tuple[int, int, float]] = []  # (vị trí, giá trị, sai số)
     consumed: list[tuple[int, int]] = []
 
@@ -96,6 +117,11 @@ def extract_amounts(text: str) -> list[tuple[int, float]]:
         if taken(m.start()):
             continue
         unit = m["unit"]
+        if unit in ("d", "dong"):
+            plain = _to_decimal(m["num"], has_unit=True)
+            typed = text[pos[m.start("unit")] : pos[m.end("unit") - 1] + 1]
+            if plain is None or not _is_dong_unit(typed, plain[0]):
+                unit = None  # "dòng", "5 dong": đọc như số không đơn vị (số nhỏ bị bỏ)
         parsed = _to_decimal(m["num"], has_unit=bool(unit))
         if parsed is None:
             continue
