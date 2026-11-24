@@ -569,6 +569,13 @@ Bản REST của tool `ledger___get_cashflow_summary` cho B1 (chi theo hũ), B5 
 - **Chênh lệch do server trừ**: `change`, `by_jar[].change_vnd`, `net_vnd` (lương trừ chi, không tính tiền vào khác).
 - Fixture `fixtures/rest/CashflowResponse.minh.json` và `.khoa_chua_co_ky_truoc.json` sinh bằng chính mã Lambda trên PostgreSQL cục bộ (`tests/local_pg/test_cashflow_rest.py`), số khớp mục 1.4 của tài liệu nghiên cứu. Zod phía frontend viết tay ở `frontend/src/api/cashflowSchemas.ts` (như các REST khác; `gen_contracts.mjs` chỉ sinh từ `blocks/`).
 
+## Phase 6, luồng K: khối `reasoning` (người tư vấn, 25/11/2026)
+
+| Khối | Nội dung | Id | Ai dựng |
+|---|---|---|---|
+| `reasoning` | Lập luận có cấu trúc của Analyst (what-if) hoặc planner lộ trình, model trả như DỮ LIỆU trong chính lời gọi đã có (không thêm lượt gọi, không phải suy nghĩ thô): 0 đến 5 bước `{step_id s1.., seen, why, effect, basis[{kind tool/rule, ref, label}]}` và một `conclusion` tùy chọn `{text, option_id (what_if) hoặc step_id (roadmap), personal[memory/behavior]}`; `context` `what_if`/`roadmap`; `complete` | `reasoning:{trace_id}` | Agent, `build_reasoning(data=...)` sau khi `yofina_agent.advisor` kiểm |
+
+Agent chỉ phát bước có mọi số qua bộ kiểm số của luồng và có ít nhất một căn cứ hợp lệ (tool trả OK trong lượt; luật `check_suitability` đã xét, không `skipped`); nhãn căn cứ do code dựng. Kết luận trỏ đúng phương án mang nhãn "Gợi ý" (what-if) hoặc một bước của bản đã lưu (lộ trình), nguồn trong `personal` phải có thật trong lượt; sai thì bỏ câu. Phát dần: các bản `complete: false` thêm từng bước, rồi bản `complete: true` (cùng id, thay tại chỗ). `fallback_text` chỉ đếm số bước, không chép chữ model. Bất biến Pydantic: bản chưa xong có ít nhất một bước và chưa có kết luận; luôn có bước hoặc kết luận; `step_id` liên tiếp; `personal` không lặp. View: `frontend/src/chat/ReasoningView.tsx` (đã ở `REGISTERED_BY_FRONTEND`, hai mươi bốn khối).
 ## Cách chọn công cụ sinh
 
 - **Zod: tự sinh** bằng `scripts/gen_contracts.mjs` (~200 dòng, không phụ thuộc gói nào) từ JSON Schema. Không dùng `json-schema-to-zod`: README của nó (kiểm bằng `npm view`, bản 2.8.1) ghi từ tháng 3/2026 dự án không còn được bảo trì tích cực, và nó không tự giải `$ref` (phải nhờ `json-refs` đứng trước), trong khi hợp đồng này dùng `$ref`/`$defs` liên file. Bộ tự viết chỉ hỗ trợ tập con ở trên và báo lỗi khi gặp thứ lạ, nên không mong manh một cách âm thầm.

@@ -9,6 +9,7 @@ import { ConfirmActionView, ForecastTimelineView, ProactiveCardView, ReceiptActi
 import { CoverageChangeView, IngestReviewView } from './ingestViews'
 import { ResilienceScoreView, ReviewListView, RoadmapDiffView, RoadmapView, StressResultView } from './phase4Views'
 import { BehaviorInsightView, CitationView } from './phase5Views'
+import { ReasoningView } from '@/chat/ReasoningView'
 
 // Registry `type -> { schema Zod, Component }`. Thêm một loại khối: schema ở contracts/ (sinh Zod), một dòng ở đây.
 // Parse TỪNG khối riêng; type lạ hoặc sai schema hiện fallback_text; error boundary bọc từng khối.
@@ -53,6 +54,7 @@ export const registry: Record<BlockType, Entry> = {
   review_list: defineBlock(blockSchemas.review_list, ReviewListView),
   behavior_insight: defineBlock(blockSchemas.behavior_insight, BehaviorInsightView),
   citation: defineBlock(blockSchemas.citation, CitationView),
+  reasoning: defineBlock(blockSchemas.reasoning, ReasoningView),
 }
 
 export const REGISTERED_TYPES = BLOCK_TYPES

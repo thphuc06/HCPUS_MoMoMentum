@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.yofina.invalid/blocks/reasoning.schema.json",
+  "title": "ReasoningBlock",
+  "description": "Cách người tư vấn cân nhắc (luồng K của phase 6): vài bước lập luận ngắn và một câu kết luận. Đây là lập luận CÓ CẤU TRÚC mà Analyst (what-if) hoặc planner lộ trình trả về như dữ liệu trong chính lời gọi đã có, không phải suy nghĩ thô của model. Mỗi bước nói điều đã thấy trong kết quả tool, vì sao điều đó quan trọng và nó đẩy quyết định về đâu, kèm căn cứ (tool đã gọi thành công trong lượt, hoặc luật phù hợp đã kiểm). Agent chỉ phát bước đã qua kiểm số (NumericGrounding) và có căn cứ hợp lệ; nhãn căn cứ do code dựng. Phát dần: các bản `complete: false` (thêm từng bước) rồi một bản `complete: true` (đủ bước, kèm kết luận nếu có), cùng id nên bản sau thay bản trước. Id khối `reasoning:{trace_id}`.",
+  "type": "object",
+  "required": ["v", "id", "type", "trace_id", "fallback_text", "source", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "$ref": "envelope.schema.json#/$defs/SchemaVersion" },
+    "id": { "$ref": "envelope.schema.json#/$defs/BlockId" },
+    "type": { "const": "reasoning" },
+    "trace_id": { "$ref": "envelope.schema.json#/$defs/TraceId" },
+    "fallback_text": { "$ref": "envelope.schema.json#/$defs/FallbackText" },
+    "source": { "$ref": "envelope.schema.json#/$defs/Source" },
+    "data": { "$ref": "#/$defs/ReasoningData" }
+  },
+  "$defs": {
+    "ReasoningBasis": {
+      "description": "Căn cứ của một bước: một tool đã trả kết quả thành công trong lượt (`ref` là tên ngắn, ví dụ `run_scenario`) hoặc một luật phù hợp đã kiểm (`ref` là `rule_id`). `label` do code dựng (nhãn của tool, nhãn luật do `check_suitability` trả).",
+      "type": "object",
+      "required": ["kind", "ref", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["tool", "rule"] },
+        "ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 }
+      }
+    },
+    "ReasoningStep": {
+      "description": "Một bước lập luận. Ba câu ngắn do model viết, số trong đó đã qua kiểm căn cứ.",
+      "type": "object",
+      "required": ["step_id", "seen", "why", "effect", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "step_id": {
+          "description": "`s1` tới `s5` theo thứ tự hiện.",
+          "type": "string",
+          "pattern": "^s[1-5]$"
+        },
+        "seen": {
+          "description": "Điều đã thấy trong kết quả tool.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "why": {
+          "description": "Vì sao điều đó quan trọng với người dùng.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "effect": {
+          "description": "Nó ảnh hưởng tới quyết định thế nào.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "basis": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ReasoningBasis" },
+          "minItems": 1,
+          "maxItems": 4
+        }
+      }
+    },
+    "ReasoningConclusion": {
+      "description": "Một câu kết luận có chính kiến: nên làm gì và vì sao. what-if: `option_id` là phương án được gợi ý (recommended) trong khối `options` cùng lượt. Lộ trình: `step_id` là một bước của bản vừa lưu. `personal` cho biết câu có dựa vào sở thích trong bộ nhớ (`memory`) hay thói quen chi tiêu của hồ sơ hành vi (`behavior`); agent chỉ giữ nguồn có thật trong lượt.",
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "option_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "step_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "personal": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["memory", "behavior"] },
+          "maxItems": 2
+        }
+      }
+    },
+    "ReasoningData": {
+      "description": "Bất biến mà JSON Schema không diễn đạt (Pydantic quyết định): `complete: false` thì có ít nhất một bước và chưa có kết luận; luôn có ít nhất một bước hoặc một kết luận; `step_id` là `s1`, `s2`... liên tiếp; kết luận của `what_if` không có `step_id`, của `roadmap` không có `option_id`; `personal` không lặp.",
+      "type": "object",
+      "required": ["context", "complete", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "description": "Lượt sinh ra lập luận: `what_if` (Analyst) hoặc `roadmap` (planner lộ trình).",
+          "type": "string",
+          "enum": ["what_if", "roadmap"]
+        },
+        "complete": {
+          "description": "false khi agent còn đang phát thêm bước; true ở bản cuối.",
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ReasoningStep" },
+          "maxItems": 5
+        },
+        "conclusion": { "$ref": "#/$defs/ReasoningConclusion" }
+      }
+    }
+  }
+}

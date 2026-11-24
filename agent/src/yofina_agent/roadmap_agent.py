@@ -16,7 +16,9 @@ from typing import Annotated, Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from yofina_agent import advisor
 from yofina_agent.compact import compact_jars, compact_obligations
+from yofina_agent.schemas import ReasoningStepIn
 from yofina_agent.settings import AgentSettings
 from yofina_agent.tools import ToolKind, ToolOutcome
 from yofina_agent.verifier import Allowed, NumericGrounding, passed_rules, suitability_status
@@ -98,6 +100,22 @@ Mỗi bước là MỘT hành động cụ thể người dùng tự làm đư�
 """
 
 log = logging.getLogger("yofina.agent.roadmap")
+
+#: Phần thêm vào `ROADMAP_SYSTEM` khi lượt chat có người tư vấn (`advise`, luồng K của phase 6): mô tả hai trường `reasoning` và
+#: `conclusion` của schema, nêu mục đích và giới hạn, không câu mẫu. Job sinh lại không có phần này và không có hai trường đó.
+ROADMAP_ADVICE_GUIDE = """
+Lập luận và kết luận cho người dùng (trường reasoning và conclusion): người dùng đọc phần này trong khung chat để thấy vì sao lộ \
+trình được xếp như vậy, như lời một người tư vấn nói với chính họ (xưng "bạn"); nên ngắn và đúng.
+- reasoning: 2 đến 4 bước, mỗi bước là một điều trong context ảnh hưởng tới cách xếp giai đoạn và bước (khoản sắp đến hạn, hũ sắp \
+cạn, thành phần yếu nhất, mục tiêu, phương án phân bổ, thói quen trong context.behavior). seen là điều đó, why là vì sao nó quan \
+trọng, effect là nó làm lộ trình ưu tiên việc gì; mỗi trường một câu, tối đa khoảng 100 ký tự. basis là 1 đến 3 mã trong can_cu. \
+Không nhắc tool, tên trường hay mã hũ; gọi hũ bằng tên.
+- Số trong reasoning và conclusion theo đúng luật số của reason: chỉ chép nguyên văn chuỗi trong reason_numbers. Bước có số khác \
+sẽ bị bỏ, nên khi không chắc thì nói bằng chữ.
+- conclusion: một câu (tối đa khoảng 180 ký tự) nói người dùng nên bắt đầu từ bước nào và vì sao; step_id là step_id của bước đó. \
+personal gồm behavior khi câu thật sự dựa vào context.behavior, không thì để mảng rỗng. context.behavior là thói quen hệ thống thấy \
+từ các khoản đã chi, không phải lời người dùng nói: khi nhắc thì không gán nó thành ý muốn của họ.
+"""
 
 #: lần gọi model tối đa cho bản phác thảo đầu: lần thứ hai nhận lỗi schema của lần đầu (ví dụ `kind` ngoài enum).
 _DRAFT_ATTEMPTS = 2
@@ -201,6 +219,8 @@ class RoadmapResult:
     model_error: Exception | None = None
     model_budget_exhausted: bool = False
     suitability: tuple[SuitabilityVerdict, ...] = ()
+    #: lập luận đã kiểm của lượt chat có người tư vấn (`advise`); None khi không yêu cầu, không có, hoặc mọi phần đều bị bỏ
+    advice: advisor.Advice | None = None
 
 
 @dataclass(frozen=True)
@@ -269,6 +289,29 @@ class GoalWeight(_Model):
 class RoadmapSketch(RoadmapOutline):
     horizon_months: Annotated[int, Field(ge=1, le=24)] | None = None
     goals: Annotated[list[GoalWeight], Field(max_length=8)] = Field(default_factory=list)
+
+
+class StepConclusionIn(_Model):
+    """Câu kết luận của lộ trình (luồng K): nên bắt đầu từ bước nào và vì sao (`step_id` là một bước của dàn ý)."""
+
+    text: Annotated[str, Field(min_length=1, max_length=240)]
+    step_id: B.SlugKey
+    personal: Annotated[list[Literal["behavior"]], Field(max_length=1)] = Field(default_factory=list)
+
+
+class _Advised(_Model):
+    """Hai trường người tư vấn (chỉ lượt chat có `advise`): lập luận như DỮ LIỆU và một câu kết luận, trong chính lời gọi planner."""
+
+    reasoning: Annotated[list[ReasoningStepIn], Field(max_length=5)] = Field(default_factory=list)
+    conclusion: StepConclusionIn | None = None
+
+
+class AdvisedSketch(RoadmapSketch, _Advised):
+    pass
+
+
+class AdvisedOutline(RoadmapOutline, _Advised):
+    pass
 
 
 class RepairIssue(_Model):
@@ -467,6 +510,7 @@ async def _ask[T: RoadmapOutline](
     compact: dict[str, Any],
     max_tokens: int,
     max_attempts: int = 1,
+    system: str = ROADMAP_SYSTEM,
 ) -> StructuredResult[T]:
     """Một lần hỏi model. `max_attempts` > 1 thì `structured_json` gửi lỗi schema cho model và hỏi lại (mỗi lần là một lượt gọi
     model, tính vào trần của lượt)."""
@@ -474,7 +518,7 @@ async def _ask[T: RoadmapOutline](
         "planner",
         output_model=schema,
         messages=[user_message(json.dumps(compact, ensure_ascii=False))],
-        system=ROADMAP_SYSTEM,
+        system=system,
         tool_name="draft_roadmap",
         description="Trả dàn ý các giai đoạn và bước của lộ trình theo schema.",
         max_attempts=max_attempts,
@@ -1040,11 +1084,12 @@ def _enough(phases: list[RoadmapDraftPhase], settings: AgentSettings) -> bool:
     return len(phases) >= min_phases and sum(len(phase.steps) for phase in phases) >= min_steps
 
 
-def _tool_budget(settings: AgentSettings, remaining: int, rounds: int, has_latest: bool) -> int:
+def _tool_budget(settings: AgentSettings, remaining: int, rounds: int, has_latest: bool, extra_reads: int = 0) -> int:
     # Context đọc 4 tool, dùng lại lần đọc latest từ chat nếu có. Tối ưu chạy một lần trước bản phác thảo và có thể thêm một lần
     # nếu bản phác thảo xin phương án khác; kiểm mỗi bước một lần/vòng (trường hợp xấu nhất: không bước nào dùng lại được phán
-    # quyết cũ) và có thể lưu mỗi vòng. Xung đột dành thêm hai call cho một lần đọc latest và một lần lưu lại.
-    fixed = (4 - int(has_latest)) + 2 + (1 + rounds) + 2
+    # quyết cũ) và có thể lưu mỗi vòng. Xung đột dành thêm hai call cho một lần đọc latest và một lần lưu lại. `extra_reads`: lần đọc
+    # ngữ cảnh thêm (chat có người tư vấn đọc hồ sơ hành vi).
+    fixed = (4 - int(has_latest)) + extra_reads + 2 + (1 + rounds) + 2
     return min(settings.roadmap_max_steps, max(0, (remaining - fixed) // (1 + rounds)))
 
 
@@ -1062,8 +1107,10 @@ async def build_roadmap(
     latest_outcome: ToolOutcome | None = None,
     regeneration: RegenerationContext | None = None,
     user_goal: UserGoal | None = None,
+    advise: bool = False,
 ) -> RoadmapResult:
-    """Sinh lộ trình, chỉ ghi bản nháp sau khi grounding và suitability đạt."""
+    """Sinh lộ trình, chỉ ghi bản nháp sau khi grounding và suitability đạt. `advise` (lượt chat): đọc thêm hồ sơ hành vi và xin
+    planner lập luận cùng câu kết luận trong chính lời gọi phác thảo (luồng K); job sinh lại không dùng."""
 
     async def stage(value: JobStage) -> None:
         if on_stage is not None:
@@ -1091,10 +1138,11 @@ async def build_roadmap(
     rounds = max(0, settings.roadmap_fix_max_rounds)
     if scope.max_calls is not None:
         rounds = min(rounds, max(0, scope.max_calls - scope.calls - 1))
-    step_limit = _tool_budget(settings, remaining, rounds, latest_outcome is not None)
+    extra_reads = int(advise)
+    step_limit = _tool_budget(settings, remaining, rounds, latest_outcome is not None, extra_reads)
     while step_limit <= 0 and rounds > 0:
         rounds -= 1
-        step_limit = _tool_budget(settings, remaining, rounds, latest_outcome is not None)
+        step_limit = _tool_budget(settings, remaining, rounds, latest_outcome is not None, extra_reads)
     if step_limit <= 0:
         _log_event("roadmap_invalid", stage="tool_budget", reason_code=reason_code)
         return RoadmapResult()
@@ -1121,12 +1169,16 @@ async def build_roadmap(
                 args["goals"] = [entry]
         return args, await tools("optimize_allocation", args, "planner")
 
-    balances, obligations, resilience, old, (base_alloc_args, optimized) = await asyncio.gather(
+    async def read_behavior() -> ToolOutcome | None:
+        return await tools("get_behavior_profile", {}, "forecast") if advise else None
+
+    balances, obligations, resilience, old, (base_alloc_args, optimized), behavior_read = await asyncio.gather(
         balances_task,
         tools("get_obligations", {}, "ledger"),
         tools("get_resilience_score", {}, "forecast"),
         read_base(),
         first_allocation(),
+        read_behavior(),
     )
     clock.lap("context")
     if (jar_summary := _parse(balances, B.JarSummaryData)) is None:
@@ -1179,6 +1231,10 @@ async def build_roadmap(
         compact["weakest"] = {"key": weakest.key, "band": weakest.band, "score": weakest.score}
     if previous is not None:
         compact["previous_feedback"] = _previous_context(previous)
+    # Thói quen chi tiêu (người tư vấn): vào bản gọn nên số trong câu thói quen là căn cứ hợp lệ cho chữ của model như mọi số khác.
+    behavior = advisor.behavior_view(behavior_read.payload) if behavior_read is not None and behavior_read.ok else None
+    if behavior is not None:
+        compact["behavior"] = behavior
     # Mục tiêu người dùng nói đã vào optimize_allocation (hũ tiết kiệm hợp lệ): đưa số vào bản gọn để grounding của bước (Allowed)
     # và model thấy nó.
     if user_goal is not None and any(
@@ -1214,6 +1270,13 @@ async def build_roadmap(
         "max_steps": step_limit,
         "reason_numbers": _reason_numbers(compact, _grounding(compact)),
     }
+    context_reads = (
+        ("get_jar_balances", balances), ("get_obligations", obligations), ("get_resilience_score", resilience),
+        ("get_roadmap", old), ("optimize_allocation", optimized), ("get_behavior_profile", behavior_read),
+    )  # fmt: skip
+    basis_tools = [name for name, o in context_reads if o is not None and o.kind is ToolKind.OK]
+    if advise:
+        model_context["can_cu"] = advisor.basis_catalog(basis_tools)
     if regeneration is not None:
         preferences: dict[str, Any] = {}
         if regeneration.alternative_id is not None:
@@ -1249,19 +1312,23 @@ async def build_roadmap(
     attempts = _DRAFT_ATTEMPTS
     if scope.max_calls is not None:
         attempts = max(1, min(attempts, scope.max_calls - scope.calls))
+    system = ROADMAP_SYSTEM + ROADMAP_ADVICE_GUIDE if advise else ROADMAP_SYSTEM
     try:
         drafted = await _ask(
             llm,
             scope,
-            RoadmapSketch,
+            AdvisedSketch if advise else RoadmapSketch,
             model_context,
             settings.roadmap_draft_max_tokens,
             max_attempts=attempts,
+            system=system,
         )
     except Exception as exc:
         clock.lap("draft", outcome=type(exc).__name__)
         return RoadmapResult(model_error=exc)
     sketch = drafted.value
+    # lập luận của bản phác thảo; vòng sửa trả lập luận mới thì dùng bản mới (`repair`)
+    advice_src: Any = sketch if advise else None
     clock.lap("draft", attempts=drafted.attempts)
     if not any(phase.steps for phase in sketch.phases):
         _log_event("roadmap_invalid", stage="empty_draft", reason_code=reason_code)
@@ -1313,7 +1380,7 @@ async def build_roadmap(
     checked_proposals: dict[str, asyncio.Task[SuitabilityVerdict | None]] = {}
 
     async def repair(issues: list[RepairIssue]) -> RoadmapOutline | None:
-        nonlocal retries, model_error
+        nonlocal retries, model_error, advice_src
         if retries >= rounds or not model_left() or model_error is not None:
             return None
         retries += 1
@@ -1330,13 +1397,16 @@ async def build_roadmap(
         }
         try:
             revised = await _ask(
-                llm, scope, RoadmapOutline, payload, settings.roadmap_draft_max_tokens
+                llm, scope, AdvisedOutline if advise else RoadmapOutline, payload, settings.roadmap_draft_max_tokens,
+                system=system,
             )
         except Exception as exc:
             model_error = exc
             clock.lap("repair", round=retries, outcome=type(exc).__name__)
             return None
         clock.lap("repair", round=retries)
+        if advise and (getattr(revised.value, "reasoning", None) or getattr(revised.value, "conclusion", None)):
+            advice_src = revised.value  # lập luận của bản đã sửa thay bản trước
         return revised.value
 
     async def save(phases: list[RoadmapDraftPhase]) -> ToolOutcome:
@@ -1454,6 +1524,49 @@ async def build_roadmap(
             _log_event(
                 "roadmap_invalid", stage="save", reason_code=reason_code, rounds=retries
             )
+        advice = _roadmap_advice(advice_src, compact, basis_tools, verdicts, result, behavior is not None) if advise else None
         return finish(
-            RoadmapResult(outcome=result, model_error=model_error, suitability=tuple(verdicts))
+            RoadmapResult(outcome=result, model_error=model_error, suitability=tuple(verdicts), advice=advice)
         )
+
+
+def _roadmap_advice(
+    src: Any,
+    compact: dict[str, Any],
+    tools_ok: list[str],
+    verdicts: list[SuitabilityVerdict],
+    saved: ToolOutcome,
+    has_behavior: bool,
+) -> advisor.Advice | None:
+    """Lập luận của planner sau khi mã kiểm (xem `advisor`): số theo bộ kiểm chặt của bước lộ trình (`_grounding` của bản gọn cuối),
+    căn cứ là tool ngữ cảnh đã trả OK hoặc luật đã kiểm cho các bước, kết luận trỏ một bước của bản ĐÃ LƯU."""
+    roadmap = _parse(saved, Roadmap)
+    if src is None or roadmap is None:
+        return None
+    reasoning = list(getattr(src, "reasoning", None) or [])
+    c = getattr(src, "conclusion", None)
+    if not reasoning and c is None:
+        return None
+    grounded = _grounding(compact)
+    steps, dropped = advisor.verify_steps(
+        reasoning, grounded=grounded, tools=tools_ok, rules=advisor.checked_rules(verdicts)
+    )
+    step_ids = {step.step_id for phase in roadmap.phases for step in phase.steps}
+    conclusion, why = advisor.verify_conclusion(
+        _clean_text(c.text) if c is not None else None,
+        c.personal if c is not None else (),
+        grounded=grounded,
+        target_ok=c is not None and c.step_id in step_ids,
+        has_memory=False,
+        has_behavior=has_behavior,
+        step_id=c.step_id if c is not None else None,
+    )
+    advisor.log_advice("roadmap", len(reasoning), len(steps), dropped, why)
+    clean = tuple(
+        s.model_copy(
+            update={"seen": _clean_text(s.seen)[:160], "why": _clean_text(s.why)[:160], "effect": _clean_text(s.effect)[:160]}
+        )
+        for s in steps
+    )
+    advice = advisor.Advice(context="roadmap", steps=clean, conclusion=conclusion)
+    return None if advice.empty else advice

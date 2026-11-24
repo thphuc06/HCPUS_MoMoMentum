@@ -105,6 +105,27 @@ function parseAmount(text: string): number | null {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/** Khối `options` cho lượt what-if mẫu: phần hụt và ngày đến hạn lấy từ khối nghĩa vụ mẫu (fixture), không số gắn cứng. */
+function adviceOptionsBlock(trace: string, shortfall: number, dueDate: string) {
+  const money = `${new Intl.NumberFormat('vi-VN').format(shortfall)} ₫`
+  const due = `${dueDate.slice(8, 10)}/${dueDate.slice(5, 7)}`
+  return {
+    v: 1,
+    id: `options:${trace}`,
+    type: 'options',
+    trace_id: trace,
+    fallback_text: 'Có 2 phương án: Hoãn mua sau kỳ lương; Bù hũ Nghĩa vụ trước hạn.',
+    source: source('agent'),
+    data: {
+      title: 'Các phương án',
+      options: [
+        { option_id: 'defer', kind: 'defer', label: 'Hoãn mua sau kỳ lương', summary: `Hoãn tới sau ${due} để hũ Nghĩa vụ không bị hụt ${money}.`, status: 'ok', recommended: true, checked_rules: ['obligations_first', 'no_borrow_to_spend'] },
+        { option_id: 'cover', kind: 'move_between_jars', label: 'Bù hũ Nghĩa vụ trước hạn', summary: `Chuyển ${money} từ hũ khác trước ${due}.`, status: 'tight', checked_rules: ['obligations_first'] },
+      ],
+    },
+  }
+}
+
 async function agent(req: IncomingMessage, res: ServerResponse) {
   const auth = String(req.headers.authorization ?? '')
   if (!auth.startsWith('Bearer ')) {
@@ -175,6 +196,30 @@ async function agent(req: IncomingMessage, res: ServerResponse) {
   // "van ban dai": lời dài cỡ phần giải thích what-if (2 đến 4 câu, tối đa khoảng 450 ký tự) để xem "Xem thêm" của khung chat.
   if (q.includes('van ban dai')) {
     await say('m1', 'Nếu mua tai nghe 1,2 triệu bằng Trả sau, hũ Nghĩa vụ ngày 05/12 cần 1.233.000 ₫ trong khi đang có 1.000.000 ₫, nên sẽ hụt 233.000 ₫. Hũ Giải trí vẫn đủ tới kỳ lương vì món này chưa trừ ngay. Bạn có thể bù phần hụt từ hũ Du lịch trước ngày 05/12, hoặc hoãn mua tới sau kỳ lương để không phát sinh phí. Đây là mô phỏng, chưa có giao dịch nào được ghi.')
+    return end()
+  }
+  // "neu mua ..." (ví dụ "neu mua tai nghe tra sau"): lượt what-if có người tư vấn (luồng K) để xem và chụp khung chat: dòng công
+  // cụ, khối nghĩa vụ, khối lập luận phát dần (cùng id, bản sau thay bản trước), phương án, lời giải thích. Số lấy từ fixture.
+  if (q.includes('neu mua')) {
+    await tool('tc1', 'ledger___get_jar_balances', 300)
+    await tool('tc2', 'ledger___get_obligations', 400)
+    await tool('tc3', 'forecast___get_behavior_profile', 400)
+    await tool('tc4', 'forecast___run_scenario', 900)
+    const impact = blockFixture('obligation_impact.minh_headphones') as { data: { shortfall_vnd: number; cost: { due_date: string; total_due_vnd: number } } } | null
+    if (impact) block({ ...impact, id: `obligation_impact:${trace}:${impact.data.cost.due_date}`, trace_id: trace })
+    await tool('tc5', 'planner___check_suitability', 700)
+    const full = blockFixture('reasoning.what_if') as { data: { steps: unknown[] } } | null
+    if (full) {
+      const id = `reasoning:${trace}`
+      for (let n = 1; n < full.data.steps.length; n++) {
+        const data = { ...full.data, complete: false, steps: full.data.steps.slice(0, n), conclusion: undefined }
+        block({ ...full, id, trace_id: trace, fallback_text: 'Yofina đang cân nhắc số liệu của bạn.', data })
+        await sleep(120)
+      }
+      block({ ...full, id, trace_id: trace })
+    }
+    if (impact) block(adviceOptionsBlock(trace, impact.data.shortfall_vnd, impact.data.cost.due_date))
+    await say('m1', 'Đây là mô phỏng, chưa có giao dịch nào được ghi.')
     return end()
   }
   if (q.includes('khoi la')) {

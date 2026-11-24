@@ -1431,6 +1431,68 @@ class CitationBlock(_BlockBase):
     data: CitationData
 
 
+# --- reasoning (phase 6, luồng K: người tư vấn) --------------------------------------------
+ReasoningContext = Literal["what_if", "roadmap"]
+ReasoningPersonal = Literal["memory", "behavior"]
+ReasoningText = Annotated[str, Field(min_length=1, max_length=160)]
+#: tối đa số bước lập luận của một khối (khớp `maxItems` của schema)
+REASONING_MAX_STEPS = 5
+
+
+class ReasoningBasis(_Strict):
+    """Căn cứ của một bước: tool đã gọi thành công trong lượt hoặc luật phù hợp đã kiểm. `label` do code dựng."""
+
+    kind: Literal["tool", "rule"]
+    ref: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+
+
+class ReasoningStep(_Strict):
+    step_id: Annotated[str, Field(pattern=r"^s[1-5]$")]
+    seen: ReasoningText
+    why: ReasoningText
+    effect: ReasoningText
+    basis: Annotated[list[ReasoningBasis], Field(min_length=1, max_length=4)]
+
+
+class ReasoningConclusion(_Strict):
+    text: Annotated[str, Field(min_length=1, max_length=240)]
+    option_id: SlugKey | None = None
+    step_id: SlugKey | None = None
+    personal: Annotated[list[ReasoningPersonal], Field(max_length=2)] | None = None
+
+    @model_validator(mode="after")
+    def _personal_unique(self) -> ReasoningConclusion:
+        if self.personal is not None and len(set(self.personal)) != len(self.personal):
+            raise ValueError("personal không được lặp")
+        return self
+
+
+class ReasoningData(_Strict):
+    context: ReasoningContext
+    complete: bool
+    steps: Annotated[list[ReasoningStep], Field(max_length=REASONING_MAX_STEPS)]
+    conclusion: ReasoningConclusion | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> ReasoningData:
+        if [s.step_id for s in self.steps] != [f"s{i + 1}" for i in range(len(self.steps))]:
+            raise ValueError("step_id phải là s1, s2... liên tiếp")
+        if not self.complete and (not self.steps or self.conclusion is not None):
+            raise ValueError("bản chưa xong có ít nhất một bước và chưa có kết luận")
+        if not self.steps and self.conclusion is None:
+            raise ValueError("cần ít nhất một bước hoặc một kết luận")
+        c = self.conclusion
+        if c is not None and ((self.context == "what_if" and c.step_id) or (self.context == "roadmap" and c.option_id)):
+            raise ValueError("kết luận what_if trỏ phương án (option_id), lộ trình trỏ bước (step_id)")
+        return self
+
+
+class ReasoningBlock(_BlockBase):
+    type: Literal["reasoning"]
+    data: ReasoningData
+
+
 Block = Annotated[
     JarSummaryBlock
     | ConfirmBlock
@@ -1454,7 +1516,8 @@ Block = Annotated[
     | RoadmapDiffBlock
     | ReviewListBlock
     | BehaviorInsightBlock
-    | CitationBlock,
+    | CitationBlock
+    | ReasoningBlock,
     Field(discriminator="type"),
 ]
 BLOCK_ADAPTER: TypeAdapter[Any] = TypeAdapter(Block)
@@ -1484,6 +1547,7 @@ BLOCK_MODELS: dict[str, type[_BlockBase]] = {
     "review_list": ReviewListBlock,
     "behavior_insight": BehaviorInsightBlock,
     "citation": CitationBlock,
+    "reasoning": ReasoningBlock,
 }
 
 
@@ -2426,5 +2490,38 @@ def build_citation(
         trace_id=trace_id,
         fallback_text=_clip(text, 280),
         source=Source(tool=CITATION_SOURCE_TOOL, as_of=r.as_of, app_date=r.app_date),
+        data=d,
+    )
+
+
+def build_reasoning(
+    *,
+    data: Mapping[str, Any] | ReasoningData,
+    trace_id: str,
+    source_tool: str,
+    as_of: datetime,
+    app_date: date,
+    block_id: str | None = None,
+) -> ReasoningBlock:
+    """Bọc `data` ĐÃ KIỂM (bước đã qua NumericGrounding, căn cứ hợp lệ, kết luận khớp phương án hay bước) thành khối. Agent phát nhiều
+    bản cùng id (`reasoning:{trace_id}`): bản chưa xong thêm từng bước, bản cuối có kết luận. `fallback_text` do code dựng, chỉ đếm
+    số bước: chữ của bước và kết luận là lời model viết, không đưa vào `fallback_text`."""
+    d = _data_model(ReasoningData, data)
+    n = len(d.steps)
+    if not d.complete:
+        text = "Yofina đang cân nhắc số liệu của bạn."
+    elif d.conclusion is not None and n:
+        text = f"Yofina đã cân nhắc {n} điều trước khi đưa ra gợi ý."
+    elif d.conclusion is not None:
+        text = "Yofina có một gợi ý cho bạn."
+    else:
+        text = f"Yofina đã cân nhắc {n} điều từ số liệu của bạn."
+    return ReasoningBlock(
+        v=SCHEMA_VERSION,
+        id=block_id or f"reasoning:{trace_id}",
+        type="reasoning",
+        trace_id=trace_id,
+        fallback_text=_clip(text, 280),
+        source=_source(source_tool, as_of, app_date),
         data=d,
     )

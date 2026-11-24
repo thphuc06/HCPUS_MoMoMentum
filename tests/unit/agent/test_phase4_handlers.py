@@ -332,8 +332,8 @@ def test_lo_trinh_nhan_muc_tieu_trong_cau_va_khoi_infeasible(monkeypatch, action
     assert len(calls_of(tools, "get_jar_balances")) == 1  # build_roadmap dùng lại lần đọc hũ của handler
     assert {tool for tool, _ in tools.calls} <= {
         "get_jar_balances", "get_obligations", "get_resilience_score", "get_roadmap",
-        "optimize_allocation", "check_suitability", "save_roadmap",
-    }  # fmt: skip  # check_suitability: agent kiểm mọi bước như ledger lúc lưu (fix/roadmap-robust)
+        "optimize_allocation", "check_suitability", "save_roadmap", "get_behavior_profile",
+    }  # fmt: skip  # check_suitability: agent kiểm mọi bước như ledger lúc lưu (fix/roadmap-robust); get_behavior_profile: người tư vấn (luồng K)
     (stored,) = calls_of(tools, "save_roadmap")
     assert stored["reason_code"] == reason
     assert stored["feasibility"] == "infeasible" and len(stored["alternatives"]) == 2

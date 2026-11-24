@@ -1,0 +1,27 @@
+{
+  "v": 1,
+  "id": "reasoning:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Yofina đang cân nhắc số liệu của bạn.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "reasoning",
+  "data": {
+    "context": "what_if",
+    "complete": false,
+    "steps": [
+      {
+        "step_id": "s1",
+        "seen": "Ngày 05/12 hũ Nghĩa vụ phải trả 2.200.000 ₫ nhưng chỉ có 1.050.000 ₫.",
+        "why": "Thiếu tiền đúng hạn thì khoản Trả sau dễ bị trễ.",
+        "effect": "Mua ngay bằng Trả sau không phải lựa chọn an toàn.",
+        "basis": [
+          { "kind": "memory", "ref": "run_scenario", "label": "Kết quả mô phỏng" }
+        ]
+      }
+    ]
+  }
+}

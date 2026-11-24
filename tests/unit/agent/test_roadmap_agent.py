@@ -551,7 +551,7 @@ def test_tool_budget_includes_every_round_save_and_conflict_attempt():
     settings = agent_settings()
     # trần riêng của lượt lập lộ trình (cũ: trần chung 16 chỉ đủ hai bước)
     assert settings.roadmap_max_steps == 6
-    assert settings.roadmap_max_tool_calls_per_turn == 40 > settings.max_tool_calls_per_turn == 16
+    assert settings.roadmap_max_tool_calls_per_turn == 40 > settings.max_tool_calls_per_turn == 18
     # 3 ngữ cảnh + 2 tối ưu (mặc định, và lần hai nếu bản phác thảo xin phương án khác) + 3 lưu + 2 xung đột = 10 cố định
     assert _tool_budget(settings, 15, 2, True) == 1
     # chat đã đọc get_roadmap (latest, có thể thêm active): 10 cố định + 6 bước × 3 vòng = 28

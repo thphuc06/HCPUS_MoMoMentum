@@ -43,6 +43,8 @@ BLOCK_TYPES = [
     # phase 5 (F7, trích dẫn biểu phí)
     "behavior_insight",
     "citation",
+    # phase 6 (luồng K, người tư vấn)
+    "reasoning",
 ]
 BLOCK_SCHEMA_FILES = {t: CONTRACTS / "blocks" / f"{t}.schema.json" for t in BLOCK_TYPES}
 

@@ -38,7 +38,7 @@ from typing import Any
 
 from ag_ui.core import BaseEvent, RunAgentInput
 
-from yofina_agent import behavior_chat, notices, trace
+from yofina_agent import advisor, behavior_chat, notices, trace
 from yofina_agent import events as ev
 from yofina_agent import memory as agent_memory
 from yofina_agent.clarify import resolve_clarify
@@ -1297,6 +1297,7 @@ class Turn:
                 # lần đọc hũ dùng lại không tính vào trần, nên ngân sách bước bằng lượt không đọc hũ trước
                 tool_calls_left=self.s.max_tool_calls_per_turn - self.tool_calls + int(cached_jars is not None),
                 latest_outcome=latest_outcome, user_goal=user_goal,
+                advise=True,  # người tư vấn (luồng K): lập luận và kết luận trong chính lời gọi planner
             )
         self.suitability.extend(result.suitability)
         if result.model_error is not None:
@@ -1323,6 +1324,7 @@ class Turn:
             ))
             return
         self.verified = True
+        await self.emit_advice(result.advice)  # lập luận của planner, trước thẻ lộ trình
         self.emit_block(block)
         versions_note = self.roadmap_versions_note(block.data, versions)
         # Lời kết dựng bằng mã từ dữ liệu khối: lượt lập thường đã dùng hết trần lượt gọi model (router + phác thảo + vòng sửa) nên
@@ -1331,6 +1333,17 @@ class Turn:
         await self.emit_fixed_text(
             _roadmap_closing(block.data, versions_note.get("active_version"), goal)
         )
+
+    async def emit_advice(self, advice: advisor.Advice | None) -> None:
+        """Khối `reasoning` của một lượt (lập luận đã kiểm số và căn cứ): chữ của model nên qua Guardrail đầu ra trước; bị chặn thì
+        bỏ cả lập luận, phần còn lại của lượt giữ nguyên."""
+        if advice is None or advice.empty:
+            return
+        gr = await self.check_output("\n".join(advice.texts()))
+        if gr is not None and gr.blocked:
+            log.warning(json.dumps({"event": "advisor_reasoning_blocked"}))
+            return
+        advisor.emit(self, advice)
 
     def roadmap_versions_note(
         self, saved: B.RoadmapData, versions: _RoadmapVersions | None

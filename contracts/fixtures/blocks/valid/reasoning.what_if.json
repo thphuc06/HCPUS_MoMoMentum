@@ -1,0 +1,52 @@
+{
+  "v": 1,
+  "id": "reasoning:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Yofina đã cân nhắc 3 điều trước khi đưa ra gợi ý.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "reasoning",
+  "data": {
+    "context": "what_if",
+    "complete": true,
+    "steps": [
+      {
+        "step_id": "s1",
+        "seen": "Ngày 05/12 hũ Nghĩa vụ phải trả 2.200.000 ₫ nhưng chỉ có 1.050.000 ₫.",
+        "why": "Thiếu tiền đúng hạn thì khoản Trả sau dễ bị trễ.",
+        "effect": "Mua ngay bằng Trả sau không phải lựa chọn an toàn.",
+        "basis": [
+          { "kind": "tool", "ref": "run_scenario", "label": "Kết quả mô phỏng" },
+          { "kind": "tool", "ref": "get_obligations", "label": "Các khoản đến hạn" }
+        ]
+      },
+      {
+        "step_id": "s2",
+        "seen": "Nghĩa vụ hằng tháng sẽ vượt mức nên giữ so với thu nhập.",
+        "why": "Thêm một khoản trả góp nữa làm mỗi kỳ lương nặng hơn.",
+        "effect": "Không gợi ý vay thêm cho món không thiết yếu.",
+        "basis": [
+          { "kind": "rule", "ref": "obligation_to_income", "label": "Nghĩa vụ trên thu nhập" },
+          { "kind": "rule", "ref": "no_borrow_to_spend", "label": "Không khuyên vay để tiêu" }
+        ]
+      },
+      {
+        "step_id": "s3",
+        "seen": "Bạn hay chi dồn trong tuần đầu sau ngày lương.",
+        "why": "Nếu mua đúng lúc lương về, hũ dễ cạn sớm hơn dự báo.",
+        "effect": "Hoãn tới sau kỳ lương và để dành dần thì nhẹ hơn.",
+        "basis": [
+          { "kind": "tool", "ref": "get_behavior_profile", "label": "Thói quen chi tiêu" }
+        ]
+      }
+    ],
+    "conclusion": {
+      "text": "Mình nghĩ bạn nên hoãn mua tới sau 05/12: hũ Nghĩa vụ đang hụt 1.150.000 ₫, và tuần đầu sau lương bạn thường chi nhiều.",
+      "option_id": "defer",
+      "personal": ["behavior"]
+    }
+  }
+}

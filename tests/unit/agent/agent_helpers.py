@@ -72,6 +72,8 @@ class FakeTools:
                 "x", mcp_ok({"status": "OK", "as_of": "2026-11-21T02:00:00Z", "app_date": "2026-11-21", "data": {"scenarios": []}})
             ),
             "check_suitability": lambda args: classify_result("x", mcp_ok(fixture("check_suitability.ok.json"))),
+            # phase 6 (luồng K): what-if khoản chi đọc thói quen chi tiêu để cá nhân hóa kết luận
+            "get_behavior_profile": lambda args: classify_result("x", mcp_ok(fixture("get_behavior_profile.ok.json"))),
             "affordability_check": lambda args: classify_result("x", mcp_ok(fixture("affordability_check.ok.json"))),
             "update_profile": lambda args: classify_result("x", mcp_ok(fixture("update_profile.needs_confirmation.json"))),
             "schedule_nudge": lambda args: classify_result("x", mcp_ok(fixture("schedule_nudge.needs_confirmation.json"))),

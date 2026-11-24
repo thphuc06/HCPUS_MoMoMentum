@@ -272,9 +272,34 @@ class AnalysisOption(_Model):
     recommended: bool | None = None
 
 
+#: Mã căn cứ của một bước lập luận: `tool:<tên ngắn>` hoặc `rule:<rule_id>`, chọn trong danh sách `<can_cu>` của prompt.
+BasisKey = Annotated[str, Field(pattern=r"^(tool|rule):[a-z][a-z0-9_]{0,63}$")]
+AdvicePersonal = Literal["memory", "behavior"]
+
+
+class ReasoningStepIn(_Model):
+    """Một bước lập luận model trả về NHƯ DỮ LIỆU (luồng K của phase 6), không phải suy nghĩ thô. Mã kiểm số từng câu và căn cứ
+    rồi mới phát (`advisor.py`); bước có số không căn cứ hoặc không có căn cứ hợp lệ bị bỏ."""
+
+    seen: Annotated[str, Field(min_length=1, max_length=160)]
+    why: Annotated[str, Field(min_length=1, max_length=160)]
+    effect: Annotated[str, Field(min_length=1, max_length=160)]
+    basis: Annotated[list[BasisKey], Field(min_length=1, max_length=3)]
+
+
+class OptionConclusionIn(_Model):
+    """Câu kết luận của what-if: nên làm gì và vì sao, theo phương án được gợi ý (`option_id`)."""
+
+    text: Annotated[str, Field(min_length=1, max_length=240)]
+    option_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+    personal: Annotated[list[AdvicePersonal], Field(max_length=2)] = Field(default_factory=list)
+
+
 class Analysis(_Model):
+    reasoning: Annotated[list[ReasoningStepIn], Field(max_length=5)] = Field(default_factory=list)
     narrative: Annotated[str, Field(min_length=1, max_length=800)]
     options: Annotated[list[AnalysisOption], Field(min_length=2, max_length=3)]
+    conclusion: OptionConclusionIn | None = None
     follow_ups: Annotated[
         list[Annotated[str, Field(min_length=1, max_length=200)]], Field(max_length=3)
     ] = Field(default_factory=list)
@@ -344,6 +369,7 @@ __all__ = [
     "PLAN_TOOLS",
     "Analysis",
     "AnalysisOption",
+    "BasisKey",
     "ClarifyChipIn",
     "ClarifyRequest",
     "GroundingResult",
@@ -353,10 +379,12 @@ __all__ = [
     "ObligationKind",
     "IntentResult",
     "OptionActionSpec",
+    "OptionConclusionIn",
     "OptionSuitability",
     "Plan",
     "PlanLimits",
     "PlanStep",
+    "ReasoningStepIn",
     "UngroundedNumber",
     "Verdict",
 ]

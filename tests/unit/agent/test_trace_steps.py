@@ -30,6 +30,7 @@ TARGET = {
     "get_forecast": "forecast",
     "get_fee_schedule": "knowledge",
     "check_suitability": "planner",
+    "get_behavior_profile": "forecast",
 }
 
 

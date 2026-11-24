@@ -72,6 +72,8 @@ def agent_prompts() -> dict[str, str]:
         "whatif.ORCHESTRATOR_SYSTEM": whatif.ORCHESTRATOR_SYSTEM,
         "whatif.ANALYST_SYSTEM": whatif.ANALYST_SYSTEM,
         "roadmap.ROADMAP_SYSTEM": roadmap_agent.ROADMAP_SYSTEM,
+        "roadmap.ROADMAP_ADVICE_GUIDE": roadmap_agent.ROADMAP_ADVICE_GUIDE,
+        "whatif.ANALYST_MEMORY_GUIDE": whatif.ANALYST_MEMORY_GUIDE,
         "memory.PROMPT_NOTICE": memory.PROMPT_NOTICE,
     }
     prompts |= {f"writer.TASKS[{k}]": v for k, v in writer.TASKS.items()}

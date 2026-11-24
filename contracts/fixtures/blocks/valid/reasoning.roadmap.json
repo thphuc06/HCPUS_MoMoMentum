@@ -1,0 +1,37 @@
+{
+  "v": 1,
+  "id": "reasoning:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Yofina đã cân nhắc 2 điều từ số liệu của bạn.",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "reasoning",
+  "data": {
+    "context": "roadmap",
+    "complete": true,
+    "steps": [
+      {
+        "step_id": "s1",
+        "seen": "Hũ Nghĩa vụ có khoản đến hạn 05/12.",
+        "why": "Khoản đến hạn cần đủ tiền trước khi để dành thêm.",
+        "effect": "Giai đoạn đầu lo khoản đến hạn trước.",
+        "basis": [
+          { "kind": "tool", "ref": "get_obligations", "label": "Các khoản đến hạn" }
+        ]
+      },
+      {
+        "step_id": "s2",
+        "seen": "Phần tiết kiệm đang là thành phần yếu nhất của điểm chống chịu.",
+        "why": "Quỹ dự phòng mỏng thì một cú sốc nhỏ cũng làm hụt tiền.",
+        "effect": "Các giai đoạn sau dồn phần chia lương vào quỹ dự phòng.",
+        "basis": [
+          { "kind": "tool", "ref": "get_resilience_score", "label": "Điểm chống chịu" },
+          { "kind": "tool", "ref": "optimize_allocation", "label": "Phương án phân bổ" }
+        ]
+      }
+    ]
+  }
+}

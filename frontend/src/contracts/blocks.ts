@@ -1298,8 +1298,56 @@ export const CitationBlock = z.object({
 })
 export type CitationBlock = z.infer<typeof CitationBlock>
 
-/** Hợp của các khối đã biết (hai mươi ba), phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema. */
-export const Block = z.discriminatedUnion('type', [JarSummaryBlock, ConfirmBlock, ReceiptBlock, NoticeBlock, ForecastTimelineBlock, ProactiveCardBlock, ConfirmActionBlock, ReceiptActionBlock, AffordabilityCardBlock, ObligationImpactBlock, OptionsBlock, ExplainBlock, ClarifyBlock, SuggestionsBlock, IngestReviewBlock, CoverageChangeBlock, ResilienceScoreBlock, StressResultBlock, RoadmapBlock, RoadmapDiffBlock, ReviewListBlock, BehaviorInsightBlock, CitationBlock])
+/** Căn cứ của một bước: một tool đã trả kết quả thành công trong lượt (`ref` là tên ngắn, ví dụ `run_scenario`) hoặc một luật phù hợp đã kiểm (`ref` là `rule_id`). `label` do code dựng (nhãn của tool, nhãn luật do `check_suitability` trả). */
+export const ReasoningBasis = z.object({
+  kind: z.enum(["tool", "rule"]),
+  ref: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,63}$")),
+  label: z.string().min(1).max(60),
+})
+export type ReasoningBasis = z.infer<typeof ReasoningBasis>
+
+/** Một bước lập luận. Ba câu ngắn do model viết, số trong đó đã qua kiểm căn cứ. */
+export const ReasoningStep = z.object({
+  step_id: z.string().regex(new RegExp("^s[1-5]$")),
+  seen: z.string().min(1).max(160),
+  why: z.string().min(1).max(160),
+  effect: z.string().min(1).max(160),
+  basis: z.array(ReasoningBasis).min(1).max(4),
+})
+export type ReasoningStep = z.infer<typeof ReasoningStep>
+
+/** Một câu kết luận có chính kiến: nên làm gì và vì sao. what-if: `option_id` là phương án được gợi ý (recommended) trong khối `options` cùng lượt. Lộ trình: `step_id` là một bước của bản vừa lưu. `personal` cho biết câu có dựa vào sở thích trong bộ nhớ (`memory`) hay thói quen chi tiêu của hồ sơ hành vi (`behavior`); agent chỉ giữ nguồn có thật trong lượt. */
+export const ReasoningConclusion = z.object({
+  text: z.string().min(1).max(240),
+  option_id: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")).optional(),
+  step_id: z.string().regex(new RegExp("^[a-z][a-z0-9_]{0,31}$")).optional(),
+  personal: z.array(z.enum(["memory", "behavior"])).max(2).optional(),
+})
+export type ReasoningConclusion = z.infer<typeof ReasoningConclusion>
+
+/** Bất biến mà JSON Schema không diễn đạt (Pydantic quyết định): `complete: false` thì có ít nhất một bước và chưa có kết luận; luôn có ít nhất một bước hoặc một kết luận; `step_id` là `s1`, `s2`... liên tiếp; kết luận của `what_if` không có `step_id`, của `roadmap` không có `option_id`; `personal` không lặp. */
+export const ReasoningData = z.object({
+  context: z.enum(["what_if", "roadmap"]),
+  complete: z.boolean(),
+  steps: z.array(ReasoningStep).max(5),
+  conclusion: ReasoningConclusion.optional(),
+})
+export type ReasoningData = z.infer<typeof ReasoningData>
+
+/** Cách người tư vấn cân nhắc (luồng K của phase 6): vài bước lập luận ngắn và một câu kết luận. Đây là lập luận CÓ CẤU TRÚC mà Analyst (what-if) hoặc planner lộ trình trả về như dữ liệu trong chính lời gọi đã có, không phải suy nghĩ thô của model. Mỗi bước nói điều đã thấy trong kết quả tool, vì sao điều đó quan trọng và nó đẩy quyết định về đâu, kèm căn cứ (tool đã gọi thành công trong lượt, hoặc luật phù hợp đã kiểm). Agent chỉ phát bước đã qua kiểm số (NumericGrounding) và có căn cứ hợp lệ; nhãn căn cứ do code dựng. Phát dần: các bản `complete: false` (thêm từng bước) rồi một bản `complete: true` (đủ bước, kèm kết luận nếu có), cùng id nên bản sau thay bản trước. Id khối `reasoning:{trace_id}`. */
+export const ReasoningBlock = z.object({
+  v: SchemaVersion,
+  id: BlockId,
+  type: z.literal("reasoning"),
+  trace_id: TraceId,
+  fallback_text: FallbackText,
+  source: Source,
+  data: ReasoningData,
+})
+export type ReasoningBlock = z.infer<typeof ReasoningBlock>
+
+/** Hợp của các khối đã biết (hai mươi bốn), phân biệt theo `type`. Frontend không parse cả mảng bằng schema này: nó parse từng khối theo registry và hiện fallback_text khi type lạ hoặc sai schema. */
+export const Block = z.discriminatedUnion('type', [JarSummaryBlock, ConfirmBlock, ReceiptBlock, NoticeBlock, ForecastTimelineBlock, ProactiveCardBlock, ConfirmActionBlock, ReceiptActionBlock, AffordabilityCardBlock, ObligationImpactBlock, OptionsBlock, ExplainBlock, ClarifyBlock, SuggestionsBlock, IngestReviewBlock, CoverageChangeBlock, ResilienceScoreBlock, StressResultBlock, RoadmapBlock, RoadmapDiffBlock, ReviewListBlock, BehaviorInsightBlock, CitationBlock, ReasoningBlock])
 export type Block = z.infer<typeof Block>
 
 /** type -> schema của MỌI khối, thứ tự như contracts/blocks/block.schema.json. */
@@ -1327,11 +1375,12 @@ export const blockSchemas = {
   review_list: ReviewListBlock,
   behavior_insight: BehaviorInsightBlock,
   citation: CitationBlock,
+  reasoning: ReasoningBlock,
 } as const
 
 export type AnyBlockType = keyof typeof blockSchemas
-export const ALL_BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions", "ingest_review", "coverage_change", "resilience_score", "stress_result", "roadmap", "roadmap_diff", "review_list", "behavior_insight", "citation"] as const
+export const ALL_BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions", "ingest_review", "coverage_change", "resilience_score", "stress_result", "roadmap", "roadmap_diff", "review_list", "behavior_insight", "citation", "reasoning"] as const
 
 /** Khối mà registry frontend đã đăng ký (xem scripts/gen_contracts.mjs, REGISTERED_BY_FRONTEND). */
-export const BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions", "ingest_review", "coverage_change", "resilience_score", "stress_result", "roadmap", "roadmap_diff", "review_list", "behavior_insight", "citation"] as const
+export const BLOCK_TYPES = ["jar_summary", "confirm", "receipt", "notice", "forecast_timeline", "proactive_card", "confirm_action", "receipt_action", "affordability_card", "obligation_impact", "options", "explain", "clarify", "suggestions", "ingest_review", "coverage_change", "resilience_score", "stress_result", "roadmap", "roadmap_diff", "review_list", "behavior_insight", "citation", "reasoning"] as const
 export type BlockType = (typeof BLOCK_TYPES)[number]
