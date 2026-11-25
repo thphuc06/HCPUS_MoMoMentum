@@ -212,7 +212,7 @@ def _make_mcp_client(url: str, headers: dict[str, str], startup_timeout: int) ->
 class GatewayTools:
     """Một kết nối MCP tới Gateway cho **một lượt hội thoại** (token của đúng người dùng đó).
 
-    Kết nối mở lười ở lần gọi tool đầu tiên và đóng ở `aclose()`. Gọi tuần tự.
+    Kết nối mở lười ở lần gọi tool đầu tiên (có khóa: lời gọi song song chờ cùng một phiên) và đóng ở `aclose()`.
     """
 
     def __init__(
@@ -228,18 +228,22 @@ class GatewayTools:
         self._call_timeout, self._startup_timeout = call_timeout, startup_timeout
         self._factory = client_factory
         self._client: Any | None = None
+        self._lock = asyncio.Lock()  # lời gọi song song (what-if) dùng chung một phiên MCP (#11)
 
     async def _ensure(self) -> Any:
-        if self._client is None:
-            if not self._url:
-                raise RuntimeError("Thiếu YOFINA_GATEWAY_URL")
-            client = self._factory(
-                self._url,
-                {"Authorization": self._identity.authorization},
-                int(self._startup_timeout),
-            )
-            await asyncio.to_thread(client.start)
-            self._client = client
+        if self._client is not None:
+            return self._client
+        async with self._lock:
+            if self._client is None:
+                if not self._url:
+                    raise RuntimeError("Thiếu YOFINA_GATEWAY_URL")
+                client = self._factory(
+                    self._url,
+                    {"Authorization": self._identity.authorization},
+                    int(self._startup_timeout),
+                )
+                await asyncio.to_thread(client.start)
+                self._client = client
         return self._client
 
     async def call(self, name: str, arguments: dict[str, Any]) -> ToolOutcome:
