@@ -6,6 +6,7 @@ Nhịp **batch đêm** (proposal §10.4): dự báo lại mọi người dùng m
 EventBridge Scheduler `yofina-nightly-0200`   cron(0 2 * * ? *), múi giờ Asia/Ho_Chi_Minh (không đổi sang UTC)
   -> Step Functions `yofina-nightly` (Standard)
        ListUsers   Lambda yofina-forecast-batch {op: list_users}          (hàm DB app_list_forecast_users: chỉ trả id)
+                   Retry: DatabaseUnavailable (Aurora đang ngủ lúc 02:00) 3 lần, lùi 10 s x2 (#14)
        ForEachUser Map, song song tối đa 3 (cấu hình forecastNightlyConcurrency)
          RunUser   Lambda yofina-forecast-batch {op: run_user, trigger: nightly}
                    Retry: DatabaseUnavailable (Aurora vừa dậy) 3 lần, lùi 10 s x2

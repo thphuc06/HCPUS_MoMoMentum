@@ -10,8 +10,8 @@ Sự kiện đầu vào là JSON `{"op": ..., ...}`:
 | `optimize_allocation` | N1 (phase 4): ledger gọi `Invoke` đồng bộ `{"op": "optimize_allocation", "user_id", "args"}`; trả NGUYÊN phong bì tool của `planner___optimize_allocation` (`{status, as_of, app_date, data}` hoặc `{status: ERROR, code, message}`). Vô nghiệm KHÔNG phải lỗi: `data.status` là `infeasible` |
 | `summarize` | gộp `results` của Map: đếm ok/bỏ qua/lỗi; có lỗi thì NÉM `NightlyHadFailures` để execution thất bại (alarm) |
 
-Lỗi của `run_user` được ném dưới tên lớp ổn định để Step Functions `Retry` theo `Error`: `DatabaseUnavailable` (thử lại được),
-`ForecastFailed` (còn lại).
+Lỗi của `run_user` và `list_users` được ném dưới tên lớp ổn định để Step Functions `Retry` theo `Error`: `DatabaseUnavailable` (thử lại được),
+`ForecastFailed` (còn lại, chỉ `run_user`).
 """
 
 from __future__ import annotations
@@ -176,7 +176,13 @@ def optimize_allocation(event: Mapping[str, Any], pipeline: Pipeline) -> dict[st
 def handle_batch(event: Mapping[str, Any], pipeline: Pipeline) -> dict[str, Any]:
     op = event.get("op", "run_user")
     if op == "list_users":
-        ids = pipeline.repo.users(pipeline.settings.nightly_max_users)
+        try:
+            ids = pipeline.repo.users(pipeline.settings.nightly_max_users)
+        except YofinaError as exc:
+            # Aurora ngủ quá ngân sách chờ của client: đổi tên lớp để Retry của bước ListUsers bắt được (#14)
+            if exc.code == ErrorCode.DATABASE_UNAVAILABLE:
+                raise DatabaseUnavailable(exc.message) from exc
+            raise
         return {"user_ids": ids, "count": len(ids)}
     if op == "run_user":
         return run_one(pipeline, _require_user(event), _trigger(event), raise_errors=True)
