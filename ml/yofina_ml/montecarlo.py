@@ -73,7 +73,9 @@ class SimSummary:
     balance_p90: np.ndarray
     p_shortfall: float
     p_shortfall_se: float
-    runout_index: int | None  # chỉ số ngày (0 là app_date + 1) đầu tiên số dư P50 <= ngưỡng
+    #: chỉ số ngày (0 là app_date + 1) đầu tiên số dư P50 <= ngưỡng; None cả khi không gì rút tiền khỏi hũ (số dư P10 không
+    #: bao giờ dưới số dư đầu, số dư đầu không âm)
+    runout_index: int | None
 
 
 def jar_seed_sequence(seed: int | None, app_date: date, jar_code: str) -> np.random.SeedSequence:
@@ -163,6 +165,11 @@ def summarize_paths(bal: np.ndarray, spec: SimSpec, runout_threshold: float) -> 
     else:
         p, se = 0.0, 0.0
     hit = np.nonzero(q[1] <= runout_threshold)[0]
+    if spec.balance_vnd >= 0 and not bool(np.any(q[0] < spec.balance_vnd)):
+        # Nothing draws on the jar (no predicted spending, no scheduled payment: e.g. a saving jar just added at 0 ₫ with no
+        # history): its balance never falls, so a start at or below the threshold is money not put in yet, not a jar that runs
+        # out. Without this the P50 sits on the threshold from day one and the jar "runs out tomorrow" with a 0% shortfall.
+        hit = hit[:0]
     return SimSummary(
         balance_p10=q[0].astype(np.int64),
         balance_p50=q[1].astype(np.int64),

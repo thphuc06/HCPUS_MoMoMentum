@@ -156,6 +156,21 @@ def test_so_du_bang_0_hut_ngay_neu_con_chi_tieu():
     assert res.jars[0].summary.runout_date == APP_DATE + timedelta(days=1)
 
 
+@pytest.mark.parametrize("kind", ["saving", "spending"])
+def test_so_du_bang_0_khong_gi_rut_tien_thi_khong_co_ngay_can(kind):
+    """Hũ 0 ₫ không có chi tiêu trong lịch sử và không có khoản đến hạn (hũ tiết kiệm vừa thêm, issue #39): số dư không bao giờ giảm,
+    nên không "cạn ngày mai"; chạy nhanh cũng vậy. Có khoản đến hạn thì có tiền bị rút: hũ đã ở ngưỡng cạn nên cạn từ ngày mai như cũ."""
+    empty = jar("dau_tu", n=60, spend=(0,) * 60, balance=0, kind=kind)
+    inp = inputs((empty,))
+    res = forecast_user(inp)
+    _ok(inp, res)
+    s = res.jars[0].summary
+    assert s.runout_date is None and s.status == "ok"
+    assert all(d.balance_p50_vnd == 0 for d in res.jars[0].days)
+    assert update_forecast(inp, res, ["dau_tu"]).jars[0].summary.runout_date is None
+    due = forecast_user(inputs((replace(empty, outflows=(obligation(6, 200_000),)),)))
+    assert due.jars[0].summary.runout_date == APP_DATE + timedelta(days=1)
+
 # --- xác suất hụt và độ tin cậy -----------------------------------------------------------------------------
 def test_chi_phat_xac_suat_khi_bat_va_hieu_chuan_dat():
     base = inputs()
