@@ -283,6 +283,63 @@ def test_ten_persona_la_bi_tu_choi():
             generate(bad, anchor=ANCHOR)
 
 
+# --- chuyển hũ trong lịch sử (spec `jar_transfers`) ------------------------------------------------
+def _with_transfer(s, *, days_ago=20, amount=200_000, src="du_phong", dst="an_uong"):
+    s.setdefault("jar_transfers", []).append(
+        {"days_ago": days_ago, "from": src, "to": dst, "amount_vnd": amount}
+    )
+    jar = next(j for j in s["jars"] if j["code"] == src)
+    jar["opening_vnd"] += amount  # hũ nguồn giữ đúng số dư cần đạt
+
+
+def test_chuyen_hu_trong_lich_su_la_hai_dong_cung_nhom_va_giu_so_du_can_dat():
+    d = generate("x", anchor=ANCHOR, spec=_spec(_with_transfer))
+    moves = [t for t in d.transactions if t.transfer_key and t.transfer_key.startswith("move:")]
+    assert sorted((t.jar_code, t.amount_vnd) for t in moves) == [
+        ("an_uong", 200_000),
+        ("du_phong", -200_000),
+    ]
+    assert len({t.transfer_key for t in moves}) == 1
+    assert all(t.kind == "transfer" and t.tx_type == "jar_transfer" for t in moves)
+    assert all(t.days_ago == 20 for t in moves)
+    assert {j.code: j.balance_vnd for j in d.jars} == FIGMA_BALANCES
+
+    # tiền chuyển vào được tiêu: hũ đích chi thêm đúng số đó
+    def spent(data):
+        return -sum(
+            t.amount_vnd
+            for t in data.transactions
+            if t.jar_code == "an_uong" and t.kind == "expense"
+        )
+
+    assert spent(d) == spent(generate("x", anchor=ANCHOR, spec=_spec(lambda s: None))) + 200_000
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"src": "khong_co"},
+        {"dst": "tien_vao_khac"},
+        {"src": "an_uong", "dst": "an_uong"},
+        {"amount": 0},
+        {"days_ago": 999},
+    ],
+)
+def test_chuyen_hu_sai_thi_bao_loi(patch):
+    def mutate(s):
+        s.setdefault("jar_transfers", []).append(
+            {
+                "days_ago": patch.get("days_ago", 20),
+                "from": patch.get("src", "du_phong"),
+                "to": patch.get("dst", "an_uong"),
+                "amount_vnd": patch.get("amount", 100_000),
+            }
+        )
+
+    with pytest.raises(PersonaError, match="jar_transfers"):
+        generate("x", anchor=ANCHOR, spec=_spec(mutate))
+
+
 # --- ánh xạ tài khoản -> persona --------------------------------------------------------------
 def test_anh_xa_tai_khoan_demo_dung_bang_cau_hinh():
     acc = load_accounts()

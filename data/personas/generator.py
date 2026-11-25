@@ -29,6 +29,12 @@ Cách dựng sổ cái (đúng cách ví thật ghi, nên các hàm dự báo đ
    của người dùng. Nó chỉ vào mẫu số của độ phủ dữ liệu (xem README "Độ phủ dữ liệu"); spec không khai thì bộ sinh cho đúng
    kết quả như trước (ba persona cũ không đổi một byte, `tests/unit/persona_digest.py` khóa điều này).
 
+9. Chuyển hũ trong lịch sử (tùy chọn): spec khai `jar_transfers` (`days_ago`, `from`, `to`, `amount_vnd`, `note`) thì mỗi khoản là
+   hai dòng `transfer` (`tx_type jar_transfer`, cùng `transfer_id`) lúc 06:30, sau dòng chia lương và trước mọi khoản chi trong
+   ngày: âm ở hũ nguồn, dương ở hũ đích, đúng như người dùng bấm "Chuyển hũ". Tiền chuyển vào được tính vào tiền vào của hũ đích
+   ở bước 4 (nên hũ đích chi được nhiều hơn phần lương chia mà vẫn về đúng số dư cần đạt), tiền chuyển đi trừ khỏi hũ nguồn.
+   Spec không khai thì không có dòng nào.
+
 Kết quả chỉ dùng "số ngày trước ngày neo" và giờ địa phương; việc ghép với đồng hồ mô phỏng (ngày neo, offset, UTC) và dựng id
 làm ở `materialize`, theo ADR-0003.
 """
@@ -63,6 +69,7 @@ _SALARY_TIME = time(6, 0)
 _SPLIT_TIME = time(6, 1)
 _OPENING_TIME = time(5, 0)
 _OBLIGATION_TIME = time(9, 0)
+_MOVE_TIME = time(6, 30)
 ID_NAMESPACE = uuid.UUID(
     "5d1f0b64-2f0e-4a53-9a2c-7a1d4a3c0f11"
 )  # định danh dòng seed theo (người dùng, persona, khóa)
@@ -400,6 +407,7 @@ def generate(
         for p in spec.get("payees", [])
     )
     payee_names = {p.name for p in payees}
+    moves = _jar_transfers(spec, {j["code"]: j["name"] for j in spec["jars"]}, history_days)
 
     jars: list[JarSeed] = []
     txs: list[TxSeed] = []
@@ -418,7 +426,9 @@ def generate(
                     "Số dư đầu kỳ", None, "jar_transfer", transfer_key=f"open:{code}",
                 )
             )  # fmt: skip
-        total_in = opening + shares[code] * len(paydays)
+        jar_moves = moves.get(code, [])
+        jar_txs.extend(jar_moves)
+        total_in = opening + shares[code] * len(paydays) + sum(t.amount_vnd for t in jar_moves)
 
         # khoản trả nghĩa vụ định kỳ trong lịch sử của hũ này
         obligation_total = 0
@@ -678,6 +688,41 @@ def _external_income_lines(spec: Mapping[str, Any], start: date, anchor: date) -
             TxSeed(
                 f"extin:{ago}", ago, time(int(cfg.get("hour", 10)), 30), "income", None, amount,
                 merchant, cfg.get("note"), tx_type, funding_source="external", classified_by="seed",
+            )
+        )  # fmt: skip
+    return out
+
+
+def _jar_transfers(
+    spec: Mapping[str, Any], jar_names: Mapping[str, str], history_days: int
+) -> dict[str, list[TxSeed]]:
+    """Dòng chuyển hũ trong lịch sử theo hũ (spec `jar_transfers`, tùy chọn): mỗi khoản một dòng âm ở hũ nguồn và một dòng
+    dương ở hũ đích, cùng nhóm chuyển. Chỉ giữa hai hũ thường khác nhau của spec, sau ngày đầu lịch sử."""
+    out: dict[str, list[TxSeed]] = {}
+    for i, mv in enumerate(spec.get("jar_transfers", [])):
+        src, dst = mv.get("from"), mv.get("to")
+        amount = int(mv.get("amount_vnd", 0))
+        ago = int(mv.get("days_ago", 0))
+        if src not in jar_names or dst not in jar_names or src == dst:
+            raise PersonaError(
+                f"jar_transfers[{i}]: hũ nguồn và hũ đích phải là hai hũ khác nhau trong spec"
+            )
+        if amount <= 0 or amount % _ROUND:
+            raise PersonaError(f"jar_transfers[{i}]: amount_vnd phải dương và là bội của {_ROUND}")
+        if not 1 <= ago < history_days:
+            raise PersonaError(f"jar_transfers[{i}]: days_ago phải từ 1 tới {history_days - 1}")
+        key = f"move:{i}"
+        note = mv.get("note")
+        out.setdefault(src, []).append(
+            TxSeed(
+                f"{key}:out", ago, _MOVE_TIME, "transfer", src, -amount, None,
+                note or f"Chuyển sang hũ {jar_names[dst]}", "jar_transfer", transfer_key=key,
+            )
+        )  # fmt: skip
+        out.setdefault(dst, []).append(
+            TxSeed(
+                f"{key}:in", ago, _MOVE_TIME, "transfer", dst, amount, None,
+                note or f"Nhận từ hũ {jar_names[src]}", "jar_transfer", transfer_key=key,
             )
         )  # fmt: skip
     return out
