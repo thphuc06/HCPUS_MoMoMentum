@@ -12,8 +12,13 @@ Mã kiểm trước khi phát (mã quyết định, không tin model):
   phải `skipped`) cho phương án hoặc bước đã kiểm. Bước không còn căn cứ hợp lệ nào bị bỏ. Nhãn căn cứ do mã dựng.
 - Kết luận: số có căn cứ; trỏ đúng phương án được gợi ý (what-if) hoặc một bước của bản đã lưu (lộ trình); nguồn cá nhân hóa khai
   trong `personal` phải có thật trong lượt (khối bộ nhớ khác rỗng, hồ sơ hành vi sẵn sàng), không thì bỏ cả câu.
+- Nhất quán với kết quả đã lưu (#7, chạy sau các kiểm trên; `SavedResult`): hũ nhận bằng tên/mã hũ thật của lượt, luật bằng mã căn
+  cứ bước đã khai, không đọc ý câu chữ. Bước trích một luật đã loại hũ nó nhắc (`rule_conflict`) hoặc nhắc hũ không có trong kết quả
+  (`jar_mismatch`) bị bỏ; kết luận nhắc hũ ngoài kết quả, hoặc còn ít hơn số bước tối thiểu sau khi bỏ bước mâu thuẫn, thì bỏ cả khối
+  (`settle`).
 
-Không có lập luận (model không trả, hoặc mọi bước và kết luận bị bỏ) thì lượt chạy như cũ và không có khối `reasoning`.
+Không có lập luận (model không trả, hoặc mọi bước và kết luận bị bỏ) thì lượt chạy như cũ và không có khối `reasoning`. Công tắc
+`AgentSettings.reasoning_switch` (SSM `agent/reasoning_enabled`) tắt thì không xin model lập luận và không có khối này.
 """
 
 from __future__ import annotations
