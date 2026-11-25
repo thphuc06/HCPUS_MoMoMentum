@@ -9,8 +9,10 @@ import json
 from datetime import date, timedelta
 
 import pytest
+from conftest import ANCHOR
 from pipeline_helpers import FakeDynamo, make_settings
 
+from personas import generate
 from yofina_core.blocks import block_to_wire
 from yofina_forecast.consumer import process_records
 from yofina_forecast.idempotency import IdempotencyStore
@@ -253,7 +255,8 @@ def test_hai_lan_chay_cung_du_lieu_cung_ket_qua_va_ghi_dung_cot(env):
             "SELECT trigger, model, history_days, n_paths, seed, params->'pipeline'->>'mode' "
             "FROM forecast_runs WHERE id = %s", [run_id]
         ).fetchone()
-    assert run[0] == "manual" and run[1] == "hurdle_calendar" and run[2] == 47
+    # số ngày lịch sử của lần chạy là số ngày lịch sử mà bộ sinh persona tạo cho minh (120 ngày từ issue #8), không chép số
+    assert run[0] == "manual" and run[1] == "hurdle_calendar" and run[2] == generate("minh", anchor=ANCHOR).history_days
     assert run[3] == 10000 and run[4] is not None and run[5] == "full"
 
 

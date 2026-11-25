@@ -13,9 +13,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import ANCHOR
 from jsonschema import Draft202012Validator
 from pipeline_helpers import make_settings
 
+from personas import generate
 from yofina_core.blocks import ResilienceScoreData, StressResultData
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.resilience import load_resilience_config, load_shock_set
@@ -98,7 +100,9 @@ def test_minh_diem_chong_chiu_bon_thanh_phan_ghi_vao_bang_va_doc_lai(env):
     assert [c.key for c in d.components] == ["save", "spend", "borrow", "plan"]
     assert all(c.applicable for c in d.components)  # minh có mục tiêu Du lịch
     assert d.disclaimer == CFG.disclaimer and d.config_version == CFG.version
-    assert d.basis.history_days == 47 and d.basis.is_initial_estimate is False
+    # lịch sử của căn cứ là lịch sử bộ sinh persona tạo cho minh (120 ngày từ issue #8), không chép số
+    assert d.basis.history_days == generate("minh", anchor=ANCHOR).history_days
+    assert d.basis.is_initial_estimate is False
     row = stored(env, MINH)
     assert row["score"] == d.score and row["band"] == d.band and row["source"] == "read"
     assert row["app_date"].isoformat() == "2026-11-21" and len(row["components"]) == 4

@@ -61,6 +61,26 @@ class FakeBedrock:
         }
 
 
+class ThrottledBedrock:
+    """Bedrock giả luôn nghẽn (Converse và embedding): hũ của mọi dòng phải đến từ đường tất định của bộ phân loại (bảng loại giao
+    dịch, nhãn seed khớp chính xác), như trên app khi model bận. Dòng không quyết được thì chờ người dùng chọn."""
+
+    def __init__(self) -> None:
+        self.requests: list[dict[str, Any]] = []
+
+    def _fail(self, op: str, req: dict[str, Any]):
+        from botocore.exceptions import ClientError
+
+        self.requests.append(req)
+        raise ClientError({"Error": {"Code": "ThrottlingException", "Message": "x"}}, op)
+
+    def converse(self, **req: Any):
+        self._fail("Converse", req)
+
+    def invoke_model(self, **req: Any):
+        self._fail("InvokeModel", req)
+
+
 class FakeStorage(Storage):
     def __init__(self) -> None:
         super().__init__()
@@ -177,8 +197,13 @@ class Ctx:
         self, up: dict[str, Any], data: bytes, model_doc: dict[str, Any], user: str = MINH
     ) -> FakeBedrock:
         """S3 nhận tệp rồi bắn thông báo qua SQS: worker xử lý."""
-        self.storage.objects[up["key"]] = data
         client = FakeBedrock(model_doc)
+        self.run_worker(up, data, client)
+        return client
+
+    def run_worker(self, up: dict[str, Any], data: bytes, client: Any) -> None:
+        """S3 nhận tệp rồi bắn thông báo qua SQS: worker xử lý với client Bedrock `client`."""
+        self.storage.objects[up["key"]] = data
         gw = LlmGateway(
             load_settings(Config({}), env={}),
             client=client,
@@ -204,7 +229,6 @@ class Ctx:
             ]
         }
         assert handle_sqs(ev, worker, max_receive_count=3) == {"batchItemFailures": []}
-        return client
 
     def job(self, job_id: str, user: str = MINH) -> dict[str, Any]:
         code, body = self.call("GET", f"/ingest/jobs/{job_id}", user=user)
@@ -394,10 +418,11 @@ def test_duong_chinh_tu_tai_len_toi_chot_so_du_hu_khong_doi(ing, env):
     )
     assert approved[0][0] == 3
 
-    # độ phủ lưu lại khớp công thức dự báo (cùng số với app_get_data_coverage)
+    # độ phủ lưu lại khớp công thức dự báo (cùng số với app_get_data_coverage). Ví của minh là ví đóng: mọi thu nhập là lương vào
+    # ví nên độ phủ đã kẹp ở 1,0 và không đổi sau khi nạp; "nạp làm độ phủ tăng" kiểm trên vy (ca dưới, tệp mẫu của cảnh 5)
     facts = ing.repo.coverage_facts(MINH, env.clock.now, TZ, 330)
     assert cov["data"]["after"] == coverage_ratio(facts)
-    assert cov["data"]["before"] is not None and cov["data"]["before"] != cov["data"]["after"]
+    assert cov["data"]["before"] == cov["data"]["after"] == 1.0
 
     # nhật ký audit không chứa token
     audit = q(
@@ -414,6 +439,57 @@ def test_duong_chinh_tu_tai_len_toi_chot_so_du_hu_khong_doi(ing, env):
         and listing["jobs"][0]["job_id"] == up["job_id"]
         and listing["jobs"][0]["status"] == "done"
     )
+
+
+def test_vy_nap_tep_mau_canh_5_qua_duong_chinh_do_phu_tang_dung_cong_thuc(env):
+    """Độ phủ tăng sau khi nạp (ý của đường chính) trên persona có độ phủ dưới 1: `vy` (thu nhập ngoài ví) đặt lại bằng đúng đường của
+    `POST /demo/reset`, tải tệp mẫu của cảnh 5 (`vy_sao_ke_vcb.csv`) qua REST nạp, worker, `confirm_rows`. Kỳ vọng suy từ bộ sinh
+    persona (`persona_coverage.coverage_facts`): độ phủ trước bằng số của dữ liệu sinh, sau bằng số đó cộng đúng các khoản chi đã chốt;
+    hai dòng tiền vào của tệp là thu nhập ngoài ví đã có nên không chốt (không cộng đôi)."""
+    from conftest import ANCHOR
+    from persona_coverage import coverage_facts as persona_facts
+
+    from personas import generate, generate_out_of_wallet
+    from yofina_ml import quality
+    from yofina_ml.types import CoverageInputs
+
+    vy = "sub-vy-canh5"  # người dùng riêng mang persona vy (audit của lần nạp không xóa khi đặt lại)
+    env.svc.reset_demo(vy, "vy", trace_id="t" * 8)
+    ing = Ctx(env)
+    data = generate("vy", anchor=ANCHOR)
+    before = coverage_ratio(ing.repo.coverage_facts(vy, env.clock.now, TZ, 330))
+    assert before == quality.data_coverage(CoverageInputs(**persona_facts(data))) < 1.0
+    bal_before = balances(env, vy)
+
+    up = ing.upload(vy, kind="csv", mime="text/csv")
+    ing.run_worker(up, (REPO / "data/personas/samples/vy_sao_ke_vcb.csv").read_bytes(), ThrottledBedrock())
+    job = ing.job(up["job_id"], user=vy)
+    assert job["status"] == "review", job
+    rows = job["review"]["data"]["rows"]
+    # dòng tiền vào của tệp là thu nhập freelance đã có trong sổ cái (ngoài ví): chỉ chốt dòng chi, bỏ mọi dòng khác
+    incomes = [r for r in rows if r["kind"] == "income"]
+    assert len(incomes) == len([t for t in generate_out_of_wallet("vy", anchor=ANCHOR, data=data).source("statement").rows if t.kind == "income"])
+    open_rows = [r for r in rows if r["review_status"] != "duplicate"]
+    take = [r for r in open_rows if r["kind"] == "expense" and "suggested_jar" in r]
+    skip = [r for r in open_rows if r not in take]
+    assert take  # hầu hết dòng chi tự có hũ gợi ý (README "Tệp mẫu cho cảnh 5")
+    code, receipt = ing.confirm(
+        {
+            "job_id": up["job_id"],
+            "rows": [{"row_id": r["row_id"]} for r in take],
+            "reject_row_ids": [r["row_id"] for r in skip],
+        },
+        user=vy,
+    )
+    assert code == 200, receipt
+    cov = receipt["data"]["coverage_change"]["data"]
+    spent = sum(r["amount_vnd"] for r in take)
+    assert cov["rows_added"] == len(take) and cov["external_spend_added_vnd"] == spent
+    assert cov.get("external_income_added_vnd", 0) == 0
+    after = quality.data_coverage(CoverageInputs(**persona_facts(data, extra_expenses=spent)))
+    assert (cov["before"], cov["after"]) == (before, after) and after > before
+    assert cov["after"] == coverage_ratio(ing.repo.coverage_facts(vy, env.clock.now, TZ, 330))
+    assert balances(env, vy) == bal_before  # dòng external không đổi số dư hũ
 
 
 def test_chot_lai_khong_ghi_them_va_token_dung_lai_bi_tu_choi(ing, env):

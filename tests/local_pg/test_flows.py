@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -877,20 +878,46 @@ def test_so_du_hu_bang_tong_dong_tra_bang_hu_sau_reset_va_sau_giao_dich(env, who
 
 
 def test_lich_su_chi_tieu_theo_ngay_du_day_va_co_nhip(env):
-    env.reset(MINH)
+    from datetime import date, timedelta
+
+    from personas import generate
+
+    anchor = date.fromisoformat(env.reset(MINH)["app_date"])
+    start, end = date(2026, 10, 5), date(2026, 11, 20)
     rows = env.db.query(
         "SELECT * FROM app_get_daily_spend(:uid, CAST(:a AS date), CAST(:b AS date))",
-        {"uid": MINH, "a": "2026-10-05", "b": "2026-11-20"},
+        {"uid": MINH, "a": start.isoformat(), "b": end.isoformat()},
     )
+    # kỳ vọng suy từ bộ sinh persona (lịch sử 120 ngày, issue #8), không chép số: lịch sử chi tiêu theo ngày là các dòng chi trừ tiền
+    # hũ KHÔNG gắn nghĩa vụ (khoản trả định kỳ như tiền cơm văn phòng đã nằm trong lịch nghĩa vụ)
+    data = generate("minh", anchor=anchor)
+
+    def seeded(jar: str, *, with_obligations: bool = False) -> dict[date, int]:
+        out: dict[date, int] = {}
+        for t in data.transactions:
+            day = anchor - timedelta(days=t.days_ago)
+            if (
+                t.jar_code == jar and t.kind == "expense" and t.funding_source == "jar" and start <= day <= end
+                and (with_obligations or t.obligation_key is None)
+            ):  # fmt: skip
+                out[day] = out.get(day, 0) - t.amount_vnd
+        return out
+
     an = [r for r in rows if r["jar_code"] == "an_uong"]
-    assert len(an) >= 28 and sum(int(r["spent_vnd"]) for r in an) == 4_720_000  # 5.020.000 trừ 300.000 tiền cơm văn phòng đã trả 23/10
-    # nhịp cuối tuần: tính theo ngày LỊCH (kể cả ngày không chi), 5/10 đến 20/11 có 14 ngày cuối tuần và 33 ngày thường
-    wk = sum(int(r["spent_vnd"]) for r in an if r["day"].weekday() >= 5) / 14
-    wd = sum(int(r["spent_vnd"]) for r in an if r["day"].weekday() < 5) / 33
+    expected = seeded("an_uong")
+    assert {r["day"]: int(r["spent_vnd"]) for r in an} == expected
+    assert len(an) >= 28  # đủ dày cho mô hình theo lịch
+    # nhịp cuối tuần: tính theo ngày LỊCH (kể cả ngày không chi) của khoảng đang xét
+    days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+    n_wk = sum(1 for d in days if d.weekday() >= 5)
+    wk = sum(int(r["spent_vnd"]) for r in an if r["day"].weekday() >= 5) / n_wk
+    wd = sum(int(r["spent_vnd"]) for r in an if r["day"].weekday() < 5) / (len(days) - n_wk)
     assert wk > 1.15 * wd
     # khoản trả nghĩa vụ định kỳ KHÔNG nằm trong lịch sử chi tiêu (đã có trong lịch nghĩa vụ)
-    hd = [r for r in rows if r["jar_code"] == "hoa_don"]
-    assert sum(int(r["spent_vnd"]) for r in hd) < 400_000
+    hd = {r["day"]: int(r["spent_vnd"]) for r in rows if r["jar_code"] == "hoa_don"}
+    assert hd == seeded("hoa_don")
+    assert sum(seeded("hoa_don", with_obligations=True).values()) > sum(hd.values())
+    assert sum(seeded("an_uong", with_obligations=True).values()) > sum(expected.values())
 
 
 def test_tong_quan_thu_hu_chi_tiet_va_dong_thoi_khong_vo_khi_co_du_bao(env, schema):
@@ -931,6 +958,7 @@ def test_du_bao_chua_co_thi_tra_ma_chua_co_du_bao_va_doc_khoi_khi_co_du_lieu(env
 
     run = str(uuid.uuid4())
     origin = date(2026, 11, 21)
+    p_short = 0.71  # khả năng hụt của lần chạy giả; thẻ hiện theo bước 5% (#19)
     with env.master() as c:
         c.execute(
             "insert into forecast_runs (id,user_id,model,computed_at,app_date,horizon_days,history_days,data_coverage,confidence_label,is_initial_estimate,trigger) "
@@ -939,8 +967,8 @@ def test_du_bao_chua_co_thi_tra_ma_chua_co_du_bao_va_doc_khoi_khi_co_du_lieu(env
         )
         c.execute(
             "insert into forecast_jar_summaries (run_id,user_id,jar_code,start_balance_vnd,payday_date,days_to_payday,runout_date,p_shortfall,status,confidence_band,show_probability,series_kind) "
-            "values (%s,%s,'an_uong',380000,'2026-12-05',14,'2026-11-23',0.71,'short','medium',true,'dense')",
-            (run, MINH),
+            "values (%s,%s,'an_uong',380000,'2026-12-05',14,'2026-11-23',%s,'short','medium',true,'dense')",
+            (run, MINH, p_short),
         )
         for i in range(1, 31):
             d = origin + timedelta(days=i)
@@ -956,7 +984,7 @@ def test_du_bao_chua_co_thi_tra_ma_chua_co_du_bao_va_doc_khoi_khi_co_du_lieu(env
         and parsed.data.status == "short"
         and parsed.data.runout_date == "2026-11-23"
     )
-    assert parsed.data.p_shortfall == pytest.approx(0.71) and parsed.data.stale is False
+    assert parsed.data.p_shortfall == pytest.approx(p_short) and parsed.data.stale is False
     kinds = {(e.kind, e.label) for e in parsed.data.events}
     assert ("salary", "Lương về") in kinds
     ov = env.svc.overview_response(MINH)
@@ -967,7 +995,10 @@ def test_du_bao_chua_co_thi_tra_ma_chua_co_du_bao_va_doc_khoi_khi_co_du_lieu(env
         and card["jar_code"] == "an_uong"
         and "23/11" in card["title"]
     )
-    assert "71%" in card["reason"]
+    # #19: khả năng hụt làm tròn bước 5%, nửa lên (như `Math.round` của frontend), không hiện số lẻ của mô hình
+    step = math.floor(p_short * 20 + 0.5)
+    assert 0 < step < 20 and f"Khả năng hụt: {step * 5}%" in card["reason"]
+    assert f"{round(p_short * 100)}%" not in card["reason"]
     assert next(j for j in ov["jars"] if j["code"] == "an_uong")["status"] == "short"
     assert json.loads(json.dumps(block_to_wire(parsed)))["type"] == "forecast_timeline"
     # qua một ngày mô phỏng thì dự báo bị đánh dấu cũ

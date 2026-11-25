@@ -3,7 +3,8 @@
 # dependencies = ["pgserver>=0.1.4", "psycopg[binary]>=3.2"]
 # ///
 """Chạy thử db/migrations/*.sql và db/seed/*.sql trên PostgreSQL cục bộ (pgserver), như migrator thật, rồi kiểm hành vi
-dưới role `yofina_app`: idempotent (chạy 0005, 0006 và seed hai lần), RLS, ràng buộc, quyền, hàm đọc.
+dưới role `yofina_app`: chạy lại như migrator (migration chỉ chạy một lần theo thứ tự: lượt hai bỏ qua mọi file theo version và
+checksum; seed chạy lại được), RLS, ràng buộc, quyền, hàm đọc.
 
     uv run scripts/db_local_check.py
 
@@ -13,6 +14,7 @@ bài học phase 1 là master Aurora không được `ALTER ROLE ... NOSUPERUSER
 Thoát mã 1 nếu có ca lỗi.
 """
 
+import hashlib
 import importlib.util
 import re
 import sys
@@ -51,18 +53,49 @@ def run_file(conn, path: Path):
     return len(stmts)
 
 
+def migrator_pass(conn, files: list[Path]) -> tuple[list[str], list[str]]:
+    """Một lượt như migrator thật (`infra-cdk/lambdas/migrator/handler.py`, `scripts/migrate.py`): `version` là tên file (seed:
+    `seed_<tên>_<8 ký tự sha256>`), đã có trong `schema_migrations` cùng checksum thì bỏ qua, checksum khác thì dừng, chưa có thì chạy
+    cả file trong một transaction rồi ghi `schema_migrations`. Trả (đã chạy, đã bỏ qua)."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations ("
+        "version text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())"
+    )
+    applied = dict(conn.execute("SELECT version, checksum FROM schema_migrations").fetchall())
+    ran, skipped = [], []
+    for f in files:
+        sql = f.read_text(encoding="utf-8")
+        version = f.stem if f.parent.name == "migrations" else (
+            f"seed_{f.stem}_{hashlib.sha256(sql.encode('utf-8')).hexdigest()[:8]}"
+        )
+        digest = sqlsplit.checksum(sql)
+        if version in applied:
+            if applied[version] != digest:
+                raise RuntimeError(f"{version} đã chạy nhưng nội dung đã đổi (checksum khác)")
+            skipped.append(version)
+            continue
+        print(f.name, run_file(conn, f), "cau lenh")
+        conn.execute("INSERT INTO schema_migrations (version, checksum) VALUES (%s, %s)", (version, digest))
+        ran.append(version)
+    return ran, skipped
+
+
+MIGRATIONS = sorted((REPO / "db/migrations").glob("*.sql"))
+SEEDS = sorted((REPO / "db/seed").glob("*.sql"))
+
 with psycopg.connect(uri, autocommit=True) as master:
-    for f in sorted((REPO / "db/migrations").glob("*.sql")):
-        print(f.name, run_file(master, f), "cau lenh")
+    first, _ = migrator_pass(master, MIGRATIONS)
     master.execute("ALTER ROLE yofina_app WITH PASSWORD 'local-test-only'")
-    for f in sorted((REPO / "db/seed").glob("*.sql")):
-        print("seed", f.name, run_file(master, f))
-    # idempotent: chạy lại 0005, 0006 và seed lần hai
-    for f in [
-        *sorted((REPO / "db/migrations").glob("000[56]*.sql")),
-        *sorted((REPO / "db/seed").glob("*.sql")),
-    ]:
-        print("lan 2", f.name, run_file(master, f))
+    seeded, _ = migrator_pass(master, SEEDS)
+    first += seeded
+    # Chạy lại như migrator thật: migration chỉ chạy MỘT lần theo thứ tự (0055 đổi kiểu trả về của hàm do 0006 tạo, nên chạy lại 0006
+    # sau 0055 là lỗi, và migrator không bao giờ làm vậy). Lượt hai phải bỏ qua mọi file nhờ version và checksum đã ghi.
+    again, skipped = migrator_pass(master, [*MIGRATIONS, *SEEDS])
+    rerun_ok = again == [] and skipped == first
+    print("lan 2 migrator: chay", len(again), "bo qua", len(skipped))
+    # Seed thì khác: sửa nội dung seed ra version mới và chạy lại trên dữ liệu đã có, nên mọi file seed phải chạy lại được (ON CONFLICT)
+    for f in SEEDS:
+        print("lan 2 seed", f.name, run_file(master, f))
     n = master.execute("select count(*) from tx_type_map").fetchone()[0]
     print(
         "tx_type_map",
@@ -99,6 +132,9 @@ ok = []
 def check(name, cond):
     print(("OK   " if cond else "FAIL ") + name)
     ok.append(cond)
+
+
+check("chạy lại như migrator: mọi migration và seed đã chạy được bỏ qua theo version và checksum", rerun_ok)
 
 
 def expect_error(conn, sql, params=(), uid=None, name=""):
@@ -478,12 +514,26 @@ with app() as c:
     with c.transaction():
         c.execute("select set_config('app.user_id', %s, true)", (u1,))
         ins_run(c, r3, "2026-11-23T19:00:00Z")
+        # 0009 viết lại hàm của 0006: KHÔNG BAO GIỜ xóa lần chạy mới nhất chứa một hũ nào đó (r1 còn là bản mới nhất của hoa_don,
+        # r2 của an_uong), nên giữ 1 lần chạy (r3) mà vẫn không xóa gì
         n = c.execute("select app_prune_forecast_runs(%s, 1)", (u1,)).fetchone()[0]
-        check("prune giữ 1 xóa 2", n == 2)
+        check(
+            "prune (0009) không xóa lần chạy mới nhất của hũ nào",
+            n == 0 and c.execute("select count(*) from forecast_runs").fetchone()[0] == 3,
+        )
+        # lần chạy mới có cả hai hũ: r1, r2 hết là bản mới nhất của hũ nào, r3 quá số giữ, nên xóa cả ba
+        r4 = str(uuid.uuid4())
+        ins_run(c, r4, "2026-11-24T19:00:00Z")
+        for jar in ("an_uong", "hoa_don"):
+            ins_sum(c, r4, jar, None, None)
+            ins_days(c, r4, jar, 500000)
+        n = c.execute("select app_prune_forecast_runs(%s, 1)", (u1,)).fetchone()[0]
+        check("prune giữ 1 xóa 3 lần chạy đã bị thay", n == 3)
         check(
             "prune kéo theo tóm tắt và dòng ngày",
-            c.execute("select count(*) from forecast_jar_summaries").fetchone()[0] == 0
-            and c.execute("select count(*) from forecasts").fetchone()[0] == 0,
+            {str(r[0]) for r in c.execute("select run_id from forecast_jar_summaries").fetchall()} == {r4}
+            and {str(r[0]) for r in c.execute("select run_id from forecasts").fetchall()} == {r4}
+            and c.execute("select count(*) from forecast_jar_summaries").fetchone()[0] == 2,
         )
 
     # bảng tra: chỉ đọc
