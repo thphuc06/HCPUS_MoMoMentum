@@ -122,6 +122,9 @@ def test_bo_hu_demo_cua_minh_theo_ty_le_spec():
     }
     goal = next(j for j in demo.jars if j.code == "muc_tieu")
     assert (goal.goal_vnd, goal.goal_date) == (6_000_000, date(2027, 4, 1))
+    assert [j.name for j in demo.jars] == [
+        "Ăn uống", "Đi lại", "Nghĩa vụ", "Giải trí", "Mục tiêu", "Dự phòng", "Đầu tư",
+    ]  # fmt: skip
     # không còn khoản chuyển "Để riêng tiền trả nghĩa vụ" từ hũ Chi hằng ngày (ví demo không có hũ đó)
     assert not any(t.jar_code == "chi_hang_ngay" for t in demo.transactions)
     assert not any(t.note == "Để riêng tiền trả nghĩa vụ" for t in demo.transactions)

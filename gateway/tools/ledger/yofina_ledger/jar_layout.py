@@ -34,9 +34,9 @@ def onboarding_override() -> list[dict[str, str | int]] | None:
 
 @dataclass(frozen=True)
 class DemoJar:
-    """One jar of the demo layout. Its balance, split share, history and goal come from the persona jars listed in
-    `personas.six_jars.JAR_ALIASES` (none for a new jar); the layout only fixes code, label, kind and purpose. A goal jar needs an amount and a date, so it
-    is left out for a persona without a source jar that has a goal."""
+    """One jar of the demo layout. Its balance, split share, history and goal come from the persona jars that
+    `personas.six_jars.JAR_ALIASES` folds into it (none for a new jar); the layout only fixes code, label, kind and
+    purpose. A goal jar needs an amount and a date, so it is left out for a persona without a source jar that has a goal."""
 
     code: str
     name: str
@@ -47,15 +47,15 @@ class DemoJar:
     purpose: str | None = None
 
 
-# Demo wallet after reset (issue #39): the two onboarding defaults plus the jars the user added after splitting
-# Chi h?ng ng?y into ?n u?ng, ?i l?i, Gi?i tr? (behaviour signals are per jar code). There is no `chi_hang_ngay`.
-# Order follows the persona wallets (Ngh?a v? takes the place of H?a ??n).
+# Demo wallet after reset (issue #39): the two onboarding defaults (Nghĩa vụ, Dự phòng) plus the jars the user added after
+# splitting Chi hằng ngày into Ăn uống, Đi lại, Giải trí (behaviour signals are per jar code), Mục tiêu and Đầu tư. There is
+# no `chi_hang_ngay`. Order follows the persona wallets (Nghĩa vụ takes the place of Hóa đơn).
 DEMO_LAYOUT = (
-    DemoJar("an_uong", "?n u?ng", "violet", "utensils", "spending", 10),
-    DemoJar("di_lai", "?i l?i", "sky", "bus", "spending", 20),
-    DemoJar(DEFAULT_OBLIGATION_JAR, "Ngh?a v?", "slate", "wallet", "obligation", 30),
-    DemoJar("giai_tri", "Gi?i tr?", "orchid", "gamepad", "spending", 40),
-    DemoJar(DEFAULT_GOAL_JAR, "M?c ti?u", "teal", "target", "saving", 50, purpose="goal"),
-    DemoJar("du_phong", "D? ph?ng", "blue", "shield", "saving", 60, purpose="buffer"),
-    DemoJar("dau_tu", "??u t?", "brown", "landmark", "saving", 70, purpose="long_term"),
+    DemoJar("an_uong", "Ăn uống", "violet", "utensils", "spending", 10),
+    DemoJar("di_lai", "Đi lại", "sky", "bus", "spending", 20),
+    DemoJar(DEFAULT_OBLIGATION_JAR, "Nghĩa vụ", "slate", "wallet", "obligation", 30),
+    DemoJar("giai_tri", "Giải trí", "orchid", "gamepad", "spending", 40),
+    DemoJar(DEFAULT_GOAL_JAR, "Mục tiêu", "teal", "target", "saving", 50, purpose="goal"),
+    DemoJar("du_phong", "Dự phòng", "blue", "shield", "saving", 60, purpose="buffer"),
+    DemoJar("dau_tu", "Đầu tư", "brown", "landmark", "saving", 70, purpose="long_term"),
 )
