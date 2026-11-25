@@ -250,8 +250,9 @@ def lan_context_jars():
     ]
 
 
-def buy_with_bnpl(jar: str) -> dict:
-    """Mua 1.200.000 ₫ bằng Trả sau qua luồng ghi thật của ledger (xem trước rồi ghi); trả nghĩa vụ đã lưu."""
+def buy_with_bnpl(jar: str, pay_jar: str | None) -> dict:
+    """Mua 1.200.000 ₫ bằng Trả sau qua luồng ghi thật của ledger (xem trước rồi ghi); trả nghĩa vụ đã lưu. `pay_jar` vắng thì không
+    truyền hũ trả (bước xem trước của ví không có hũ obligation phải từ chối)."""
     service, _, clock = make_service(())
     repo = LanWallet(clock)
     repo.add_lan(LAN)
@@ -262,6 +263,7 @@ def buy_with_bnpl(jar: str) -> dict:
         "jar": jar,
         "funding": "credit",
         "counterparty": "Tiki",
+        **({"pay_jar": pay_jar} if pay_jar else {}),
     }
     trace = "a" * 32
     prep, _ = service.prepare_action(
@@ -281,21 +283,24 @@ def forecast_jars_charged(ob: dict) -> list[str]:
     return [j.code for j in inp.jars for f in j.outflows if f.label == ob["name"]]
 
 
-def what_if_and_check_jars(monkeypatch, jar: str | None) -> tuple[str, str]:
-    """Hũ phải trả mà what-if và kiểm tra trước khi chi báo cho cùng món mua đó, trên cùng tài khoản trước khi mua."""
+def what_if_and_check_jars(monkeypatch, jar: str | None, pay_jar: str) -> tuple[str, str]:
+    """Hũ phải trả mà what-if và kiểm tra trước khi chi báo cho cùng món mua đó (cùng hũ trả đã chọn), trên cùng tài khoản trước khi
+    mua."""
     monkeypatch.setattr(phase3_helpers, "JARS", LAN_JARS)
     monkeypatch.setattr(scenario_mod.forecast_repo, "save_scenario", lambda *a, **k: None)
     pipeline, _, repo, ref, settings = phase3_helpers.build(
         obligations=[], context={"jars": lan_context_jars(), "obligations": []}
     )
-    spec = {"kind": "bnpl_purchase", "amount_vnd": 1_200_000, "funding_source": "credit"}
+    spec = {
+        "kind": "bnpl_purchase", "amount_vnd": 1_200_000, "funding_source": "credit", "pay_jar": pay_jar,
+    }  # fmt: skip
     if jar:
         spec["jar_code"] = jar
     what_if = ScenarioEngine(pipeline, repo, ref, settings).run(
         phase3_helpers.USER, spec, trace_id="t1"
     )
     check = AffordabilityEngine(pipeline, repo, ref, settings).check(
-        phase3_helpers.USER, amount_vnd=1_200_000, funding_source="credit", jar=jar
+        phase3_helpers.USER, amount_vnd=1_200_000, funding_source="credit", jar=jar, pay_jar=pay_jar
     )
     return (
         what_if["data"]["obligation_impact"]["at_due"][0]["jar"]["code"],
@@ -304,21 +309,31 @@ def what_if_and_check_jars(monkeypatch, jar: str | None) -> tuple[str, str]:
 
 
 @pytest.mark.parametrize(
-    ("chosen", "charged"),
+    ("chosen", "pay_jar"),
     [
-        ("giai_tri", "giai_tri"),  # hũ người dùng chọn
-        (
-            None,
-            "an_uong",
-        ),  # không chọn: khoản chi nằm ở Chưa phân loại, nợ tính vào hũ chi tiêu đầu tiên
+        ("giai_tri", "giai_tri"),  # mua vào hũ Giải trí, trả từ chính hũ đó
+        (None, "an_uong"),  # khoản chi nằm ở Chưa phân loại, người dùng chọn trả từ hũ Ăn uống
     ],
 )
 def test_tra_sau_khong_co_hu_nghia_vu_du_bao_what_if_va_kiem_truoc_khi_chi_cung_mot_hu(
-    monkeypatch, chosen, charged
+    monkeypatch, chosen, pay_jar
 ):
-    ob = buy_with_bnpl(chosen or "chua_phan_loai")
-    assert forecast_jars_charged(ob) == [charged]  # dự báo thật không bỏ khoản nợ
-    assert what_if_and_check_jars(monkeypatch, chosen) == (charged, charged)
+    # quy tắc đã chốt (#39): ví không có hũ obligation mà không truyền hũ trả thì bước xem trước hỏi lại (PARAMS_INVALID)
+    with pytest.raises(YofinaError) as e:
+        buy_with_bnpl(chosen or "chua_phan_loai", None)
+    assert e.value.code == ErrorCode.PARAMS_INVALID
+    # có hũ trả: sổ cái, dự báo, what-if và kiểm tra trước khi chi tính khoản nợ vào CÙNG một hũ (#15)
+    ob = buy_with_bnpl(chosen or "chua_phan_loai", pay_jar)
+    assert ob["pay_jar_code"] == pay_jar
+    assert forecast_jars_charged(ob) == [pay_jar]  # dự báo thật không bỏ khoản nợ
+    assert what_if_and_check_jars(monkeypatch, chosen, pay_jar) == (pay_jar, pay_jar)
+
+
+def test_tra_sau_ghi_tu_truoc_khong_co_hu_tra_van_nam_trong_du_bao():
+    """Khoản Trả sau ghi từ trước khi có quy tắc hỏi hũ trả (không lưu hũ trả, ví không có hũ obligation) vẫn vào dự báo: lùi về hũ
+    chi tiêu đầu tiên (`bnpl_pay_jar`, #15), không rơi khỏi dự báo."""
+    ob = {**buy_with_bnpl("giai_tri", "giai_tri"), "pay_jar_code": None}
+    assert forecast_jars_charged(ob) == ["an_uong"]
 
 
 def test_nguong_lich_su_cua_cong_xac_suat_ghi_de_duoc_qua_cau_hinh():
