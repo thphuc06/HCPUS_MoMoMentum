@@ -4,8 +4,8 @@ Thứ tự (mã điều khiển, model KHÔNG quyết định thứ tự):
 
     1. Orchestrator (vai `planner`, 1 lượt gọi): dựng `ScenarioSpec` từ câu hỏi, tham số của router, danh sách hũ thật và ngày mô phỏng.
        Model không dùng được hoặc spec sai thì dựng bằng mã từ tham số router (`deterministic_spec`), không có thì báo chưa dựng được.
-       Khóa `whatif_spec_source` = `code_first` (#23, mặc định `model`): router đủ tham số thì dựng bằng mã luôn (`code_spec`, 0 lượt
-       gọi); không đủ thì vai `small`, vai đó lỗi hoặc spec sai thì `planner`.
+       Khóa `whatif_spec_source` = `code_first` (#23, mặc định `model`): router đủ tham số, kể cả loại kịch bản, thì dựng bằng mã luôn
+       (`code_spec`, 0 lượt gọi); không đủ thì vai `small`, vai đó lỗi hoặc spec sai thì `planner`.
     2. Kế hoạch (`schemas.Plan`, chỉ tool ĐỌC, `limits` từ cấu hình): song song `get_obligations`, `get_fee_schedule` (Trả sau),
        `get_forecast` (hũ chính), rồi `run_scenario` (engine tất định, ghi `scenarios`).
     3. Phát khối số liệu NGAY (forecast_timeline trước-sau, obligation_impact) trước mọi văn bản.
@@ -556,13 +556,12 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
     )
     guess = deterministic_spec(r, turn.jar_rows)
     list_early = bool(turn.conversation_id) and guess is not None and pay_jar(guess) is not None
-    ready = None
-    if code_first:
-        with turn.step("orchestrator"):
-            ready = code_spec(r, turn.jar_rows)
+    # một bước `orchestrator` mỗi lượt: đường mã đo bước dựng kế hoạch đọc ngay (0 lời gọi model), đường model đo lời gọi model
+    ready = code_spec(r, turn.jar_rows) if code_first else None
     if ready is not None:
-        log.info(json.dumps({"event": "whatif_spec", "source": "code"}))
-        early = [step for step in build_plan(ready, limits).steps if step.parallel_group == 0]
+        with turn.step("orchestrator"):
+            log.info(json.dumps({"event": "whatif_spec", "source": "code"}))
+            early = [step for step in build_plan(ready, limits).steps if step.parallel_group == 0]
         *reads, listed = await asyncio.gather(
             *(_step_call(turn, step) for step in early),
             _list_scenarios(turn) if list_early else _none(),
@@ -673,9 +672,11 @@ async def _orchestrate(
 def code_spec(r: IntentResult, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Spec dựng bằng mã khi router đã trích ĐỦ tham số (#23, `code_first`), None nếu chưa đủ (khi đó Orchestrator gọi model).
 
-    Đủ nghĩa là `deterministic_spec` dựng được spec hợp lệ với mã hũ thật, và router không trích điều gì mà spec dựng bằng mã bỏ
-    qua: `deterministic_spec` không đọc ngày, nên câu có cụm chỉ thời gian (`date_text`) để model đổi ra ngày cụ thể."""
-    if r.params.date_text:
+    Đủ nghĩa là router đã trích loại kịch bản (`scenario_kind`), `deterministic_spec` dựng được spec hợp lệ với mã hũ thật, và router
+    không trích điều gì mà spec dựng bằng mã bỏ qua. Loại trống thì `deterministic_spec` đoán loại từ nguồn tiền (Trả sau, hũ): đủ
+    cho đường dự phòng khi model lỗi, nhưng câu chi lặp lại mà router bỏ sót loại sẽ thành mua một lần, nên để model dựng.
+    `deterministic_spec` không đọc ngày, nên câu có cụm chỉ thời gian (`date_text`) cũng để model đổi ra ngày cụ thể."""
+    if r.params.scenario_kind is None or r.params.date_text:
         return None
     spec = deterministic_spec(r, rows)
     spec = validate_spec(spec) if spec is not None else None

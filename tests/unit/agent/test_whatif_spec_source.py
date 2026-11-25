@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 from agent_helpers import (
+    FakeRecords,
     FakeTools,
     agent_settings,
     blocks_of,
@@ -241,7 +242,11 @@ def test_cum_ngay_cua_router_thi_khong_dung_spec_bang_ma():
     with_date = IntentResult(
         intent="what_if",
         params=IntentParams(
-            amount_vnd=1_200_000, funding="credit", label="tai nghe", date_text="thứ sáu tuần sau"
+            amount_vnd=1_200_000,
+            funding="credit",
+            scenario_kind="bnpl_purchase",
+            label="tai nghe",
+            date_text="thứ sáu tuần sau",
         ),
         confidence=0.9,
         needs_clarification=False,
@@ -251,3 +256,37 @@ def test_cum_ngay_cua_router_thi_khong_dung_spec_bang_ma():
         update={"params": with_date.params.model_copy(update={"date_text": None})}
     )
     assert code_spec(plain, jars) == BNPL_SPEC
+
+
+def test_router_khong_trich_loai_kich_ban_thi_khong_dung_spec_bang_ma():
+    """Router để `scenario_kind` trống: mã không tự đoán loại từ nguồn tiền (Trả sau, hũ) dù đủ số tiền và hũ."""
+    jars = [{"code": "giai_tri", "name": "Giải trí"}]
+    for params in (
+        IntentParams(amount_vnd=1_200_000, funding="credit", label="tai nghe"),
+        IntentParams(amount_vnd=300_000, funding="jar", jar_text="Giải trí", label="gym"),
+    ):
+        r = IntentResult(intent="what_if", params=params, confidence=0.9, needs_clarification=False)
+        assert code_spec(r, jars) is None
+
+
+def test_code_first_router_khong_trich_loai_thi_goi_vai_small_va_mot_buoc_orchestrator(monkeypatch):
+    """Câu chi lặp lại mà router bỏ sót loại: không chạy như mua một lần bằng mã; Orchestrator gọi vai small dựng spec chi lặp lại,
+    và bản ghi lượt chỉ có MỘT bước `orchestrator`."""
+    route = {k: v for k, v in ROUTE_GYM.items() if k != "scenario_kind"}
+    route["funding"] = "jar"
+    llm = make_llm(
+        [
+            route_response(**route),
+            tool_response("plan_scenario", {"scenario": GYM}),
+            tool_response("analyze", analysis()),
+        ]
+    )
+    records = FakeRecords()
+    events, tools, _ = run_turn(
+        GYM_Q, llm=llm, settings=CODE_FIRST, monkeypatch=monkeypatch, records=records
+    )
+    check_agui_order(events)
+    assert model_ids(llm) == ["m-small-a", "m-small-a", SONNET]
+    assert scenario_sent(tools) == GYM_SPEC
+    (rec,) = records.saved
+    assert [s["step"] for s in rec["step_timings"]].count("orchestrator") == 1
