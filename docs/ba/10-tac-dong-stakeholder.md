@@ -72,7 +72,7 @@ quadrantChart
 
 | | Tác động | Tính năng gây ra | Cách đo |
 |---|---|---|---|
-| ➕ | **Ít nợ quá hạn, ít phải thu hồi**: RCT cho thấy nhắc hạn giảm 14% phí trễ (Medina 2021), tin nhắn hành vi giảm 4% khả năng trễ (Colombia 2026) | Nghĩa vụ trong dự báo; F3 | K4; R4 phí theo kết quả |
+| ➕ | **Ít nợ quá hạn, ít phải thu hồi**: SMS nhắc hạn trên trả sau giảm 21–24% số khách bị phí trễ (AFM 2024, tuổi trung bình 29), tin nhắn hành vi giảm 4% khả năng trễ (Colombia 2026) | Nghĩa vụ trong dự báo; F3 | K4; R4 phí theo kết quả |
 | ➕ | **Rủi ro uy tín thấp hơn**: người dùng biết tổng chi phí trước khi mua, ít "bẫy nợ" trên báo chí | F3, bảng "Vì sao" | Số bài báo hoặc khiếu nại về phí (định tính) |
 | ➕ | **Ngân hàng nhận tiền gửi** từ hũ đệm và hũ dài hạn | BR-68, R7 | Số tài khoản tiết kiệm mở qua gợi ý phù hợp |
 | ➖ | **Giảm thu phí chậm trả.** Phí này là nguồn thu (MoMo công bố 5,25–21% dư nợ quá hạn) | K4 | So phần phí mất đi với phần tổn thất và chi phí thu hồi giảm được trong pilot. **Xử lý:** R4 chỉ thu khi lợi ròng dương |

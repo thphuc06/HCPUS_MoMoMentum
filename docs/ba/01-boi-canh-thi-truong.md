@@ -126,6 +126,24 @@ Lưu ý: chưa có nguồn nào cắt đúng nhóm 18–30. Các khảo sát dù
 | Luật Các tổ chức tín dụng số 32/2024/QH15 và Nghị định 32/2024/NĐ-CP | Theo một trang tra cứu, BNPL chỉ do tổ chức tín dụng hoặc công ty tài chính được cấp phép thực hiện. Chưa có khung riêng cho BNPL | Yofina **không cấp tín dụng**; sản phẩm trả sau chỉ là mô phỏng. Không gợi ý nơi vay | Thương gia, SB Law (**nguồn thứ cấp, cần đối chiếu**) |
 | Xu hướng khu vực | Thái Lan rà soát BNPL: giới hạn tuổi và thu nhập người vay, trần phí | Tín hiệu là quản lý sẽ siết; "trả sau có trách nhiệm" là điểm cộng | Tuổi Trẻ 24/06/2026 |
 
+## 7a. Số liệu tham chiếu từ các nước lân cận (bổ sung 25/11)
+
+**Nguyên tắc mượn số.** Chỉ mượn số về **hành vi, rủi ro và xu hướng quản lý** của trả sau, vì những số này phụ thuộc vào cách sản phẩm vận hành, mà sản phẩm trả sau trong khu vực khá giống nhau. **Không mượn cơ cấu chi tiêu** (tỷ lệ ăn uống, nhà ở…), vì nó phụ thuộc giá nhà và thu nhập từng nước. Các cơ quan thống kê trong khu vực cũng không công bố cơ cấu này theo độ tuổi. Phần cơ cấu chi tiêu dùng số Việt Nam ([02 mục B2a](02-business-rules.md)).
+
+| Nước | Số liệu | Nguồn | Dùng vào |
+|---|---|---|---|
+| Indonesia | Nợ xấu trả sau của **ngân hàng 2,36%** (06/2026); của **công ty tài chính 3,44% (05/2026) → 3,09% (06/2026) → 3,12% (09/2026)** | OJK, qua [Kontan](https://keuangan.kontan.co.id/news/npf-paylater-perusahaan-pembiayaan-membaik-jadi-309-per-juni-2026), [Bisnis.com](https://finansial.bisnis.com/read/20261109/89/2019635/pembiayaan-paylater-multifinance-tumbuh-3135-jadi-rp1354-triliun-per-kuartal-iii2026), [Warta Ekonomi](https://wartaekonomi.co.id/read622664/kredit-macet-paylater-naik-jadi-344-ojk-perketat-aturan-bnpl-lewat-padk-baru) | Cận dưới của `p_mất` ([11 mục 5a](11-can-bang-chi-phi-va-loi-ich.md)) |
+| Indonesia | Dư nợ trả sau ngân hàng 31,5 nghìn tỷ Rp, 34,5 triệu tài khoản (09/2026); OJK siết quy định trả sau bằng PADK 2/2026 khi nợ xấu tăng | [RMOL](https://rmol.id/read/2026/11/06/727444/utang-paylater-masyarakat-di-bank-tembus-rp31-5-triliun-hingga-september-2026), Warta Ekonomi như trên | Xu hướng quản lý (11 mục 3) |
+| Malaysia | Nợ trả sau quá hạn (từ 1 ngày) **6% (03/2023) → 3,2% (06/2025 và 12/2025)** dư nợ trả sau; dư nợ 4,9 tỷ RM, 7,5 triệu tài khoản hoạt động (12/2025), tăng từ 3,8 tỷ RM và 6,5 triệu (06/2025). Dư nợ trả sau mới khoảng **0,3%** nợ hộ gia đình nhưng tăng nhanh; lập cơ quan mới (Consumer Credit Commission) giám sát trả sau | [Bank Negara Malaysia, Financial Stability Review 2H 2025](https://www.bnm.gov.my/publications/fsr2025h2/ch1b); [Malay Mail 31/03/2026](https://www.malaymail.com/news/malaysia/2026/03/31/bnm-says-new-consumer-credit-commission-will-oversee-bnpl-sector-amid-rising-debt-and-rapid-expansion/214493) | Xu hướng quản lý |
+| Thái Lan | Rà soát trả sau: giới hạn tuổi, thu nhập người vay, trần phí | Đã có ở mục 7, nguồn #19 | Xu hướng quản lý |
+
+**Kết luận dùng được trên slide:** các nước đi trước Việt Nam vài năm có cùng một đường đi: trả sau tăng nhanh, nợ quá hạn cao ở giai đoạn đầu (Malaysia 6% năm 2023; Indonesia lên 3,44% tháng 5/2026), rồi **giảm khi siết quy định và quản lý rủi ro** (Malaysia còn 3,2% cuối 2025; Indonesia về 3,09–3,12%). Hai ý cho slide: (1) "trả sau có trách nhiệm" sẽ thành yêu cầu; (2) **giảm trễ hạn là làm được**, thị trường lân cận đã làm. Mọi số trong bảng này đều trong 12 tháng gần nhất.
+
+**Thay khảo sát bằng nguồn không cần tự làm:**
+- **Khảo sát lớn của bên thứ ba** (mẫu nghìn người): UOB ACSS 2026 Việt Nam: 92% có quỹ dự phòng, 59% đủ 3–6 tháng chi tiêu ([UOB](https://www.uob.com.sg/asean-insights/articles/acss-2026-vietnam.page)).
+- **Đánh giá công khai trên App Store và Google Play** của các app ví: đếm tỷ lệ đánh giá nói về phí, khoản trừ không rõ, trễ hạn trả sau. Đây là góc nhìn của hàng nghìn người dùng thật, rộng hơn khảo sát 50–100 người.
+- **Chính dữ liệu trong sản phẩm** (sau khi chạy thật): tỷ lệ chi thực tế của từng hũ sau 1–2 kỳ lương. Đề xuất BR-78 ở file 02.
+
 ## 8. Giới hạn của nghiên cứu và việc nên làm tiếp
 
 - Chưa có dữ liệu cắt đúng nhóm 18–30. Khảo sát BNPL đều mẫu nhỏ (173, 275 người) hoặc không rõ phương pháp.

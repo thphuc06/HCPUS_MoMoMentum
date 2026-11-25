@@ -110,12 +110,12 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 - **Đang ra:** `gateway/tools/planner/rules/obligation_to_income.yaml` dùng **một** ngưỡng 36% (quy tắc 28/36). Vượt thì thẻ đỏ "không khuyến khích".
 - **BA đề xuất:** hai mức, vàng từ 30%, đỏ từ 40% (C-03).
 - **Gợi ý sửa:** chỉ sửa file luật nếu nhóm chọn tách hai mức.
-- **BA chốt trước:** **C-03** (giữ 36% làm mức đỏ, hay tách hai mức).
+- **BA chốt trước:** **C-03**. Đề xuất 25/11: giữ 36% làm mức đỏ, không sửa code trước demo.
 
 **T-07 [Thông tin] Quy tắc nghiệp vụ mới chưa có trong code**
 - Chưa có: cơ cấu hũ theo mục đích và giai đoạn sống (BR-63 đến 73), chi phí trả sau minh bạch (BR-74 đến 76), hỗ trợ trước hạn (BR-77), FR14.
 - **Đề xuất:** không đưa vào demo, trừ **G1** (hiện chi phí trả sau quy ra năm trên thẻ kiểm tra trước khi chi, BR-75) vì làm nhanh được. Phần còn lại ghi là lộ trình sau cuộc thi.
-- **BA chốt trước:** G-01, C-12.
+- **BA chốt trước:** G-01, C-12 (đã đưa vào [12 mục 2.1](12-tong-hop-va-viec-can-chot.md#21-gấp-technical-đang-chờ-chốt-trước-deploy-đợt-1-2811), hạn 28/11).
 
 ## 5. Số đo hiện có (cho slide và NFR)
 

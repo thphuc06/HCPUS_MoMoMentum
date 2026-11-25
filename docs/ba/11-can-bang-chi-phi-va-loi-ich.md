@@ -54,7 +54,7 @@ MoMo: 5,25% / 10,5% / 15,75% / 21% dư nợ quá hạn tùy số ngày trễ, hi
 
 Hai lý do bên cho vay không nên bám vào phí chậm trả:
 1. **Phí trễ đi cùng tổn thất.** Một phần người trễ hạn sẽ không trả được gốc, và mọi ca trễ đều tốn chi phí nhắc và thu hồi.
-2. **Rủi ro quy định.** Thị trường trả sau Việt Nam tăng từ 4 lên 15 nền tảng trong 2020–2024 và đang chờ khung pháp lý riêng; một số báo cáo nói khung này có thể gồm **trần phí trễ hạn**, nhưng chưa xác nhận được là đã ban hành ([Vietstock, 07/2025](https://en.vietstock.vn/2025/07/vietnams-bnpl-market-set-for-changes-amid-intensifying-competition-37-615310.htm)). Thái Lan đã rà soát trần phí trả sau ([01 mục 7](01-boi-canh-thi-truong.md#7-bối-cảnh-pháp-lý-đầu-vào-cho-ràng-buộc-nghiệp-vụ)). Mô hình dựa vào phí phạt là mô hình dễ bị cắt.
+2. **Rủi ro quy định.** Thị trường trả sau Việt Nam tăng từ 4 lên 15 nền tảng trong 2020–2024 và đang chờ khung pháp lý riêng; một số báo cáo nói khung này có thể gồm **trần phí trễ hạn**, nhưng chưa xác nhận được là đã ban hành ([Vietstock, 07/2025](https://en.vietstock.vn/2025/07/vietnams-bnpl-market-set-for-changes-amid-intensifying-competition-37-615310.htm)). Thái Lan đã rà soát trần phí trả sau ([01 mục 7](01-boi-canh-thi-truong.md#7-bối-cảnh-pháp-lý-đầu-vào-cho-ràng-buộc-nghiệp-vụ)); Indonesia siết quy định trả sau năm 2026 khi nợ xấu tăng; Malaysia lập cơ quan mới giám sát trả sau ([01 mục 7a](01-boi-canh-thi-truong.md#7a-số-liệu-tham-chiếu-từ-các-nước-lân-cận-bổ-sung-2511)). Mô hình dựa vào phí phạt là mô hình dễ bị cắt.
 
 ## 4. Sáu đòn bẩy: người dùng đỡ tốn, đối tác không thiệt
 
@@ -107,9 +107,12 @@ Không có số của đối tác thì **không đưa ra một con số dự bá
 | Tham số cần | Proxy công khai | Nguồn |
 |---|---|---|
 | `p_mất` (ca trễ hạn mất gốc) | Tỷ lệ nợ xấu của các công ty tài chính tiêu dùng: **11,2% (2023) → 7,2% (2025)** | FiinGroup, qua [CafeF 05/10/2026](https://cafef.vn/ty-le-no-xau-cac-cong-ty-tai-chinh-giam-manh-188261005110119868.chn) và [VnBusiness 24/08/2026](https://vnbusiness.vn/loi-nhuan-nganh-tai-chinh-tieu-dung-tang-toc.html) |
+| `p_mất`, cận dưới từ khu vực | Nợ xấu trả sau ở Indonesia: ngân hàng **2,36%** (06/2026), công ty tài chính **3,09–3,12%** (06–09/2026) | OJK, qua Kontan, Bisnis.com ([01 mục 7a](01-boi-canh-thi-truong.md#7a-số-liệu-tham-chiếu-từ-các-nước-lân-cận-bổ-sung-2511)) |
 | Chi phí mỗi đồng trễ (tổn thất và thu hồi), dùng ở K9 | Chi phí tín dụng của ngành tài chính tiêu dùng: **14,5% → 11,5%** (năm chưa nêu rõ) | FiinGroup, qua VnBusiness như trên |
 | Mức độ "nặng" của chi phí rủi ro | FE Credit trích dự phòng 6.158 tỷ ₫ ở nửa đầu 2026, gần 98% lợi nhuận trước dự phòng | VnBusiness như trên |
 | `c_thu_hồi` (chi phí nhắc, thu hồi mỗi ca) | Không có số công khai. Ước theo lương CSKH 8–12 triệu ₫/tháng ([CareerLink 2026](https://www.careerlink.vn/cam-nang-viec-lam/tu-van-nghe-nghiep/bo-phan-cham-soc-khach-hang)) | Giả định |
+
+**Kết hợp hai nguồn:** điểm hòa vốn khoảng 2% nằm **dưới cả cận dưới của khu vực** (Indonesia 2,36–3,12%) lẫn số của Việt Nam (7,2%). Kết luận "bên cho vay lời ròng khi trễ hạn giảm" vì vậy đứng được với mọi nguồn công khai đã tìm.
 
 Lưu ý: tỷ lệ nợ xấu tính trên toàn bộ dư nợ, còn `p_mất` tính trên các ca **đã trễ**. Ca đã trễ rủi ro hơn bình quân, nên `p_mất` thật nhiều khả năng **cao hơn** 7,2%. Dùng 7,2% là cách tính thận trọng.
 
@@ -125,7 +128,7 @@ Lưu ý: tỷ lệ nợ xấu tính trên toàn bộ dư nợ, còn `p_mất` t�
 
 **3. Tự tạo dữ liệu thay thế.**
 - **Ticket CSKH (H-01):** đọc đánh giá công khai của app MoMo trên App Store và Google Play trong 6 tháng gần nhất, đếm tỷ lệ đánh giá nói về phí, khoản trừ không rõ, hạn trả. Đây là proxy cho tỷ lệ chủ đề, không phải số ticket.
-- **Hành vi trễ hạn:** dùng các số đã có ở [01 mục 4.2](01-boi-canh-thi-truong.md#42-mua-trước-trả-sau-và-nợ-nhỏ) (29,8% từng trả chậm, 37,5% có từ 3 tài khoản trả sau). Có thể thêm vài câu hỏi vào khảo sát người dùng của C-11.
+- **Hành vi trễ hạn:** dùng các số đã có ở [01 mục 4.2](01-boi-canh-thi-truong.md#42-mua-trước-trả-sau-và-nợ-nhỏ) (29,8% từng trả chậm, 37,5% có từ 3 tài khoản trả sau). Thêm số khu vực ở [01 mục 7a](01-boi-canh-thi-truong.md#7a-số-liệu-tham-chiếu-từ-các-nước-lân-cận-bổ-sung-2511).
 - **Hiệu quả của Yofina:** đo trên persona trong demo (số ngày cảnh báo trước, số ca tránh được hụt). Ghi rõ là dữ liệu tổng hợp.
 
 ### Phần lợi từ tiền gửi (G5), ước lượng thô
