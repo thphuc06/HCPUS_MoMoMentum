@@ -15,7 +15,13 @@ from typing import Any
 import pytest
 from ingest_helpers import REPO
 from yofina_ingest.extract import Candidate
-from yofina_ingest.worker import is_duplicate_match, pick_matches, same_party, text_tokens, texts_similar
+from yofina_ingest.worker import (
+    is_duplicate_match,
+    pick_matches,
+    same_party,
+    text_tokens,
+    texts_similar,
+)
 
 from personas import generate
 from yofina_core.ingest import IngestSettings
