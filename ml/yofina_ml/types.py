@@ -159,7 +159,8 @@ class JarSummary:
     """Một dòng của bảng `forecast_jar_summaries`.
 
     `p_shortfall` là None khi và chỉ khi `show_probability` là False (ràng buộc CHECK của DB): chỉ phát xác suất khi
-    `config.probability_enabled` và không phải ước lượng ban đầu; còn lại để None và chỉ có `confidence_band`.
+    `config.probability_enabled`, không phải ước lượng ban đầu, và hũ có đủ `probability_min_history_days` ngày lịch sử của loại
+    chuỗi (hiệu chỉnh, BR-31); còn lại để None và chỉ có `confidence_band`.
     `runout_date` là ngày cạn dự kiến trong horizon (ngày đầu tiên số dư P50 chạm 0 hoặc thấp hơn); None nếu không cạn.
     `p_shortfall` là xác suất số dư hũ xuống dưới 0 ít nhất một ngày từ app_date + 1 tới trước ngày lương kế (`next_payday`).
     """

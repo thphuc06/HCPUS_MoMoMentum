@@ -25,7 +25,8 @@ def forecast_user(inputs: ForecastInputs) -> ForecastResult:
     Bảo đảm (đã kiểm bằng `yofina_ml.contract.check_result`): `result.jars` cùng thứ tự `inputs.jars`; mỗi hũ đúng
     `horizon_days` dòng ngày bắt đầu từ `app_date + 1`; bất biến phân vị của `DayQuantiles`; `p_shortfall is None` khi và chỉ
     khi `show_probability` sai; `run.is_initial_estimate` đúng khi `run.history_days < config.cold_start_min_days`, khi đó
-    `confidence_label` là low và `show_probability` sai ở mọi hũ.
+    `confidence_label` là low và `show_probability` sai ở mọi hũ. `show_probability` cũng sai khi hũ có ít ngày lịch sử hơn
+    `probability_min_history_days` của loại chuỗi (hiệu chỉnh, BR-31); khi đó vẫn có `status` và `confidence_band`.
     """
     return _impl.forecast_user(inputs)
 

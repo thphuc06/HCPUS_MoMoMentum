@@ -1,0 +1,379 @@
+{
+ "method": "lịch sử cắt còn L ngày (studies._truncate), origin chung từ ngày 120 bước 7, chân trời 30, 2000 đường, cổng lịch sử tắt khi đo",
+ "heldout_seeds": [
+  201,
+  202,
+  203,
+  204,
+  205,
+  206
+ ],
+ "families": [
+  "hurdle_lognormal",
+  "shopping_sessions"
+ ],
+ "prob_band_h30": [
+  0.75,
+  0.85
+ ],
+ "rows": 52416,
+ "seconds": 2290.6,
+ "summary": {
+  "30": {
+   "dense": {
+    "n": 1609,
+    "cov7": 0.784,
+    "cov14": 0.773,
+    "cov30": 0.756,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.744,
+     "shopping_sessions": 0.774
+    },
+    "below_p10_30": 0.172,
+    "above_p90_30": 0.073,
+    "brier": 0.0001,
+    "brier_climatology": 0.0227
+   },
+   "sparse": {
+    "n": 4007,
+    "cov7": 0.837,
+    "cov14": 0.763,
+    "cov30": 0.603,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.575,
+     "shopping_sessions": 0.627
+    },
+    "below_p10_30": 0.259,
+    "above_p90_30": 0.139,
+    "brier": 0.0372,
+    "brier_climatology": 0.25
+   },
+   "obligation": {
+    "n": 936,
+    "cov7": 0.837,
+    "cov14": 0.787,
+    "cov30": 0.728,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.788,
+     "shopping_sessions": 0.667
+    },
+    "below_p10_30": 0.095,
+    "above_p90_30": 0.177,
+    "brier": 0.0,
+    "brier_climatology": 0.1389
+   }
+  },
+  "47": {
+   "dense": {
+    "n": 1563,
+    "cov7": 0.796,
+    "cov14": 0.784,
+    "cov30": 0.782,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.774,
+     "shopping_sessions": 0.793
+    },
+    "below_p10_30": 0.154,
+    "above_p90_30": 0.065,
+    "brier": 0.0001,
+    "brier_climatology": 0.0105
+   },
+   "sparse": {
+    "n": 4053,
+    "cov7": 0.857,
+    "cov14": 0.798,
+    "cov30": 0.677,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.648,
+     "shopping_sessions": 0.701
+    },
+    "below_p10_30": 0.216,
+    "above_p90_30": 0.107,
+    "brier": 0.0331,
+    "brier_climatology": 0.25
+   },
+   "obligation": {
+    "n": 936,
+    "cov7": 0.837,
+    "cov14": 0.787,
+    "cov30": 0.728,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.788,
+     "shopping_sessions": 0.667
+    },
+    "below_p10_30": 0.095,
+    "above_p90_30": 0.177,
+    "brier": 0.0,
+    "brier_climatology": 0.1389
+   }
+  },
+  "60": {
+   "dense": {
+    "n": 1580,
+    "cov7": 0.804,
+    "cov14": 0.794,
+    "cov30": 0.796,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.785,
+     "shopping_sessions": 0.814
+    },
+    "below_p10_30": 0.144,
+    "above_p90_30": 0.06,
+    "brier": 0.0001,
+    "brier_climatology": 0.0111
+   },
+   "sparse": {
+    "n": 4036,
+    "cov7": 0.867,
+    "cov14": 0.813,
+    "cov30": 0.711,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.691,
+     "shopping_sessions": 0.728
+    },
+    "below_p10_30": 0.191,
+    "above_p90_30": 0.099,
+    "brier": 0.032,
+    "brier_climatology": 0.25
+   },
+   "obligation": {
+    "n": 936,
+    "cov7": 0.837,
+    "cov14": 0.787,
+    "cov30": 0.728,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.788,
+     "shopping_sessions": 0.667
+    },
+    "below_p10_30": 0.095,
+    "above_p90_30": 0.177,
+    "brier": 0.0,
+    "brier_climatology": 0.1389
+   }
+  },
+  "75": {
+   "dense": {
+    "n": 1570,
+    "cov7": 0.807,
+    "cov14": 0.796,
+    "cov30": 0.807,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.797,
+     "shopping_sessions": 0.822
+    },
+    "below_p10_30": 0.136,
+    "above_p90_30": 0.057,
+    "brier": 0.0001,
+    "brier_climatology": 0.0059
+   },
+   "sparse": {
+    "n": 4046,
+    "cov7": 0.87,
+    "cov14": 0.822,
+    "cov30": 0.732,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.712,
+     "shopping_sessions": 0.749
+    },
+    "below_p10_30": 0.173,
+    "above_p90_30": 0.095,
+    "brier": 0.0306,
+    "brier_climatology": 0.25
+   },
+   "obligation": {
+    "n": 936,
+    "cov7": 0.837,
+    "cov14": 0.787,
+    "cov30": 0.728,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.788,
+     "shopping_sessions": 0.667
+    },
+    "below_p10_30": 0.095,
+    "above_p90_30": 0.177,
+    "brier": 0.0,
+    "brier_climatology": 0.1389
+   }
+  },
+  "90": {
+   "dense": {
+    "n": 1584,
+    "cov7": 0.802,
+    "cov14": 0.794,
+    "cov30": 0.814,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.808,
+     "shopping_sessions": 0.823
+    },
+    "below_p10_30": 0.132,
+    "above_p90_30": 0.054,
+    "brier": 0.0001,
+    "brier_climatology": 0.0072
+   },
+   "sparse": {
+    "n": 4032,
+    "cov7": 0.874,
+    "cov14": 0.832,
+    "cov30": 0.747,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.727,
+     "shopping_sessions": 0.763
+    },
+    "below_p10_30": 0.166,
+    "above_p90_30": 0.088,
+    "brier": 0.0297,
+    "brier_climatology": 0.2499
+   },
+   "obligation": {
+    "n": 936,
+    "cov7": 0.837,
+    "cov14": 0.787,
+    "cov30": 0.728,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.788,
+     "shopping_sessions": 0.667
+    },
+    "below_p10_30": 0.095,
+    "above_p90_30": 0.177,
+    "brier": 0.0,
+    "brier_climatology": 0.1389
+   }
+  },
+  "105": {
+   "dense": {
+    "n": 1571,
+    "cov7": 0.807,
+    "cov14": 0.807,
+    "cov30": 0.813,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.806,
+     "shopping_sessions": 0.823
+    },
+    "below_p10_30": 0.139,
+    "above_p90_30": 0.048,
+    "brier": 0.0001,
+    "brier_climatology": 0.0046
+   },
+   "sparse": {
+    "n": 4045,
+    "cov7": 0.872,
+    "cov14": 0.837,
+    "cov30": 0.757,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.736,
+     "shopping_sessions": 0.776
+    },
+    "below_p10_30": 0.157,
+    "above_p90_30": 0.085,
+    "brier": 0.029,
+    "brier_climatology": 0.2499
+   },
+   "obligation": {
+    "n": 936,
+    "cov7": 0.837,
+    "cov14": 0.787,
+    "cov30": 0.728,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.788,
+     "shopping_sessions": 0.667
+    },
+    "below_p10_30": 0.095,
+    "above_p90_30": 0.177,
+    "brier": 0.0,
+    "brier_climatology": 0.1389
+   }
+  },
+  "120": {
+   "dense": {
+    "n": 1574,
+    "cov7": 0.809,
+    "cov14": 0.809,
+    "cov30": 0.81,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.796,
+     "shopping_sessions": 0.83
+    },
+    "below_p10_30": 0.143,
+    "above_p90_30": 0.047,
+    "brier": 0.0001,
+    "brier_climatology": 0.0046
+   },
+   "sparse": {
+    "n": 4042,
+    "cov7": 0.875,
+    "cov14": 0.842,
+    "cov30": 0.767,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.75,
+     "shopping_sessions": 0.782
+    },
+    "below_p10_30": 0.151,
+    "above_p90_30": 0.082,
+    "brier": 0.0283,
+    "brier_climatology": 0.2499
+   },
+   "obligation": {
+    "n": 936,
+    "cov7": 0.837,
+    "cov14": 0.787,
+    "cov30": 0.728,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.788,
+     "shopping_sessions": 0.667
+    },
+    "below_p10_30": 0.095,
+    "above_p90_30": 0.177,
+    "brier": 0.0,
+    "brier_climatology": 0.1389
+   }
+  },
+  "full": {
+   "dense": {
+    "n": 1563,
+    "cov7": 0.795,
+    "cov14": 0.8,
+    "cov30": 0.804,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.786,
+     "shopping_sessions": 0.832
+    },
+    "below_p10_30": 0.147,
+    "above_p90_30": 0.049,
+    "brier": 0.0001,
+    "brier_climatology": 0.006
+   },
+   "sparse": {
+    "n": 4053,
+    "cov7": 0.874,
+    "cov14": 0.849,
+    "cov30": 0.787,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.769,
+     "shopping_sessions": 0.802
+    },
+    "below_p10_30": 0.135,
+    "above_p90_30": 0.078,
+    "brier": 0.0271,
+    "brier_climatology": 0.25
+   },
+   "obligation": {
+    "n": 936,
+    "cov7": 0.837,
+    "cov14": 0.787,
+    "cov30": 0.728,
+    "cov30_by_family": {
+     "hurdle_lognormal": 0.788,
+     "shopping_sessions": 0.667
+    },
+    "below_p10_30": 0.095,
+    "above_p90_30": 0.177,
+    "brier": 0.0,
+    "brier_climatology": 0.1389
+   }
+  }
+ },
+ "thresholds": {
+  "dense": 47,
+  "sparse": 120
+ }
+}

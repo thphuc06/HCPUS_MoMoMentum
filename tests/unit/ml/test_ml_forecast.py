@@ -227,6 +227,22 @@ def test_hu_thua_du_lich_su_tu_nguong_thi_hien_xac_suat():
     assert all(jf.summary.show_probability for jf in res.jars)  # đúng bằng ngưỡng là đủ
 
 
+@pytest.mark.parametrize(("n", "dense_shown", "sparse_shown"), [(47, True, False), (120, True, True)])
+def test_hieu_chinh_mac_dinh_tai_khoan_lich_su_ngan_khong_thay_xac_suat_hu_thua(
+    n, dense_shown, sparse_shown
+):
+    # BR-31 (#9), số đo ở docs/research/backtest-final.md: ở 47 ngày lịch sử dải 30 ngày của hũ thưa chỉ phủ 0,68 (cổng
+    # [0,75; 0,85]) nên ẩn %, hũ dày phủ 0,78 nên vẫn hiện; tới 120 ngày hũ thưa phủ 0,77 thì hiện lại
+    inp = with_config(inputs(_two_jars(n)), probability_enabled=True)
+    res = forecast_user(inp)
+    _ok(inp, res)
+    by = {jf.summary.jar_code: jf.summary for jf in res.jars}
+    assert (by["an_uong"].series_kind, by["giai_tri"].series_kind) == ("dense", "sparse")
+    assert by["an_uong"].show_probability is dense_shown
+    assert by["giai_tri"].show_probability is sparse_shown
+    assert (by["giai_tri"].p_shortfall is None) is (not sparse_shown)
+
+
 def test_chinh_nhanh_tu_lan_chay_cu_chua_co_nguong_lich_su_van_an_xac_suat():
     inp = with_config(inputs(_two_jars(60)), probability_enabled=True, extra=_gate(40, 90))
     prev = forecast_user(inp)

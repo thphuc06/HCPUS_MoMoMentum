@@ -163,8 +163,9 @@ def render_sf(sf: dict[str, dict[str, float]]) -> str:
 
 def write_default_calibration(path: Path, payload: dict[str, Any]) -> None:
     head = (
-        '"""Hiệu chỉnh mặc định do backtest sinh ra. KHÔNG SỬA TAY: chạy `uv run scripts/ml_backtest.py --write-calibration`.\n\n'
-        "Số đo và phương pháp ở docs/research/backtest-phase-2.md.\n"
+        '"""Hiệu chỉnh mặc định do backtest sinh ra. KHÔNG SỬA TAY: chạy `uv run scripts/ml_backtest.py --write-calibration`\n'
+        "(rho, level_sigma, probability_ok) và `uv run scripts/ml_history_gate.py --write-calibration` (probability_min_history_days).\n\n"
+        "Số đo và phương pháp ở docs/research/backtest-phase-2.md và docs/research/backtest-final.md.\n"
         '"""\n\n'
     )
     body = pprint.pformat(payload, sort_dicts=False, width=100)
