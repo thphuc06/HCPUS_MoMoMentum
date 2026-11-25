@@ -289,6 +289,8 @@ def test_job_thanh_cong_ghi_dong_da_che_va_chuyen_sang_review(env):
         and "0123456789" not in r["description"]
         and "****6789" in r["description"]
     )
+    # loại đã che của dòng (đối tác: tên; nội dung: tên và dãy 0123456789 có dạng số điện thoại), không có giá trị gốc
+    assert r["pii_masked"] == ["name", "phone"]
     assert (r["review_status"], r["suggested_jar_code"], r["jar_source"]) == (
         "auto_added",
         "an_uong",
@@ -339,6 +341,7 @@ def test_dong_trung_so_cai_thanh_duplicate_khong_tu_chon(env):
     run(worker, sqs_event(key))
     (r,) = repo.rows[jid]
     assert (r["review_status"], r["duplicate_of_transaction_id"]) == ("duplicate", tx_near)
+    assert r["pii_masked"] == []  # "Highlands Coffee", "ca phe": không che gì
     job = repo.jobs[jid]
     assert (job["rows_duplicate"], job["rows_review"], job["rows_auto_added"]) == (1, 0, 0)
     assert repo.window == IngestSettings().ingest_dedupe_window_days

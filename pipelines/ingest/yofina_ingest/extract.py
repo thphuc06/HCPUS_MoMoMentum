@@ -46,7 +46,13 @@ from yofina_core.llm import (
     get_gateway,
 )
 from yofina_core.params import MAX_VND
-from yofina_core.pii import PiiPolicy, mask_counterparty, mask_row_text
+from yofina_core.pii import (
+    PiiPolicy,
+    mask_counterparty_kinds,
+    mask_row_text,
+    mask_row_text_kinds,
+    ordered_kinds,
+)
 from yofina_ingest import csvparse, prompts
 from yofina_ingest.classify import RowInput, classify_rows
 from yofina_ingest.context import ExtractContext, eval_context
@@ -180,6 +186,8 @@ class Candidate:
     source_row: int | None = None
     flags: list[str] = field(default_factory=list)
     fx: FxInfo | None = None
+    #: loại PII đã che trong đối tác và nội dung (`yofina_core.pii.ROW_PII_KINDS`, theo thứ tự đó); KHÔNG bao giờ là giá trị gốc
+    pii_masked: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -249,10 +257,15 @@ def source_kind_of(content_type: str, filename: str, settings: IngestSettings) -
 
 
 # --- hoàn thiện dòng (dùng chung ảnh và CSV) --------------------------------------------------------------------------------------
-def _masked(raw: RawRow, ctx: ExtractContext) -> tuple[str | None, str | None]:
-    cp = mask_counterparty(raw.counterparty, is_person=raw.is_person, policy=ctx.policy)
-    desc = mask_row_text(raw.description, ctx.policy)
-    return clean_text(neutralize(cp), CP_LIMIT), clean_text(neutralize(desc), DESC_LIMIT)
+def _masked(raw: RawRow, ctx: ExtractContext) -> tuple[str | None, str | None, list[str]]:
+    """Đối tác và nội dung đã che, và các loại PII đã che trong hai trường đó (gộp)."""
+    cp = mask_counterparty_kinds(raw.counterparty, is_person=raw.is_person, policy=ctx.policy)
+    desc = mask_row_text_kinds(raw.description, ctx.policy)
+    return (
+        clean_text(neutralize(cp.text), CP_LIMIT),
+        clean_text(neutralize(desc.text), DESC_LIMIT),
+        ordered_kinds(cp.kinds | desc.kinds),
+    )
 
 
 def _convert(raw: RawRow, ctx: ExtractContext) -> tuple[int | None, FxInfo | None]:
@@ -332,7 +345,7 @@ def finalize_rows(
         injected = looks_like_instruction(*texts)
         if injected:
             flags.append("instruction_like_text")
-        cp, desc = _masked(raw, ctx)
+        cp, desc, pii_masked = _masked(raw, ctx)
         kind = "expense" if raw.direction == "out" else "income"
         info = ctx.type_map.get(raw.tx_type or "")
         tx_type = raw.tx_type if info is not None and info.direction == raw.direction else None
@@ -349,6 +362,7 @@ def finalize_rows(
                 source_row=raw.source_row,
                 flags=flags,
                 fx=fx_info,
+                pii_masked=pii_masked,
             )
         )
         proposals.append((raw.jar_code, raw.jar_confidence, raw.is_person))
