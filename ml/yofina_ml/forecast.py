@@ -376,8 +376,11 @@ def update_forecast(
         if code not in jars_by:
             raise KeyError(f"hũ {code} không có trong inputs")
     prev_params = previous.run.params or {}
+    # khóa vắng trong hiệu chỉnh đã lưu (lần chạy trước khi có khóa đó, ví dụ ngưỡng lịch sử của BR-31) lấy từ hiệu chỉnh hiện hành
     cal = (
-        calibration_from_dict(prev_params["calibration"]) if "calibration" in prev_params else None
+        calibration_from_dict(prev_params["calibration"], base=resolve_calibration(inputs.config))
+        if "calibration" in prev_params
+        else None
     )
     ctx = _make_ctx(inputs, cal)
     prev_states = prev_params.get("jar_state", {}) or {}

@@ -227,6 +227,20 @@ def test_hu_thua_du_lich_su_tu_nguong_thi_hien_xac_suat():
     assert all(jf.summary.show_probability for jf in res.jars)  # đúng bằng ngưỡng là đủ
 
 
+def test_chinh_nhanh_tu_lan_chay_cu_chua_co_nguong_lich_su_van_an_xac_suat():
+    inp = with_config(inputs(_two_jars(60)), probability_enabled=True, extra=_gate(40, 90))
+    prev = forecast_user(inp)
+    old_cal = {
+        k: ({kk: vv for kk, vv in v.items() if kk != "probability_min_history_days"}
+            if isinstance(v, dict) else v)
+        for k, v in prev.run.params["calibration"].items()
+    }  # fmt: skip
+    old = replace(prev, run=replace(prev.run, params={**prev.run.params, "calibration": old_cal}))
+    res = update_forecast(inp, old, ["giai_tri"])
+    s = next(jf.summary for jf in res.jars if jf.summary.jar_code == "giai_tri")
+    assert not s.show_probability and s.p_shortfall is None
+
+
 def test_xac_suat_hut_tang_khi_so_du_giam():
     ps = []
     for bal in (3_000_000, 1_500_000, 600_000):
