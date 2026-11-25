@@ -302,7 +302,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     drift = {
         k: scan(h, params, grid(1.5, 4.0, 0.5), split_seeds=5, drift_days=k)
-        for k in range(1, args.drift_days + 1)
+        for k in range(0, args.drift_days + 1)
     }
     print("\nĐộ bền khi tải tệp sau ngày neo (số hạt chia khoản xác nhận trên 5):")
     for k, rows in drift.items():
