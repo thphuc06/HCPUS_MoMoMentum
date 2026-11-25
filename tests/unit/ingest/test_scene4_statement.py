@@ -21,10 +21,10 @@ from yofina_ingest import extract as ex
 from yofina_ingest.context import eval_context
 
 from personas import generate
-from personas.six_jars import JAR_ALIASES, apply_demo_layout
+from personas.six_jars import apply_demo_layout
 from yofina_core.ingest import IngestSettings
 from yofina_core.pii import PiiPolicy
-from yofina_ledger.classify_seed import load_seed_set
+from yofina_ledger.classify_seed import label_jar_pairs, load_seed_set
 from yofina_ledger.jar_layout import DEMO_LAYOUT
 from yofina_ml import change as ch
 from yofina_ml.backtest.change_calibration import persona_daily_spend
@@ -57,15 +57,14 @@ def minh_context(store: FakeLabelStore, layout: str = "persona"):
     return c
 
 
-def seed_label_store(jar_codes: set[str], aliases: dict[str, str] | None = None) -> FakeLabelStore:
-    """Nhãn seed của `minh` (đổi mã hũ theo `aliases` rồi chỉ giữ hũ người dùng có, như `apply_seed_labels`), tra theo chuỗi đã
-    chuẩn hóa."""
+def seed_label_store(jar_codes: set[str]) -> FakeLabelStore:
+    """Nhãn seed của `minh` vào hũ của ví như `apply_seed_labels` (`classify_seed.label_jar_pairs`: hũ riêng khớp nhóm thắng hũ chung),
+    tra theo chuỗi đã chuẩn hóa."""
     store = FakeLabelStore()
     seed = load_seed_set("minh")
     assert seed is not None
-    labels = [((aliases or {}).get(x.jar_code, x.jar_code), x.text_norm) for x in seed.labels]
-    for i, (code, text) in enumerate(x for x in labels if x[0] in jar_codes):
-        store.exact.setdefault(text, []).append(ExactLabel(code, "seed", i))
+    for i, (lab, code) in enumerate(label_jar_pairs(seed, jar_codes)):
+        store.exact.setdefault(lab.text_norm, []).append(ExactLabel(code, "seed", i))
     return store
 
 
@@ -87,8 +86,7 @@ def layout(request):
 @pytest.fixture(scope="module")
 def extracted(layout):
     """Tệp cảnh 4 qua `extract_rows` với kho nhãn seed của `minh` và Bedrock giả luôn nghẽn: (kết quả, client giả)."""
-    aliases = JAR_ALIASES if layout == "demo" else None
-    store = seed_label_store({j.code for j in minh_data(layout).jars}, aliases)
+    store = seed_label_store({j.code for j in minh_data(layout).jars})
     gw, client = throttled_gateway()
     res = ex.extract_rows(
         DATA_CSV.read_bytes(),

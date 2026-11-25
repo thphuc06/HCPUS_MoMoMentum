@@ -807,7 +807,7 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         từ bảng `fee_schedules`), hạn mức, sổ cái có `tx_type`, sự kiện lương; số dư hũ được dựng lại từ sổ cái. Sau đó TÍNH
         DỰ BÁO ĐỒNG BỘ (gọi `yofina-forecast-batch`) để mở app là có số (`forecast_ready`), rồi phát `profile.updated`."""
         import personas  # dữ liệu seed (data/personas), đóng gói cùng Lambda
-        from personas.six_jars import JAR_ALIASES, apply_demo_layout
+        from personas.six_jars import apply_demo_layout
         from yofina_core.wallet import DEFAULT_OBLIGATION_JAR
         from yofina_ledger.jar_layout import DEMO_LAYOUT, DEMO_LAYOUT_ID
 
@@ -851,7 +851,7 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         try:
             from yofina_ledger.classify_seed import apply_seed_labels
 
-            apply_seed_labels(self.repo.db, user_id, persona, jar_aliases=JAR_ALIASES)
+            apply_seed_labels(self.repo.db, user_id, persona)
         except Exception:
             log.exception("reset_seed_labels_failed persona=%s", persona)
         forecast_ready = (

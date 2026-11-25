@@ -122,7 +122,8 @@ def test_hu_cua_giao_dich_moi_tren_vi_demo_va_vi_ba_hu():
 
 def test_moi_loai_giao_dich_mac_dinh_hu_du_lich_vao_hu_goal_cua_vi_demo_qua_anh_xa():
     """Mọi loại giao dịch có hũ mặc định `du_lich` (đọc từ db/seed/tx_type_map.sql, không chép tay) đi vào hũ mà ánh xạ của
-    bộ hũ demo gộp Du lịch vào, trên ví demo; ví ba hũ giữ Chi hằng ngày, kể cả khi người dùng thêm hũ Mục tiêu."""
+    bộ hũ demo gộp Du lịch vào, trên ví demo cũ và ví demo có Chi hằng ngày; ví ba hũ giữ Chi hằng ngày, trừ khi người dùng thêm
+    hũ Mục tiêu (hũ riêng thắng hũ chung)."""
     import re
     from pathlib import Path
 
@@ -133,12 +134,76 @@ def test_moi_loai_giao_dich_mac_dinh_hu_du_lich_vao_hu_goal_cua_vi_demo_qua_anh_
     with_goal = (*_THREE_JAR_WALLET, goal_jar)
     for tx_type in travel_types:
         assert wallet.transaction_jar("du_lich", _DEMO_WALLET, tx_type=tx_type) == goal_jar
+        assert wallet.transaction_jar("du_lich", _DEMO_DAILY_WALLET, tx_type=tx_type) == goal_jar
         assert wallet.transaction_jar("du_lich", _THREE_JAR_WALLET, tx_type=tx_type) == "chi_hang_ngay"
-        assert wallet.transaction_jar("du_lich", with_goal, tx_type=tx_type) == "chi_hang_ngay"
+        # hũ riêng (hũ goal mà ánh xạ gộp Du lịch vào) thắng hũ chung Chi hằng ngày (issue #39, 26/11)
+        assert wallet.transaction_jar("du_lich", with_goal, tx_type=tx_type) == goal_jar
         # ví bảy hũ cũ còn hũ Du lịch: giữ hũ đó
         assert wallet.transaction_jar("du_lich", (*_DEMO_WALLET, "du_lich"), tx_type=tx_type) == "du_lich"
     # không có hũ nào nhận: hỏi hũ
     assert wallet.transaction_jar("du_lich", ("an_uong", "du_phong"), tx_type="travel") is None
+
+
+#: ví demo từ 26/11 (issue #39): ba hũ mặc định rồi các hũ tự thêm
+_DEMO_DAILY_WALLET = (
+    "chi_hang_ngay", "nghia_vu", "du_phong", "an_uong", "di_lai", "giai_tri", "muc_tieu", "dau_tu",
+)  # fmt: skip
+_LEGACY_WALLET = ("an_uong", "di_lai", "hoa_don", "giai_tri", "du_lich", "du_phong", "nghia_vu")
+_BILLS = ("bill_electricity", "bill_water", "bill_internet", "bill_phone", "phone_topup", "rent")
+
+
+@pytest.mark.parametrize(
+    ("wallet_codes", "expected"),
+    [
+        pytest.param(
+            _DEMO_DAILY_WALLET,
+            {
+                "food_drink": "an_uong", "grocery": "an_uong", "ride_hailing": "di_lai", "fuel": "di_lai",
+                "entertainment": "giai_tri", "subscription": "giai_tri", **dict.fromkeys(_BILLS, "nghia_vu"),
+                "travel": "muc_tieu",
+            },
+            id="demo-8-hu",
+        ),
+        pytest.param(
+            _THREE_JAR_WALLET,
+            {
+                "food_drink": "chi_hang_ngay", "grocery": "chi_hang_ngay", "ride_hailing": "chi_hang_ngay",
+                "fuel": "chi_hang_ngay", "entertainment": "chi_hang_ngay", "subscription": "nghia_vu",
+                **dict.fromkeys(_BILLS, "nghia_vu"), "travel": "chi_hang_ngay",
+            },
+            id="ba-hu",
+        ),
+        pytest.param(
+            (*_THREE_JAR_WALLET, "an_uong"),
+            {
+                "food_drink": "an_uong", "grocery": "an_uong", "ride_hailing": "chi_hang_ngay",
+                "fuel": "chi_hang_ngay", "entertainment": "chi_hang_ngay", "subscription": "nghia_vu",
+                **dict.fromkeys(_BILLS, "nghia_vu"), "travel": "chi_hang_ngay",
+            },
+            id="ba-hu-them-an-uong",
+        ),
+        pytest.param(
+            _LEGACY_WALLET,
+            {
+                "food_drink": "an_uong", "grocery": "an_uong", "ride_hailing": "di_lai", "fuel": "di_lai",
+                "entertainment": "giai_tri", "subscription": "giai_tri", **dict.fromkeys(_BILLS, "hoa_don"),
+                "travel": "du_lich",
+            },
+            id="bay-hu-cu",
+        ),
+    ],
+)  # fmt: skip
+def test_hu_rieng_khop_loai_giao_dich_thang_hu_chung(wallet_codes, expected):
+    """Quy tắc phân loại theo loại giao dịch (issue #39, 26/11): ví có hũ riêng khớp loại (hũ mặc định của loại trong `tx_type_map`,
+    hoặc hũ mà `LEGACY_JAR_ALIASES` gộp hũ đó vào) thì hũ riêng thắng; không có thì vào hũ chung của bộ ba (Chi hằng ngày, Nghĩa vụ)."""
+    route = {t: wallet.transaction_jar(d, wallet_codes, tx_type=t) for t, d in _TYPE_DEFAULTS.items()}
+    assert route == expected
+    # hũ của nhãn (nhãn seed k-NN mang mã hũ của bộ bảy, không có loại giao dịch) đi cùng quy tắc
+    labels = {code: wallet.transaction_jar(code, wallet_codes) for code in ("an_uong", "di_lai", "hoa_don", "du_lich")}
+    assert labels == {
+        "an_uong": expected["food_drink"], "di_lai": expected["ride_hailing"], "hoa_don": expected["rent"],
+        "du_lich": expected["travel"],
+    }  # fmt: skip
 
 
 def test_obligation_kind_labels_match_frontend():
