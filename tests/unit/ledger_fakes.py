@@ -3,12 +3,10 @@
 
 from __future__ import annotations
 
-import re
 import threading
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -146,16 +144,7 @@ class FakeRepo:
         return []
 
     def reference_templates(self):
-        migration = Path(__file__).resolve().parents[2] / "db/migrations/0055_default_six_jars.sql"
-        fields = ("code", "name", "color_key", "icon_key", "kind", "default_split_percent",
-                  "is_default", "sort_order", "purpose")
-        return [
-            dict(zip(fields, (code, name, color, icon, kind, Decimal(pct), True, int(order), purpose or None), strict=True))
-            for code, name, color, icon, kind, pct, order, purpose in re.findall(
-                r"^\s*\('([^']+)', '([^']+)', '([^']+)', '([^']+)', '([^']+)', (\d+), true, (\d+), (?:NULL|'([^']+)')\)",
-                migration.read_text(encoding="utf-8"), re.M
-            )
-        ]
+        return []
 
     def confirm_block(self, uid, conversation_id, block_id):
         for t in sorted(self.turns.get(uid, {}).values(), key=lambda t: t["id"], reverse=True):

@@ -59,7 +59,7 @@ class ConfirmClaim:
     receipt_for: Callable[[MoveResult], Mapping[str, Any]]
 
 
-SQL_JAR_VIEW = "SELECT * FROM app_get_jar_state(:uid)"
+SQL_JAR_VIEW = "SELECT * FROM app_get_jar_state_with_purpose(:uid)"
 
 SQL_QUERY_TRANSACTIONS = (
     "SELECT * FROM app_query_transactions("
@@ -525,9 +525,10 @@ class LedgerRepo(WalletRepo, Phase3Repo):
         """Nạp lộ trình seed của persona (số phiên bản đã nạp; 0 nếu persona không có file seed). Nhập `roadmap_seed` ở đây (không ở đầu
         file) vì nó kéo theo bộ luật suitability, thứ mà các Lambda chỉ dùng `repo` không cần."""
         from yofina_ledger import roadmap_seed
+        from yofina_ledger.jar_layout import DEMO_LAYOUT_ID
 
         persona = details.get("persona")
-        layout = "six_jars" if details.get("jar_layout") == "six_jars" else None
+        layout = DEMO_LAYOUT_ID if details.get("jar_layout") == DEMO_LAYOUT_ID else None
         if roadmap_seed.load_seed(persona, layout=layout) is None:
             return 0
         if app_date is None:

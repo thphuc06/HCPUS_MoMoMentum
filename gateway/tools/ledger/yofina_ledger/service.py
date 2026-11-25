@@ -809,12 +809,12 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         import personas  # dữ liệu seed (data/personas), đóng gói cùng Lambda
         from personas.six_jars import JAR_ALIASES, use_default_jars
         from yofina_core.wallet import DEFAULT_OBLIGATION_JAR
+        from yofina_ledger.jar_layout import DEMO_LAYOUT, DEMO_LAYOUT_ID
 
         s = self.settings
         now = self.now()
-        templates = self.repo.reference_templates()
         try:
-            data = use_default_jars(personas.generate(persona, anchor=s.demo_anchor_date), templates)
+            data = use_default_jars(personas.generate(persona, anchor=s.demo_anchor_date), DEMO_LAYOUT)
         except personas.PersonaError as exc:
             raise YofinaError(ErrorCode.PARAMS_INVALID, f"Persona không hợp lệ: {exc}") from exc
         fee = self.ref.bnpl_monthly_fee(s.demo_anchor_date)
@@ -828,7 +828,7 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
             bnpl_label=self.ref.product_label(BNPL_PRODUCT_CODE, s.demo_anchor_date),
             obligation_pay_jar=DEFAULT_OBLIGATION_JAR,
         )
-        purposes = {t["code"]: t.get("purpose") for t in templates if t["is_default"]}
+        purposes = {jar.code: jar.purpose for jar in DEMO_LAYOUT}
         counts = self.repo.reset_user(
             user_id,
             profile=mat.profile,
@@ -841,7 +841,7 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
             trace_id=trace_id,
             details={
                 "persona": persona,
-                "jar_layout": "six_jars",
+                "jar_layout": DEMO_LAYOUT_ID,
                 "clock_offset_days": mat.clock_offset_days,
             },
             app_date=mat.app_date,  # ngày neo cho lộ trình seed (phase 4), không suy từ giao dịch

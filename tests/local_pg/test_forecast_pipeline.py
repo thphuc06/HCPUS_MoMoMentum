@@ -299,7 +299,7 @@ def test_dat_lai_tinh_du_bao_dong_bo_va_tra_forecast_ready_true(env):
     assert r["forecast_ready"] is True and fc.computed == [(MINH, "reset")]
     ov = env.svc.overview_response(MINH)
     assert ov["forecast"] is not None and ov["forecast"]["stale"] is False and fc.requested == []
-    assert len(ov["jars"]) == 6
+    assert len(ov["jars"]) == 4
     assert all("status" in jar for jar in ov["jars"])
 
 

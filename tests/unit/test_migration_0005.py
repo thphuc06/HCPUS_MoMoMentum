@@ -251,7 +251,8 @@ def test_confirm_resolutions_chap_nhan_bien_nhan_khong_co_transfer_id():
 
 # --- seed -------------------------------------------------------------------------------------
 SEED_FILES = sorted(SEEDS.glob("*.sql"))
-TEMPLATES = MIGRATIONS / "0055_default_six_jars.sql"
+TEMPLATES = MIGRATIONS / "0056_activate_onboarding_jar_layout.sql"
+EXPANSION = MIGRATIONS / "0055_default_six_jars.sql"
 
 
 def test_co_ba_file_seed_cho_ba_bang_tra():
@@ -262,13 +263,9 @@ def test_co_ba_file_seed_cho_ba_bang_tra():
 def test_seed_mot_cau_lenh_viet_lai_duoc_khong_tham_so_khong_bi_mat(path):
     sql = path.read_text(encoding="utf-8")
     stmts = [strip_leading_comments(x) for x in split_migration(sql)]
-    if path.stem == "jar_templates":
-        assert len(stmts) == 2 and stmts[0].startswith("UPDATE jar_templates ")
-        assert path.read_text(encoding="utf-8").split("\n", 1)[1].strip() in TEMPLATES.read_text(encoding="utf-8")
-    else:
-        assert len(stmts) == 1
-    assert stmts[-1].startswith("INSERT INTO")
-    assert "ON CONFLICT" in stmts[-1] and "DO UPDATE SET" in stmts[-1]
+    (stmt,) = stmts
+    assert stmt.startswith("INSERT INTO") and "ON CONFLICT" in stmt
+    assert ("DO NOTHING" if path.stem == "jar_templates" else "DO UPDATE SET") in stmt
     assert not any(named_params(s) for s in stmts) and not re.search(r"(?<![:\w]):[A-Za-z_]", sql)
     assert not re.search(r"PASSWORD|SECRET|\b\d{12}\b", code_only(sql), re.I)
 
@@ -281,10 +278,7 @@ def seed_rows(path):
 
 
 def test_tx_type_map_ma_hu_chuan_deu_co_trong_jar_templates_va_loai_noi_bo_khong_chon_duoc():
-    jar_codes = {
-        r.lstrip("(").split(",")[0].strip().strip("'")
-        for r in seed_rows(TEMPLATES)
-    }
+    jar_codes = {r.lstrip("(").split(",")[0].strip().strip("'") for r in seed_rows(TEMPLATES)}
     rows = []
     for r in seed_rows(SEEDS / "tx_type_map.sql"):
         parts = [p.strip() for p in re.findall(r"'[^']*'|[A-Za-z0-9_]+", r)]
@@ -321,10 +315,18 @@ def test_jar_templates_tong_ty_le_mac_dinh_bang_100_va_khong_co_hu_he_thong():
         "chi_hang_ngay": ("spending", "NULL"),
         "nghia_vu": ("obligation", "NULL"),
         "du_phong": ("saving", "buffer"),
-        "quy_don": ("saving", "sinking"),
-        "muc_tieu": ("saving", "goal"),
-        "tich_luy_dai_han": ("saving", "long_term"),
     }
+
+
+def test_schema_expansion_leaves_existing_reader_signatures_and_catalogue_intact():
+    sql = code_only(EXPANSION.read_text(encoding="utf-8"))
+    assert "ALTER TABLE jars ADD COLUMN purpose" in sql
+    assert "ALTER TABLE jar_templates ADD COLUMN purpose" in sql
+    assert "INSERT INTO jar_templates" not in sql and "UPDATE jar_templates" not in sql
+    assert not re.search(
+        r"\b(?:CREATE(?: OR REPLACE)?|DROP) FUNCTION app_(?:list_jars|get_jar_state|get_overview|get_jar_detail|get_forecast_context)\(",
+        sql,
+    )
 
 
 def test_bieu_phi_co_nguon_ngay_hieu_luc_va_khong_bia_them_khoan_phi():
