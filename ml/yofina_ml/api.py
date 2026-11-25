@@ -45,3 +45,15 @@ def update_forecast(
     (pipeline rơi về `forecast_user` đầy đủ). Thuần hàm như `forecast_user`.
     """
     return _impl.update_forecast(inputs, previous, jar_codes)
+
+
+def runout_date_shown(result: ForecastResult, jar_code: str) -> bool:
+    """Có nên nêu NGÀY cạn (`JarSummary.runout_date`) của hũ này không.
+
+    Sai khi hiệu chỉnh bật `recalibrate` (#25) và hũ là hũ thưa (trừ hũ nghĩa vụ): ngày cạn của hũ thưa sai trung bình 5-6
+    ngày trên backtest, nên bên dùng hiện "có thể cạn trước ngày lương" kèm `p_shortfall` (khi `show_probability`) thay cho
+    một ngày cụ thể. Đọc từ `result.run.params["show_runout_date"]` ({mã hũ: bool}); kết quả cũ hoặc công tắc tắt không có
+    khóa đó thì luôn đúng (như trước). `runout_date` vẫn được ghi như cũ để không vỡ bên dùng chưa đọc cờ này.
+    """
+    shown = (result.run.params or {}).get("show_runout_date") or {}
+    return bool(shown.get(jar_code, True))

@@ -39,7 +39,7 @@ from yofina_ml.marginals import (
     marginal_from_state,
 )
 from yofina_ml.models import COLD_START, HURDLE, MODEL_VERSION, select_model
-from yofina_ml.montecarlo import SimSpec, jar_seed_sequence, simulate_jar
+from yofina_ml.montecarlo import SimSpec, SimSummary, jar_seed_sequence, simulate_jar
 from yofina_ml.params import MLParams
 from yofina_ml.quality import (
     COVERAGE_FORMULA,
@@ -48,6 +48,7 @@ from yofina_ml.quality import (
     min_band,
     status_for,
 )
+from yofina_ml.recalibration import apply_cqr
 from yofina_ml.types import (
     ConfidenceBand,
     DayQuantiles,
@@ -169,6 +170,19 @@ def _recalibrated_p(
     return iso(p)
 
 
+def _recalibrated_band(
+    sim: SimSummary, jar: JarInput, kind: SeriesKind, cal_kind: SeriesCalibration, ctx: _Ctx
+) -> tuple[np.ndarray, np.ndarray]:
+    """P10, P90 số dư sau CQR bất đối xứng (#25): chỉ hũ dày, chỉ khi bật `Calibration.recalibrate` và có bảng. Đơn vị độ
+    lệch là chi TB ngày của `scale_days` ngày lịch sử cuối của hũ nhân số ngày tới mốc (như lúc fit trên backtest)."""
+    band = cal_kind.cqr
+    if not ctx.cal.recalibrate or band is None or kind != "dense":
+        return sim.balance_p10, sim.balance_p90
+    recent = jar.daily_spend_vnd[-band.scale_days :]
+    scale = float(np.mean(recent)) if recent else 0.0
+    return apply_cqr(band, sim.balance_p10, sim.balance_p50, sim.balance_p90, scale)
+
+
 def _jar_result(
     jar: JarInput,
     marg: Marginal,
@@ -192,15 +206,16 @@ def _jar_result(
     ss = jar_seed_sequence(ctx.cfg.seed, inputs.app_date, jar.code)
     sim = simulate_jar(spec, cal_kind, ctx.n_paths, ss, float(ctx.prm.runout_balance_threshold_vnd))
     sq = _spend_quantiles(marg, alpha, ctx)
+    b10, b90 = _recalibrated_band(sim, jar, kind, cal_kind, ctx)
     days = tuple(
         DayQuantiles(
             date=inputs.app_date + timedelta(days=i + 1),
             spend_p10_vnd=int(sq[0, i]),
             spend_p50_vnd=int(sq[1, i]),
             spend_p90_vnd=int(sq[2, i]),
-            balance_p10_vnd=int(sim.balance_p10[i]),
+            balance_p10_vnd=int(b10[i]),
             balance_p50_vnd=int(sim.balance_p50[i]),
-            balance_p90_vnd=int(sim.balance_p90[i]),
+            balance_p90_vnd=int(b90[i]),
         )
         for i in range(ctx.horizon)
     )
@@ -314,6 +329,20 @@ def fit_jar(jar: JarInput, ctx: _Ctx) -> JarFit:
     return JarFit(model.name, kind, marg, alpha)
 
 
+def _add_runout_display(
+    params: dict[str, Any], jars: Sequence[JarInput], out: Sequence[JarForecast], ctx: _Ctx
+) -> None:
+    """Ghi `params["show_runout_date"]` = {mã hũ: có nêu ngày cạn không} khi bật `recalibrate` (#25): hũ thưa không nêu ngày
+    cụ thể (backtest: sai TB 5-6 ngày), trừ hũ nghĩa vụ (ngày cạn đi theo lịch nghĩa vụ đã biết). Công tắc tắt thì không ghi
+    khóa, đầu ra như trước. Đọc bằng `yofina_ml.api.runout_date_shown`."""
+    if not ctx.cal.recalibrate:
+        return
+    params["show_runout_date"] = {
+        jf.summary.jar_code: not (jf.summary.series_kind == "sparse" and j.kind != "obligation")
+        for j, jf in zip(jars, out, strict=True)
+    }
+
+
 def make_context(inputs: ForecastInputs, cal: Calibration | None = None) -> _Ctx:
     return _make_ctx(inputs, cal)
 
@@ -336,6 +365,7 @@ def forecast_user(inputs: ForecastInputs) -> ForecastResult:
     params = _base_params(ctx)
     params["jar_models"] = {j.code: m for j, m in zip(inputs.jars, models_used, strict=True)}
     params["jar_state"] = states
+    _add_runout_display(params, inputs.jars, out, ctx)
     return ForecastResult(run=_run_meta(ctx, run_model, params), jars=tuple(out))
 
 
@@ -413,5 +443,6 @@ def update_forecast(
         out.append(_jar_result(jar, marg, alpha, kind, ctx))
     params = _base_params(ctx)
     params["jar_state"] = states
+    _add_runout_display(params, [jars_by[c] for c in jar_codes], out, ctx)
     params["updated_from_model"] = previous.run.model
     return ForecastResult(run=_run_meta(ctx, previous.run.model, params), jars=tuple(out))
