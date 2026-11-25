@@ -103,6 +103,11 @@ TODAY = date(2026, 11, 21)  # ngày mô phỏng của test
         ("cuối tháng 12 năm sau", date(2027, 12, 31)),
         ("cuối năm", date(2026, 12, 31)),
         ("2027-02-28", date(2027, 2, 28)),
+        # hạn nói bằng một khoảng thời gian tính từ hôm nay (#39): "trong N tháng", hoặc cả cụm hạn chỉ là khoảng thời gian
+        ("trong 3 tháng", date(2027, 2, 21)),
+        ("trong vòng 2 tuần", date(2026, 12, 5)),
+        ("trong 1 năm", date(2027, 11, 21)),
+        ("3 tháng", date(2027, 2, 21)),
         ("20/11/2026", None),  # đã qua
         ("31/02", None),
         ("sớm nhất có thể", None),
@@ -121,6 +126,7 @@ def test_doi_han_muc_tieu_theo_ngay_mo_phong(text, expected):
         ("Lộ trình gom 5 triệu vào hũ Tết, hạn Tháng 3 năm sau!", "Tháng 3 năm sau"),
         ("lộ trình 2 triệu cho hũ Quà, xong cuối tháng sau", "cuối tháng sau"),
         ("lộ trình 2 triệu hũ Quà ngày 5  tháng 1 năm 2027", "ngày 5  tháng 1 năm 2027"),
+        ("lập giúp mình lộ trình xây quỹ dự phòng 3 triệu trong 3 tháng", "trong 3 tháng"),
     ],
 )
 def test_cum_han_giu_nguyen_chu_go_va_doi_cung_ngay_voi_ca_cau(sentence, phrase):
@@ -130,8 +136,12 @@ def test_cum_han_giu_nguyen_chu_go_va_doi_cung_ngay_voi_ca_cau(sentence, phrase)
 
 @pytest.mark.parametrize(
     "text",
-    ["lộ trình gom 1.5 triệu ở hũ Du lịch", "để dành 1.5tr", "gom đủ 15 triệu ở hũ Mua xe", "sớm nhất có thể", ""],
-)
+    [
+        "lộ trình gom 1.5 triệu ở hũ Du lịch", "để dành 1.5tr", "gom đủ 15 triệu ở hũ Mua xe", "sớm nhất có thể", "",
+        # khoảng thời gian đứng giữa câu mà không có "trong"/"nữa" không phải hạn (cả cụm hạn mới đọc được khoảng thời gian trần)
+        "lộ trình để dành 3 tháng lương ở hũ Dự phòng",
+    ],
+)  # fmt: skip
 def test_so_tien_khong_bi_doc_thanh_han(text):
     assert goal_date_phrase(text) is None
     assert parse_goal_date(text, TODAY) is None
