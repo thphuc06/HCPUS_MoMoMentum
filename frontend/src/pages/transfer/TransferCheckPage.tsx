@@ -5,9 +5,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScreenHeader } from '@/components/ScreenHeader'
 import { ErrorState } from '@/components/StateViews'
 import { useApiResource } from '@/api/resource'
+import { useOverview } from '@/api/OverviewProvider'
 import type { AffordabilityRequest } from '@/api/schemas'
 import { AffordCard } from '@/features/affordability/AffordCard'
 import { amountOf, useTransferFlow } from '@/features/transfer/TransferFlow'
+import { payJarChoices } from '@/features/transfer/params'
 import { formatVnd } from '@/lib/format'
 import { Avatar } from './TransferPayeePage'
 
@@ -18,6 +20,7 @@ import { Avatar } from './TransferPayeePage'
 export function TransferCheckPage() {
   const navigate = useNavigate()
   const { state, patch } = useTransferFlow()
+  const ov = useOverview()
   const amount = amountOf(state)
   const source = state.source
   const payee = state.payee
@@ -80,7 +83,9 @@ export function TransferCheckPage() {
                         type="button"
                         onClick={() => {
                           patch({ source: { kind: 'credit' } })
-                          toReview()
+                          // Ví không có hũ nghĩa vụ: phải chọn hũ trả ở bước nguồn tiền trước khi xem lại.
+                          if (payJarChoices(ov.data?.jars ?? []).length > 0 && !state.payJar) navigate('/transfer/amount')
+                          else toReview()
                         }}
                       >
                         Trả bằng {check.data.data.credit.cost.product_label}

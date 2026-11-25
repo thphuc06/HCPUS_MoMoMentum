@@ -13,6 +13,8 @@ export type TransferState = {
   source: TransferSource | null
   /** Hũ tính chi tiêu khi trả bằng hạn mức (tùy chọn). */
   creditJar: string
+  /** Hũ trả khoản Trả sau khi đến hạn; chỉ hỏi khi ví không có hũ nghĩa vụ. */
+  payJar: string
   note: string
   /** Mã chống ghi trùng: một mã cho mỗi lần chuyển, đổi sau khi thành công. */
   clientRef: string
@@ -26,7 +28,7 @@ type Ctx = {
   reset: () => void
 }
 
-const fresh = (): TransferState => ({ payee: null, amountDigits: '', source: null, creditJar: '', note: '', clientRef: `ui-${newUuid()}`, receipt: null })
+const fresh = (): TransferState => ({ payee: null, amountDigits: '', source: null, creditJar: '', payJar: '', note: '', clientRef: `ui-${newUuid()}`, receipt: null })
 
 const TransferContext = createContext<Ctx | null>(null)
 

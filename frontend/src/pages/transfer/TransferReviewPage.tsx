@@ -34,6 +34,7 @@ export function TransferReviewPage() {
           clientRef: state.clientRef,
           txTypes: txTypes.data?.tx_types ?? [],
           creditJar: state.creditJar || undefined,
+          payJar: state.payJar || undefined,
         })
       : null
   const preview = usePreview('record_transaction', write.phase === 'done' ? null : params)
