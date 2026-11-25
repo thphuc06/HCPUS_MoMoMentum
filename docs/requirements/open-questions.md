@@ -4,7 +4,8 @@ Tick `[x]` khi đã chốt và ghi kết quả bên dưới câu hỏi (kèm ng�
 
 ## Về scope (proposal §16, giữ nguyên 8 câu)
 
-- [ ] Hạn nộp bài chính xác là ngày nào, và tiêu chí chấm có trọng số ra sao? *(kế hoạch hiện giả định nộp trước chung kết 11/12/2026)*
+- [x] Hạn nộp bài chính xác là ngày nào, và tiêu chí chấm có trọng số ra sao? *(kế hoạch hiện giả định nộp trước chung kết 11/12/2026)*
+  - Chốt 25/11 (kiểm toán, đọc trang cuộc thi): hạn **23:59:59 ngày 03/12/2026**; sau hạn không được sửa mã nguồn, slide, sản phẩm đang chạy; chung kết 11/12. Tiêu chí (thể lệ Điều 18): Sáng tạo; Chất lượng và độ hoàn thiện; Tiềm năng tác động; trọng số không công bố. Nguồn: [2026-11-25-audit-tong-hop.md](../research/2026-11-25-audit-tong-hop.md), [phase 6](../plan/phases/phase-6-danh-gia-dong-goi.md) Q14.
 - [ ] Đội có 2 hay 3 người, ai làm frontend? *(nếu 2 người: gộp vai frontend vào người lo agent và cắt F6 — proposal §15)*
 - [ ] Persona chính là sinh viên đi làm thêm hay người đi làm 1 đến 3 năm?
 - [x] Demo dùng tên và biểu phí Ví Trả Sau thật, hay một sản phẩm trả sau mô phỏng? *(đề xuất của proposal: mô phỏng, dẫn biểu phí công khai làm ví dụ)*
@@ -53,7 +54,7 @@ Từ bảy ghi chú đọc tài liệu và bảy spike chạy thật trong [../r
 
 ### Chỉnh kiến trúc so với proposal (đã áp vào overview.md ngày 2026-11-21)
 
-Các mục dưới đây đã được phản ánh trong [overview.md](../architecture/overview.md) với nhãn **[đã chạy thử]**, **[đọc tài liệu]** hoặc **[đề xuất]**; cơ chế xác nhận và bộ model vẫn ghi là đề xuất vì chủ dự án chưa chốt (mục "Cần chủ dự án quyết" ở trên).
+Các mục dưới đây đã được phản ánh trong [overview.md](../architecture/overview.md) với nhãn **[đã chạy thử]**, **[đọc tài liệu]** hoặc **[đề xuất]**. Cơ chế xác nhận và bộ model đã được chủ dự án chốt ngày 21/11 (mục "Cần chủ dự án quyết" ở trên); các lệch so với proposal gom ở [ADR-0004](../decisions/0004-lech-so-voi-proposal.md).
 
 - [ ] **Tên tool** (đã chạy thử): Gateway từ chối dấu chấm; tool hiện ra là `ledger___get_jar_balances` (target `ledger`). [spike-agentcore-gateway-identity.md](../research/spike-agentcore-gateway-identity.md)
 - [ ] **Danh tính xuống tool** (đã chạy thử): Lambda sau Gateway không nhận claim nào; header do client gửi đi qua nguyên văn nên không tin được. Dùng hai lớp: interceptor đọc JWT đã xác minh và ghi đè `user_id`, cộng Cedar `context.input.user_id == principal.id`. [spike-agentcore-gateway-identity.md](../research/spike-agentcore-gateway-identity.md)
@@ -72,7 +73,8 @@ Các mục dưới đây đã được phản ánh trong [overview.md](../archit
 - [ ] **Structured output** (đã chạy thử): luôn đặt `structured_output_attempts`, nếu không vòng lặp có thể không dừng; không chuyển nguyên event stream của Strands ra trình duyệt (chứa system prompt). Nova không hỗ trợ `outputConfig`, dùng ép tool. [spike-strands-agui-local.md](../research/spike-strands-agui-local.md), [spike-bedrock-models.md](../research/spike-bedrock-models.md)
 - [x] **Che PII**: Guardrails không kiểm kết quả tool và không có mẫu PII Việt Nam; che ở Lambda tool và bước nạp dữ liệu. Đọc tài liệu, chưa tạo guardrail thử. [bedrock.md](../research/bedrock.md)
   - Phase 3 (22/11): `yofina_core.pii` che SĐT, CCCD, số tài khoản trước khi vào LLM và trước khi ghi bộ nhớ; Guardrail `yofina-guardrail` chỉ lọc chủ đề cấm và prompt injection. Đã deploy; `ApplyGuardrail` chặn câu "nên mua cổ phiếu VNM" (`GUARDRAIL_INTERVENED`).
-- [ ] **Automated Reasoning checks**: chỉ tiếng Anh, không có ở Singapore; giữ verifier Python. Đọc tài liệu. [bedrock.md](../research/bedrock.md)
+- [x] **Automated Reasoning checks**: chỉ tiếng Anh, không có ở Singapore; giữ verifier Python. Đọc tài liệu. [bedrock.md](../research/bedrock.md)
+  - Chốt 2026-11-21 (chủ dự án, cùng lúc bỏ Bedrock Data Automation ở mục trên): bỏ. Xem [ADR-0004](../decisions/0004-lech-so-voi-proposal.md).
 - [ ] **Phiên bản** (đã cài thử): `strands-agents` 1.65.0, `ag-ui-strands` 1.0.4, `ag-ui-protocol` 1.0.0, `@ag-ui/client` 1.0.5; thư viện `mcp` 2.x đổi tên hàm so với mẫu của FAST.
 
 ### Chưa thử (cần làm khi dựng thật)
@@ -81,7 +83,7 @@ Các điểm này được thử trong [phase 1](../plan/phases/phase-1-nen-va-l
 
 - [x] Nối frontend thật với Runtime thật: **chạy** (22/11, người điều phối tự đi trên trình duyệt với bản build ở localhost nối backend thật: hỏi số dư, chuyển hũ qua xác nhận, phát lại sau tải trang). Phía backend đã chạy (22/11): token Cognito → Runtime V2 → Gateway (interceptor + Cedar `ENFORCE`) → Aurora, khối UI qua SSE, lưu và đọc lại hội thoại ([spike-vertical-slice.md](../research/spike-vertical-slice.md)); còn thử từ app đã host bằng trình duyệt.
 - [x] Interrupt/resume AG-UI qua Runtime với session manager bền: **chạy** với `S3SessionManager`, kể cả khi microVM bị dừng; không session manager thì `UNKNOWN_INTERRUPT_ID` sau khi microVM đổi. Yofina không dùng (ADR-0002). `AgentCoreMemorySessionManager` chưa thử ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 5).
-- [ ] CORS từ domain thật, Safari trên iPhone, Amplify Hosting. Đã thử bằng `curl` với Origin là URL Amplify: preflight 200, `Access-Control-Allow-Origin: *`, header frontend được phản chiếu ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 10); còn thử từ trình duyệt thật và Safari iPhone.
+- [ ] CORS từ domain thật, Safari trên iPhone, Amplify Hosting. Đã thử bằng `curl` với Origin là URL Amplify: preflight 200, `Access-Control-Allow-Origin: *`, header frontend được phản chiếu ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 10). Trình duyệt thật trên URL Amplify: **chạy** (đi cảnh 2 ngày 23/11, [phase 3](../plan/phases/phase-3-what-if-va-kiem-tra.md), mục "Kết quả đi cảnh 2"). Chỉ còn Safari iPhone (phase 6 G4).
 - [x] Strands `MCPClient` xử lý thế nào khi Cedar từ chối (lỗi giao thức `-32002`): với Gateway thật `MCPClient` nuốt thành chuỗi, `_GatewayMCPClient` giữ ngoại lệ gốc và đọc `MCPError.code`; người dùng thấy khối `notice` "Không có quyền thực hiện" ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 3).
 - [x] Cedar `context.input.user_id` khi `user_id` là tham số tùy chọn trong schema: chạy (`has` + so với `principal.id`); không interceptor thì `user_id` của người khác, vắng hoặc rỗng đều bị `-32002` ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 2).
 - [x] Thông điệp từ chối của Gateway khi không bật `DEBUG`: giống bản `DEBUG` với luật toàn `permit`; dùng mức mặc định ([spike-vertical-slice.md](../research/spike-vertical-slice.md) mục 4).
