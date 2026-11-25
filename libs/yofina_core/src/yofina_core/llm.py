@@ -15,7 +15,11 @@ Việc module làm (docs/plan/master-plan.md, mục "Model và giới hạn"):
    `ModelBudgetExceeded` (ứng với `ErrorCode.MODEL_BUDGET_EXCEEDED`) và **không** rơi sang model
    dự phòng: trần là chốt chi phí của cả vai. Không đọc/ghi được bộ đếm cũng coi là chạm trần
    (đóng cửa an toàn, vì đây là chốt chi phí). Lượt gọi được đếm *trước* khi gửi, nên lời gọi
-   bị throttle vẫn tính vào trần (thiên về an toàn).
+   bị Bedrock throttle vẫn tính vào trần **ngày** của model đó (thiên về an toàn, có chủ ý: `UpdateItem` có điều
+   kiện là chỗ giữ trước giúp trần đúng giữa mọi microVM/Lambda; bộ đếm theo từng model nên lần Sonnet bị throttle
+   không lấy chỗ của Kimi). Lần bộ giới hạn tốc độ bỏ qua thì không đụng bộ đếm ngày.
+   **Trần mỗi lượt hội thoại** (`TurnScope`) thì chỉ đếm lời gọi thật sự tới model: lần bị bộ giới hạn bỏ qua
+   hoặc bị Bedrock từ chối trước khi chạy (`REFUSED_OUTCOMES`) được trả chỗ, để model dự phòng còn chỗ.
 4. **Chuỗi dự phòng** bắt `ThrottlingException` **và** `AccessDeniedException` (Claude 5.x bị chặn
    theo kiểu này, xem docs/research/spike-bedrock-models.md §1) cùng vài lỗi tạm thời khác.
 5. **Ghi log** mỗi lời gọi: vai, model, token vào/ra, thời lượng, kết quả (JSON một dòng, logger
@@ -80,6 +84,18 @@ _FALLBACK_EXC_NAMES = frozenset(
         "ReadTimeoutError",
         "ConnectTimeoutError",
         "EndpointConnectionError",
+    }
+)
+#: Kết quả của lần thử mà Bedrock từ chối **trước khi** model chạy (throttle, quota 0, model/dịch vụ chưa nhận việc):
+#: không có token, không mất tiền, nên không tính vào trần lượt hội thoại (`TurnScope`). Lần thử hết giờ, lỗi 5xx hay lỗi
+#: khác vẫn tính, vì model có thể đã chạy. `ModelThrottledException` là tên Strands đặt cho `ThrottlingException`.
+REFUSED_OUTCOMES = frozenset(
+    {
+        "ThrottlingException",
+        "ModelThrottledException",
+        "AccessDeniedException",
+        "ServiceUnavailableException",
+        "ModelNotReadyException",
     }
 )
 
@@ -385,9 +401,19 @@ class CallRecord:
     latency_ms: int
     outcome: str
 
+    @property
+    def counted(self) -> bool:
+        """Lần thử này có tính vào trần lượt không (False nếu Bedrock từ chối trước khi model chạy)."""
+        return self.outcome not in REFUSED_OUTCOMES
+
 
 class TurnScope:
     """Gom các lượt gọi của **một lượt hội thoại**: đếm, đặt trần (`max_calls`), cộng token.
+
+    Trần chỉ đếm lời gọi thật sự tới model: `begin_call` giữ một chỗ trước khi gửi (để các lời gọi song song không vượt
+    trần), rồi chỗ đó được trả lại nếu lần thử không tới model: bộ giới hạn tốc độ bỏ qua, chạm trần ngày (`cancel_call`)
+    hoặc Bedrock từ chối trước khi chạy (`add` với kết quả thuộc `REFUSED_OUTCOMES`). Nhờ vậy khi Sonnet bị throttle,
+    model dự phòng vẫn còn chỗ trong trần.
 
     Truyền tường minh (không dùng contextvar) để chạy đúng qua generator bất đồng bộ và luồng.
     """
@@ -395,28 +421,36 @@ class TurnScope:
     def __init__(self, max_calls: int | None = None) -> None:
         self.max_calls = max_calls
         self.records: list[CallRecord] = []
-        self._started = 0
+        self._held = 0  # lời gọi đã tính + lời gọi đang giữ chỗ chưa có kết quả
         self._lock = threading.Lock()
 
     def begin_call(self, role: str) -> None:
         with self._lock:
-            if self.max_calls is not None and self._started >= self.max_calls:
+            if self.max_calls is not None and self._held >= self.max_calls:
                 raise ModelBudgetExceeded(
                     f"Đã dùng hết {self.max_calls} lượt gọi model cho một lượt hội thoại",
                     role=role,
                     cap=self.max_calls,
                     reason="turn_limit",
                 )
-            self._started += 1
+            self._held += 1
+
+    def cancel_call(self) -> None:
+        """Trả chỗ đã giữ bằng `begin_call` khi lần thử dừng trước lúc gửi tới model."""
+        with self._lock:
+            self._held = max(self._held - 1, 0)
 
     def add(self, record: CallRecord) -> None:
         with self._lock:
             self.records.append(record)
+            if not record.counted:
+                self._held = max(self._held - 1, 0)
 
     @property
     def calls(self) -> int:
-        """Số lời gọi đã thật sự gửi tới Bedrock (có ghi nhận kết quả), không tính lời gọi bị chặn trước."""
-        return len(self.records)
+        """Số lời gọi đã tới model và có kết quả (con số trần lượt đếm); lần bị từ chối vẫn nằm trong `records`."""
+        with self._lock:
+            return sum(1 for r in self.records if r.counted)
 
     def usage_by_model(self) -> list[dict[str, Any]]:
         """Dạng `usage` của AG-UI (`TokenUsage`): provider, model, inputTokens, outputTokens."""
@@ -648,16 +682,23 @@ class LlmGateway:
             ) from exc
 
     def reserve(self, role: str, spec: ModelSpec, scope: TurnScope | None = None) -> None:
-        """Giữ chỗ cho một lời gọi (đồng bộ): trần lượt hội thoại -> tốc độ -> trần ngày."""
+        """Giữ chỗ cho một lời gọi (đồng bộ): trần lượt hội thoại -> tốc độ -> trần ngày.
+
+        Dừng ở bước tốc độ hoặc trần ngày thì trả lại chỗ trong trần lượt (lời gọi chưa tới model)."""
         if scope is not None:
             scope.begin_call(role)
-        waited = 0.0
-        while (wait := self.limiter.try_acquire(spec.id, spec.rpm)) > 0:
-            if waited + wait > self.settings.rate_limit_max_wait_seconds:
-                raise RateLimitWaitTooLong(spec.id, wait)
-            self._sleep(wait)
-            waited += wait
-        self._consume_budget(role, spec)
+        try:
+            waited = 0.0
+            while (wait := self.limiter.try_acquire(spec.id, spec.rpm)) > 0:
+                if waited + wait > self.settings.rate_limit_max_wait_seconds:
+                    raise RateLimitWaitTooLong(spec.id, wait)
+                self._sleep(wait)
+                waited += wait
+            self._consume_budget(role, spec)
+        except BaseException:
+            if scope is not None:
+                scope.cancel_call()
+            raise
 
     async def reserve_async(
         self, role: str, spec: ModelSpec, scope: TurnScope | None = None
@@ -665,13 +706,18 @@ class LlmGateway:
         """Như `reserve` nhưng không chặn event loop (chờ bằng `asyncio.sleep`, DynamoDB trong luồng)."""
         if scope is not None:
             scope.begin_call(role)
-        waited = 0.0
-        while (wait := self.limiter.try_acquire(spec.id, spec.rpm)) > 0:
-            if waited + wait > self.settings.rate_limit_max_wait_seconds:
-                raise RateLimitWaitTooLong(spec.id, wait)
-            await asyncio.sleep(wait)
-            waited += wait
-        await asyncio.to_thread(self._consume_budget, role, spec)
+        try:
+            waited = 0.0
+            while (wait := self.limiter.try_acquire(spec.id, spec.rpm)) > 0:
+                if waited + wait > self.settings.rate_limit_max_wait_seconds:
+                    raise RateLimitWaitTooLong(spec.id, wait)
+                await asyncio.sleep(wait)
+                waited += wait
+            await asyncio.to_thread(self._consume_budget, role, spec)
+        except BaseException:  # gồm cả CancelledError khi đang chờ
+            if scope is not None:
+                scope.cancel_call()
+            raise
 
     # -- phân loại lỗi và ghi log -----------------------------------------------------------
     @staticmethod
