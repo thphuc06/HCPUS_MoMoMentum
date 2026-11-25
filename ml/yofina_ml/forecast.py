@@ -155,6 +155,20 @@ def _series_kind(y: np.ndarray, ctx: _Ctx) -> SeriesKind:
     return "sparse" if zero_share > ctx.prm.sparse_zero_share else "dense"
 
 
+def _recalibrated_p(
+    p: float, spec: SimSpec, jar: JarInput, cal_kind: SeriesCalibration, ctx: _Ctx
+) -> float:
+    """`p_shortfall` sau PAV (#25) khi bật `Calibration.recalibrate` và loại chuỗi có bảng isotonic. Giữ nguyên p khi nó
+    tất định (số dư đã âm: chắc chắn hụt; không còn ngày nào trước kỳ lương: không thể hụt) và ở hũ nghĩa vụ (bảng chỉ học
+    trên hũ chi tiêu và tiết kiệm, p của hũ nghĩa vụ đi theo lịch nghĩa vụ)."""
+    iso = cal_kind.p_isotonic
+    if not ctx.cal.recalibrate or iso is None or jar.kind == "obligation":
+        return p
+    if spec.balance_vnd < 0 or spec.window < 1:
+        return p
+    return iso(p)
+
+
 def _jar_result(
     jar: JarInput,
     marg: Marginal,
@@ -190,14 +204,11 @@ def _jar_result(
         )
         for i in range(ctx.horizon)
     )
-    p_pub = round(float(sim.p_shortfall), 4)
+    p_pub = round(_recalibrated_p(float(sim.p_shortfall), spec, jar, cal_kind, ctx), 4)
     # BR-31: % chỉ hiện khi khoảng của loại chuỗi này đã đạt độ phủ mục tiêu ở ĐỘ DÀI LỊCH SỬ của hũ
     calibrated = cal_kind.probability_ok_at(jar.history_days)
     show = (
-        ctx.cfg.probability_enabled
-        and not ctx.is_initial
-        and kind != "cold_start"
-        and calibrated
+        ctx.cfg.probability_enabled and not ctx.is_initial and kind != "cold_start" and calibrated
     )
     band: ConfidenceBand = (
         "low"

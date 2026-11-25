@@ -31,7 +31,8 @@ class SeriesCalibration:
     level_sigma: float
     probability_ok: bool
     probability_min_history_days: int = 0
-    p_isotonic: Isotonic | None = None  # PAV cho p_shortfall (#25), chỉ áp khi `Calibration.recalibrate`
+    #: PAV cho p_shortfall (#25), chỉ áp khi `Calibration.recalibrate`
+    p_isotonic: Isotonic | None = None
 
     def probability_ok_at(self, history_days: int) -> bool:
         """Khoảng của loại chuỗi này đã đạt độ phủ mục tiêu ở độ dài lịch sử `history_days` (được phát %)."""
@@ -44,7 +45,8 @@ class Calibration:
     dense: SeriesCalibration
     sparse: SeriesCalibration
     cold_start: SeriesCalibration
-    recalibrate: bool = False  # công tắc hiệu chỉnh sau Monte Carlo (#25): PAV, CQR, ẩn ngày cạn hũ thưa
+    #: công tắc hiệu chỉnh sau Monte Carlo (#25): PAV, CQR, ẩn ngày cạn hũ thưa
+    recalibrate: bool = False
 
     def for_kind(self, kind: str) -> SeriesCalibration:
         return getattr(self, kind)
