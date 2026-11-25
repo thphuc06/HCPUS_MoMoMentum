@@ -84,6 +84,7 @@ export const JarBalance = z.object({
   balance_vnd: Vnd,
   split_percent: z.number().min(0).max(100),
   kind: z.enum(["spending", "saving", "obligation"]).optional(),
+  purpose: z.enum(["buffer", "sinking", "goal", "long_term"]).optional(),
   goal_vnd: VndPositive.optional(),
   goal_date: IsoDate.optional(),
 })

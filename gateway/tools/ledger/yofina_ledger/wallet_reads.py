@@ -23,6 +23,7 @@ from yofina_core.clock import latest_payday, next_payday
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.params import JAR_CODE_RE, UUID_RE
 from yofina_core.schedule import build_timeline_events
+from yofina_core.wallet import default_obligation_jar, transaction_jar
 from yofina_ledger import convert, review_reads
 from yofina_ledger.proactive import choose_proactive_card
 
@@ -407,7 +408,8 @@ class WalletReads:
     def payees_response(self, user_id: str) -> dict[str, Any]:
         return {"payees": [convert.payee_json(r) for r in self.repo.list_payees(user_id)]}
 
-    def tx_types_response(self) -> dict[str, Any]:
+    def tx_types_response(self, user_id: str) -> dict[str, Any]:
+        jar_codes = {j["code"] for j in self.repo.jar_view(user_id).jars}
         out = []
         for info in self.ref.tx_types().values():  # đã theo sort_order của bảng tra
             if not info.is_selectable or info.direction == "internal":
@@ -419,7 +421,10 @@ class WalletReads:
                 "is_person_transfer": info.is_person_transfer,
             }
             if info.default_jar_code:
-                item["default_jar"] = info.default_jar_code
+                item["default_jar"] = (
+                    transaction_jar(info.default_jar_code, jar_codes, tx_type=info.tx_type)
+                    or info.default_jar_code
+                )
             if info.system_role:
                 item["system_role"] = info.system_role
             out.append(item)
@@ -434,6 +439,7 @@ class WalletReads:
                     "color_key": t.color_key,
                     "icon_key": t.icon_key,
                     "kind": t.kind,
+                    **({"purpose": t.purpose} if t.purpose else {}),
                     "default_split_percent": convert.percent(t.default_split_percent),
                     "is_default": t.is_default,
                 }
@@ -510,17 +516,16 @@ class WalletReads:
         names = {j["code"]: j["name"] for j in view.jars if j.get("kind") != "system"}
         unclassified_codes = {j["code"] for j in view.jars if j.get("system_role") == "unclassified"}
         tx_types = self.ref.tx_types()
-        type_defaults = {code: info.default_jar_code for code, info in tx_types.items()}
+        type_defaults = {
+            code: transaction_jar(info.default_jar_code, names, tx_type=code)
+            for code, info in tx_types.items()
+        }
         chosen: list[tuple[Any, list[str]]] = []
         entries: list[dict[str, Any]] = []
         for r in rows:
             suggested = list(r.get("suggested_jars") or [])
-            if (
-                not suggested
-            ):  # chưa có gợi ý do phân loại (phase 4): lấy hũ chuẩn của loại giao dịch
-                info = tx_types.get(r.get("tx_type") or "")
-                if info and info.default_jar_code in names:
-                    suggested = [info.default_jar_code]
+            if not suggested and (default := type_defaults.get(r.get("tx_type") or "")):
+                suggested = [default]
             suggested = [c for c in suggested[:2] if c in names]
             chosen.append((r, suggested))
             entries.extend(
@@ -602,8 +607,8 @@ class WalletReads:
             return None
         obligations = self.repo.list_obligations(user_id, status="active", limit=100)
         user_jars = [j for j in view.jars if j.get("kind") != "system"]
-        default_pay_jar = next(
-            (j["code"] for j in user_jars if j.get("kind") == "obligation"), None
+        default_pay_jar = default_obligation_jar(
+            (j["code"], j["kind"]) for j in user_jars
         )
         origin = convert.to_date(summary["run_app_date"])
         assert origin is not None

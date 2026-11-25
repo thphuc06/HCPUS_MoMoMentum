@@ -135,12 +135,16 @@ export type ProfileResponse = z.infer<typeof ProfileResponse>
 export const JarKind = z.enum(['spending', 'saving', 'obligation', 'system'])
 export type JarKind = z.infer<typeof JarKind>
 
+export const JarPurpose = z.enum(['buffer', 'sinking', 'goal', 'long_term'])
+export type JarPurpose = z.infer<typeof JarPurpose>
+
 export const JarFull = z.object({
   code: JarCode,
   name: z.string().min(1).max(40),
   color_key: Key,
   icon_key: Key,
   kind: JarKind,
+  purpose: JarPurpose.optional(),
   system_role: z.enum(['other_income', 'unclassified']).optional(),
   balance_vnd: VndSigned,
   split_percent: z.number().min(0).max(100),
@@ -279,6 +283,7 @@ export const JarTemplate = z.object({
   color_key: Key,
   icon_key: Key,
   kind: z.enum(['spending', 'saving', 'obligation']),
+  purpose: JarPurpose.optional(),
   default_split_percent: z.number().min(0).max(100),
   is_default: z.boolean(),
 })

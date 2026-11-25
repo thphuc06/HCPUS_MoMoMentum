@@ -56,6 +56,7 @@ class TemplateRow:
     default_split_percent: Decimal
     is_default: bool
     sort_order: int
+    purpose: str | None = None
 
 
 class ReferenceData:
@@ -133,6 +134,7 @@ class ReferenceData:
                     default_split_percent=Decimal(str(r["default_split_percent"])),
                     is_default=bool(r["is_default"]),
                     sort_order=int(r["sort_order"]),
+                    purpose=r.get("purpose"),
                 )
                 for r in self._source.reference_templates()
             ]

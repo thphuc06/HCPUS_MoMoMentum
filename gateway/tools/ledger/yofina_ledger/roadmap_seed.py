@@ -51,11 +51,11 @@ def seed_path(persona: str) -> Path:
     return Path(personas.__file__).resolve().parent / "roadmaps" / f"{persona}.json"
 
 
-def load_seed(persona: str | None) -> dict[str, Any] | None:
+def load_seed(persona: str | None, *, layout: str | None = None) -> dict[str, Any] | None:
     """Nội dung file seed của persona, hoặc None nếu persona không có lộ trình seed."""
     if not persona or not persona.isidentifier():
         return None
-    path = seed_path(persona)
+    path = seed_path(f"{persona}_{layout}" if layout else persona)
     if not path.is_file():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
@@ -123,11 +123,12 @@ def _resolve_phases(raw: list[dict[str, Any]], today: date) -> list[dict[str, An
 
 
 def seed_roadmaps(
-    tx: Any, user_id: str, *, persona: str | None, app_date: date, jars: list[dict[str, Any]]
+    tx: Any, user_id: str, *, persona: str | None, app_date: date, jars: list[dict[str, Any]],
+    layout: str | None = None,
 ) -> int:
     """Nạp lộ trình seed của `persona` trong transaction `tx` (sau khi sổ cái và số dư hũ đã nạp). Trả số phiên bản đã nạp (0 nếu persona
     không có file seed). `jars` là danh sách hũ đã nạp (mã, tên, màu, biểu tượng, loại, mục tiêu)."""
-    seed = load_seed(persona)
+    seed = load_seed(persona, layout=layout)
     if seed is None:
         return 0
     meta = {j["code"]: j for j in jars}

@@ -251,6 +251,7 @@ def test_confirm_resolutions_chap_nhan_bien_nhan_khong_co_transfer_id():
 
 # --- seed -------------------------------------------------------------------------------------
 SEED_FILES = sorted(SEEDS.glob("*.sql"))
+TEMPLATES = MIGRATIONS / "0055_default_six_jars.sql"
 
 
 def test_co_ba_file_seed_cho_ba_bang_tra():
@@ -261,22 +262,28 @@ def test_co_ba_file_seed_cho_ba_bang_tra():
 def test_seed_mot_cau_lenh_viet_lai_duoc_khong_tham_so_khong_bi_mat(path):
     sql = path.read_text(encoding="utf-8")
     stmts = [strip_leading_comments(x) for x in split_migration(sql)]
-    assert len(stmts) == 1 and stmts[0].startswith("INSERT INTO")
-    assert "ON CONFLICT" in stmts[0] and "DO UPDATE SET" in stmts[0]  # chạy lại nhiều lần được
-    assert not named_params(stmts[0]) and not re.search(r"(?<![:\w]):[A-Za-z_]", sql)
+    if path.stem == "jar_templates":
+        assert len(stmts) == 2 and stmts[0].startswith("UPDATE jar_templates ")
+        assert path.read_text(encoding="utf-8").split("\n", 1)[1].strip() in TEMPLATES.read_text(encoding="utf-8")
+    else:
+        assert len(stmts) == 1
+    assert stmts[-1].startswith("INSERT INTO")
+    assert "ON CONFLICT" in stmts[-1] and "DO UPDATE SET" in stmts[-1]
+    assert not any(named_params(s) for s in stmts) and not re.search(r"(?<![:\w]):[A-Za-z_]", sql)
     assert not re.search(r"PASSWORD|SECRET|\b\d{12}\b", code_only(sql), re.I)
 
 
 def seed_rows(path):
     """Mỗi dòng giá trị của câu INSERT (một dòng một bộ, bắt đầu bằng dấu mở ngoặc và dấu nháy)."""
     sql = path.read_text(encoding="utf-8")
-    return [ln.strip().rstrip(",") for ln in sql.splitlines() if re.match(r"\s*\('", ln)]
+    values = sql.split("VALUES", 1)[1].split("ON CONFLICT", 1)[0]
+    return [ln.strip().rstrip(",") for ln in values.splitlines() if re.match(r"\s*\('", ln)]
 
 
 def test_tx_type_map_ma_hu_chuan_deu_co_trong_jar_templates_va_loai_noi_bo_khong_chon_duoc():
     jar_codes = {
         r.lstrip("(").split(",")[0].strip().strip("'")
-        for r in seed_rows(SEEDS / "jar_templates.sql")
+        for r in seed_rows(TEMPLATES)
     }
     rows = []
     for r in seed_rows(SEEDS / "tx_type_map.sql"):
@@ -301,12 +308,23 @@ def test_tx_type_map_ma_hu_chuan_deu_co_trong_jar_templates_va_loai_noi_bo_khong
 
 def test_jar_templates_tong_ty_le_mac_dinh_bang_100_va_khong_co_hu_he_thong():
     total = 0
-    for r in seed_rows(SEEDS / "jar_templates.sql"):
+    defaults = {}
+    for r in seed_rows(TEMPLATES):
         parts = [p.strip().strip("'") for p in re.findall(r"'[^']*'|[A-Za-z0-9_]+", r)]
-        code, _name, _color, _icon, kind, split, is_default, _order = parts
+        code, _name, _color, _icon, kind, split, is_default, _order, purpose = parts
         assert kind in wallet.USER_JAR_KINDS and code not in wallet.SYSTEM_JAR_CODES.values()
-        total += int(split) if is_default == "true" else 0
+        if is_default == "true":
+            defaults[code] = (kind, purpose)
+            total += int(split)
     assert total == 100
+    assert defaults == {
+        "chi_hang_ngay": ("spending", "NULL"),
+        "nghia_vu": ("obligation", "NULL"),
+        "du_phong": ("saving", "buffer"),
+        "quy_don": ("saving", "sinking"),
+        "muc_tieu": ("saving", "goal"),
+        "tich_luy_dai_han": ("saving", "long_term"),
+    }
 
 
 def test_bieu_phi_co_nguon_ngay_hieu_luc_va_khong_bia_them_khoan_phi():

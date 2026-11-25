@@ -8,7 +8,7 @@ thế nào cho đúng") và `contracts/README.md` ("Mốc trên biểu đồ"):
   người dùng, không lùi quá cửa sổ cấu hình.
 - Lương: `split_amount(lương đã khai, tỷ lệ các hũ)` vào đúng ngày lương trong horizon (cùng quy tắc `confirm_salary`).
 - Nghĩa vụ: mở rộng chu kỳ trong horizon bằng `yofina_core.schedule.expand_due_dates`; quá hạn tính vào ngày đầu; nghĩa vụ chưa có hũ
-  trả gán cho hũ `obligation` đầu tiên (theo `sort_order`), không có hũ đó thì bỏ và ghi `unassigned_obligations`.
+  trả dùng hũ nghĩa vụ mặc định. Khoản không xác định được hũ đi vào unassigned_obligations.
 - Hạt ngẫu nhiên tất định theo người dùng (băm `user_id`), nên cùng dữ liệu cho cùng dự báo qua nhiều lần chạy.
 """
 
@@ -25,7 +25,7 @@ from yofina_core.clock import next_payday as next_payday_of
 from yofina_core.clock import payday_dates
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.schedule import expand_due_dates
-from yofina_core.wallet import split_amount
+from yofina_core.wallet import default_obligation_jar, split_amount
 from yofina_forecast.settings import ForecastSettings
 from yofina_ml.calibration import calibrated_config
 from yofina_ml.contract import check_inputs
@@ -188,7 +188,7 @@ def build_inputs(ctx: Context, settings: ForecastSettings, user_id: str, *, n_pa
     codes = [j["code"] for j in forecast_jars]
     if not codes:
         raise YofinaError(ErrorCode.FORECAST_UNAVAILABLE, "Chưa có hũ nào để dự báo.")
-    default_pay = next((j["code"] for j in forecast_jars if j["kind"] == "obligation"), None)
+    default_pay = default_obligation_jar((j["code"], j["kind"]) for j in forecast_jars)
 
     through = app_date + timedelta(days=horizon)
     pay_dates = tuple(payday_dates(payday, app_date, through))

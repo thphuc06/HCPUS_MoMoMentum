@@ -23,6 +23,7 @@ from conftest import ANCHOR
 from persona_coverage import AFTER_RANGE, BEFORE_RANGE, coverage_facts
 
 from personas import generate, generate_out_of_wallet
+from personas.six_jars import JAR_ALIASES
 from yofina_core import ingest
 from yofina_ml import quality
 from yofina_ml.types import CoverageInputs
@@ -86,8 +87,8 @@ def write_external_expense(env, user, row, anchor: date) -> None:
         m.execute(
             "INSERT INTO transactions (id, user_id, occurred_at, app_date, kind, jar_code, amount_vnd, merchant, source, "
             "tx_type, funding_source) VALUES (%s, %s, %s, %s, 'expense', %s, %s, %s, 'ingest', %s, 'external')",
-            [str(uuid.uuid4()), user, env.clock.now, row.app_date(anchor), row.jar_code,
-             -row.amount_vnd, row.merchant, row.tx_type],
+            [str(uuid.uuid4()), user, env.clock.now, row.app_date(anchor),
+             JAR_ALIASES.get(row.jar_code, row.jar_code), -row.amount_vnd, row.merchant, row.tx_type],
         )  # fmt: skip
 
 
@@ -113,9 +114,11 @@ def test_vy_thu_nhap_ngoai_vi_trong_so_cai_va_so_du_hu_dung_bat_bien(env):
     ]
     bal = balances(env, VY)
     assert {c: int(v) for c, v in by_jar.items()} == bal  # số dư mỗi hũ = tổng dòng trả bằng hũ
-    assert {j.code: j.balance_vnd for j in data.jars} == {
-        c: bal[c] for c in (j.code for j in data.jars)
-    }
+    expected = {"quy_don": 0, "tich_luy_dai_han": 0}
+    for jar in data.jars:
+        code = JAR_ALIASES.get(jar.code, jar.code)
+        expected[code] = expected.get(code, 0) + jar.balance_vnd
+    assert {code: bal[code] for code in expected} == expected
 
 
 def test_vy_do_phu_truoc_nap_trong_dai(env):

@@ -179,6 +179,8 @@ def jar_full_json(
         out["system_role"] = row["system_role"]
     if row.get("goal_vnd") is not None:
         out["goal_vnd"] = vnd(row["goal_vnd"])
+    if row.get("purpose") is not None:
+        out["purpose"] = row["purpose"]
     if row.get("goal_date") is not None:
         out["goal_date"] = to_date(row["goal_date"]).isoformat()  # type: ignore[union-attr]
     if forecast is not None:

@@ -73,6 +73,7 @@ from yofina_core.llm import (  # noqa: E402
 )
 from yofina_core.params import TxTypeInfo, fold_text  # noqa: E402
 from yofina_core.pii import PiiPolicy  # noqa: E402
+from yofina_core.wallet import transaction_jar  # noqa: E402
 from yofina_ledger.classify_config import ClassifyThresholds, load_thresholds  # noqa: E402
 
 log = logging.getLogger("yofina.ingest.classify")
@@ -260,7 +261,8 @@ def classify_rows(rows: Sequence[RowInput], inputs: ClassifyInputs) -> list[JarC
         if j.get("kind") != "system"
     }
     type_map = {
-        k: TypeInfo(k, v.label, v.direction, v.default_jar_code) for k, v in inputs.type_map.items()
+        k: TypeInfo(k, v.label, v.direction, transaction_jar(v.default_jar_code, jars, tx_type=k))
+        for k, v in inputs.type_map.items()
     }
     person_types = {k for k, v in inputs.type_map.items() if v.is_person_transfer}
     merchants = [r.counterparty for r in rows if r.counterparty]

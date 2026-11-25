@@ -15,6 +15,7 @@ from typing import Any
 from yofina_core.clock import next_payday as next_payday_of
 from yofina_core.money import to_vnd
 from yofina_core.schedule import expand_due_dates
+from yofina_core.wallet import default_obligation_jar, is_buffer_jar
 
 MONTH_DAYS = Decimal(30)
 
@@ -26,6 +27,7 @@ class JarFact:
     kind: str
     balance_vnd: int
     goal_vnd: int | None = None
+    purpose: str | None = None
 
 
 @dataclass(frozen=True)
@@ -56,8 +58,8 @@ class SuitabilityFacts:
 
     @property
     def default_pay_jar(self) -> str | None:
-        """Hũ trả nghĩa vụ mặc định: hũ `obligation` đầu tiên (cùng quy tắc của dự báo)."""
-        return next((j.code for j in self.jars if j.kind == "obligation"), None)
+        """Ưu tiên Nghĩa vụ chuẩn, với hũ nghĩa vụ cũ làm dự phòng."""
+        return default_obligation_jar((j.code, j.kind) for j in self.jars)
 
     def pay_jar_of(self, ob: ObligationFact) -> str | None:
         return ob.pay_jar_code or self.default_pay_jar
@@ -93,9 +95,9 @@ class SuitabilityFacts:
         return total
 
     def is_emergency_jar(self, jar: JarFact) -> bool:
-        """Hũ thuộc quỹ dự phòng: hũ tiết kiệm không gắn mục tiêu cụ thể (hũ có mục tiêu là để dành cho việc khác). Cùng định nghĩa
-        với `yofina_forecast.resilience.emergency_jar`."""
-        return jar.kind == "saving" and jar.goal_vnd is None
+        if jar.purpose is None and any(j.purpose == "buffer" for j in self.jars):
+            return False
+        return is_buffer_jar(jar.kind, jar.purpose, jar.goal_vnd)
 
     def emergency_fund_vnd(self) -> int:
         """Quỹ dự phòng: tổng số dư các hũ thuộc quỹ dự phòng (`is_emergency_jar`)."""
@@ -124,6 +126,7 @@ def facts_from_rows(
                 name=j["name"],
                 kind=j["kind"],
                 balance_vnd=to_vnd(j["balance_vnd"]),
+                purpose=j.get("purpose"),
                 goal_vnd=to_vnd(j["goal_vnd"]) if j.get("goal_vnd") is not None else None,
             )
             for j in jars

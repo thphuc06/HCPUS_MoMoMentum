@@ -35,7 +35,7 @@ from yofina_classify.model import (
 from yofina_classify.text import MaskedTx, mask_tx
 from yofina_core.llm import AllModelsFailed, ModelBudgetExceeded, StructuredOutputError
 from yofina_core.pii import PiiPolicy
-from yofina_core.wallet import EMBEDDING_DIMENSIONS
+from yofina_core.wallet import EMBEDDING_DIMENSIONS, transaction_jar
 from yofina_ledger.classify_config import ClassifyThresholds
 
 log = logging.getLogger("yofina.classify")
@@ -112,8 +112,11 @@ class Classifier:
                 auto_th,
             )
         info = ctx.type_map.get(facts.tx_type)
-        if info is not None and info.direction == "out" and info.default_jar_code in ctx.jars:
-            jar = str(info.default_jar_code)
+        jar = (
+            transaction_jar(info.default_jar_code, ctx.jars, tx_type=facts.tx_type)
+            if info is not None and info.direction == "out" else None
+        )
+        if jar:
             conf = th.type_map_confidence
             return self._finish(
                 facts,
@@ -261,12 +264,9 @@ class Classifier:
         # hỏi gộp: bổ sung hũ chuẩn của loại giao dịch làm gợi ý nếu còn thiếu
         if d.tier == "ask":
             info = ctx.type_map.get(facts.tx_type)
-            if (
-                info
-                and info.default_jar_code in ctx.jars
-                and all(j != info.default_jar_code for j, _ in d.candidates)
-            ):
-                d.candidates.append((str(info.default_jar_code), 0.0))
+            default = transaction_jar(info.default_jar_code, ctx.jars, tx_type=facts.tx_type) if info else None
+            if default and all(j != default for j, _ in d.candidates):
+                d.candidates.append((default, 0.0))
         return d
 
     def _is_small_one_off(self, facts: TxFacts, ctx: UserContext) -> bool:

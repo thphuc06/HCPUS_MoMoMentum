@@ -807,11 +807,14 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         từ bảng `fee_schedules`), hạn mức, sổ cái có `tx_type`, sự kiện lương; số dư hũ được dựng lại từ sổ cái. Sau đó TÍNH
         DỰ BÁO ĐỒNG BỘ (gọi `yofina-forecast-batch`) để mở app là có số (`forecast_ready`), rồi phát `profile.updated`."""
         import personas  # dữ liệu seed (data/personas), đóng gói cùng Lambda
+        from personas.six_jars import JAR_ALIASES, use_default_jars
+        from yofina_core.wallet import DEFAULT_OBLIGATION_JAR
 
         s = self.settings
         now = self.now()
+        templates = self.repo.reference_templates()
         try:
-            data = personas.generate(persona, anchor=s.demo_anchor_date)
+            data = use_default_jars(personas.generate(persona, anchor=s.demo_anchor_date), templates)
         except personas.PersonaError as exc:
             raise YofinaError(ErrorCode.PARAMS_INVALID, f"Persona không hợp lệ: {exc}") from exc
         fee = self.ref.bnpl_monthly_fee(s.demo_anchor_date)
@@ -823,18 +826,24 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
             user_id=user_id,
             bnpl_fee={"amount_vnd": fee.amount_vnd, "id": fee.id} if fee else None,
             bnpl_label=self.ref.product_label(BNPL_PRODUCT_CODE, s.demo_anchor_date),
+            obligation_pay_jar=DEFAULT_OBLIGATION_JAR,
         )
+        purposes = {t["code"]: t.get("purpose") for t in templates if t["is_default"]}
         counts = self.repo.reset_user(
             user_id,
             profile=mat.profile,
-            jars=mat.jars,
+            jars=[{**jar, "purpose": purposes[jar["code"]]} for jar in mat.jars],
             payees=mat.payees,
             obligations=mat.obligations,
             credit_line=mat.credit_line,
             transactions=mat.transaction_rows,
             salary_events=mat.salary_events,
             trace_id=trace_id,
-            details={"persona": persona, "clock_offset_days": mat.clock_offset_days},
+            details={
+                "persona": persona,
+                "jar_layout": "six_jars",
+                "clock_offset_days": mat.clock_offset_days,
+            },
             app_date=mat.app_date,  # ngày neo cho lộ trình seed (phase 4), không suy từ giao dịch
         )
         # Phase 4 luồng B: nhãn k-NN seed của persona (0 nếu persona chưa có file nhãn). Lỗi nạp nhãn không làm hỏng việc đặt lại:
@@ -842,7 +851,7 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         try:
             from yofina_ledger.classify_seed import apply_seed_labels
 
-            apply_seed_labels(self.repo.db, user_id, persona)
+            apply_seed_labels(self.repo.db, user_id, persona, jar_aliases=JAR_ALIASES)
         except Exception:
             log.exception("reset_seed_labels_failed persona=%s", persona)
         forecast_ready = (

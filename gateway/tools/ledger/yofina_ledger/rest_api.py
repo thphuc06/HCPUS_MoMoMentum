@@ -159,7 +159,7 @@ def _dispatch(
             cursor=q.get("cursor"),
         )
     if route == "GET /tx-types":
-        return 200, service.tx_types_response()
+        return 200, service.tx_types_response(sub)
     if route == "GET /payees":
         return 200, service.payees_response(sub)
     if route == "GET /obligations":

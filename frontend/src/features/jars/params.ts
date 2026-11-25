@@ -1,4 +1,4 @@
-import type { JarFull, JarTemplate, ToolParams } from '@/api/schemas'
+import type { JarFull, JarPurpose, JarTemplate, ToolParams } from '@/api/schemas'
 
 export type JarRowState = {
   /** Có `code` là hũ đã có (sửa); không có là hũ mới (server sinh mã từ tên). */
@@ -9,6 +9,7 @@ export type JarRowState = {
   kind: 'spending' | 'saving' | 'obligation'
   /** Tỷ lệ chia lương, chuỗi người dùng gõ ("30", "12,5"). */
   percent: string
+  purpose?: JarPurpose
   goal_vnd?: number
   goal_date?: string
   /** Số dư hiện có (chỉ để biết hũ còn tiền thì chưa bỏ được). */
@@ -25,6 +26,7 @@ export function rowsFromJars(jars: readonly JarFull[]): JarRowState[] {
       icon_key: j.icon_key,
       kind: j.kind === 'system' ? 'spending' : j.kind,
       percent: String(j.split_percent),
+      purpose: j.purpose,
       goal_vnd: j.goal_vnd,
       goal_date: j.goal_date,
       balance_vnd: j.balance_vnd,
@@ -32,7 +34,7 @@ export function rowsFromJars(jars: readonly JarFull[]): JarRowState[] {
 }
 
 export function rowFromTemplate(t: JarTemplate): JarRowState {
-  return { name: t.name, color_key: t.color_key, icon_key: t.icon_key, kind: t.kind, percent: '0', balance_vnd: 0 }
+  return { name: t.name, color_key: t.color_key, icon_key: t.icon_key, kind: t.kind, purpose: t.purpose, percent: '0', balance_vnd: 0 }
 }
 
 /** "12,5" -> 12.5; chuỗi hỏng -> NaN. */
@@ -60,7 +62,9 @@ export function isChanged(rows: readonly JarRowState[], original: readonly JarFu
   if (rows.length !== orig.length) return true
   return rows.some((r, i) => {
     const o = orig[i]!
-    return r.code !== o.code || r.name.trim() !== o.name || Math.round(parsePercent(r.percent) * 100) !== Math.round(parsePercent(o.percent) * 100)
+    return r.code !== o.code || r.name.trim() !== o.name ||
+      r.purpose !== o.purpose || r.goal_vnd !== o.goal_vnd || r.goal_date !== o.goal_date ||
+      Math.round(parsePercent(r.percent) * 100) !== Math.round(parsePercent(o.percent) * 100)
   })
 }
 
@@ -76,6 +80,7 @@ export function saveJarsParams(rows: readonly JarRowState[]): ToolParams {
         split_percent: Math.round(parsePercent(r.percent) * 100) / 100,
       }
       if (r.code) j.code = r.code
+      if (r.purpose) j.purpose = r.purpose
       if (r.goal_vnd) j.goal_vnd = r.goal_vnd
       if (r.goal_date) j.goal_date = r.goal_date
       return j

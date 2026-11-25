@@ -33,7 +33,7 @@ DEFAULT_ALLOCATION_PARAMS = AllocationParams(
 )
 #: hũ chi tiêu thiết yếu theo mẫu hũ mặc định (`db/seed/jar_templates.sql`: ăn uống, đi lại, hóa đơn); hũ người dùng tự thêm thì không
 #: thiết yếu. Đọc được từ `YOFINA_ESSENTIAL_JAR_CODES` (cách nhau bằng dấu phẩy).
-DEFAULT_ESSENTIAL_JAR_CODES = ("an_uong", "di_lai", "hoa_don")
+DEFAULT_ESSENTIAL_JAR_CODES = ("an_uong", "di_lai", "hoa_don", "chi_hang_ngay")
 
 
 @dataclass(frozen=True)

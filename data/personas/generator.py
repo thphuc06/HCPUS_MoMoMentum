@@ -51,6 +51,7 @@ from yofina_core.schedule import bnpl_due_date, first_due_from_day
 from yofina_core.wallet import (
     OTHER_INCOME_JAR_CODE,
     UNCLASSIFIED_JAR_CODE,
+    default_obligation_jar,
     split_amount,
 )
 
@@ -738,7 +739,7 @@ def materialize(
     """Gắn đồng hồ: offset sao cho ngày mô phỏng = `anchor`; mỗi dòng có `app_date` mô phỏng và `occurred_at` thật (UTC)
     nhất quán với offset (ngày thật = hôm nay thật - days_ago). `bnpl_fee` (`amount_vnd`, `id`) lấy từ bảng `fee_schedules`
     do người gọi cung cấp; không có thì nghĩa vụ trả sau không có phí. `obligation_pay_jar` là hũ trả của khoản Trả sau
-    (mặc định: hũ `obligation` đầu tiên của persona)."""
+    (mặc định: Nghĩa vụ chuẩn hoặc hũ nghĩa vụ cũ)."""
     offset = clock_offset_for(anchor, now, tz)
     real_today = now.astimezone(tz).date()
 
@@ -847,8 +848,8 @@ def materialize(
         }
         if data.bnpl_principal_vnd:
             fee = int(bnpl_fee["amount_vnd"]) if bnpl_fee else 0
-            pay_jar = obligation_pay_jar or next(
-                (j.code for j in data.jars if j.kind == "obligation"), None
+            pay_jar = obligation_pay_jar or default_obligation_jar(
+                (j.code, j.kind) for j in data.jars
             )
             obligations.append(
                 {

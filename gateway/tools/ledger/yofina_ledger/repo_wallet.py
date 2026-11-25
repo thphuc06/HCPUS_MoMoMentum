@@ -96,7 +96,7 @@ SQL_REF_FEES = (
     "FROM fee_schedules ORDER BY product_code, fee_type, effective_from DESC LIMIT 100"
 )
 SQL_REF_TEMPLATES = (
-    "SELECT code, name, color_key, icon_key, kind, default_split_percent, is_default, sort_order "
+    "SELECT code, name, color_key, icon_key, kind, default_split_percent, is_default, sort_order, purpose "
     "FROM jar_templates ORDER BY sort_order, code LIMIT 40"
 )
 
@@ -186,7 +186,8 @@ SQL_WRITE_CREDIT_TX = (
     "'bnpl_auto', (SELECT id FROM ins), CAST(:fee_id AS uuid) WHERE EXISTS (SELECT 1 FROM ins) "
     "ON CONFLICT (user_id, due_date) WHERE kind = 'bnpl' AND status = 'active' DO UPDATE SET "
     "principal_vnd = obligations.principal_vnd + CAST(:amount AS numeric), "
-    "amount_vnd = obligations.amount_vnd + CAST(:amount AS numeric), updated_at = now() "
+    "amount_vnd = obligations.amount_vnd + CAST(:amount AS numeric), "
+    "pay_jar_code = coalesce(obligations.pay_jar_code, EXCLUDED.pay_jar_code), updated_at = now() "
     "RETURNING id, principal_vnd, fee_vnd, amount_vnd, due_date, (xmax = 0) AS created), "
     "cl AS (UPDATE credit_lines SET outstanding_vnd = outstanding_vnd + CAST(:amount AS numeric), updated_at = now() "
     "WHERE user_id = :uid AND EXISTS (SELECT 1 FROM ins) RETURNING outstanding_vnd, limit_vnd), "
@@ -321,8 +322,8 @@ SQL_UPSERT_USER = (
     "RETURNING (xmax = 0) AS created, display_name, monthly_salary_vnd, payday_day, risk_tolerance"
 )
 SQL_TEMPLATE_JARS = (
-    "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind) "
-    "SELECT CAST(:uid AS text), t.code, t.name, t.color_key, t.icon_key, 0, t.default_split_percent, t.sort_order, t.kind "
+    "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind, purpose) "
+    "SELECT CAST(:uid AS text), t.code, t.name, t.color_key, t.icon_key, 0, t.default_split_percent, t.sort_order, t.kind, t.purpose "
     "FROM jar_templates t WHERE t.is_default AND NOT EXISTS "
     "(SELECT 1 FROM jars j WHERE j.user_id = :uid AND j.kind <> 'system') RETURNING code"
 )
@@ -363,7 +364,7 @@ SQL_RELEASE_CANCELLED_CREDIT = (
 )
 
 SQL_JARS_FOR_SAVE = (
-    "SELECT j.code, j.name, j.balance_vnd, "
+    "SELECT j.code, j.name, j.balance_vnd, j.purpose, j.goal_vnd, j.goal_date, "
     "(SELECT count(*) FROM obligations o WHERE o.user_id = j.user_id AND o.pay_jar_code = j.code "
     "AND o.status = 'active') AS active_obligations, "
     "(SELECT count(*) FROM transactions t WHERE t.user_id = j.user_id AND t.jar_code = j.code) AS tx_count "
@@ -379,13 +380,14 @@ SQL_DELETE_JARS = (
 )
 SQL_UPSERT_JARS = (
     "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind, "
-    "goal_vnd, goal_date) "
+    "goal_vnd, goal_date, purpose) "
     "SELECT CAST(:uid AS text), r.code, r.name, r.color_key, r.icon_key, 0, r.split_percent, r.sort_order, r.kind, r.goal_vnd, "
-    "r.goal_date FROM jsonb_to_recordset(CAST(:jars AS jsonb)) AS r(code text, name text, color_key text, "
-    "icon_key text, split_percent numeric, sort_order integer, kind text, goal_vnd numeric, goal_date date) "
+    "r.goal_date, r.purpose FROM jsonb_to_recordset(CAST(:jars AS jsonb)) AS r(code text, name text, color_key text, "
+    "icon_key text, split_percent numeric, sort_order integer, kind text, goal_vnd numeric, goal_date date, purpose text) "
     "ON CONFLICT (user_id, code) DO UPDATE SET name = EXCLUDED.name, color_key = EXCLUDED.color_key, "
     "icon_key = EXCLUDED.icon_key, kind = EXCLUDED.kind, split_percent = EXCLUDED.split_percent, "
     "sort_order = EXCLUDED.sort_order, goal_vnd = EXCLUDED.goal_vnd, goal_date = EXCLUDED.goal_date, "
+    "purpose = EXCLUDED.purpose, "
     "updated_at = now() RETURNING code, name, balance_vnd"
 )
 
@@ -743,6 +745,10 @@ class WalletRepo:
                 )
             next_due = next_due_for(ob)
             is_bnpl = ob["kind"] == "bnpl"
+            if is_bnpl and amount != _vnd(ob["amount_vnd"]):
+                raise YofinaError(
+                    ErrorCode.PARAMS_INVALID, "Trả sau cần thanh toán đủ tổng tiền đến hạn."
+                )
             params = {
                 **self._tx_params({**tx, "uid": user_id}),
                 "next_due": next_due,
@@ -1207,20 +1213,30 @@ class WalletRepo:
             if removed_codes:
                 t.execute(SQL_RELEASE_PAY_JAR, {"uid": user_id, "removed": removed_codes})
                 t.execute(SQL_DELETE_JARS, {"uid": user_id, "removed": removed_codes})
-            payload = [
-                {
-                    "code": j["code"],
-                    "name": j["name"],
-                    "color_key": j["color_key"],
-                    "icon_key": j["icon_key"],
-                    "kind": j["kind"],
-                    "split_percent": j["split_percent"],
+            previous = {j["code"]: j for j in existing}
+            payload = []
+            for i, jar in enumerate(norm["jars"]):
+                old = previous.get(jar["code"], {})
+                purpose = jar.get("purpose", old.get("purpose")) if jar["kind"] == "saving" else None
+                if (
+                    purpose == old.get("purpose") == "sinking"
+                    and old.get("goal_date") is not None
+                    and "goal_date" in jar
+                    and jar["goal_date"] != str(old["goal_date"])
+                ):
+                    raise YofinaError(
+                        ErrorCode.PARAMS_INVALID, "Ngày đã cam kết của Quỹ dồn được giữ nguyên."
+                    )
+                preserve_commitment = purpose == "sinking" or (purpose and "purpose" not in jar)
+                goal_date = old.get("goal_date") if preserve_commitment else None
+                goal_vnd = old.get("goal_vnd") if preserve_commitment else None
+                payload.append({
+                    **jar,
                     "sort_order": i,
-                    "goal_vnd": j.get("goal_vnd"),
-                    "goal_date": j.get("goal_date"),
-                }
-                for i, j in enumerate(norm["jars"])
-            ]
+                    "purpose": purpose,
+                    "goal_vnd": jar.get("goal_vnd", int(goal_vnd) if goal_vnd is not None else None),
+                    "goal_date": jar.get("goal_date", str(goal_date) if goal_date is not None else None),
+                })
             out = t.execute(SQL_UPSERT_JARS, {"uid": user_id, "jars": payload})
             t.execute(
                 SQL_AUDIT_TX,

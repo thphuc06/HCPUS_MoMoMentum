@@ -196,9 +196,9 @@ ON CONFLICT (id) DO UPDATE SET
 """
 SQL_INSERT_JAR = (
     "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind, "
-    "goal_vnd, goal_date) "
+    "goal_vnd, goal_date, purpose) "
     "VALUES (:uid, :code, :name, :color_key, :icon_key, 0, CAST(:split AS numeric), :sort_order, :kind, "
-    "CAST(:goal_vnd AS numeric), CAST(:goal_date AS date))"
+    "CAST(:goal_vnd AS numeric), CAST(:goal_date AS date), :purpose)"
 )
 SQL_ENSURE_SYSTEM = "SELECT app_ensure_system_jars(:uid) AS created"
 SQL_INSERT_PAYEE = (
@@ -478,10 +478,12 @@ class LedgerRepo(WalletRepo, Phase3Repo):
         `app_date` là ngày mô phỏng sau khi đặt lại (ngày neo) để dựng ngày của lộ trình seed. Vắng thì lấy ngày sau giao dịch mới nhất của
         persona (bộ sinh persona không tạo giao dịch ở ngày neo: giao dịch gần nhất là hôm trước)."""
         with self.db.transaction(user_id) as tx:
+            # Acquire the user's row lock before deleting any data so concurrent resets
+            # serialize even when the user has no rows in the first tables.
+            tx.execute(SQL_UPSERT_USER, {"uid": user_id, **profile})
             for sql in RESET_DELETES:
                 tx.execute(sql, {"uid": user_id})
-            tx.execute(SQL_UPSERT_USER, {"uid": user_id, **profile})
-            tx.batch(SQL_INSERT_JAR, [{"uid": user_id, **j} for j in jars])
+            tx.batch(SQL_INSERT_JAR, [{"uid": user_id, "purpose": None, **j} for j in jars])
             tx.execute(SQL_ENSURE_SYSTEM, {"uid": user_id})
             tx.batch(SQL_INSERT_PAYEE, [{"uid": user_id, **p} for p in payees])
             tx.batch(SQL_INSERT_OBLIGATION_SEED, [{"uid": user_id, **o} for o in obligations])
@@ -525,12 +527,13 @@ class LedgerRepo(WalletRepo, Phase3Repo):
         from yofina_ledger import roadmap_seed
 
         persona = details.get("persona")
-        if roadmap_seed.load_seed(persona) is None:
+        layout = "six_jars" if details.get("jar_layout") == "six_jars" else None
+        if roadmap_seed.load_seed(persona, layout=layout) is None:
             return 0
         if app_date is None:
             if not transactions:
                 return 0
             app_date = max(t["app_date"] for t in transactions) + timedelta(days=1)
         return roadmap_seed.seed_roadmaps(
-            tx, user_id, persona=persona, app_date=app_date, jars=list(jars)
+            tx, user_id, persona=persona, app_date=app_date, jars=list(jars), layout=layout
         )

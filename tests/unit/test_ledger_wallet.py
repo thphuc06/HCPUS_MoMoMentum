@@ -498,7 +498,7 @@ def test_seed_hu_mac_dinh_cong_lai_dung_100_va_co_chuyen_tien_cho_nguoi_duoc_dan
         seed,
         re.M,
     )
-    assert len(rows) == 7
+    assert sum(d == "true" for _, _, d in rows) == 6
     assert sum(Decimal(p) for _, p, d in rows if d == "true") == 100
     tx = (REPO / "db" / "seed" / "tx_type_map.sql").read_text(encoding="utf-8")
     flagged = re.findall(r"^\s+\('([a-z_]+)'.*, true\),?$", tx, re.M)

@@ -180,11 +180,33 @@ class Env:
         return psycopg.connect(self.pg["master"], autocommit=True)
 
     def reset(self, user: str, persona: str | None = None) -> dict[str, Any]:
-        """Đặt lại về persona; mặc định lấy từ tên người dùng thử (`sub-lan` là persona lan, còn lại minh)."""
+        """Load the legacy demo fixture for existing compatibility scenarios."""
+        from personas import generate, materialize
+        from yofina_ledger.classify_seed import apply_seed_labels
+
         name = persona or user.removeprefix("sub-")
-        return self.svc.reset_demo(
-            user, name if name in ("minh", "lan", "khoa") else "minh", trace_id="t" * 8
+        if name not in ("minh", "lan", "khoa", "vy"):
+            name = "minh"
+        fee = self.svc.ref.bnpl_monthly_fee(ANCHOR)
+        mat = materialize(
+            generate(name, anchor=ANCHOR), anchor=ANCHOR, now=self.clock(),
+            tz=SETTINGS.tz, user_id=user,
+            bnpl_fee={"amount_vnd": fee.amount_vnd, "id": fee.id} if fee else None,
+            bnpl_label=self.svc.ref.product_label("bnpl_sim", ANCHOR),
         )
+        counts = self.repo.reset_user(
+            user, profile=mat.profile, jars=mat.jars, payees=mat.payees, obligations=mat.obligations,
+            credit_line=mat.credit_line, transactions=mat.transaction_rows, salary_events=mat.salary_events,
+            trace_id="t" * 8, details={"persona": name}, app_date=mat.app_date,
+        )
+        apply_seed_labels(self.db, user, name)
+        return {
+            "app_date": mat.app_date.isoformat(),
+            "clock_offset_days": mat.clock_offset_days,
+            "jars_count": counts.jars,
+            "transactions_count": counts.transactions,
+            "obligations_count": counts.obligations,
+        }
 
     def act(self, user: str, tool: str, params: dict[str, Any], **kw: Any):
         """Luồng đủ: cấp token rồi thực hiện. Trả khối biên nhận (dict gửi ra ngoài)."""

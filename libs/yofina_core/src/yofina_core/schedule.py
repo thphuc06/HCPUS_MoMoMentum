@@ -102,8 +102,7 @@ def build_timeline_events(
 ) -> list[TimelineEvent]:
     """Mốc trên biểu đồ của MỘT hũ: nghĩa vụ đang hoạt động trả bằng hũ này và phần lương của hũ.
 
-    Ngày dự báo bắt đầu từ `origin + 1` (hợp đồng). Nghĩa vụ không có `pay_jar_code` gán cho `default_pay_jar` (hũ
-    `obligation` đầu tiên); không có hũ như vậy thì không mô phỏng. Phần lương dùng `split_amount` (cùng quy tắc
+    Ngày dự báo bắt đầu sau origin. Nghĩa vụ cũ thiếu hũ trả dùng default_pay_jar nếu có. Phần lương dùng `split_amount` (cùng quy tắc
     `confirm_salary`) nên số trên biểu đồ khớp số được chia thật. Sắp theo ngày, nghĩa vụ trước lương cùng ngày.
     """
     first = origin + timedelta(days=1)

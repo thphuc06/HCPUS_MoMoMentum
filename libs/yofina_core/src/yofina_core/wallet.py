@@ -7,8 +7,9 @@ mã cố định theo hợp đồng (người dùng không đổi được); tê
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from decimal import ROUND_FLOOR, Decimal
+from typing import Literal
 
 # --- hũ ----------------------------------------------------------------------------------------
 OTHER_INCOME_JAR_CODE = "tien_vao_khac"  # "Tiền vào khác": tính vào tổng số dư, không phải thu nhập
@@ -19,6 +20,61 @@ SYSTEM_ROLES = ("other_income", "unclassified")
 SYSTEM_JAR_CODES = {"other_income": OTHER_INCOME_JAR_CODE, "unclassified": UNCLASSIFIED_JAR_CODE}
 JAR_KINDS = ("spending", "saving", "obligation", "system")
 USER_JAR_KINDS = ("spending", "saving", "obligation")  # hũ người dùng tạo được (không có system)
+
+JarPurpose = Literal["buffer", "sinking", "goal", "long_term"]
+JAR_PURPOSES = ("buffer", "sinking", "goal", "long_term")
+DEFAULT_SPENDING_JAR = "chi_hang_ngay"
+DEFAULT_OBLIGATION_JAR = "nghia_vu"
+DEFAULT_GOAL_JAR = "muc_tieu"
+
+
+def is_buffer_jar(kind: str, purpose: str | None, goal_vnd: object) -> bool:
+    return kind == "saving" and (purpose == "buffer" or (purpose is None and goal_vnd is None))
+
+
+def is_goal_jar(kind: str, purpose: str | None) -> bool:
+    return kind == "saving" and purpose in (None, "goal")
+
+
+def default_obligation_jar(jars: Iterable[tuple[str, str]]) -> str | None:
+    codes = [code for code, kind in jars if kind == "obligation"]
+    if DEFAULT_OBLIGATION_JAR in codes:
+        return DEFAULT_OBLIGATION_JAR
+    return next(iter(codes), None)
+
+
+def bnpl_pay_jar(
+    jars: Iterable[tuple[str, str]], *, existing: str | None, purchase_jar: str | None
+) -> str | None:
+    user_jars = [(code, kind) for code, kind in jars if kind != "system"]
+    codes = {code for code, _ in user_jars}
+    if existing in codes:
+        return existing
+    if default := default_obligation_jar(user_jars):
+        return default
+    if purchase_jar in codes:
+        return purchase_jar
+    return next(
+        (code for code, kind in user_jars if kind == "spending"),
+        user_jars[0][0] if user_jars else None,
+    )
+
+
+def transaction_jar(default_code: str | None, jar_codes: Iterable[str], *, tx_type: str) -> str | None:
+    """Keep the legacy category when present and route known types on the six-jar layout."""
+    if default_code is None:
+        return None
+    codes = set(jar_codes)
+    if default_code in codes:
+        return default_code
+    if default_code == "hoa_don" or tx_type == "subscription":
+        fallback = DEFAULT_OBLIGATION_JAR
+    elif default_code in ("an_uong", "di_lai", "giai_tri", "du_lich"):
+        fallback = DEFAULT_SPENDING_JAR
+    else:
+        return None
+    return fallback if fallback in codes else None
+
 
 # --- giao dịch ---------------------------------------------------------------------------------
 TRANSACTION_KINDS = ("expense", "income", "transfer")

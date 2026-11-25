@@ -112,6 +112,7 @@ from yofina_core.pii import mask_pii
 from yofina_core.resilience import load_shock_set
 from yofina_core.roadmap import JobStage, Roadmap, RoadmapReasonCode
 from yofina_core.suitability import SuitabilityVerdict
+from yofina_core.wallet import is_goal_jar
 
 log = logging.getLogger("yofina.agent.turn")
 
@@ -1218,7 +1219,7 @@ class Turn:
             return None
         row = next(j for j in self._jar_rows if j["code"] == match.code)
         name = str(row["name"])
-        if row.get("kind") != "saving":
+        if not is_goal_jar(row.get("kind"), row.get("purpose")):
             await self.emit_fixed_text(_GOAL_NOT_SAVING.format(name=name))
             return None
         target_date: date | None = None

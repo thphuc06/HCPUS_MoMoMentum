@@ -40,6 +40,7 @@ from yofina_core.roadmap import (
     AllocationRelaxation,
     AllocationSolver,
 )
+from yofina_core.wallet import default_obligation_jar, is_buffer_jar, is_goal_jar
 from yofina_forecast.common import clip, int_of, to_date
 from yofina_forecast.resilience import (
     Gathered,
@@ -178,7 +179,7 @@ class AllocationEngine:
         jars = {j["code"]: j for j in g.jar_rows}
         codes = [j["code"] for j in g.jar_rows]
         spend = {j["code"]: j.get("spend") or [] for j in g.ctx.jars}
-        default_pay = next((j["code"] for j in g.jar_rows if j["kind"] == "obligation"), None)
+        default_pay = default_obligation_jar((j["code"], j["kind"]) for j in g.jar_rows)
 
         # nghĩa vụ quy về tháng (có cú sốc tăng giá thì loại bị tăng nặng hơn)
         oblig_floor = dict.fromkeys(codes, 0)
@@ -200,8 +201,12 @@ class AllocationEngine:
 
         # mục tiêu: khai ở hũ, rồi ghi đè theo tham số
         goals: dict[str, _Goal] = {}
+        explicit_buffer = any(j.get("purpose") == "buffer" for j in jars.values())
         for code, j in jars.items():
-            if j.get("goal_vnd") is not None and j["kind"] != "obligation":
+            if j.get("goal_vnd") is not None and (
+                is_goal_jar(j["kind"], j.get("purpose"))
+                or (j["kind"] == "spending" and j.get("purpose") is None)
+            ):
                 goals[code] = _Goal(
                     code,
                     int_of(j["goal_vnd"]),
@@ -214,10 +219,10 @@ class AllocationEngine:
             j = jars.get(code)
             if j is None:
                 raise YofinaError(ErrorCode.JAR_NOT_FOUND, f"Không tìm thấy hũ {code}.")
-            if j["kind"] != "saving":
+            if not is_goal_jar(j["kind"], j.get("purpose")):
                 raise YofinaError(
                     ErrorCode.PARAMS_INVALID,
-                    f"Hũ {j['name']} không phải hũ tiết kiệm nên không đặt mục tiêu được.",
+                    f"Hũ {j['name']} không dùng cho mục tiêu trong lộ trình.",
                 )
             old = goals.get(code)
             target = ga.get("target_vnd") or (old.target_vnd if old else None)
@@ -257,10 +262,14 @@ class AllocationEngine:
             )
             if kind == "obligation":
                 role = "obligation"
-            elif goal is not None:
+            elif goal is not None or j.get("purpose") == "goal":
                 role = "goal"
-            elif kind == "saving":
+            elif is_buffer_jar(kind, j.get("purpose"), j.get("goal_vnd")) and (
+                j.get("purpose") == "buffer" or not explicit_buffer
+            ):
                 role = "emergency"
+            elif kind == "saving":
+                role = "saving"
             elif code in s.essential_jar_codes:
                 role = "essential"
             else:

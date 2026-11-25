@@ -21,6 +21,7 @@ from typing import Any
 from yofina_core.blocks import block_to_wire, build_review_list
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd
+from yofina_core.wallet import transaction_jar
 from yofina_ledger import convert, review_reads
 
 
@@ -77,7 +78,10 @@ def review_response(
     ]
     names = {j["code"]: j["name"] for j in jars}
     tx_types = service.ref.tx_types()
-    type_defaults = {code: info.default_jar_code for code, info in tx_types.items()}
+    type_defaults = {
+        code: transaction_jar(info.default_jar_code, names, tx_type=code)
+        for code, info in tx_types.items()
+    }
     rows = review_reads.list_rows(db, user_id, mode, limit)
     count = int(rows[0]["total_count"]) if rows else 0
     total = convert.vnd(rows[0]["total_vnd"]) if rows else 0

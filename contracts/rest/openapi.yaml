@@ -2393,6 +2393,10 @@ components:
           type: number
           minimum: 0
           maximum: 100
+        purpose:
+          type: string
+          enum: [buffer, sinking, goal, long_term]
+          description: Vai trò tùy chọn của hũ để dành.
         goal_vnd:
           $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
         goal_date:
@@ -2734,6 +2738,10 @@ components:
         kind:
           type: string
           enum: [spending, saving, obligation]
+        purpose:
+          type: string
+          enum: [buffer, sinking, goal, long_term]
+          description: Vai trò tùy chọn của hũ để dành.
         default_split_percent:
           type: number
           minimum: 0
@@ -2754,8 +2762,10 @@ components:
       description: |
         Tham số của `record_transaction`. Chuẩn hóa ở server (contracts/README.md): điền `tx_type`
         mặc định (`other_expense` hoặc `income_other`), `funding` mặc định `jar`; nếu thiếu `jar` thì
-        suy từ `tx_type` qua bảng tra, không suy được thì hũ Chưa phân loại; tiền vào luôn có `jar` là hũ
-        Tiền vào khác. Bản chuẩn hóa mới là thứ được ký.
+        dùng hũ trả của nghĩa vụ nếu có `obligation_id`, nếu không thì suy từ loại giao dịch qua bảng tra.
+        Khoản chi chưa có hũ vào Chưa phân loại. Tiền vào dùng hũ Tiền vào khác.
+        Số tiền của giao dịch đã trả gồm cả khoản phí đã trả cùng giao dịch, nếu có.
+        Phí Trả sau đến hạn được tính trong tổng nghĩa vụ. Bản chuẩn hóa mới là thứ được ký.
       type: object
       required: [kind, amount_vnd]
       additionalProperties: false
@@ -2905,6 +2915,10 @@ components:
           type: number
           minimum: 0
           maximum: 100
+        purpose:
+          type: string
+          enum: [buffer, sinking, goal, long_term]
+          description: Vai trò tùy chọn của hũ để dành.
         goal_vnd:
           $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
         goal_date:

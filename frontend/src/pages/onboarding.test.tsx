@@ -108,6 +108,40 @@ describe('O2 hũ và tỷ lệ chia', () => {
     expect(screen.getByTestId('split-total')).toHaveTextContent('Tổng đủ 100%')
   })
 
+  it('giữ vai trò và ngày đã cam kết khi sửa tỷ lệ bộ sáu hũ', async () => {
+    const overview = restFixture('OverviewResponse.minh') as Json
+    const defaults = [
+      { code: 'chi_hang_ngay', name: 'Chi hằng ngày', kind: 'spending', split_percent: 35 },
+      { code: 'nghia_vu', name: 'Nghĩa vụ', kind: 'obligation', split_percent: 35 },
+      { code: 'du_phong', name: 'Dự phòng', kind: 'saving', purpose: 'buffer', split_percent: 15 },
+      { code: 'quy_don', name: 'Quỹ dồn', kind: 'saving', purpose: 'sinking', split_percent: 5, goal_vnd: 920000, goal_date: '2027-01-03' },
+      { code: 'muc_tieu', name: 'Mục tiêu', kind: 'saving', purpose: 'goal', split_percent: 5 },
+      { code: 'tich_luy_dai_han', name: 'Tích lũy dài hạn', kind: 'saving', purpose: 'long_term', split_percent: 5, goal_date: '2029-01-01' },
+    ].map((j) => ({ color_key: 'teal', icon_key: 'wallet', balance_vnd: 0, ...j }))
+    const { calls } = mountApp(backend({ 'GET /overview': { ...overview, jars: defaults } }), '/onboarding')
+    const user = userEvent.setup()
+    const list = await screen.findByRole('list', { name: 'Các hũ và tỷ lệ chia lương' })
+    expect(within(list).getAllByRole('listitem')).toHaveLength(6)
+    const sinking = list.querySelector('[data-jar-row="quy_don"]') as HTMLElement
+    expect(within(sinking).getByLabelText('Ngày dự kiến')).toHaveAttribute('readonly')
+    expect(within(sinking).getByLabelText('Mục đích của Quỹ dồn')).toHaveValue('sinking')
+    const dailySplit = screen.getByLabelText('Tỷ lệ chia lương của Chi hằng ngày')
+    const sinkingSplit = screen.getByLabelText('Tỷ lệ chia lương của Quỹ dồn')
+    await user.clear(dailySplit)
+    await user.type(dailySplit, '34')
+    await user.clear(sinkingSplit)
+    await user.type(sinkingSplit, '6')
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
+    await screen.findByRole('heading', { name: 'Chi phí cố định' })
+    const { params } = bodyOf(callsTo(calls, 'POST', '/confirmations')[0]!)
+    expect(params.jars).toContainEqual(expect.objectContaining({
+      code: 'quy_don', purpose: 'sinking', split_percent: 6, goal_vnd: 920000, goal_date: '2027-01-03',
+    }))
+    expect(params.jars).toContainEqual(expect.objectContaining({
+      code: 'tich_luy_dai_han', purpose: 'long_term', goal_date: '2029-01-01',
+    }))
+  })
+
   it('tổng khác 100% thì không cho tiếp tục và nói rõ tổng hiện tại', async () => {
     await openO2()
     const user = userEvent.setup()
@@ -168,7 +202,7 @@ describe('O3 chi phí cố định (tùy chọn)', () => {
     const conf = bodyOf(callsTo(calls, 'POST', '/confirmations')[0]!)
     expect(conf).toEqual({
       tool: 'update_profile',
-      params: { obligation: { op: 'upsert', kind: 'rent', name: 'Tiền trọ', cycle: 'monthly', is_essential: true, amount_vnd: 2500000, due_day: 1 } },
+      params: { obligation: { op: 'upsert', kind: 'rent', name: 'Tiền trọ', cycle: 'monthly', is_essential: true, amount_vnd: 2500000, due_day: 1, pay_jar: 'nghia_vu' } },
     })
     expect(screen.getByText(/Khoản trả sau không cần khai/)).toBeInTheDocument()
   })

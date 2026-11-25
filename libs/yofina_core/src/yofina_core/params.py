@@ -33,6 +33,7 @@ from yofina_core.wallet import (
     DATA_DELETION_SCOPES,
     DECLARABLE_OBLIGATION_KINDS,
     DELETE_MY_DATA,
+    JAR_PURPOSES,
     MOVE_BETWEEN_JARS,
     NUDGE_KINDS,
     NUDGE_OPS,
@@ -48,6 +49,7 @@ from yofina_core.wallet import (
     UNCLASSIFIED_JAR_CODE,
     UPDATE_PROFILE,
     USER_JAR_KINDS,
+    transaction_jar,
 )
 
 JAR_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
@@ -89,7 +91,7 @@ class NormContext:
     tx_types: Mapping[str, TxTypeInfo] = field(default_factory=dict)
     #: mọi mã hũ của người dùng, kể cả hai hũ hệ thống
     jar_codes: frozenset[str] = frozenset()
-    #: hũ `obligation` đầu tiên theo thứ tự hiển thị (hũ trả mặc định của nghĩa vụ)
+    #: hũ mặc định do ledger tra theo cấu hình hũ của người dùng
     obligation_jar: str | None = None
 
 
@@ -325,8 +327,8 @@ def _default_expense_jar(tx_type: str, ctx: NormContext) -> str:
     Chưa phân loại."""
     info = ctx.tx_types.get(tx_type)
     if info is not None:
-        if info.default_jar_code and info.default_jar_code in ctx.jar_codes:
-            return info.default_jar_code
+        if jar := transaction_jar(info.default_jar_code, ctx.jar_codes, tx_type=tx_type):
+            return jar
         if info.system_role:
             return SYSTEM_JAR_CODES[info.system_role]
     return UNCLASSIFIED_JAR_CODE
@@ -473,6 +475,11 @@ def normalize_save_jars(params: Mapping[str, Any], ctx: NormContext | None) -> d
                 raise ParamsError(f"{key} không hợp lệ")
             jar[key] = value.strip().lower()
         jar["kind"] = _choice("kind", _clean(item.get("kind")), USER_JAR_KINDS)
+        purpose = _clean(item.get("purpose"))
+        if purpose is not None:
+            if jar["kind"] != "saving":
+                raise ParamsError("purpose chỉ dành cho hũ để dành")
+            jar["purpose"] = _choice("purpose", purpose, JAR_PURPOSES)
         if item.get("split_percent") is None:
             raise ParamsError("Mỗi hũ cần split_percent")
         jar["split_percent"] = _percent(item["split_percent"])
@@ -484,7 +491,7 @@ def normalize_save_jars(params: Mapping[str, Any], ctx: NormContext | None) -> d
             jar["goal_vnd"] = _amount("goal_vnd", item["goal_vnd"])
         gdate = _clean(item.get("goal_date"))
         if gdate is not None:
-            if "goal_vnd" not in jar:
+            if "goal_vnd" not in jar and purpose not in ("sinking", "long_term"):
                 raise ParamsError("goal_date cần goal_vnd")
             jar["goal_date"] = _iso_date("goal_date", gdate).isoformat()
         jars.append(jar)

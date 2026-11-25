@@ -4,6 +4,12 @@
 
 Cập nhật lần cuối: **2026-11-25 rạng sáng** (Claude Code điều phối các worker `kiro-cli`). Phase 5 đã code xong, đã deploy, đã đo; **chưa đóng chính thức** (còn tiêu chí 3 OCR và đi lại 6 cảnh trên giao diện mới, xem mục B).
 
+## Bộ sáu hũ mặc định (25/11, nhánh feat/default-six-jars)
+
+Onboarding và lần đặt lại demo đã xác nhận dùng Chi hằng ngày (35%), Nghĩa vụ (35%), Dự phòng (15%), Quỹ dồn (5%), Mục tiêu (5%) và Tích lũy dài hạn (5%). Tỷ lệ là giả định thử nghiệm, có thể chỉnh và phải cộng đủ 100%. Migration 0055 thêm purpose cho hũ để dành và cập nhật danh mục, giữ dữ liệu tài khoản cũ trước khi đặt lại.
+
+Hai cảnh đầu của [kịch bản demo](docs/plan/demo-script.md) đã chạy bằng engine và PostgreSQL cục bộ. Các mục sau ghi lại trạng thái trước thay đổi này. Lượt Kiro Opus 5.5 đang chờ phê duyệt credits.
+
 ## Cập nhật rạng sáng 25/11 (sau khi viết bản trên)
 
 - **Bộ nhớ đã sửa gốc** (nhánh p5/mem-extract, ac2a4fe): bước hợp nhất mặc định của AWS bỏ sở thích có thời hạn ("temporary states") và Nova Lite không theo chỉ dẫn; nay override cả hợp nhất, đổi sang Haiku 4.5. `memory-state-preference` và `memory-knowledge-update` đạt (mỗi ca một lần). Mục A.2 bên dưới coi như xong; chi tiết ở file phase 5 và agentcore-memory-design.md mục 2.2a.

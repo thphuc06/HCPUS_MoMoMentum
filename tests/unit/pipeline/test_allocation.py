@@ -443,7 +443,7 @@ def test_cau_hinh_mac_dinh_la_gia_tri_mo_phong_co_the_ghi_de_bang_cau_hinh():
     assert (
         base.allocation == P
         and base.resilience_window_days == 30
-        and base.essential_jar_codes == ("an_uong", "di_lai", "hoa_don")
+        and base.essential_jar_codes == ("an_uong", "di_lai", "hoa_don", "chi_hang_ngay")
     )
     over = ForecastSettings.from_config(
         Config(

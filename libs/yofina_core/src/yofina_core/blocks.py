@@ -49,7 +49,7 @@ from yofina_core.confirm import (
     params_hash,
 )
 from yofina_core.money import format_vnd, to_vnd
-from yofina_core.wallet import GENERIC_ACTION_TOOLS
+from yofina_core.wallet import GENERIC_ACTION_TOOLS, JarPurpose
 
 SCHEMA_VERSION = 1
 MAX_VND = 99_999_999_999_999
@@ -108,12 +108,15 @@ class JarBalance(_Strict):
     split_percent: Annotated[float, Field(ge=0, le=100)]
     # Phase 4 (tùy chọn, tương thích ngược): loại hũ và mục tiêu GỐC đọc từ bảng `jars`, để lộ trình dựng được `save_jars`.
     kind: UserJarKind | None = None
+    purpose: JarPurpose | None = None
     goal_vnd: VndPositive | None = None
     goal_date: IsoDate | None = None
 
     @model_validator(mode="after")
     def _goal_pair(self) -> JarBalance:
-        if self.goal_date is not None and self.goal_vnd is None:
+        if self.purpose is not None and self.kind != "saving":
+            raise ValueError("purpose chỉ dành cho hũ để dành")
+        if self.goal_date is not None and self.goal_vnd is None and self.purpose not in ("sinking", "long_term"):
             raise ValueError("goal_date cần goal_vnd")
         return self
 
@@ -1609,6 +1612,7 @@ def _jar_row(row: Mapping[str, Any]) -> JarBalance:
         balance_vnd=to_vnd(row["balance_vnd"]),
         split_percent=_percent(row["split_percent"]),
         kind=row.get("kind"),
+        purpose=row.get("purpose"),
         goal_vnd=to_vnd(goal_vnd) if goal_vnd is not None else None,
         goal_date=goal_date,
     )

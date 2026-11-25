@@ -37,7 +37,7 @@ from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd, to_vnd
 from yofina_core.schedule import bnpl_due_date
 from yofina_core.suitability import Proposal
-from yofina_core.wallet import BNPL_PRODUCT_CODE
+from yofina_core.wallet import BNPL_PRODUCT_CODE, bnpl_pay_jar
 from yofina_forecast.common import (
     STATUS_RANK,
     STATUS_WORD,
@@ -591,10 +591,11 @@ class AffordabilityEngine:
             if funding == "credit" or exc.code != ErrorCode.CREDIT_LIMIT_EXCEEDED:
                 raise
             return None
-        default_pay = next((j["code"] for j in user_jars if j["kind"] == "obligation"), None)
-        pay = (existing.get("pay_jar_code") if existing else None) or default_pay
-        if pay is None or all(j["code"] != pay for j in user_jars):
-            pay = jar_code or next((j["code"] for j in user_jars if j["kind"] == "spending"), None)
+        pay = bnpl_pay_jar(
+            ((j["code"], j["kind"]) for j in user_jars),
+            existing=existing.get("pay_jar_code") if existing else None,
+            purchase_jar=jar_code,
+        )
         if pay is None:
             return None
         dues = [
