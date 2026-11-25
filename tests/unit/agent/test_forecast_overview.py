@@ -209,3 +209,45 @@ def test_hu_thua_khong_dua_ngay_can_cho_model(with_date):
     shown = _forecast_payload("giai_tri")
     shown["data"]["runout_date_shown"] = True
     assert compact_forecast(shown)["runout"]["date_text"] == "29/11"
+
+
+#: Chỉ Giải trí hụt (cạn 29/11, trước lương 05/12), mọi hũ khác đủ.
+_ONLY_GIAI_TRI = {code: (name, "short", "2026-11-29") if code == "giai_tri" else (name, "ok", None) for code, (name, _, _) in _PLAN.items()}
+
+
+@pytest.mark.parametrize(
+    ("flag", "expected"),
+    [
+        (
+            False,
+            "Hũ Giải trí có thể cạn trước ngày lương. Các hũ còn lại đủ tới kỳ lương. Biểu đồ bên dưới là của hũ Giải trí.",
+        ),
+        (True, "Hũ Giải trí dự kiến cạn ngày 29/11, sớm 6 ngày so với kỳ lương 05/12. Các hũ còn lại đủ tới kỳ lương."),
+        (None, "Hũ Giải trí dự kiến cạn ngày 29/11, sớm 6 ngày so với kỳ lương 05/12. Các hũ còn lại đủ tới kỳ lương."),
+    ],
+    ids=["hu_thua_co_sai", "co_dung", "vang_co"],
+)
+def test_hu_thua_hut_la_nhom_co_the_can_truoc_ngay_luong(monkeypatch, flag, expected):
+    """#25: hũ thưa hụt (`runout_date_shown` sai) là nhóm riêng "có thể cạn trước ngày lương", không lẫn vào nhóm sát; khi đó câu
+    trả lời không mở đầu "Chưa hũ nào…" dù không hũ nào khác cạn. Cờ đúng hoặc vắng thì như cũ (nêu ngày cạn)."""
+
+    def forecast(args: dict[str, Any]) -> Any:
+        p = _forecast_payload(args["jar"], _ONLY_GIAI_TRI)
+        if args["jar"] == "giai_tri" and flag is not None:
+            p["data"]["runout_date_shown"] = flag
+            if flag is False:
+                del p["data"]["runout_date"]
+        return classify_result("x", mcp_ok(p))
+
+    events, _, writer = run_turn(
+        CHIP,
+        llm=make_llm([route_response(intent="forecast_lookup")]),
+        tools=FakeTools({"get_forecast": forecast}),
+        monkeypatch=monkeypatch,
+    )
+    check_agui_order(events)
+    assert _text(events) == expected
+    assert "Chưa hũ nào" not in _text(events) and "sát số dư" not in _text(events)
+    timeline = [b for b in blocks_of(events) if b["type"] == "forecast_timeline"]
+    assert len(timeline) == 1 and timeline[0]["data"]["jar"]["code"] == "giai_tri"
+    assert writer.calls == []

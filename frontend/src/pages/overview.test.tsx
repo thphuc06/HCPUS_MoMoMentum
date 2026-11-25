@@ -287,7 +287,7 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     expect(reason.closest('[data-disclosure-panel]')).toHaveAttribute('data-disclosure-panel', 'open')
   })
 
-  it('hũ thưa (#25, server không nêu ngày cạn): thẻ cạn có một dòng "Có thể cạn trước ngày lương" kèm %, không dải ngày, không ngày cạn', async () => {
+  it('hũ thưa (#25, server không nêu ngày cạn): "Có thể cạn trước ngày lương" chỉ một lần trên Tổng quan (tiêu đề), số lớn chỉ khả năng hụt %, không dải ngày, không ngày cạn', async () => {
     const sparse = overview((o) => {
       const an = o.jars.find((j: Json) => j.code === 'an_uong')
       delete an.runout_date
@@ -297,10 +297,11 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     })
     mountApp(backend({ 'GET /overview': sparse }))
     const card = await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
-    expect(within(card).getByTestId('runout-hero')).toHaveTextContent(/^Có thể cạn trước ngày lương, khả năng 70%$/)
+    expect(within(card).getByTestId('runout-hero')).toHaveTextContent(/^Khả năng hụt 70%$/)
     expect(within(card).queryByTestId('mini-timeline')).toBeNull()
     const chip = (await screen.findByRole('list', { name: 'Danh sách hũ' })).querySelector('[data-jar="an_uong"] [data-chip]')
     expect(chip).toHaveTextContent(/^Hụt$/)
+    expect(document.body.textContent!.match(/có thể cạn trước ngày lương/gi)).toHaveLength(1)
     expect(document.body.textContent).not.toMatch(/cạn (ngày )?\d{2}\/\d{2}/i)
   })
 
@@ -315,6 +316,14 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     const card = await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
     expect(within(card).queryByTestId('runout-hero')).toBeNull()
     expect(within(card).queryByTestId('mini-timeline')).toBeNull()
+  })
+
+  it('cờ runout_date_shown đúng: như cũ, số lớn "6 ngày" và dải ngày, không có "có thể cạn trước ngày lương"', async () => {
+    mountApp(backend({ 'GET /overview': overview((o) => { o.jars.find((j: Json) => j.code === 'an_uong').runout_date_shown = true }) }))
+    const card = await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
+    expect(within(card).getByTestId('runout-hero')).toHaveTextContent(/^6 ngày hũ trống trước kỳ lương$/)
+    expect(within(card).getByTestId('mini-timeline')).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/có thể cạn trước ngày lương/i)
   })
 
   it('thẻ chủ động không có số lớn (không phải cảnh báo cạn): lý do hiện ngay, không thu gọn', async () => {
