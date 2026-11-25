@@ -112,7 +112,7 @@ from yofina_core.pii import mask_pii
 from yofina_core.resilience import load_shock_set
 from yofina_core.roadmap import JobStage, Roadmap, RoadmapReasonCode
 from yofina_core.suitability import SuitabilityVerdict
-from yofina_core.wallet import is_goal_jar
+from yofina_core.wallet import is_goal_jar, resolve_obligation_pay_jar
 
 log = logging.getLogger("yofina.agent.turn")
 
@@ -1448,6 +1448,18 @@ class Turn:
             "update_profile", args, compact=lambda o: compact_confirm_action((o.payload or {})["data"]), block=confirm_action_block
         )
         o = res.outcome
+        if "obligation" in args and await self.needs_pay_jar(args["obligation"], o):
+            # Ví không có hũ loại nghĩa vụ: server không có hũ trả mặc định. Hỏi hũ trả (chip là hũ thật); lượt trả lời
+            # mang tên hũ ở jar_text thì gọi lại với pay_jar.
+            choice = resolve_jar(p.jar_text, self._jar_rows)
+            if choice.status != "ok" or choice.code is None:
+                await self.emit_clarify(ClarifyRequest(slot="jar", question=notices.CLARIFY["pay_jar"]["question"]), r)
+                return
+            args["obligation"] = {**args["obligation"], "pay_jar": choice.code}
+            res = await self.call_tool_retry(
+                "update_profile", args, compact=lambda o: compact_confirm_action((o.payload or {})["data"]), block=confirm_action_block
+            )
+            o = res.outcome
         if o.kind is ToolKind.NEEDS_CONFIRMATION and res.compact is not None:
             await self.write("confirm_action", question, res.compact)
         elif o.kind is ToolKind.OK:
@@ -1460,6 +1472,20 @@ class Turn:
             )
         else:
             self.tool_failure(o)
+
+    async def needs_pay_jar(self, obligation: Mapping[str, Any], outcome: ToolOutcome) -> bool:
+        """Lỗi `update_profile` là "chưa có hũ trả": PARAMS_INVALID khi chưa gửi pay_jar, và theo đúng quy tắc chung của server
+        (`resolve_obligation_pay_jar`) các hũ hiện có không cho hũ trả mặc định. Kết quả lỗi chỉ có mã và câu chữ, nên mã lỗi
+        cộng quy tắc dùng chung thay cho việc so câu chữ."""
+        if outcome.kind is not ToolKind.TOOL_ERROR or outcome.code != ErrorCode.PARAMS_INVALID.value:
+            return False
+        if "pay_jar" in obligation:
+            return False
+        jars = await self.ensure_jars()
+        rows = self._jar_rows
+        if not jars.outcome.ok or not rows or any(j.get("kind") is None for j in rows):
+            return False  # không biết loại hũ (dữ liệu cũ): không đoán, để lỗi gốc hiện ra
+        return resolve_obligation_pay_jar((str(j["code"]), str(j["kind"])) for j in rows) is None
 
     # --- chuyển hũ --------------------------------------------------------------------------
     async def on_move(self, r: IntentResult, question: str) -> None:

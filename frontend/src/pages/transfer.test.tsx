@@ -414,3 +414,75 @@ describe('transferParams (thuần hàm)', () => {
     expect(transferParams({ ...base, txTypes: [{ ...txTypes[0]!, direction: 'in' as const }], source: { kind: 'credit' } })).not.toHaveProperty('tx_type')
   })
 })
+
+describe('Trả sau: hũ trả khi đến hạn (ví không có hũ nghĩa vụ)', () => {
+  // Tổng quan của fixture, bỏ loại "obligation" khỏi mọi hũ: server khi đó không có hũ trả mặc định và đòi pay_jar.
+  const withoutObligationJar = (): Json => {
+    const o = restFixture('OverviewResponse.minh') as Json
+    for (const j of o.jars) if (j.kind === 'obligation') j.kind = 'spending'
+    return o
+  }
+  const PAY_JAR = 'Hũ trả khi đến hạn'
+
+  it('hiện ô chọn hũ trả (chỉ hũ người dùng), chưa chọn thì không đi tiếp; chọn rồi thì gửi pay_jar trong record_transaction', async () => {
+    const o = withoutObligationJar()
+    const { calls } = mountApp(backend({ 'GET /overview': o, 'POST /actions': () => receipt() }), '/transfer')
+    const user = userEvent.setup()
+    await pickPayee(user)
+    await typeAmount(user, ['2', '5', '0', '000'])
+    await chooseSource(user, /Trả sau \(mô phỏng\)/)
+    const picker = await screen.findByLabelText(PAY_JAR)
+    const options = within(picker).getAllByRole('option').filter((op) => (op as HTMLOptionElement).value !== '')
+    expect(options.map((op) => (op as HTMLOptionElement).value)).toEqual(o.jars.map((j: Json) => j.code))
+    for (const s of o.system_jars) expect(within(picker).queryByRole('option', { name: s.name })).toBeNull()
+    const next = screen.getByRole('button', { name: 'Kiểm tra trước khi chuyển' })
+    expect(next).toBeDisabled()
+
+    const chosen = o.jars[0]
+    await user.selectOptions(picker, chosen.code)
+    expect(next).toBeEnabled()
+    await user.click(next)
+    await user.click(await screen.findByRole('button', { name: /^(Tiếp tục|Vẫn chuyển)/ }))
+    const confirmBtn = await screen.findByRole('button', { name: /Xác nhận chuyển/ })
+    await waitFor(() => expect(confirmBtn).toBeEnabled())
+    await user.click(confirmBtn)
+    expect(await screen.findByTestId('transfer-receipt')).toBeInTheDocument()
+    const conf = bodyOf(callsTo(calls, 'POST', '/confirmations')[0]!)
+    expect(conf.params).toMatchObject({ funding: 'credit', pay_jar: chosen.code })
+    expect(bodyOf(callsTo(calls, 'POST', '/actions')[0]!).params).toEqual(conf.params)
+  })
+
+  it('"Trả bằng Trả sau" ở bước kiểm tra: chưa chọn hũ trả thì về bước nguồn tiền để chọn, không vào xem lại cụt đường', async () => {
+    const short = validBlock('affordability_card.transfer_an_uong_short')
+    const { router } = mountApp(backend({ 'GET /overview': withoutObligationJar(), 'POST /affordability': short }), '/transfer')
+    const user = userEvent.setup()
+    await toCheck(user, /Hũ Ăn uống/)
+    await user.click(screen.getByRole('button', { name: 'Trả bằng Trả sau (mô phỏng)' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/transfer/amount'))
+    expect(await screen.findByLabelText(PAY_JAR)).toBeInTheDocument()
+  })
+
+  it('ví có hũ nghĩa vụ: không hiện ô chọn và gửi đúng tham số như trước (không có pay_jar)', async () => {
+    const { calls } = mountApp(backend({ 'POST /actions': () => receipt() }), '/transfer')
+    const user = userEvent.setup()
+    await toReview(user, /Trả sau \(mô phỏng\)/)
+    const confirmBtn = await screen.findByRole('button', { name: /Xác nhận chuyển/ })
+    await waitFor(() => expect(confirmBtn).toBeEnabled())
+    await user.click(confirmBtn)
+    await screen.findByTestId('transfer-receipt')
+    const conf = bodyOf(callsTo(calls, 'POST', '/confirmations')[0]!)
+    const txTypes = (restFixture('TxTypesResponse.default') as Json).tx_types
+    const today = transferParams({ amountVnd: 250000, source: { kind: 'credit' }, payeeId: HUY, note: '', clientRef: conf.params.client_ref, txTypes })
+    expect(conf.params).toEqual(today)
+    expect(conf.params).not.toHaveProperty('pay_jar')
+  })
+
+  it('chọn hũ trên bước nguồn tiền chỉ hiện khi ví thiếu hũ nghĩa vụ', async () => {
+    mountApp(backend(), '/transfer')
+    const user = userEvent.setup()
+    await pickPayee(user)
+    await chooseSource(user, /Trả sau \(mô phỏng\)/)
+    expect(screen.getByLabelText(/Tính vào hũ/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(PAY_JAR)).toBeNull()
+  })
+})
