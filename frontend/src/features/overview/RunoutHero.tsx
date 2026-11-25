@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import { cn } from '@/lib/cn'
 import { diffDays } from '@/lib/dates'
-import { mayRunOutText } from '@/lib/jar'
+import { formatShortfallChance } from '@/lib/format'
 
 /**
  * Số ngày hũ trống trước kỳ lương của thẻ cảnh báo cạn: hiệu hai ngày server trả (`runout_date` của hũ và `next_payday.date`),
@@ -16,8 +16,8 @@ export function emptyDaysBeforePayday(runoutDate: string | undefined, paydayDate
 
 /**
  * Số lớn của thẻ cảnh báo cạn (cảnh 1): "12 ngày · hũ trống trước kỳ lương", hiện sau dải ngày khi được phép chuyển động. Hũ thưa
- * (#25, server không nêu ngày cạn) không có số ngày: một dòng "Có thể cạn trước ngày lương, khả năng 60%" (cùng chữ với Nhìn trước
- * và khối dự báo).
+ * (#25, server không nêu ngày cạn) không có số ngày: một dòng "Khả năng hụt 60%" (cùng chữ với Nhìn trước); tiêu đề thẻ của server đã
+ * nói "có thể cạn trước ngày lương" nên dòng này không nhắc lại.
  */
 export function RunoutHero(props: ({ days: number; chance?: undefined } | { chance: number; days?: undefined }) & { animate?: boolean }) {
   const { animate = false } = props
@@ -26,7 +26,7 @@ export function RunoutHero(props: ({ days: number; chance?: undefined } | { chan
   if (props.days === undefined) {
     return (
       <p data-testid="runout-hero" className={cn('mt-2 text-body font-semibold text-bad-fg', motion)} style={style}>
-        {mayRunOutText(props.chance)}
+        Khả năng hụt {formatShortfallChance(props.chance).toLowerCase()}
       </p>
     )
   }
