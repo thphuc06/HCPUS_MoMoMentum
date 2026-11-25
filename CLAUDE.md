@@ -58,3 +58,28 @@ Máy có sẵn MCP server và skill cho AWS; chi tiết và trạng thái từng
 | Tra và thao tác Amazon Bedrock AgentCore (Runtime, Memory, Gateway, Policy, Identity) | `agentcore` MCP (`mcp__agentcore__*`) |
 | Gọi AWS API, kiểm tính năng theo Region | AWS MCP connector (`mcp__claude_ai_AWS_MCP__aws___*`), ưu tiên hơn AWS CLI qua Bash |
 | CDK, Lambda/Step Functions/EventBridge, Bedrock, SQS, CloudWatch, IAM, chi phí… | Skill `aws-core:*` (gọi trước khi làm phần đó) |
+
+## Agent skills
+
+### Issue tracker
+
+Issue và spec nằm ở GitHub Issues của `thphuc06/HCPUS_MoMoMentum`, thao tác bằng `gh` CLI. Xem `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Dùng năm nhãn mặc định: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. Xem `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` ở gốc repo (tạo khi chốt thuật ngữ đầu tiên), ADR ở `docs/decisions/` (không dùng `docs/adr/`). Xem `docs/agents/domain.md`.
+
+### Nơi ghi tài liệu (dùng file sẵn có, không tạo file riêng cùng mục đích)
+
+| Skill muốn ghi | Ghi vào |
+|---|---|
+| Handoff (`/handoff`) | [HANDOFF.md](HANDOFF.md), ghi đè phần trạng thái; không ghi ra thư mục tạm |
+| ADR (`/domain-modeling`, `/grill-with-docs`, `/improve-codebase-architecture`) | [docs/decisions/](docs/decisions/README.md) theo template và bảng danh sách ở đó |
+| Ghi chú tra cứu (`/research`) | [docs/research/](docs/research/README.md), thêm dòng vào bảng danh sách |
+| Câu hỏi chưa chốt | [docs/requirements/open-questions.md](docs/requirements/open-questions.md) |
+| Yêu cầu bị từ chối (`/triage`, thay cho `.out-of-scope/`) | Issue đóng với nhãn `wontfix`; đổi phạm vi thì sửa mục "MVP và mở rộng" ở [requirements.md](docs/requirements/requirements.md) |
+| Lịch sử thay đổi | [docs/ai-log/](docs/ai-log/README.md), như thói quen số 3 |

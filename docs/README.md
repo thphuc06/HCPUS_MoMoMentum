@@ -16,6 +16,7 @@
 | Kế hoạch 3 tuần theo proposal, chia vai | [plan/README.md](plan/README.md) |
 | Tài nguyên AWS đã tạo | [aws-resources.md](aws-resources.md) |
 | Kịch bản demo | [plan/demo-script.md](plan/demo-script.md) |
+| Cấu hình cho các engineering skill (issue tracker GitHub, nhãn triage, nơi đặt glossary/ADR) | [agents/issue-tracker.md](agents/issue-tracker.md), [agents/triage-labels.md](agents/triage-labels.md), [agents/domain.md](agents/domain.md) |
 | Lịch sử thay đổi của AI | [ai-log/README.md](ai-log/README.md) (log tháng 11: [ai-log/2026-11.md](ai-log/2026-11.md)) |
 
 Quy ước: tài liệu viết tiếng Việt, thuật ngữ kỹ thuật giữ tiếng Anh; các file dẫn nhau bằng link tương đối. Trạng thái hiện tại của dự án: [../HANDOFF.md](../HANDOFF.md).

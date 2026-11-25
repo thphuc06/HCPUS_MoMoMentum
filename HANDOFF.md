@@ -4,6 +4,14 @@
 
 Cập nhật lần cuối: **2026-11-25 rạng sáng** (Claude Code điều phối các worker `kiro-cli`). Phase 5 đã code xong, đã deploy, đã đo; **chưa đóng chính thức** (còn tiêu chí 3 OCR và đi lại 6 cảnh trên giao diện mới, xem mục B).
 
+## Cập nhật trưa 25/11: kiểm toán toàn dự án, hạn nộp thật là 03/12
+
+- **Hạn nộp thật: 23:59:59 ngày 03/12/2026** (trang cuộc thi), không phải 10/12. Sau hạn không được sửa mã nguồn, slide, sản phẩm đang chạy; sản phẩm phải chạy tới hết 11/12. Lịch mới ở mục 8 của [phase 6](docs/plan/phases/phase-6-danh-gia-dong-goi.md): đợt 1 ngày 28/11, đợt 2 ngày 30/11 (hạn cuối tính năng mới), freeze tối 1/12, RC và eval cuối 2/12, nộp trước 18:00 ngày 3/12.
+- Kiểm toán bằng 9 subagent (Kiro CLI điều phối): [tổng hợp](docs/research/2026-11-25-audit-tong-hop.md) và 9 ghi chú `docs/research/2026-11-25-audit-*.md`. Quyết định của chủ dự án ở mục 7 file phase 6 ("Chốt 25/11 sau kiểm toán").
+- **Việc theo dõi trên GitHub Issues**: issue tổng [#2](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/2), 36 issue con (#3–#38) chia theo đợt, nhãn `ready-for-agent` / `ready-for-human`, có quan hệ blocked-by. Cấu hình skill ở `docs/agents/`.
+- Đã làm trên AWS: đăng ký một email vào SNS `yofina-alerts` (đã xác nhận; trước đó topic có 0 người nhận). Yêu cầu tăng quota Bedrock qua API bị từ chối vì quota của tài khoản thấp hơn mặc định: phải mở case AWS Support (#3).
+- Máy của Phúc đã có `uv` và `.venv`; unit 3920 passed, 3 skipped.
+
 ## Cập nhật rạng sáng 25/11 (sau khi viết bản trên)
 
 - **Bộ nhớ đã sửa gốc** (nhánh p5/mem-extract, ac2a4fe): bước hợp nhất mặc định của AWS bỏ sở thích có thời hạn ("temporary states") và Nova Lite không theo chỉ dẫn; nay override cả hợp nhất, đổi sang Haiku 4.5. `memory-state-preference` và `memory-knowledge-update` đạt (mỗi ca một lần). Mục A.2 bên dưới coi như xong; chi tiết ở file phase 5 và agentcore-memory-design.md mục 2.2a.

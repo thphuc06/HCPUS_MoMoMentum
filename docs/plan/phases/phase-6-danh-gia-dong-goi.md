@@ -2,7 +2,7 @@
 
 Kế hoạch tổng: [master-plan.md](../master-plan.md). Bản đầu viết 21/11; **viết lại 24/11 khuya** (worker Kiro, Claude Opus 5.5, do Claude Code điều phối) theo hiện trạng sau Runtime v26.
 
-**Ngày: 25/11–10/12/2026, nộp chậm nhất 10/12 (hạn giả định 11/12).** [đổi 24/11: bản cũ là 9–10/12; phase 5 xong code sớm hai tuần nên phase 6 có 16 ngày.] Điều kiện vào: phase 5 đóng (mục A dưới đây), hoặc tới 26/11 tối chưa đóng thì phase 6 vẫn chạy và ghi rõ phần thiếu.
+**Ngày: 25/11–03/12/2026, nộp trước 18:00 ngày 03/12 (hạn chính thức 23:59:59 ngày 03/12).** [đổi 25/11: hạn thật lấy từ trang cuộc thi; sau hạn không được sửa mã nguồn, slide, sản phẩm đang chạy; sản phẩm phải chạy tới hết 11/12. Bản 24/11 giả định nộp 10/12. Việc cần làm theo dõi ở issue [#2](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/2), nguồn: [kiểm toán 25/11](../../research/2026-11-25-audit-tong-hop.md).] Điều kiện vào: phase 5 đóng (mục A dưới đây), hoặc tới 26/11 tối chưa đóng thì phase 6 vẫn chạy và ghi rõ phần thiếu.
 
 Ký hiệu trong file: **[giữ]** là phần của bản 21/11 còn đúng; **[đổi 24/11]** là phần đã sửa; **[mới 24/11]** là phần thêm; **[cắt 24/11]** là phần bỏ (đề xuất, chờ chủ dự án duyệt ở mục 7).
 
@@ -32,7 +32,7 @@ Ký hiệu trong file: **[giữ]** là phần của bản 21/11 còn đúng; **[
 4. Bộ nộp bài: README cho giám khảo, sơ đồ kiến trúc, video demo, kịch bản thuyết trình, tài liệu chi phí AWS.
 5. Buổi chấm chạy được: tài khoản và mật khẩu mới, Aurora thức, kiểm trước giờ, phương án dự phòng khi Bedrock throttle hoặc chạm trần.
 
-Không thêm tính năng mới. [giữ]
+[đổi 25/11, chủ dự án] Được thêm tính năng mới tới hết 30/11 (deploy đợt 2). Tính năng chưa merge và chưa xanh ngày 30/11 thì cắt; mỗi tính năng có unit test và 1–2 ca eval, không làm gãy đường đi 6 cảnh. Bản 24/11 ghi "không thêm tính năng mới".
 
 ## 2. Tiêu chí hoàn thành đo được
 
@@ -282,27 +282,34 @@ Hạn trả lời đề xuất: 26/11 cho Q1–Q9 (ảnh hưởng đợt 1), 2/1
 | Q14 | Hạn nộp chính xác, định dạng nộp (độ dài video, số trang slide, có thuyết trình trực tiếp không, thời lượng), trọng số chấm, giữ tên Yofina? | Hỏi ban tổ chức sớm; lịch dưới giả định nộp chậm nhất 10/12, video 3 phút, slide 10 trang |
 | Q15 | Chốt khối 2.2 của [ba/12](../../ba/12-tong-hop-va-viec-can-chot.md) trước khi dựng slide (D-01, E-01, E-03, F-02, I-01, I-02)? | Chốt trước 5/12; slide dùng K2, K5, K4 kèm RCT, K9 dạng hòa vốn |
 
-## 8. Lịch (hạn nộp giả định 11/12/2026)
+**Chốt 25/11 sau kiểm toán (chủ dự án)** [mới 25/11]. Nguồn: [2026-11-25-audit-tong-hop.md](../../research/2026-11-25-audit-tong-hop.md); việc ở issue [#2](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/2) và 36 issue con.
+
+- **Q14 đã trả lời**: hạn 23:59:59 ngày 03/12; video MP4 để link Drive; chủ đề "Trợ lý AI · Trợ lý tài chính"; đội đã đăng ký. Không gửi câu hỏi cho ban tổ chức; vì vậy mọi thao tác vận hành (Aurora 0,5 ACU, đổi mật khẩu demo, trần SSM) làm trước khi nộp và để nguyên tới 11/12. README phải khai proposal Swinburne là tài sản có sẵn. Thời lượng thuyết trình chung kết chưa biết.
+- **Q12 đổi**: Aurora 0,5 ACU và đổi mật khẩu ngày 2/12 (trước khi xuất tờ hướng dẫn), không phải 9/12.
+- **Q6 đổi**: trần theo tài khoản 100 lượt chat/ngày (thay 60); trần chung qua SSM: planner 1.500, ingest 1.000 lời gọi/ngày cho khung chấm. Giữ thời gian chờ bộ giới hạn 20 s; không rút ngắn output Analyst.
+- **Luồng K**: giữ số bước và độ dài lập luận; sửa chỗ lập luận mâu thuẫn với kết quả đã lưu; thêm công tắc SSM.
+- **Cảnh 4 chạy thật**, không dùng bản lộ trình seed; persona `minh` 120 ngày lịch sử, không cài điểm gãy trong lịch sử; giám khảo tải tệp sao kê CSV để kích hoạt sinh lại lộ trình.
+- **Tài khoản**: `giamkhao1–3` đều dùng persona `minh`, không thuộc nhóm `ops`; truy vết trong demo qua "Vì sao → Chi tiết kỹ thuật"; bảng vận hành chiếu bằng tài khoản vận hành riêng.
+- **Eval**: sửa bộ chấm trước RC dù điểm có thể giảm; đối kháng và đường demo chạy 3 lần, báo khoảng tin cậy; K5 báo hai định nghĩa cạnh baseline.
+
+## 8. Lịch (hạn nộp 23:59:59 ngày 03/12/2026) [đổi 25/11]
+
+Bản 24/11 (RC 4/12, nộp 10/12) nằm sau hạn thật nên thay bằng bảng dưới. Issue theo đợt ở [#2](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/2).
 
 | Ngày | Mốc | Việc |
 |---|---|---|
-| T4 25/11 | | A1 (Học đi 6 cảnh); chủ dự án trả lời Q1–Q9; mở worker B1, B2, C1, C2, E1–E5 + F1 (`p6-agent-polish`), D1, H2, K1–K3 (`p6-advisor`) |
-| T5 26/11 | **M1: đóng phase 5** | A2–A5; A3 đo bộ nhớ; G1 bắt đầu theo ghi nhận A1 |
-| T6 27/11 | | B3, B4, B5, D4; review và merge nhánh xong |
-| T7 28/11 | **M2: deploy đợt 1** | Gồm A2, A3, B1, B3, B4, B5, C1, C2, E1–E5, F1, D4, G1, K1–K3 phần đã xong. `--only` các ca của phần đổi; C3 (3 phiên song song) |
-| CN 29/11 | | Đọc log sau đợt 1 (C1 hết `turn_persist_timeout` chưa); B7 |
-| T2 30/11 | | D2, D3, D5, G2, G3, H1, H3; I2 bắt đầu |
-| T3 1/12 | | Tiếp D2; E7 nếu còn thời gian; B6 viết test cấu hình |
-| T4 2/12 | **M3: deploy đợt 2** | D2, D3, D5, G1–G3, K4 và chỉnh K theo đợt 1, sửa mức cao của B7. `--only` what-if, ca đối kháng chủ đề cấm |
-| T5 3/12 | **M4: code freeze** (tối) | Chỉ còn sửa lỗi chặn demo. Q5 (viết lại lịch sử git) nếu chọn, trước freeze |
-| T6 4/12 | **M5: RC và eval cuối** | Deploy RC (nếu có gì sau đợt 2); Aurora 0,5 ACU; lượt eval đầy đủ duy nhất (mục 5.1); đo event đầu và affordability; C4, C5, B6; trả Aurora về 0 |
-| T7 5/12 | | H3, H4 viết eval-report; I5 chi phí; quay màn hình 6 cảnh trên RC (I3) |
-| CN 6/12 | **M6: bản nháp bộ nộp** | I1 README, I2 sơ đồ, I3 dựng video, I4 slide và kịch bản nói |
-| T2 7/12 | | I6, I7; G4 (iPhone); chủ dự án duyệt video và slide |
-| T3 8/12 | **M7: tổng duyệt** | G5 (3 lần liên tiếp); J1 chạy thử; J4 diễn tập sự cố |
-| T4 9/12 | | Sửa còn lại; J2 đổi mật khẩu; J3 Aurora 0,5 ACU; quét bí mật lần cuối (B2); HANDOFF, ai-log, file phase 6 "Kết quả thực hiện" |
-| T5 10/12 | **M8: nộp bài** | J1 trước khi gửi; nộp; commit và push |
-| T6 11/12 | Hạn giả định | Đệm. Từ đây J5 mỗi ngày tới hết khung chấm, rồi trả Aurora về 0 |
+| T4 25/11 | | Kiểm toán xong, chủ dự án chốt quyết định, tạo issue. A1 (đi 6 cảnh, #4); mở case quota Bedrock (#3); bắt đầu việc đợt 1 |
+| T5 26/11 | **M1: đóng phase 5** | A2–A5; dữ liệu `minh` 120 ngày (#8); sửa bộ chấm eval (#5, #6) |
+| T6 27/11 | | Review, merge nhánh đợt 1; người viết 20 câu giữ riêng (#31) |
+| T7 28/11 | **M2: deploy đợt 1** | Gồm #5–#20 và việc cũ còn hiệu lực (A2, A3, B1, B3, B5, C1, C2, E1–E5, F1, D4, G1). `--only` các ca của phần đổi |
+| CN 29/11 | | Đo sau đợt 1 (#21: OCR, bộ nhớ, 6 cảnh, 3 phiên song song); đọc log; làm việc đợt 2 |
+| T2 30/11 | **M3: deploy đợt 2, hạn cuối tính năng mới** | #22–#29 và tính năng mới của chủ dự án đã xanh; `--only` what-if, lộ trình, cảnh 4 chạy thật |
+| T3 1/12 | **M4: code freeze** (tối) | Chỉ sửa lỗi chặn demo. Tổng duyệt lần 1 (G5); tài liệu và ADR-0004 (#32); BA nộp số kinh doanh (#33); nháp slide (#37) |
+| T4 2/12 | **M5: RC và eval cuối** | Deploy RC; vận hành trước khi nộp (#35: Aurora 0,5 ACU để tới 11/12, đổi mật khẩu, trần SSM, preflight); lượt eval đầy đủ duy nhất kèm chạy 3 lần (#34); quay màn hình 6 cảnh |
+| T5 3/12 | **M6: nộp bài trước 18:00** | Sáng: sửa lỗi chặn demo (chỉ `--only`). eval-report; README, tờ A4, `.zip` (#36); slide (#37); video lên Drive (#38); J1; nộp; commit và push |
+| 4–8/12 | Giám khảo dùng thử | Không sửa mã, slide, sản phẩm. J5 theo dõi mỗi ngày |
+| T3 8/12 | Công bố top 5 | |
+| T6 11/12 | **Chung kết** | Thuyết trình trực tiếp (thời lượng chưa biết); sau đó trả Aurora về 0 |
 
 ## 9. Cách kiểm (người điều phối)
 

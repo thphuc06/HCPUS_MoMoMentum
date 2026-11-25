@@ -31,6 +31,22 @@ Bảy ghi chú dưới đây do subagent (Claude Sonnet 5.5) viết ngày 2026-1
 | [frontend-fintech-ui.md](frontend-fintech-ui.md) | Stack frontend đề xuất, mẫu thiết kế app ngân hàng, biểu đồ, nhận diện |
 | [spending-visualization.md](spending-visualization.md) | Biểu đồ chi tiêu (theo hũ, hũ sắp cạn, cuối tuần, Trả sau, so kỳ trước): dữ liệu từ endpoint/tool nào, khoảng trống hợp đồng, khối chat, thư viện, ưu tiên P0/P1/P2; minh họa [spending-visualization-preview.html](spending-visualization-preview.html) |
 
+### Kiểm toán toàn dự án sau 5 phase (2026-11-25)
+
+Bắt đầu từ [2026-11-25-audit-tong-hop.md](2026-11-25-audit-tong-hop.md): hạn nộp thật 03/12, ban giám khảo, 31 việc đã gộp (AU-01…31) xếp theo ưu tiên, giới hạn đã biết, việc không làm. Chín ghi chú chi tiết do subagent viết (Kiro CLI điều phối), mỗi ghi chú có bằng chứng file:dòng hoặc số đã chạy:
+
+| Ghi chú | Phạm vi |
+|---|---|
+| [2026-11-25-audit-phase-1-2.md](2026-11-25-audit-phase-1-2.md) | Phase 1–2 so với file plan |
+| [2026-11-25-audit-phase-3.md](2026-11-25-audit-phase-3.md) | Phase 3 (what-if, kiểm tra trước khi chi) |
+| [2026-11-25-audit-phase-4.md](2026-11-25-audit-phase-4.md) | Phase 4 (chống chịu, lộ trình, phân hũ) |
+| [2026-11-25-audit-phase-5.md](2026-11-25-audit-phase-5.md) | Phase 5 (nạp, hồ sơ, bộ nhớ, trace) và luồng K |
+| [2026-11-25-audit-proposal-vs-product.md](2026-11-25-audit-proposal-vs-product.md) | Proposal F1–F7, FR/NFR, kiến trúc so với code |
+| [2026-11-25-audit-ml-forecasting.md](2026-11-25-audit-ml-forecasting.md) | Dự báo, hiệu chỉnh, K5 (có số backtest offline) |
+| [2026-11-25-audit-agent-aws-latency.md](2026-11-25-audit-agent-aws-latency.md) | Độ trễ, chi phí, quota Bedrock (có số từ log) |
+| [2026-11-25-audit-evals-safety.md](2026-11-25-audit-evals-safety.md) | Phương pháp eval, an toàn, bảo mật |
+| [2026-11-25-audit-demo-judge.md](2026-11-25-audit-demo-judge.md) | Thể lệ, câu chuyện demo, kinh doanh, bộ nộp |
+
 ### Tỷ giá cho chứng từ ngoại tệ khi nạp (2026-11-25)
 
 [ingest-fx-rates.md](ingest-fx-rates.md): so sáu nguồn tỷ giá có VND (Vietcombank JSON theo ngày, Vietcombank XML, NHNN, ExchangeRate-API, fawazahmed0, Frankfurter) theo khóa, giới hạn gọi, điều khoản; chọn tỷ giá bán Vietcombank của ngày giao dịch, lý do, làm tròn, bộ nhớ đệm, xử lý lỗi; Lambda nạp ra internet không cần NAT.
