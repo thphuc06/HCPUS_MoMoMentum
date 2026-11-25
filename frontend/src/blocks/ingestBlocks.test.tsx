@@ -56,7 +56,23 @@ describe('ingest_review', () => {
     expect(screen.queryByLabelText('Số VND sẽ ghi')).toBeNull()
   })
 
-  for (const name of ['ingest_review.bad_status', 'ingest_review.float_amount', 'ingest_review.transfer_row', 'ingest_review.fx_float_original']) {
+  it('fixture pii: chip "Đã che" ở dòng có PII (chỉ loại, không giá trị), câu tổng ở đầu danh sách; dòng không che gì không có chip', () => {
+    draw(validBlock('ingest_review.pii'))
+    expect(screen.getByTestId('ingest-pii-total')).toHaveTextContent('Đã che 3 thông tin cá nhân trước khi lưu')
+    const chips = screen.getAllByTestId('ingest-pii')
+    expect(chips).toHaveLength(1)
+    expect(chips[0]).toHaveTextContent('Đã che: tên, SĐT, số TK')
+    expect(chips[0]).toHaveAccessibleName('Đã che trước khi lưu: tên người, số điện thoại, số tài khoản')
+    const plain = document.querySelector('[data-ingest-row="9a1b2c3d-4e5f-4a6b-8c7d-000000000022"]') as HTMLElement
+    expect(within(plain).queryByTestId('ingest-pii')).toBeNull()
+  })
+
+  it('fixture không có pii_masked: không chip, không câu tổng', () => {
+    draw(validBlock('ingest_review.review'))
+    expect(screen.queryByTestId('ingest-pii')).toBeNull()
+    expect(screen.queryByTestId('ingest-pii-total')).toBeNull()
+  })
+  for (const name of ['ingest_review.bad_status', 'ingest_review.float_amount', 'ingest_review.transfer_row', 'ingest_review.fx_float_original', 'ingest_review.pii_raw_value']) {
     it(`sai schema (${name}): hiện fallback_text`, () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const raw = invalidBlock(name)

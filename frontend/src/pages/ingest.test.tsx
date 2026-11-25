@@ -317,6 +317,24 @@ describe('dòng ngoại tệ ở màn duyệt', () => {
   })
 })
 
+describe('thông tin cá nhân đã che ở màn duyệt (cảnh 5)', () => {
+  it('dòng có PII có chip "Đã che" chỉ nêu loại; đầu danh sách có câu tổng; dòng không che gì không có chip', async () => {
+    const piiJob = { ...job('review'), rows_total: 2, review: validBlock('ingest_review.pii') }
+    mountIngest(withS3(ingestBackend([piiJob])), `/ingest?job=${JOB}`)
+    await screen.findByRole('list', { name: 'Dòng đã đọc' })
+    expect(screen.getByTestId('ingest-pii-total')).toHaveTextContent('Đã che 3 thông tin cá nhân trước khi lưu')
+    const row = (id: string) => document.querySelector(`[data-ingest-row="${id}"]`) as HTMLElement
+    expect(within(row('9a1b2c3d-4e5f-4a6b-8c7d-000000000021')).getByTestId('ingest-pii')).toHaveTextContent('Đã che: tên, SĐT, số TK')
+    expect(within(row('9a1b2c3d-4e5f-4a6b-8c7d-000000000022')).queryByTestId('ingest-pii')).toBeNull()
+  })
+
+  it('lần nạp không che gì: không có câu tổng', async () => {
+    mountIngest(withS3(ingestBackend([job('review')])), `/ingest?job=${JOB}`)
+    await screen.findByRole('list', { name: 'Dòng đã đọc' })
+    expect(screen.queryByTestId('ingest-pii-total')).toBeNull()
+    expect(screen.queryByTestId('ingest-pii')).toBeNull()
+  })
+})
 describe('lỗi có câu tiếng Việt và lối thoát', () => {
   it('chứng từ không còn giao dịch nào (INGEST_NO_TRANSACTIONS): câu theo lý do con, không nói "không phải biên lai"', async () => {
     mountIngest(withS3(ingestBackend([restFixture('IngestJobResponse.no_transactions')])))

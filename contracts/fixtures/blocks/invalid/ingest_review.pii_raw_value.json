@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "id": "ingest_review:7d4e2a10-3b5c-4f81-9e62-1c0a8b7d5e43",
+  "id": "ingest_review:5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
   "trace_id": "2b7c9e14d0a84f3c9e61a5d8b3c7f210",
   "fallback_text": "Đã đọc 2 dòng ngoài ví; 2 dòng chờ bạn duyệt, 0 dòng trùng.",
   "source": {
@@ -10,12 +10,12 @@
   },
   "type": "ingest_review",
   "data": {
-    "job_id": "7d4e2a10-3b5c-4f81-9e62-1c0a8b7d5e43",
+    "job_id": "5c2d8e14-7a3b-4f60-9d21-0b4e6a8c1f37",
     "status": "review",
     "source_kind": "image",
     "rows": [
       {
-        "row_id": "4c8e1f20-6a3b-4d59-8e17-000000000001",
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000021",
         "seq": 1,
         "kind": "expense",
         "app_date": "2026-11-20",
@@ -37,7 +37,7 @@
         ]
       },
       {
-        "row_id": "4c8e1f20-6a3b-4d59-8e17-000000000002",
+        "row_id": "9a1b2c3d-4e5f-4a6b-8c7d-000000000022",
         "seq": 2,
         "kind": "expense",
         "app_date": "2026-11-20",
