@@ -67,7 +67,7 @@ def test_chay_thu_la_mac_dinh_khong_goi_apply(sp, monkeypatch, capsys):
     assert "CHẠY THỬ" in capsys.readouterr().out
     monkeypatch.setattr(sys, "argv", ["seed_persona.py", "giamkhao3", "--apply"])
     assert sp.main() == 0 and len(called) == 1
-    assert called[0][1:3] == ("giamkhao3", "vy")  # apply(args, tài khoản, persona, tiền tố nhóm)
+    assert called[0][1:3] == ("giamkhao3", "minh")  # apply(args, tài khoản, persona, tiền tố nhóm)
 
 
 def test_tai_khoan_la_persona_la_bi_tu_choi(sp, monkeypatch):
@@ -139,7 +139,7 @@ def test_apply_noi_dung_mach_dat_lai_cua_ledger_voi_sub_cua_tai_khoan(sp, monkey
     monkeypatch.setattr(core_db, "DataApi", FakeDb)
     monkeypatch.setattr(service_mod, "LedgerService", FakeService)
     monkeypatch.setattr(events_mod, "EventPublisher", lambda bus, region=None: ("pub", bus))
-    monkeypatch.setattr(sys, "argv", ["seed_persona.py", "giamkhao3", "--apply", "--forecast"])
+    monkeypatch.setattr(sys, "argv", ["seed_persona.py", "giamkhao3", "--persona", "vy", "--apply", "--forecast"])
     assert sp.main() == 0
     assert seen["reset"][:2] == ("sub-giamkhao3", "vy")
     assert seen["groups"] == (

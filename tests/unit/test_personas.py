@@ -64,7 +64,8 @@ def test_minh_khop_bang_so_figma():
         "du_phong",
         "nghia_vu",
     ]
-    assert 100 <= len(d.transactions) <= 200  # lịch sử đủ dày cho dự báo
+    # mật độ giữ như bản 47 ngày (166 dòng, 3,5 dòng mỗi ngày) khi kéo lịch sử ra 120 ngày (issue #8)
+    assert 3.0 <= len(d.transactions) / d.history_days <= 4.0
 
 
 @pytest.mark.parametrize("name", ["minh", "lan", "khoa", "vy"])
@@ -137,11 +138,14 @@ def test_khoan_tra_nghia_vu_trong_lich_su_gan_obligation_va_dung_han_tung_thang(
     rent = next(o for o in d.obligations if o.kind == "rent")
     paid = [t for t in d.transactions if t.obligation_key == rent.key]
     days = [(ANCHOR - timedelta(days=t.days_ago)).isoformat() for t in paid]
-    assert sorted(days) == ["2026-10-06", "2026-11-06"]
+    assert sorted(days) == ["2026-08-06", "2026-09-06", "2026-10-06", "2026-11-06"]
     assert all(t.amount_vnd == -rent.amount_vnd and t.tx_type == "rent" for t in paid)
     electric = next(o for o in d.obligations if o.name == "Tiền điện")
-    (one,) = [t for t in d.transactions if t.obligation_key == electric.key]
-    assert electric.amount_min_vnd <= -one.amount_vnd <= electric.amount_max_vnd
+    paid_electric = [t for t in d.transactions if t.obligation_key == electric.key]
+    assert len(paid_electric) == 4  # 26/7, 26/8, 26/9, 26/10
+    assert all(
+        electric.amount_min_vnd <= -t.amount_vnd <= electric.amount_max_vnd for t in paid_electric
+    )
 
 
 def test_lich_su_co_nhip_cuoi_tuan_va_dau_ky_luong():
@@ -154,8 +158,8 @@ def test_lich_su_co_nhip_cuoi_tuan_va_dau_ky_luong():
     per_day: dict[int, int] = defaultdict(int)
     for t in spend:
         per_day[t.days_ago] += -t.amount_vnd
-    weekend = [per_day[a] for a in range(1, 48) if (ANCHOR - timedelta(days=a)).weekday() >= 5]
-    weekday = [per_day[a] for a in range(1, 48) if (ANCHOR - timedelta(days=a)).weekday() < 5]
+    weekend = [per_day[a] for a in range(1, d.history_days + 1) if (ANCHOR - timedelta(days=a)).weekday() >= 5]
+    weekday = [per_day[a] for a in range(1, d.history_days + 1) if (ANCHOR - timedelta(days=a)).weekday() < 5]
     assert sum(weekend) / len(weekend) > 1.15 * sum(weekday) / len(weekday)
     assert sum(1 for v in per_day.values() if v) >= 28  # đủ ngày có chi cho mô hình theo lịch
 
@@ -170,19 +174,19 @@ def test_tham_so_nhip_la_cau_hinh_trong_spec_khong_phai_ma():
     assert {j.code: j.balance_vnd for j in flat.jars} == FIGMA_BALANCES  # đổi nhịp không đổi số dư
 
 
-def test_minh_co_47_ngay_lich_su_va_hai_ky_luong():
+def test_minh_co_120_ngay_lich_su_va_bon_ky_luong():
     d = generate("minh", anchor=ANCHOR)
-    assert d.history_days == 47
+    assert d.history_days == 120 and max(t.days_ago for t in d.transactions) == 120
     salary = [t for t in d.transactions if t.tx_type == "salary"]
-    assert {t.days_ago for t in salary} == {47, 16}  # 5/10 và 5/11
+    assert {t.days_ago for t in salary} == {108, 77, 47, 16}  # 5/8, 5/9, 5/10 và 5/11
     assert all(t.amount_vnd == 9_000_000 and t.jar_code == "tien_vao_khac" for t in salary)
-    assert sorted(e.days_ago for e in d.salary_events) == [16, 47]
+    assert sorted(e.days_ago for e in d.salary_events) == [16, 47, 77, 108]
     # mặc định KHÔNG nạp sự kiện lương đã xác nhận: kỳ lương hiện tại ở trạng thái `expected` như bảng số Figma
     assert d.seed_salary_events is False
     assert materialize(d, anchor=ANCHOR, now=NOW, tz=TZ).salary_events == []
     spec = _spec(lambda s: s.update(seed_salary_events=True))
     d2 = generate("x", anchor=ANCHOR, spec=spec)
-    assert len(materialize(d2, anchor=ANCHOR, now=NOW, tz=TZ).salary_events) == 2
+    assert len(materialize(d2, anchor=ANCHOR, now=NOW, tz=TZ).salary_events) == 4
     split = [t for t in d.transactions if t.tx_type == "salary_split" and t.days_ago == 16]
     assert sum(t.amount_vnd for t in split) == 0 and len(split) == 8  # trừ Tiền vào khác, cộng 7 hũ
 
@@ -194,12 +198,78 @@ def test_khoa_la_tai_khoan_moi_chi_18_ngay():
     assert len(d.salary_events) == 1
 
 
-def test_an_uong_cua_minh_chi_tieu_don_ve_cuoi_ky():
+def _an_uong_moi_ngay(d):
+    out: dict[int, int] = defaultdict(int)
+    for t in d.transactions:
+        if t.jar_code == "an_uong" and t.kind == "expense" and t.obligation_key is None:
+            out[t.days_ago] += -t.amount_vnd
+    return out
+
+
+def test_an_uong_cua_minh_chi_don_dau_ky_luong_o_moi_ky():
     d = generate("minh", anchor=ANCHOR)
-    spent = [t for t in d.transactions if t.jar_code == "an_uong" and t.kind == "expense"]
-    recent = sum(-t.amount_vnd for t in spent if t.days_ago <= 16)
-    old = sum(-t.amount_vnd for t in spent if t.days_ago > 16)
-    assert recent > 0 and old > 0 and recent >= old * 0.9
+    per_day = _an_uong_moi_ngay(d)
+    # ba kỳ lương đủ (5/8, 5/9, 5/10): 14 ngày đầu kỳ chi mỗi ngày nhiều hơn phần còn lại của kỳ
+    for first, last in ((108, 78), (77, 48), (47, 17)):
+        early = [per_day[a] for a in range(first, first - 14, -1)]
+        late = [per_day[a] for a in range(first - 14, last - 1, -1)]
+        assert sum(early) / len(early) > 1.1 * sum(late) / len(late), (first, last)
+
+
+def test_lich_su_minh_khong_co_diem_gay_hanh_vi():
+    """Không cài sẵn đổi hành vi (issue #8): bộ phát hiện của sản phẩm chạy trên đúng lịch sử lúc đặt lại không xác nhận, không
+    nghi ở hũ chi tiêu nào; cảnh 4 phải tự tạo thay đổi lúc chạy. Kỳ lương hiện tại chi mỗi ngày gần như các kỳ trước."""
+    from yofina_ml import change as ch
+    from yofina_ml.backtest.change_calibration import persona_daily_spend
+
+    params = ch.load_params()
+    for jar, daily in persona_daily_spend("minh", ANCHOR).items():
+        s = ch.prepare_weekly(daily, params)
+        if s.skipped:
+            continue
+        assert ch.detect_confirmed(s, params) is None, jar
+        assert ch.detect_suspect(s, params) is None, jar
+    per_day = _an_uong_moi_ngay(generate("minh", anchor=ANCHOR))
+    now = sum(per_day[a] for a in range(16, 0, -1)) / 16
+    before = sum(per_day[a] for a in range(108, 16, -1)) / 92
+    assert 0.8 < now / before < 1.4
+
+
+def test_minh_chi_deu_nhu_ban_47_ngay():
+    # số khoản chi mỗi ngày giữ như bản 47 ngày (Ăn uống 110, Đi lại 14 khoản trong 47 ngày)
+    d = generate("minh", anchor=ANCHOR)
+    count: dict[str, int] = defaultdict(int)
+    for t in d.transactions:
+        if t.kind == "expense" and t.funding_source == "jar" and t.obligation_key is None:
+            count[t.jar_code] += 1
+    assert abs(count["an_uong"] / 120 - 110 / 47) < 0.1
+    assert abs(count["di_lai"] / 120 - 14 / 47) < 0.05
+
+
+def test_minh_bu_hu_an_uong_tu_hu_tiet_kiem_cuoi_moi_ky_truoc():
+    d = generate("minh", anchor=ANCHOR)
+    moves = [t for t in d.transactions if t.transfer_key and t.transfer_key.startswith("move:")]
+    into = [t for t in moves if t.amount_vnd > 0]
+    assert {t.jar_code for t in into} == {"an_uong"}
+    assert {t.days_ago for t in into} == {92, 61, 31}  # 21/8, 21/9, 21/10: trước hạn tiền cơm văn phòng ngày 23
+    assert sum(t.amount_vnd for t in moves) == 0 and sum(t.amount_vnd for t in into) == 3_500_000
+    assert all(t.days_ago > 16 for t in moves)  # kỳ lương hiện tại chưa bù
+
+
+def test_lo_trinh_seed_cua_minh_khop_lich_su_va_so_du_vua_sinh():
+    """`roadmaps/minh.json` là dữ liệu seed, nhưng phần nói về lịch sử và số dư phải khớp persona vừa sinh (issue #8)."""
+    seed = json.loads((REPO / "data" / "personas" / "roadmaps" / "minh.json").read_text("utf-8"))
+    d = generate("minh", anchor=ANCHOR)
+    basis = seed["basis"]
+    assert basis["history_days"] == d.history_days == 120
+    assert basis["confidence_band"] == "high"  # từ 60 ngày lịch sử, độ phủ 1,0 (band_high_min_days)
+    flag = seed["behavior_flag"]
+    offsets = [flag[k] for k in ("suspected_days_ago", "change_point_days_ago", "confirmed_days_ago")]
+    assert all(1 <= o < d.history_days for o in offsets) and offsets == sorted(offsets, reverse=True)
+    bal = {j.code: j.balance_vnd for j in d.jars}
+    text = json.dumps(seed, ensure_ascii=False)
+    assert bal["an_uong"] == 380_000 and "Ăn uống chỉ còn 380.000 ₫" in text
+    assert bal["du_phong"] == 2_700_000 and "Dự phòng 2.700.000 ₫" in text
 
 
 # --- đồng hồ mô phỏng -------------------------------------------------------------------------
@@ -283,17 +353,78 @@ def test_ten_persona_la_bi_tu_choi():
             generate(bad, anchor=ANCHOR)
 
 
+# --- chuyển hũ trong lịch sử (spec `jar_transfers`) ------------------------------------------------
+def _with_transfer(s, *, days_ago=20, amount=200_000, src="du_phong", dst="an_uong"):
+    s.setdefault("jar_transfers", []).append(
+        {"days_ago": days_ago, "from": src, "to": dst, "amount_vnd": amount}
+    )
+    jar = next(j for j in s["jars"] if j["code"] == src)
+    jar["opening_vnd"] += amount  # hũ nguồn giữ đúng số dư cần đạt
+
+
+def test_chuyen_hu_trong_lich_su_la_hai_dong_cung_nhom_va_giu_so_du_can_dat():
+    d = generate("x", anchor=ANCHOR, spec=_spec(_with_transfer))
+    moves = [
+        t
+        for t in d.transactions
+        if t.transfer_key and t.transfer_key.startswith("move:") and t.days_ago == 20
+    ]
+    assert sorted((t.jar_code, t.amount_vnd) for t in moves) == [
+        ("an_uong", 200_000),
+        ("du_phong", -200_000),
+    ]
+    assert len({t.transfer_key for t in moves}) == 1
+    assert all(t.kind == "transfer" and t.tx_type == "jar_transfer" for t in moves)
+    assert all(t.days_ago == 20 for t in moves)
+    assert {j.code: j.balance_vnd for j in d.jars} == FIGMA_BALANCES
+
+    # tiền chuyển vào được tiêu: hũ đích chi thêm đúng số đó
+    def spent(data):
+        return -sum(
+            t.amount_vnd
+            for t in data.transactions
+            if t.jar_code == "an_uong" and t.kind == "expense"
+        )
+
+    assert spent(d) == spent(generate("x", anchor=ANCHOR, spec=_spec(lambda s: None))) + 200_000
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"src": "khong_co"},
+        {"dst": "tien_vao_khac"},
+        {"src": "an_uong", "dst": "an_uong"},
+        {"amount": 0},
+        {"days_ago": 999},
+    ],
+)
+def test_chuyen_hu_sai_thi_bao_loi(patch):
+    def mutate(s):
+        s.setdefault("jar_transfers", []).append(
+            {
+                "days_ago": patch.get("days_ago", 20),
+                "from": patch.get("src", "du_phong"),
+                "to": patch.get("dst", "an_uong"),
+                "amount_vnd": patch.get("amount", 100_000),
+            }
+        )
+
+    with pytest.raises(PersonaError, match="jar_transfers"):
+        generate("x", anchor=ANCHOR, spec=_spec(mutate))
+
+
 # --- ánh xạ tài khoản -> persona --------------------------------------------------------------
 def test_anh_xa_tai_khoan_demo_dung_bang_cau_hinh():
     acc = load_accounts()
-    # giamkhao3 là persona vy (có thu nhập ngoài ví, cho cảnh nạp dữ liệu F6); giamkhao1 và 2 giữ nguyên minh (cảnh 1)
+    # ba tài khoản giám khảo cùng persona minh: cảnh 1 đến 4 ra cùng số trên mọi tài khoản (issue #8)
     assert acc["demo_accounts"] == {
         "minh": "minh",
         "lan": "lan",
         "khoa": "khoa",
         "giamkhao1": "minh",
         "giamkhao2": "minh",
-        "giamkhao3": "vy",
+        "giamkhao3": "minh",
     }
     assert set(acc["demo_accounts"].values()) <= set(available_personas())
 
