@@ -333,7 +333,10 @@ _THREE = _DEMO_DAILY[:3]
     ],
 )  # fmt: skip
 def test_buoc_loai_giao_dich_cua_dong_nap_theo_hu_rieng_roi_hu_chung(jars, expected):
-    c = ctx(None, jars=[{"code": code, "name": code, "kind": kind, "balance_vnd": 0} for code, kind in jars])
+    c = ctx(
+        None,
+        jars=[{"code": code, "name": code, "kind": kind, "balance_vnd": 0} for code, kind in jars],
+    )
     rows = [RowInput(TODAY, 50000, f"Cửa hàng {t}", None, False, t, None, None) for t in expected]
     got = classify_rows(rows, c.classify_inputs())
     assert {t: (choice.code, choice.source) for t, choice in zip(expected, got, strict=True)} == {

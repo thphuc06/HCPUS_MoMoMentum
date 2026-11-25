@@ -95,7 +95,10 @@ def test_sau_dat_lai_minh_hu_an_uong_can_23_11_con_12_ngay_toi_ky_luong(api):
     assert an["forecast_floor_vnd"] < 0  # vạch "mực dự báo" của thẻ hũ
     card = ov["proactive_card"]
     assert card["data"]["kind"] == "runout_warning" and "23/11" in card["fallback_text"]
-    assert card["data"].get("jar_code") in (None, "an_uong")  # thẻ của Tổng quan vẫn là Ăn uống, không phải Chi hằng ngày
+    assert card["data"].get("jar_code") in (
+        None,
+        "an_uong",
+    )  # thẻ của Tổng quan vẫn là Ăn uống, không phải Chi hằng ngày
     # các hũ khác: không hũ nào báo hụt; Nghĩa vụ (gộp Hóa đơn) sát vì tiền điện 26/11 và Trả sau 03/12 (rollout Bước 5: khả năng hụt
     # 0,26); hũ goal Du lịch và Đầu tư 0 ₫ (không gì rút tiền) đủ; Chi hằng ngày (chi lặt vặt, khối `demo_jars`) đủ tới lương
     status = {j["code"]: j["status"] for j in ov["jars"]}

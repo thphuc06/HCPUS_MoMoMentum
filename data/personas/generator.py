@@ -779,7 +779,9 @@ def _demo_jar(
         )  # fmt: skip
     spend = opening + line * len(income_days) - target
     if spend < 0:
-        raise PersonaError(f"demo_jars {code}: tiền vào nhỏ hơn số dư cần đạt {target}; thêm opening_vnd")
+        raise PersonaError(
+            f"demo_jars {code}: tiền vào nhỏ hơn số dư cần đạt {target}; thêm opening_vnd"
+        )
     if spend % _ROUND:
         raise PersonaError(f"demo_jars {code}: tổng chi {spend} phải là bội của {_ROUND}")
     merchants = _merchants({**d, "code": code})
@@ -793,7 +795,17 @@ def _demo_jar(
             )
         )  # fmt: skip
     split_lines = [
-        TxSeed(f"split:{ago}:{code}", ago, _SPLIT_TIME, "transfer", code, line, None, None, "salary_split")
+        TxSeed(
+            f"split:{ago}:{code}",
+            ago,
+            _SPLIT_TIME,
+            "transfer",
+            code,
+            line,
+            None,
+            None,
+            "salary_split",
+        )
         for ago in income_days
     ]
     _simulate_non_negative(code, txs + split_lines)

@@ -158,7 +158,11 @@ def test_vector_seed_khu_hoi_float16_va_sai_chieu_bi_tu_choi():
 def test_nhan_seed_vao_hu_cua_vi_cung_quy_tac_voi_loai_giao_dich(wallet, expected):
     vec = classify_seed.encode_vector([0.0] * EMBEDDING_DIMENSIONS)
     seed = classify_seed.SeedSet(
-        "x", "m", tuple(classify_seed.SeedLabel(f"nhan {c}", c, vec) for c in sorted(expected or {"an_uong": 0}))
+        "x",
+        "m",
+        tuple(
+            classify_seed.SeedLabel(f"nhan {c}", c, vec) for c in sorted(expected or {"an_uong": 0})
+        ),
     )
     got = {lab.jar_code: code for lab, code in classify_seed.label_jar_pairs(seed, wallet)}
     assert got == expected
