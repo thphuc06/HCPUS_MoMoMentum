@@ -79,18 +79,18 @@ Chuyển danh mục sớm sẽ khiến Ledger cũ tạo hũ mới mà bỏ trố
 
 ### Bước 3. Kê khai ở bước 3 của onboarding
 
-- [ ] **Nghĩa vụ theo số đã khai.** Sau khi người dùng khai nghĩa vụ, server tính tỷ lệ đề xuất = tổng nghĩa vụ quy về tháng ÷ lương đã khai, làm tròn lên điểm nguyên. Lệch tỷ lệ đang đặt từ 1 điểm thì hiện thẻ. Phần chênh lấy từ hoặc trả về Chi hằng ngày trước, Dự phòng sau; Dự phòng không xuống dưới sàn `buffer_min_split_percent` (giả định 10%).
-- [ ] **Khoản biết trước.** Thêm câu hỏi tùy chọn "Khoản biết trước trong 12 tháng tới" (Tết, học phí, bảo hiểm năm…), mỗi khoản có tên, số tiền và ngày cần. Có khai thì đề xuất tạo Quỹ dồn với tỷ lệ = số tiền còn thiếu ÷ số kỳ lương còn lại trước ngày cần ÷ lương, làm tròn lên điểm nguyên, nguồn bù như trên. Không khai thì không tạo hũ.
-- [ ] **Kiểm tra theo ngày.** Với kỳ lương hiện tại và kỳ kế tiếp, cộng các khoản đến hạn trước ngày lương rồi so với số dư cộng phần chia. Thiếu thì thẻ nêu khoản nào thiếu và thiếu bao nhiêu.
-- [ ] **Bỏ qua bước 3.** Giữ tỷ lệ mẫu và ghi "chưa có số khai" trên thẻ hũ.
-- [ ] **Nghĩa vụ vượt số tiền chia được.** Khi tổng Nghĩa vụ, Quỹ dồn và sàn Dự phòng vượt 100%, không lưu tỷ lệ và không gợi ý cắt khoản thiết yếu (BR-21). Hiện danh sách nghĩa vụ theo thứ tự ưu tiên (nhà ở, điện nước, rồi nợ) và mở lộ trình.
-- [ ] Mẫu số chỉ là lương đã khai. Lương nhận lệch số khai quá ngưỡng BR-12 thì hỏi cập nhật lương trước khi đề xuất.
+- [x] **Nghĩa vụ theo số đã khai.** Sau khi người dùng khai nghĩa vụ, server tính tỷ lệ đề xuất = tổng nghĩa vụ quy về tháng ÷ lương đã khai, làm tròn lên điểm nguyên. Lệch tỷ lệ đang đặt từ 1 điểm thì hiện thẻ. Phần chênh lấy từ hoặc trả về Chi hằng ngày trước, Dự phòng sau; Dự phòng không xuống dưới sàn `buffer_min_split_percent` (giả định 10%).
+- [x] **Khoản biết trước.** Thêm câu hỏi tùy chọn "Khoản biết trước trong 12 tháng tới" (Tết, học phí, bảo hiểm năm…), mỗi khoản có tên, số tiền và ngày cần. Có khai thì đề xuất tạo Quỹ dồn với tỷ lệ = số tiền còn thiếu ÷ số kỳ lương còn lại trước ngày cần ÷ lương, làm tròn lên điểm nguyên, nguồn bù như trên. Không khai thì không tạo hũ.
+- [x] **Kiểm tra theo ngày.** Với kỳ lương hiện tại và kỳ kế tiếp, cộng các khoản đến hạn trước ngày lương rồi so với số dư cộng phần chia. Thiếu thì thẻ nêu khoản nào thiếu và thiếu bao nhiêu.
+- [x] **Bỏ qua bước 3.** Giữ tỷ lệ mẫu và ghi "chưa có số khai" trên thẻ hũ.
+- [x] **Nghĩa vụ vượt số tiền chia được.** Khi tổng Nghĩa vụ, Quỹ dồn và sàn Dự phòng vượt 100%, không lưu tỷ lệ và không gợi ý cắt khoản thiết yếu (BR-21). Hiện danh sách nghĩa vụ theo thứ tự ưu tiên (nhà ở, điện nước, rồi nợ) và mở lộ trình.
+- [x] Mẫu số chỉ là lương đã khai. Lương nhận lệch số khai quá ngưỡng BR-12 thì hỏi cập nhật lương trước khi đề xuất.
 
 ### Bước 4. Xác nhận mọi thay đổi tỷ lệ
 
-- [ ] Thẻ và bản xem trước `save_jars` hiện lý do bằng số đo, tỷ lệ trước và sau, số tiền mỗi kỳ lương trước và sau, và phần chênh lệch. Server tính mọi số (BR-47, BR-48).
-- [ ] Người dùng chọn Đồng ý, Sửa số hoặc Không đổi. Tổng phải bằng 100% mới lưu được. Thay đổi chỉ có hiệu lực sau khi xác nhận qua `save_jars` (BR-45).
-- [ ] Tỷ lệ mới áp từ lần xác nhận chia lương đầu tiên sau khi lưu. Nếu đang có sự kiện lương chờ, thẻ hỏi rõ "áp cho kỳ này" hay "từ kỳ sau". Dự báo cập nhật ngay và thẻ ghi rõ điều đó.
+- [x] Thẻ và bản xem trước `save_jars` hiện lý do bằng số đo, tỷ lệ trước và sau, số tiền mỗi kỳ lương trước và sau, và phần chênh lệch. Server tính mọi số (BR-47, BR-48).
+- [x] Người dùng chọn Đồng ý, Sửa số hoặc Không đổi. Tổng phải bằng 100% mới lưu được. Thay đổi chỉ có hiệu lực sau khi xác nhận qua `save_jars` (BR-45).
+- [x] Tỷ lệ mới áp từ lần xác nhận chia lương đầu tiên sau khi lưu. Nếu đang có sự kiện lương chờ, thẻ hỏi rõ "áp cho kỳ này" hay "từ kỳ sau". Dự báo cập nhật ngay và thẻ ghi rõ điều đó.
 
 ### Bước 5. Demo bốn hũ
 
