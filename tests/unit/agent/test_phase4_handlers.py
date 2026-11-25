@@ -28,7 +28,9 @@ from yofina_agent.textutil import strip_accents
 from yofina_agent.tools import classify_result
 from yofina_agent.turn import (
     _GOAL_BAD_DATE,
+    _GOAL_ADD_GOAL_JAR,
     _GOAL_NOT_SAVING,
+    _GOAL_USE_GOAL_JAR,
     _GOAL_UNKNOWN_JAR,
     Turn,
 )
@@ -393,6 +395,47 @@ def test_lo_trinh_bo_muc_tieu_hu_khong_phai_tiet_kiem_va_noi_ro(monkeypatch, jar
     assert calls_of(tools, "optimize_allocation") == [{}]  # không gửi mục tiêu
     assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
 
+
+def _jars_payload(rows):
+    payload = fixture("get_jar_balances.ok_goals.json")
+    base = {"color_key": "teal", "icon_key": "wallet", "balance_vnd": 0, "split_percent": 0}
+    payload["data"]["jars"] = [{**base, **r} for r in rows]
+    payload["data"]["jars_total_vnd"] = 0
+    return payload
+
+
+THREE_JARS = [
+    {"code": "chi_hang_ngay", "name": "Chi hằng ngày", "kind": "spending", "split_percent": 42},
+    {"code": "nghia_vu", "name": "Nghĩa vụ", "kind": "obligation", "split_percent": 33},
+    {"code": "du_phong", "name": "Dự phòng", "kind": "saving", "purpose": "buffer", "split_percent": 25},
+]
+
+
+@pytest.mark.parametrize(
+    ("rows", "note"),
+    [
+        # ví ba hũ: chưa có hũ nào đặt mục tiêu được
+        (THREE_JARS, _GOAL_ADD_GOAL_JAR.format(name="Dự phòng")),
+        # đã có hũ mục tiêu: chỉ ra hũ đó
+        (
+            [*THREE_JARS, {"code": "muc_tieu", "name": "Du lịch", "kind": "saving", "purpose": "goal",
+                           "goal_vnd": 6_000_000, "goal_date": "2027-04-01", "split_percent": 0}],
+            _GOAL_USE_GOAL_JAR.format(name="Dự phòng", goal_jars="Du lịch"),
+        ),
+    ],
+)  # fmt: skip
+def test_lo_trinh_muc_tieu_o_hu_du_phong_noi_dung_tinh_huong(monkeypatch, rows, note):
+    """Hũ Dự phòng LÀ hũ tiết kiệm, chỉ không đặt mục tiêu được: câu báo nói đúng điều đó và chỉ chỗ đặt mục tiêu, không nói
+    "không phải hũ tiết kiệm"."""
+    tools = roadmap_tools()
+    tools.results["get_jar_balances"] = lambda _a: classify_result("get_jar_balances", mcp_ok(_jars_payload(rows)))
+    events, _, _ = goal_turn(
+        monkeypatch, tools=tools, roadmap_action="create", amount_vnd=3_000_000, jar_text="hũ Dự phòng", date_text="3 tháng nữa"
+    )
+    check_agui_order(events)
+    assert texts_of(events)[0] == note
+    assert "không phải hũ tiết kiệm" not in note
+    assert calls_of(tools, "optimize_allocation") == [{}]
 
 def test_lo_trinh_han_khong_doc_duoc_van_giu_so_tien(monkeypatch):
     tools = roadmap_tools()

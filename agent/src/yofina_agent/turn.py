@@ -1306,7 +1306,17 @@ class Turn:
         row = next(j for j in self._jar_rows if j["code"] == match.code)
         name = str(row["name"])
         if not is_goal_jar(row.get("kind"), row.get("purpose")):
-            await self.emit_fixed_text(_GOAL_NOT_SAVING.format(name=name))
+            if row.get("kind") != "saving":
+                await self.emit_fixed_text(_GOAL_NOT_SAVING.format(name=name))
+                return None
+            goal_jars = [
+                str(j["name"]) for j in self._jar_rows if is_goal_jar(j.get("kind"), j.get("purpose"))
+            ]
+            await self.emit_fixed_text(
+                _GOAL_USE_GOAL_JAR.format(name=name, goal_jars=", ".join(goal_jars))
+                if goal_jars
+                else _GOAL_ADD_GOAL_JAR.format(name=name)
+            )
             return None
         target_date: date | None = None
         if p.date_text:
@@ -1795,6 +1805,9 @@ _GOAL_NOT_SAVING = (
     "Hũ {name} không phải hũ tiết kiệm nên mình không đặt mục tiêu này cho hũ đó. "
     "Lộ trình bên dưới dùng các mục tiêu đã khai ở hũ tiết kiệm."
 )
+#: hũ tiết kiệm nhưng mục đích không phải mục tiêu (Dự phòng, Quỹ dồn, Tích lũy dài hạn): nói đúng tình huống, chỉ chỗ đặt mục tiêu
+_GOAL_USE_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Bạn đặt mục tiêu này ở hũ {goal_jars} nhé."
+_GOAL_ADD_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Thêm hũ Mục tiêu ở màn Thêm hoặc sửa hũ để đặt mục tiêu này."
 _GOAL_BAD_DATE = "Mình chưa đọc được hạn “{typed}” nên dùng hạn đã khai ở hũ {name}, nếu có."
 _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa đặt hạn này. Bạn cho mình biết số tiền muốn gom nhé."
 
