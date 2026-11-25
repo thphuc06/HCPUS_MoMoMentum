@@ -1,4 +1,4 @@
-"""Trần lượt chat theo tài khoản mỗi ngày (#13, B4): chạm trần thì lượt kết thúc bằng một `notice`, không gọi model hay tool."""
+"""Trần lượt chat theo tài khoản mỗi ngày (#13, B4): chạm trần thì lượt kết thúc bằng một `notice` lỗi, không gọi model hay tool."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from agent_helpers import (
     FakeWriter,
     agent_settings,
     blocks_of,
+    check_agui_order,
     collect,
     make_jwt,
     make_llm,
@@ -17,12 +18,12 @@ from agent_helpers import (
     run,
     run_input,
 )
-
 from yofina_agent.identity import Identity
 from yofina_agent.store import UnconfiguredTurnBlockStore
 from yofina_agent.turn import Turn, TurnDeps
+
 from yofina_core.llm import BudgetCapReached
-from yofina_core.quota import AccountQuota
+from yofina_core.quota import CHAT, AccountQuota
 
 NOW = datetime(2026, 12, 3, 3, 0, tzinfo=UTC)  # 10:00 giờ Việt Nam
 
@@ -41,7 +42,7 @@ class CountingUsage:
         return n + 1
 
 
-def chat_turn(quota: AccountQuota, monkeypatch: Any, *, sub: str = "user-a", routed: bool = True):
+def chat_turn(quota: AccountQuota, monkeypatch: Any, *, routed: bool = True):
     llm = make_llm([route_response(intent="balance_lookup")] if routed else [])
     tools = FakeTools()
     monkeypatch.setattr("yofina_agent.turn.write_stream", FakeWriter("Tổng 7.730.000 ₫."))
@@ -55,7 +56,7 @@ def chat_turn(quota: AccountQuota, monkeypatch: Any, *, sub: str = "user-a", rou
     turn = Turn(
         deps,
         run_input("Hũ ăn uống còn bao nhiêu?"),
-        Identity(sub, make_jwt(sub)),
+        Identity("user-a", make_jwt("user-a")),
         trace_id="8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
         conversation_id="session-1",
     )
@@ -67,15 +68,18 @@ def notices_of(events: list[Any]) -> list[dict[str, Any]]:
 
 
 def test_tran_2_thi_luot_thu_ba_nhan_thong_bao_va_khong_goi_model_hay_tool(monkeypatch):
-    quota = AccountQuota("chat", store=CountingUsage(), cap=2, now=lambda: NOW)
+    quota = AccountQuota(CHAT, store=CountingUsage(), cap=2, now=lambda: NOW)
     for _ in range(2):
-        events, tools, _ = chat_turn(quota, monkeypatch)
-        assert notices_of(events) == [] and tools.calls
+        events, tools, bedrock = chat_turn(quota, monkeypatch)
+        assert notices_of(events) == [] and tools.calls and bedrock.calls
 
     events, tools, bedrock = chat_turn(quota, monkeypatch, routed=False)
+    check_agui_order(events)
     [notice] = notices_of(events)
     data = notice["data"]
-    assert data["code"] == "DAILY_QUOTA_EXCEEDED"
+    assert data["kind"] == "error" and data["code"] == "DAILY_QUOTA_EXCEEDED"
+    assert data.get("retryable") is not True  # thử lại trong ngày cũng bị chặn
     assert "2 lượt" in data["message"] and "vẫn xem" in data["message"]
     assert tools.calls == [] and bedrock.calls == []
     assert events[-1].type.value == "RUN_FINISHED"
+    assert events[-1].result["model_calls"] == 0

@@ -192,3 +192,24 @@ class AccountQuota:
                 )
             )
             return None
+
+
+_SHARED: dict[str, AccountQuota] = {}
+_SHARED_LOCK = threading.Lock()
+
+
+def shared(kind: str) -> AccountQuota:
+    """Bộ đếm dùng chung của tiến trình cho loại `kind` (tạo lần đầu từ môi trường, như `llm.get_gateway`).
+
+    Tạo lỗi (thiếu Region, boto3) thì ghi log và dùng bộ đếm tắt: trần theo tài khoản không bao giờ làm sập lượt hay route.
+    """
+    with _SHARED_LOCK:
+        if kind not in _SHARED:
+            try:
+                _SHARED[kind] = AccountQuota.from_env(kind)
+            except Exception as exc:
+                logger.error(
+                    json.dumps({"event": "quota_disabled", "kind": kind, "reason": repr(exc)[:200]})
+                )
+                _SHARED[kind] = AccountQuota(kind, store=None, cap=DEFAULT_CAPS[kind])
+        return _SHARED[kind]
