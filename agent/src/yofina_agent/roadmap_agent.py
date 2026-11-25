@@ -146,6 +146,9 @@ _REF_FIELDS: tuple[str, ...] = (
     "proposed_monthly_vnd",
     "current_monthly_vnd",
 )
+#: trường tham chiếu là phần hũ CẦN THÊM (hũ nhận tiền) và phần hũ BỚT ĐI (hũ nguồn) trong phương án tối ưu
+_NEED_FIELDS = frozenset({"proposed_increase", "floor_gap_vnd"})
+_SOURCE_FIELDS = frozenset({"proposed_decrease"})
 _ORDINAL_RE = re.compile(
     r"^\s*(?:(?:giai\s+đoạn|bước|phase|step)\s+)?\d{1,2}\s*[:.)\-–—](?!\d)\s*", re.IGNORECASE
 )
@@ -495,11 +498,14 @@ def _set_allocation(compact: dict[str, Any], plan: AllocationPlanData) -> None:
         code, balance = jar["code"], int(jar["balance_vnd"])
         if balance <= 0:
             continue
+        # chỉ tham chiếu có nghĩa với hũ này làm nguồn: phần cần thêm của hũ nhận (tăng, phần thiếu sàn) hoặc phần giảm của chính hũ
+        # nguồn; cùng luật `_amount_issue` kiểm lúc dựng bước
         fitting = [
             f"{ref_jar}.{name}"
             for ref_jar, fields in refs.items()
             for name in fields
-            if _number_ref(AmountRef(jar_code=ref_jar, field=name), lines[ref_jar]) <= balance  # type: ignore[arg-type]
+            if name in (_SOURCE_FIELDS if ref_jar == code else _NEED_FIELDS)
+            and _number_ref(AmountRef(jar_code=ref_jar, field=name), lines[ref_jar]) <= balance  # type: ignore[arg-type]
         ]
         if fitting:
             sources[code] = {"max_text": jar["balance_text"], "refs": fitting}
@@ -704,6 +710,66 @@ def _step_metrics(
     ]
 
 
+def _need(line: AllocationLine | None) -> int:
+    """Phần hũ cần thêm trong kỳ theo phương án tối ưu: phần đề xuất tăng so với hiện tại, hoặc phần còn thiếu so với sàn, lấy số lớn."""
+    if line is None:
+        return 0
+    return max(line.proposed_monthly_vnd - line.current_monthly_vnd, line.floor_gap_vnd, 0)
+
+
+def _amount_issue(
+    outline: StepOutline,
+    ref: AmountRef,
+    amount: int,
+    lines: dict[str, AllocationLine],
+    balances: dict[str, B.JarBalance],
+    immediate: bool,
+) -> tuple[str, str] | None:
+    """Kiểm số tiền của bước theo dữ liệu thật, bằng mã, ở khâu nhận dàn ý (số là số model CHỌN qua `amount_ref`). Số tiền của bước
+    là khoản chuyển hoặc khoản thay đổi của bước đó, nên:
+
+    - bước chuyển tiền không vượt phần hũ nhận cần thêm trong kỳ (`_need`), và ở giai đoạn sau kỳ lương không vượt khoản hũ nguồn nhận
+      mỗi tháng theo tỷ lệ chia hiện tại (bước làm ngay đã bị luật `source_jar_covers` chặn theo số dư hiện có);
+    - bước đổi tỷ lệ chia tăng phần của một hũ không vượt phần hũ đó cần thêm (mức chia mới không phải số tiền của bước), bước giảm phần
+      chia hay giảm chi không vượt khoản hũ đó đang nhận mỗi tháng.
+
+    Trả (mã ổn định cho log, phản hồi cho vòng sửa), None khi hợp lệ."""
+
+    def name(code: str) -> str:
+        jar = balances.get(code)
+        return _clean_text(jar.name) if jar is not None else code
+
+    source, target = outline.jar_code, outline.to_jar_code
+    if outline.kind in _MONEY_MOVING_KINDS and source and target and source != target:
+        need = _need(lines.get(target))
+        if amount > need:
+            return "amount_over_need", (
+                f"Số tiền {format_vnd(amount)} lớn hơn phần hũ {name(target)} cần thêm trong kỳ ({format_vnd(need)})."
+                " Chọn tham chiếu là phần cần thêm của hũ nhận, hoặc chọn hũ nhận khác."
+            )
+        src = lines.get(source)
+        if not immediate and src is not None and amount > src.current_monthly_vnd:
+            return "amount_over_source", (
+                f"Số tiền {format_vnd(amount)} mỗi tháng lớn hơn khoản hũ {name(source)} nhận mỗi tháng"
+                f" ({format_vnd(src.current_monthly_vnd)}). Chọn hũ nguồn khác hoặc tham chiếu nhỏ hơn."
+            )
+        return None
+    line = lines[ref.jar_code]
+    if outline.kind == "adjust_split" and ref.field not in _SOURCE_FIELDS:
+        need = _need(line)
+        if amount > need:
+            return "amount_over_need", (
+                f"Số tiền {format_vnd(amount)} lớn hơn phần hũ {name(ref.jar_code)} cần thêm mỗi tháng ({format_vnd(need)});"
+                " mức chia mới không phải số tiền của bước. Dùng proposed_increase của hũ được tăng phần chia."
+            )
+    elif outline.kind in ("adjust_split", "cut_spending") and amount > line.current_monthly_vnd:
+        return "amount_over_source", (
+            f"Số tiền {format_vnd(amount)} lớn hơn khoản hũ {name(ref.jar_code)} đang nhận mỗi tháng"
+            f" ({format_vnd(line.current_monthly_vnd)}). Dùng proposed_decrease của hũ đó."
+        )
+    return None
+
+
 def _build_step(
     outline: StepOutline,
     balances: list[B.JarBalance],
@@ -733,9 +799,10 @@ def _build_step(
                 "amount_not_positive",
                 f"Trường {ref.field} của hũ {ref.jar_code} không dương trong phương án tối ưu. Đổi tham chiếu hoặc bỏ số tiền.",
             )
-        metrics = _step_metrics(
-            outline, ref, line, amount, immediate, {item.code: item for item in balances}
-        )
+        by_code = {item.code: item for item in balances}
+        if (issue := _amount_issue(outline, ref, amount, lines, by_code, immediate)) is not None:
+            raise _StepInvalid(*issue)
+        metrics = _step_metrics(outline, ref, line, amount, immediate, by_code)
     action = _build_action(outline, amount, phase_end, today, balances, lines)
     step = RoadmapDraftStep(
         step_id=outline.step_id,
@@ -860,9 +927,20 @@ def _add_month(day: date) -> date:
     return payday_in_month(day.day, year, month + 1)
 
 
-def _phase_bounds(start: date, end: date, count: int) -> list[tuple[date, date]]:
-    """Ngày của từng giai đoạn theo thứ tự thời gian: giai đoạn đầu là tháng đầu tiên (việc làm ngay, trước và quanh kỳ lương kế),
-    các giai đoạn sau chia đều phần còn lại tới cuối kỳ. Kỳ quá ngắn thì chia đều cả kỳ."""
+def _phase_bounds(today: date, start: date, end: date, count: int) -> list[tuple[date, date]]:
+    """Ngày của từng giai đoạn theo thứ tự thời gian, đúng khuôn của prompt: kỳ phân bổ bắt đầu ở ngày lương kế (`start`, theo hồ sơ),
+    nên khi hôm nay còn trước ngày đó, giai đoạn đầu là từ hôm nay tới ngày lương kế (việc làm ngay, lấy từ số dư hiện có) và các giai
+    đoạn sau nằm trong kỳ phân bổ. Không có khoảng trước kỳ lương (kỳ bắt đầu hôm nay) thì chia kỳ như `_period_bounds`."""
+    if today < start:
+        if count == 1:
+            return [(today, end)]  # một giai đoạn: bắt đầu ngay, nên bước chuyển tiền vẫn bị chặn bởi số dư hiện có
+        return [(today, start), *_period_bounds(start, end, count - 1)]
+    return _period_bounds(start, end, count)
+
+
+def _period_bounds(start: date, end: date, count: int) -> list[tuple[date, date]]:
+    """Chia kỳ phân bổ: giai đoạn đầu là tháng đầu tiên, các giai đoạn sau chia đều phần còn lại tới cuối kỳ. Kỳ quá ngắn thì chia
+    đều cả kỳ."""
     first_end = _add_month(start)
     if count <= 1 or first_end >= end:
         days = (end - start).days
@@ -923,7 +1001,7 @@ async def _verify(
     def options(item: StepOutline | RoadmapDraftStep, phase_start: date) -> str:
         """Tham chiếu tiền dùng được cho bước này; bước chuyển tiền của giai đoạn đầu (làm ngay) bị chặn bởi số dư hũ nguồn."""
         cap = None
-        if item.kind in _MONEY_MOVING_KINDS and item.jar_code and phase_start <= start:
+        if item.kind in _MONEY_MOVING_KINDS and item.jar_code and phase_start <= today:
             cap = balance_of.get(item.jar_code)
         return _ref_options((item.jar_code, item.to_jar_code), lines, cap)
 
@@ -948,7 +1026,7 @@ async def _verify(
             candidates = phase.steps[:step_limit]
             active_phases.append((phase, candidates))
             step_limit -= len(candidates)
-    bounds = _phase_bounds(start, horizon_end, len(active_phases)) if active_phases else []
+    bounds = _phase_bounds(today, start, horizon_end, len(active_phases)) if active_phases else []
     # Bước đã dựng của mọi giai đoạn được kiểm suitability CÙNG LÚC (một asyncio.gather cho cả vòng): độ trễ một vòng là độ trễ của
     # lượt check_suitability chậm nhất, không cộng dồn theo số bước hay số giai đoạn.
     pending: list[tuple[int, Awaitable[Any]]] = []
@@ -1019,7 +1097,7 @@ async def _verify(
                     lines,
                     (phase_start, phase_end),
                     today,
-                    immediate=phase_start <= start,
+                    immediate=phase_start <= today,
                 )
             except ValueError as exc:
                 if isinstance(exc, ValidationError):
@@ -1029,7 +1107,7 @@ async def _verify(
                 else:
                     code = exc.code if isinstance(exc, _StepInvalid) else "value_error"
                     message = str(exc)
-                if code in ("amount_not_positive", "amount_ref_jar"):
+                if code in ("amount_not_positive", "amount_ref_jar", "amount_over_need", "amount_over_source"):
                     message += options(item, phase_start)
                 issues.append(
                     RepairIssue(step_id=item.step_id, rule_id="step_invalid", message=message)

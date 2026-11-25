@@ -469,6 +469,8 @@ def test_vy_nap_tep_mau_canh_5_qua_duong_chinh_do_phu_tang_dung_cong_thuc(env):
     # dòng tiền vào của tệp là thu nhập freelance đã có trong sổ cái (ngoài ví): chỉ chốt dòng chi, bỏ mọi dòng khác
     incomes = [r for r in rows if r["kind"] == "income"]
     assert len(incomes) == len([t for t in generate_out_of_wallet("vy", anchor=ANCHOR, data=data).source("statement").rows if t.kind == "income"])
+    # README của data/personas: hai dòng này là "trùng" (đối tác "STUDIO NANG…" của sao kê là "Studio Nắng (freelance thiết kế)")
+    assert {r["review_status"] for r in incomes} == {"duplicate"}
     open_rows = [r for r in rows if r["review_status"] != "duplicate"]
     take = [r for r in open_rows if r["kind"] == "expense" and "suggested_jar" in r]
     skip = [r for r in open_rows if r not in take]

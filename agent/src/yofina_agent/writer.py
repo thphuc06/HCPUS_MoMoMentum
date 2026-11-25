@@ -15,7 +15,6 @@ from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
 from yofina_agent.compact import allowed_amounts, has_untrusted_text, without_untrusted_text
-from yofina_agent.metered_model import MeteredModel
 from yofina_agent.textutil import ungrounded_amounts
 from yofina_core.llm import LlmGateway, TurnScope
 
@@ -168,7 +167,11 @@ async def write_stream(
     memory: str = "",
 ) -> AsyncIterator[str]:
     """Stream các mẩu chữ của câu trả lời. Ném `ModelBudgetExceeded`/`AllModelsFailed`... khi model không gọi được."""
-    from strands import Agent  # import muộn: nặng, và chỉ cần khi thật sự viết chữ
+    # import muộn: nặng, và chỉ cần khi thật sự viết chữ; bộ kiểm số của module (`has_ungrounded_numbers`, dùng cả ở Roadmap agent
+    # của Lambda sinh lại) không kéo Strands theo
+    from strands import Agent
+
+    from yofina_agent.metered_model import MeteredModel
 
     agent = Agent(
         model=MeteredModel(gateway, "small", scope=scope, max_tokens=max_tokens),

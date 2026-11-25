@@ -12,6 +12,7 @@ from typing import Any
 
 from yofina_agent.textutil import extract_amounts
 from yofina_core.money import format_vnd, to_vnd
+from yofina_core.wallet import OBLIGATION_KIND_LABELS
 
 #: Trường chữ chép nguyên từ giao dịch hoặc từ tệp người dùng nạp (đối tác, nội dung chuyển khoản, ghi chú), đã che PII nhưng không bỏ
 #: chỉ dẫn: dữ liệu KHÔNG tin cậy. Prompt người viết đánh dấu chúng (`writer.build_writer_prompt`) và số trong chúng không bao giờ là
@@ -402,7 +403,8 @@ def compact_obligations(payload: Mapping[str, Any]) -> dict[str, Any]:
     rows = [
         {
             "name": o["name"],
-            "kind": o["kind"],
+            # nhãn tiếng Việt của bảng chung thay cho mã loại: model chép chữ có trong ngữ cảnh, nên mã thô lọt ra câu trả lời (#19)
+            "kind_label": OBLIGATION_KIND_LABELS.get(o["kind"], "Nghĩa vụ"),
             "amount_vnd": to_vnd(o["amount_vnd"]),
             "amount_text": format_vnd(o["amount_vnd"]),
             "due_date_text": _dm(o["due_date"]),

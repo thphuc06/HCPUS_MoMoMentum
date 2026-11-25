@@ -139,3 +139,16 @@ def test_moi_loai_giao_dich_mac_dinh_hu_du_lich_vao_hu_goal_cua_vi_demo_qua_anh_
         assert wallet.transaction_jar("du_lich", (*_DEMO_WALLET, "du_lich"), tx_type=tx_type) == "du_lich"
     # không có hũ nào nhận: hỏi hũ
     assert wallet.transaction_jar("du_lich", ("an_uong", "du_phong"), tx_type="travel") is None
+
+
+def test_obligation_kind_labels_match_frontend():
+    """Nhãn loại nghĩa vụ phía server là CÙNG bảng `KIND_LABEL` của frontend (một bảng, hai ngôn ngữ): đủ mọi loại, chữ trùng."""
+    import re
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[3] / "frontend/src/features/obligations/params.ts").read_text(encoding="utf-8")
+    body = re.search(r"export const KIND_LABEL[^{]*\{(?P<body>[^}]*)\}", source)
+    assert body is not None
+    frontend = dict(re.findall(r"(\w+):\s*'([^']*)'", body["body"]))
+    assert frontend == wallet.OBLIGATION_KIND_LABELS
+    assert set(wallet.OBLIGATION_KIND_LABELS) == set(wallet.OBLIGATION_KINDS)

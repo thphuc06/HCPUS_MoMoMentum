@@ -194,10 +194,11 @@ def test_save_grounded_roadmap_and_report_stages():
     assert stored["goals"] == data["goals"]
     assert stored["alternatives"] == data["alternatives"]
     first, second, third = stored["phases"]
-    # giai đoạn đầu là tháng đầu (việc làm ngay), các giai đoạn sau chia đều phần còn lại, nối liền và theo thứ tự thời gian
-    assert first["start_date"] == data["period_start"] == "2026-12-05"
-    assert first["end_date"] == "2027-01-05" == second["start_date"]
-    assert second["end_date"] == third["start_date"]
+    # giai đoạn đầu là từ hôm nay tới ngày lương kế (việc làm ngay, trước kỳ lương, #19); kỳ phân bổ bắt đầu ở ngày lương kế: giai
+    # đoạn kế là tháng đầu của kỳ, giai đoạn cuối là phần còn lại; nối liền và theo thứ tự thời gian
+    assert first["start_date"] == "2026-11-21" == fixture("get_jar_balances.ok_goals.json")["app_date"]
+    assert first["end_date"] == data["period_start"] == "2026-12-05" == second["start_date"]
+    assert second["end_date"] == "2027-01-05" == third["start_date"]
     assert third["end_date"] == "2027-04-05"  # horizon trả về là bốn tháng
     move, nudge = first["steps"][0], second["steps"][0]
     line = next(line for line in data["lines"] if line["jar"]["code"] == "du_phong")
@@ -374,6 +375,45 @@ def test_parallel_context_and_pii_filtered_before_model():
     assert "Nguyễn Văn An" not in data
     assert "Liên hệ người nhận" not in data
     assert obligations["data"]["obligations"][0]["id"] not in data
+
+
+def test_nghia_vu_trong_ngu_canh_mang_nhan_tieng_viet_khong_mang_ma_loai():
+    # #19: bản lộ trình sinh lại ở cảnh 4 ghi "Subscription 300.000 ₫ đến hạn 23/11" vì nghĩa vụ trong ngữ cảnh chỉ có mã loại (tên bị
+    # bỏ vì là chữ không tin cậy): model chép chữ có trong ngữ cảnh. Nay mỗi nghĩa vụ mang nhãn của bảng chung, không còn mã.
+    from yofina_core.wallet import OBLIGATION_KIND_LABELS
+
+    tools = scripted_tools()
+    _, client, _ = build(tools, outline(review()))
+    seen = prompt(client)["context"]["obligations"]
+    kinds = [o["kind"] for o in fixture("get_obligations.ok.json")["data"]["obligations"]]
+    assert [o["kind_label"] for o in seen] == [OBLIGATION_KIND_LABELS[k] for k in kinds]
+    assert all("kind" not in o and "name" not in o for o in seen)
+    assert not set(kinds) & set(json.dumps(seen, ensure_ascii=False).replace('"', " ").split())
+
+
+def test_giai_doan_dau_la_tu_hom_nay_toi_ngay_luong_ke():
+    # Kỳ phân bổ bắt đầu ở ngày lương kế (05/12, hôm nay 21/11): giai đoạn "việc làm ngay, trước kỳ lương kế" phải nằm TRƯỚC ngày đó,
+    # không phải tháng đầu của kỳ (bản cảnh 4 trên app ghi 05/12–05/01 cho giai đoạn "Tuần này"). Bước chuyển tiền của nó lấy từ số
+    # dư hiện có nên đề xuất kiểm có start_date là hôm nay (luật source_jar_covers so với số dư).
+    tools = scripted_tools(checks=("ok", "ok", "ok"))
+    draft = outline(step())
+    draft["phases"] += [
+        {"phase_id": "sau_luong", "title": "Sau kỳ lương", "steps": [review(step_id="xem_sau_luong")]},
+        {"phase_id": "ve_dich", "title": "Về đích", "steps": [review(step_id="xem_ve_dich", jar_code="du_phong")]},
+    ]
+    result, _, _ = build(tools, draft)
+    assert result.outcome.ok
+    first, second, third = args_for(tools, "save_roadmap")[0]["phases"]
+    payday = fixture("optimize_allocation.ok.json")["data"]["period_start"]
+    assert (first["start_date"], first["end_date"]) == ("2026-11-21", payday)
+    assert second["start_date"] == payday and third["end_date"] > third["start_date"] == second["end_date"]
+    for phase in (first, second, third):
+        for item in phase["steps"]:
+            if "due_date" in item:
+                assert phase["start_date"] <= item["due_date"] <= phase["end_date"]
+    move = args_for(tools, "check_suitability")[0]["proposal"]
+    assert move["funding_source"] == "jar" and move["start_date"] == "2026-11-21"
+    assert first["steps"][0]["metrics"][0]["before"] == "760.000 ₫"  # số dư hiện có của hũ nguồn
 
 
 def test_model_cannot_send_money_as_a_structured_field():
@@ -1052,7 +1092,7 @@ def test_agent_proposal_matches_ledger_save_check_in_later_phase():
         step(action=None),
         # pay_obligation một hũ ("giữ tiền hũ Nghĩa vụ") nay là bước mơ hồ: xem test_buoc_mo_ho_vao_vong_sua_khong_ton_luot_kiem
         step(kind="pay_obligation", jar_code="an_uong", to_jar_code="nghia_vu", action=None,
-             amount_ref={"jar_code": "nghia_vu", "field": "floor_vnd"}),
+             amount_ref={"jar_code": "nghia_vu", "field": "proposed_increase"}),
         step(kind="cut_spending", jar_code="giai_tri", to_jar_code="du_phong",
              amount_ref={"jar_code": "giai_tri", "field": "proposed_decrease"}),
         review(),
@@ -1284,9 +1324,6 @@ def test_metric_chuyen_ngay_la_so_du_hai_hu_khop_so_tien_buoc():
             {"jar_code": "giai_tri", "field": "proposed_decrease"},
             [{"label": "Phân bổ hằng tháng hũ Giải trí", "before": "1.200.000 ₫", "after": "600.000 ₫"}],
         ),
-        # mức hiện tại hay sàn không có "trước → sau" nào khớp số tiền bước (Runtime v20: Dự phòng 900.000 → 900.000 ₫)
-        ({"jar_code": "du_phong", "field": "current_monthly_vnd"}, None),
-        ({"jar_code": "du_phong", "field": "floor_vnd"}, None),
     ],
 )  # fmt: skip
 def test_metric_buoc_sau_ky_luong_noi_dung_hu_va_dung_so(ref, expected):
@@ -1300,19 +1337,73 @@ def test_metric_buoc_sau_ky_luong_noi_dung_hu_va_dung_so(ref, expected):
         assert abs(after - before) == later["amount_vnd"]
 
 
-def test_metric_adjust_split_muc_de_xuat_la_so_tien_buoc():
+def test_metric_adjust_split_phan_tang_la_so_tien_buoc():
+    # số tiền của bước đổi tỷ lệ chia là phần THAY ĐỔI của hũ (120.000 ₫), mức chia mới (1.320.000 ₫) là "sau" của metric
     tools = scripted_tools(checks=("ok", "ok"))
     split = review(
         step_id="tang_chia", kind="adjust_split", jar_code="du_lich", action=None,
-        amount_ref={"jar_code": "du_lich", "field": "proposed_monthly_vnd"},
+        amount_ref={"jar_code": "du_lich", "field": "proposed_increase"},
     )  # fmt: skip
     result, _, _ = build(tools, later_phase(split))
     assert result.outcome.ok
     later = args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]
-    assert later["amount_vnd"] == 1_320_000
+    assert later["amount_vnd"] == 120_000
     assert later["metrics"] == [
         {"label": "Phân bổ hằng tháng hũ Du lịch", "before": "1.200.000 ₫", "after": "1.320.000 ₫"}
     ]
+
+
+@pytest.mark.parametrize(
+    ("bad", "fixed", "amount"),
+    [
+        # bước đổi tỷ lệ chia lấy MỨC chia mới làm số tiền (cảnh 4 trên app: 5.358.067 ₫ "dồn" vào Ăn uống, #19): vượt phần hũ cần thêm
+        (
+            review(step_id="tang_chia", kind="adjust_split", jar_code="du_lich", action=None,
+                   amount_ref={"jar_code": "du_lich", "field": "proposed_monthly_vnd"}),
+            review(step_id="tang_chia", kind="adjust_split", jar_code="du_lich", action=None,
+                   amount_ref={"jar_code": "du_lich", "field": "proposed_increase"}),
+            120_000,
+        ),
+        # bước chuyển tiền sau kỳ lương theo mức chia mới hay mức hiện tại của hũ nhận: không phải khoản hũ nhận cần thêm
+        (step(amount_ref={"jar_code": "du_phong", "field": "proposed_monthly_vnd"}), step(), 600_000),
+        (step(amount_ref={"jar_code": "du_phong", "field": "current_monthly_vnd"}), step(), 600_000),
+        # phần GIẢM của hũ nhận dùng làm khoản chuyển vào nó (Đi lại được đề xuất giảm, không cần thêm)
+        (
+            step(to_jar_code="di_lai", amount_ref={"jar_code": "di_lai", "field": "proposed_decrease"}),
+            step(),
+            600_000,
+        ),
+    ],
+)  # fmt: skip
+def test_so_tien_buoc_vuot_phan_hu_nhan_can_them_vao_vong_sua(bad, fixed, amount, caplog):
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    tools = scripted_tools(checks=("ok", "ok", "ok"))
+    result, client, scope = build(tools, later_phase(bad), later_phase(fixed))
+    assert result.outcome.ok and scope.calls == 2
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert feedback["rule_id"] == "step_invalid" and "cần thêm" in feedback["message"]
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected["detail"] == "amount_over_need"
+    later = args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]
+    assert later["amount_vnd"] == amount
+
+
+def test_buoc_chuyen_sau_ky_luong_khong_vuot_khoan_hu_nguon_nhan_moi_thang(caplog):
+    # sau kỳ lương khoản hằng tháng lấy từ phần lương chảy vào hũ nguồn: hũ nguồn Đi lại chỉ nhận 300.000 ₫ mỗi tháng, ít hơn khoản
+    # 600.000 ₫ Dự phòng cần thêm, nên bước bị đưa vào vòng sửa (luật source_jar_covers chỉ so với cả thu nhập tháng)
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    allocation = fixture("optimize_allocation.ok.json")
+    for line in allocation["data"]["lines"]:
+        if line["jar"]["code"] == "di_lai":
+            line["current_monthly_vnd"] = 300_000  # nhận ít hơn phần Dự phòng cần thêm (600.000 ₫)
+    tools = scripted_tools(allocation=allocation, checks=("ok", "ok", "ok"))
+    bad = step(jar_code="di_lai", action=None)
+    result, client, _ = build(tools, later_phase(bad), later_phase(step()))
+    assert result.outcome.ok
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert "nhận mỗi tháng" in feedback["message"]
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected["detail"] == "amount_over_source"
 
 
 def test_log_thoi_luong_tung_chang(caplog):
@@ -1462,13 +1553,15 @@ def test_nguon_giai_doan_dau_va_han_muc_tieu_dang_nguoi_doc():
     assert "31/03/2027" in prompt(client)["reason_numbers"]
 
 
-def test_metric_buoc_chuyen_sau_ky_luong_theo_muc_chia_moi_thi_bo():
+def test_metric_buoc_chuyen_sau_ky_luong_theo_phan_tang_cua_hu_nhan():
     tools = scripted_tools(checks=("ok", "ok"))
-    move = step(amount_ref={"jar_code": "du_phong", "field": "proposed_monthly_vnd"})
-    result, _, _ = build(tools, later_phase(move))
+    result, _, _ = build(tools, later_phase(step()))
     assert result.outcome.ok
     later = args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]
-    assert later["amount_vnd"] == 1_800_000 and "metrics" not in later
+    assert later["amount_vnd"] == 600_000
+    assert later["metrics"] == [
+        {"label": "Phân bổ hằng tháng hũ Dự phòng", "before": "1.200.000 ₫", "after": "1.800.000 ₫"}
+    ]
 
 
 @pytest.mark.parametrize(

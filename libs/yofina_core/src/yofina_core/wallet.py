@@ -120,6 +120,16 @@ TX_TYPE_BNPL_PURCHASE = "bnpl_purchase"
 # --- nghĩa vụ, hạn mức, lương ------------------------------------------------------------------
 OBLIGATION_KINDS = ("bnpl", "loan", "rent", "bill", "subscription")
 DECLARABLE_OBLIGATION_KINDS = ("loan", "rent", "bill", "subscription")  # bnpl chỉ tự sinh
+#: Nhãn tiếng Việt của loại nghĩa vụ phía server, CÙNG bảng `KIND_LABEL` của frontend (`frontend/src/features/obligations/params.ts`;
+#: test `test_obligation_kind_labels_match_frontend` giữ hai nơi trùng nhau). Chữ đưa cho model hay hiện cho người dùng dùng nhãn này,
+#: không dùng mã loại.
+OBLIGATION_KIND_LABELS: dict[str, str] = {
+    "rent": "Tiền trọ",
+    "bill": "Hóa đơn",
+    "subscription": "Thuê bao",
+    "loan": "Khoản vay",
+    "bnpl": "Trả sau",
+}
 OBLIGATION_CYCLES = ("once", "weekly", "monthly", "yearly")
 OBLIGATION_STATUSES = ("active", "paid", "cancelled")
 OBLIGATION_SOURCES = ("declared", "bnpl_auto")
