@@ -11,6 +11,7 @@ import pytest
 from memory_repo import MemoryRepo
 from pipeline_helpers import NOW, FakeDynamo, context_rows, make_settings
 
+from yofina_core.db import DataApi, DataApiSettings
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_forecast.batch import (
     DatabaseUnavailable,
@@ -20,6 +21,7 @@ from yofina_forecast.batch import (
 )
 from yofina_forecast.events import ForecastEventPublisher
 from yofina_forecast.idempotency import Claim, IdempotencyStore
+from yofina_forecast.repo import ForecastRepo
 from yofina_forecast.runner import Pipeline
 from yofina_forecast.tool import error_result, get_forecast, handle_gateway, tool_name
 
@@ -77,6 +79,39 @@ def test_batch_loi_nem_ten_lop_on_dinh_de_step_functions_retry():
         handle_batch({"op": "run_user", "user_id": "u", "trigger": "khac"}, p2)
     with pytest.raises(ForecastFailed):
         handle_batch({"op": "la"}, p2)
+
+
+class _ResumingRds:
+    """Client rds-data giả: Aurora đang ngủ (min 0 ACU), lệnh nào cũng gặp `DatabaseResumingException`."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def execute_statement(self, **_kw: Any) -> dict[str, Any]:
+        self.calls += 1
+        exc = Exception("DatabaseResumingException: Aurora đang dậy")
+        exc.response = {"Error": {"Code": "DatabaseResumingException"}}  # type: ignore[attr-defined]
+        raise exc
+
+
+def test_list_users_aurora_dang_ngu_nem_database_unavailable_de_step_functions_retry():
+    # #14: đêm 24/11 bước ListUsers hỏng với `YofinaError` nên Retry theo tên `DatabaseUnavailable` không bắt được
+    t = [0.0]
+
+    def sleep(s: float) -> None:
+        t[0] += s
+
+    rds = _ResumingRds()
+    db = DataApi(
+        DataApiSettings("arn:cluster", "arn:secret", "db", resume_max_wait_seconds=6, resume_sleep_seconds=2),
+        rds,  # type: ignore[arg-type]
+        sleep=sleep,
+        monotonic=lambda: t[0],
+    )
+    p = Pipeline(ForecastRepo(db), make_settings(), None, clock=lambda: NOW)
+    with pytest.raises(DatabaseUnavailable):
+        handle_batch({"op": "list_users"}, p)
+    assert rds.calls > 1  # client đã tự chờ trong ngân sách của nó trước khi nhường cho Step Functions
 
 
 def test_batch_summarize_co_loi_thi_nem_de_execution_that_bai():

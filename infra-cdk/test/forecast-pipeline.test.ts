@@ -121,4 +121,32 @@ describe('ForecastPipeline (phase 5: model nhỏ cho batch)', () => {
     const errors = Annotations.fromStack(stack).findError('*', Match.stringLikeRegexp('khong_co'));
     assert.equal(errors.length, 1);
   });
+
+  /** Định nghĩa ASL của `yofina-nightly` (token CloudFormation trong chuỗi thay bằng `TOKEN`). */
+  function nightlyDefinition(template: Template): any {
+    const sms = template.findResources('AWS::StepFunctions::StateMachine', {
+      Properties: { StateMachineName: 'yofina-nightly' },
+    }) as Record<string, Res>;
+    const def = Object.values(sms)[0]?.Properties.DefinitionString;
+    assert.ok(def, 'không có state machine yofina-nightly');
+    const parts: unknown[] = def['Fn::Join'] ? def['Fn::Join'][1] : [def];
+    return JSON.parse(parts.map((x) => (typeof x === 'string' ? x : 'TOKEN')).join(''));
+  }
+
+  it('nightly: ListUsers thử lại DatabaseUnavailable có giãn nhịp như RunUser (#14: Aurora đang ngủ lúc 02:00)', () => {
+    const def = nightlyDefinition(build({}).template);
+    const retry = def.States.ListUsers.Retry;
+    assert.ok(Array.isArray(retry), 'ListUsers không có Retry');
+    const db = retry.find((r: any) => r.ErrorEquals.includes('DatabaseUnavailable'));
+    assert.ok(db, 'ListUsers không retry DatabaseUnavailable');
+    assert.deepEqual(
+      { IntervalSeconds: db.IntervalSeconds, MaxAttempts: db.MaxAttempts, BackoffRate: db.BackoffRate },
+      { IntervalSeconds: 10, MaxAttempts: 3, BackoffRate: 2 },
+    );
+    // tổng thời gian chờ giữa các lần: 10 + 20 + 40 = 70 s, chưa kể ngân sách chờ 20 s của client trong mỗi lần
+    const runUser = def.States.ForEachUser.ItemProcessor.States.RunUser.Retry.find((r: any) =>
+      r.ErrorEquals.includes('DatabaseUnavailable'),
+    );
+    assert.deepEqual(db, runUser);
+  });
 });

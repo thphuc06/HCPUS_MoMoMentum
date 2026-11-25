@@ -359,12 +359,22 @@ export class ForecastPipeline extends Construct {
     }).addAlarmAction(new cwActions.SnsAction(alertTopic));
 
     // --- batch đêm: liệt kê người dùng -> Map (giới hạn song song) -> yofina-forecast-batch -> tổng hợp ---------------------
+    // Aurora (min 0 ACU) gần như luôn ngủ lúc 02:00; AWS ghi dậy mất khoảng 15 s, ngủ quá 24 giờ thì 30 s trở lên. Client Data API
+    // đã tự chờ trong ngân sách dbResumeMaxWaitSeconds rồi Lambda ném DatabaseUnavailable: Step Functions thử lại có lùi
+    // (chờ 10 + 20 + 40 s). Dùng cho cả bước đầu ListUsers (#14: đêm 24/11 hỏng ở đây vì bước này chưa có retry).
+    const dbResumeRetry: sfn.RetryProps = {
+      errors: ['DatabaseUnavailable'],
+      interval: Duration.seconds(10),
+      maxAttempts: 3,
+      backoffRate: 2,
+    };
     const listUsers = new tasks.LambdaInvoke(this, 'ListUsers', {
       lambdaFunction: this.batch,
       payload: sfn.TaskInput.fromObject({ op: 'list_users' }),
       payloadResponseOnly: true,
       resultPath: '$.list',
     });
+    listUsers.addRetry(dbResumeRetry);
     const runUser = new tasks.LambdaInvoke(this, 'RunUser', {
       lambdaFunction: this.batch,
       payload: sfn.TaskInput.fromObject({
@@ -375,7 +385,7 @@ export class ForecastPipeline extends Construct {
       payloadResponseOnly: true,
     });
     // Aurora vừa tự dừng thì lần đầu có thể chưa sẵn sàng: thử lại có lùi; lỗi khác thì ghi nhận từng mục, không làm hỏng người khác.
-    runUser.addRetry({ errors: ['DatabaseUnavailable'], interval: Duration.seconds(10), maxAttempts: 3, backoffRate: 2 });
+    runUser.addRetry(dbResumeRetry);
     runUser.addCatch(
       new sfn.Pass(this, 'UserFailed', {
         parameters: { status: 'failed', 'user_id.$': '$.user_id', 'error.$': '$.error.Error' },
