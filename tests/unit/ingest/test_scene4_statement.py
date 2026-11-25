@@ -124,6 +124,9 @@ def test_sao_ke_canh_4_tu_vao_an_uong_khong_can_model_va_pelt_xac_nhan():
 
 @pytest.fixture(scope="module")
 def generator():
+    """Bộ sinh tệp, nạp từ đường dẫn. Bộ sinh thêm thư mục nguồn (có `pipelines/ingest`) vào `sys.path` khi nạp; trả `sys.path` và các
+    module của script về như cũ khi xong, vì `test_eval_ingest_scoring` cần `yofina_ingest` KHÔNG tìm thấy qua `sys.path`."""
+    saved_path, before = list(sys.path), set(sys.modules)
     path = REPO / "data" / "personas" / "samples" / "make_scene4_csv.py"
     spec = importlib.util.spec_from_file_location("make_scene4_csv", path)
     mod = importlib.util.module_from_spec(spec)
@@ -132,7 +135,10 @@ def generator():
         spec.loader.exec_module(mod)
         yield mod
     finally:
-        sys.modules.pop(spec.name, None)
+        sys.path[:] = saved_path
+        for name in ("make_scene4_csv", "measure_scene4_pelt", "inject_behavior_shift"):
+            if name not in before:
+                sys.modules.pop(name, None)
 
 
 def test_tep_da_commit_dung_la_dau_ra_cua_bo_sinh_va_ban_cong_khai_cung_noi_dung(generator):
