@@ -3,6 +3,7 @@
 
     uv run python scripts/measure_scene4_pelt.py                  # bảng hệ số -> phát hiện, hệ số tối thiểu, độ bền
     uv run python scripts/measure_scene4_pelt.py --json           # thêm bản JSON của các bảng
+    uv run python scripts/measure_scene4_pelt.py --factor 3.0     # thêm độ bền lệch ngày của hệ số 3,0 trên đủ 20 hạt chia khoản
 
 Cách dựng (đúng như `scripts/inject_behavior_shift.py`, dùng lại chính hàm `plan_shift` của nó, không chép mã):
 
@@ -226,9 +227,18 @@ def minimal_factor(
     merchants: Sequence[str] | None = None,
     factors: Sequence[float] | None = None,
     split_seeds: int = SPLIT_SEEDS,
+    drift_days: int = 0,
 ) -> float | None:
-    """Hệ số nhỏ nhất trên lưới mà PELT xác nhận với mọi hạt chia khoản, và mọi hệ số lớn hơn trên lưới cũng vậy. None nếu không có."""
-    rows = scan(history, params, factors or grid(), merchants=merchants, split_seeds=split_seeds)
+    """Hệ số nhỏ nhất trên lưới mà PELT xác nhận với mọi hạt chia khoản, và mọi hệ số lớn hơn trên lưới cũng vậy, khi ngày mô phỏng là
+    ngày neo + `drift_days`. None nếu không có."""
+    rows = scan(
+        history,
+        params,
+        factors or grid(),
+        merchants=merchants,
+        split_seeds=split_seeds,
+        drift_days=drift_days,
+    )
     best: float | None = None
     for r in reversed(rows):
         if r["confirmed"] != r["of"]:
@@ -273,6 +283,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument(
         "--persona-seeds", type=int, default=8, help="số seed persona khác để đo độ nhạy (1..N)"
     )
+    ap.add_argument(
+        "--factor",
+        type=float,
+        action="append",
+        default=[],
+        help=f"hệ số cần đo độ bền lệch ngày trên đủ {SPLIT_SEEDS} hạt chia khoản (lặp lại được)",
+    )
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
@@ -308,6 +325,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     for k, rows in drift.items():
         print(f"  lệch {k} ngày: " + "  ".join(f"{r['factor']}:{r['confirmed']}" for r in rows))
 
+    chosen = {k: scan(h, params, args.factor, drift_days=k) for k in range(0, args.drift_days + 1)}
+    if args.factor:
+        print(f"\nĐộ bền của hệ số đã chọn (số hạt chia khoản xác nhận trên {SPLIT_SEEDS}):")
+        for k, rows in chosen.items():
+            print(
+                f"  lệch {k} ngày: "
+                + "  ".join(f"{r['factor']}:{r['confirmed']}/{r['of']}" for r in rows)
+            )
+
     seeds = {}
     for s in range(1, args.persona_seeds + 1):
         hs = persona_history(anchor=args.anchor, seed=s)
@@ -330,6 +356,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "minimal_factor": fmin,
                     "exact_threshold": exact,
                     "drift": drift,
+                    "chosen_drift": chosen,
                     "persona_seeds": seeds,
                 },
                 ensure_ascii=False,

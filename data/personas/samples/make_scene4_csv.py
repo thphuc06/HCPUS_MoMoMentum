@@ -11,9 +11,11 @@ seed, cùng ngày neo nên sổ cái sau khi đặt lại giống hệt nhau, v�
 
 Mọi số ra từ dữ liệu persona và bộ đo, không số nào gõ tay:
 
-- Hệ số tăng chi: `minimal_factor` của `scripts/measure_scene4_pelt.py`, hệ số nhỏ nhất trên lưới 0,1 mà PELT (`yofina_ml.change` với
-  `change_defaults.json` hiện tại) xác nhận với mọi hạt chia khoản, trên lịch sử 120 ngày của `minh` ở ngày neo, với đúng các nơi chi
-  của tệp này.
+- Hệ số tăng chi: chủ dự án chốt `FACTOR` (3,0 lần) để tệp chịu được lệch một ngày giữa lúc đặt lại và lúc tải. Bộ sinh không lấy con
+  số đó mù quáng: dùng `minimal_factor` của `scripts/measure_scene4_pelt.py` trên lưới 0,1 từ `FACTOR` tới `FACTOR_MAX`, lấy hệ số
+  nhỏ nhất mà PELT (`yofina_ml.change` với `change_defaults.json` hiện tại) xác nhận với mọi hạt chia khoản ở mọi độ lệch ngày trong
+  `DRIFT_DAYS` (và mọi hệ số lớn hơn trên lưới cũng vậy), trên lịch sử 120 ngày của `minh` ở ngày neo, với đúng các nơi chi của tệp.
+  Ra đúng `FACTOR` nếu nó đã đủ bền; không có hệ số nào trong khoảng thì dừng.
 - Khoản chi: `plan_shift` của `scripts/inject_behavior_shift.py` (mức chi tuần cũ là trung vị các tuần trước hai tuần cuối, mỗi tuần
   thêm cho tới hệ số lần mức cũ, số khoản mỗi tuần điển hình của hũ, ngày trong đúng tuần đó).
 - Nơi chi: đối tác trong lịch sử hũ Ăn uống mà bộ phân loại của luồng nạp (`yofina_ingest.classify.classify_rows`) tự xếp vào Ăn uống
@@ -27,9 +29,9 @@ Mọi số ra từ dữ liệu persona và bộ đo, không số nào gõ tay:
 Định dạng: UTF-8 có BOM, CRLF, cột `STT`, `Ngày giao dịch` (dd/mm/yyyy), `Mã giao dịch`, `Đối tác`, `Số tiền ghi nợ`, `Số tiền ghi
 có` mà `pipelines/ingest/yofina_ingest/csvparse.py` nhận bằng bảng tên cột (không cần model ánh xạ cột). Mã giao dịch hư cấu, tất định.
 
-Tệp gắn với ngày neo (mặc định `2026-11-21`, như YOFINA_DEMO_ANCHOR_DATE). Ngày mô phỏng đi theo ngày thật kể từ lần đặt lại, nên phải
-đặt lại rồi tải trong cùng ngày; tải sau một ngày trở lên thì hai tuần lệch không còn trùng hai tuần cuối và PELT không xác nhận (bảng
-lệch ngày ở `docs/research/2026-11-26-canh4-pelt.md`).
+Tệp gắn với ngày neo (mặc định `2026-11-21`, như YOFINA_DEMO_ANCHOR_DATE). Ngày mô phỏng đi theo ngày thật kể từ lần đặt lại. Tệp chịu
+được tải trong ngày đặt lại hoặc trễ một ngày (bộ sinh kiểm lại PELT ở cả hai độ lệch trên chính các dòng của tệp); trễ hai ngày trở lên
+thì hai tuần lệch không còn trùng hai tuần cuối và PELT thường không xác nhận (bảng lệch ngày ở `docs/research/2026-11-26-canh4-pelt.md`).
 """
 
 from __future__ import annotations
@@ -65,6 +67,12 @@ OUT_DIRS = (HERE, REPO / "frontend" / "public" / "samples")
 HEADER = ["STT", "Ngày giao dịch", "Mã giao dịch", "Đối tác", "Số tiền ghi nợ", "Số tiền ghi có"]
 STEP_VND = 1000  # số tiền làm tròn tới nghìn, như bộ sinh persona
 WEEK = 7
+#: hệ số tăng chi chủ dự án chốt (issue #22): cao hơn hệ số tối thiểu ở lệch 0 ngày (2,1) để chịu được tải trễ một ngày
+FACTOR = 3.0
+#: hệ số lớn nhất được phép khi `FACTOR` chưa đủ bền
+FACTOR_MAX = 4.0
+#: các độ lệch ngày (ngày mô phỏng lúc tải trừ ngày neo) mà PELT phải xác nhận
+DRIFT_DAYS = (0, 1)
 
 
 def _load_measure():
@@ -205,11 +213,35 @@ class Output:
     merchants: tuple[str, ...]
     rows: tuple[Any, ...]
     baseline_weekly_vnd: int
-    detected: Any
+    detected: Any  # kết quả PELT khi tải trong ngày đặt lại
+    detected_by_drift: dict[int, Any]  # kết quả PELT theo từng độ lệch ngày của `DRIFT_DAYS`
 
 
-def generate(anchor: date) -> Output:
-    """Nội dung tệp ở ngày neo `anchor` cùng các số đã dùng (hệ số, nơi chi, mức cũ, kết quả PELT)."""
+def robust_factor(
+    history: Any,
+    params: Any,
+    merchants: Sequence[str],
+    *,
+    floor: float = FACTOR,
+    ceil: float = FACTOR_MAX,
+    drift_days: Sequence[int] = DRIFT_DAYS,
+) -> float | None:
+    """Hệ số nhỏ nhất trên lưới 0,1 trong [`floor`, `ceil`] mà PELT xác nhận với mọi hạt chia khoản ở mọi độ lệch trong `drift_days`,
+    và mọi hệ số lớn hơn trong khoảng cũng vậy. None nếu không có."""
+    m = _load_measure()
+    factors = m.grid(floor, ceil, m.GRID_STEP)
+    best = floor
+    for k in drift_days:
+        f = m.minimal_factor(history, params, merchants=merchants, factors=factors, drift_days=k)
+        if f is None:
+            return None
+        best = max(best, f)
+    return best
+
+
+def generate(anchor: date, *, factor: float = FACTOR) -> Output:
+    """Nội dung tệp ở ngày neo `anchor` cùng các số đã dùng (hệ số, nơi chi, mức cũ, kết quả PELT). `factor` là hệ số sàn (mặc định
+    `FACTOR`); hệ số dùng thật là `robust_factor` từ sàn đó."""
     from yofina_core.ingest import IngestSettings
     from yofina_ml import change as ch
 
@@ -220,50 +252,61 @@ def generate(anchor: date) -> Output:
     merchants = deterministic_merchants(PERSONA, anchor, history.merchants)
     if not merchants:
         raise SystemExit("không có nơi chi nào bộ phân loại tự xếp vào Ăn uống mà không cần model")
-    factor = m.minimal_factor(history, params, merchants=merchants)
-    if factor is None:
+    chosen = robust_factor(history, params, merchants, floor=factor)
+    if chosen is None:
         raise SystemExit(
-            "PELT không xác nhận ở hệ số nào trên lưới: xem scripts/measure_scene4_pelt.py"
+            f"PELT không xác nhận bền (lệch {', '.join(map(str, DRIFT_DAYS))} ngày, mọi hạt chia khoản) ở hệ số nào trong "
+            f"{factor}–{FACTOR_MAX}: xem scripts/measure_scene4_pelt.py"
         )
     rows = avoid_duplicates(
-        m.plan(history, factor, merchants=merchants),
+        m.plan(history, chosen, merchants=merchants),
         history.expenses,
         IngestSettings().ingest_dedupe_window_days,
         anchor - timedelta(days=1),
     )
-    detected = m.detect(history, rows, params)
-    if detected is None:  # tránh trùng sổ cái chỉ dịch 1.000 ₫ nên không được làm mất phát hiện
-        raise SystemExit("sau khi tránh trùng sổ cái, PELT không còn xác nhận")
+    by_drift = {k: m.detect(history, rows, params, drift_days=k) for k in DRIFT_DAYS}
+    lost = [k for k, hit in by_drift.items() if hit is None]
+    if lost:  # tránh trùng sổ cái chỉ dịch vài nghìn đồng nên không được làm mất phát hiện
+        raise SystemExit(
+            f"sau khi tránh trùng sổ cái, PELT không còn xác nhận ở lệch {', '.join(map(str, lost))} ngày"
+        )
     return Output(
         data=csv_bytes(rows, seed=f"scene4:{PERSONA}:{anchor.isoformat()}"),
-        factor=factor,
+        factor=chosen,
         merchants=tuple(merchants),
         rows=tuple(rows),
         baseline_weekly_vnd=sc.baseline_weekly(list(history.spends), anchor, m.SHIFT_WEEKS),
-        detected=detected,
+        detected=by_drift[0],
+        detected_by_drift=by_drift,
     )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--anchor", type=date.fromisoformat, default=None, help="ngày neo (YYYY-MM-DD)")
+    ap.add_argument(
+        "--factor",
+        type=float,
+        default=FACTOR,
+        help=f"hệ số sàn (mặc định {FACTOR}, tối đa {FACTOR_MAX})",
+    )
     ap.add_argument("--check", action="store_true", help="chỉ so với tệp đã có, không ghi")
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):  # console Windows mặc định cp1252
         stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
     anchor = args.anchor or _load_measure().DEFAULT_ANCHOR
-    out = generate(anchor)
+    out = generate(anchor, factor=args.factor)
     total = sum(r.amount_vnd for r in out.rows)
     days = sorted({r.day for r in out.rows})
     print(
         f"{NAME}: {len(out.rows)} dòng chi, tổng {total:,} ₫, {days[0]} .. {days[-1]}; hệ số {out.factor} lần mức chi tuần cũ "
         f"{out.baseline_weekly_vnd:,} ₫; nơi chi: {', '.join(out.merchants)}"
     )
-    hit = out.detected
-    print(
-        f"PELT: {hit.old_weekly_vnd:,} -> {hit.new_weekly_vnd:,} ₫ mỗi tuần, giữ {hit.weeks_held} tuần ({hit.direction})"
-    )
+    for k, hit in out.detected_by_drift.items():
+        print(
+            f"PELT lệch {k} ngày: {hit.old_weekly_vnd:,} -> {hit.new_weekly_vnd:,} ₫ mỗi tuần, giữ {hit.weeks_held} tuần ({hit.direction})"
+        )
     stale = []
     for folder in OUT_DIRS:
         path = folder / NAME
