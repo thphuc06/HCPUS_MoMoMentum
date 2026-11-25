@@ -908,7 +908,7 @@ def test_tong_quan_thu_hu_chi_tiet_va_dong_thoi_khong_vo_khi_co_du_bao(env, sche
     assert e.value.code == ErrorCode.JAR_NOT_FOUND
     for name, fn in (
         ("PayeesResponse", env.svc.payees_response),
-        ("TxTypesResponse", lambda u: env.svc.tx_types_response()),
+        ("TxTypesResponse", lambda u: env.svc.tx_types_response(u)),
         ("JarTemplatesResponse", lambda u: env.svc.jar_templates_response()),
         ("SalaryEventsResponse", env.svc.salary_events_response),
         ("CreditLineResponse", env.svc.credit_line_response),
@@ -1138,7 +1138,7 @@ def test_xem_truoc_do_server_tinh_gom_phi_tra_sau_va_khong_ghi_gi(env):
 
 def test_tx_types_co_co_chuyen_tien_cho_nguoi_khac(env):
     env.reset(MINH)
-    types = env.svc.tx_types_response()["tx_types"]
+    types = env.svc.tx_types_response(MINH)["tx_types"]
     flagged = [t["tx_type"] for t in types if t["is_person_transfer"]]
     assert flagged == ["transfer_person"] and all("is_person_transfer" in t for t in types)
 
