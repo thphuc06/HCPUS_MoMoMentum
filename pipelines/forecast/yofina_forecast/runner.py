@@ -86,7 +86,11 @@ class Pipeline:
 
     def load_context(self, user_id: str, now: datetime) -> Context:
         rows = self.repo.context(
-            user_id, now, self.settings.app_timezone, self.settings.history_window_days
+            user_id,
+            now,
+            self.settings.app_timezone,
+            self.settings.history_window_days,
+            self.settings.essential_jar_codes,
         )
         ctx = Context.from_rows(rows)
         if ctx is None:

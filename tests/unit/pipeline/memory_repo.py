@@ -23,7 +23,7 @@ class MemoryRepo:
         self.fail_save = False
 
     # --- đọc ---
-    def context(self, user_id, now, tz, window_days):
+    def context(self, user_id, now, tz, window_days, essential_categories=()):
         self.context_calls += 1
         return self.context_rows
 

@@ -32,7 +32,9 @@ DEFAULT_ALLOCATION_PARAMS = AllocationParams(
     stay_epsilon=1e-6,  # giữ phần tiền chưa ai cần ở trạng thái chưa phân bổ thay vì dồn bừa vào một hũ
 )
 #: hũ chi tiêu thiết yếu theo mẫu hũ mặc định (`db/seed/jar_templates.sql`: ăn uống, đi lại, hóa đơn); hũ người dùng tự thêm thì không
-#: thiết yếu. Đọc được từ `YOFINA_ESSENTIAL_JAR_CODES` (cách nhau bằng dấu phẩy).
+#: thiết yếu. Cũng là nhóm LOẠI giao dịch thiết yếu: loại có `tx_type_map.default_jar_code` thuộc tập này là chi thiết yếu khi nằm ở
+#: Chi hằng ngày hoặc ở hũ obligation (chuỗi `essential_spend` của ngữ cảnh dự báo; ví demo, ví ba hũ trả hóa đơn từ hũ Nghĩa vụ chung).
+#: Đọc được từ `YOFINA_ESSENTIAL_JAR_CODES` (cách nhau bằng dấu phẩy).
 DEFAULT_ESSENTIAL_JAR_CODES = ("an_uong", "di_lai", "hoa_don")
 
 

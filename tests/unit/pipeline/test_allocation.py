@@ -487,3 +487,28 @@ def test_mixed_daily_jar_floor_uses_only_essential_transaction_history():
         )
         daily = next(j for j in built.problem.jars if j.code == "chi_hang_ngay")
         assert daily.floor_vnd == daily_essential * P.month_days * P.essential_floor_percent / 100
+
+
+def test_obligation_jar_floor_adds_essential_bills_not_tied_to_an_obligation():
+    """Ví demo, ví ba hũ: hóa đơn vào hũ obligation. Sàn của hũ này = nghĩa vụ cứng đã khai + `essential_floor_percent` của chi
+    thiết yếu theo LOẠI giao dịch không gắn nghĩa vụ (chuỗi `essential_spend` của ngữ cảnh), như sàn hũ Hóa đơn của ví bảy hũ cũ."""
+    w = world()
+    engine = AllocationEngine(pipe(w))
+    gathered = engine.resilience.gather(USER, NOW)
+    floors = {}
+    for bills in (None, 0, 6_000):
+        ctx = replace(gathered.ctx, jars=tuple(
+            {**j, **({} if bills is None else {"essential_spend": [bills] * 30})}
+            if j["code"] == "nghia_vu" else j
+            for j in gathered.ctx.jars
+        ))
+        built = engine.build(
+            replace(gathered, ctx=ctx),
+            horizon_months=3, goal_args=[], shock_id=None, allow_relaxation=False,
+        )
+        nv = next(j for j in built.problem.jars if j.code == "nghia_vu")
+        assert nv.role == "obligation" and nv.floor_tier == "obligation"
+        floors[bills] = nv.floor_vnd
+    hard = 2_000_000 + 375_000 + round(1_000_000 / 3)
+    assert floors[None] == floors[0] == hard  # ví cũ (không có chuỗi) và ví không có hóa đơn: như trước
+    assert floors[6_000] == hard + round(6_000 * P.month_days * P.essential_floor_percent / 100)

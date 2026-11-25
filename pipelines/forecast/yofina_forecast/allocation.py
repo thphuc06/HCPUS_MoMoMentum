@@ -10,7 +10,9 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
   nghĩa vụ loại bị tăng giá tăng theo, khoản chi một lần trừ vào thu nhập: dựng lộ trình thích ứng sau `stress_test`.
 - **Mức hiện tại** của hũ = thu nhập x tỷ lệ chia đã khai.
 - **Sàn cứng** = nghĩa vụ phải trả bằng hũ đó (nghĩa vụ thiết yếu và nợ Trả sau, vay; quy về tháng) cộng, với hũ chi tiêu thiết yếu,
-  `essential_floor_percent` của mức chi trung bình hằng tháng. Nghĩa vụ ưu tiên hơn chi tiêu thiết yếu (mức phạt elastic khác nhau).
+  `essential_floor_percent` của mức chi trung bình hằng tháng. Chi hằng ngày và hũ obligation chỉ tính phần chi có LOẠI giao dịch thiết
+  yếu không gắn nghĩa vụ (`essential_spend`; hũ obligation: hóa đơn trả lẻ như nạp điện thoại). Nghĩa vụ ưu tiên hơn chi tiêu thiết
+  yếu (mức phạt elastic khác nhau).
 - **Mục tiêu** = hũ có `goal_vnd`; mức cần mỗi tháng = phần còn thiếu x ngày của tháng / số ngày còn lại tới hạn (không có hạn thì hết
   `horizon_months`). `goals` của tham số ghi đè trọng số, số tiền hoặc hạn của từng hũ (hũ không phải hũ tiết kiệm thì từ chối).
 - Hũ chi tiêu thiết yếu theo cấu hình (`essential_jar_codes`), hũ tiết kiệm không mục tiêu là hũ Dự phòng (giữ mức hiện tại, cắt thì
@@ -186,10 +188,11 @@ class AllocationEngine:
         jars = {j["code"]: j for j in g.jar_rows}
         codes = [j["code"] for j in g.jar_rows]
         spend = {j["code"]: j.get("spend") or [] for j in g.ctx.jars}
-        daily_spend = next(
-            (j.get("essential_spend") or [] for j in g.ctx.jars if j["code"] == DEFAULT_SPENDING_JAR),
-            [],
-        )
+        # chi thiết yếu theo LOẠI giao dịch (không gắn nghĩa vụ) của Chi hằng ngày và hũ obligation (`essential_spend`, repo.SQL_CONTEXT)
+        essential_of = {
+            j["code"]: j.get("essential_spend") or [] for j in g.ctx.jars if "essential_spend" in j
+        }
+        daily_spend = essential_of.get(DEFAULT_SPENDING_JAR, [])
         default_pay = resolve_obligation_pay_jar((j["code"], j["kind"]) for j in g.jar_rows)
 
         # nghĩa vụ quy về tháng (có cú sốc tăng giá thì loại bị tăng nặng hơn)
@@ -268,7 +271,12 @@ class AllocationEngine:
             pct = float(j["split_percent"])
             split[code] = pct
             goal = goals.get(code)
-            essential_spend = daily_spend if code == DEFAULT_SPENDING_JAR else spend.get(code, [])
+            if code == DEFAULT_SPENDING_JAR:
+                essential_spend = daily_spend
+            elif kind == "obligation":
+                essential_spend = essential_of.get(code, [])
+            else:
+                essential_spend = spend.get(code, [])
             monthly_spend = variable_monthly_spend(
                 essential_spend, s.resilience_window_days, month_days
             )
@@ -290,7 +298,8 @@ class AllocationEngine:
                 role = "discretionary"
             floor = oblig_floor[code]
             tier = "obligation" if floor > 0 else "essential"
-            if role == "essential":
+            # hũ chi tiêu thiết yếu, và hũ obligation với hóa đơn trả lẻ (không gắn nghĩa vụ đã khai): sàn gồm phần chi thiết yếu
+            if role == "essential" or role == "obligation":
                 floor += round(monthly_spend * prm.essential_floor_percent / 100.0)
             goal_spec = None
             if goal is not None:

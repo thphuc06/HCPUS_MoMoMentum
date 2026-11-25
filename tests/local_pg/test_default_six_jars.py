@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, timedelta
 
 import psycopg
@@ -12,6 +13,7 @@ from ledger_fakes import http_event
 from pipeline_helpers import make_settings
 
 from yofina_core.errors import ErrorCode, YofinaError
+from yofina_core.wallet import DEFAULT_SPENDING_JAR
 from yofina_forecast.allocation import AllocationEngine
 from yofina_forecast.inputs import build_inputs
 from yofina_forecast.repo import ForecastRepo
@@ -526,8 +528,9 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
     assert daily["status"] == "short" and daily["runout_date"] < daily["payday_date"]
 
     ctx = pipeline.load_context(user, env.clock())
-    # ví demo không có Chi hằng ngày: không có chuỗi chi thiết yếu riêng, Ăn uống và Đi lại là hũ thiết yếu theo mã như ví cũ
-    assert not any("essential_spend" in j for j in ctx.jars)
+    # ví demo không có Chi hằng ngày: chỉ hũ obligation (Nghĩa vụ) có chuỗi chi thiết yếu theo loại (hóa đơn trả lẻ), Ăn uống và
+    # Đi lại là hũ thiết yếu theo mã như ví cũ
+    assert {j["code"] for j in ctx.jars if "essential_spend" in j} == {"nghia_vu"}
     built = build_inputs(ctx, settings, user, n_paths=1000)
     source = next(j for j in built.inputs.jars if j.code == "nghia_vu")
     bnpl = next(o for o in ctx.obligations if o["kind"] == "bnpl")
@@ -612,3 +615,71 @@ def test_forecast_context_counts_only_essential_types_in_daily_jar(env):
     daily = next(j for j in ctx.jars if j["code"] == "chi_hang_ngay")
     assert daily["spend"][-1] == 131_000
     assert daily["essential_spend"][-1] == 57_000
+
+
+def _allocation(env, user):
+    settings = make_settings(n_paths_full=500, scenario_n_paths=500)
+    pipeline = Pipeline(ForecastRepo(env.db), settings, None, clock=env.clock)
+    assert pipeline.run_user(user, trigger="reset").status == "ok"
+    gathered = ResilienceEngine(pipeline).gather(user, env.clock())
+    engine = AllocationEngine(pipeline)
+    return pipeline, gathered, engine
+
+
+def _build(engine, gathered, shock_id=None):
+    return engine.build(
+        gathered, horizon_months=3, goal_args=[], shock_id=shock_id, allow_relaxation=True
+    )
+
+
+def test_bill_floor_of_obligation_jar_on_demo_wallet_matches_legacy_bill_jar(env):
+    """Hóa đơn của ví demo vào hũ Nghĩa vụ (gộp Hóa đơn và Nghĩa vụ của ví bảy hũ). Sàn của hũ này phải gồm phần chi hóa đơn trả lẻ
+    theo loại giao dịch như sàn hũ Hóa đơn của ví cũ, nên lộ trình không hạ tỷ lệ Nghĩa vụ xuống dưới mức chi hóa đơn thật."""
+    demo, legacy = "bill-floor-demo", "bill-floor-legacy"
+    assert _reset(env, demo, "persona-minh")["statusCode"] == 200
+    env.reset(legacy, "minh")
+    _, g_demo, engine = _allocation(env, demo)
+    _, g_legacy, engine_legacy = _allocation(env, legacy)
+
+    # chuỗi chi thiết yếu của Nghĩa vụ = chi loại hóa đơn không gắn nghĩa vụ trong cửa sổ lịch sử (cùng nguồn với Chi hằng ngày)
+    nv = next(j for j in g_demo.ctx.jars if j["code"] == "nghia_vu")
+    first = date.fromisoformat(g_demo.ctx.meta["history_start"])
+    with env.master() as c:
+        (bills,) = c.execute(
+            "SELECT coalesce(sum(-t.amount_vnd), 0) FROM transactions t JOIN tx_type_map m ON m.tx_type = t.tx_type "
+            "WHERE t.user_id = %s AND t.jar_code = 'nghia_vu' AND t.kind = 'expense' AND t.obligation_id IS NULL "
+            "AND t.funding_source IN ('jar', 'external') AND m.default_jar_code = 'hoa_don' "
+            "AND t.app_date BETWEEN %s AND %s",
+            [demo, first, g_demo.app_date - timedelta(days=1)],
+        ).fetchone()
+    assert bills > 0 and sum(nv["essential_spend"]) == bills
+
+    for shock in (None, "tien_tro_tang"):
+        d = {j.code: j for j in _build(engine, g_demo, shock).problem.jars}
+        old = {j.code: j for j in _build(engine_legacy, g_legacy, shock).problem.jars}
+        assert d["nghia_vu"].role == "obligation"
+        assert d["nghia_vu"].floor_vnd == old["hoa_don"].floor_vnd + old["nghia_vu"].floor_vnd
+
+    plan = engine.optimize(demo, {"horizon_months": 3})["data"]
+    line = next(x for x in plan["lines"] if x["jar"]["code"] == "nghia_vu")
+    floor = next(j for j in _build(engine, g_demo).problem.jars if j.code == "nghia_vu").floor_vnd
+    print("Bill floor demo", line["split_percent_current"], line["split_percent_proposed"], floor, line["proposed_monthly_vnd"])
+    assert line["floor_vnd"] == floor and line["proposed_monthly_vnd"] >= floor
+
+
+def test_legacy_seven_jar_allocation_unchanged_by_obligation_bill_floor(env):
+    """Ví bảy hũ cũ: hũ Nghĩa vụ không có chi loại thiết yếu nào ngoài nghĩa vụ đã khai, nên kết quả như khi chưa có chuỗi
+    `essential_spend` cho hũ obligation (hành vi trước)."""
+    user = "bill-floor-legacy-only"
+    env.reset(user, "minh")
+    _, gathered, engine = _allocation(env, user)
+    nv = next(j for j in gathered.ctx.jars if j["code"] == "nghia_vu")
+    assert set(nv["essential_spend"]) <= {0}
+    before_ctx = replace(gathered.ctx, jars=tuple(
+        {k: v for k, v in j.items() if k != "essential_spend"} if j["code"] != DEFAULT_SPENDING_JAR else j
+        for j in gathered.ctx.jars
+    ))
+    for shock in (None, "tien_tro_tang", "om_mot_tuan"):
+        now = _build(engine, gathered, shock).problem
+        before = _build(engine, replace(gathered, ctx=before_ctx), shock).problem
+        assert now == before

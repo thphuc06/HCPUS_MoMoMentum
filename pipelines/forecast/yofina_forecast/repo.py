@@ -17,6 +17,7 @@ from typing import Any
 
 from yofina_core.db import DataApi, Row
 from yofina_core.wallet import DEFAULT_SPENDING_JAR
+from yofina_forecast.settings import DEFAULT_ESSENTIAL_JAR_CODES
 from yofina_ml.types import ForecastResult
 
 SQL_CONTEXT = """
@@ -28,26 +29,29 @@ WITH ctx AS MATERIALIZED (
          CAST(payload->>'app_date' AS date) - 1 AS last_day
   FROM ctx WHERE section = 'meta'
 ), essential AS (
-  SELECT t.app_date, sum(-t.amount_vnd) AS amount
+  -- chi thiết yếu theo LOẠI giao dịch (nhóm của loại trong tx_type_map thuộc tham số essential, cấu hình essential_jar_codes), không gắn
+  -- nghĩa vụ (khoản đã khai tính riêng ở sàn nghĩa vụ): của Chi hằng ngày và của hũ obligation (hóa đơn trả lẻ trên ví có hũ Nghĩa vụ chung)
+  SELECT t.jar_code, t.app_date, sum(-t.amount_vnd) AS amount
   FROM transactions t
   JOIN tx_type_map m ON m.tx_type = t.tx_type
+  JOIN jars ej ON ej.user_id = t.user_id AND ej.code = t.jar_code
   CROSS JOIN date_window w
   WHERE t.user_id = :uid
-    AND t.jar_code = :daily_jar AND t.kind = 'expense'
+    AND (t.jar_code = :daily_jar OR ej.kind = 'obligation') AND t.kind = 'expense'
     AND t.funding_source IN ('jar', 'external') AND t.obligation_id IS NULL
-    AND m.default_jar_code IN ('an_uong', 'di_lai')
+    AND m.default_jar_code = ANY(string_to_array(CAST(:essential AS text), ','))
     AND t.app_date BETWEEN w.first_day AND w.last_day
-  GROUP BY t.app_date
+  GROUP BY t.jar_code, t.app_date
 )
 SELECT c.section, c.jar_code,
   CASE WHEN c.section = 'jar' THEN
     c.payload || jsonb_strip_nulls(jsonb_build_object('purpose', j.purpose))
-      || CASE WHEN c.jar_code = :daily_jar THEN jsonb_build_object('essential_spend', (
+      || CASE WHEN c.jar_code = :daily_jar OR j.kind = 'obligation' THEN jsonb_build_object('essential_spend', (
         SELECT coalesce(jsonb_agg(coalesce(e.amount, 0) ORDER BY g.day), '[]'::jsonb)
         FROM date_window w CROSS JOIN LATERAL generate_series(
           CAST(w.first_day AS timestamp), CAST(w.last_day AS timestamp), interval '1 day'
         ) AS g(day)
-        LEFT JOIN essential e ON e.app_date = CAST(g.day AS date)
+        LEFT JOIN essential e ON e.jar_code = c.jar_code AND e.app_date = CAST(g.day AS date)
       )) ELSE '{}'::jsonb END
     ELSE c.payload END AS payload
 FROM ctx c
@@ -118,7 +122,16 @@ class ForecastRepo:
         self.db = db
 
     # --- đọc ------------------------------------------------------------------------------------
-    def context(self, user_id: str, now: datetime, tz: str, window_days: int) -> list[Row]:
+    def context(
+        self,
+        user_id: str,
+        now: datetime,
+        tz: str,
+        window_days: int,
+        essential_categories: Sequence[str] = DEFAULT_ESSENTIAL_JAR_CODES,
+    ) -> list[Row]:
+        """Ngữ cảnh dự báo. `essential_categories`: nhóm loại giao dịch thiết yếu (`tx_type_map.default_jar_code`, cấu hình
+        `essential_jar_codes`) cho chuỗi `essential_spend` của Chi hằng ngày và hũ obligation."""
         with self.db.transaction(user_id) as tx:
             return tx.execute(
                 SQL_CONTEXT,
@@ -128,6 +141,7 @@ class ForecastRepo:
                     "tz": tz,
                     "win": window_days,
                     "daily_jar": DEFAULT_SPENDING_JAR,
+                    "essential": ",".join(essential_categories),
                 },
             )
 
