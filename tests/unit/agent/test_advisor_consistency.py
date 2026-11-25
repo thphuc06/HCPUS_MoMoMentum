@@ -20,7 +20,8 @@ from agent_helpers import (
     run_turn,
     tool_response,
 )
-from test_advisor import STEP_BEHAVIOR
+from test_advisor import ROADMAP_STEP_BEHAVIOR, ROADMAP_STEP_OBLIGATION, STEP_BEHAVIOR
+from test_roadmap_agent import build, outline, review, scripted_tools, step
 from test_whatif import NARRATIVE, ROUTE_WHAT_IF, SCENARIO, WHAT_IF_Q
 from yofina_agent import advisor
 from yofina_agent.schemas import ReasoningStepIn
@@ -336,3 +337,49 @@ def test_whatif_analyst_lap_luan_mau_thuan_thi_khoi_khong_con_buoc_vi_pham(monke
     assert "Giải trí" not in json.dumps(logged, ensure_ascii=False) and "760" not in json.dumps(
         logged
     )
+
+
+# --- lộ trình trong chat, planner giả trả lập luận nói hũ nguồn khác bản đã lưu ----------------------------------------------
+def saved_from(old: str, new: str) -> dict[str, Any]:
+    """`save_roadmap.ok` với hũ nguồn `old` của mọi bước đổi thành `new` (bản đã lưu chuyển tiền từ hũ khác)."""
+    payload = fixture("save_roadmap.ok.json")
+    for phase in payload["data"]["phases"]:
+        for s in phase["steps"]:
+            if s.get("jar_code") == old:
+                s["jar_code"] = new
+            params = (s.get("action") or {}).get("params") or {}
+            if params.get("from_jar") == old:
+                params["from_jar"] = new
+    return payload
+
+
+ROADMAP_WRONG = {
+    "seen": "Hũ Ăn uống sắp cạn trước kỳ lương.",
+    "why": "Thiếu tiền ăn thì khó giữ lộ trình.",
+    "effect": "Thêm bước chuyển từ hũ Giải trí sang Ăn uống trong giai đoạn đầu.",
+    "basis": ["tool:get_jar_balances"],
+}
+
+
+def test_lo_trinh_planner_noi_hu_nguon_khac_ban_da_luu_thi_bo_buoc(caplog):
+    caplog.set_level(logging.INFO, logger="yofina.agent.advisor")
+    draft = outline(step(jar_code="di_lai"), review())
+    draft["reasoning"] = [ROADMAP_WRONG, ROADMAP_STEP_OBLIGATION, ROADMAP_STEP_BEHAVIOR]
+    draft["conclusion"] = {
+        "text": "Bạn nên bắt đầu bằng việc giữ sẵn tiền cho khoản đến hạn 05/12.",
+        "step_id": "giu_san_tra_sau",
+        "personal": [],
+    }
+    # bản đã lưu chuyển tiền từ hũ Đi lại (không bước nào lấy từ hũ Giải trí)
+    tools = scripted_tools(checks=("ok", "ok", "ok"), saves=(saved_from("giai_tri", "di_lai"),))
+    result, _, _ = build(tools, draft, advise=True)
+    assert result.outcome.ok and result.advice is not None
+    assert [s.seen for s in result.advice.steps] == [
+        ROADMAP_STEP_OBLIGATION["seen"],
+        ROADMAP_STEP_BEHAVIOR["seen"],
+    ]
+    assert "Giải trí" not in " ".join(result.advice.texts())
+    assert result.advice.conclusion is not None
+    (logged,) = advisor_logs(caplog)
+    assert logged["context"] == "roadmap" and logged["dropped_jar_mismatch"] == 1
+    assert logged["block"] == "kept"

@@ -1188,28 +1188,6 @@ async def whatif_advice(
     return advice
 
 
-#: trường mang mã hũ dạng chuỗi trong kết quả tool và phương án
-_JAR_KEYS = frozenset({"jar_code", "from_jar", "to_jar"})
-
-
-def _jar_codes(node: Any) -> set[str]:
-    """Mọi mã hũ trong một kết quả có cấu trúc (đệ quy): `jar.code` và các trường `jar_code`, `from_jar`, `to_jar`."""
-    out: set[str] = set()
-    if isinstance(node, Mapping):
-        jar = node.get("jar")
-        if isinstance(jar, Mapping) and isinstance(jar.get("code"), str):
-            out.add(jar["code"])
-        for key, value in node.items():
-            if key in _JAR_KEYS and isinstance(value, str) and value:
-                out.add(value)
-            else:
-                out |= _jar_codes(value)
-    elif isinstance(node, list):
-        for item in node:
-            out |= _jar_codes(item)
-    return out
-
-
 async def _what_if_saved(
     turn: Turn,
     checked: list[tuple[Any, SuitabilityVerdict]],
@@ -1229,8 +1207,8 @@ async def _what_if_saved(
     names = {
         str(j["code"]): str(j["name"]) for j in turn.jar_rows if j.get("code") and j.get("name")
     }
-    scenario_jars = _jar_codes((scenario or {}).get("data"))
-    option_jars = {o.option_id: _jar_codes(o.model_dump(mode="json")) for o, _ in checked}
+    scenario_jars = advisor.jar_codes((scenario or {}).get("data"))
+    option_jars = {o.option_id: advisor.jar_codes(o.model_dump(mode="json")) for o, _ in checked}
     sources = set(personal)
     personal_jars: set[str] = set()
     if "memory" in sources:

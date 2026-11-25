@@ -895,7 +895,9 @@ async def _verify(
     *,
     round_no: int = 0,
     cache: dict[str, asyncio.Task[SuitabilityVerdict | None]] | None = None,
-) -> tuple[list[RoadmapDraftPhase], list[RepairIssue], list[SuitabilityVerdict]]:
+) -> tuple[list[RoadmapDraftPhase], list[RepairIssue], list[tuple[str | None, SuitabilityVerdict]]]:
+    """Các giai đoạn đạt, các lỗi cho vòng sửa, và các phán quyết mới của vòng kèm hũ nguồn của đề xuất được kiểm (để lập luận
+    biết luật nào đã loại hũ nào, #7)."""
     lines = {line.jar.code: line for line in plan.lines}
     start, horizon_end = period
     cache = {} if cache is None else cache
@@ -1040,7 +1042,7 @@ async def _verify(
     for (index, _), (step, blocked, verdict, fresh) in zip(pending, checked, strict=True):
         phase, _, (phase_start, _) = kept[index]
         if verdict is not None and fresh:
-            verdicts.append(verdict)
+            verdicts.append((_proposal(step, phase_start).jar_code, verdict))
         blocked = [
             issue.model_copy(update={"message": issue.message + options(step, phase_start)})
             if issue.rule_id == "source_jar_covers"
@@ -1372,6 +1374,8 @@ async def build_roadmap(
     clock.lap("allocate", reoptimized=reoptimized)
 
     verdicts: list[SuitabilityVerdict] = []
+    #: (hũ nguồn của đề xuất, phán quyết) của mọi vòng kiểm bước, cho kiểm nhất quán của lập luận
+    judged: list[tuple[str | None, SuitabilityVerdict]] = []
     model_error: Exception | None = None
     retries = 0
     conflict_retried = False
@@ -1478,7 +1482,8 @@ async def build_roadmap(
             round_no=retries,
             cache=checked_proposals,
         )
-        verdicts.extend(checked)
+        verdicts.extend(v for _, v in checked)
+        judged.extend(checked)
         clock.lap("suitability", round=retries, issues=len(issues))
         # Các bước đạt đã đủ khuôn lộ trình (đủ giai đoạn, đủ bước): bỏ các bước bị loại thay vì tốn thêm một lượt planner để sửa.
         # Mọi bước được lưu vẫn đã qua grounding và check_suitability; save_roadmap kiểm lại như cũ.
@@ -1524,7 +1529,13 @@ async def build_roadmap(
             _log_event(
                 "roadmap_invalid", stage="save", reason_code=reason_code, rounds=retries
             )
-        advice = _roadmap_advice(advice_src, compact, basis_tools, verdicts, result, behavior is not None) if advise else None
+        advice = (
+            _roadmap_advice(
+                advice_src, compact, basis_tools, judged, result, behavior is not None, settings
+            )
+            if advise
+            else None
+        )
         return finish(
             RoadmapResult(outcome=result, model_error=model_error, suitability=tuple(verdicts), advice=advice)
         )
@@ -1534,12 +1545,14 @@ def _roadmap_advice(
     src: Any,
     compact: dict[str, Any],
     tools_ok: list[str],
-    verdicts: list[SuitabilityVerdict],
+    judged: list[tuple[str | None, SuitabilityVerdict]],
     saved: ToolOutcome,
     has_behavior: bool,
+    settings: AgentSettings,
 ) -> advisor.Advice | None:
     """Lập luận của planner sau khi mã kiểm (xem `advisor`): số theo bộ kiểm chặt của bước lộ trình (`_grounding` của bản gọn cuối),
-    căn cứ là tool ngữ cảnh đã trả OK hoặc luật đã kiểm cho các bước, kết luận trỏ một bước của bản ĐÃ LƯU."""
+    căn cứ là tool ngữ cảnh đã trả OK hoặc luật đã kiểm cho các bước, kết luận trỏ một bước của bản ĐÃ LƯU; rồi kiểm nhất quán với
+    bản đã lưu (`_roadmap_saved`, #7): bước hay kết luận nhắc hũ ngoài bản đã lưu, hoặc trích luật đã loại hũ nó nhắc, bị bỏ."""
     roadmap = _parse(saved, Roadmap)
     if src is None or roadmap is None:
         return None
@@ -1548,8 +1561,13 @@ def _roadmap_advice(
     if not reasoning and c is None:
         return None
     grounded = _grounding(compact)
+    result = _roadmap_saved(roadmap, compact, judged)
     steps, dropped = advisor.verify_steps(
-        reasoning, grounded=grounded, tools=tools_ok, rules=advisor.checked_rules(verdicts)
+        reasoning,
+        grounded=grounded,
+        tools=tools_ok,
+        rules=advisor.checked_rules(v for _, v in judged),
+        saved=result,
     )
     step_ids = {step.step_id for phase in roadmap.phases for step in phase.steps}
     conclusion, why = advisor.verify_conclusion(
@@ -1560,13 +1578,42 @@ def _roadmap_advice(
         has_memory=False,
         has_behavior=has_behavior,
         step_id=c.step_id if c is not None else None,
+        saved=result,
     )
-    advisor.log_advice("roadmap", len(reasoning), len(steps), dropped, why)
-    clean = tuple(
+    clean = [
         s.model_copy(
-            update={"seen": _clean_text(s.seen)[:160], "why": _clean_text(s.why)[:160], "effect": _clean_text(s.effect)[:160]}
+            update={
+                "seen": _clean_text(s.seen)[:160],
+                "why": _clean_text(s.why)[:160],
+                "effect": _clean_text(s.effect)[:160],
+            }
         )
         for s in steps
+    ]
+    advice, block = advisor.settle(
+        "roadmap", clean, conclusion, dropped, why, min_steps=settings.reasoning_min_steps
     )
-    advice = advisor.Advice(context="roadmap", steps=clean, conclusion=conclusion)
+    advisor.log_advice("roadmap", len(reasoning), len(steps), dropped, why, block)
     return None if advice.empty else advice
+
+
+def _roadmap_saved(
+    roadmap: Roadmap, compact: dict[str, Any], judged: list[tuple[str | None, SuitabilityVerdict]]
+) -> advisor.SavedResult:
+    """Bản lộ trình ĐÃ LƯU mà lập luận phải khớp, dựng từ dữ liệu có cấu trúc: hũ của các bước (hũ nguồn, hũ nhận, hũ trong tham số
+    hành động) và hũ của mục tiêu; tên hũ theo bản gọn model đã thấy; luật đã loại hũ nào theo phán quyết của mọi vòng kiểm bước (hũ
+    nguồn của đề xuất). Bước và kết luận cùng dùng tập hũ này."""
+    names = {
+        str(j["code"]): str(j["name"])
+        for j in compact.get("jars") or []
+        if j.get("code") and j.get("name")
+    }
+    jars = frozenset(
+        advisor.jar_codes(roadmap.model_dump(mode="json", include={"phases", "goals"}))
+    )
+    return advisor.SavedResult(
+        jar_names=names,
+        step_jars=jars,
+        conclusion_jars=jars,
+        rejected=advisor.rule_rejections(judged),
+    )

@@ -183,6 +183,29 @@ def mentioned_jars(text: str, jar_names: Mapping[str, str]) -> frozenset[str]:
     return frozenset(found)
 
 
+#: Trường mang mã hũ dạng chuỗi trong kết quả tool, phương án và bước lộ trình.
+_JAR_KEYS = frozenset({"jar_code", "from_jar", "to_jar"})
+
+
+def jar_codes(node: Any) -> set[str]:
+    """Mọi mã hũ trong một kết quả có cấu trúc (đệ quy): `jar.code` và các trường `jar_code`, `from_jar`, `to_jar`. Danh sách hũ
+    trong tham số `save_jars` (khóa `code` trần) không tính: bước đổi tỷ lệ chia không phải bước "nói về" mọi hũ."""
+    out: set[str] = set()
+    if isinstance(node, Mapping):
+        jar = node.get("jar")
+        if isinstance(jar, Mapping) and isinstance(jar.get("code"), str):
+            out.add(jar["code"])
+        for key, value in node.items():
+            if key in _JAR_KEYS and isinstance(value, str) and value:
+                out.add(value)
+            else:
+                out |= jar_codes(value)
+    elif isinstance(node, list):
+        for item in node:
+            out |= jar_codes(item)
+    return out
+
+
 def rule_rejections(
     judged: Iterable[tuple[str | None, SuitabilityVerdict]],
 ) -> dict[str, frozenset[str]]:
@@ -392,6 +415,7 @@ __all__ = [
     "behavior_view",
     "checked_rules",
     "emit",
+    "jar_codes",
     "log_advice",
     "mentioned_jars",
     "rule_rejections",
