@@ -2210,6 +2210,7 @@ components:
         - MEMORY_RECORD_NOT_FOUND
         - MEMORY_UNAVAILABLE
         - INGEST_NO_TRANSACTIONS
+        - DAILY_QUOTA_EXCEEDED
       x-http-status:
         UNAUTHENTICATED: 401
         FORBIDDEN: 403
@@ -2256,6 +2257,7 @@ components:
         MEMORY_RECORD_NOT_FOUND: 404
         MEMORY_UNAVAILABLE: 503
         INGEST_NO_TRANSACTIONS: 422
+        DAILY_QUOTA_EXCEEDED: 429
       x-meaning:
         UNAUTHENTICATED: Thiếu hoặc sai access token.
         FORBIDDEN: Không được phép (token xác nhận không thuộc người dùng này, v.v.).
@@ -2302,6 +2304,7 @@ components:
         MEMORY_RECORD_NOT_FOUND: Không có bản ghi bộ nhớ này với người dùng (đã xóa, không tồn tại hoặc của người khác; không phân biệt).
         MEMORY_UNAVAILABLE: AgentCore Memory không trả lời hoặc từ chối (giới hạn tần suất); thử lại sau ít phút. Dữ liệu khác không bị ảnh hưởng.
         INGEST_NO_TRANSACTIONS: Tệp là chứng từ tài chính nhưng không còn giao dịch nào để duyệt sau khi lọc (màn chưa thực hiện, giao dịch không thành công, chỉ chuyển giữa tài khoản của chính mình, rút tiền mặt, không đọc được số tiền). Lý do con ở error_reason của job.
+        DAILY_QUOTA_EXCEEDED: Tài khoản đã dùng đủ trần trong ngày (mặc định 100 lượt chat, 20 lần nạp tệp; SSM /yofina/quota/*), tính lại từ 0 giờ ngày hôm sau (giờ Việt Nam). Các màn số liệu vẫn đọc bình thường.
     ErrorResponse:
       type: object
       required: [error]
