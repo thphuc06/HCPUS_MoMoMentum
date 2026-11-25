@@ -1267,6 +1267,28 @@ def test_get_roadmap_va_diff_va_phien_ban(ops):
     assert empty.versions_response(U, limit=20) == {"versions": []}
 
 
+def rest_with_ops(ops_: RoadmapOps, method, path, *, body=None, query=None):
+    """REST thật (`handle_http` -> `roadmap_rest.dispatch`) trên `RoadmapOps` dùng kho giả trong bộ nhớ."""
+    svc, _repo, _clock = make_service()
+    svc.__dict__["_roadmap_ops"] = ops_
+    out = handle_http(http_event(method, path, sub=U, body=body, query=query), svc)
+    return out["statusCode"], json.loads(out["body"])
+
+
+def test_get_roadmap_tra_basis_computed_at_cua_ban_dang_xem(ops):
+    """#27: màn lộ trình ghi "Số tính ngày …" từ `basis.computed_at` của bản đang xem, nên REST trả đúng thời điểm đã lưu cùng
+    phiên bản đó (mỗi bản một giá trị), không phải thời điểm đọc."""
+    repo = seed(ops)
+    for row, at in zip(repo.rows, ("2026-12-08T20:00:00Z", "2026-12-09T17:30:00Z"), strict=True):
+        row["plan"]["basis"] = {**row["plan"]["basis"], "computed_at": at}
+    status, block = rest_with_ops(ops, "GET", "/roadmap")
+    assert status == 200 and block["data"]["version"] == 2
+    assert block["data"]["basis"]["computed_at"] == "2026-12-09T17:30:00Z"
+    assert block["source"]["as_of"] == "2026-12-10T03:00:00Z"  # thời điểm đọc khác thời điểm tính
+    status, old = rest_with_ops(ops, "GET", "/roadmap", query={"version": "1"})
+    assert status == 200 and old["data"]["basis"]["computed_at"] == "2026-12-08T20:00:00Z"
+
+
 def test_quyet_dinh_buoc_idempotent_va_loi(ops):
     repo = seed(ops)
     kw = {"step_id": "nhac_du_lich", "version": 2, "reason": None, "trace_id": "t" * 8}

@@ -72,6 +72,22 @@ describe('lộ trình thích ứng', () => {
     expect(step.getByText(executable.reason)).toBeVisible()
   })
 
+  it.each([
+    ['2026-12-09T17:30:00Z', '21/11'], // 00:30 ngày 10/12 giờ Việt Nam
+    ['2026-12-09T16:59:00Z', '20/11'], // 23:59 ngày 09/12 giờ Việt Nam
+  ])('ghi "Số tính ngày …" từ basis.computed_at %s theo đồng hồ ứng dụng', async (computedAt, shownDay) => {
+    // Bản lưu lúc 10:05 ngày 10/12 giờ thật, ngày mô phỏng 21/11 (lệch −19 ngày như ví demo): ngày hiện ra là ngày mô phỏng, không
+    // phải ngày thật, như các ngày khác trên màn (ngày giai đoạn, hạn bước).
+    const block = structuredClone(v3)
+    block.data.created_at = '2026-12-10T03:05:00Z'
+    block.data.app_date = '2026-11-21'
+    block.data.basis.computed_at = computedAt
+    mountApp(backend({ 'GET /roadmap': block, 'GET /roadmap/versions': versions }), '/roadmap')
+    const shown = within((await screen.findByRole('heading', { name: 'Lộ trình · Phiên bản 3' })).closest('[data-block="roadmap"]') as HTMLElement)
+    expect(shown.getByText(`Số tính ngày ${shownDay}`)).toBeVisible()
+    expect(shown.queryByText(/09\/12|10\/12/)).toBeNull()
+  })
+
   it('hiện tên hũ của người dùng ở mọi bước, không hiện mã hũ thô', async () => {
     mountApp(backend({ 'GET /roadmap': v3, 'GET /roadmap/versions': versions }), '/roadmap')
     const overview = restFixture('OverviewResponse.minh') as { jars: Array<{ code: string; name: string }> }
