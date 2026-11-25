@@ -892,29 +892,63 @@ def execute_case(
 
 
 # --- evaluator ------------------------------------------------------------------------------------
-def _allowed(run: dict[str, Any], question: str):
+#: Khối do model viết (Analyst, planner lộ trình, router): số trong chúng là thứ phải kiểm, không bao giờ là căn cứ.
+MODEL_WRITTEN_BLOCKS = frozenset({"options", "reasoning", "clarify"})
+
+
+def _allowed(run: dict[str, Any], inputs: Iterable[str]):
+    """Tập số hợp lệ: kết quả tool của lượt và khối do code dựng (bỏ chữ không tin cậy của dòng giao dịch hay dòng nạp,
+    `compact.without_untrusted_text`), cùng dữ liệu đầu vào (câu hỏi, lịch sử). Không lấy từ khối do model viết."""
+    from yofina_agent.compact import without_untrusted_text
     from yofina_agent.verifier import Allowed
 
     a = Allowed()
     for t in run["tools"]:
         if t["result"]:
             with contextlib.suppress(ValueError):
-                a.add_payload(json.loads(t["result"]))
+                a.add_payload(without_untrusted_text(json.loads(t["result"])))
     for b in run["blocks"]:
-        a.add_payload(b.get("data"))
-    a.add_text(question)
+        if b.get("type") not in MODEL_WRITTEN_BLOCKS:
+            a.add_payload(without_untrusted_text(b.get("data")))
+    for x in inputs:
+        a.add_text(x)
     return a
 
 
-def numeric_grounding(run: dict[str, Any], question: str) -> dict[str, Any]:
+def _final_reasoning(run: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Bản cuối của mỗi khối `reasoning` (các bản stream cùng `id`, bản sau thay bản trước như frontend hiện)."""
+    last: dict[Any, dict[str, Any]] = {}
+    for b in _blocks_of(run, "reasoning"):
+        last[b.get("id")] = b["data"]
+    return list(last.values())
+
+
+def model_texts(run: Mapping[str, Any]) -> tuple[dict[str, str], dict[str, int]]:
+    """Chữ do model viết, theo nơi: câu trả lời, nhãn và tóm tắt phương án, các bước và kết luận của lập luận; kèm số tiền trong
+    tham số hành động của phương án."""
+    texts = {"text": run["text"]}
+    extra: dict[str, int] = {}
+    for i, b in enumerate(_blocks_of(run, "options")):
+        for o in b["data"].get("options") or []:
+            where = f"option:{i}:{o.get('option_id')}"
+            texts[where] = f"{o.get('label') or ''}. {o.get('summary') or ''}"
+            amount = ((o.get("action") or {}).get("params") or {}).get("amount_vnd")
+            if isinstance(amount, int) and not isinstance(amount, bool):
+                extra[where] = amount
+    for i, data in enumerate(_final_reasoning(run)):
+        for st in data.get("steps") or []:
+            texts[f"reasoning:{i}:{st.get('step_id')}"] = ". ".join(str(st.get(k) or "") for k in ("seen", "why", "effect"))
+        if isinstance(c := data.get("conclusion"), Mapping) and c.get("text"):
+            texts[f"reasoning:{i}:conclusion"] = str(c["text"])
+    return texts, extra
+
+
+def numeric_grounding(run: dict[str, Any], question: str, history: Iterable[str] = ()) -> dict[str, Any]:
+    """Mọi số tiền và phần trăm do model viết (`model_texts`) có trong kết quả tool, khối do code dựng, câu hỏi hoặc lịch sử (`_allowed`)."""
     from yofina_agent.verifier import NumericGrounding
 
-    texts = {"text": run["text"]}
-    for b in run["blocks"]:
-        if b["type"] == "options":
-            for o in b["data"]["options"]:
-                texts[f"option:{o['option_id']}"] = f"{o['label']}. {o['summary']}"
-    res = NumericGrounding.check(texts, _allowed(run, question))
+    texts, extra = model_texts(run)
+    res = NumericGrounding.check(texts, _allowed(run, [question, *history]), extra_amounts=extra)
     return {
         "ok": res.ok,
         "checked": res.checked_count,
@@ -1809,7 +1843,9 @@ def score(
     manifest: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     s: dict[str, Any] = {
-        "numeric_grounding": numeric_grounding(run, case["question"]),
+        "numeric_grounding": numeric_grounding(
+            run, case["question"], [h["content"] for h in case.get("history") or []]
+        ),
         "schema_validity": schema_validity(run),
         "suitability_compliance": suitability_compliance(run),
     }
