@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -167,6 +169,57 @@ def test_loi_khac_khong_retry_va_khong_ro_chi_tiet_sql():
     assert ei.value.code == ErrorCode.INTERNAL_ERROR
     assert "secret_table" not in ei.value.message
     assert sleeps == [] and fake.ops() == ["execute"]
+
+
+# --- mức log của lỗi Data API (#39) -------------------------------------------------------------------------------------------
+def _db_records(caplog, fake: FakeRds) -> list[logging.LogRecord]:
+    db, _ = api(fake)
+    with caplog.at_level(logging.INFO, logger="yofina_core.db"), pytest.raises(YofinaError) as ei:
+        db.query("SELECT 1")
+    assert ei.value.code == ErrorCode.INTERNAL_ERROR  # mã nghiệp vụ do tầng gọi đổi (roadmap_logic.db_business_error), không đổi ở đây
+    return [r for r in caplog.records if r.name == "yofina_core.db"]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # đúng dạng Data API trả trên Aurora thật: chữ có dấu của thông điệp RAISE đã bị thay bằng U+FFFD trước khi tới Lambda
+        "ERROR: ROADMAP_VERSION_CONFLICT: b\ufffd\ufffd\ufffdn n\ufffd\ufffdy kh\ufffd\ufffdng c\ufffd\ufffdn; SQLState: P0001",
+        "ERROR: ROADMAP_NOT_FOUND: không có phiên bản này\n  Where: PL/pgSQL function app_decide_roadmap_version; SQLState: P0001",
+        "ERROR: PARAMS_INVALID: khoảng thời gian không hợp lệ; SQLState: P0001",
+    ],
+    ids=["conflict_hong_dau", "not_found", "params_invalid"],
+)
+def test_loi_nghiep_vu_4xx_cua_ham_sql_ghi_info_khong_phai_error(caplog, message):
+    """Lỗi nghiệp vụ dự kiến (`RAISE EXCEPTION 'MÃ: ...'` với MÃ là `ErrorCode` nhóm 4xx) ghi INFO như mọi mã 4xx khác của handler
+    (dòng `rest_request`/`gateway_call` mức INFO); không có dòng ERROR. Dòng log là JSON giữ nguyên chữ tiếng Việt (không `\\uXXXX`)."""
+    fake = FakeRds()
+    fake.script = [AwsError("BadRequestException", message)]
+    records = _db_records(caplog, fake)
+    assert [r.levelno for r in records] == [logging.INFO]
+    line = json.loads(records[0].getMessage())
+    code = message.split(": ")[1]
+    assert line["msg"] == "data_api_business_error" and line["code"] == code and line["aws_code"] == "BadRequestException"
+    assert message.split("; SQLState")[0].split(f"{code}: ")[1].split("\n")[0] in records[0].getMessage()  # chữ gốc, không thoát mã
+    assert "\\u" not in records[0].getMessage()
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "syntax error at or near SELECT secret_table",
+        "ERROR: INTERNAL_ERROR: còn dữ liệu của người dùng sau khi xóa; SQLState: P0001",  # mã 5xx do hàm SQL ném: vẫn là lỗi hệ thống
+        "ERROR: FOO_BAR: không phải mã của ErrorCode; SQLState: P0001",
+        'ERROR: duplicate key value violates unique constraint "x"; SQLState: 23505',
+    ],
+    ids=["cu_phap", "internal_error", "ma_la", "trung_khoa"],
+)
+def test_loi_he_thong_cua_data_api_van_ghi_error(caplog, message):
+    fake = FakeRds()
+    fake.script = [AwsError("BadRequestException", message)]
+    records = _db_records(caplog, fake)
+    assert [r.levelno for r in records] == [logging.ERROR]
+    assert records[0].getMessage().startswith("data_api_error code=BadRequestException")
 
 
 def test_query_max_rows_bao_loi_khi_thieu_limit():

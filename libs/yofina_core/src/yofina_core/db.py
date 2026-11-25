@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -34,12 +35,15 @@ from decimal import Decimal
 from typing import Any, Protocol
 
 from yofina_core.config import Config
-from yofina_core.errors import ErrorCode, YofinaError
+from yofina_core.errors import HTTP_STATUS, ErrorCode, YofinaError
 
 log = logging.getLogger(__name__)
 
 Params = Mapping[str, Any]
 Row = dict[str, Any]
+#: một tiền tố mã kiểu `ErrorCode` ("ROADMAP_VERSION_CONFLICT: ") trong thông điệp lỗi của Postgres; mã có thuộc `ErrorCode` không
+#: thì `_sql_business_code` kiểm
+_SQL_CODE_RE = re.compile(r"\b([A-Z][A-Z0-9_]+): ")
 
 
 class RdsDataClient(Protocol):
@@ -324,10 +328,33 @@ class Transaction:
         self.api.batch(sql, param_sets, transaction_id=self.id)
 
 
+def _sql_business_code(exc: Exception) -> ErrorCode | None:
+    """Mã nghiệp vụ nhóm 4xx nếu `exc` là lỗi do hàm SQL `app_*` ném theo quy ước `RAISE EXCEPTION 'MÃ: ...'` (db/README.md), với MÃ
+    là một `ErrorCode` (Data API giữ dạng `ERROR: ROADMAP_VERSION_CONFLICT: ...`). Mã 5xx (`INTERNAL_ERROR`) hay chữ lạ thì None."""
+    for m in _SQL_CODE_RE.finditer(str(exc)):
+        code = ErrorCode.__members__.get(m.group(1))
+        if code is not None:
+            return code if HTTP_STATUS[code] < 500 else None
+    return None
+
+
 def _translate(exc: Exception) -> Exception:
-    """Lỗi boto3 khác -> `YofinaError` không rò chi tiết SQL; log giữ nguyên chi tiết."""
+    """Lỗi boto3 khác -> `YofinaError` không rò chi tiết SQL; log giữ nguyên chi tiết.
+
+    Lỗi nghiệp vụ dự kiến của hàm SQL (mã 4xx) ghi INFO như mọi mã 4xx của handler (dòng `rest_request`, `gateway_call`): đây là việc
+    người dùng hoặc dữ liệu, không phải sự cố. Lỗi còn lại là lỗi hệ thống, ghi ERROR. Chữ có dấu trong thông điệp của Postgres có thể
+    đã bị Data API thay bằng U+FFFD trước khi tới đây (xem `roadmap_logic.DB_ERROR_FALLBACK`); log ghi nguyên văn những gì nhận."""
     code = _error_code(exc)
-    log.error("data_api_error code=%s detail=%s", code, str(exc)[:500])
+    business = _sql_business_code(exc)
+    if business is not None:
+        log.info(
+            json.dumps(
+                {"msg": "data_api_business_error", "code": str(business), "aws_code": code, "detail": str(exc)[:500]},
+                ensure_ascii=False,
+            )
+        )
+    else:
+        log.error("data_api_error code=%s detail=%s", code, str(exc)[:500])
     if code in {"ServiceUnavailableError", "StatementTimeoutException"}:
         return YofinaError(ErrorCode.DATABASE_UNAVAILABLE, "Cơ sở dữ liệu tạm thời không phản hồi.")
     if isinstance(exc, YofinaError):

@@ -548,6 +548,25 @@ def test_quyet_dinh_buoc_loi(minh):
     assert status == 400
 
 
+def test_loi_nghiep_vu_cua_ham_sql_ghi_info_khong_ghi_error(minh, caplog):
+    """#39: hàm SQL thật ném `RAISE EXCEPTION 'ROADMAP_VERSION_CONFLICT: ...'` ("Dùng bản mới" trên bản đã bỏ, đường của
+    `app_decide_roadmap_version`), đi qua đúng `DataApi` và handler REST: API trả 409 như cũ, log là một dòng INFO
+    `data_api_business_error` kèm mã, không có dòng ERROR nào (dòng ERROR là việc của lỗi hệ thống)."""
+    import logging
+
+    env = minh
+    propose_v3(env)
+    status, body = rest(env, "POST", "/roadmap/versions/3/decision", body={"decision": "keep_previous"})
+    assert status == 200, body
+    with caplog.at_level(logging.INFO):
+        status, body = rest(env, "POST", "/roadmap/versions/3/decision", body={"decision": "adopt"})
+    assert status == 409 and body["error"]["code"] == "ROADMAP_VERSION_CONFLICT"
+    assert [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR] == []
+    (line,) = [json.loads(r.getMessage()) for r in caplog.records if "data_api_business_error" in r.getMessage()]
+    assert line["code"] == "ROADMAP_VERSION_CONFLICT"
+    assert "chờ chọn" in line["detail"]  # chữ tiếng Việt của thông điệp SQL giữ nguyên trong dòng log
+
+
 # =====================================================================================================
 # POST /roadmap/steps/{step_id}/edit
 # =====================================================================================================
