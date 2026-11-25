@@ -116,6 +116,24 @@ def test_the_chu_dong_lam_tron_kha_nang_hut_buoc_5_va_khong_noi_100_hay_0(p, tai
     assert "100%" not in c.data.reason and " 0%" not in c.data.reason
 
 
+def test_tai_khoan_0_dong_khong_hien_the_du_kien_can():
+    """Lỗi P12-08: sau "Xóa dữ liệu của tôi" rồi onboarding lại, mọi hũ 0 ₫ mà thẻ vẫn ghi "dự kiến cạn … Còn 0 ₫"."""
+    jars = [jar("an_uong", "Ăn uống", 0), jar("giai_tri", "Giải trí", 0)]
+    f = {c: fc("short", TODAY, 1.0, True, initial=True, history=0) for c in ("an_uong", "giai_tri")}
+    c = card(jars=jars, forecasts=f)
+    assert c.data.kind == "low_data"
+    assert c.data.reason == "Chưa có giao dịch nào. Khai nghĩa vụ hoặc nhập giao dịch để có dự báo."
+    assert card(jars=jars, forecasts={k: {**v, "is_initial_estimate": False} for k, v in f.items()}) is None
+
+
+def test_hu_het_tien_trong_tai_khoan_co_tien_noi_da_het_khong_noi_con_0_dong():
+    jars = [jar("an_uong", "Ăn uống", 0), jar("giai_tri", "Giải trí", 760_000)]
+    c = card(jars=jars, forecasts={"an_uong": fc("short", TODAY, 1.0, True), "giai_tri": fc("ok")})
+    assert c.data.kind == "runout_warning" and c.data.jar_code == "an_uong"
+    assert c.data.title == "Hũ Ăn uống đã hết tiền"
+    assert c.data.reason == "Còn 14 ngày nữa mới tới kỳ lương 05/12."
+
+
 def test_hu_sat_va_nghia_vu_den_han_va_xem_lai_va_du_lieu_it_theo_thu_tu():
     jars = [jar("hoa_don", "Hóa đơn", 450_000), jar("nghia_vu", "Nghĩa vụ", 1_000_000)]
     ob = {
