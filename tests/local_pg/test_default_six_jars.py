@@ -1,4 +1,4 @@
-"""End-to-end six-jar tests using local PostgreSQL and deterministic engines."""
+"""Jar layout rollout and reset tests using local PostgreSQL."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import date
 
 import psycopg
 import pytest
-from conftest import REPO, _load
+from conftest import NOW, REPO, _load
 from ledger_fakes import http_event
 from pipeline_helpers import make_settings
 
@@ -22,15 +22,27 @@ from yofina_forecast.stress import StressEngine
 from yofina_ledger.rest_api import handle_http
 from yofina_planner.facts import facts_from_rows
 
-EXPECTED = {
-    "chi_hang_ngay": ("spending", None, 35),
+ONBOARDING = {
+    "chi_hang_ngay": ("spending", None, 42),
+    "nghia_vu": ("obligation", None, 33),
+    "du_phong": ("saving", "buffer", 25),
+}
+DEMO = {
+    "chi_hang_ngay": ("spending", None, 45),
     "nghia_vu": ("obligation", None, 35),
     "du_phong": ("saving", "buffer", 15),
-    "quy_don": ("saving", "sinking", 5),
     "muc_tieu": ("saving", "goal", 5),
-    "tich_luy_dai_han": ("saving", "long_term", 5),
 }
-TRACE = "sixjars"
+LEGACY = {
+    "an_uong": ("spending", None, 25),
+    "di_lai": ("spending", None, 10),
+    "hoa_don": ("spending", None, 30),
+    "giai_tri": ("spending", None, 10),
+    "du_lich": ("saving", None, 5),
+    "du_phong": ("saving", None, 15),
+    "nghia_vu": ("obligation", None, 5),
+}
+TRACE = "jarlayout"
 
 
 def _read_jars(env, user):
@@ -60,11 +72,12 @@ def _reset(env, user, groups):
     return handle_http(http_event("POST", "/demo/reset", sub=user, groups=groups), env.svc)
 
 
-def test_migration_and_catalogue_seed_preserve_preexisting_jar_rows(tmp_path):
+def test_migration_and_seed_preserve_legacy_wallet_and_read_contract(tmp_path):
     import pgserver
 
     splitter = _load("sqlsplit", REPO / "infra-cdk/lambdas/migrator/sqlsplit.py")
     migration = REPO / "db/migrations/0055_default_six_jars.sql"
+    activation = migration.with_name("0056_activate_onboarding_jar_layout.sql")
     seed = REPO / "db/seed/jar_templates.sql"
     server = pgserver.get_server(str(tmp_path / "pg"), cleanup_mode="stop")
     try:
@@ -80,22 +93,99 @@ def test_migration_and_catalogue_seed_preserve_preexisting_jar_rows(tmp_path):
                     break
                 apply(path)
 
-            conn.execute("INSERT INTO users(id, display_name) VALUES ('existing', 'Existing')")
+            def legacy_init(user):
+                # SQL used by the previous Ledger, which has no purpose parameter.
+                with conn.transaction():
+                    conn.execute("SET LOCAL ROLE yofina_app")
+                    conn.execute("SELECT set_config('app.user_id', %s, true)", [user])
+                    conn.execute(
+                        "INSERT INTO users(id, display_name) VALUES (%s, 'Legacy')", [user]
+                    )
+                    conn.execute("SELECT app_ensure_system_jars(%s)", [user])
+                    return conn.execute(
+                        "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, "
+                        "split_percent, sort_order, kind) "
+                        "SELECT %s, t.code, t.name, t.color_key, t.icon_key, 0, t.default_split_percent, "
+                        "t.sort_order, t.kind FROM jar_templates t WHERE t.is_default AND NOT EXISTS "
+                        "(SELECT 1 FROM jars j WHERE j.user_id = %s AND j.kind <> 'system') "
+                        "RETURNING code, kind, split_percent",
+                        [user, user],
+                    ).fetchall()
+
+            def snapshot():
+                return {
+                    table: conn.execute(
+                        f"SELECT to_jsonb(t) - 'purpose' AS snapshot_row FROM {table} t "
+                        "WHERE user_id = 'existing' ORDER BY snapshot_row"
+                    ).fetchall()
+                    for table in ("jars", "transactions", "salary_events", "obligations")
+                }
+
+            def legacy_reads():
+                with conn.transaction():
+                    conn.execute("SET LOCAL ROLE yofina_app")
+                    results = [
+                        conn.execute("SELECT * FROM app_list_jars('existing')"),
+                        conn.execute("SELECT * FROM app_get_jar_state('existing')"),
+                        conn.execute("SELECT app_get_overview('existing', %s, 'UTC')", [NOW]),
+                        conn.execute(
+                            "SELECT app_get_jar_detail('existing', 'an_uong', %s, 'UTC')", [NOW]
+                        ),
+                        conn.execute(
+                            "SELECT * FROM app_get_forecast_context('existing', %s, 'UTC')", [NOW]
+                        ),
+                    ]
+                    assert conn.execute("SELECT DISTINCT user_id FROM jars").fetchall() == [
+                        ("existing",)
+                    ]
+                    return [
+                        ([col.name for col in result.description], result.fetchall())
+                        for result in results
+                    ]
+
+            apply(seed)
+            assert {c: (k, None, p) for c, k, p in legacy_init("existing")} == LEGACY
             conn.execute(
-                "INSERT INTO jars(user_id, code, name, color_key, icon_key, balance_vnd, split_percent, kind) "
-                "VALUES ('existing', 'du_phong', 'Original buffer', 'blue', 'shield', 321000, 37.25, 'saving'), "
-                "('existing', 'an_uong', 'Original food', 'teal', 'utensils', 127000, 62.75, 'spending')"
+                "UPDATE jars SET name = 'Original food', balance_vnd = 127000, split_percent = 22.5 "
+                "WHERE user_id = 'existing' AND code = 'an_uong'"
             )
-            select = "SELECT code, name, balance_vnd, split_percent FROM jars ORDER BY code"
-            before = conn.execute(select).fetchall()
+            conn.execute(
+                "UPDATE jars SET balance_vnd = 321000, split_percent = 17.5 "
+                "WHERE user_id = 'existing' AND code = 'du_phong'"
+            )
+            tx_id = conn.execute(
+                "INSERT INTO transactions (user_id, occurred_at, app_date, kind, jar_code, amount_vnd, tx_type) "
+                "VALUES ('existing', %s, DATE '2026-12-05', 'income', 'tien_vao_khac', 448000, 'salary') "
+                "RETURNING id",
+                [NOW],
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT INTO salary_events (user_id, period_date, transaction_id, received_on, amount_vnd, "
+                "status, split, confirmed_at) VALUES ('existing', DATE '2026-12-05', %s, DATE '2026-12-05', "
+                """448000, 'confirmed', '[{"jar":"an_uong","amount_vnd":127000},
+                {"jar":"du_phong","amount_vnd":321000}]', %s)""",
+                [tx_id, NOW],
+            )
+            conn.execute(
+                "INSERT INTO obligations (user_id, kind, name, amount_vnd, due_date, pay_jar_code) "
+                "VALUES ('existing', 'bill', 'Electricity', 90000, DATE '2026-12-15', 'hoa_don')"
+            )
+            before, reads_before = snapshot(), legacy_reads()
             apply(migration)
             apply(seed)
-            apply(seed)
-            assert conn.execute(select).fetchall() == before
+            assert {c: (k, None, p) for c, k, p in legacy_init("old-ledger")} == LEGACY
+            assert snapshot() == before and legacy_reads() == reads_before
             assert conn.execute("SELECT count(purpose) FROM jars").fetchone() == (0,)
-            assert conn.execute(
-                "SELECT count(*), sum(default_split_percent) FROM jar_templates WHERE is_default"
-            ).fetchone() == (6, 100)
+            apply(activation)
+            apply(seed)
+            assert snapshot() == before and legacy_reads() == reads_before
+            assert conn.execute("SELECT count(purpose) FROM jars").fetchone() == (0,)
+            assert {
+                code: (kind, purpose, rate)
+                for code, kind, purpose, rate in conn.execute(
+                    "SELECT code, kind, purpose, default_split_percent FROM jar_templates WHERE is_default"
+                )
+            } == ONBOARDING
     finally:
         server.cleanup()
 
@@ -104,23 +194,25 @@ def test_onboarding_and_edit_purpose_amount_date_and_split(env):
     user = "six-onboarding"
     env.act(user, "update_profile", {"monthly_salary_vnd": 9_000_000, "payday_day": 5})
     before = _read_jars(env, user)
-    assert _layout(before) == EXPECTED
+    assert _layout(before) == ONBOARDING
+    assert sum(j["split_percent"] for j in before) == 100
     assert all(j["balance_vnd"] == 0 for j in before)
     overview = env.svc.overview_response(user)
-    assert _layout(overview["jars"]) == EXPECTED
+    assert _layout(overview["jars"]) == ONBOARDING
     types = {row["tx_type"]: row for row in env.svc.tx_types_response(user)["tx_types"]}
     assert types["rent"]["default_jar"] == "nghia_vu"
     assert types["food_drink"]["default_jar"] == "chi_hang_ngay"
     assert {j["code"] for j in overview["system_jars"]} == {"tien_vao_khac", "chua_phan_loai"}
-    assert {
-        t["code"]: t.get("purpose")
-        for t in env.svc.jar_templates_response()["templates"]
-        if t["is_default"]
-    } == {code: info[1] for code, info in EXPECTED.items()}
+    templates = {t["code"]: t for t in env.svc.jar_templates_response()["templates"]}
+    assert {code: t.get("purpose") for code, t in templates.items() if t["is_default"]} == {
+        code: info[1] for code, info in ONBOARDING.items()
+    }
 
     patch = {j["code"]: j for j in _editable(before)}
+    for code in ("quy_don", "tich_luy_dai_han", "muc_tieu"):
+        patch[code] = _editable([{**templates[code], "split_percent": 0}])[0]
     patch["quy_don"].update(goal_vnd=920_000, goal_date="2027-01-03", split_percent=6)
-    patch["chi_hang_ngay"]["split_percent"] = 34
+    patch["chi_hang_ngay"]["split_percent"] -= 6
     patch["tich_luy_dai_han"]["goal_date"] = "2029-01-01"
     patch["muc_tieu"].update(goal_vnd=4_000_000, goal_date="2027-04-01")
     env.act(user, "save_jars", {"jars": list(patch.values())})
@@ -165,21 +257,56 @@ def test_reset_preserves_legacy_until_allowed_and_is_repeatable(env):
 
     first = _reset(env, user, "persona-minh")
     assert first["statusCode"] == 200, first
-    body = json.loads(first["body"])
     jars = _read_jars(env, user)
-    assert body["jars_count"] == 6 and _layout(jars) == EXPECTED
-    assert sum(j["balance_vnd"] for j in jars) == sum(j["balance_vnd"] for j in before)
-    assert next(j for j in jars if j["code"] == "muc_tieu")["goal_date"] == "2027-04-01"
+    assert _layout(jars) == DEMO
+    assert {j["code"]: j["balance_vnd"] for j in jars} == {
+        "chi_hang_ngay": 1_080_000,
+        "nghia_vu": 2_150_000,
+        "du_phong": 2_700_000,
+        "muc_tieu": 1_800_000,
+    }
     assert _reset(env, user, "persona-minh")["statusCode"] == 200
     assert _read_jars(env, user) == jars and _read_jars(env, other) == other_before
     rows = env.repo.jar_view(user).jars
-    assert len(rows) == 8
+    assert len(rows) == 6
     assert {
         o["pay_jar_code"] for o in env.repo.list_obligations(user, status="active", limit=100)
     } == {"nghia_vu"}
     roadmaps = handle_http(http_event("GET", "/roadmap/versions", sub=user), env.svc)
     assert roadmaps["statusCode"] == 200
     assert len(json.loads(roadmaps["body"])["versions"]) == 3
+
+
+@pytest.mark.parametrize("persona", ["minh", "khoa", "lan", "vy"])
+def test_reset_uses_four_demo_jars_for_each_persona(env, persona):
+    user = f"layout-demo-{persona}"
+    response = _reset(env, user, f"persona-{persona}")
+    assert response["statusCode"] == 200, response
+    assert json.loads(response["body"])["jars_count"] == 4
+    jars = _read_jars(env, user)
+    assert len(jars) == 4 and _layout(jars) == DEMO
+    assert sum(j["split_percent"] for j in jars) == 100
+    goal = next(j for j in jars if j["code"] == "muc_tieu")
+    assert (goal["goal_vnd"], goal["goal_date"]) == (6_000_000, "2027-04-01")
+    assert {
+        o["pay_jar_code"] for o in env.repo.list_obligations(user, status="active", limit=100)
+    } == {"nghia_vu"}
+    assert _reset(env, user, f"persona-{persona}")["statusCode"] == 200
+    assert _read_jars(env, user) == jars
+
+
+def test_rollback_uses_legacy_onboarding_and_keeps_demo_layout(env, monkeypatch):
+    monkeypatch.setenv("YOFINA_ONBOARDING_JAR_LAYOUT", "legacy")
+    user = "layout-rollback"
+    env.act(user, "update_profile", {"monthly_salary_vnd": 9_000_000, "payday_day": 5})
+    assert _layout(_read_jars(env, user)) == LEGACY
+    assert {
+        t["code"]: (t["kind"], t.get("purpose"), t["default_split_percent"])
+        for t in env.svc.jar_templates_response()["templates"]
+        if t["is_default"]
+    } == LEGACY
+    assert _reset(env, "layout-rollback-demo", "persona-lan")["statusCode"] == 200
+    assert _layout(_read_jars(env, "layout-rollback-demo")) == DEMO
 
 
 def test_new_obligations_and_bnpl_choose_and_charge_the_explicit_source(env):
@@ -285,7 +412,7 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
     pipeline = Pipeline(ForecastRepo(env.db), settings, None, clock=env.clock)
     assert pipeline.run_user(user, trigger="reset").status == "ok"
     summaries = {row["jar_code"]: row for row in env.repo.forecast_summaries(user)}
-    assert set(summaries) == set(EXPECTED)
+    assert set(summaries) == set(DEMO)
     daily = summaries["chi_hang_ngay"]
     print("Runout demo", daily["start_balance_vnd"], daily["runout_date"], daily["payday_date"])
     assert daily["status"] == "short" and daily["runout_date"] < daily["payday_date"]
@@ -340,10 +467,8 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
         allow_relaxation=True,
     )
     roles = {j.code: j.role for j in allocation.problem.jars}
-    assert (roles["du_phong"], roles["quy_don"], roles["muc_tieu"], roles["tich_luy_dai_han"]) == (
+    assert (roles["du_phong"], roles["muc_tieu"]) == (
         "emergency",
-        "saving",
         "goal",
-        "saving",
     )
     assert allocation.goals["muc_tieu"].target_date == date(2027, 4, 1)

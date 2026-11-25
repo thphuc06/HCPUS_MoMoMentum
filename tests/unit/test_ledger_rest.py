@@ -254,7 +254,13 @@ def test_reset_sinh_lai_persona_dat_dong_ho_ve_ngay_neo(schema_ok, groups):
     assert body["app_date"] == "2026-11-21" and body["clock_offset_days"] == -19
     (reset,) = repo.resets
     assert reset["uid"] == "sub-moi" and reset["profile"]["salary"] == 9_000_000
-    assert len(reset["jars"]) == 6 and body["jars_count"] == 6
+    assert len(reset["jars"]) == 4 and body["jars_count"] == 4
+    assert {j["code"]: j["purpose"] for j in reset["jars"]} == {
+        "chi_hang_ngay": None,
+        "nghia_vu": None,
+        "du_phong": "buffer",
+        "muc_tieu": "goal",
+    }
     assert body["transactions_count"] == len(reset["transactions"]) > 100
     assert (
         body["obligations_count"] == len(reset["obligations"]) == 7

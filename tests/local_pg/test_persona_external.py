@@ -114,7 +114,7 @@ def test_vy_thu_nhap_ngoai_vi_trong_so_cai_va_so_du_hu_dung_bat_bien(env):
     ]
     bal = balances(env, VY)
     assert {c: int(v) for c, v in by_jar.items()} == bal  # số dư mỗi hũ = tổng dòng trả bằng hũ
-    expected = {"quy_don": 0, "tich_luy_dai_han": 0}
+    expected = {}
     for jar in data.jars:
         code = JAR_ALIASES.get(jar.code, jar.code)
         expected[code] = expected.get(code, 0) + jar.balance_vnd

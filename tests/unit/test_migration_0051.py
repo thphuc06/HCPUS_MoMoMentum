@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import subprocess
+from pathlib import Path
 
 from conftest import REPO
 
@@ -77,4 +78,4 @@ def test_khong_sua_migration_cu():
     )  # fmt: skip
     if out.returncode == 0:
         changed = [line for line in out.stdout.splitlines() if line.strip()]
-        assert all(re.search(r"/0051_", c) for c in changed), changed
+        assert all(Path(c).name >= SQL_PATH.name for c in changed), changed

@@ -446,7 +446,7 @@ def test_onboarding_tai_khoan_trang_chi_voi_luong_va_ngay_nhan(env, schema):
     assert parse_block(r).data.summary.startswith("Đã tạo hồ sơ")
     ov = env.svc.overview_response("sub-moi")
     assert ov["profile"]["onboarded"] and ov["profile"]["display_name"] == "Hà"
-    assert len(ov["jars"]) == 6 and sum(j["split_percent"] for j in ov["jars"]) == 100
+    assert len(ov["jars"]) == 3 and sum(j["split_percent"] for j in ov["jars"]) == 100
     assert [j["code"] for j in ov["system_jars"]] == ["tien_vao_khac", "chua_phan_loai"]
     assert ov["next_payday"]["date"] == "2026-12-15" and ov["credit_line"]["limit_vnd"] == 3_000_000
     assert ov["balance"]["total_vnd"] == 0

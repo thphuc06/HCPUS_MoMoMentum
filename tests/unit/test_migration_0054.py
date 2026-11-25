@@ -94,4 +94,5 @@ def test_rang_buoc_so_tien_va_fx_khop_hop_dong():
 
 def test_khong_sua_migration_cu():
     names = sorted(p.name for p in (REPO / "db" / "migrations").glob("*.sql"))
-    assert names[-2:] == ["0053_phase5.sql", "0054_ingest_fx.sql"]
+    i = names.index("0054_ingest_fx.sql")
+    assert names[i - 1] == "0053_phase5.sql"

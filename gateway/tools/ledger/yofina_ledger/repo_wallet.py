@@ -27,6 +27,7 @@ from yofina_core.wallet import (
     TX_TYPE_JAR_TRANSFER,
     TX_TYPE_SALARY_SPLIT,
 )
+from yofina_ledger.jar_layout import onboarding_override
 
 ALREADY_APPLIED_MESSAGE = "Đề nghị này đã được thực hiện rồi. Chưa ghi thêm gì."
 CANCELLED_MESSAGE = "Đề nghị này đã bị hủy. Hãy hỏi lại nếu bạn vẫn muốn thực hiện."
@@ -58,9 +59,10 @@ class ClaimSpec:
 
 
 # --- đọc -----------------------------------------------------------------------------------------------------
-SQL_JAR_STATE = "SELECT * FROM app_get_jar_state(:uid)"
-SQL_OVERVIEW = "SELECT app_get_overview(:uid, CAST(:now AS timestamptz), :tz) AS data"
-SQL_JAR_DETAIL = "SELECT app_get_jar_detail(:uid, :jar, CAST(:now AS timestamptz), :tz) AS data"
+SQL_OVERVIEW = "SELECT app_get_overview_with_purpose(:uid, CAST(:now AS timestamptz), :tz) AS data"
+SQL_JAR_DETAIL = (
+    "SELECT app_get_jar_detail_with_purpose(:uid, :jar, CAST(:now AS timestamptz), :tz) AS data"
+)
 SQL_LIST_TRANSACTIONS = (
     "SELECT * FROM app_list_transactions(CAST(:uid AS text), CAST(:jar AS text), CAST(:from_date AS date), "
     "CAST(:to_date AS date), CAST(:kind AS text), CAST(:tx_type AS text), CAST(:needs_review AS boolean), "
@@ -95,10 +97,17 @@ SQL_REF_FEES = (
     "condition_note, source_name, source_url, effective_from, effective_to "
     "FROM fee_schedules ORDER BY product_code, fee_type, effective_from DESC LIMIT 100"
 )
-SQL_REF_TEMPLATES = (
-    "SELECT code, name, color_key, icon_key, kind, default_split_percent, is_default, sort_order, purpose "
-    "FROM jar_templates ORDER BY sort_order, code LIMIT 40"
+SQL_ONBOARDING_TEMPLATES = (
+    "SELECT t.code, t.name, t.color_key, t.icon_key, t.kind, "
+    "coalesce(l.split_percent, t.default_split_percent) AS default_split_percent, "
+    "CASE WHEN CAST(:layout AS jsonb) IS NULL THEN t.is_default ELSE l.code IS NOT NULL END AS is_default, "
+    "coalesce(l.sort_order, t.sort_order) AS sort_order, "
+    "CASE WHEN l.code IS NULL THEN t.purpose END AS purpose "
+    "FROM jar_templates t LEFT JOIN "
+    "jsonb_to_recordset(coalesce(CAST(:layout AS jsonb), '[]'::jsonb)) "
+    "AS l(code text, split_percent numeric, sort_order smallint) ON l.code = t.code"
 )
+SQL_REF_TEMPLATES = SQL_ONBOARDING_TEMPLATES + " ORDER BY sort_order, code LIMIT 40"
 
 # --- ghi: dùng chung --------------------------------------------------------------------------------------
 SQL_AUDIT_TX = (
@@ -324,7 +333,7 @@ SQL_UPSERT_USER = (
 SQL_TEMPLATE_JARS = (
     "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind, purpose) "
     "SELECT CAST(:uid AS text), t.code, t.name, t.color_key, t.icon_key, 0, t.default_split_percent, t.sort_order, t.kind, t.purpose "
-    "FROM jar_templates t WHERE t.is_default AND NOT EXISTS "
+    f"FROM ({SQL_ONBOARDING_TEMPLATES}) t WHERE t.is_default AND NOT EXISTS "
     "(SELECT 1 FROM jars j WHERE j.user_id = :uid AND j.kind <> 'system') RETURNING code"
 )
 SQL_DEFAULT_CREDIT_LINE = (
@@ -525,7 +534,7 @@ class WalletRepo:
         return self.db.query(SQL_REF_FEES, max_rows=100)
 
     def reference_templates(self) -> list[Row]:
-        return self.db.query(SQL_REF_TEMPLATES, max_rows=40)
+        return self.db.query(SQL_REF_TEMPLATES, {"layout": onboarding_override()}, max_rows=40)
 
     # --- ghi: tiện ích -----------------------------------------------------------------------------------------
     @staticmethod
@@ -1084,7 +1093,7 @@ class WalletRepo:
             jars_after: list[dict[str, Any]] = []
             if created:
                 t.execute(SQL_ENSURE_SYSTEM_JARS, {"uid": user_id})
-                made = t.execute(SQL_TEMPLATE_JARS, {"uid": user_id})
+                made = t.execute(SQL_TEMPLATE_JARS, {"uid": user_id, "layout": onboarding_override()})
                 facts["template_jars"] = [m["code"] for m in made]
                 t.execute(
                     SQL_DEFAULT_CREDIT_LINE,

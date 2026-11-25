@@ -1,6 +1,6 @@
 {
   "persona": "minh",
-  "nguon": "Dữ liệu demo cho bộ sáu hũ. Số dư và hạn Mục tiêu lấy lúc reset. Số mẫu trong các bước dùng để minh họa cách cập nhật lộ trình.",
+  "nguon": "Dữ liệu demo cho bộ bốn hũ. Số dư và hạn Mục tiêu lấy lúc reset. Số mẫu trong các bước dùng để minh họa cách cập nhật lộ trình.",
   "basis": {
     "confidence_band": "medium",
     "is_initial_estimate": false,
