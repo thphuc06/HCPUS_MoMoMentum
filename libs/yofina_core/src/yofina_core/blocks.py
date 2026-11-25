@@ -311,6 +311,8 @@ class ForecastTimelineData(_Strict):
     horizon_days: Annotated[int, Field(ge=1, le=90)]
     payday: ForecastPayday
     runout_date: IsoDate | None = None
+    # #25: sai ở hũ thưa (ngày cạn không đủ tin cậy) thì không có runout_date; vắng (None) nghĩa là đúng như trước.
+    runout_date_shown: bool | None = None
     p_shortfall: Ratio | None = None
     p_shortfall_se: Ratio | None = None
     confidence_band: ConfidenceBand
@@ -1922,8 +1924,12 @@ def _forecast_sentence(
     payday: date | str,
     stale: bool,
     initial: bool,
+    date_shown: bool = True,
 ) -> str:
-    if status == "short" and runout:
+    if status == "short" and not date_shown:
+        # hũ thưa (#25): không nêu ngày cạn cụ thể
+        text = f"Hũ {name} có thể cạn trước ngày lương {_dm(payday)}."
+    elif status == "short" and runout:
         gap = (date.fromisoformat(_date_text(payday)) - date.fromisoformat(_date_text(runout))).days
         text = (
             f"Hũ {name} dự kiến cạn ngày {_dm(runout)}, còn {gap} ngày tới kỳ lương {_dm(payday)}."
@@ -1959,14 +1965,17 @@ def build_forecast_timeline(
     - `jar`: code, name, color_key, icon_key.
     - `summary`: một hàng của `app_get_forecast_summaries` (computed_at, run_app_date, model, horizon_days,
       history_days, data_coverage, is_initial_estimate, start_balance_vnd, payday_date, days_to_payday,
-      runout_date, p_shortfall, p_shortfall_se, status, confidence_band, show_probability).
+      runout_date, p_shortfall, p_shortfall_se, status, confidence_band, show_probability, runout_date_shown).
     - `days`: các hàng của `app_get_forecast_series` (day, balance_p10_vnd, balance_p50_vnd, balance_p90_vnd).
     - `events`: mốc đã ghép từ nghĩa vụ và lịch lương, mỗi mốc có date, kind, label, amount_vnd, amount_max_vnd tùy chọn.
     - `p_shortfall` chỉ được phát khi `show_probability` đúng và có giá trị (quy tắc hiển thị của hợp đồng).
+    - `runout_date_shown` sai (hũ thưa, #25; cột của migration 0055, vắng là đúng) thì khối không có `runout_date` và đánh dấu
+      `runout_date_shown: false`.
     Tiền Data API trả dạng chuỗi hoặc Decimal đều được; số âm giữ nguyên dấu.
     """
     show_p = bool(summary.get("show_probability")) and summary.get("p_shortfall") is not None
-    runout = summary.get("runout_date")
+    date_shown = summary.get("runout_date_shown") is not False
+    runout = summary.get("runout_date") if date_shown else None
     coverage = summary.get("data_coverage")
     payday = _date_text(summary["payday_date"])
     data = ForecastTimelineData(
@@ -1979,6 +1988,7 @@ def build_forecast_timeline(
         horizon_days=int(summary["horizon_days"]),
         payday=ForecastPayday(date=payday, days_until=int(summary["days_to_payday"])),
         runout_date=_date_text(runout) if runout else None,
+        runout_date_shown=None if date_shown else False,
         p_shortfall=_ratio(summary["p_shortfall"]) if show_p else None,
         p_shortfall_se=(
             _ratio(summary["p_shortfall_se"])
@@ -2048,15 +2058,16 @@ def build_forecast_timeline_from_data(
             f"Nếu {cmp.label}: "
             + _forecast_sentence(
                 d.jar.name, cmp.after.status, cmp.after.runout_date, d.payday.date, d.stale,
-                d.is_initial_estimate,
+                d.is_initial_estimate, d.runout_date_shown is not False,
             ),
             280,
         )  # fmt: skip
         default_id = f"forecast_timeline:{trace_id}:{d.jar.code}:what_if"
     else:
         text = _forecast_sentence(
-            d.jar.name, d.status, d.runout_date, d.payday.date, d.stale, d.is_initial_estimate
-        )
+            d.jar.name, d.status, d.runout_date, d.payday.date, d.stale, d.is_initial_estimate,
+            d.runout_date_shown is not False,
+        )  # fmt: skip
         default_id = f"forecast_timeline:{trace_id}:{d.jar.code}"
     return ForecastTimelineBlock(
         v=SCHEMA_VERSION,

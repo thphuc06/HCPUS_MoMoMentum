@@ -2370,7 +2370,7 @@ components:
     JarFull:
       description: |
         Một hũ, đủ để vẽ thẻ hũ trên Tổng quan và Danh sách hũ. `balance_vnd` có dấu: chỉ hũ hệ thống
-        Chưa phân loại mới âm. Các trường dự báo (`status`, `runout_date`, `p_shortfall`, `confidence_band`) lấy từ
+        Chưa phân loại mới âm. Các trường dự báo (`status`, `runout_date`, `runout_date_shown`, `p_shortfall`, `confidence_band`) lấy từ
         lần chạy dự báo mới nhất có chứa hũ; vắng nếu hũ chưa có dự báo (hũ hệ thống không có dự báo).
         `p_shortfall` chỉ có khi đủ tin cậy (xem khối `forecast_timeline`).
       type: object
@@ -2407,7 +2407,14 @@ components:
         status:
           $ref: '../blocks/forecast_timeline.schema.json#/$defs/JarStatus'
         runout_date:
+          description: Vắng khi hũ không cạn trong kỳ dự báo, hoặc khi `runout_date_shown` sai.
           $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        runout_date_shown:
+          description: |
+            Có nêu ngày cạn cụ thể không (#25), cùng nghĩa với trường cùng tên của khối `forecast_timeline`. Vắng nghĩa là đúng.
+            Sai ở hũ thưa: server bỏ `runout_date`, giao diện hiện "Có thể cạn trước ngày lương" kèm `p_shortfall` (khi có) cho
+            hũ hụt. Server đọc từ cột cùng tên của `app_get_forecast_summaries` (migration 0055).
+          type: boolean
         p_shortfall:
           $ref: '../blocks/envelope.schema.json#/$defs/Ratio'
         confidence_band:

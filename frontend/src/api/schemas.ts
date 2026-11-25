@@ -148,6 +148,8 @@ export const JarFull = z.object({
   goal_date: IsoDate.optional(),
   status: JarStatus.optional(),
   runout_date: IsoDate.optional(),
+  /** #25: sai ở hũ thưa (server đã bỏ `runout_date`), giao diện nói "Có thể cạn trước ngày lương"; vắng nghĩa là đúng. */
+  runout_date_shown: z.boolean().optional(),
   p_shortfall: Ratio.optional(),
   confidence_band: ConfidenceBand.optional(),
   /** Số dư dự báo P50 thấp nhất từ ngày mai tới trước kỳ lương (có dấu, có thể âm); vắng khi hũ chưa có dự báo. */
