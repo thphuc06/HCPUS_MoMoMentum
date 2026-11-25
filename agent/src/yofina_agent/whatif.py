@@ -387,12 +387,17 @@ ANALYST_MEMORY_GUIDE = (
 )
 
 
-def _jar_for_analyst(j: Mapping[str, Any]) -> dict[str, Any]:
-    """Hũ cho Analyst: mã, tên và số dư đã định dạng (để chọn hũ đủ tiền; số dư nằm trong kết quả `get_jar_balances` nên có căn cứ)."""
+def _jar_for_analyst(j: Mapping[str, Any], spend_amount: int | None = None) -> dict[str, Any]:
+    """Hũ cho Analyst: mã, tên và số dư đã định dạng (để chọn hũ đủ tiền; số dư nằm trong kết quả `get_jar_balances` nên có căn cứ).
+
+    Có khoản chi thì kèm `covers_amount`: mã so số dư với số tiền khoản chi (#11), để Analyst không đề xuất trả bằng hũ không đủ tiền rồi
+    bị luật `source_jar_covers` của Verifier bắt và phải sửa thêm một vòng. Verifier vẫn kiểm luật đó."""
     out: dict[str, Any] = {"code": j["code"], "name": j["name"]}
     balance = j.get("balance_vnd")
     if isinstance(balance, int) and not isinstance(balance, bool):
         out["balance_text"] = format_vnd(balance)
+        if spend_amount is not None:
+            out["covers_amount"] = balance >= spend_amount
     return out
 
 
@@ -405,15 +410,23 @@ def analyst_prompt(
     previous: Analysis | None = None,
     memory: str = "",
     can_cu: list[dict[str, str]] | None = None,
+    spend_amount: int | None = None,
 ) -> str:
     """Prompt của Analyst. `memory` là khối `<bo_nho_nguoi_dung>` đã làm sạch (`TurnMemory.prompt_block`): không vào `compact` nên
     không phải căn cứ cho con số nào (Verifier dựng `Allowed` từ kết quả tool và câu hỏi, không từ bộ nhớ). Khối khác rỗng thì kèm
     `ANALYST_MEMORY_GUIDE` ngay sau nó; khối rỗng thì prompt không có chữ nào về bộ nhớ. `can_cu` là danh sách mã căn cứ cho các
-    bước lập luận (`advisor.basis_catalog`: tool đã có kết quả trong lượt và các luật phù hợp)."""
-    jars = [_jar_for_analyst(j) for j in jar_rows]
+    bước lập luận (`advisor.basis_catalog`: tool đã có kết quả trong lượt và các luật phù hợp). `spend_amount` là số tiền khoản chi
+    của kịch bản (`_spend_amount`), có thì mỗi hũ mang cờ `covers_amount` do mã tính."""
+    jars = [_jar_for_analyst(j, spend_amount) for j in jar_rows]
+    covers_note = (
+        "\ncovers_amount = true nghĩa là số dư hũ đó đủ trả cả khoản chi (mã đã so). Phương án trả khoản chi bằng tiền hũ "
+        "chỉ dùng hũ có covers_amount = true; không hũ nào đủ thì đừng đề xuất trả ngay bằng tiền hũ."
+        if spend_amount is not None
+        else ""
+    )
     parts = [
         f"<ngay_hom_nay>{app_date}</ngay_hom_nay>",
-        f"<danh_sach_hu>\n{json.dumps(jars, ensure_ascii=False)}\n</danh_sach_hu>",
+        f"<danh_sach_hu>\n{json.dumps(jars, ensure_ascii=False)}\n</danh_sach_hu>{covers_note}",
         f"<cau_hoi>\n{question}\n</cau_hoi>",
         f"<du_lieu>\n{json.dumps(compact, ensure_ascii=False)}\n</du_lieu>",
     ]
@@ -704,7 +717,15 @@ async def _call_analyst(
                 messages=[
                     user_message(
                         analyst_prompt(
-                            question, compact, turn.jar_rows, turn.app_date, feedback, previous, memory, can_cu=can_cu
+                            question,
+                            compact,
+                            turn.jar_rows,
+                            turn.app_date,
+                            feedback,
+                            previous,
+                            memory,
+                            can_cu=can_cu,
+                            spend_amount=spend_amount,
                         )
                     )
                 ],
