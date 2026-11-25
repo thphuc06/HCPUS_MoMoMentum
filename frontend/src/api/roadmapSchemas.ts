@@ -75,6 +75,8 @@ export type RoadmapStepEditRequest = z.infer<typeof RoadmapStepEditRequest>
 
 export const RoadmapVersionDecisionRequest = z.strictObject({
   decision: z.enum(['adopt', 'keep_previous']),
+  // Một câu lý do tùy chọn khi "Giữ bản cũ" (server che PII rồi lưu cùng quyết định); với adopt thì server bỏ qua.
+  reason: z.string().min(1).max(200).optional(),
 })
 export type RoadmapVersionDecisionRequest = z.infer<typeof RoadmapVersionDecisionRequest>
 

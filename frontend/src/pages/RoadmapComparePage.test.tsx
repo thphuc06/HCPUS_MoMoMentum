@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ERROR_MESSAGES } from '@/api/errors'
@@ -15,12 +15,9 @@ const path = `/roadmap/versions/${diff.data.to_version}/decision`
 describe('so với bản cũ', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it.each([
-    ['adopt', 'Dùng bản mới', 'active', 'Đang dùng'],
-    ['keep_previous', 'Giữ bản cũ', 'discarded', 'Đã bỏ'],
-  ] as const)('gửi %s và hiển thị khối server trả về', async (decision, button, status, label) => {
+  it('gửi adopt và hiển thị khối server trả về', async () => {
     const user = userEvent.setup()
-    const block = { ...proposed, data: { ...proposed.data, status } }
+    const block = { ...proposed, data: { ...proposed.data, status: 'active' as const } }
     const { calls } = mountApp(backend({
       'GET /roadmap': active,
       'GET /roadmap/versions': versions,
@@ -30,10 +27,28 @@ describe('so với bản cũ', () => {
     await user.click(await screen.findByRole('link', { name: 'Có phiên bản mới' }))
     expect(await screen.findByRole('heading', { name: 'So sánh lộ trình · Bản 2 → 3' })).toBeVisible()
     expect(screen.getByText(diff.data.reason.text)).toBeVisible()
-    await user.click(screen.getByRole('button', { name: button }))
+    await user.click(screen.getByRole('button', { name: 'Dùng bản mới' }))
     expect(await screen.findByRole('heading', { name: 'Lộ trình · Phiên bản 3' })).toBeVisible()
-    expect(screen.getByText(label)).toBeVisible()
-    expect(callsTo(calls, 'POST', path).map(bodyOf)).toEqual([restFixture(`RoadmapVersionDecisionRequest.${decision}`)])
+    expect(screen.getByText('Đang dùng')).toBeVisible()
+    expect(callsTo(calls, 'POST', path).map(bodyOf)).toEqual([restFixture('RoadmapVersionDecisionRequest.adopt')])
+  })
+
+  it.each([
+    ['để trống lý do', 'keep_previous'],
+    ['có lý do', 'keep_previous_reason'],
+  ] as const)('Giữ bản cũ hỏi một câu lý do tùy chọn rồi gửi: %s', async (_case, fixture) => {
+    const user = userEvent.setup()
+    const request = restFixture(`RoadmapVersionDecisionRequest.${fixture}`)
+    const block = { ...proposed, data: { ...proposed.data, status: 'discarded' as const } }
+    const { calls } = mountApp(backend({ 'GET /roadmap/diff': diff, [`POST ${path}`]: block }), '/roadmap/compare')
+    await user.click(await screen.findByRole('button', { name: 'Giữ bản cũ' }))
+    const dialog = within(await screen.findByRole('alertdialog', { name: 'Giữ bản cũ' }))
+    expect(callsTo(calls, 'POST', path)).toHaveLength(0) // chưa gửi khi mới hỏi
+    if (request.reason) await user.type(dialog.getByRole('textbox', { name: /Vì sao bạn giữ bản cũ/ }), String(request.reason))
+    await user.click(dialog.getByRole('button', { name: 'Giữ bản cũ' }))
+    expect(await screen.findByRole('heading', { name: 'Lộ trình · Phiên bản 3' })).toBeVisible()
+    expect(screen.getByText('Đã bỏ')).toBeVisible()
+    expect(callsTo(calls, 'POST', path).map(bodyOf)).toEqual([request])
   })
 
   it('tắt cả hai nút khi can_adopt=false', async () => {

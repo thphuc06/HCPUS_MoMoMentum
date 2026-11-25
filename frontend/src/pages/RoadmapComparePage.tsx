@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, ListSkeleton } from '@/components/StateViews'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Roadmap } from '@/features/roadmap/Roadmap'
 import { RoadmapDiff } from '@/features/roadmap/RoadmapDiff'
+import { KeepPreviousDialog } from '@/features/roadmap/KeepPreviousDialog'
 import { useRoadmapMutation } from '@/features/roadmap/useStepDecision'
 import { RoadmapVersion } from '@/contracts/blocks'
 
@@ -24,14 +25,27 @@ export function RoadmapComparePage() {
   const to = versionParam(search.get('to'))
   const diff = useApiResource((api) => api.getRoadmapDiff({ from_version: from, to_version: to }), [from, to])
   const [result, setResult] = useState<RoadmapResponse | null>(null)
-  const mutation = useRoadmapMutation(diff.reload)
+  // "Giữ bản cũ" mở hộp hỏi lý do trước khi gửi; xung đột thì đóng hộp để trang báo lỗi và tải lại so sánh.
+  const [asking, setAsking] = useState(false)
+  const mutation = useRoadmapMutation(() => {
+    setAsking(false)
+    return diff.reload()
+  })
   const missing = diff.error?.code === 'ROADMAP_NOT_FOUND'
   const data = missing ? null : diff.data?.data
   const enabled = !!data?.can_adopt && diff.status === 'ready' && !diff.refreshing && !mutation.working
 
-  const decide = (decision: RoadmapVersionDecisionRequest['decision']) => {
+  const decide = (decision: RoadmapVersionDecisionRequest['decision'], reason?: string) => {
     if (!enabled || !data) return
-    void mutation.run(() => api.decideRoadmapVersion(data.to_version, { decision }), setResult)
+    void mutation.run(() => api.decideRoadmapVersion(data.to_version, { decision, ...(reason && { reason }) }), (block) => {
+      setAsking(false)
+      setResult(block)
+    })
+  }
+  const askKeepPrevious = () => {
+    if (!enabled) return
+    mutation.clearError()
+    setAsking(true)
   }
 
   return (
@@ -48,14 +62,24 @@ export function RoadmapComparePage() {
             {diff.status === 'loading' && <ListSkeleton rows={2} label="Đang tải so sánh lộ trình" />}
             {missing && <EmptyState title="Chưa có bản để so sánh" message="Quay lại lộ trình để xem phiên bản hiện tại." />}
             {diff.error && !missing && <ErrorState error={diff.error} title="Chưa tải được so sánh" onRetry={() => void diff.reload()} />}
-            {mutation.error && <ErrorState error={mutation.error} title="Chưa lưu được lựa chọn" />}
+            {mutation.error && !asking && <ErrorState error={mutation.error} title="Chưa lưu được lựa chọn" />}
             {data && (
               <>
                 <RoadmapDiff data={data} />
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" size="sm" disabled={!enabled} onClick={() => decide('adopt')}>Dùng bản mới</Button>
-                  <Button type="button" size="sm" variant="outline" disabled={!enabled} onClick={() => decide('keep_previous')}>Giữ bản cũ</Button>
+                  <Button type="button" size="sm" variant="outline" disabled={!enabled} onClick={askKeepPrevious}>Giữ bản cũ</Button>
                 </div>
+                {asking && (
+                  <KeepPreviousDialog
+                    fromVersion={data.from_version}
+                    toVersion={data.to_version}
+                    working={mutation.working}
+                    error={mutation.error}
+                    onClose={() => setAsking(false)}
+                    onKeep={(reason) => decide('keep_previous', reason)}
+                  />
+                )}
               </>
             )}
           </>
