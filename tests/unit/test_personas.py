@@ -256,6 +256,22 @@ def test_minh_bu_hu_an_uong_tu_hu_tiet_kiem_cuoi_moi_ky_truoc():
     assert all(t.days_ago > 16 for t in moves)  # kỳ lương hiện tại chưa bù
 
 
+def test_lo_trinh_seed_cua_minh_khop_lich_su_va_so_du_vua_sinh():
+    """`roadmaps/minh.json` là dữ liệu seed, nhưng phần nói về lịch sử và số dư phải khớp persona vừa sinh (issue #8)."""
+    seed = json.loads((REPO / "data" / "personas" / "roadmaps" / "minh.json").read_text("utf-8"))
+    d = generate("minh", anchor=ANCHOR)
+    basis = seed["basis"]
+    assert basis["history_days"] == d.history_days == 120
+    assert basis["confidence_band"] == "high"  # từ 60 ngày lịch sử, độ phủ 1,0 (band_high_min_days)
+    flag = seed["behavior_flag"]
+    offsets = [flag[k] for k in ("suspected_days_ago", "change_point_days_ago", "confirmed_days_ago")]
+    assert all(1 <= o < d.history_days for o in offsets) and offsets == sorted(offsets, reverse=True)
+    bal = {j.code: j.balance_vnd for j in d.jars}
+    text = json.dumps(seed, ensure_ascii=False)
+    assert bal["an_uong"] == 380_000 and "Ăn uống chỉ còn 380.000 ₫" in text
+    assert bal["du_phong"] == 2_700_000 and "Dự phòng 2.700.000 ₫" in text
+
+
 # --- đồng hồ mô phỏng -------------------------------------------------------------------------
 def test_materialize_dat_ngay_mo_phong_ve_ngay_neo():
     d = generate("minh", anchor=ANCHOR)

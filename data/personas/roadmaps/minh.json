@@ -2,9 +2,9 @@
   "persona": "minh",
   "nguon": "DỮ LIỆU SEED, không phải kết quả của engine hay agent. Số của persona (số dư hũ, mục tiêu Du lịch, hạn mức, nghĩa vụ) đọc từ chính persona minh lúc nạp: mục tiêu và hạn của hũ lấy từ spec, số dư hũ lấy từ sổ cái vừa nạp, các mục tiêu được chiếu theo `goal_monthly_plan_vnd` (mức dành mỗi tháng cho hũ, là tham số seed). Số tiền của từng bước và các con số mức chi hằng tuần (520.000 và 810.000 đồng mỗi tuần của Ăn uống, 300.000 và 250.000 đồng của Giải trí) là dữ liệu seed theo bảng số Figma L1, KHÔNG tính từ sổ cái. Mọi ngày là số ngày kể từ ngày neo (ngày mô phỏng lúc đặt lại). Mỗi phiên bản được nạp bằng đúng đường của tool và REST (chạy luật suitability cho từng bước, hàm app_save_roadmap, quyết định bước, sửa bước): lộ trình seed không hợp lệ thì đặt lại demo báo lỗi thay vì lưu.",
   "basis": {
-    "confidence_band": "medium",
+    "confidence_band": "high",
     "is_initial_estimate": false,
-    "history_days": 47,
+    "history_days": 120,
     "coverage": 1.0,
     "stale": false
   },
