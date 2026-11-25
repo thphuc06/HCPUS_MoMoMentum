@@ -188,13 +188,14 @@ def mentioned_jars(text: str, jar_names: Mapping[str, str]) -> frozenset[str]:
     return frozenset(found)
 
 
-#: Trường mang mã hũ dạng chuỗi trong kết quả tool, phương án và bước lộ trình.
-_JAR_KEYS = frozenset({"jar_code", "from_jar", "to_jar"})
+#: Trường mang mã hũ dạng chuỗi trong kết quả tool, phương án và bước lộ trình (`to_jar_code`: hũ nhận của bước lộ trình, có cả khi
+#: bước không gắn hành động `move_between_jars`).
+_JAR_KEYS = frozenset({"jar_code", "to_jar_code", "from_jar", "to_jar"})
 
 
 def jar_codes(node: Any) -> set[str]:
-    """Mọi mã hũ trong một kết quả có cấu trúc (đệ quy): `jar.code` và các trường `jar_code`, `from_jar`, `to_jar`. Danh sách hũ
-    trong tham số `save_jars` (khóa `code` trần) không tính: bước đổi tỷ lệ chia không phải bước "nói về" mọi hũ."""
+    """Mọi mã hũ trong một kết quả có cấu trúc (đệ quy): `jar.code` và các trường `jar_code`, `to_jar_code`, `from_jar`, `to_jar`.
+    Danh sách hũ trong tham số `save_jars` (khóa `code` trần) không tính: bước đổi tỷ lệ chia không phải bước "nói về" mọi hũ."""
     out: set[str] = set()
     if isinstance(node, Mapping):
         jar = node.get("jar")

@@ -383,3 +383,42 @@ def test_lo_trinh_planner_noi_hu_nguon_khac_ban_da_luu_thi_bo_buoc(caplog):
     (logged,) = advisor_logs(caplog)
     assert logged["context"] == "roadmap" and logged["dropped_jar_mismatch"] == 1
     assert logged["block"] == "kept"
+
+
+def saved_without_action(step_id: str) -> dict[str, Any]:
+    """`save_roadmap.ok` với bước `step_id` không gắn hành động: hũ nhận chỉ còn ở `to_jar_code` của bước."""
+    payload = fixture("save_roadmap.ok.json")
+    for phase in payload["data"]["phases"]:
+        for s in phase["steps"]:
+            if s["step_id"] == step_id:
+                s.pop("action", None)
+    return payload
+
+
+def test_lo_trinh_hu_nhan_chi_o_to_jar_code_van_tinh_la_hu_cua_ban_da_luu(caplog):
+    caplog.set_level(logging.INFO, logger="yofina.agent.advisor")
+    bu_an_uong = {
+        "seen": "Hũ Ăn uống sắp cạn trước kỳ lương.",
+        "why": "Thiếu tiền ăn thì khó giữ lộ trình.",
+        "effect": "Giai đoạn đầu bù hũ Ăn uống.",
+        "basis": ["tool:get_jar_balances"],
+    }
+    draft = outline(step(jar_code="di_lai"), review())
+    draft["reasoning"] = [bu_an_uong, ROADMAP_STEP_OBLIGATION]
+    draft["conclusion"] = {
+        "text": "Bạn nên bắt đầu bằng bước bù hũ Ăn uống trước kỳ lương.",
+        "step_id": "bu_an_uong",
+        "personal": [],
+    }
+    # bước bu_an_uong của bản đã lưu (set_aside, giai_tri -> an_uong) không có hành động move_between_jars
+    tools = scripted_tools(checks=("ok", "ok", "ok"), saves=(saved_without_action("bu_an_uong"),))
+    result, _, _ = build(tools, draft, advise=True)
+    assert result.outcome.ok and result.advice is not None
+    assert [s.seen for s in result.advice.steps] == [
+        bu_an_uong["seen"],
+        ROADMAP_STEP_OBLIGATION["seen"],
+    ]
+    assert result.advice.conclusion is not None
+    assert result.advice.conclusion.step_id == "bu_an_uong"
+    (logged,) = advisor_logs(caplog)
+    assert logged["dropped_jar_mismatch"] == 0 and logged["block"] == "kept"
