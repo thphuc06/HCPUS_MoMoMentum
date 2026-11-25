@@ -30,6 +30,7 @@ Bảy ghi chú dưới đây do subagent (Claude Sonnet 5.5) viết ngày 2026-1
 | [agentic-ui-generative-ui.md](agentic-ui-generative-ui.md) | Khối UI từ JSON, hợp đồng khối, luồng xác nhận, UX cho agent |
 | [frontend-fintech-ui.md](frontend-fintech-ui.md) | Stack frontend đề xuất, mẫu thiết kế app ngân hàng, biểu đồ, nhận diện |
 | [spending-visualization.md](spending-visualization.md) | Biểu đồ chi tiêu (theo hũ, hũ sắp cạn, cuối tuần, Trả sau, so kỳ trước): dữ liệu từ endpoint/tool nào, khoảng trống hợp đồng, khối chat, thư viện, ưu tiên P0/P1/P2; minh họa [spending-visualization-preview.html](spending-visualization-preview.html) |
+| [2026-11-26-canh4-pelt.md](2026-11-26-canh4-pelt.md) | Cảnh 4 chạy thật (#22): hệ số tăng chi tối thiểu để PELT xác nhận trên `minh` 120 ngày (2,1 lần, không đổi penalty), độ bền theo lệch ngày, tệp sao kê CSV cho giám khảo và đường phân loại không cần model; đã chạy offline |
 
 ### Kiểm toán toàn dự án sau 5 phase (2026-11-25)
 
