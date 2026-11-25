@@ -129,13 +129,27 @@ class YofinaError(Exception):
 
     Dùng xuyên suốt tầng ledger: tool trả `{"status": "ERROR", code, message}`, REST ánh xạ
     `HTTP_STATUS[code]`. `message` không chứa dữ liệu nhạy cảm (không token, không số dư của người khác).
+    `field` (tùy chọn): tên tham số còn thiếu hoặc sai, để bên gọi biết cần hỏi lại gì mà không so câu chữ (ví dụ `pay_jar`
+    khi ví không có hũ trả mặc định cho khoản Trả sau hay nghĩa vụ); tool trả thêm `"field"` khi có.
     """
 
-    def __init__(self, code: ErrorCode, message: str) -> None:
+    def __init__(self, code: ErrorCode, message: str, *, field: str | None = None) -> None:
         super().__init__(f"{code}: {message}")
         self.code = code
         self.message = message
+        self.field = field
 
     @property
     def http_status(self) -> int:
         return HTTP_STATUS[self.code]
+
+    def tool_result(self) -> dict[str, str]:
+        """Phong bì lỗi của tool (`ToolError` của contracts/tools): `field` chỉ có khi lỗi gắn với một tham số."""
+        out = {"status": ToolStatus.ERROR.value, "code": str(self.code), "message": self.message}
+        if self.field:
+            out["field"] = self.field
+        return out
+
+
+#: `field` của lỗi khi ví không có hũ trả mặc định (không có hũ loại obligation) và người gọi chưa chọn hũ trả
+PAY_JAR_FIELD = "pay_jar"

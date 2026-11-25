@@ -33,7 +33,7 @@ from yofina_core.blocks import (
     format_instant,
 )
 from yofina_core.clock import app_today
-from yofina_core.errors import ErrorCode, YofinaError
+from yofina_core.errors import PAY_JAR_FIELD, ErrorCode, YofinaError
 from yofina_core.money import format_vnd, to_vnd
 from yofina_core.schedule import bnpl_due_date
 from yofina_core.suitability import Proposal
@@ -611,7 +611,7 @@ class AffordabilityEngine:
         )
         if pay is None:
             if funding == "credit" or pay_jar is not None:
-                raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản Trả sau này.")
+                raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản Trả sau này.", field=PAY_JAR_FIELD)
             return None
         dues = [
             ob.amount_vnd

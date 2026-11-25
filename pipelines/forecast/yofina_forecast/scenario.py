@@ -39,7 +39,7 @@ from yofina_core.blocks import (
     format_instant,
 )
 from yofina_core.clock import app_today
-from yofina_core.errors import ErrorCode, YofinaError
+from yofina_core.errors import PAY_JAR_FIELD, ErrorCode, YofinaError
 from yofina_core.money import format_vnd_short
 from yofina_core.scenario import parse_scenario, scenario_hash, scenario_to_wire
 from yofina_core.schedule import advance_due, bnpl_due_date, obligation_window
@@ -328,7 +328,7 @@ def apply_scenario(
             selected=spec.pay_jar,
         )
         if pay is None:
-            raise YofinaError(ErrorCode.SCENARIO_INVALID, "Chọn hũ để trả khoản Trả sau này.")
+            raise YofinaError(ErrorCode.SCENARIO_INVALID, "Chọn hũ để trả khoản Trả sau này.", field=PAY_JAR_FIELD)
         label = _label(
             spec,
             f"mua {item + ' ' if item else ''}{_short(spec.amount_vnd)} bằng {credit.label}",
@@ -407,7 +407,7 @@ def apply_scenario(
         if code is None:
             if spec.jar_code is not None:
                 _forecastable(metas, inputs, spec.jar_code)
-            raise YofinaError(ErrorCode.SCENARIO_INVALID, "Chọn hũ để trả khoản định kỳ này.")
+            raise YofinaError(ErrorCode.SCENARIO_INVALID, "Chọn hũ để trả khoản định kỳ này.", field=PAY_JAR_FIELD)
         wire["jar_code"] = code
         _forecastable(metas, inputs, code)
         out = inputs

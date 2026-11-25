@@ -86,6 +86,7 @@ from yofina_agent.tools import (
     ToolKind,
     ToolOutcome,
     affordability_block,
+    asks_pay_jar,
     confirm_action_block,
     confirm_block,
     forecast_block,
@@ -113,7 +114,7 @@ from yofina_core.pii import mask_pii
 from yofina_core.resilience import load_shock_set
 from yofina_core.roadmap import JobStage, Roadmap, RoadmapReasonCode
 from yofina_core.suitability import SuitabilityVerdict
-from yofina_core.wallet import is_goal_jar, resolve_obligation_pay_jar
+from yofina_core.wallet import is_goal_jar
 
 log = logging.getLogger("yofina.agent.turn")
 
@@ -1489,6 +1490,19 @@ class Turn:
             compact=lambda o: compact_affordability(o.payload or {}),
             block=affordability_block,
         )
+        if "pay_jar" not in args and asks_pay_jar(res.outcome):
+            # Trả sau trên ví không có hũ loại nghĩa vụ: hỏi hũ trả rồi kiểm lại với pay_jar (như khai nghĩa vụ)
+            code = await self.pay_jar_or_ask(r)
+            if code is None:
+                return
+            args["pay_jar"] = code
+            res = await self.call_tool_retry(
+                "affordability_check",
+                args,
+                target="forecast",
+                compact=lambda o: compact_affordability(o.payload or {}),
+                block=affordability_block,
+            )
         if not res.outcome.ok:
             self.tool_failure(res.outcome)
             return
@@ -1533,14 +1547,13 @@ class Turn:
             "update_profile", args, compact=lambda o: compact_confirm_action((o.payload or {})["data"]), block=confirm_action_block
         )
         o = res.outcome
-        if "obligation" in args and await self.needs_pay_jar(args["obligation"], o):
+        if "obligation" in args and "pay_jar" not in args["obligation"] and asks_pay_jar(o):
             # Ví không có hũ loại nghĩa vụ: server không có hũ trả mặc định. Hỏi hũ trả (chip là hũ thật); lượt trả lời
             # mang tên hũ ở jar_text thì gọi lại với pay_jar.
-            choice = resolve_jar(p.jar_text, self._jar_rows)
-            if choice.status != "ok" or choice.code is None:
-                await self.emit_clarify(ClarifyRequest(slot="jar", question=notices.CLARIFY["pay_jar"]["question"]), r)
+            code = await self.pay_jar_or_ask(r)
+            if code is None:
                 return
-            args["obligation"] = {**args["obligation"], "pay_jar": choice.code}
+            args["obligation"] = {**args["obligation"], "pay_jar": code}
             res = await self.call_tool_retry(
                 "update_profile", args, compact=lambda o: compact_confirm_action((o.payload or {})["data"]), block=confirm_action_block
             )
@@ -1558,19 +1571,16 @@ class Turn:
         else:
             self.tool_failure(o)
 
-    async def needs_pay_jar(self, obligation: Mapping[str, Any], outcome: ToolOutcome) -> bool:
-        """Lỗi `update_profile` là "chưa có hũ trả": PARAMS_INVALID khi chưa gửi pay_jar, và theo đúng quy tắc chung của server
-        (`resolve_obligation_pay_jar`) các hũ hiện có không cho hũ trả mặc định. Kết quả lỗi chỉ có mã và câu chữ, nên mã lỗi
-        cộng quy tắc dùng chung thay cho việc so câu chữ."""
-        if outcome.kind is not ToolKind.TOOL_ERROR or outcome.code != ErrorCode.PARAMS_INVALID.value:
-            return False
-        if "pay_jar" in obligation:
-            return False
+    async def pay_jar_or_ask(self, r: IntentResult) -> str | None:
+        """Hũ trả khi tool báo thiếu hũ trả (`asks_pay_jar`): mã hũ người dùng nêu ở `jar_text` (lượt trả lời câu hỏi hũ trả), không
+        nêu được thì phát khối `clarify` hỏi hũ trả (chip là hũ thật) và trả None (lượt kết thúc). Không gọi model."""
         jars = await self.ensure_jars()
-        rows = self._jar_rows
-        if not jars.outcome.ok or not rows or any(j.get("kind") is None for j in rows):
-            return False  # không biết loại hũ (dữ liệu cũ): không đoán, để lỗi gốc hiện ra
-        return resolve_obligation_pay_jar((str(j["code"]), str(j["kind"])) for j in rows) is None
+        if jars.outcome.ok:
+            choice = resolve_jar(r.params.jar_text, self._jar_rows)
+            if choice.status == "ok" and choice.code is not None:
+                return choice.code
+        await self.emit_clarify(ClarifyRequest(slot="jar", question=notices.CLARIFY["pay_jar"]["question"]), r)
+        return None
 
     # --- chuyển hũ --------------------------------------------------------------------------
     async def on_move(self, r: IntentResult, question: str) -> None:

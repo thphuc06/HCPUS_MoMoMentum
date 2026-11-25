@@ -53,6 +53,7 @@ from yofina_agent.textutil import parse_amount_vnd
 from yofina_agent.tools import (
     ToolKind,
     ToolOutcome,
+    asks_pay_jar,
     confirm_action_block,
     confirm_block,
     scenario_blocks,
@@ -595,8 +596,23 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
     missing: list[str] = []
     with turn.step("tools"):
         scenario_res, st.behavior = await asyncio.gather(
-            _execute_plan(turn, plan, missing, prefetched=prefetched), _read_behavior(turn, spec)
+            _execute_plan(turn, plan, missing, prefetched=prefetched, keep_pay_jar_error=not spec.get("pay_jar")),
+            _read_behavior(turn, spec),
         )
+    if scenario_res is not None and not scenario_res.outcome.ok:
+        # Trả sau trên ví không có hũ loại nghĩa vụ (run_scenario báo thiếu hũ trả, `asks_pay_jar`): hỏi hũ trả như khai nghĩa vụ,
+        # hoặc chạy lại kịch bản với hũ người dùng vừa nêu (gọi lại tool, không thêm lời gọi model)
+        code = await turn.pay_jar_or_ask(r)
+        if code is None:
+            st.handled = True
+            return st
+        spec = {**spec, "pay_jar": code}
+        st.spec = spec
+        retry = build_plan(spec, limits, with_scenarios=with_scenarios, conversation_id=turn.conversation_id)
+        scenario_res = await _step_call(turn, next(s for s in retry.steps if s.tool == "forecast___run_scenario"))
+        if not scenario_res.outcome.ok:
+            turn.tool_failure(scenario_res.outcome, retryable=True)
+            scenario_res = None
     if scenario_res is None:
         return st  # run_scenario lỗi: tool_failure đã phát
     payload = scenario_res.outcome.payload or {}
@@ -731,10 +747,18 @@ async def _ready(value: Any) -> Any:
     return value
 
 
-async def _execute_plan(turn: Turn, plan: Plan, missing: list[str], prefetched: Mapping[str, Any] | None = None) -> Any:
+async def _execute_plan(
+    turn: Turn,
+    plan: Plan,
+    missing: list[str],
+    prefetched: Mapping[str, Any] | None = None,
+    *,
+    keep_pay_jar_error: bool = False,
+) -> Any:
     """Chạy kế hoạch theo nhóm. Trả `CallResult` của run_scenario, hoặc None nếu nó lỗi (đã phát thông báo).
 
-    Bước có trong `prefetched` (đã đọc cùng lúc với Orchestrator) dùng lại kết quả đó, không gọi lần hai."""
+    `keep_pay_jar_error`: run_scenario báo thiếu hũ trả (`asks_pay_jar`) thì trả nguyên kết quả lỗi, không phát thông báo, để người
+    gọi hỏi hũ trả. Bước có trong `prefetched` (đã đọc cùng lúc với Orchestrator) dùng lại kết quả đó, không gọi lần hai."""
     prefetched = prefetched or {}
     labels = {
         "ledger___get_obligations": "nghĩa vụ sắp đến hạn",
@@ -750,6 +774,8 @@ async def _execute_plan(turn: Turn, plan: Plan, missing: list[str], prefetched: 
             if st.tool == "forecast___run_scenario":
                 result = res
                 if not res.outcome.ok:
+                    if keep_pay_jar_error and asks_pay_jar(res.outcome):
+                        return res
                     turn.tool_failure(res.outcome, retryable=True)
                     return None
             elif not res.outcome.ok:

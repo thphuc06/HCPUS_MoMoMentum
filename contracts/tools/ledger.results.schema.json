@@ -25,6 +25,11 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 280
+        },
+        "field": {
+          "description": "Tùy chọn: tên tham số còn thiếu hoặc sai mà người gọi cần hỏi lại (ví dụ `pay_jar`: ví không có hũ trả mặc định cho khoản Trả sau hay nghĩa vụ và chưa chọn hũ trả). Vắng khi lỗi không gắn với một tham số; bên đọc cũ bỏ qua được.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,39}$"
         }
       }
     },

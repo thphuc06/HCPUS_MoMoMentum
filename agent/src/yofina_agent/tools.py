@@ -20,6 +20,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import uuid
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -32,9 +33,12 @@ from pydantic import ValidationError
 from yofina_agent import notices
 from yofina_agent.identity import Identity
 from yofina_core import blocks as B
-from yofina_core.errors import ErrorCode
+from yofina_core.errors import PAY_JAR_FIELD, ErrorCode
 
 log = logging.getLogger("yofina.agent.tools")
+
+#: dạng của `field` trong phong bì lỗi (`ToolError` của contracts/tools/ledger.results.schema.json)
+_FIELD_RE = re.compile(r"[a-z][a-z0-9_]{0,39}")
 
 DENIED_JSONRPC_CODE = -32002  # Gateway: "Tool Execution Denied" (Cedar)
 INVALID_TOKEN_JSONRPC_CODE = (
@@ -60,10 +64,26 @@ class ToolOutcome:
     message: str | None = None  # thông điệp tiếng Việt an toàn để hiện cho người dùng
     detail: str | None = None  # chi tiết kỹ thuật, chỉ để log
     args: dict[str, Any] = field(default_factory=dict)
+    #: `field` của phong bì lỗi (`ToolError`): tham số còn thiếu hoặc sai (ví dụ `pay_jar`); None khi lỗi không gắn tham số nào
+    error_field: str | None = None
 
     @property
     def ok(self) -> bool:
         return self.kind in (ToolKind.OK, ToolKind.NEEDS_CONFIRMATION)
+
+
+#: mã lỗi tool dùng khi ví không có hũ trả mặc định: ledger và `affordability_check` (PARAMS_INVALID), `run_scenario` (SCENARIO_INVALID)
+_PAY_JAR_CODES = frozenset({ErrorCode.PARAMS_INVALID.value, ErrorCode.SCENARIO_INVALID.value})
+
+
+def asks_pay_jar(outcome: ToolOutcome) -> bool:
+    """Lỗi tool nói ĐÚNG là thiếu hũ trả (`field: "pay_jar"` có cấu trúc của phong bì lỗi, không so câu chữ): ví không có hũ loại
+    nghĩa vụ và người gọi chưa chọn hũ trả. Lỗi tham số khác (ngày sai, số tiền sai...) không phải."""
+    return (
+        outcome.kind is ToolKind.TOOL_ERROR
+        and outcome.code in _PAY_JAR_CODES
+        and outcome.error_field == PAY_JAR_FIELD
+    )
 
 
 # --- phân loại kết quả (hàm thuần, có unit test) ---------------------------------------------
@@ -179,12 +199,14 @@ def classify_result(
         return ToolOutcome(name, ToolKind.NEEDS_CONFIRMATION, payload=payload)
     if status == "ERROR":
         message = str(payload.get("message") or notices.GENERIC_ERROR_MESSAGE)[:280]
+        err_field = payload.get("field")
         return ToolOutcome(
             name,
             ToolKind.TOOL_ERROR,
             payload=payload,
             code=_error_code_of(payload.get("code")),
             message=message,
+            error_field=err_field if isinstance(err_field, str) and _FIELD_RE.fullmatch(err_field) else None,
         )
     return bad(f"status lạ: {status!r}")
 

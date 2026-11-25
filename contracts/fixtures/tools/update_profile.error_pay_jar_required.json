@@ -1,0 +1,6 @@
+{
+  "status": "ERROR",
+  "code": "PARAMS_INVALID",
+  "message": "Chọn hũ để trả khoản nghĩa vụ này.",
+  "field": "pay_jar"
+}

@@ -27,7 +27,7 @@ from yofina_core.blocks import (
 )
 from yofina_core.clock import latest_payday, next_payday
 from yofina_core.confirm import ParamsError
-from yofina_core.errors import ErrorCode, YofinaError
+from yofina_core.errors import PAY_JAR_FIELD, ErrorCode, YofinaError
 from yofina_core.money import format_vnd
 from yofina_core.params import NormContext, compute_dedupe_key, jar_commitments, normalize_params
 from yofina_core.schedule import advance_due, bnpl_due_date
@@ -362,7 +362,7 @@ class WalletWrites:
             selected=norm.get("pay_jar"),
         )
         if pay_jar is None:
-            raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản Trả sau này.")
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản Trả sau này.", field=PAY_JAR_FIELD)
         before_total = convert.vnd(existing["amount_vnd"]) if existing else 0
         after_total = before_total + amount + (0 if existing else fee)
         extra.update(
@@ -672,7 +672,7 @@ class WalletWrites:
                     saved=cur.get("pay_jar_code"),
                 )
             if pay is None:
-                raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản nghĩa vụ này.")
+                raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản nghĩa vụ này.", field=PAY_JAR_FIELD)
             values = {**ob, "op": "update", "pay_jar": pay}
             if "amount_vnd" in ob:
                 changes.append(
@@ -699,7 +699,7 @@ class WalletWrites:
         )
         pay = resolve_obligation_pay_jar(available, selected=pay)
         if pay is None:
-            raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản nghĩa vụ này.")
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản nghĩa vụ này.", field=PAY_JAR_FIELD)
         values = {**ob, "op": "create", "pay_jar": pay}
         if "due_date" not in values:
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Khoản nghĩa vụ mới cần ngày đến hạn.")

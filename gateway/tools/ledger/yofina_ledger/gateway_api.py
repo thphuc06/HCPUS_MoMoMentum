@@ -140,7 +140,7 @@ def handle_gateway(
         return result
     except YofinaError as exc:
         outcome = str(exc.code)
-        return error_result(exc.code, exc.message)
+        return exc.tool_result()
     except Exception:
         outcome = "INTERNAL_ERROR"
         log.exception("gateway_unhandled tool=%s trace_id=%s", tool, trace_id)

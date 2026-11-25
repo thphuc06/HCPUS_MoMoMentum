@@ -163,7 +163,7 @@ def optimize_allocation(event: Mapping[str, Any], pipeline: Pipeline) -> dict[st
             raise YofinaError(ErrorCode.PARAMS_INVALID, "args phải là một đối tượng.")
         return AllocationEngine(pipeline).optimize(uid, args)
     except YofinaError as exc:
-        return {"status": str(ToolStatus.ERROR), "code": str(exc.code), "message": exc.message}
+        return exc.tool_result()
     except Exception:
         log.exception("optimize_allocation_unhandled")
         return {

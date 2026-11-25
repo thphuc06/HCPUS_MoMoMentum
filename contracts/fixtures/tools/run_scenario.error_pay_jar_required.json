@@ -1,0 +1,6 @@
+{
+  "status": "ERROR",
+  "code": "SCENARIO_INVALID",
+  "message": "Chọn hũ để trả khoản Trả sau này.",
+  "field": "pay_jar"
+}

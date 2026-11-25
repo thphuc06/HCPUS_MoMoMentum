@@ -329,6 +329,36 @@ def test_tra_sau_khong_co_hu_nghia_vu_du_bao_what_if_va_kiem_truoc_khi_chi_cung_
     assert what_if_and_check_jars(monkeypatch, chosen, pay_jar) == (pay_jar, pay_jar)
 
 
+def test_tra_sau_khong_co_hu_tra_bao_loi_co_cau_truc_field_pay_jar(monkeypatch):
+    """Ví không có hũ obligation, chưa chọn hũ trả: sổ cái, what-if và kiểm tra trước khi chi đều báo lỗi kèm `field: "pay_jar"`
+    (phong bì lỗi của tool), để agent biết cần hỏi hũ trả mà không so câu chữ."""
+    with pytest.raises(YofinaError) as e:
+        buy_with_bnpl("giai_tri", None)
+    assert (e.value.code, e.value.field) == (ErrorCode.PARAMS_INVALID, "pay_jar")
+    assert e.value.tool_result() == {
+        "status": "ERROR", "code": "PARAMS_INVALID", "message": e.value.message, "field": "pay_jar",
+    }  # fmt: skip
+    monkeypatch.setattr(phase3_helpers, "JARS", LAN_JARS)
+    monkeypatch.setattr(scenario_mod.forecast_repo, "save_scenario", lambda *a, **k: None)
+    pipeline, _, repo, ref, settings = phase3_helpers.build(
+        obligations=[], context={"jars": lan_context_jars(), "obligations": []}
+    )
+    spec = {"kind": "bnpl_purchase", "amount_vnd": 1_200_000, "funding_source": "credit", "jar_code": "giai_tri"}
+    with pytest.raises(YofinaError) as e:
+        ScenarioEngine(pipeline, repo, ref, settings).run(phase3_helpers.USER, spec, trace_id="t1")
+    assert (e.value.code, e.value.field) == (ErrorCode.SCENARIO_INVALID, "pay_jar")
+    with pytest.raises(YofinaError) as e:
+        AffordabilityEngine(pipeline, repo, ref, settings).check(
+            phase3_helpers.USER, amount_vnd=1_200_000, funding_source="credit", jar="giai_tri"
+        )
+    assert (e.value.code, e.value.field) == (ErrorCode.PARAMS_INVALID, "pay_jar")
+
+
+def test_loi_khong_gan_tham_so_khong_co_field():
+    err = YofinaError(ErrorCode.PARAMS_INVALID, "Thiếu mã hũ.")
+    assert err.field is None and "field" not in err.tool_result()
+
+
 def test_tra_sau_ghi_tu_truoc_khong_co_hu_tra_van_nam_trong_du_bao():
     """Khoản Trả sau ghi từ trước khi có quy tắc hỏi hũ trả (không lưu hũ trả, ví không có hũ obligation) vẫn vào dự báo: lùi về hũ
     chi tiêu đầu tiên (`bnpl_pay_jar`, #15), không rơi khỏi dự báo."""
