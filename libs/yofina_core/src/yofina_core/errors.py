@@ -62,6 +62,9 @@ class ErrorCode(StrEnum):
     MEMORY_UNAVAILABLE = "MEMORY_UNAVAILABLE"
     # Phase 5 (F6, tách "không có giao dịch nào" khỏi "không phải tài liệu tài chính"): thêm cuối danh sách.
     INGEST_NO_TRANSACTIONS = "INGEST_NO_TRANSACTIONS"
+    # Phase 6 (#13, B4): trần lượt chat/nạp tệp theo tài khoản mỗi ngày (yofina_core.quota). Thêm cuối danh sách.
+    DAILY_QUOTA_EXCEEDED = "DAILY_QUOTA_EXCEEDED"
+
 
 HTTP_STATUS: dict[ErrorCode, int] = {
     ErrorCode.UNAUTHENTICATED: 401,
@@ -109,6 +112,7 @@ HTTP_STATUS: dict[ErrorCode, int] = {
     ErrorCode.MEMORY_RECORD_NOT_FOUND: 404,
     ErrorCode.MEMORY_UNAVAILABLE: 503,
     ErrorCode.INGEST_NO_TRANSACTIONS: 422,
+    ErrorCode.DAILY_QUOTA_EXCEEDED: 429,
 }
 
 

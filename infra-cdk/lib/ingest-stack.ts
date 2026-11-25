@@ -294,7 +294,7 @@ export class IngestStack extends Stack {
       YOFINA_FORECAST_HISTORY_WINDOW_DAYS: String(ingest.forecastHistoryWindowDays),
       // đồng hồ mô phỏng (ADR-0003)
       YOFINA_APP_TIMEZONE: tools.appTimezone,
-      // yofina_core.llm: DynamoUsageStore đọc YOFINA_USAGE_TABLE
+      // yofina_core.llm (worker) và yofina_core.quota (API, trần nạp tệp theo tài khoản): DynamoUsageStore đọc YOFINA_USAGE_TABLE
       YOFINA_USAGE_TABLE: usageTable,
     });
 
@@ -496,7 +496,20 @@ export class IngestStack extends Stack {
       }),
     );
     this.api.addToRolePolicy(
-      new iam.PolicyStatement({ sid: 'ReadConfig', actions: ['ssm:GetParameter'], resources: configParams }),
+      new iam.PolicyStatement({
+        sid: 'ReadConfig',
+        actions: ['ssm:GetParameter'],
+        // yofina_core.quota: trần lượt nạp tệp mỗi tài khoản mỗi ngày (`quota/uploads_per_day`), đổi không cần deploy
+        resources: [...configParams, ssmArn(`${p}/quota/*`)],
+      }),
+    );
+    // yofina_core.quota: đếm lần nạp tệp mỗi tài khoản mỗi ngày ở bảng usage (phân vùng `quota#<ngày>`, khóa băm `sub`)
+    this.api.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'CountUploads',
+        actions: ['dynamodb:UpdateItem'],
+        resources: [this.formatArn({ service: 'dynamodb', resource: 'table', resourceName: usageTable })],
+      }),
     );
     this.api.addToRolePolicy(
       new iam.PolicyStatement({

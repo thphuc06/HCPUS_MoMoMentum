@@ -19,6 +19,8 @@ from yofina_ingest.settings import IngestRuntime
 from yofina_core.confirm import ConfirmService
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.ingest import IngestSettings
+from yofina_core.llm import BudgetCapReached
+from yofina_core.quota import UPLOAD, AccountQuota
 
 NOW = datetime(2026, 12, 10, 3, 0, tzinfo=UTC)
 USER = "sub-minh"
@@ -253,6 +255,59 @@ def test_tai_khoan_chua_co_ho_so(api):
         {"source_kind": "image", "mime": "image/png", "size_bytes": 5, "consent": True},
     )
     assert (code, err["error"]["code"]) == (422, "PROFILE_INCOMPLETE") and not repo.created
+
+
+# --- trần nạp tệp theo tài khoản mỗi ngày (#13, B4) ------------------------------------------------------------------------
+class CountingUsage:
+    """Bộ đếm giả cùng giao kèo với `DynamoUsageStore.consume`: tăng nguyên tử, đủ trần thì ném `BudgetCapReached`."""
+
+    def __init__(self, start: int = 0) -> None:
+        self.n = start
+
+    def consume(self, *, day: str, model: str, cap: int, ttl_epoch: int) -> int:
+        if self.n >= cap:
+            raise BudgetCapReached(model)
+        self.n += 1
+        return self.n
+
+
+def quota_api(api, used: int) -> tuple[IngestApi, FakeRepo, list[str], CountingUsage]:
+    svc, repo = api
+    presigned: list[str] = []
+
+    def presign(bucket: str, key: str, mime: str, max_bytes: int, ttl: int) -> dict[str, Any]:
+        presigned.append(key)
+        return {"url": "https://s3.invalid/", "fields": {"key": key}}
+
+    usage = CountingUsage(used)
+    quota = AccountQuota(UPLOAD, store=usage, cap=20, now=lambda: NOW)
+    return (
+        IngestApi(
+            repo, svc.confirm, svc.rt, presigner=presign, clock=lambda: NOW, upload_quota=quota
+        ),
+        repo,
+        presigned,
+        usage,
+    )
+
+
+def test_cham_tran_nap_tep_thi_429_co_ma_khong_cap_url_khong_tao_job(api):
+    svc, repo, presigned, _ = quota_api(api, used=20)
+    body = {"source_kind": "image", "mime": "image/png", "size_bytes": 5, "consent": True}
+    code, err = call(svc, "POST", "/ingest/uploads", body)
+    assert (code, err["error"]["code"]) == (429, "DAILY_QUOTA_EXCEEDED")
+    assert "20" in err["error"]["message"] and "vẫn xem" in err["error"]["message"]
+    assert repo.created == [] and presigned == []
+
+
+def test_chi_lan_cap_url_moi_tinh_vao_tran(api):
+    svc, repo, presigned, usage = quota_api(api, used=0)
+    image = {"source_kind": "image", "mime": "image/png", "size_bytes": 5}
+    assert call(svc, "POST", "/ingest/uploads", image)[0] == 403  # chưa đồng ý
+    assert call(svc, "POST", "/ingest/uploads", {**image, "mime": "application/pdf"})[0] == 415
+    assert usage.n == 0
+    assert call(svc, "POST", "/ingest/uploads", {**image, "consent": True})[0] == 200
+    assert usage.n == 1 and len(repo.created) == len(presigned) == 1
 
 
 # --- danh tính, đường dẫn -----------------------------------------------------------------------------------------------------

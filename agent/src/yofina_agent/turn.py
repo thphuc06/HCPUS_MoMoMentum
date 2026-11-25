@@ -104,6 +104,7 @@ from yofina_agent.writer import (
     write_stream,
 )
 from yofina_core import blocks as B
+from yofina_core import quota as daily_quota
 from yofina_core.clock import app_timezone
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
@@ -165,6 +166,8 @@ class TurnDeps:
     guardrail: Guardrail | None = None  # None: không lọc (test hoặc chưa cấu hình)
     records: TurnRecordStore = field(default_factory=UnconfiguredTurnRecordStore)
     memory: agent_memory.AgentMemory | None = None  # None: cấu hình từ môi trường (`YOFINA_MEMORY_ID`; vắng thì tắt)
+    # None: trần lượt chat của tiến trình (`daily_quota.shared`, bảng `YOFINA_USAGE_TABLE`; vắng thì tắt), tạo lười
+    quota: daily_quota.AccountQuota | None = None
 
 
 @dataclass
@@ -366,6 +369,26 @@ class Turn:
         await self.emit_text(one())
 
     # --- suy giảm ---------------------------------------------------------------------------
+    async def within_quota(self) -> bool:
+        """Trần lượt chat của tài khoản (#13): tính một lượt trước mọi lời gọi model, bộ nhớ, tool. Chạm trần thì khối `notice`
+        lỗi và trả False (kết thúc lượt). Chạy ngoài event loop: lần đầu tạo client DynamoDB, đọc trần ở SSM; sau đó một
+        `UpdateItem`. Bộ đếm lỗi thì `take` tự cho qua."""
+        quota = self.d.quota
+        try:
+            await asyncio.to_thread(
+                lambda: (quota or daily_quota.shared(daily_quota.CHAT)).take(self.identity.sub)
+            )
+        except daily_quota.DailyQuotaExceeded as exc:
+            self.emit_notice(
+                kind="error",
+                code=exc.code.value,
+                title=daily_quota.EXCEEDED_TITLE,
+                message=exc.message,
+                retryable=False,
+            )
+            return False
+        return True
+
     @property
     def llm(self) -> LlmGateway:
         assert self._llm is not None, "gọi ensure_llm() trước"
@@ -818,6 +841,9 @@ class Turn:
                 max_chars=self.s.history_chars_per_message,
             )
         ).text
+        # trần lượt chat theo tài khoản (#13): trước mọi lời gọi model, bộ nhớ và tool
+        if not await self.within_quota():
+            return
         agent_memory.start_recall(self, question)  # đọc bộ nhớ song song với router và Guardrail
         if (prewarm := getattr(self.tools, "prewarm", None)) is not None:
             # mở phiên MCP song song với router (#11); aclose chờ phiên mở xong nên không sót phiên

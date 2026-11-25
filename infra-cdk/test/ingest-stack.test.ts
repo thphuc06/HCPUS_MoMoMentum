@@ -270,9 +270,11 @@ describe('YofinaIngest', () => {
     for (const a of ['lambda:InvokeFunction', 'dynamodb:PutItem', 's3:PutObject']) {
       assert.ok(has(api, a) && !has(worker, a), a);
     }
-    for (const a of ['bedrock:InvokeModel', 'dynamodb:UpdateItem', 's3:GetObject']) {
+    for (const a of ['bedrock:InvokeModel', 's3:GetObject']) {
       assert.ok(has(worker, a) && !has(api, a), a);
     }
+    // bảng usage: worker đếm lượt gọi model, API đếm lần nạp tệp theo tài khoản (#13)
+    assert.ok(has(worker, 'dynamodb:UpdateItem') && has(api, 'dynamodb:UpdateItem'));
     for (const sts of [api, worker]) assert.ok(!has(sts, 'events:PutEvents'), 'không phát sự kiện: không cần quyền EventBridge');
     // gọi lại dự báo chỉ trên yofina-forecast-batch
     const invoke = api.find((s) => asList<string>(s.Action).includes('lambda:InvokeFunction'));

@@ -52,6 +52,8 @@ export const ERROR_CODES = [
   'MEMORY_UNAVAILABLE',
   // phase 5 (F6: tệp là chứng từ tài chính nhưng không còn giao dịch nào, tách khỏi INGEST_NOT_FINANCIAL)
   'INGEST_NO_TRANSACTIONS',
+  // phase 6 (#13): trần lượt chat/nạp tệp theo tài khoản mỗi ngày
+  'DAILY_QUOTA_EXCEEDED',
 ] as const
 
 export const ErrorCode = z.enum(ERROR_CODES)
@@ -111,6 +113,7 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   MEMORY_RECORD_NOT_FOUND: 404,
   MEMORY_UNAVAILABLE: 503,
   INGEST_NO_TRANSACTIONS: 422,
+  DAILY_QUOTA_EXCEEDED: 429,
 }
 
 /** Thông báo tiếng Việt cho từng mã lỗi (thay vì hiện mã thô hay chữ tiếng Anh của server). */
@@ -160,6 +163,7 @@ export const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   MEMORY_RECORD_NOT_FOUND: 'Không còn mục nhớ này. Có thể nó đã được xóa.',
   MEMORY_UNAVAILABLE: 'Bộ nhớ của trợ lý đang không trả lời. Thử lại sau ít phút; dữ liệu khác vẫn dùng được.',
   INGEST_NO_TRANSACTIONS: 'Tệp này không có giao dịch nào đã hoàn tất để thêm.',
+  DAILY_QUOTA_EXCEEDED: 'Hôm nay tài khoản đã dùng hết lượt cho việc này. Ngày mai bạn thử lại nhé; các màn số liệu vẫn xem bình thường.',
   NETWORK: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
   TIMEOUT: 'Máy chủ phản hồi quá lâu. Nếu bạn vừa ghi một giao dịch, kiểm tra ở Hoạt động trước khi thử lại.',
   INVALID_RESPONSE: 'Máy chủ trả dữ liệu không đọc được. Thử lại sau ít phút.',

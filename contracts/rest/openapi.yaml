@@ -889,6 +889,10 @@ paths:
         **Đồng ý**: người dùng chưa đồng ý (hoặc đã rút) cho nguồn này mà không gửi `consent: true` thì 403 `CONSENT_REQUIRED`
         và không tạo gì. Đã đồng ý thì `consent` có thể bỏ.
 
+        **Trần mỗi ngày** (#13): mỗi lần cấp URL tính một lượt vào trần nạp tệp của tài khoản (SSM `/yofina/quota/uploads_per_day`,
+        mặc định 20; yêu cầu bị từ chối ở các bước kiểm trên thì không tính). Đủ trần thì 429 `DAILY_QUOTA_EXCEEDED`, không tạo job,
+        không cấp URL; các route đọc vẫn dùng bình thường.
+
         **Bắt đầu job**: không có endpoint "bắt đầu". Tải lên thành công thì sự kiện S3 `ObjectCreated` (qua SQS có DLQ) tự đưa
         job sang `queued` rồi `processing`; frontend chỉ cần `GET /ingest/jobs/{job_id}`. Lý do: tải lên chính là tín hiệu bắt
         đầu, không có trạng thái "đã tải mà quên bấm bắt đầu", và không có thêm một đường ghi từ client. Tệp tới mà job không
@@ -2210,6 +2214,7 @@ components:
         - MEMORY_RECORD_NOT_FOUND
         - MEMORY_UNAVAILABLE
         - INGEST_NO_TRANSACTIONS
+        - DAILY_QUOTA_EXCEEDED
       x-http-status:
         UNAUTHENTICATED: 401
         FORBIDDEN: 403
@@ -2256,6 +2261,7 @@ components:
         MEMORY_RECORD_NOT_FOUND: 404
         MEMORY_UNAVAILABLE: 503
         INGEST_NO_TRANSACTIONS: 422
+        DAILY_QUOTA_EXCEEDED: 429
       x-meaning:
         UNAUTHENTICATED: Thiếu hoặc sai access token.
         FORBIDDEN: Không được phép (token xác nhận không thuộc người dùng này, v.v.).
@@ -2302,6 +2308,7 @@ components:
         MEMORY_RECORD_NOT_FOUND: Không có bản ghi bộ nhớ này với người dùng (đã xóa, không tồn tại hoặc của người khác; không phân biệt).
         MEMORY_UNAVAILABLE: AgentCore Memory không trả lời hoặc từ chối (giới hạn tần suất); thử lại sau ít phút. Dữ liệu khác không bị ảnh hưởng.
         INGEST_NO_TRANSACTIONS: Tệp là chứng từ tài chính nhưng không còn giao dịch nào để duyệt sau khi lọc (màn chưa thực hiện, giao dịch không thành công, chỉ chuyển giữa tài khoản của chính mình, rút tiền mặt, không đọc được số tiền). Lý do con ở error_reason của job.
+        DAILY_QUOTA_EXCEEDED: Tài khoản đã dùng đủ trần trong ngày (mặc định 100 lượt chat, 20 lần nạp tệp; SSM /yofina/quota/*), tính lại từ 0 giờ ngày hôm sau (giờ Việt Nam). Các màn số liệu vẫn đọc bình thường.
     ErrorResponse:
       type: object
       required: [error]

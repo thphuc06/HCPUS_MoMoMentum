@@ -327,6 +327,7 @@ export class AgentStack extends Stack {
           ssmArn(`${p}/llm/*`),
           ssmArn(`${p}/guardrail/id`),
           ssmArn(`${p}/guardrail/version`),
+          ssmArn(`${p}/quota/*`),
         ],
       }),
     );

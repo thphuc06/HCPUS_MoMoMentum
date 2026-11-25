@@ -46,7 +46,9 @@ def _extract():
 def test_ma_no_transactions_khop_cac_noi_va_them_cuoi():
     code = "INGEST_NO_TRANSACTIONS"
     schema = SCHEMAS["ErrorCode"]
-    assert list(ErrorCode)[-1] == ErrorCode(code) and schema["enum"][-1] == code
+    names = [c.value for c in ErrorCode]
+    # thêm cuối danh sách lúc đó (sau MEMORY_UNAVAILABLE); mã thêm về sau (#13) đứng sau nó, thứ tự cũ không đổi
+    assert names.index(code) == names.index("MEMORY_UNAVAILABLE") + 1 == schema["enum"].index(code)
     assert HTTP_STATUS[ErrorCode(code)] == 422 == schema["x-http-status"][code]
     assert "error_reason" in schema["x-meaning"][code]
     errors_ts = (FRONT / "api" / "errors.ts").read_text(encoding="utf-8")
