@@ -14,6 +14,7 @@ Phase 5 (FR13, luồng B): CỔNG GIÁ TRỊ của bản tin chủ động (ph�
 from __future__ import annotations
 
 import json
+import math
 import re
 import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -33,6 +34,18 @@ _MUTE = {"kind": "mute_kind", "label": "Ít nhắc loại này"}
 
 def _dm(value: date) -> str:
     return f"{value.day:02d}/{value.month:02d}"
+
+
+def shortfall_chance_text(p: float) -> str:
+    """Khả năng hụt (0..1) thành chữ, CÙNG LUẬT với `formatShortfallChance` của frontend (`frontend/src/lib/format.ts`): làm tròn
+    bước 5% (backtest phase 2 mục 2.5: xác suất hũ dày lệch 2 đến 8 điểm %), tròn lên 100% thì "Gần như chắc chắn", tròn về 0% thì
+    "Dưới 5%" (mô hình không chắc tuyệt đối). Làm tròn nửa lên như `Math.round`, không theo kiểu ngân hàng của `round`."""
+    step = math.floor(float(p) * 20 + 0.5)
+    if step >= 20:
+        return "Gần như chắc chắn"
+    if step <= 0:
+        return "Dưới 5%"
+    return f"{step * 5}%"
 
 
 def choose_proactive_card(
@@ -121,7 +134,7 @@ def choose_proactive_card(
             else:
                 reason = f"Còn {balance}, còn {days} ngày tới kỳ lương {_dm(payday)}."  # type: ignore[arg-type]
             if f.get("show_probability") and f.get("p_shortfall") is not None:
-                reason += f" Xác suất hụt khoảng {round(float(f['p_shortfall']) * 100)}%."
+                reason += f" Khả năng hụt: {shortfall_chance_text(float(f['p_shortfall'])).lower()}."
         else:
             title = f"Hũ {name} đang sát số dư"
             reason = f"Còn {balance}, dự kiến còn rất ít trước kỳ lương {_dm(payday)}."  # type: ignore[arg-type]

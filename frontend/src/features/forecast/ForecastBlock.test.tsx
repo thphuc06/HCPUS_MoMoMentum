@@ -55,7 +55,7 @@ describe('ForecastBlock: nội dung hiển thị', () => {
     expect(screen.getByTestId('forecast-summary')).toHaveTextContent(forecastSummary(d))
     expect(screen.getByTestId('forecast-summary')).toHaveTextContent('Ăn uống dự kiến cạn ngày 29/11')
     expect(screen.getByText('Hụt · cạn 29/11')).toBeInTheDocument() // chip trạng thái có chữ
-    expect(screen.getByTestId('p-shortfall')).toHaveTextContent('71%')
+    expect(screen.getByTestId('p-shortfall')).toHaveTextContent('70%')
     expect(screen.getByTestId('confidence-band')).toHaveTextContent('Vừa')
     expect(screen.queryByText(/Chưa đủ cơ sở để nêu xác suất/)).toBeNull()
     expect(screen.getByTestId('coverage')).toHaveTextContent('62%')

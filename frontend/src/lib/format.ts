@@ -118,13 +118,16 @@ export function formatRatioPercent(r: number): string {
 }
 
 /**
- * Khả năng hụt (xác suất 0..1 do server tính) thành chữ để đọc: tròn 100% không nói "100%" (mô hình không chắc tuyệt đối)
- * mà nói "gần như chắc chắn"; gần 0 nói "dưới 1%". Chỉ đổi cách đọc số server trả, không tính lại gì.
+ * Khả năng hụt (xác suất 0..1 do server tính) thành chữ để đọc, CÙNG LUẬT với `shortfall_chance_text` của server
+ * (`gateway/tools/ledger/yofina_ledger/proactive.py`): làm tròn bước 5% (backtest phase 2 mục 2.5: xác suất hũ dày lệch 2 đến
+ * 8 điểm %); tròn lên 100% không nói "100%" (mô hình không chắc tuyệt đối) mà nói "gần như chắc chắn"; tròn về 0% nói "dưới 5%".
+ * Chỉ đổi cách đọc số server trả, không tính lại gì.
  */
 export function formatShortfallChance(p: number): string {
-  if (p >= 0.995) return 'Gần như chắc chắn'
-  if (p > 0 && p < 0.005) return 'Dưới 1%'
-  return formatRatioPercent(p)
+  const step = Math.round(p * 20)
+  if (step >= 20) return 'Gần như chắc chắn'
+  if (step <= 0) return 'Dưới 5%'
+  return `${step * 5}%`
 }
 
 /** Phần trăm 0..100 (ví dụ tỷ lệ chia lương): bỏ phần thập phân thừa, "31%" hoặc "12,5%". */
