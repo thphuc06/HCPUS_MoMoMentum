@@ -791,6 +791,11 @@ async def drain() -> None:
         await asyncio.gather(*list(_BACKGROUND), return_exceptions=True)
 
 
+def busy() -> bool:
+    """Còn lần ghi bộ nhớ nền chưa xong (`/ping` báo `HealthyBusy`)."""
+    return bool(_BACKGROUND)
+
+
 # --- ý định `memory`: người dùng nói một sở thích hoặc hỏi trợ lý nhớ gì ----------------------------------
 _ASK_RE = re.compile(
     r"\b(?:nho|biet)\s+(?:duoc\s+)?(?:gi|nhung gi|dieu gi|nhung dieu gi)\b"

@@ -31,7 +31,7 @@ import contextlib
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -116,6 +116,21 @@ from yofina_core.suitability import SuitabilityVerdict
 log = logging.getLogger("yofina.agent.turn")
 
 _DONE = object()
+
+#: Ghi lượt chạy nền sau `RUN_FINISHED` (#11). Giữ tham chiếu để tác vụ không bị thu gom và để `/ping` báo bận.
+_PERSISTING: set[asyncio.Task[None]] = set()
+
+
+def background_busy() -> bool:
+    """True khi còn việc nền sau `RUN_FINISHED` (ghi lượt, ghi bộ nhớ): `/ping` trả `HealthyBusy` để Runtime giữ phiên."""
+    return bool(_PERSISTING) or agent_memory.busy()
+
+
+async def drain_background() -> None:
+    """Chờ mọi việc nền xong (test, và khi tắt tiến trình)."""
+    while _PERSISTING:
+        await asyncio.gather(*list(_PERSISTING), return_exceptions=True)
+    await agent_memory.drain()
 
 #: lỗi tạm thời của tool đáng thử lại một lần (lỗi nghiệp vụ như hết tiền, từ chối quyền thì không)
 _TRANSIENT_CODES = {
@@ -638,6 +653,7 @@ class Turn:
 
     # --- điều khiển -------------------------------------------------------------------------
     async def execute(self) -> None:
+        completed = False
         try:
             try:
                 async with asyncio.timeout(self.s.run_timeout_seconds):
@@ -653,10 +669,15 @@ class Turn:
                 log.exception("lượt hội thoại lỗi ngoài dự kiến")
                 self.degrade_code = self.degrade_code or ErrorCode.INTERNAL_ERROR.value
             self.flush_degraded_notice()
-            await self.persist()
+            completed = True
         finally:
-            with contextlib.suppress(Exception):
-                await self.tools.aclose()
+            # Dựng việc ghi TRƯỚC khi phát RUN_FINISHED (bản ghi lượt chụp đúng lúc lượt xong), chạy nó SAU (#11).
+            jobs: list[Awaitable[None]] = []
+            if completed:
+                try:
+                    jobs = self.persist_jobs()
+                except Exception:  # dựng bản ghi lỗi không được chặn RUN_FINISHED
+                    log.exception("dựng việc ghi lượt lỗi")
             self.emit(
                 ev.run_finished(
                     self.run_input,
@@ -673,6 +694,10 @@ class Turn:
                 )
             )
             self.queue.put_nowait(_DONE)
+            # Chạy nền, ngoài tác vụ của luồng SSE (stream_turn hủy tác vụ đó khi client ngắt): ghi lượt rồi mới đóng phiên MCP.
+            task = asyncio.get_running_loop().create_task(self.persist_then_close(jobs))
+            _PERSISTING.add(task)
+            task.add_done_callback(_PERSISTING.discard)
             agent_memory.schedule_remember(self)  # sau RUN_FINISHED, chạy nền: không làm chậm lượt
 
     def turn_record(self) -> dict[str, Any]:
@@ -711,36 +736,64 @@ class Turn:
             ).model_dump()
         return record
 
-    async def persist(self) -> None:
-        """Lưu lượt (kể cả lượt suy giảm hoặc chỉ có chữ) và bản ghi lượt. Lỗi lưu không làm hỏng lượt."""
+    def persist_jobs(self) -> list[Awaitable[None]]:
+        """Việc ghi lượt (kể cả lượt suy giảm hoặc chỉ có chữ) và bản ghi lượt, dựng lúc lượt xong; chạy sau `RUN_FINISHED`."""
         assistant_text = "\n\n".join(self.assistant_parts)
-        jobs = []
+        jobs: list[Awaitable[None]] = []
         if self.blocks or self.user_text or assistant_text:
+            blocks, user_text = list(self.blocks.values()), self.user_text
             jobs.append(
-                self.d.store.save(
-                    tools=self.tools,
-                    conversation_id=self.conversation_id,
-                    trace_id=self.trace_id,
-                    blocks=list(self.blocks.values()),
-                    user_text=self.user_text,
-                    assistant_text=assistant_text,
+                self._persist_with_retry(
+                    "turn_blocks",
+                    lambda: self.d.store.save(
+                        tools=self.tools,
+                        conversation_id=self.conversation_id,
+                        trace_id=self.trace_id,
+                        blocks=blocks,
+                        user_text=user_text,
+                        assistant_text=assistant_text,
+                    ),
+                    self.s.turn_blocks_timeout_seconds,
                 )
             )
         if self.intent is not None:
-            jobs.append(self.d.records.save(tools=self.tools, record=self.turn_record()))
-        if not jobs:
-            return
-        try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*jobs, return_exceptions=True),
-                timeout=max(self.s.turn_blocks_timeout_seconds, self.s.turn_record_timeout_seconds),
+            record = self.turn_record()
+            jobs.append(
+                self._persist_with_retry(
+                    "turn_record",
+                    lambda: self.d.records.save(tools=self.tools, record=record),
+                    self.s.turn_record_timeout_seconds,
+                )
             )
-        except TimeoutError:
-            log.warning(json.dumps({"event": "turn_persist_timeout"}))
-            return
-        for r in results:
-            if isinstance(r, BaseException):
-                log.warning(json.dumps({"event": "turn_persist_error", "error": repr(r)[:200]}))
+        return jobs
+
+    async def _persist_with_retry(
+        self, job: str, save: Callable[[], Awaitable[bool]], timeout: float
+    ) -> None:
+        """Một việc ghi, thử lại một lần nếu lỗi hoặc quá giờ (cả hai tool ghi idempotent theo trace_id).
+
+        Tool trả lỗi nghiệp vụ (store trả False, đã tự ghi log) thì không thử lại.
+        """
+        for attempt in (1, 2):
+            try:
+                await asyncio.wait_for(save(), timeout=timeout)
+                return
+            except TimeoutError:
+                log.warning(json.dumps({"event": "turn_persist_timeout", "job": job, "attempt": attempt}))
+            except Exception as exc:
+                log.warning(
+                    json.dumps(
+                        {"event": "turn_persist_error", "job": job, "attempt": attempt, "error": repr(exc)[:200]}
+                    )
+                )
+
+    async def persist_then_close(self, jobs: Sequence[Awaitable[None]]) -> None:
+        """Chạy nền sau `RUN_FINISHED`: ghi lượt (song song) rồi đóng phiên MCP. Lỗi ghi không làm hỏng lượt."""
+        try:
+            await asyncio.gather(*jobs, return_exceptions=True)
+        finally:
+            with contextlib.suppress(Exception):
+                await self.tools.aclose()
 
     async def flow(self) -> None:
         found = ev.last_user_text(self.run_input)

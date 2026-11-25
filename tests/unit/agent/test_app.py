@@ -1,4 +1,7 @@
+import asyncio
 import json
+import threading
+import time
 
 from agent_helpers import (
     FakeTools,
@@ -60,6 +63,29 @@ def test_ping_healthy_viet_hoa(monkeypatch):
     client, _, _ = make_client(monkeypatch)
     r = client.get("/ping")
     assert r.status_code == 200 and r.json()["status"] == "Healthy"
+    # không gửi giờ tăng dần ở mỗi ping: AWS cảnh báo phiên sẽ không bao giờ hết hạn idle
+    assert "time_of_last_update" not in r.json()
+
+
+def test_ping_ban_khi_con_ghi_luot_nen_sau_run_finished(monkeypatch):
+    """#11: ghi lượt chạy sau RUN_FINISHED; trong lúc đó /ping trả HealthyBusy để Runtime giữ phiên tới khi ghi xong."""
+    gate = threading.Event()
+
+    class SlowStore:
+        async def save(self, **kw):
+            await asyncio.to_thread(gate.wait, 10)
+            return True
+
+    client, _, _ = make_client(monkeypatch, store=SlowStore())
+    with client:
+        r = client.post("/invocations", json=BODY, headers=auth())
+        assert sse_events(r)[-1]["type"] == "RUN_FINISHED"
+        assert client.get("/ping").json() == {"status": "HealthyBusy"}
+        gate.set()
+        deadline = time.monotonic() + 5
+        while client.get("/ping").json()["status"] != "Healthy" and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert client.get("/ping").json() == {"status": "Healthy"}
 
 
 def test_thieu_hoac_sai_authorization_thi_401_co_ma_loi(monkeypatch):
