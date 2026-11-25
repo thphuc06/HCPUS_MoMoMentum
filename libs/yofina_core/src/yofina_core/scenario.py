@@ -58,6 +58,7 @@ class BnplPurchase(_ScenarioBase):
     amount_vnd: VndPositive
     funding_source: Literal["credit"]
     jar_code: JarCode | None = None
+    pay_jar: JarCode | None = None
     date: IsoDate | None = None
     label: Label | None = None
 
@@ -75,7 +76,7 @@ class RecurringExpense(_ScenarioBase):
     cycle: Literal["weekly", "monthly", "yearly"]
     date: IsoDate
     end_date: IsoDate | None = None
-    jar_code: JarCode
+    jar_code: JarCode | None = None
     label: Label | None = None
 
     @model_validator(mode="after")

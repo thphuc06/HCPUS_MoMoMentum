@@ -2397,6 +2397,11 @@ components:
           type: string
           enum: [buffer, sinking, goal, long_term]
           description: Vai trò tùy chọn của hũ để dành.
+        sinking_items:
+          type: array
+          maxItems: 40
+          items:
+            $ref: '../blocks/jar_summary.schema.json#/$defs/SinkingItem'
         goal_vnd:
           $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
         goal_date:
@@ -2777,6 +2782,9 @@ components:
           $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
         jar:
           $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        pay_jar:
+          description: Hũ trả khoản Trả sau khi đến hạn, nếu chưa lưu nguồn trả.
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
         tx_type:
           type: string
           pattern: '^[a-z][a-z0-9_]{0,39}$'
@@ -2919,6 +2927,11 @@ components:
           type: string
           enum: [buffer, sinking, goal, long_term]
           description: Vai trò tùy chọn của hũ để dành.
+        sinking_items:
+          type: array
+          maxItems: 40
+          items:
+            $ref: '../blocks/jar_summary.schema.json#/$defs/SinkingItem'
         goal_vnd:
           $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
         goal_date:
@@ -2926,6 +2939,7 @@ components:
     SaveJarsParams:
       description: |
         Thay cả danh sách hũ người dùng (không gồm hũ hệ thống) theo thứ tự trong mảng (thứ tự hiển thị).
+        Hũ có purpose goal cần số tiền và ngày mục tiêu. Khoản của Quỹ dồn có tên duy nhất trong hũ và giữ ngày cần đã lưu.
         Tổng `split_percent` phải bằng 100. Hũ đang có mà không có trong danh sách chỉ bị bỏ khi số dư
         bằng 0 và không còn nghĩa vụ trả bằng hũ đó, nếu không trả 422 `JAR_PROTECTED`.
       type: object
@@ -3612,6 +3626,9 @@ components:
           type: string
           enum: [jar, credit]
         jar:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        pay_jar:
+          description: Hũ trả khoản Trả sau khi đến hạn, nếu chưa lưu nguồn trả.
           $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
         label:
           type: string

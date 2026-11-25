@@ -15,7 +15,7 @@ from typing import Any
 from yofina_core.clock import next_payday as next_payday_of
 from yofina_core.money import to_vnd
 from yofina_core.schedule import expand_due_dates
-from yofina_core.wallet import default_obligation_jar, is_buffer_jar
+from yofina_core.wallet import is_buffer_jar, resolve_obligation_pay_jar
 
 MONTH_DAYS = Decimal(30)
 
@@ -58,11 +58,13 @@ class SuitabilityFacts:
 
     @property
     def default_pay_jar(self) -> str | None:
-        """Ưu tiên Nghĩa vụ chuẩn, với hũ nghĩa vụ cũ làm dự phòng."""
-        return default_obligation_jar((j.code, j.kind) for j in self.jars)
+        """Hũ Nghĩa vụ chung của ví, nếu có."""
+        return resolve_obligation_pay_jar((j.code, j.kind) for j in self.jars)
 
     def pay_jar_of(self, ob: ObligationFact) -> str | None:
-        return ob.pay_jar_code or self.default_pay_jar
+        return resolve_obligation_pay_jar(
+            ((j.code, j.kind) for j in self.jars), saved=ob.pay_jar_code
+        )
 
     def dues_between(self, first: date, through: date) -> list[tuple[ObligationFact, date]]:
         """Mọi lần đến hạn của nghĩa vụ đang hoạt động trong [first, through]; nghĩa vụ quá hạn tính vào `first`."""

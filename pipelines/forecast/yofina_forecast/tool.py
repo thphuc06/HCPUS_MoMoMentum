@@ -51,7 +51,7 @@ log = logging.getLogger("yofina.forecast.tool")
 
 TOOL_PREFIX = "forecast___"
 SOURCE_TOOL = "forecast___get_forecast"
-AFFORDABILITY_BODY_FIELDS = frozenset({"amount_vnd", "funding_source", "jar", "label", "date"})
+AFFORDABILITY_BODY_FIELDS = frozenset({"amount_vnd", "funding_source", "jar", "pay_jar", "label", "date"})
 STRESS_BODY_FIELDS = frozenset({"shock_id"})
 
 
@@ -174,6 +174,7 @@ def handle_gateway(
                 amount_vnd=event.get("amount_vnd"),
                 funding_source=event.get("funding_source"),
                 jar=event.get("jar"),
+                pay_jar=event.get("pay_jar"),
                 label=event.get("label"),
                 pay_date=event.get("date"),
             )
@@ -251,6 +252,7 @@ def handle_http(
                 amount_vnd=body.get("amount_vnd"),
                 funding_source=body.get("funding_source"),
                 jar=body.get("jar"),
+                pay_jar=body.get("pay_jar"),
                 label=body.get("label"),
                 pay_date=body.get("date"),
             )

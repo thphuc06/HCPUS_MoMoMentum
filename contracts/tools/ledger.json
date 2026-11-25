@@ -233,6 +233,10 @@
           "type": "string",
           "description": "Loại giao dịch (ví dụ food_drink, bill_electricity, transfer_person, salary, friend_repay). Bỏ trống: other_expense hoặc income_other."
         },
+        "pay_jar": {
+          "type": "string",
+          "description": "Hũ trả khoản Trả sau khi đến hạn nếu chưa có nguồn đã lưu."
+        },
         "funding": {
           "type": "string",
           "description": "jar (trừ tiền hũ, mặc định) hoặc credit (mua bằng hạn mức Trả sau mô phỏng, sinh nghĩa vụ). Chỉ dùng credit với chi tiêu."

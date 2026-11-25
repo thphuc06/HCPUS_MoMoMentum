@@ -56,6 +56,7 @@ _ARG_KEYS: dict[str, tuple[str, ...]] = {
         "jar",
         "tx_type",
         "funding",
+        "pay_jar",
         "payee_id",
         "counterparty",
         "note",

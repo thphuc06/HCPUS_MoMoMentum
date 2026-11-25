@@ -23,7 +23,7 @@ from yofina_core.clock import latest_payday, next_payday
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.params import JAR_CODE_RE, UUID_RE
 from yofina_core.schedule import build_timeline_events
-from yofina_core.wallet import default_obligation_jar, transaction_jar
+from yofina_core.wallet import resolve_obligation_pay_jar, transaction_jar
 from yofina_ledger import convert, review_reads
 from yofina_ledger.proactive import choose_proactive_card
 
@@ -607,7 +607,7 @@ class WalletReads:
             return None
         obligations = self.repo.list_obligations(user_id, status="active", limit=100)
         user_jars = [j for j in view.jars if j.get("kind") != "system"]
-        default_pay_jar = default_obligation_jar(
+        default_pay_jar = resolve_obligation_pay_jar(
             (j["code"], j["kind"]) for j in user_jars
         )
         origin = convert.to_date(summary["run_app_date"])
@@ -627,12 +627,7 @@ class WalletReads:
         assert computed is not None
         stale = self._is_stale(summary, today, computed, now)
         return build_forecast_timeline(
-            jar={
-                "code": jar["code"],
-                "name": jar["name"],
-                "color_key": jar["color_key"],
-                "icon_key": jar["icon_key"],
-            },
+            jar=jar,
             summary=summary,
             days=series,
             events=[
@@ -642,6 +637,7 @@ class WalletReads:
                     "label": e.label,
                     "amount_vnd": e.amount_vnd,
                     "amount_max_vnd": e.amount_max_vnd,
+                    "original_due_date": e.original_due_date,
                 }
                 for e in events
             ],

@@ -70,3 +70,14 @@ def test_tool_ghi_tren_man_hinh_va_cho_agent_khong_trung_nhau_o_nhom_con_lai():
     assert not set(wallet.INGEST_ACTION_TOOLS) & set(wallet.ACTION_TOOLS)
     assert wallet.CONFIRM_ROWS in wallet.GENERIC_ACTION_TOOLS
     assert wallet.GENERIC_ACTION_TOOLS[-1] == wallet.CONFIRM_ROWS
+
+
+def test_obligation_source_uses_saved_jar_or_shared_jar_and_requires_legacy_choice():
+    resolve = wallet.resolve_obligation_pay_jar
+    legacy = [("hoa_don", "obligation"), ("daily", "spending"), ("system", "system")]
+    modern = [*legacy, ("nghia_vu", "obligation")]
+    assert resolve(legacy) is None
+    assert resolve(legacy, saved="system") is None
+    assert resolve(legacy, selected="daily") == "daily"
+    assert resolve(modern, saved="daily", selected="hoa_don") == "daily"
+    assert resolve(modern, saved="removed") == "nghia_vu"

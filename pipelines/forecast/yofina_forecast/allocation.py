@@ -40,7 +40,13 @@ from yofina_core.roadmap import (
     AllocationRelaxation,
     AllocationSolver,
 )
-from yofina_core.wallet import default_obligation_jar, is_buffer_jar, is_goal_jar
+from yofina_core.wallet import (
+    DEFAULT_SPENDING_JAR,
+    is_buffer_jar,
+    is_goal_jar,
+    pay_jar_or_default,
+    resolve_obligation_pay_jar,
+)
 from yofina_forecast.common import clip, int_of, to_date
 from yofina_forecast.resilience import (
     Gathered,
@@ -179,7 +185,11 @@ class AllocationEngine:
         jars = {j["code"]: j for j in g.jar_rows}
         codes = [j["code"] for j in g.jar_rows]
         spend = {j["code"]: j.get("spend") or [] for j in g.ctx.jars}
-        default_pay = default_obligation_jar((j["code"], j["kind"]) for j in g.jar_rows)
+        daily_spend = next(
+            (j.get("essential_spend") or [] for j in g.ctx.jars if j["code"] == DEFAULT_SPENDING_JAR),
+            [],
+        )
+        default_pay = resolve_obligation_pay_jar((j["code"], j["kind"]) for j in g.jar_rows)
 
         # nghĩa vụ quy về tháng (có cú sốc tăng giá thì loại bị tăng nặng hơn)
         oblig_floor = dict.fromkeys(codes, 0)
@@ -193,7 +203,7 @@ class AllocationEngine:
                 monthly = round(monthly * (1.0 + pct / 100.0 * share))
             obligations_total += monthly
             hard = bool(ob.get("is_essential")) or ob["kind"] in DEBT_KINDS
-            pay = ob.get("pay_jar_code") or default_pay
+            pay = pay_jar_or_default(jars, ob.get("pay_jar_code"), default_pay)
             if hard and pay in oblig_floor:
                 oblig_floor[pay] += monthly
             elif not hard:
@@ -257,8 +267,9 @@ class AllocationEngine:
             pct = float(j["split_percent"])
             split[code] = pct
             goal = goals.get(code)
+            essential_spend = daily_spend if code == DEFAULT_SPENDING_JAR else spend.get(code, [])
             monthly_spend = variable_monthly_spend(
-                spend.get(code, []), s.resilience_window_days, month_days
+                essential_spend, s.resilience_window_days, month_days
             )
             if kind == "obligation":
                 role = "obligation"
@@ -270,7 +281,9 @@ class AllocationEngine:
                 role = "emergency"
             elif kind == "saving":
                 role = "saving"
-            elif code in s.essential_jar_codes:
+            elif (
+                monthly_spend > 0 if code == DEFAULT_SPENDING_JAR else code in s.essential_jar_codes
+            ):
                 role = "essential"
             else:
                 role = "discretionary"
@@ -319,6 +332,7 @@ class AllocationEngine:
     @staticmethod
     def _ref(j: Mapping[str, Any]) -> dict[str, str]:
         return {
+            **({"purpose": j["purpose"]} if j.get("purpose") is not None else {}),
             "code": j["code"],
             "name": j["name"],
             "color_key": j["color_key"],

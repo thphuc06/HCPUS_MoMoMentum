@@ -12,6 +12,7 @@
       "properties": {
         "date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
         "kind": { "type": "string", "enum": ["obligation", "salary"] },
+        "original_due_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
         "label": { "type": "string", "minLength": 1, "maxLength": 60 },
         "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
         "amount_min_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
@@ -25,6 +26,7 @@
       "additionalProperties": false,
       "properties": {
         "code": { "$ref": "../blocks/envelope.schema.json#/$defs/JarCode" },
+        "purpose": { "type": "string", "enum": ["buffer", "sinking", "goal", "long_term"] },
         "kind": { "type": "string", "enum": ["spending", "saving", "obligation"] },
         "balance_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
         "split_percent": { "type": "number", "minimum": 0, "maximum": 100 },

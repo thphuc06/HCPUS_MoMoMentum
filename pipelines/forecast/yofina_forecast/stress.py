@@ -147,6 +147,7 @@ class StressEngine:
                     "name": row["name"],
                     "color_key": row["color_key"],
                     "icon_key": row["icon_key"],
+                    "purpose": row.get("purpose"),
                 }
             )
         threshold = float(

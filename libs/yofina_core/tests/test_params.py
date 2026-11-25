@@ -14,6 +14,7 @@ from yofina_core.params import (
     TxTypeInfo,
     compute_dedupe_key,
     fold_text,
+    jar_commitments,
     normalize_params,
     slugify_jar_code,
     unique_jar_code,
@@ -587,3 +588,25 @@ def test_khoa_khu_trung_theo_cong_thuc_hop_dong():
         counterparty="Cơm tấm Cô Ba",
         client_ref="r1",
     )
+
+
+def test_purpose_goal_requires_amount_and_date_at_creation():
+    valid = {**JARS[1], "purpose": "goal"}
+    assert jar_commitments(valid, {})["goal_date"] == "2027-04-01"
+    with pytest.raises(ParamsError):
+        jar_commitments({**valid, "goal_date": None}, {})
+    with pytest.raises(ParamsError):
+        jar_commitments({**valid, "goal_vnd": None}, {})
+    assert jar_commitments({"kind": "saving"}, valid)["goal_vnd"] == valid["goal_vnd"]
+
+
+def test_sinking_commitments_survive_legacy_update_and_keep_dates():
+    item = {"name": "Học phí", "amount_vnd": 900_000, "needed_date": "2027-03-01"}
+    old = {"kind": "saving", "purpose": "sinking", "sinking_items": [item]}
+    assert jar_commitments({"kind": "saving"}, old)["sinking_items"] == [item]
+    updated_amount = {**item, "amount_vnd": 950_000}
+    assert jar_commitments({**old, "sinking_items": [updated_amount]}, old)["sinking_items"] == [
+        updated_amount
+    ]
+    with pytest.raises(ParamsError):
+        jar_commitments({**old, "sinking_items": [{**item, "needed_date": "2027-04-01"}]}, old)

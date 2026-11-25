@@ -36,28 +36,30 @@ def is_goal_jar(kind: str, purpose: str | None) -> bool:
     return kind == "saving" and purpose in (None, "goal")
 
 
-def default_obligation_jar(jars: Iterable[tuple[str, str]]) -> str | None:
-    codes = [code for code, kind in jars if kind == "obligation"]
-    if DEFAULT_OBLIGATION_JAR in codes:
-        return DEFAULT_OBLIGATION_JAR
-    return next(iter(codes), None)
-
-
-def bnpl_pay_jar(
-    jars: Iterable[tuple[str, str]], *, existing: str | None, purchase_jar: str | None
+def resolve_obligation_pay_jar(
+    jars: Iterable[tuple[str, str]], *, saved: str | None = None, selected: str | None = None
 ) -> str | None:
-    user_jars = [(code, kind) for code, kind in jars if kind != "system"]
-    codes = {code for code, _ in user_jars}
-    if existing in codes:
-        return existing
-    if default := default_obligation_jar(user_jars):
-        return default
-    if purchase_jar in codes:
-        return purchase_jar
-    return next(
-        (code for code, kind in user_jars if kind == "spending"),
-        user_jars[0][0] if user_jars else None,
-    )
+    """Keep a valid saved source, then use an explicit choice or the shared Nghĩa vụ jar."""
+    eligible = {code: kind for code, kind in jars if kind in USER_JAR_KINDS}
+    if selected is not None:
+        default = selected if selected in eligible else None
+    else:
+        default = (
+            DEFAULT_OBLIGATION_JAR if eligible.get(DEFAULT_OBLIGATION_JAR) == "obligation" else None
+        )
+    return pay_jar_or_default(eligible, saved, default)
+
+
+def default_obligation_jar(jars: Iterable[tuple[str, str]]) -> str | None:
+    """Shared default for callers that do not have a saved or selected source."""
+    return resolve_obligation_pay_jar(jars)
+
+
+def pay_jar_or_default(
+    eligible_codes: Iterable[str], saved: str | None, default: str | None
+) -> str | None:
+    """Resolve a saved source against the current wallet after finding its shared default."""
+    return saved if saved in eligible_codes else default
 
 
 def transaction_jar(default_code: str | None, jar_codes: Iterable[str], *, tx_type: str) -> str | None:

@@ -276,6 +276,10 @@ def normalize_record_transaction(
     if funding == "credit" and obligation_id is not None:
         raise ParamsError("Không trả nghĩa vụ bằng hạn mức Trả sau")
     out["funding"] = funding
+    if (pay_jar := _clean(params.get("pay_jar"))) is not None:
+        if funding != "credit":
+            raise ParamsError("pay_jar chỉ dành cho giao dịch Trả sau")
+        out["pay_jar"] = _jar_code("pay_jar", pay_jar)
     if obligation_id is not None:
         out["obligation_id"] = _uuid("obligation_id", obligation_id)
     tx_type = _clean(params.get("tx_type"))
@@ -307,7 +311,17 @@ def normalize_record_transaction(
         if jar is not None:
             out["jar"] = _jar_code("jar", jar)
         elif ctx is not None:
-            out["jar"] = _default_expense_jar(tx_type, ctx)
+            info = ctx.tx_types.get(tx_type)
+            is_bill = info is not None and info.default_jar_code == "hoa_don"
+            if (
+                funding == "jar" and obligation_id is None
+                and (is_bill or tx_type == "obligation_payment")
+            ):
+                if ctx.obligation_jar is None:
+                    raise ParamsError("Chọn hũ để trả khoản nghĩa vụ này.")
+                out["jar"] = ctx.obligation_jar
+            else:
+                out["jar"] = _default_expense_jar(tx_type, ctx)
     for key, limit in (("counterparty", 120), ("note", 200)):
         text = _text(key, params.get(key), max_len=limit)
         if text is not None:
@@ -454,6 +468,33 @@ def normalize_update_profile(params: Mapping[str, Any], ctx: NormContext | None)
     return out
 
 
+def jar_commitments(jar: Mapping[str, Any], old: Mapping[str, Any]) -> dict[str, Any]:
+    """Resolve and validate saving metadata against the current jar at preview and write."""
+    purpose = jar.get("purpose", old.get("purpose")) if jar["kind"] == "saving" else None
+    same_purpose = purpose is not None and purpose == old.get("purpose")
+    old_date = str(old["goal_date"]) if same_purpose and old.get("goal_date") is not None else None
+    old_amount = old.get("goal_vnd") if same_purpose else None
+    goal_date = jar.get("goal_date", old_date)
+    goal_vnd = jar.get("goal_vnd", int(old_amount) if old_amount is not None else None)
+    if goal_date is not None and goal_vnd is None and purpose not in ("sinking", "long_term"):
+        raise ParamsError("goal_date cần goal_vnd")
+    if purpose == "goal" and (goal_vnd is None or goal_date is None):
+        raise ParamsError("Hũ Mục tiêu cần số tiền và ngày mục tiêu")
+    if purpose == "sinking" and old_date is not None and goal_date != old_date:
+        raise ParamsError("Ngày đã cam kết của Quỹ dồn được giữ nguyên")
+    previous_items = (old.get("sinking_items") or []) if same_purpose else []
+    items = jar.get("sinking_items", previous_items)
+    if items and purpose != "sinking":
+        raise ParamsError("sinking_items chỉ dành cho Quỹ dồn")
+    old_dates = {item["name"].casefold(): item["needed_date"] for item in previous_items}
+    if any(
+        old_dates.get(item["name"].casefold(), item["needed_date"]) != item["needed_date"]
+        for item in items
+    ):
+        raise ParamsError("Ngày đã cam kết của Quỹ dồn được giữ nguyên")
+    return {"purpose": purpose, "goal_vnd": goal_vnd, "goal_date": goal_date, "sinking_items": items}
+
+
 # --- save_jars ------------------------------------------------------------------------------------------
 def normalize_save_jars(params: Mapping[str, Any], ctx: NormContext | None) -> dict[str, Any]:
     raw = params.get("jars")
@@ -491,9 +532,30 @@ def normalize_save_jars(params: Mapping[str, Any], ctx: NormContext | None) -> d
             jar["goal_vnd"] = _amount("goal_vnd", item["goal_vnd"])
         gdate = _clean(item.get("goal_date"))
         if gdate is not None:
-            if "goal_vnd" not in jar and purpose not in ("sinking", "long_term"):
-                raise ParamsError("goal_date cần goal_vnd")
             jar["goal_date"] = _iso_date("goal_date", gdate).isoformat()
+        if "sinking_items" in item:
+            raw_items = item["sinking_items"]
+            if not isinstance(raw_items, list) or len(raw_items) > 40:
+                raise ParamsError("sinking_items phải là danh sách tối đa 40 khoản")
+            entries = []
+            names: set[str] = set()
+            for entry in raw_items:
+                if not isinstance(entry, Mapping) or set(entry) != {
+                    "name", "amount_vnd", "needed_date"
+                }:
+                    raise ParamsError("Khoản Quỹ dồn cần tên, số tiền và ngày cần")
+                title = _text("sinking_items.name", entry["name"], max_len=80)
+                if title is None or title.casefold() in names:
+                    raise ParamsError("Tên khoản Quỹ dồn phải có và không được trùng")
+                names.add(title.casefold())
+                entries.append({
+                    "name": title,
+                    "amount_vnd": _amount("sinking_items.amount_vnd", entry["amount_vnd"]),
+                    "needed_date": _iso_date("sinking_items.needed_date", entry["needed_date"]).isoformat(),
+                })
+            jar["sinking_items"] = entries
+        if given_code is None or (ctx is not None and given_code not in ctx.jar_codes):
+            jar_commitments(jar, {})
         jars.append(jar)
         given.append(given_code)
     dup = {c for c in given if c is not None and given.count(c) > 1}

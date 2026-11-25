@@ -16,12 +16,43 @@ from decimal import Decimal
 from typing import Any
 
 from yofina_core.db import DataApi, Row
+from yofina_core.wallet import DEFAULT_SPENDING_JAR
 from yofina_ml.types import ForecastResult
 
-SQL_CONTEXT = (
-    "SELECT section, jar_code, payload "
-    "FROM app_get_forecast_context(CAST(:uid AS text), CAST(:now AS timestamptz), CAST(:tz AS text), CAST(:win AS integer))"
+SQL_CONTEXT = """
+WITH ctx AS MATERIALIZED (
+  SELECT section, jar_code, payload
+  FROM app_get_forecast_context(CAST(:uid AS text), CAST(:now AS timestamptz), CAST(:tz AS text), CAST(:win AS integer))
+), date_window AS (
+  SELECT CAST(payload->>'history_start' AS date) AS first_day,
+         CAST(payload->>'app_date' AS date) - 1 AS last_day
+  FROM ctx WHERE section = 'meta'
+), essential AS (
+  SELECT t.app_date, sum(-t.amount_vnd) AS amount
+  FROM transactions t
+  JOIN tx_type_map m ON m.tx_type = t.tx_type
+  CROSS JOIN date_window w
+  WHERE t.user_id = :uid
+    AND t.jar_code = :daily_jar AND t.kind = 'expense'
+    AND t.funding_source IN ('jar', 'external') AND t.obligation_id IS NULL
+    AND m.default_jar_code IN ('an_uong', 'di_lai')
+    AND t.app_date BETWEEN w.first_day AND w.last_day
+  GROUP BY t.app_date
 )
+SELECT c.section, c.jar_code,
+  CASE WHEN c.section = 'jar' THEN
+    c.payload || jsonb_strip_nulls(jsonb_build_object('purpose', j.purpose))
+      || CASE WHEN c.jar_code = :daily_jar THEN jsonb_build_object('essential_spend', (
+        SELECT coalesce(jsonb_agg(coalesce(e.amount, 0) ORDER BY g.day), '[]'::jsonb)
+        FROM date_window w CROSS JOIN LATERAL generate_series(
+          CAST(w.first_day AS timestamp), CAST(w.last_day AS timestamp), interval '1 day'
+        ) AS g(day)
+        LEFT JOIN essential e ON e.app_date = CAST(g.day AS date)
+      )) ELSE '{}'::jsonb END
+    ELSE c.payload END AS payload
+FROM ctx c
+LEFT JOIN jars j ON c.section = 'jar' AND j.user_id = :uid AND j.code = c.jar_code
+"""
 SQL_SUMMARIES = "SELECT * FROM app_get_forecast_summaries(CAST(:uid AS text), CAST(:jar AS text))"
 SQL_RUN = "SELECT * FROM app_get_forecast_run(CAST(:uid AS text), CAST(:run AS uuid), CAST(:jars AS text))"
 SQL_USERS = "SELECT user_id FROM app_list_forecast_users(CAST(:lim AS integer))"
@@ -56,7 +87,7 @@ SQL_LIST_CONVERSATION_SCENARIOS = "SELECT * FROM app_list_conversation_scenarios
 SQL_PRUNE_SCENARIOS = (
     "SELECT app_prune_scenarios(CAST(:uid AS text), CAST(:keep AS integer)) AS removed"
 )
-SQL_JAR_STATE = "SELECT * FROM app_get_jar_state(CAST(:uid AS text))"
+SQL_JAR_STATE = "SELECT * FROM app_get_jar_state_with_commitments(CAST(:uid AS text))"
 SQL_OBLIGATIONS = "SELECT * FROM app_list_obligations(CAST(:uid AS text), CAST(:status AS text), CAST(:due AS date), CAST(:lim AS integer))"
 SQL_GET_RESILIENCE = (
     "SELECT * FROM app_get_resilience_score(CAST(:uid AS text), CAST(:app_date AS date))"
@@ -88,11 +119,17 @@ class ForecastRepo:
 
     # --- đọc ------------------------------------------------------------------------------------
     def context(self, user_id: str, now: datetime, tz: str, window_days: int) -> list[Row]:
-        return self.db.query(
-            SQL_CONTEXT,
-            {"uid": user_id, "now": now, "tz": tz, "win": window_days},
-            max_rows=200,
-        )
+        with self.db.transaction(user_id) as tx:
+            return tx.execute(
+                SQL_CONTEXT,
+                {
+                    "uid": user_id,
+                    "now": now,
+                    "tz": tz,
+                    "win": window_days,
+                    "daily_jar": DEFAULT_SPENDING_JAR,
+                },
+            )
 
     def summaries(self, user_id: str, jar: str | None = None) -> list[Row]:
         """Tóm tắt dự báo MỚI NHẤT của mỗi hũ (hàm `app_get_forecast_summaries`)."""

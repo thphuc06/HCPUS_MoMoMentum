@@ -25,7 +25,7 @@ from yofina_core.clock import next_payday as next_payday_of
 from yofina_core.clock import payday_dates
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.schedule import expand_due_dates
-from yofina_core.wallet import default_obligation_jar, split_amount
+from yofina_core.wallet import pay_jar_or_default, resolve_obligation_pay_jar, split_amount
 from yofina_forecast.settings import ForecastSettings
 from yofina_ml.calibration import calibrated_config
 from yofina_ml.contract import check_inputs
@@ -139,7 +139,7 @@ def expand_obligations(
     for ob in obligations:
         if ob.get("status", "active") != "active":
             continue
-        jar = ob.get("pay_jar_code") or default_pay_jar
+        jar = pay_jar_or_default(known, ob.get("pay_jar_code"), default_pay_jar)
         if jar not in known:
             unassigned.append(str(ob.get("name", ""))[:60])
             continue
@@ -159,6 +159,7 @@ def expand_obligations(
                     amount_min_vnd=rng[0],
                     amount_max_vnd=rng[1],
                     ref_id=str(ob["id"]),
+                    original_due_date=due if d == first and due < first else None,
                 )
             )
     for lst in flows.values():
@@ -188,7 +189,7 @@ def build_inputs(ctx: Context, settings: ForecastSettings, user_id: str, *, n_pa
     codes = [j["code"] for j in forecast_jars]
     if not codes:
         raise YofinaError(ErrorCode.FORECAST_UNAVAILABLE, "Chưa có hũ nào để dự báo.")
-    default_pay = default_obligation_jar((j["code"], j["kind"]) for j in forecast_jars)
+    default_pay = resolve_obligation_pay_jar((j["code"], j["kind"]) for j in forecast_jars)
 
     through = app_date + timedelta(days=horizon)
     pay_dates = tuple(payday_dates(payday, app_date, through))
@@ -220,6 +221,7 @@ def build_inputs(ctx: Context, settings: ForecastSettings, user_id: str, *, n_pa
             JarInput(
                 code=j["code"],
                 kind=j["kind"],
+                purpose=j.get("purpose"),
                 balance_vnd=_int(j["balance_vnd"]),
                 split_percent=float(Decimal(str(j["split_percent"]))),
                 history_start=history_start,
