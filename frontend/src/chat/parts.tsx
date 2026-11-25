@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { DisclosureButton, useDisclosure } from '@/components/ui/Disclosure'
 import { Input } from '@/components/ui/input'
-import { toolLabel } from './errors'
+import { modelStepLabel, toolLabel } from './errors'
 import type { ChatItem } from './session'
 
 // Figma UserBubble (10:238): bong bóng chủ đạo, bo 20, góc dưới phải nhỏ.
@@ -57,25 +57,42 @@ export function AIMessage({ text, done, superseded = false }: { text: string; do
 
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 
-// Figma ToolProgress (10:75): thẻ "Yofina đang làm" với danh sách bước: xong (dấu tích), đang chạy (vòng quay).
-export function ToolProgress({ tools }: { tools: readonly ToolItem[] }) {
-  const running = tools.some((t) => t.status === 'running')
+function StepRow({ status, label }: { status: 'running' | 'done'; label: string }) {
+  return (
+    <li className="flex items-center gap-2.5 text-small text-ink" data-status={status}>
+      {status === 'done' ? (
+        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-ok-bg text-ok-fg">
+          <Check className="size-3.5" aria-hidden />
+        </span>
+      ) : (
+        // Giảm chuyển động: vòng nét đứt đứng yên (không quay).
+        <span aria-hidden className="size-5 shrink-0 rounded-full border-2 border-dashed border-brand motion-safe:animate-spin" />
+      )}
+      <span>{label}</span>
+    </li>
+  )
+}
+
+/**
+ * Figma ToolProgress (10:75): thẻ "Yofina đang làm" với danh sách bước: xong (dấu tích), đang chạy (vòng quay).
+ * `modelStepRunning`: công cụ đã xong nhưng lượt chưa kết thúc (Analyst hay người viết đang chạy): thêm một bước đang chạy,
+ * thẻ chưa ghi "đã làm". Bước đó đã hiện thì giữ lại thành bước xong khi lượt kết thúc, để thẻ không co lại (nhảy bố cục).
+ */
+export function ToolProgress({ tools, modelStepRunning = false }: { tools: readonly ToolItem[]; modelStepRunning?: boolean }) {
+  const [modelStepShown, setModelStepShown] = useState(false)
+  if (modelStepRunning && !modelStepShown) setModelStepShown(true)
+  const running = modelStepRunning || tools.some((t) => t.status === 'running')
+  const names = tools.map((t) => t.name)
   return (
     <section aria-live="polite" data-testid="tool-progress" className="rounded-card bg-surface-2 p-4">
       <h3 className="text-small font-semibold text-ink-2">{running ? 'Yofina đang làm' : 'Yofina đã làm'}</h3>
       <ul className="mt-2 space-y-2">
         {tools.map((t) => (
-          <li key={t.id} className="flex items-center gap-2.5 text-small text-ink" data-status={t.status}>
-            {t.status === 'done' ? (
-              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-ok-bg text-ok-fg">
-                <Check className="size-3.5" aria-hidden />
-              </span>
-            ) : (
-              <span aria-hidden className="size-5 shrink-0 animate-spin rounded-full border-2 border-dashed border-brand" />
-            )}
-            <span>{toolLabel(t.name, t.status)}</span>
-          </li>
+          <StepRow key={t.id} status={t.status} label={toolLabel(t.name, t.status)} />
         ))}
+        {(modelStepRunning || modelStepShown) && (
+          <StepRow key="model-step" status={modelStepRunning ? 'running' : 'done'} label={modelStepLabel(names, modelStepRunning ? 'running' : 'done')} />
+        )}
       </ul>
     </section>
   )

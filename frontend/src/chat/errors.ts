@@ -118,3 +118,13 @@ export function toolLabel(name: string, status: 'running' | 'done'): string {
   if (l) return l[status]
   return status === 'running' ? 'Đang xử lý…' : 'Đã xử lý'
 }
+
+/**
+ * Nhãn bước model chạy sau các công cụ (agent không phát event riêng cho bước này): sau `run_scenario` là Analyst cân các
+ * phương án (khoảng 16 s), còn lại là người viết soạn câu trả lời.
+ */
+export function modelStepLabel(toolNames: readonly string[], status: 'running' | 'done'): string {
+  const whatIf = toolNames.some((n) => n === 'run_scenario' || n.endsWith('___run_scenario'))
+  if (whatIf) return status === 'running' ? 'Đang cân các phương án…' : 'Đã cân các phương án'
+  return status === 'running' ? 'Đang soạn câu trả lời…' : 'Đã soạn câu trả lời'
+}
