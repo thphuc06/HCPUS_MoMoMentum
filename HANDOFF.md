@@ -42,6 +42,39 @@ Cập nhật lần cuối: **2026-11-25 rạng sáng** (Claude Code điều ph�
 
 **Issue chưa làm**: #3 (chờ AWS duyệt quota), #4 (đi 6 cảnh), #7 (lập luận nhất quán + công tắc SSM), #13 (trần lượt gọi), #16 (cảnh 5), #17 (bỏ `ops` khỏi tài khoản giám khảo), #21 (đo sau đợt 1), #22–#29 (đợt 2), #30 (chờ BA chốt C-02), #31 (20 câu giữ riêng), #32 (tài liệu, ADR-0004), #33 (số kinh doanh), #34–#38 (RC và nộp). Lô kế tiếp đề xuất: #7, #13, #17, #16, rồi deploy đợt 1.
 
+## Bàn giao cho người điều phối (tối 25/11, chuyển sang máy khác)
+
+Người điều phối trước (Kiro CLI trên laptop của Phúc) dừng giữa lô A. Worktree `C:\moMo-wt\p6-*` chỉ có trên laptop, nên máy mới tự tạo worktree từ nhánh trên origin.
+
+### Lô A: đang dở (chưa merge vào `main`)
+
+| Nhánh trên origin | Issue | Trạng thái | Phạm vi file của worker |
+|---|---|---|---|
+| `p6/accounts` | #17, #16 | #17 xong 2 commit (`seed_demo.py`: nhóm `ops` chỉ cho `minh`, chạy lại gỡ `ops` khỏi `giamkhao*`; demo-script cảnh 6 kết bằng "Vì sao → Chi tiết kỹ thuật"), chưa chạy đủ bộ test. #16 chưa làm | scripts seed/tạo tài khoản, `data/personas/samples/make_samples.py`, `frontend/public/samples/`, `docs/plan/demo-script.md` |
+| `p6/quota` | #13 (+ B3, B4) | 1 commit WIP: `quota.py`, test, mã lỗi mới ở `errors.py`, `openapi.yaml`, `frontend/src/api/errors.ts`; chưa nối vào `turn.py`, chưa có phần ingest, CDK, CORS | `libs/yofina_core/.../quota.py`, `errors.py`, `turn.py` (chỉ một lời gọi), `pipelines/ingest/`, `infra-cdk/lib/tools-stack.ts`, `ingest-stack.ts`, README hạ tầng |
+| `p6/cqr` | #25 | 1 commit WIP: `ml/yofina_ml/recalibration.py`, test, sửa `calibration/__init__.py`; chưa đo, chưa có công tắc | `ml/yofina_ml/` (trừ `change_defaults.json`), script đo, mục mới trong `docs/research/backtest-final.md` |
+| chưa tạo | #7 | chưa làm | `agent/.../advisor.py`, phần reasoning trong `whatif.py`, `roadmap_agent.py`; IAM SSM nếu cần |
+| chưa tạo | #22 | chưa làm | `data/personas/roadmaps/`, `roadmap_seed.py`, CSV sao kê mới ở `data/personas/samples/` + `frontend/public/samples/`, `change_defaults.json` (chỉ khi đo cho thấy cần) |
+| chưa tạo | #23, #24 | chưa làm | phần Orchestrator trong `whatif.py`, `libs/yofina_core/.../llm.py`, `llm_defaults.json` |
+
+Lô sau: #26 (K5, sau #25), #27 + #29 (giao diện lộ trình, cùng một worker), #28 (hũ Khác: chỉ làm nếu đo offline được mà không gọi Bedrock), #32 (tài liệu, ADR-0004; không sửa `README.md`), bản nháp #36 (README giám khảo, script đóng `.zip`, danh sách tài sản có sẵn/thư viện/công cụ AI). Việc cần người hoặc chờ điều kiện: #3, #4, #21, #30, #31, #33, #34, #35, #37, #38.
+
+### Chưa duyệt
+
+- **Deploy đợt 1 lên AWS chưa được chủ dự án duyệt.** Không deploy, không seed, không đặt SSM, không chạy eval trên Runtime khi chưa hỏi. Lệnh deploy ở mục "Cập nhật chiều 25/11". Deploy chạy từ máy local, nên máy phải mở suốt 45–60 phút.
+- Các lượt kiểm sau deploy tốn tiền model (khoảng $0,5–1) cần chủ dự án đồng ý trước.
+
+### Quy ước giao việc cho worker (đã dùng ở đợt 1)
+
+- Mỗi issue một worker, worktree riêng (`git worktree add <thư mục> -b p6/<tên> main`, hoặc `-B p6/<tên> origin/p6/<tên>` cho nhánh đã có), chỉ sửa file trong phạm vi được giao, theo skill `/tdd` với seam do người điều phối chốt sẵn (không hỏi người dùng), commit từng phần xanh ngay (mạng hay làm đứt worker), không push, không đụng `main`.
+- Commit tiếng Việt, kết bằng `(#số issue)`, **không thêm `Co-authored-by` hay trailer nào** (yêu cầu của chủ dự án).
+- Worker không sửa `docs/ai-log/`, `HANDOFF.md`, file phase 6, issue; người điều phối làm các việc đó.
+- Chạy tối đa khoảng 6 worker song song. Lần trước chạy 11 cùng lúc thì 6 cái bị lỗi mạng, phải chạy lại.
+- Gộp qua một nhánh tích hợp (ví dụ `p6/wave2`), xung đột kiểu "cả hai cùng thêm" thì giữ cả hai, chạy `uv run pytest tests/unit libs/yofina_core/tests -q -p no:cacheprovider` (mốc 4007 passed, 3 skipped) trước khi fast-forward `main` và push. `git fetch` trước: BA (bloan0908) hay commit vào `main`, và đầu `docs/ai-log/2026-11.md` hay xung đột (gộp tay, giữ mọi entry, mới nhất ở trên).
+- Sau khi gộp: comment trạng thái lên từng issue (`gh issue comment <n> --body-file <tệp>`; PowerShell không có heredoc). **Chỉ đóng issue khi đã deploy và kiểm theo mục "Cách kiểm" của issue**, trừ việc không cần deploy (như #18).
+- Repo public: không ghi email, mật khẩu, account ID, thông tin thật về tài khoản AWS vào file hay issue.
+- Bẫy đã gặp: ca eval `leak-1` phải hỏi tài khoản demo khác `minh` (giờ là `lan`); `giamkhao1–3` đều là persona `minh`.
+
 ## Cập nhật rạng sáng 25/11 (sau khi viết bản trên)
 
 - **Bộ nhớ đã sửa gốc** (nhánh p5/mem-extract, ac2a4fe): bước hợp nhất mặc định của AWS bỏ sở thích có thời hạn ("temporary states") và Nova Lite không theo chỉ dẫn; nay override cả hợp nhất, đổi sang Haiku 4.5. `memory-state-preference` và `memory-knowledge-update` đạt (mỗi ca một lần). Mục A.2 bên dưới coi như xong; chi tiết ở file phase 5 và agentcore-memory-design.md mục 2.2a.
