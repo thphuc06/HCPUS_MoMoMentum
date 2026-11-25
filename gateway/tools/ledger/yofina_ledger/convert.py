@@ -184,7 +184,10 @@ def jar_full_json(
     if forecast is not None:
         out["status"] = forecast["status"]
         out["confidence_band"] = forecast["confidence_band"]
-        if forecast.get("runout_date"):
+        if forecast.get("runout_date_shown") is False:
+            # hũ thưa (#25, cột của migration 0055): không nêu ngày cạn, giao diện nói "có thể cạn trước ngày lương"
+            out["runout_date_shown"] = False
+        elif forecast.get("runout_date"):
             out["runout_date"] = to_date(forecast["runout_date"]).isoformat()  # type: ignore[union-attr]
         if forecast.get("forecast_floor_vnd") is not None:
             out["forecast_floor_vnd"] = vnd(forecast["forecast_floor_vnd"])

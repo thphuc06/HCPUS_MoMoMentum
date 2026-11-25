@@ -126,11 +126,15 @@ def choose_proactive_card(
             title = f"Hũ {name} đã hết tiền"
             reason = f"Còn {days} ngày nữa mới tới kỳ lương {_dm(payday)}."  # type: ignore[arg-type]
         elif status == "short":
-            title = (
-                f"Hũ {name} dự kiến cạn ngày {_dm(runout)}"  # type: ignore[arg-type]
-                if runout
-                else f"Hũ {name} dự kiến hụt trước kỳ lương"
-            )
+            if f.get("runout_date_shown") is False:
+                # hũ thưa (#25): ngày cạn không đủ tin cậy nên không nêu ngày, cả số ngày suy ra từ nó
+                title, runout = f"Hũ {name} có thể cạn trước ngày lương", None
+            else:
+                title = (
+                    f"Hũ {name} dự kiến cạn ngày {_dm(runout)}"  # type: ignore[arg-type]
+                    if runout
+                    else f"Hũ {name} dự kiến hụt trước kỳ lương"
+                )
             if runout:
                 # Khoảng từ ngày cạn tới lương (cùng số với khối forecast_timeline trong chat), không phải từ hôm nay.
                 gap = (payday - runout).days  # type: ignore[operator]
@@ -437,17 +441,24 @@ def gather_candidates(
             gap = (payday - runout).days
             value = int(avg_daily_spend.get(code, 0)) * gap
             empty = vnd(jar["balance_vnd"]) <= 0
+            if empty:
+                title = f"Hũ {name} đã hết tiền"
+                body = f"Còn {(payday - today).days} ngày nữa mới tới kỳ lương {_dm(payday)}."
+            elif f.get("runout_date_shown") is False:
+                # hũ thưa (#25): ngày cạn (và khoảng trống suy ra từ nó) không đủ tin cậy để nêu; điểm vẫn tính theo ngày cạn
+                title = f"Hũ {name} có thể cạn trước ngày lương"
+                body = f"Còn {balance}, còn {(payday - today).days} ngày tới kỳ lương {_dm(payday)}."
+                if f.get("show_probability") and f.get("p_shortfall") is not None:
+                    body += f" Khả năng hụt: {shortfall_chance_text(float(f['p_shortfall'])).lower()}."
+            else:
+                title = f"Hũ {name} dự kiến cạn ngày {_dm(runout)}"
+                body = f"Còn {balance}, cạn xong còn {gap} ngày nữa mới tới kỳ lương {_dm(payday)}."
             out.append(
                 GateCandidate(
                     kind="runout_warning",
                     score=1.0 + min(gap, 28) / 7,
-                    title=_clip(f"Hũ {name} đã hết tiền" if empty else f"Hũ {name} dự kiến cạn ngày {_dm(runout)}", 80),
-                    body=_clip(
-                        f"Còn {(payday - today).days} ngày nữa mới tới kỳ lương {_dm(payday)}."
-                        if empty
-                        else f"Còn {balance}, cạn xong còn {gap} ngày nữa mới tới kỳ lương {_dm(payday)}.",
-                        200,
-                    ),
+                    title=_clip(title, 80),
+                    body=_clip(body, 200),
                     status="short",
                     jar_code=code,
                     value_vnd=value or None,
