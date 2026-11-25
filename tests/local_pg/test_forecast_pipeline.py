@@ -234,7 +234,8 @@ def test_don_lan_chay_cu_khong_lam_mat_du_bao_cua_hu_khac(env):
     s = summaries(env, MINH)
     assert len(s) == 7  # lần chạy đầy đủ vẫn còn vì là lần mới nhất của sáu hũ kia
     with env.master() as m:
-        runs = m.execute("SELECT count(*) FROM forecast_runs").fetchone()[0]
+        # chỉ lần chạy của MINH: Postgres cục bộ dùng chung cả phiên, test khác để lại lần chạy của người dùng khác
+        runs = m.execute("SELECT count(*) FROM forecast_runs WHERE user_id = %s", [MINH]).fetchone()[0]
     assert runs <= 4
     assert env.repo.forecast_series(MINH, "di_lai")  # chuỗi ngày của hũ khác còn nguyên
 
