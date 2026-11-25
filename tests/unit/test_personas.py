@@ -286,14 +286,14 @@ def test_ten_persona_la_bi_tu_choi():
 # --- ánh xạ tài khoản -> persona --------------------------------------------------------------
 def test_anh_xa_tai_khoan_demo_dung_bang_cau_hinh():
     acc = load_accounts()
-    # giamkhao3 là persona vy (có thu nhập ngoài ví, cho cảnh nạp dữ liệu F6); giamkhao1 và 2 giữ nguyên minh (cảnh 1)
+    # ba tài khoản giám khảo cùng persona minh: cảnh 1 đến 4 ra cùng số trên mọi tài khoản (issue #8)
     assert acc["demo_accounts"] == {
         "minh": "minh",
         "lan": "lan",
         "khoa": "khoa",
         "giamkhao1": "minh",
         "giamkhao2": "minh",
-        "giamkhao3": "vy",
+        "giamkhao3": "minh",
     }
     assert set(acc["demo_accounts"].values()) <= set(available_personas())
 
