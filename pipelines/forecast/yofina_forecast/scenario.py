@@ -407,7 +407,7 @@ def apply_scenario(
         if code is None:
             if spec.jar_code is not None:
                 _forecastable(metas, inputs, spec.jar_code)
-            raise YofinaError(ErrorCode.SCENARIO_INVALID, "Chọn hũ để trả khoản định kỳ này.", field=PAY_JAR_FIELD)
+            raise YofinaError(ErrorCode.SCENARIO_INVALID, "Chọn hũ để trả khoản định kỳ này.", field="jar_code")
         wire["jar_code"] = code
         _forecastable(metas, inputs, code)
         out = inputs

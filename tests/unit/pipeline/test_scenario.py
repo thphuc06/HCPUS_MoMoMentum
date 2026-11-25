@@ -280,3 +280,24 @@ def test_bnpl_legacy_wallet_requires_explicit_source_when_none_saved(saved):
     data = run(eng, {**spec, "pay_jar": "an_uong"}, saved)
     assert data["obligation_impact"]["at_due"][0]["jar"]["code"] == "an_uong"
     assert data["obligation_impact"]["cost"]["total_due_vnd"] == 533_000
+
+
+def test_recurring_without_shared_jar_names_jar_code_not_pay_jar(saved):
+    """Khoản định kỳ trên ví không có hũ Nghĩa vụ: lỗi gắn đúng tham số của kịch bản (`jar_code`, `RecurringExpense` không có
+    `pay_jar`). Gắn `pay_jar` thì agent hỏi hũ trả rồi gọi lại với `pay_jar`, kịch bản bị từ chối lần nữa."""
+    eng, _ = engine(
+        context={
+            "jars": [jar_row("an_uong", "spending", 1_000_000, 100, 1, [0] * 47)],
+            "obligations": [],
+        },
+        obligations=[],
+    )
+    spec = {"kind": "recurring_expense", "amount_vnd": 250_000, "cycle": "monthly", "date": "2026-12-01", "label": "Tiền nhà"}
+    with pytest.raises(YofinaError) as error:
+        run(eng, spec, saved)
+    assert (error.value.code, error.value.field) == (ErrorCode.SCENARIO_INVALID, "jar_code")
+    with pytest.raises(YofinaError) as error:
+        run(eng, {**spec, "pay_jar": "an_uong"}, saved)  # thứ agent sẽ gửi nếu lỗi nói thiếu pay_jar: sai hợp đồng kịch bản
+    assert error.value.code == ErrorCode.PARAMS_INVALID and error.value.field is None
+    data = run(eng, {**spec, "jar_code": "an_uong"}, saved)
+    assert data["spec"]["jar_code"] == "an_uong"
