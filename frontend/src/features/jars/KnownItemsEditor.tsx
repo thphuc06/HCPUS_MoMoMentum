@@ -75,14 +75,14 @@ export function KnownItemsEditor({
           <label className="block">
             <span className="mb-1.5 block text-small font-semibold text-ink-2">Tên khoản biết trước</span>
             <Input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} aria-invalid={touched && !!nameErr} placeholder="Ví dụ: Tết" />
-            {touched && nameErr && <span className="mt-1 block text-note font-semibold text-bad-fg">{nameErr}</span>}
           </label>
+          {touched && nameErr && <span className="mt-1 block text-note font-semibold text-bad-fg">{nameErr}</span>}
           <MoneyInput label="Số tiền cần" value={amount} onChange={setAmount} error={touched ? amountErr : undefined} />
           <label className="block">
             <span className="mb-1.5 block text-small font-semibold text-ink-2">Ngày cần</span>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={touched && !!dateErr} />
-            {touched && dateErr && <span className="mt-1 block text-note font-semibold text-bad-fg">{dateErr}</span>}
           </label>
+          {touched && dateErr && <span className="mt-1 block text-note font-semibold text-bad-fg">{dateErr}</span>}
           <div className="flex gap-2">
             <Button type="button" className="flex-1" onClick={add}>
               Thêm khoản này

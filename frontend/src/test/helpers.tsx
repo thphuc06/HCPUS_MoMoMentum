@@ -31,6 +31,7 @@ import type {
   PayeesResponse,
   ProfileResponse,
   SalaryEventsResponse,
+  SplitProposalResponse,
   TransactionsResponse,
   TxTypesResponse,
 } from '@/api/schemas'
@@ -71,6 +72,7 @@ const fx = <T,>(name: string) => restFixture(name) as unknown as T
 export function fakeApi(over: Partial<ApiClient> = {}): ApiClient {
   return {
     getJars: vi.fn(async () => jarsFromFixture()),
+    proposeJarSplit: vi.fn(async () => fx<SplitProposalResponse>('SplitProposalResponse.proposed')),
     getOverview: vi.fn(async () => fx<OverviewResponse>('OverviewResponse.minh')),
     getCashflow: vi.fn(async () => fx<CashflowResponse>('CashflowResponse.minh')),
     getProfile: vi.fn(async () => fx<ProfileResponse>('ProfileResponse.minh')),
