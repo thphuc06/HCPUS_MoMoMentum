@@ -53,5 +53,7 @@
   "memory_query_max_chars": 1000,
   "memory_message_max_chars": 2000,
   "memory_write_timeout_seconds": 5.0,
-  "reasoning_min_steps": 2
+  "reasoning_min_steps": 2,
+  "reasoning_enabled": true,
+  "reasoning_refresh_seconds": 300
 }

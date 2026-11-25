@@ -1112,7 +1112,10 @@ async def build_roadmap(
     advise: bool = False,
 ) -> RoadmapResult:
     """Sinh lộ trình, chỉ ghi bản nháp sau khi grounding và suitability đạt. `advise` (lượt chat): đọc thêm hồ sơ hành vi và xin
-    planner lập luận cùng câu kết luận trong chính lời gọi phác thảo (luồng K); job sinh lại không dùng."""
+    planner lập luận cùng câu kết luận trong chính lời gọi phác thảo (luồng K); job sinh lại không dùng. Công tắc người tư vấn
+    (`settings.reasoning_switch`, #7) tắt thì lượt chat chạy như job sinh lại: không đọc hồ sơ hành vi, không xin lập luận."""
+    if advise and not await settings.reasoning_switch.enabled():
+        advise = False
 
     async def stage(value: JobStage) -> None:
         if on_stage is not None:
