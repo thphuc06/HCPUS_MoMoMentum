@@ -97,10 +97,11 @@ Chuyển danh mục sớm sẽ khiến Ledger cũ tạo hũ mới mà bỏ trố
 - [x] Viết cấu hình demo bốn hũ theo bảng "Demo (Reset data)". Bỏ ánh xạ sang Quỹ dồn và Tích lũy dài hạn; dòng chia lương cũ của các hũ bị bỏ gộp vào hũ nhận tương ứng.
 - [x] Cập nhật [lộ trình seed của Minh](../../data/personas/roadmaps/minh_six_jars.json) nếu còn tham chiếu hũ bị bỏ. Lộ trình hiện chỉ dùng Mục tiêu, Nghĩa vụ, Chi hằng ngày và Dự phòng.
 - [x] Kiểm tra cả bốn persona sau reset. Lan có thêm hũ Nghĩa vụ (C-07).
-- [ ] Chạy lại cảnh 1 đến 4 theo [kịch bản demo](demo-script.md) bằng engine cục bộ. Số đợt trước, cần xác nhận lại:
+- [x] Chạy lại cảnh 1 đến 4 theo [kịch bản demo](demo-script.md) bằng engine cục bộ. Số đợt trước, cần xác nhận lại:
   - Cảnh 1: Chi hằng ngày có 1.080.000 ₫ và dự kiến cạn ngày 03/12, trước kỳ lương 05/12.
+  - Kết quả 25/11 (engine cục bộ, PostgreSQL cục bộ): cảnh 1 đúng 1.080.000 ₫, cạn 02/12 hoặc 03/12 tùy hạt theo mã người dùng; cảnh 2 đúng 2.200.000 ₫ (967.000 ₫ gốc cũ + 33.000 ₫ phí + 1.200.000 ₫), khoản thiếu đầu tiên Trả Sau 03/12, thiếu 760.784 ₫; cảnh 3 điểm 26 → 13, trụ 31 ngày. Cảnh 4 cần agent (Bedrock), chưa chạy.
   - Cảnh 2: mua tai nghe 1.200.000 ₫ bằng Trả Sau, Nghĩa vụ có khoản đến hạn 2.200.000 ₫ ngày 03/12, đã gồm phí 33.000 ₫, và dự kiến thiếu khoảng 761.000 ₫.
-- [ ] Sửa lời dẫn trong kịch bản demo. Cảnh 1 nêu hai nguyên nhân: nhịp chi và 700.000 ₫ đã để riêng cho nghĩa vụ. Cảnh 2 nêu ngày đến hạn 03/12 là điều khoản mô phỏng (spec Minh và BR-22 dùng ngày 5) và liệt kê các khoản đến hạn trước lương: cơm văn phòng, tiền điện, Trả Sau.
+- [x] Sửa lời dẫn trong kịch bản demo. Cảnh 1 nêu hai nguyên nhân: nhịp chi và 700.000 ₫ đã để riêng cho nghĩa vụ. Cảnh 2 nêu ngày đến hạn 03/12 là điều khoản mô phỏng (spec Minh và BR-22 dùng ngày 5) và liệt kê các khoản đến hạn trước lương: cơm văn phòng, tiền điện, Trả Sau.
 
 ### Bước 6. Kiểm thử cục bộ
 
