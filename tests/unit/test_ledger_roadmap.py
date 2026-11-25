@@ -587,6 +587,27 @@ def test_diff_roadmaps_them_bo_doi_va_khong_doi():
     assert f == {"label": "Hũ nguồn", "before": "Giải trí", "after": "Đi lại"}
 
 
+def test_diff_roadmaps_loai_buoc_va_giai_doan_ghi_tieng_viet_khong_ghi_ma():
+    """Lỗi P4-01 (E1): màn So với bản cũ ghi "set_aside", "xay_quy_du_phong". Loại bước dùng nhãn, giai đoạn dùng tên giai đoạn."""
+    old = rl.roadmap_data(make_row(2, "active"))
+    row = make_row(5, "proposed", based_on_version=2)
+    phases = row["plan"]["phases"]
+    moved = next(s for s in phases[0]["steps"] if s["step_id"] == "bu_an_uong")
+    phases[0]["steps"].remove(moved)
+    phases[1]["steps"].append({**moved, "kind": "cut_spending"})
+    row["step_states"] = {}
+    d = rl.diff_roadmaps(old, rl.roadmap_data(row), {})
+    fields = next(c for c in d["changes"] if c["step_id"] == "bu_an_uong")["fields"]
+    by = {f["label"]: f for f in fields}
+    assert by["Loại bước"] == {"label": "Loại bước", "before": "Để dành", "after": "Giảm chi"}
+    assert by["Giai đoạn"] == {
+        "label": "Giai đoạn",
+        "before": old["phases"][0]["title"],
+        "after": old["phases"][1]["title"],
+    }
+    assert "_" not in by["Giai đoạn"]["before"] + by["Giai đoạn"]["after"]
+
+
 # =====================================================================================================
 # ForecastClient.optimize_allocation (N1)
 # =====================================================================================================
