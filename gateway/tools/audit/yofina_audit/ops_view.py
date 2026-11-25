@@ -72,11 +72,19 @@ class Pricing:
         return p
 
     def cost_vnd(self, input_tokens: int, output_tokens: int, cache_read_tokens: int = 0) -> int:
-        """Chi phí ước tính, số nguyên VND, làm tròn lên (thiên về không báo thấp chi phí)."""
+        """Chi phí ước tính, số nguyên VND, làm tròn lên (thiên về không báo thấp chi phí).
+
+        `input_tokens` là TỔNG token vào, gồm cả phần đọc cache (`cache_read_tokens`, như `token_usage` của bản ghi lượt và
+        `yofina_core.llm`): phần thường (`input_tokens - cache_read_tokens`) theo giá vào, phần đọc cache theo giá đọc cache. Giá Claude
+        Sonnet 4.6 trên Bedrock (global cross-Region, ap-southeast-1, AWS Price List `AmazonBedrockFoundationModels` bản
+        20261123095841, https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/region_index.json,
+        trang https://aws.amazon.com/bedrock/pricing/): 3 USD mỗi triệu token vào, 15 USD ra, 0,30 USD đọc cache, 3,75 USD ghi cache 5
+        phút. Phần ghi cache chưa có trong bản ghi lượt nên vẫn tính ở giá vào (thấp hơn giá ghi cache 0,75 USD mỗi triệu token)."""
+        read = min(max(cache_read_tokens, 0), max(input_tokens, 0))
         usd = (
-            Decimal(max(input_tokens, 0)) * self.input_usd_per_mtok
+            Decimal(max(input_tokens, 0) - read) * self.input_usd_per_mtok
             + Decimal(max(output_tokens, 0)) * self.output_usd_per_mtok
-            + Decimal(max(cache_read_tokens, 0)) * self.cache_read_usd_per_mtok
+            + Decimal(read) * self.cache_read_usd_per_mtok
         ) / Decimal(1_000_000)
         return math.ceil(usd * self.vnd_per_usd)
 

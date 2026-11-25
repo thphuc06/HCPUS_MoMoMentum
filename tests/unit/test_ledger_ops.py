@@ -14,7 +14,7 @@ from conftest import OPENAPI_URI
 from jsonschema import Draft202012Validator
 from ledger_fakes import NOW, http_event, make_service
 
-from yofina_audit.ops_view import Pricing, mask, tool_calls_of, trace_detail
+from yofina_audit.ops_view import Pricing, mask, tool_calls_of, trace_detail, trace_summary
 from yofina_audit.record import parse_turn_record
 from yofina_audit.trace import build_trace_data
 from yofina_core.errors import ErrorCode, YofinaError
@@ -512,6 +512,17 @@ def test_gia_lam_tron_len_so_nguyen_vnd():
     assert PRICING.cost_vnd(1_000_000, 0) == 78_000
     with pytest.raises(ValueError):
         Pricing.from_mapping({"input_usd_per_mtok": 1})
+
+
+def test_chi_phi_tach_token_vao_thuong_va_token_doc_cache():
+    # input_tokens là TỔNG token vào, gồm 8.000 token đọc cache: 2.000 token thường × 3 USD + 8.000 × 0,3 USD + 1.000 token ra
+    # × 15 USD (mỗi triệu token) = 0,006 + 0,0024 + 0,015 = 0,0234 USD × 26.000 = 608,4 -> 609 ₫
+    usage = {"input_tokens": 10_000, "output_tokens": 1_000, "model_calls": 2, "cache_read_tokens": 8_000}
+    assert trace_detail(row(token_usage=usage), PRICING)["est_cost_vnd"] == 609
+    assert trace_summary(row(token_usage=usage), PRICING)["est_cost_vnd"] == 609
+    # không qua cache: 10.000 × 3 + 1.000 × 15 = 0,045 USD × 26.000 = 1.170 ₫
+    plain = {"input_tokens": 10_000, "output_tokens": 1_000, "model_calls": 2}
+    assert trace_detail(row(token_usage=plain), PRICING)["est_cost_vnd"] == 1_170
 
 
 def _Cfg(env):
