@@ -106,9 +106,10 @@ Chuyển danh mục sớm sẽ khiến Ledger cũ tạo hũ mới mà bỏ trố
 ### Bước 6. Kiểm thử cục bộ
 
 - [ ] Duy trì fixture riêng cho ví cũ chưa reset, ví ba hũ và ví demo bốn hũ. Cập nhật các ca tích hợp sau reset còn truy vấn `an_uong`, kỳ vọng mốc cạn 23/11 hoặc kỳ vọng sáu hũ. Giữ các ca dùng mã cũ để kiểm hành vi tương thích.
-- [ ] Kiểm tài khoản mới có và không có kê khai, tài khoản cũ chưa reset, và tài khoản demo reset hai lần. Xác nhận đúng số hũ và tổng 100%, dữ liệu cũ còn nguyên trước reset, reset lặp lại giữ số dư nhất quán và hũ không bị trùng.
-- [ ] Kiểm ca nghĩa vụ vượt số tiền chia được và ca có sự kiện lương chờ khi đổi tỷ lệ.
-- [ ] Kiểm quay lui: đổi cấu hình onboarding về bộ bảy thì tài khoản mới nhận bộ bảy, reset demo vẫn chạy.
+  - 25/11: phần fixture cục bộ đã có (`tests/local_pg/test_default_six_jars.py`: ví cũ, bộ ba, demo bốn hũ). Chưa sửa 10 file trong `tests/integration` còn truy vấn `an_uong` (73 chỗ) vì chỉ kiểm được khi chạy tích hợp với AWS; xem HANDOFF mục "Cần chạy khi được duyệt".
+- [x] Kiểm tài khoản mới có và không có kê khai, tài khoản cũ chưa reset, và tài khoản demo reset hai lần. Xác nhận đúng số hũ và tổng 100%, dữ liệu cũ còn nguyên trước reset, reset lặp lại giữ số dư nhất quán và hũ không bị trùng.
+- [x] Kiểm ca nghĩa vụ vượt số tiền chia được và ca có sự kiện lương chờ khi đổi tỷ lệ.
+- [x] Kiểm quay lui: đổi cấu hình onboarding về bộ bảy thì tài khoản mới nhận bộ bảy, reset demo vẫn chạy.
 
 Chỉ chạy test đã kiểm tra là dùng tài nguyên cục bộ. Đợt trước đã đạt 234 ca PostgreSQL cục bộ và chạy hai cảnh demo; cần chạy lại các ca chịu ảnh hưởng.
 
