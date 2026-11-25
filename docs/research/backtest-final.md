@@ -272,3 +272,99 @@ lại `--write-recalibration` sau.
   của các hũ thưa có hiện % (qua PAV); % của hũ Ăn uống là p thô như trước #25 vì PAV hũ dày đã bỏ. Ngày cạn 23/11 (theo P50) không đổi. Cần
   đi lại cảnh 1 sau khi deploy Lambda dự báo.
 - Dữ liệu tổng hợp hai họ bộ sinh; chưa có dữ liệu thật để kiểm.
+
+## K5: cảnh báo hũ cạn (#26)
+
+Ngày đo: 2026-11-25. Issue #26 (AU-10; ML-01, ML-02 trong [kiểm toán ML](2026-11-25-audit-ml-forecasting.md) §3). Dữ liệu tổng hợp, chạy
+offline trên CPU, không gọi AWS. Đo SAU hiệu chỉnh hiện hành: CQR cho dải hũ dày, PAV chỉ cho hũ thưa (mục "Hiệu chỉnh CQR và PAV").
+K5 của [ba/08 §3.5](../ba/08-kpi-kinh-doanh.md): cảnh báo trước ít nhất 7 ngày, đúng từ 70%.
+
+### Kết luận ngắn
+
+- **Hũ dày, 120 ngày lịch sử** (như `minh`): cảnh báo đúng trong ±3 ngày **0,572**, chưa đạt mục tiêu 0,70. Sai TB 3,47 ngày. Trung vị
+  số ngày báo trước của cảnh báo đúng là **13 ngày**, đạt mức 7 ngày. Seasonal naive 0,441, burn-rate 0,490.
+- **Định nghĩa 2**, cảnh báo đúng vì hũ cạn thật trước ngày lương: hũ dày **0,816**, seasonal naive 0,663, burn-rate 0,686.
+- **Hũ thưa** (nay không hiện ngày cạn): ±3 ngày 0,287, sai TB 6,24 ngày; định nghĩa 2 là 0,654. Một ngày cụ thể ở hũ thưa chỉ đúng khoảng
+  một phần tư đến ba phần mười số lần (0,244 đến 0,301 theo độ dài lịch sử), nên việc chỉ báo "có thể cạn trước ngày lương" (#25) có cơ sở.
+- Sản phẩm hơn cả hai baseline ở cả hai định nghĩa, ở mọi độ dài lịch sử và cả hai loại hũ. Đổi lại nó báo ít hơn (hũ dày 120 ngày: 2.445
+  cảnh báo so với 3.441 và 3.525), nên bắt được ít ca cạn trước lương hơn (0,696 so với 0,796 và 0,843).
+
+### Phương pháp
+
+Luật đo viết trong docstring của `ml/yofina_ml/backtest/k5.py` trước khi chạy tập kiểm. Đây là phép B của kiểm toán §3.2, đưa vào repo.
+
+- **Vì sao không đo trên persona demo**: `minh`, `lan`, `vy` dựng ngược từ ngày neo nên không có tương lai thật; số dư thật của bộ sinh tổng
+  hợp hiếm khi âm trước kỳ lương (kiểm toán §3.1). Vì vậy dùng số dư kịch bản, như phép đo PAV ở mục trên.
+- **Mẫu**: 36 persona giữ ra ngoài (seed 201–206, hai họ bộ sinh, mọi cấu hình). Origin từ ngày 120 bước 7, chân trời 30 ngày, lịch sử
+  cắt còn 47 ngày, 120 ngày và lịch sử đủ. Lấy mọi hũ chi tiêu và tiết kiệm có chi TB 28 ngày dương và còn ít nhất 8 ngày trước kỳ lương
+  (để báo trước 7 ngày là làm được); bỏ hũ nghĩa vụ và hũ khởi đầu lạnh.
+- **Số dư kịch bản**: b = α × chi TB 28 ngày × w, α thuộc 0,6 / 0,8 / 1,0 / 1,25 / 1,6, w là số ngày trước kỳ lương; không tiền vào, không
+  nghĩa vụ. Ngày cạn thật là ngày đầu tiên b trừ chi thật cộng dồn ≤ 0 trong 30 ngày.
+- **Ba phương pháp**, cùng kịch bản. Sản phẩm: biên của `fit_jar`, Monte Carlo với đúng hạt và `rho`/`level_sigma` của `forecast_user`,
+  p qua PAV như `forecast_user`, ngày cạn dự báo là ngày đầu số dư P50 ≤ 0. Seasonal naive: như trên với `extra.model = "seasonal_naive"`,
+  p thô. Burn-rate: số dư b − chi TB 28 ngày × t, ngày cạn là ngày đầu số đó ≤ 0, không có xác suất.
+- **Cảnh báo**: sản phẩm và seasonal naive báo khi p ≥ 0,2 (trạng thái Sát hoặc Hụt) VÀ ngày cạn dự báo trước ngày lương; burn-rate báo
+  khi ngày cạn dự báo trước ngày lương. Hũ thưa tính cùng luật để đối chiếu, dù giao diện không hiện ngày của nó.
+- **Định nghĩa 1**: cảnh báo có ngày cạn thật cách ngày dự báo không quá ±3 ngày, tính trên mọi cảnh báo (thật không cạn trong 30 ngày là
+  sai). Sai TB tính trên cảnh báo có ngày cạn thật. **Định nghĩa 2**: cảnh báo mà hũ cạn thật trước ngày lương.
+- **Báo trước**: số ngày từ lúc báo (origin) tới ngày cạn thật; trung vị trên các cảnh báo đúng của từng định nghĩa. Mỗi origin tính riêng,
+  nên đây là khoảng báo trước tại một lần báo, không phải từ lần báo đầu tiên của một chuỗi ngày.
+- **Bắt được**: trong các ca hũ cạn thật trước ngày lương, tỷ lệ có cảnh báo.
+
+### Số đo
+
+| Lịch sử | Nhóm | Phương pháp | Kịch bản | Cảnh báo | Đ1: đúng ±3 ngày | Sai TB (ngày) | Báo trước trung vị, Đ1 (ngày) | Đ2: cạn trước lương | Báo trước trung vị, Đ2 (ngày) | Bắt được |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 47 | hũ dày | sản phẩm | 5835 | 2475 | 0,549 | 3,65 | 13 | 0,789 | 12 | 0,700 |
+| 47 | hũ dày | seasonal naive | 5835 | 3346 | 0,409 | 4,99 | 12 | 0,641 | 13 | 0,769 |
+| 47 | hũ dày | burn-rate | 5835 | 3501 | 0,488 | 3,98 | 13 | 0,675 | 13 | 0,847 |
+| 47 | hũ thưa | sản phẩm | 10625 | 3779 | 0,244 | 6,64 | 12 | 0,565 | 9 | 0,564 |
+| 47 | hũ thưa | seasonal naive | 10625 | 5864 | 0,181 | 8,08 | 9 | 0,424 | 10 | 0,657 |
+| 47 | hũ thưa | burn-rate | 10625 | 6375 | 0,202 | 7,18 | 12 | 0,431 | 9 | 0,726 |
+| **120** | **hũ dày** | **sản phẩm** | 5875 | 2445 | **0,572** | 3,47 | 13 | **0,816** | 12 | 0,696 |
+| 120 | hũ dày | seasonal naive | 5875 | 3441 | 0,441 | 4,67 | 12 | 0,663 | 13 | 0,796 |
+| 120 | hũ dày | burn-rate | 5875 | 3525 | 0,490 | 3,99 | 13 | 0,686 | 13 | 0,843 |
+| **120** | **hũ thưa** | **sản phẩm** | 10585 | 3102 | **0,287** | 6,24 | 12 | **0,654** | 9 | 0,547 |
+| 120 | hũ thưa | seasonal naive | 10585 | 6286 | 0,189 | 7,89 | 9 | 0,440 | 9 | 0,746 |
+| 120 | hũ thưa | burn-rate | 10585 | 6351 | 0,200 | 7,20 | 12 | 0,424 | 9 | 0,726 |
+| đủ | hũ dày | sản phẩm | 5825 | 2387 | 0,570 | 3,57 | 13 | 0,819 | 12 | 0,688 |
+| đủ | hũ dày | seasonal naive | 5825 | 3393 | 0,445 | 4,62 | 12 | 0,667 | 13 | 0,796 |
+| đủ | hũ dày | burn-rate | 5825 | 3495 | 0,491 | 3,98 | 13 | 0,686 | 12 | 0,842 |
+| đủ | hũ thưa | sản phẩm | 10635 | 3078 | 0,301 | 6,13 | 12 | 0,671 | 9 | 0,553 |
+| đủ | hũ thưa | seasonal naive | 10635 | 6427 | 0,194 | 7,77 | 9 | 0,446 | 9 | 0,768 |
+| đủ | hũ thưa | burn-rate | 10635 | 6381 | 0,201 | 7,18 | 12 | 0,425 | 9 | 0,727 |
+
+"Kịch bản" là số (persona, origin, hũ, α); "Cảnh báo" là số kịch bản phương pháp đó báo. Tỷ lệ Đ1, Đ2 chia cho số cảnh báo; "Bắt được"
+chia cho số kịch bản hũ cạn thật trước ngày lương.
+
+Đọc bảng:
+
+- Định nghĩa 2 cao hơn định nghĩa 1 vì nó không đòi đúng ngày: cảnh báo đúng khi hũ cạn bất kỳ ngày nào trước lương. Ngược lại, một cảnh
+  báo đúng ngày (±3) mà hũ cạn ngay sau ngày lương thì đúng theo định nghĩa 1 nhưng sai theo định nghĩa 2.
+- Hũ dày ở 47 ngày kém 120 ngày một chút (0,549 so với 0,572); từ 120 ngày trở lên gần như không đổi (0,570 ở lịch sử đủ).
+- Burn-rate bắt được nhiều nhất vì với số dư kịch bản này nó luôn báo khi α ≤ 1 (chi TB × w ≥ b), nhưng 31% cảnh báo của nó là hũ
+  không cạn trước lương (hũ dày, 120 ngày), so với 18% của sản phẩm.
+- So với số của kiểm toán §3.2 (lịch sử đủ, origin từ ngày 90): sản phẩm hũ dày 0,565 → 0,570, seasonal naive 0,458 → 0,445, burn-rate
+  0,469 → 0,491, định nghĩa 2 (một trừ "báo mà không cạn trước lương") 0,841 → 0,819. Chênh lệch do tập origin (từ ngày 120 ở đây) và mã
+  đo viết lại; script tạm của kiểm toán không còn nên không so được từng dòng. Kết luận không đổi: chưa đạt 0,70 ở định nghĩa 1, hơn hai
+  baseline, báo trước đủ 7 ngày.
+
+### Chạy lại
+
+```powershell
+uv run scripts/ml_backtest.py --k5 --out k5.json --tables k5.md
+```
+
+Lệnh in bảng trên và ghi JSON (`summary` theo độ dài, loại hũ, phương pháp). Đo với hiệu chỉnh hiện hành trong `calibration/default.py`,
+nên nếu sinh lại bảng thì chạy sau `--write-recalibration` (đặt cả hai cờ trong một lệnh cũng được, K5 chạy sau khi ghi). `--quick` để kiểm
+khói (2 seed, origin bước 28, khoảng 25 giây). Bản đầy đủ mất khoảng 5,5 phút trên máy dev (328 giây, 148.140 dòng). Kết quả tất định theo
+hạt `seed × 1000 + origin`.
+
+### Điều chưa xử lý
+
+- Số tuyệt đối phụ thuộc lưới α của số dư kịch bản và luật "cảnh báo" (p ≥ 0,2 và có ngày cạn trước lương). Phép so với baseline thì công
+  bằng vì cùng kịch bản.
+- Định nghĩa "đúng" của ba/08 §3.5 còn vế "hoặc người dùng đã hành động để tránh", không đo offline được, và định nghĩa vẫn chờ chủ dự án
+  duyệt (E-02).
+- Chưa đo hũ nghĩa vụ (ngày cạn đi theo lịch nghĩa vụ đã biết).
+- Dữ liệu tổng hợp hai họ bộ sinh; chưa có dữ liệu thật để kiểm.

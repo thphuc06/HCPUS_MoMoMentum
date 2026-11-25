@@ -92,7 +92,7 @@ Ba nguyên tắc:
 ### 3.5 K5: cảnh báo trước ít nhất 7 ngày, đúng từ 70%
 
 - **Đo được ngay** bằng backtest trên 3 persona và trên bộ sinh dữ liệu khác họ ([backtest-phase-2.md](../research/backtest-phase-2.md)).
-- **Căn cứ:** tầm dự báo là 30 ngày, kèm lịch lương và lịch nghĩa vụ đã biết trước. Persona demo `minh` được báo cạn ngày 23/11, trước kỳ lương 12 ngày.
+- **Căn cứ:** tầm dự báo là 30 ngày, kèm lịch lương và lịch nghĩa vụ đã biết trước. Backtest trên persona tổng hợp giữ ra ngoài (hũ dày, 120 ngày lịch sử): cảnh báo đến trước ngày hũ cạn thật trung vị 13 ngày; đúng trong ±3 ngày 0,57, chưa đạt 70%; đúng vì hũ cạn trước ngày lương 0,82 ([backtest-final.md](../research/backtest-final.md), mục "K5"). Persona demo `minh` được báo cạn ngày 23/11: con số 12 ngày là khoảng từ ngày cạn tới kỳ lương, không phải số ngày báo trước.
 - **Định nghĩa "đúng":** hũ được dự báo trạng thái Hụt hoặc Sát thì thực tế cạn trong khoảng ±3 ngày quanh ngày dự báo, hoặc người dùng đã hành động để tránh. Định nghĩa này cần chủ dự án duyệt.
 
 ### 3.6 K6, K7: biên lợi nhuận gộp ≥ 65%, chi phí AI ≤ 15% doanh thu
