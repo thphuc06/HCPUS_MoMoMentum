@@ -47,7 +47,7 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | **C-02** | Định nghĩa mức "sát" (vàng) khi kiểm tra trước khi chi | Theo BR-36: vàng khi ngày cạn mới rơi trước kỳ lương nhưng sau ngày cạn cũ. Technical đặt ngưỡng tương ứng | Nhóm | T-02; AC-FR6-01 |
 | **C-03** | Ngưỡng nghĩa vụ trên thu nhập (code đang dùng một ngưỡng 36%) | Đơn giản nhất: **giữ 36% làm mức đỏ** (có căn cứ quy tắc 28/36, nằm giữa đề xuất 30–40%), không tách hai mức trước demo | Nhóm | T-06 |
 | **C-05** | Ngưỡng "khoản đủ lớn mới hỏi" khi phân hũ | Từ 2% lương tháng; khoản nhỏ một lần vào hũ "Khác" | Nhóm | T-03 (E7) |
-| **G-01, C-12, T-07** | Phạm vi demo cho các quy tắc mới | Chỉ thêm **G1** (chi phí quy năm trên thẻ kiểm tra trước khi chi, BR-75). Không đổi bộ hũ demo (C-12). Còn lại ghi là lộ trình | Nhóm, Kỹ thuật | T-07 |
+| **G-01, C-12, T-07** | Phạm vi demo cho các quy tắc mới | Chỉ thêm **G1** (chi phí quy năm trên thẻ kiểm tra trước khi chi, BR-75). Không đổi bộ hũ demo (C-12): **đổi 26/11**, chủ dự án chốt bộ hũ mặc định theo mục đích và bộ hũ demo có hũ tự thêm, đã deploy (issue #39, xem cuối B2a của [02](02-business-rules.md)). Còn lại ghi là lộ trình | Nhóm, Kỹ thuật | T-07 |
 | C-01 | "Còn N ngày tới lương" tính từ hôm nay hay từ ngày cạn | Tách hai câu: ngày cạn, rồi số ngày trống tới lương | Nhóm | Câu chữ cảnh 1 |
 | C-08 | Vị trí và câu chữ nhãn "do AI tạo" | Dòng nhỏ dưới mỗi câu trả lời và trong màn Giới thiệu. Hỏi technical đã có chưa | Nhóm | AC-DEMO-03 |
 | C-14 | Persona chính | Mới đi làm (22–26), khớp persona Minh | Nhóm | Kịch bản demo |
