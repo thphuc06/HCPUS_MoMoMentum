@@ -39,6 +39,14 @@ export const LEDGER_BUILD_COMMAND =
 export const CASHFLOW_ROUTES: Array<[string, apigwv2.HttpMethod]> = [['/cashflow', apigwv2.HttpMethod.GET]];
 
 /**
+ * Route REST của đề xuất tỷ lệ chia lương ở bước 3 onboarding (`POST /jars/split-proposal`, x-lambda: ledger,
+ * `split_proposal.py`): chỉ tính, không ghi gì. Cùng Lambda ledger và JWT authorizer mặc định như các route khác.
+ */
+export const SPLIT_PROPOSAL_ROUTES: Array<[string, apigwv2.HttpMethod]> = [
+  ['/jars/split-proposal', apigwv2.HttpMethod.POST],
+];
+
+/**
  * Cấu hình riêng của stack công cụ (Lambda ledger + HTTP API). Mọi giá trị đổi được bằng context
  * (`-c khóa=giá trị`); không giá trị nào phụ thuộc tài khoản. Các giá trị nghiệp vụ được truyền vào Lambda
  * dưới dạng biến môi trường `YOFINA_*` (xem libs/yofina_core/src/yofina_core/config.py), không gắn cứng trong mã.
@@ -396,6 +404,8 @@ export class ToolsStack extends Stack {
       ['/nudges/{nudge_id}/feedback', apigwv2.HttpMethod.POST],
       // đợt giao diện (x-lambda: ledger): biểu đồ chi tiêu của màn Hoạt động
       ...CASHFLOW_ROUTES,
+      // bộ hũ mặc định (x-lambda: ledger): tỷ lệ đề xuất theo kê khai ở bước 3 onboarding
+      ...SPLIT_PROPOSAL_ROUTES,
     ];
     for (const [routePath, method] of routes) {
       this.api.addRoutes({ path: routePath, methods: [method], integration });
