@@ -27,6 +27,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from yofina_core.config import SSM_PREFIX_ENV, Config
+from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.llm import BudgetCapReached, DynamoUsageStore, UsageStore, load_defaults
 
 logger = logging.getLogger("yofina.quota")
@@ -41,11 +42,23 @@ TTL_DAYS = 3
 _KEY_SALT = "yofina-quota:"
 
 
-class DailyQuotaExceeded(Exception):
-    """Tài khoản đã dùng đủ trần của loại `kind` trong ngày."""
+#: tiêu đề khối `notice` của lượt chat bị chặn (khối giới hạn 80 ký tự)
+EXCEEDED_TITLE = "Hôm nay đã hết lượt"
+#: việc bị chặn, theo loại trần; câu đầy đủ ở `DailyQuotaExceeded.message` (khối `notice` giới hạn 280 ký tự)
+_USED_UP: dict[str, str] = {
+    CHAT: "Hôm nay tài khoản đã dùng đủ {cap} lượt trò chuyện với trợ lý.",
+    UPLOAD: "Hôm nay tài khoản đã nạp đủ {cap} tệp.",
+}
+_STILL_OK = " Bạn vẫn xem số liệu ở các màn khác bình thường; lượt mới mở lại từ 0 giờ ngày mai."
+
+
+class DailyQuotaExceeded(YofinaError):
+    """Tài khoản đã dùng đủ trần của loại `kind` trong ngày: mã `DAILY_QUOTA_EXCEEDED` (HTTP 429), câu tiếng Việt hiển thị được."""
 
     def __init__(self, kind: str, cap: int) -> None:
-        super().__init__(f"Đã dùng đủ {cap} lượt {kind} hôm nay")
+        super().__init__(
+            ErrorCode.DAILY_QUOTA_EXCEEDED, _USED_UP[kind].format(cap=max(cap, 0)) + _STILL_OK
+        )
         self.kind, self.cap = kind, cap
 
 
@@ -73,21 +86,36 @@ class CapSource:
         self._read_at = 0.0
         self._lock = threading.Lock()
 
+    def _ssm_client(self) -> Any:
+        if self._ssm is None:
+            import boto3  # chỉ import khi thật sự đọc SSM
+
+            self._ssm = boto3.client("ssm", region_name=Config(self._env).region())
+        return self._ssm
+
     def _read(self) -> int:
         env_key = f"YOFINA_QUOTA_{self.name.upper()}"
         try:
             if env_key in self._env:
                 return int(self._env[env_key])
-            if not self._env.get(SSM_PREFIX_ENV):
+            prefix = self._env.get(SSM_PREFIX_ENV)
+            if not prefix:
                 return self.default
-            # Config mới mỗi lần đọc: Config nhớ giá trị mãi, ở đây cần thấy giá trị SSM mới sau `ttl`
-            env_only_prefix = {SSM_PREFIX_ENV: self._env[SSM_PREFIX_ENV]}
-            if "YOFINA_REGION" in self._env:
-                env_only_prefix["YOFINA_REGION"] = self._env["YOFINA_REGION"]
-            raw = Config(env_only_prefix, self._ssm).get(f"quota/{self.name}", default=None)
-            return int(raw) if raw is not None else self.default
+            path = f"{prefix.rstrip('/')}/quota/{self.name}"
+            try:
+                resp = self._ssm_client().get_parameter(Name=path, WithDecryption=False)
+            except Exception as exc:
+                # như `Config`: khóa vắng (`ParameterNotFound`) thì dùng mặc định
+                if type(exc).__name__ == "ParameterNotFound":
+                    return self.default
+                raise
+            return int(resp["Parameter"]["Value"])
         except Exception as exc:
-            logger.error(json.dumps({"event": "quota_cap_unreadable", "name": self.name, "error": repr(exc)[:200]}))
+            logger.error(
+                json.dumps(
+                    {"event": "quota_cap_unreadable", "name": self.name, "error": repr(exc)[:200]}
+                )
+            )
             return self.default
 
     def __call__(self) -> int:
@@ -133,7 +161,9 @@ class AccountQuota:
                 client = boto3.client("dynamodb", region_name=Config(env).region())
             store = DynamoUsageStore(table, client)
         else:
-            logger.warning(json.dumps({"event": "quota_disabled", "kind": kind, "reason": "no_usage_table"}))
+            logger.warning(
+                json.dumps({"event": "quota_disabled", "kind": kind, "reason": "no_usage_table"})
+            )
         return cls(kind, store=store, cap=CapSource(kind, env, ssm))
 
     def take(self, sub: str) -> int | None:
@@ -153,7 +183,12 @@ class AccountQuota:
                 ttl_epoch=ttl,
             )
         except BudgetCapReached as exc:
+            logger.info(json.dumps({"event": "quota_exceeded", "kind": self.kind, "cap": cap}))
             raise DailyQuotaExceeded(self.kind, cap) from exc
         except Exception as exc:
-            logger.error(json.dumps({"event": "quota_store_error", "kind": self.kind, "error": repr(exc)[:300]}))
+            logger.error(
+                json.dumps(
+                    {"event": "quota_store_error", "kind": self.kind, "error": repr(exc)[:300]}
+                )
+            )
             return None

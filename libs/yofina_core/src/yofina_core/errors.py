@@ -65,6 +65,7 @@ class ErrorCode(StrEnum):
     # Phase 6 (#13, B4): trần lượt chat/nạp tệp theo tài khoản mỗi ngày (yofina_core.quota). Thêm cuối danh sách.
     DAILY_QUOTA_EXCEEDED = "DAILY_QUOTA_EXCEEDED"
 
+
 HTTP_STATUS: dict[ErrorCode, int] = {
     ErrorCode.UNAUTHENTICATED: 401,
     ErrorCode.FORBIDDEN: 403,
