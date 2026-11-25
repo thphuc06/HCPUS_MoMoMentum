@@ -4,15 +4,15 @@ Ngày lập: 25/11/2026. Cập nhật sau khi rà soát với trang Notion "Feed
 Nhánh: `feat/default-six-jars`  
 SHA gốc đã đối chiếu với `origin/main`: `865fba9f60039294c9afdb936a1c1f401de11430`. Commit WIP chứa bộ sáu hũ: `622a1b0`.
 
-Tên file giữ nguyên để không gãy liên kết, nhưng phạm vi đã đổi: người dùng mới nhận **ba hũ**, demo dùng **cấu hình hũ riêng** với bốn hũ. Trước khi sửa tiếp, xác minh lại worktree, nhánh, SHA và `origin/main` theo hướng dẫn Git của dự án.
+Tên file giữ nguyên để không gãy liên kết, nhưng phạm vi đã đổi: người dùng mới nhận **ba hũ**, demo dùng **cấu hình hũ riêng**: hai hũ mặc định cộng các hũ người dùng tự thêm (đổi 26/11, issue #39). Trước khi sửa tiếp, xác minh lại worktree, nhánh, SHA và `origin/main` theo hướng dẫn Git của dự án.
 
 ## Quyết định đã chốt
 
 | # | Quyết định | Ghi chú |
 | --- | --- | --- |
 | Q1 | Người dùng mới nhận ba hũ: Chi hằng ngày, Nghĩa vụ, Dự phòng | Các hũ để dành khác chỉ tạo khi có số liệu (mục "Cấu hình hũ") |
-| Q2 | Demo có cấu hình hũ riêng, không đọc bộ mặc định của onboarding | Cả bốn persona (`minh`, `khoa`, `lan`, `vy`) dùng chung cấu hình demo |
-| Q3 | Minh có bốn hũ: Chi hằng ngày, Nghĩa vụ, Dự phòng, Mục tiêu | Bỏ Quỹ dồn và Tích lũy dài hạn khỏi dữ liệu demo vì số dư 0, không có mục tiêu, không cảnh nào dùng |
+| Q2 | Demo có cấu hình hũ riêng, không đọc bộ mặc định của onboarding. **Đổi 26/11**: bộ demo là hai hũ mặc định Nghĩa vụ, Dự phòng cộng các hũ người dùng tự thêm (Ăn uống, Đi lại, Giải trí, Mục tiêu, Đầu tư); không có hũ Chi hằng ngày | Cả bốn persona (`minh`, `khoa`, `lan`, `vy`) dùng chung cấu hình demo. Lý do đổi: PELT, hồ sơ hành vi và cờ đổi hành vi tính theo mã hũ; gom Ăn uống, Đi lại, Giải trí vào một hũ thì mất tín hiệu, mà cảnh 1 và cảnh 4 (kiểm trên app tối 25/11: Ăn uống cạn 23/11, CSV cảnh 4 vào Ăn uống rồi PELT xác nhận) dựa vào hũ `an_uong` |
+| Q3 | ~~Minh có bốn hũ: Chi hằng ngày, Nghĩa vụ, Dự phòng, Mục tiêu~~. **Đổi 26/11**: Minh có bảy hũ (bảng "Demo (Reset data)") | Cùng lý do với Q2. Đầu tư là hũ mới 0 ₫, không lịch sử (câu chuyện: người dùng tự thêm); Quỹ dồn và Tích lũy dài hạn vẫn không có trong demo |
 | Q4 | Kê khai ở bước 3 của onboarding (màn "Chi phí cố định") | Khai qua chat chưa làm trong lượt này |
 | Q5 | Hũ Nghĩa vụ mặc định là một hũ chung | Tiền trọ, hóa đơn, khoản vay và Trả Sau cùng trả từ hũ này |
 | Q6 | Hoãn bộ hũ theo giai đoạn sống (BR-70) | Mọi người dùng mới nhận cùng ba hũ; xem mục "Chưa làm trong lượt này" |
@@ -35,15 +35,25 @@ Tỷ lệ 42/33/25 lấy theo các nhóm của bộ "Mới đi làm" ở [B2a](.
 
 ### Demo (Reset data)
 
-| Hũ | Loại | `purpose` | Tỷ lệ | Số dư sau reset |
-| --- | --- | --- | ---: | --- |
-| Chi hằng ngày | `spending` | — | 45% | Gộp từ Ăn uống, Đi lại, Giải trí, trừ 700.000 ₫ đã để riêng cho nghĩa vụ |
-| Nghĩa vụ | `obligation` | — | 35% | Gộp từ Hóa đơn và Nghĩa vụ cũ, cộng 700.000 ₫ |
-| Dự phòng | `saving` | `buffer` | 15% | Giữ từ Dự phòng cũ |
-| Mục tiêu | `saving` | `goal` | 5% | Từ Du lịch cũ, giữ mục tiêu 6.000.000 ₫, hạn 01/04/2027 |
-| **Tổng** | | | **100%** | |
+Đổi 26/11 (issue #39, lý do ở Q2). Cấu hình ở [`jar_layout.py`](../../gateway/tools/ledger/yofina_ledger/jar_layout.py) (`DEMO_LAYOUT`: mã, tên, loại, `purpose`), ánh xạ hũ persona sang hũ demo ở [`six_jars.py`](../../data/personas/six_jars.py) (`JAR_ALIASES`, mã không có trong ánh xạ giữ nguyên). Số dư, tỷ lệ, lịch sử, dòng chia lương cũ, hũ trả của nghĩa vụ, nhãn phân loại seed và lộ trình seed đi theo cùng ánh xạ; không bảng tỷ lệ nào chép cứng.
 
-Tỷ lệ demo dồn 10% của hai hũ bỏ đi vào Chi hằng ngày, gần mức 44% trong spec cũ của Minh. Tỷ lệ chỉ ảnh hưởng các kỳ lương từ 05/12, nhưng vẫn phải chạy lại bốn cảnh trước khi chốt số (bước 5).
+| Hũ | Mã | Loại | `purpose` | Hũ persona gộp vào | Tỷ lệ của `minh` | Số dư sau reset của `minh` |
+| --- | --- | --- | --- | --- | ---: | ---: |
+| Ăn uống (tự thêm) | `an_uong` | `spending` | — | `an_uong`, giữ nguyên mọi dòng | 30% | 380.000 ₫ |
+| Đi lại (tự thêm) | `di_lai` | `spending` | — | `di_lai`, giữ nguyên | 7% | 640.000 ₫ |
+| Nghĩa vụ (mặc định) | `nghia_vu` | `obligation` | — | `nghia_vu` + `hoa_don` | 31 + 5 = 36% | 1.450.000 ₫ |
+| Giải trí (tự thêm) | `giai_tri` | `spending` | — | `giai_tri`, giữ nguyên | 7% | 760.000 ₫ |
+| Mục tiêu (tự thêm) | `muc_tieu` | `saving` | `goal` | `du_lich`, mục tiêu và hạn lấy từ hũ nguồn (6.000.000 ₫, 01/04/2027) | 10% | 1.800.000 ₫ |
+| Dự phòng (mặc định) | `du_phong` | `saving` | `buffer` | `du_phong` | 10% | 2.700.000 ₫ |
+| Đầu tư (tự thêm) | `dau_tu` | `saving` | `long_term` | không có (hũ mới, không lịch sử) | 0% | 0 ₫ |
+| **Tổng** | | | | | **100%** | **7.730.000 ₫** (như ví persona) |
+
+- Tỷ lệ mỗi hũ là tổng tỷ lệ của hũ nguồn trong spec persona, nên tổng luôn 100% và mỗi persona giữ tỷ lệ của mình. Đầu tư 0% (DB cho phép `split_percent` từ 0 tới 100; không bịa tỷ lệ cho hũ không có nguồn).
+- Persona thiếu hũ nguồn: hũ mục tiêu chỉ tạo khi persona có hũ nguồn mang mục tiêu (`goal` phải có số tiền và hạn, `save_jars` từ chối hũ `goal` thiếu một trong hai), các hũ khác luôn tạo (0 ₫, 0% nếu không có nguồn). Kết quả: `minh`, `vy` có 7 hũ (Mục tiêu của `vy` là 10.000.000 ₫, hạn 01/06/2027 từ hũ Du lịch của `vy`); `lan`, `khoa` có 6 hũ. Persona có hũ không nằm trong ánh xạ thì đặt lại báo lỗi thay vì bỏ số dư.
+- Hũ trả của nghĩa vụ theo cùng ánh xạ: Tiền cơm văn phòng vẫn trả từ Ăn uống (mốc cạn 23/11 của cảnh 1), Netflix từ Giải trí, tiền nhà và hóa đơn từ Nghĩa vụ (gộp từ Hóa đơn); Trả sau trả từ Nghĩa vụ.
+- Bỏ khoản chuyển 700.000 ₫ "Để riêng tiền trả nghĩa vụ" của bộ bốn hũ: nó lấy từ Chi hằng ngày, hũ không còn trong ví demo; Ăn uống không được đổi số dư hay chuỗi chi; lấy từ hũ khác (Dự phòng, Mục tiêu) là bịa thêm một giao dịch và làm đổi cảnh 3. Không có khoản này, Nghĩa vụ vẫn sát trước khi mua (1.450.000 ₫ cho Tiền điện 375.000 ₫ ngày 26/11 và Trả sau 1.000.000 ₫ ngày 03/12) và thiếu sau khi mua tai nghe, nên cảnh 2 vẫn có nghĩa (số đo ở Bước 5).
+- Trả sau của `minh` đến hạn ngày 3 trên ví demo (`DEMO_CREDIT_DUE_DAY`, spec và BR-22 dùng ngày 5): giữ vì cửa sổ "đến hạn trước kỳ lương" của hũ Nghĩa vụ chỉ lấy khoản có ngày đến hạn **trước** ngày lương (`yofina_core.schedule.obligation_window`), khoản đến hạn đúng 05/12 sẽ không nằm trong danh sách của cảnh 2.
+- Lộ trình seed: không có file riêng cho bộ hũ demo; đặt lại nạp `data/personas/roadmaps/minh.json` (v1 đã thay, v2 đang dùng, 120 ngày) với mã hũ đổi theo `JAR_ALIASES` (`du_lich` thành `muc_tieu`). `minh_six_jars.json` (dựng từ seed 47 ngày cũ, có `behavior_flag` và v3 `behavior_changed`) đã bỏ.
 
 Reset data chỉ dùng được với tài khoản thuộc nhóm demo ([`rest_api.py`](../../gateway/tools/ledger/yofina_ledger/rest_api.py), route `POST /demo/reset`) và thay toàn bộ dữ liệu bằng persona. Tài khoản thật đã có hũ **không** được chuyển bộ; người dùng tự sửa hũ ở màn "Thêm hoặc sửa hũ".
 
@@ -52,7 +62,7 @@ Reset data chỉ dùng được với tài khoản thuộc nhóm demo ([`rest_ap
 | Chỗ | Commit WIP đang làm | Cần đổi |
 | --- | --- | --- |
 | [Migration 0057](../../db/migrations/0057_default_six_jars.sql) (trước khi gộp vào `main` là 0055) và [seed](../../db/seed/jar_templates.sql) | Bật bộ sáu ngay khi chạy | Tách phần schema và phần bật bộ hũ (bước 1) |
-| [`six_jars.py`](../../data/personas/six_jars.py) | Lấy hũ demo từ `is_default`, báo lỗi nếu không đúng sáu hũ | Đọc cấu hình demo riêng (bước 1, bước 5) |
+| [`six_jars.py`](../../data/personas/six_jars.py) | Lấy hũ demo từ `is_default`, báo lỗi nếu không đúng sáu hũ | Đọc cấu hình demo riêng (bước 1, bước 5); 26/11 đổi sang bộ hũ có hũ tự thêm (`apply_demo_layout`) |
 | [`service.py` `reset_demo`](../../gateway/tools/ledger/yofina_ledger/service.py) | Lấy `purpose` từ danh mục mặc định | Lấy từ cấu hình demo |
 | [`settings.py`](../../pipelines/forecast/yofina_forecast/settings.py) `DEFAULT_ESSENTIAL_JAR_CODES` | Coi cả Chi hằng ngày là thiết yếu, kể cả giải trí | Tính sàn theo phần chi thiết yếu (bước 2) |
 | [`wallet_writes.py` `_prep_save_jars`](../../gateway/tools/ledger/yofina_ledger/wallet_writes.py) | Bản xem trước chỉ có % trước và sau | Thêm số tiền mỗi kỳ và kỳ áp dụng (bước 4) |
@@ -61,7 +71,7 @@ Reset data chỉ dùng được với tài khoản thuộc nhóm demo ([`rest_ap
 
 ### Bước 1. Tách cấu hình bộ hũ và migration
 
-- [x] Thêm cấu hình bộ hũ riêng cho onboarding và cho demo (ví dụ `jar_layout`). Onboarding đọc bộ ba; Reset data đọc bộ demo. Bỏ điều kiện "đúng sáu hũ" trong `use_default_jars`.
+- [x] Thêm cấu hình bộ hũ riêng cho onboarding và cho demo (ví dụ `jar_layout`). Onboarding đọc bộ ba; Reset data đọc bộ demo. Bỏ điều kiện "đúng sáu hũ" trong `use_default_jars` (26/11: đổi tên thành `apply_demo_layout`).
 - [x] Tách [migration 0057](../../db/migrations/0057_default_six_jars.sql) thành phần mở rộng schema và phần bật bộ hũ. Thêm `purpose` cho `jars` và `jar_templates`, chấp nhận `NULL` trên dữ liệu cũ. Giữ hợp đồng đọc cũ trong giai đoạn chạy xen kẽ, kể cả quyền truy cập và RLS.
 - [x] Phần bật bộ hũ đặt `is_default = true` cho đúng ba hũ, `false` cho Quỹ dồn, Mục tiêu, Tích lũy dài hạn và bảy hũ cũ. Đồng bộ cả migration và seed để chạy seed sớm cũng chưa bật bộ mới.
 - [x] Đối chiếu snapshot trước và sau migration và seed trên PostgreSQL cục bộ. Hũ, số dư, tỷ lệ, giao dịch và nghĩa vụ của ví cũ phải khớp. Ledger cũ còn phải khởi tạo được bộ bảy sau khi schema mở rộng.
@@ -92,21 +102,25 @@ Chuyển danh mục sớm sẽ khiến Ledger cũ tạo hũ mới mà bỏ trố
 - [x] Người dùng chọn Đồng ý, Sửa số hoặc Không đổi. Tổng phải bằng 100% mới lưu được. Thay đổi chỉ có hiệu lực sau khi xác nhận qua `save_jars` (BR-45).
 - [x] Tỷ lệ mới áp từ lần xác nhận chia lương đầu tiên sau khi lưu. Nếu đang có sự kiện lương chờ, thẻ hỏi rõ "áp cho kỳ này" hay "từ kỳ sau". Dự báo cập nhật ngay và thẻ ghi rõ điều đó.
 
-### Bước 5. Demo bốn hũ
+### Bước 5. Demo có hũ tự thêm (đổi 26/11)
 
-- [x] Viết cấu hình demo bốn hũ theo bảng "Demo (Reset data)". Bỏ ánh xạ sang Quỹ dồn và Tích lũy dài hạn; dòng chia lương cũ của các hũ bị bỏ gộp vào hũ nhận tương ứng.
-- [x] Cập nhật [lộ trình seed của Minh](../../data/personas/roadmaps/minh_six_jars.json) nếu còn tham chiếu hũ bị bỏ. Lộ trình hiện chỉ dùng Mục tiêu, Nghĩa vụ, Chi hằng ngày và Dự phòng.
-- [x] Kiểm tra cả bốn persona sau reset. Lan có thêm hũ Nghĩa vụ (C-07).
-- [x] Chạy lại cảnh 1 đến 4 theo [kịch bản demo](demo-script.md) bằng engine cục bộ. Số đợt trước, cần xác nhận lại:
-  - Cảnh 1: Chi hằng ngày có 1.080.000 ₫ và dự kiến cạn ngày 03/12, trước kỳ lương 05/12.
-  - Kết quả 25/11 (engine cục bộ, PostgreSQL cục bộ): cảnh 1 đúng 1.080.000 ₫, cạn 02/12 hoặc 03/12 tùy hạt theo mã người dùng; cảnh 2 đúng 2.200.000 ₫ (967.000 ₫ gốc cũ + 33.000 ₫ phí + 1.200.000 ₫), khoản thiếu đầu tiên Trả Sau 03/12, thiếu 760.784 ₫; cảnh 3 điểm 26 → 13, trụ 31 ngày. Cảnh 4 cần agent (Bedrock), chưa chạy.
-  - Cảnh 2: mua tai nghe 1.200.000 ₫ bằng Trả Sau, Nghĩa vụ có khoản đến hạn 2.200.000 ₫ ngày 03/12, đã gồm phí 33.000 ₫, và dự kiến thiếu khoảng 761.000 ₫.
-- [x] Sửa lời dẫn trong kịch bản demo. Cảnh 1 nêu hai nguyên nhân: nhịp chi và 700.000 ₫ đã để riêng cho nghĩa vụ. Cảnh 2 nêu ngày đến hạn 03/12 là điều khoản mô phỏng (spec Minh và BR-22 dùng ngày 5) và liệt kê các khoản đến hạn trước lương: cơm văn phòng, tiền điện, Trả Sau.
+Bản 25/11 làm demo bốn hũ (Chi hằng ngày 45%, Nghĩa vụ 35%, Dự phòng 15%, Mục tiêu 5%, khoản chuyển 700.000 ₫ để riêng cho nghĩa vụ, lộ trình riêng `minh_six_jars.json`). Ngày 26/11 chủ dự án đổi Q2, Q3; bản dưới thay bản đó.
+
+- [x] Viết cấu hình demo theo bảng "Demo (Reset data)": `DEMO_LAYOUT` và `JAR_ALIASES`; tỷ lệ, số dư, mục tiêu suy từ spec persona; dòng chia lương cũ gộp theo ánh xạ (một dòng mỗi hũ mỗi kỳ, như `confirm_salary`).
+- [x] Lộ trình seed của Minh dựng từ [`roadmaps/minh.json`](../../data/personas/roadmaps/minh.json) của `main` qua cùng ánh xạ (`roadmap_seed.load_seed(..., jar_aliases=...)`); bỏ `minh_six_jars.json`. Test unit kiểm file đổi mã y hệt file gốc ngoài mã hũ.
+- [x] Kiểm cả bốn persona sau reset, reset hai lần cho cùng kết quả, tổng tiền ví bằng persona gốc (`tests/local_pg/test_default_six_jars.py`, `tests/unit/test_personas.py`).
+- [x] Chạy lại cảnh 1 đến 4 bằng engine cục bộ, ngày mô phỏng 21/11/2026 (`tests/local_pg/test_demo_scenes.py` với `-s`; cảnh 4: `tests/unit/ingest/test_scene4_statement.py`, `scripts/measure_scene4_pelt.py`). Kết quả 26/11 (PostgreSQL cục bộ, 10.000 đường, what-if 5.000 đường, người dùng thử `sub-minh`):
+  - Cảnh 1: Ăn uống 380.000 ₫ cạn **23/11**, `days_to_payday` 14 (lương 05/12), khả năng hụt 1,0, nhóm tin cậy `high` (Cao), thẻ chủ động `runout_warning`. Ăn uống, Đi lại, Giải trí dự báo y hệt ví persona trên cùng người dùng. Đi lại 640.000 ₫ và Giải trí 760.000 ₫ "đủ", không nêu ngày cạn (`runout_date_shown` sai, hũ thưa #25). Nghĩa vụ 1.450.000 ₫ "sát" (khả năng hụt 0,26).
+  - Cảnh 2: mua tai nghe 1.200.000 ₫ bằng Trả sau: khoản đến hạn 03/12 thành 2.200.000 ₫ (1.000.000 ₫ có sẵn gồm phí 33.000 ₫, cộng 1.200.000 ₫, phí không cộng thêm vì tháng đã có phí). Hũ Nghĩa vụ liệt kê trước lương: Tiền điện 375.000 ₫ (tối đa 450.000 ₫) ngày 26/11, Trả sau 2.200.000 ₫ ngày 03/12; khoản thiếu đầu tiên là Trả sau 03/12, thiếu **1.162.559 ₫** (số dư P50 trước hạn 1.037.441 ₫). Trước khi mua không có khoản thiếu.
+  - Cảnh 3: điểm 29 → 12 khi mất việc 2 tháng, trụ **25 ngày** (mốc trên app 25/11: 29 → 12, 24 ngày). Ví persona trên cùng máy cũng ra 25 ngày, nên lệch một ngày không do bộ hũ: hạt Monte Carlo theo mã người dùng (`sub-minh` cục bộ, tài khoản thật trên app) và ngày mô phỏng lúc đo.
+  - Cảnh 4 (phần không cần model): 32 dòng tự vào Ăn uống trên cả ví persona và ví demo; PELT xác nhận từ hệ số 2,1 (ngưỡng mịn 2,04), tệp dùng 3,5 xác nhận 20/20 hạt chia khoản khi tải trong ngày và trễ một ngày, y hệt ví persona.
+- [ ] Sửa lời dẫn trong kịch bản demo (người điều phối làm): cảnh 1 không còn "700.000 ₫ đã để riêng"; cảnh 2 nêu ngày đến hạn 03/12 là điều khoản mô phỏng.
 
 ### Bước 6. Kiểm thử cục bộ
 
-- [ ] Duy trì fixture riêng cho ví cũ chưa reset, ví ba hũ và ví demo bốn hũ. Cập nhật các ca tích hợp sau reset còn truy vấn `an_uong`, kỳ vọng mốc cạn 23/11 hoặc kỳ vọng sáu hũ. Giữ các ca dùng mã cũ để kiểm hành vi tương thích.
+- [ ] Duy trì fixture riêng cho ví cũ chưa reset, ví ba hũ và ví demo (26/11: bảy hũ, có `an_uong`). Cập nhật các ca tích hợp sau reset còn truy vấn `an_uong`, kỳ vọng mốc cạn 23/11 hoặc kỳ vọng sáu hũ. Giữ các ca dùng mã cũ để kiểm hành vi tương thích.
   - 25/11: phần fixture cục bộ đã có (`tests/local_pg/test_default_six_jars.py`: ví cũ, bộ ba, demo bốn hũ). Chưa sửa 10 file trong `tests/integration` còn truy vấn `an_uong` (73 chỗ) vì chỉ kiểm được khi chạy tích hợp với AWS; xem HANDOFF mục "Cần chạy khi được duyệt".
+  - 26/11: ví demo lại có `an_uong`, `di_lai`, `giai_tri` với số dư như persona; các ca tích hợp truy vấn `an_uong` và mốc cạn 23/11 khớp lại, chỉ còn ca nào hỏi `hoa_don` hay `du_lich` trên ví demo (nay là `nghia_vu`, `muc_tieu`) cần xem khi chạy tích hợp. `tests/local_pg/test_forecast_pipeline.py` lấy lại kỳ vọng của `main` (Ăn uống cạn 23/11, thẻ `runout_warning`).
 - [x] Kiểm tài khoản mới có và không có kê khai, tài khoản cũ chưa reset, và tài khoản demo reset hai lần. Xác nhận đúng số hũ và tổng 100%, dữ liệu cũ còn nguyên trước reset, reset lặp lại giữ số dư nhất quán và hũ không bị trùng.
 - [x] Kiểm ca nghĩa vụ vượt số tiền chia được và ca có sự kiện lương chờ khi đổi tỷ lệ.
 - [x] Kiểm quay lui: đổi cấu hình onboarding về bộ bảy thì tài khoản mới nhận bộ bảy, reset demo vẫn chạy.
@@ -117,7 +131,7 @@ Chỉ chạy test đã kiểm tra là dùng tài nguyên cục bộ. Đợt trư
 
 1. Áp dụng schema tương thích trong khi bộ bảy còn hoạt động.
 2. Cập nhật các bên đọc dữ liệu hũ, sau đó cập nhật Ledger và các luồng ghi. Kiểm tra cả ví cũ và ví có `purpose` trên môi trường đã được phép kiểm thử.
-3. Bật cấu hình demo bốn hũ, rồi bật bộ ba cho onboarding. Kiểm tra lại hai luồng với tài khoản thử.
+3. Bật cấu hình demo (bảng "Demo (Reset data)"), rồi bật bộ ba cho onboarding. Kiểm tra lại hai luồng với tài khoản thử.
 4. Nếu cần quay lui, chuyển cấu hình cho các lần tạo ví và reset tiếp theo. Giữ schema và các bên đọc tương thích để những ví đã tạo vẫn hoạt động.
 
 ## Chưa làm trong lượt này

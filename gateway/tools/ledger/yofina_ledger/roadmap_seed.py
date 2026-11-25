@@ -12,6 +12,8 @@ Số trong seed: số của persona (mục tiêu và hạn của hũ từ spec, 
 seed ghi rõ trong file (`nguon`). Mọi ngày trong file là số ngày kể từ ngày neo (ngày mô phỏng lúc đặt lại), nên không gắn với một ngày cụ thể.
 
 Chạy TRONG transaction đặt lại (`LedgerRepo.reset_user`): ghi hỏng thì cả lần đặt lại rollback.
+
+Ví demo (bộ hũ demo, issue #39) dùng cùng file seed của persona, mã hũ đổi theo `personas.six_jars.JAR_ALIASES` (`jar_aliases`).
 """
 
 from __future__ import annotations

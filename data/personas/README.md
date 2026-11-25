@@ -8,6 +8,7 @@ Dữ liệu persona **seed** cho demo: hồ sơ, hũ (kể cả hai hũ hệ th�
 | `generator.py` | `generate(persona, anchor=...)` dựng sổ cái; `materialize(...)` ghép với đồng hồ mô phỏng ([ADR-0003](../../docs/decisions/0003-dong-ho-mo-phong.md)) và dựng id tất định; `persona_from_groups`, `parse_groups_claim` |
 | `out_of_wallet.py` | `generate_out_of_wallet(persona, anchor=...)`: dựng khoản chi NGOÀI ví (thứ người dùng sẽ nạp từ sao kê hoặc ảnh) từ khối `out_of_wallet` của spec; `statement_csv` ghi sao kê CSV kiểu VCB. Không vào sổ cái seed |
 | `samples/` | Tệp mẫu để tải lên ở cảnh 5 (`vy_sao_ke_vcb.csv`, `vy_bien_lai_1.png`, `vy_bien_lai_2.png`) và `make_samples.py` sinh ra chúng; xem mục "Tệp mẫu cho cảnh 5" |
+| `six_jars.py` | `apply_demo_layout(data, DEMO_LAYOUT)`: gộp ví persona vào bộ hũ demo mà `POST /demo/reset` nạp (`JAR_ALIASES`, `DEMO_CREDIT_DUE_DAY`); mục "Bộ hũ demo sau khi đặt lại" |
 | `accounts.json` | Ánh xạ tài khoản demo → persona và tiền tố nhóm Cognito (`persona-`). Mã sản phẩm không rẽ nhánh theo email: persona của người gọi lấy từ nhóm Cognito (claim `cognito:groups`) |
 
 ## Persona
@@ -20,6 +21,22 @@ Dữ liệu persona **seed** cho demo: hồ sơ, hũ (kể cả hai hũ hệ th�
 | `vy` | nạp bằng `scripts/seed_persona.py --persona vy` (cảnh 5: nạp dữ liệu ngân hàng khác, F6; không còn tài khoản giám khảo nào dùng) | Nhà thiết kế, lương 8.000.000 ₫ ngày 5 vào ví, **cộng 4.800.000 ₫ mỗi tháng freelance về tài khoản Vietcombank khác** (ngày 18), rủi ro vừa | 6 hũ (Ăn uống, Đi lại, Hóa đơn, Giải trí, Du lịch, Dự phòng), 5 nghĩa vụ (thuê phòng, Internet, điện thoại, điện, Spotify), hạn mức Trả sau 3.000.000 ₫ | 47 ngày, hai kỳ lương, 147 dòng (2 dòng là thu nhập ngoài ví) |
 
 **Nghĩa vụ của `minh`** (ngày đến hạn kế tiếp tính từ ngày neo): Tiền điện 375.000 ₫ (khoảng 300.000 đến 450.000, ngày 26, hũ Hóa đơn), Trả sau (mô phỏng) **1.000.000 ₫ = gốc 967.000 + phí 33.000** đến hạn 5/12 trả từ hũ Nghĩa vụ (phí lấy từ bảng `fee_schedules` lúc nạp, không gắn cứng), Tiền thuê phòng 2.000.000 ₫ (ngày 6), Internet FPT 220.000 ₫ (ngày 12), Netflix 180.000 ₫ (ngày 15, hũ Giải trí), Cước điện thoại 100.000 ₫ (ngày 20). Tiền cơm văn phòng 300.000 ₫ (ngày 23, trả từ hũ Ăn uống; thêm ở đợt hiệu chỉnh cảnh 1, xem dưới). Hạn mức Trả sau 5.000.000 ₫, dư nợ gốc 967.000 ₫ (hai giao dịch mua bằng hạn mức trong lịch sử: 520.000 và 447.000). Người nhận: Trần Quang Huy (yêu thích, người nhận của cảnh chuyển tiền demo), Nguyễn Thu Hà, Mẹ, Lê Minh Châu. Hóa đơn tháng 11 chưa tới hạn tiền điện nên hũ Hóa đơn (450.000) "sát" như Figma.
+
+## Bộ hũ demo sau khi đặt lại (issue #39)
+
+Spec ở `specs/` vẫn là ví bảy hũ cũ (bảng trên, băm đầu ra bộ sinh không đổi). `POST /demo/reset` (`LedgerService.reset_demo`) nạp ví đó **qua bộ hũ demo**: hai hũ mặc định của onboarding (Nghĩa vụ, Dự phòng) cộng các hũ người dùng tự thêm (Ăn uống, Đi lại, Giải trí, Mục tiêu, Đầu tư); không có hũ Chi hằng ngày. Lý do: PELT, hồ sơ hành vi và cờ đổi hành vi tính theo mã hũ, nên Ăn uống, Đi lại, Giải trí phải là hũ riêng (cảnh 1, cảnh 4). Mã, tên, loại, `purpose` ở `gateway/tools/ledger/yofina_ledger/jar_layout.py` (`DEMO_LAYOUT`); ánh xạ ở `six_jars.py`:
+
+| Hũ persona | Hũ demo |
+|---|---|
+| `an_uong`, `di_lai`, `giai_tri`, `du_phong`, `nghia_vu` | giữ mã (mọi dòng giữ nguyên số tiền và ngày) |
+| `hoa_don` | `nghia_vu` |
+| `du_lich` | `muc_tieu` (`purpose` `goal`, mục tiêu và hạn của hũ Du lịch) |
+| (không có) | `dau_tu` (`purpose` `long_term`, 0 ₫, 0%, không lịch sử) |
+
+- Số dư, tỷ lệ chia (tổng tỷ lệ của hũ nguồn), dòng chia lương các kỳ trước (một dòng mỗi hũ mỗi kỳ), sự kiện lương, hũ trả của nghĩa vụ, nhãn phân loại seed (`classify_seed.apply_seed_labels`) và lộ trình seed (`roadmaps/README.md`) đi theo cùng ánh xạ. Chuyển giữa hai hũ gộp vào cùng một hũ thì bỏ cả hai chân. Tổng tiền ví bằng ví persona.
+- Hũ Mục tiêu chỉ có khi persona có hũ nguồn mang mục tiêu: `minh`, `vy` có 7 hũ, `lan`, `khoa` có 6 hũ (không có Mục tiêu). Hũ persona không có trong ánh xạ thì đặt lại báo lỗi.
+- `minh` sau đặt lại: Ăn uống 380.000 ₫ (30%), Đi lại 640.000 ₫ (7%), Nghĩa vụ 1.450.000 ₫ (36%), Giải trí 760.000 ₫ (7%), Mục tiêu 1.800.000 ₫ (10%, 6.000.000 ₫ đến 01/04/2027), Dự phòng 2.700.000 ₫ (10%), Đầu tư 0 ₫ (0%). Tiền cơm văn phòng vẫn trả từ Ăn uống nên mốc cạn 23/11 của cảnh 1 giữ nguyên; Netflix trả từ Giải trí; tiền nhà, hóa đơn và Trả sau trả từ Nghĩa vụ. Trả sau đến hạn ngày 3 thay vì ngày 5 (`DEMO_CREDIT_DUE_DAY`) để khoản đến hạn nằm trong danh sách "trước kỳ lương" của hũ Nghĩa vụ ở cảnh 2.
+- Số đo cảnh 1 đến 4 trên ví demo: `docs/plan/default-six-jars-rollout.md`, Bước 5; đo lại bằng `tests/local_pg/test_demo_scenes.py -s`.
 
 ## Hiệu chỉnh cảnh 1 (phase 2, luồng C)
 
