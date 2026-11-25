@@ -70,12 +70,12 @@ Chuyển danh mục sớm sẽ khiến Ledger cũ tạo hũ mới mà bỏ trố
 
 ### Bước 2. Nghiệp vụ theo `purpose` và hũ Nghĩa vụ chung
 
-- [ ] Truyền `purpose` qua tạo, đọc, sửa và reset. Cập nhật hợp đồng API, Ledger, Agent, Planner, forecast và frontend. Bên đọc phải chấp nhận dữ liệu thiếu `purpose` và dữ liệu có `purpose`. Agent cũ kiểm tra chặt trường trả về, nên cập nhật bên đọc trước khi Ledger phát trường mới.
-- [ ] Dùng `buffer` cho số dư Dự phòng trong Planner, stress test và LP, giữ quy tắc tương thích cho ví cũ chưa có `purpose`. Đưa `goal` vào luồng mục tiêu và lộ trình hiện có; hũ `goal` phải có số tiền và hạn. Cho `sinking` lưu khoản cần (tên, số tiền, ngày cần) và giữ ngày đã cam kết.
-- [ ] Hũ Nghĩa vụ chung là nguồn trả mặc định cho tiền nhà, hóa đơn, khoản vay và Trả Sau. Ưu tiên nguồn đã lưu. Khi ví cũ thiếu hũ Nghĩa vụ và chưa có nguồn hợp lệ, yêu cầu chọn hũ trả. Dùng cùng quy tắc trong sổ cái và what-if, đồng thời kiểm tra các luồng còn chọn hũ `obligation` đầu tiên.
-- [ ] Dự báo hũ Nghĩa vụ liệt kê các khoản đến hạn trước kỳ lương kế tiếp theo ngày, nêu khoản đầu tiên bị thiếu và số thiếu.
-- [ ] Ghi và dự báo một khoản đến hạn gồm cả gốc và phí Trả Sau khi phí đã nằm trong tổng. Phí trả ngay đi theo giao dịch gốc.
-- [ ] Tính sàn thiết yếu của Chi hằng ngày theo phần chi có loại giao dịch thiết yếu (ăn uống, đi lại), không theo cả hũ. Nếu chưa làm kịp, giữ cách hiện tại và ghi rõ giới hạn trong bảng "Vì sao" của lộ trình.
+- [x] Truyền `purpose` qua tạo, đọc, sửa và reset. Cập nhật hợp đồng API, Ledger, Agent, Planner, forecast và frontend. Bên đọc phải chấp nhận dữ liệu thiếu `purpose` và dữ liệu có `purpose`. Agent cũ kiểm tra chặt trường trả về, nên cập nhật bên đọc trước khi Ledger phát trường mới.
+- [x] Dùng `buffer` cho số dư Dự phòng trong Planner, stress test và LP, giữ quy tắc tương thích cho ví cũ chưa có `purpose`. Đưa `goal` vào luồng mục tiêu và lộ trình hiện có; hũ `goal` phải có số tiền và hạn. Cho `sinking` lưu khoản cần (tên, số tiền, ngày cần) và giữ ngày đã cam kết.
+- [x] Hũ Nghĩa vụ chung là nguồn trả mặc định cho tiền nhà, hóa đơn, khoản vay và Trả Sau. Ưu tiên nguồn đã lưu. Khi ví cũ thiếu hũ Nghĩa vụ và chưa có nguồn hợp lệ, yêu cầu chọn hũ trả. Dùng cùng quy tắc trong sổ cái và what-if, đồng thời kiểm tra các luồng còn chọn hũ `obligation` đầu tiên.
+- [x] Dự báo hũ Nghĩa vụ liệt kê các khoản đến hạn trước kỳ lương kế tiếp theo ngày, nêu khoản đầu tiên bị thiếu và số thiếu.
+- [x] Ghi và dự báo một khoản đến hạn gồm cả gốc và phí Trả Sau khi phí đã nằm trong tổng. Phí trả ngay đi theo giao dịch gốc.
+- [x] Tính sàn thiết yếu của Chi hằng ngày theo phần chi có loại giao dịch thiết yếu (ăn uống, đi lại), không theo cả hũ. Nếu chưa làm kịp, giữ cách hiện tại và ghi rõ giới hạn trong bảng "Vì sao" của lộ trình.
 
 ### Bước 3. Kê khai ở bước 3 của onboarding
 
