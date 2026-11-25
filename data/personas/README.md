@@ -71,7 +71,9 @@ Muốn đổi số kịch bản thì sửa các số trong `specs/vy.json` (`ext
 
 Tài khoản demo: `giamkhao3` (persona `vy`). Trước buổi demo bấm "Đặt lại dữ liệu" để độ phủ về 0,664 và xóa sạch lần nạp trước (đặt lại xóa cả dòng external, job nạp và đồng ý).
 
-## Nạp persona mới lên AWS (giamkhao3 nhận `vy`)
+## Nạp persona mới lên AWS
+
+**Từ issue #8 `giamkhao3` dùng `minh` như `giamkhao1`, `giamkhao2` (`accounts.json`)**; minh có 120 ngày lịch sử. Để dữ liệu mới tới AWS: đóng gói và deploy lại `YofinaTools` (zip `yofina-ledger` kèm `data/personas`, cả `roadmaps/minh.json`), rồi `uv run scripts/seed_demo.py minh giamkhao1 giamkhao2 giamkhao3` (bước 1 đưa `giamkhao3` về nhóm `persona-minh`, bước 2 gọi `POST /demo/reset`). Phần dưới giữ làm hướng dẫn chung cho persona chưa có trong zip (ví dụ `vy`, nay nạp bằng `--persona vy`).
 
 Hiện trạng đã đọc từ mã (chưa chạm AWS): persona của người gọi lấy từ nhóm Cognito `persona-<tên>` (claim `cognito:groups`), và `POST /demo/reset` của Lambda `yofina-ledger` chỉ nhận tên có trong `personas.available_personas()` của thư mục `data/personas` ĐÃ ĐÓNG TRONG ZIP của nó (`--extra data/personas:personas`). Lambda đang deploy là bản trước `vy`, nên có hai việc tách bạch: đổi nhóm của tài khoản và đưa dữ liệu vào Aurora.
 
