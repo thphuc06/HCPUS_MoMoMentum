@@ -313,8 +313,14 @@ def normalize_record_transaction(
         elif ctx is not None:
             info = ctx.tx_types.get(tx_type)
             is_bill = info is not None and info.default_jar_code == "hoa_don"
+            # ví cũ còn hũ Hóa đơn: giữ hũ mặc định của loại giao dịch (khớp /tx-types, phân loại, tra soát); chỉ ví
+            # không có hũ đó mới trả từ hũ Nghĩa vụ chung
+            bill_jar = (
+                transaction_jar(info.default_jar_code, ctx.jar_codes, tx_type=tx_type)
+                if is_bill and info is not None else None
+            )
             if (
-                funding == "jar" and obligation_id is None
+                funding == "jar" and obligation_id is None and bill_jar is None
                 and (is_bill or tx_type == "obligation_payment")
             ):
                 if ctx.obligation_jar is None:

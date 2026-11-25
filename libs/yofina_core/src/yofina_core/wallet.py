@@ -39,14 +39,18 @@ def is_goal_jar(kind: str, purpose: str | None) -> bool:
 def resolve_obligation_pay_jar(
     jars: Iterable[tuple[str, str]], *, saved: str | None = None, selected: str | None = None
 ) -> str | None:
-    """Keep a valid saved source, then use an explicit choice or the shared Nghĩa vụ jar."""
+    """Keep a valid saved source, then use an explicit choice or the shared Nghĩa vụ jar.
+
+    A wallet without `nghia_vu` (legacy wallet that renamed or deleted it) falls back to its first obligation-kind jar,
+    as before the shared jar existed. Only a wallet with no obligation-kind jar at all has no default: the caller must
+    ask the user to choose (rollout Bước 2)."""
     eligible = {code: kind for code, kind in jars if kind in USER_JAR_KINDS}
     if selected is not None:
         default = selected if selected in eligible else None
+    elif eligible.get(DEFAULT_OBLIGATION_JAR) == "obligation":
+        default = DEFAULT_OBLIGATION_JAR
     else:
-        default = (
-            DEFAULT_OBLIGATION_JAR if eligible.get(DEFAULT_OBLIGATION_JAR) == "obligation" else None
-        )
+        default = next((code for code, kind in eligible.items() if kind == "obligation"), None)
     return pay_jar_or_default(eligible, saved, default)
 
 

@@ -78,7 +78,8 @@ def test_migration_and_seed_preserve_legacy_wallet_and_read_contract(tmp_path):
 
     splitter = _load("sqlsplit", REPO / "infra-cdk/lambdas/migrator/sqlsplit.py")
     migration = REPO / "db/migrations/0055_default_six_jars.sql"
-    activation = migration.with_name("0056_activate_onboarding_jar_layout.sql")
+    commitments = migration.with_name("0056_sinking_commitments.sql")
+    activation = migration.with_name("0057_activate_onboarding_jar_layout.sql")
     seed = REPO / "db/seed/jar_templates.sql"
     server = pgserver.get_server(str(tmp_path / "pg"), cleanup_mode="stop")
     try:
@@ -116,7 +117,7 @@ def test_migration_and_seed_preserve_legacy_wallet_and_read_contract(tmp_path):
             def snapshot():
                 return {
                     table: conn.execute(
-                        f"SELECT to_jsonb(t) - 'purpose' AS snapshot_row FROM {table} t "
+                        f"SELECT to_jsonb(t) - 'purpose' - 'sinking_items' AS snapshot_row FROM {table} t "
                         "WHERE user_id = 'existing' ORDER BY snapshot_row"
                     ).fetchall()
                     for table in ("jars", "transactions", "salary_events", "obligations")
@@ -173,6 +174,7 @@ def test_migration_and_seed_preserve_legacy_wallet_and_read_contract(tmp_path):
             )
             before, reads_before = snapshot(), legacy_reads()
             apply(migration)
+            apply(commitments)  # cả hai phần schema chạy trước, bộ bảy vẫn bật (Bước 7 bước 1)
             apply(seed)
             assert {c: (k, None, p) for c, k, p in legacy_init("old-ledger")} == LEGACY
             assert snapshot() == before and legacy_reads() == reads_before

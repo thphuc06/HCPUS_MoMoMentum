@@ -76,8 +76,13 @@ def test_obligation_source_uses_saved_jar_or_shared_jar_and_requires_legacy_choi
     resolve = wallet.resolve_obligation_pay_jar
     legacy = [("hoa_don", "obligation"), ("daily", "spending"), ("system", "system")]
     modern = [*legacy, ("nghia_vu", "obligation")]
-    assert resolve(legacy) is None
-    assert resolve(legacy, saved="system") is None
+    # ví cũ không có nghia_vu: hũ obligation đầu tiên, như trước khi có hũ chung
+    assert resolve(legacy) == "hoa_don"
+    assert resolve(legacy, saved="system") == "hoa_don"
+    # không có hũ obligation nào: không có mặc định, phải chọn
+    no_obligation = [("daily", "spending"), ("system", "system")]
+    assert resolve(no_obligation) is None
+    assert resolve(no_obligation, saved="system") is None
     assert resolve(legacy, selected="daily") == "daily"
     assert resolve(modern, saved="daily", selected="hoa_don") == "daily"
     assert resolve(modern, saved="removed") == "nghia_vu"

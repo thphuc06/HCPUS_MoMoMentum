@@ -1,3 +1,4 @@
+-- Thứ tự: chạy SAU 0055 và 0056 (schema tương thích); là migration cuối của lộ trình để bước bật bộ ba tách được khỏi phần schema (Bước 7).
 -- Activate the three-jar onboarding layout after Ledger supports purpose.
 UPDATE jar_templates SET is_default = false WHERE is_default AND code NOT IN
   ('chi_hang_ngay', 'nghia_vu', 'du_phong');
