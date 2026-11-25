@@ -2,9 +2,27 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: **2026-11-25 tối** (Kiro CLI điều phối subagent). Đợt 1 và đợt 2 phase 6 (lô A, lô C) đã code và merge vào `main` (`66807ad`), **chưa deploy gì**: xem mục "Cập nhật tối 25/11" ngay dưới. Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B).
+Cập nhật lần cuối: **2026-11-25 khuya** (Kiro CLI điều phối worker `kiro-cli` `claude-opus-5.5`). Đợt 1 và đợt 2 phase 6 **đã deploy** (Runtime v28, Amplify job 24, migration tới 0056) và đã kiểm trên app: xem mục "Cập nhật khuya 25/11" ngay dưới. Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B).
 
-## Cập nhật tối 25/11: đợt 2 (lô A + lô C) đã merge vào `main`, CHƯA deploy
+## Cập nhật khuya 25/11: đã deploy gộp đợt 1 + đợt 2, kiểm trên app (không chạy eval)
+
+Chủ dự án duyệt deploy và dặn: chỉ kiểm vài ca trên app thật, **không chạy eval** (để lượt eval tới gần cuối). Trước deploy làm thêm 4 việc nhỏ (worker `kiro-cli --model claude-opus-5.5 --effort high`): câu "hũ nào sắp cạn?" có nhóm hũ thưa "có thể cạn trước ngày lương", thẻ Tổng quan không lặp chữ (#25); sửa 3 lỗi `pii.py` và màn duyệt nạp có chip "Đã che: tên, SĐT, số TK" + dòng tổng, migration 0056 (#16; KHÔNG hiện ảnh, theo chủ dự án); CSV cảnh 4 sinh lại bền khi tải trễ 1 ngày (hệ số tự chọn 3,5 sau khi bộ che không còn che "Huỳnh Hoa") (#22). Unit 4170 passed, 2 skipped.
+
+**Đã deploy** (`main` `65effe2`; chi tiết ở `docs/aws-resources.md`): migration 0055, 0056 (chạy thử 0001–0056 trên Postgres cục bộ trước); 5 zip; `YofinaTools`, `YofinaIngest`, `YofinaAgent`, `YofinaFrontend`; Runtime **v28**; Amplify **job 24**; `seed_demo.py` 4 tài khoản (đặt lại lần cuối sau khi kiểm). Khóa SSM thử (`/yofina/quota/chat_turns_per_day`, `/yofina/agent/reasoning_enabled`) đã xóa.
+
+**Lỗi tìm thấy khi kiểm và đã sửa, đã deploy**:
+- Zip ingest đóng thiếu `yofina_classify` (dùng lệnh cũ trong README thay vì `INGEST_BUILD_COMMAND`): `yofina-ingest-api` trả 500 khoảng 5 phút. Đã đóng lại, sửa lệnh trong `infra-cdk/README.md`. **Luôn đóng zip theo các hằng `*_BUILD_COMMAND` trong `infra-cdk/lib/`.**
+- Luật rewrite SPA của Amplify trả `index.html` cho `.csv`: tệp mẫu cảnh 4 không tải được. Thêm `csv`, `pdf` vào luật + test CDK (`3b98fa2`).
+- Mở chat rồi gửi tin ngay (khoảng 1,5 s) bị 409 `SESSION_BUSY` vì lượt làm nóng chưa xong: frontend chờ làm nóng (trần 15 s), 409 tự thử lại 1/2/4 s (`53a2887`).
+
+**Kết quả kiểm trên app** (Chrome tự động 390×844, ảnh chụp và log CloudWatch): CSP có `frame-ancestors 'none'`; `giamkhao1` bị từ chối ở `/ops`, `minh` vào được; cảnh 1 Ăn uống cạn 23/11, nhãn "Cao"; cảnh 2 what-if khoảng 26 s trọn câu, khối đầu khoảng 1 s khi ấm, khối lập luận còn (1/4 bước bị bỏ vì `jar_mismatch` ở một lượt); cache Sonnet đọc 1.716 và 4.359 token ở lượt sau; cảnh 3 điểm 29 → 12, trụ 24 ngày; cảnh 4: 32 dòng tự vào Ăn uống, bản đề xuất mới khoảng 24 s sau khi xác nhận, "Số tính ngày 21/11", "Giữ bản cũ" hỏi lý do và lưu được; cảnh 5: màn duyệt sau 8,6 s, `B***`, chip "Đã che: tên"; trần lượt chat 2 → tin thứ 3 bị chặn đúng câu; công tắc lập luận tắt → không còn khối lập luận; 0 `turn_persist_timeout`. Tiền model của các lượt kiểm khoảng dưới 0,5 USD.
+
+**Đã đóng** (đạt "Cách kiểm"): #8, #10, #12, #16, #17, #20, #22, #24, #25, #26, #27, #29 (cùng #18 từ trước). **Còn mở** đã có comment: #7 (ca lộ trình `--only` khi eval; quyết trường hũ có cấu trúc), #11 (đếm `audit_events`, đủ 3 lượt ấm), #13 (SSM trần chung ngày 2/12), #19 (chữ "Subscription" thô và ngày giai đoạn lệch trong bản lộ trình model sinh ở cảnh 4; chưa kiểm tài khoản 0 ₫), #5, #6, #23 (cần eval), #9 (cần tài khoản lịch sử ngắn), #14 (xem job đêm vài đêm), #15 (kiểm trên `lan`), #28 (đề xuất đóng), #32, #36.
+
+**Thấy khi kiểm, chưa sửa**: câu "lập giúp mình lộ trình xây quỹ dự phòng 3 triệu trong 3 tháng" không lập bản mới mà hiện lại bản đang dùng, kèm câu "Bạn chưa nói mục tiêu này thuộc hũ nào…"; bản lộ trình v3 sinh lại ở cảnh 4 có bước "Đổi tỷ lệ chia lương" dồn 5.358.067 ₫ vào Ăn uống. Đáng xem lại trước khi quay video cảnh 4.
+
+**Công cụ kiểm UI**: `%TEMP%\yofina-ui\run.js` (playwright-core điều khiển Chrome cài sẵn; mật khẩu đọc từ secret trong tiến trình, không ghi ra). Kịch bản JSON từng bước ở cùng thư mục. Thư mục tạm, không thuộc repo.
+## Cập nhật tối 25/11: đợt 2 (lô A + lô C) đã merge vào `main` (đã deploy khuya 25/11, xem mục trên)
 
 Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vòng, gộp qua `p6/wave2`, có một lượt review độc lập (`semantic_reviewer`) giữa hai vòng. Unit sau khi gộp: **4127 passed, 2 skipped**; CDK 89/89; contracts OK; vitest 1011 passed, 2 đỏ là hai test chập chờn có sẵn (`spending.test.tsx`, `phase3Chat.test.tsx`: chạy riêng thì xanh, trên `main` cũ cũng đỏ y vậy khi chạy cả bộ). Mỗi issue đã có comment trạng thái. #26 đã đóng (đo offline, không cần deploy, người điều phối chạy lại ra đúng số).
 
@@ -86,7 +104,7 @@ Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vò
 
 ### Chưa duyệt
 
-- **Deploy gộp đợt 1 + đợt 2 lên AWS chưa được chủ dự án duyệt** (lệnh ở mục "Cập nhật tối 25/11"). Không deploy, không seed, không đặt SSM, không chạy eval trên Runtime, không gọi Bedrock khi chưa hỏi. Khi xin duyệt: nêu chi phí, tác động, cách rollback.
+- Deploy gộp đợt 1 + đợt 2 **đã làm khuya 25/11** (chủ dự án duyệt). Deploy sau này vẫn phải hỏi trước, kèm chi phí, tác động, cách rollback. Không deploy, không seed, không đặt SSM, không chạy eval trên Runtime, không gọi Bedrock khi chưa hỏi. Khi xin duyệt: nêu chi phí, tác động, cách rollback.
 - Việc cần người hoặc chờ điều kiện: #3, #4, #21, #30, #31, #33, #34, #35, #37, #38.
 
 ### Quy ước giao việc cho worker (đã dùng ở đợt 1 và đợt 2)
@@ -134,7 +152,7 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 ## Đang chạy trên AWS (`ap-southeast-1`)
 
 - Bảy stack đều `*_COMPLETE`. Danh sách tài nguyên: [docs/aws-resources.md](docs/aws-resources.md).
-- **Runtime `yofina_agent` v27**, **Amplify job 21**, migration tới **0054**. App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
+- **Runtime `yofina_agent` v28**, **Amplify job 24**, migration tới **0056** (deploy khuya 25/11). App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
 - Memory `yofina_memory` (id không đổi) với hai strategy override `preferences_vi`, `facts_vi`: override cả trích xuất lẫn hợp nhất, model **Claude Haiku 4.5** (khoảng $0,007–0,0125 mỗi lượt được ghi; quota 10 RPM dùng chung với model dự phòng của vai `small`). Lambda nạp gọi ra API tỷ giá Vietcombank (không VPC, không NAT).
 - Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. **Mật khẩu đã lộ trong lịch sử chat 23/11: đổi trước buổi chấm.** `minh`, `giamkhao1` thuộc nhóm `ops`.
 - Aurora `yofina-db` min 0 ACU (lần gọi đầu chậm 15–20 giây). **Trước buổi demo** lên 0,5 ACU: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`, xong trả về `-c dbMinAcu=0`.
