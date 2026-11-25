@@ -220,6 +220,13 @@ describe('bảng mã lỗi', () => {
     expect(apiErrorFromResponse(403, undefined).code).toBe('FORBIDDEN')
     expect(apiErrorFromResponse(429, undefined).code).toBe('RATE_LIMITED')
   })
+  it('429 DAILY_QUOTA_EXCEEDED (#13) giữ mã riêng, không thử lại, câu nói vẫn xem được số liệu', () => {
+    const err = apiErrorFromResponse(429, { error: { code: 'DAILY_QUOTA_EXCEEDED', message: 'x', trace_id: 't' } })
+    expect(err.code).toBe('DAILY_QUOTA_EXCEEDED')
+    expect(err.retryable).toBe(false)
+    expect(err.message).toBe(ERROR_MESSAGES.DAILY_QUOTA_EXCEEDED)
+    expect(err.message).toMatch(/vẫn xem/)
+  })
 })
 
 describe('lớp REST phase 5', () => {

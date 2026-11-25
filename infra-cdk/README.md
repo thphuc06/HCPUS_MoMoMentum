@@ -169,7 +169,7 @@ IAM (mỗi Lambda một role do CDK sinh, cộng `AWSLambdaBasicExecutionRole`):
 | `rds-data:ExecuteStatement, BatchExecuteStatement, BeginTransaction, CommitTransaction, RollbackTransaction` trên cluster ARN | có | có |
 | `secretsmanager:GetSecretValue` | secret `yofina_app` + khóa HMAC | chỉ secret `yofina_app` |
 | `bedrock:InvokeModel` (Converse dùng quyền này), mẫu 3 phần của global cross-Region inference cho model của `ingestLlmRoles` (xem mục Bedrock ở trên) | có | có |
-| `dynamodb:UpdateItem` trên `yofina-usage` (đếm lượt model) | có | có |
+| `dynamodb:UpdateItem` trên `yofina-usage` (worker: đếm lượt model; API: đếm lần nạp tệp theo tài khoản, mục "Trần theo tài khoản mỗi ngày") | có | có |
 | `ssm:GetParameter, GetParametersByPath` trên `/yofina/llm`, `/yofina/llm/*`, `/yofina/ingest_*`, `/yofina/db_*`, `/yofina/confirm_*`, `/yofina/forecast_*`, `/yofina/dynamodb/usage-table` (khóa tùy chọn vắng phải trả `ParameterNotFound`, không phải `AccessDenied`) | có | có |
 | `lambda:InvokeFunction` trên `yofina-forecast-batch` (ARN dựng bằng `formatArn`) | có | có |
 | `events:PutEvents` trên `yofina-bus` | có | có |
@@ -283,4 +283,22 @@ Dùng `uv pip install --python-platform aarch64-manylinux2014 --only-binary=:all
 | `agent/runtime-arn`, `agent/runtime-id`, `agent/runtime-url` | Runtime `yofina_agent`; URL invoke đầy đủ (`.../invocations?qualifier=DEFAULT`) ghi thành `VITE_AGENT_RUNTIME_URL`; ARN chứa account ID nên `print_env.py frontend` không ghi nó (Vite nhúng mọi `VITE_*` vào bundle) |
 | `agent/zip-key` | Khóa S3 của zip agent hiện hành (`builds/agent-<hash>.zip`); `scripts/agent_deploy.py` ghi (ngoài CDK) |
 | `ingest/bucket-name`, `ingest/api-function-name`, `ingest/worker-function-name`, `ingest/queue-url` | `YofinaIngest` (chưa deploy): bucket tệp tải lên, hai Lambda, hàng đợi job |
+| `quota/chat_turns_per_day`, `quota/uploads_per_day` | Trần theo tài khoản mỗi ngày. Tạo tay, không do CDK; vắng thì dùng mặc định trong mã (mục dưới) |
 | `alert-email` | Email cảnh báo (SecureString, chỉ `scripts/cdk.py` đọc) |
+
+## Trần theo tài khoản mỗi ngày (#13)
+
+`yofina_core.quota` giới hạn mỗi tài khoản trong một ngày, để một người không dùng hết trần chung theo model (`/yofina/llm/daily_cap_<vai>`, khác với trần này) của mọi người:
+
+| Khóa SSM (String, số nguyên) | Mặc định trong mã | Tính một lượt khi | Ai đọc | Chạm trần thì |
+|---|---|---|---|---|
+| `/yofina/quota/chat_turns_per_day` | 100 | mỗi tin nhắn chat (không tính lượt làm nóng `warmup`) | Runtime `yofina_agent` | khối `notice` lỗi mã `DAILY_QUOTA_EXCEEDED`, lượt kết thúc, 0 lời gọi model và tool |
+| `/yofina/quota/uploads_per_day` | 20 | mỗi lần `POST /ingest/uploads` cấp URL (yêu cầu hỏng, chưa đồng ý thì không tính) | Lambda `yofina-ingest-api` | HTTP 429 `DAILY_QUOTA_EXCEEDED`, không tạo job, không ký URL |
+
+Các màn số liệu (REST đọc của ledger, `GET /ingest/*`) không bị ảnh hưởng.
+
+- **Thứ tự nguồn**: biến môi trường `YOFINA_QUOTA_CHAT_TURNS_PER_DAY` / `YOFINA_QUOTA_UPLOADS_PER_DAY` (đổi phải deploy), rồi SSM, rồi mặc định. Mỗi tiến trình (phiên Runtime, môi trường Lambda) nhớ giá trị SSM 300 giây rồi đọc lại. Đọc SSM lỗi hoặc giá trị không phải số nguyên thì dùng mặc định và ghi log `quota_cap_unreadable`.
+- **Đổi trần không cần deploy**: `aws ssm put-parameter --name /yofina/quota/chat_turns_per_day --type String --value 150 --overwrite --region ap-southeast-1` (tương tự `uploads_per_day`). Có hiệu lực ở mọi phiên đang chạy trong vòng 5 phút. Bỏ ghi đè: `aws ssm delete-parameter --name /yofina/quota/chat_turns_per_day --region ap-southeast-1` (về mặc định sau tối đa 5 phút). Trần `0` chặn ngay. Đọc lại: `aws ssm get-parameter --name /yofina/quota/chat_turns_per_day --region ap-southeast-1`.
+- **Thử tích hợp** (cách kiểm của #13): đặt `chat_turns_per_day` = 2, chờ 5 phút, gửi 3 tin từ một tài khoản thử: tin thứ ba nhận thông báo hết lượt; xong thì xóa tham số.
+- **Bộ đếm**: bảng `yofina-usage`, `day` = `quota#<YYYY-MM-DD>` (ngày thật theo `budget_timezone`, mặc định `Asia/Ho_Chi_Minh`, đổi lúc 0 giờ), `model` = `chat#<băm>` hoặc `upload#<băm>` (SHA-256 của `sub`, không lưu `sub` hay email), TTL 3 ngày. Phân vùng riêng nên `/ops/summary` (`Query` theo `day = YYYY-MM-DD`) không lẫn số. Bảng đếm lỗi (mạng, quyền) thì cho qua và ghi log `quota_store_error`: trần chung theo model vẫn chặn chi phí. Chạm trần ghi log `quota_exceeded` (loại và trần, không có `sub`); không có `YOFINA_USAGE_TABLE` thì tắt và ghi `quota_disabled`.
+- **IAM**: Runtime có `/yofina/quota/*` trong `ReadConfig` và dùng chung `dynamodb:UpdateItem` của bộ đếm lượt gọi model; `yofina-ingest-api` có `ssm:GetParameter` trên `/yofina/quota/*` và `dynamodb:UpdateItem` trên `yofina-usage`. CORS của `yofina-api` không đổi: HTTP API tự gắn header CORS đã cấu hình vào mọi phản hồi của integration, kể cả 429.

@@ -889,6 +889,10 @@ paths:
         **Đồng ý**: người dùng chưa đồng ý (hoặc đã rút) cho nguồn này mà không gửi `consent: true` thì 403 `CONSENT_REQUIRED`
         và không tạo gì. Đã đồng ý thì `consent` có thể bỏ.
 
+        **Trần mỗi ngày** (#13): mỗi lần cấp URL tính một lượt vào trần nạp tệp của tài khoản (SSM `/yofina/quota/uploads_per_day`,
+        mặc định 20; yêu cầu bị từ chối ở các bước kiểm trên thì không tính). Đủ trần thì 429 `DAILY_QUOTA_EXCEEDED`, không tạo job,
+        không cấp URL; các route đọc vẫn dùng bình thường.
+
         **Bắt đầu job**: không có endpoint "bắt đầu". Tải lên thành công thì sự kiện S3 `ObjectCreated` (qua SQS có DLQ) tự đưa
         job sang `queued` rồi `processing`; frontend chỉ cần `GET /ingest/jobs/{job_id}`. Lý do: tải lên chính là tín hiệu bắt
         đầu, không có trạng thái "đã tải mà quên bấm bắt đầu", và không có thêm một đường ghi từ client. Tệp tới mà job không
