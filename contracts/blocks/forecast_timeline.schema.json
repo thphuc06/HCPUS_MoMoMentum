@@ -34,6 +34,7 @@
       "properties": {
         "code": { "$ref": "envelope.schema.json#/$defs/JarCode" },
         "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "purpose": { "type": "string", "enum": ["buffer", "sinking", "goal", "long_term"] },
         "color_key": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
         "icon_key": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" }
       }
@@ -81,6 +82,25 @@
         "amount_max_vnd": {
           "description": "Trần của khoảng, chỉ có với nghĩa vụ khai theo khoảng (ví dụ tiền điện).",
           "$ref": "envelope.schema.json#/$defs/VndPositive"
+        }
+      }
+    },
+    "ForecastObligationWindow": {
+      "description": "Các khoản đến hạn của hũ Nghĩa vụ trước kỳ lương, theo ngày rồi theo tên. Khoản thiếu đầu tiên tính từ số dư P50 của ngày đó.",
+      "type": "object",
+      "required": ["items"],
+      "additionalProperties": false,
+      "properties": {
+        "items": { "type": "array", "items": { "$ref": "#/$defs/ForecastEvent" } },
+        "first_shortfall": {
+          "type": "object",
+          "required": ["date", "label", "shortfall_vnd"],
+          "additionalProperties": false,
+          "properties": {
+            "date": { "$ref": "envelope.schema.json#/$defs/IsoDate" },
+            "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+            "shortfall_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" }
+          }
         }
       }
     },
@@ -149,6 +169,7 @@
           "maxItems": 60,
           "items": { "$ref": "#/$defs/ForecastEvent" }
         },
+        "obligations_before_payday": { "$ref": "#/$defs/ForecastObligationWindow" },
         "compare": {
           "description": "Chỉ có khi khối là kết quả what-if (tool `forecast___run_scenario`). Trường cấp trên là TRƯỚC, `compare.after` là SAU. Id khối what-if có hậu tố `:what_if` để không đè khối baseline của cùng hũ trong một lượt.",
           "$ref": "#/$defs/ForecastCompare"
@@ -204,6 +225,7 @@
           "description": "Sai số chuẩn Monte Carlo của p_shortfall sau kịch bản.",
           "$ref": "envelope.schema.json#/$defs/Ratio"
         },
+        "obligations_before_payday": { "$ref": "#/$defs/ForecastObligationWindow" },
         "min_balance_p50_vnd": {
           "description": "Số dư P50 thấp nhất trong khoảng dự báo sau kịch bản (âm là hụt).",
           "$ref": "envelope.schema.json#/$defs/VndSigned"

@@ -138,6 +138,12 @@ export type JarKind = z.infer<typeof JarKind>
 export const JarPurpose = z.enum(['buffer', 'sinking', 'goal', 'long_term'])
 export type JarPurpose = z.infer<typeof JarPurpose>
 
+export const SinkingItem = z.object({
+  name: z.string().min(1).max(80),
+  amount_vnd: VndPositive,
+  needed_date: IsoDate,
+})
+
 export const JarFull = z.object({
   code: JarCode,
   name: z.string().min(1).max(40),
@@ -150,6 +156,7 @@ export const JarFull = z.object({
   split_percent: z.number().min(0).max(100),
   goal_vnd: VndPositive.optional(),
   goal_date: IsoDate.optional(),
+  sinking_items: z.array(SinkingItem).max(40).optional(),
   status: JarStatus.optional(),
   runout_date: IsoDate.optional(),
   p_shortfall: Ratio.optional(),
@@ -406,6 +413,7 @@ export const AffordabilityRequest = z.object({
   amount_vnd: VndPositive,
   funding_source: z.enum(['jar', 'credit']).optional(),
   jar: JarCode.optional(),
+  pay_jar: JarCode.optional(),
   label: z.string().min(1).max(60).optional(),
   date: IsoDate.optional(),
 })

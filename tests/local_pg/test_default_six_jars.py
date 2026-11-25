@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 
 import psycopg
 import pytest
@@ -62,6 +62,7 @@ def _editable(jars):
         "kind",
         "split_percent",
         "purpose",
+        "sinking_items",
         "goal_vnd",
         "goal_date",
     )
@@ -212,6 +213,11 @@ def test_onboarding_and_edit_purpose_amount_date_and_split(env):
     for code in ("quy_don", "tich_luy_dai_han", "muc_tieu"):
         patch[code] = _editable([{**templates[code], "split_percent": 0}])[0]
     patch["quy_don"].update(goal_vnd=920_000, goal_date="2027-01-03", split_percent=6)
+    commitments = [
+        {"name": "Học phí", "amount_vnd": 400_000, "needed_date": "2027-02-15"},
+        {"name": "Bảo hiểm", "amount_vnd": 800_000, "needed_date": "2027-03-15"},
+    ]
+    patch["quy_don"]["sinking_items"] = commitments
     patch["chi_hang_ngay"]["split_percent"] -= 6
     patch["tich_luy_dai_han"]["goal_date"] = "2029-01-01"
     patch["muc_tieu"].update(goal_vnd=4_000_000, goal_date="2027-04-01")
@@ -220,11 +226,13 @@ def test_onboarding_and_edit_purpose_amount_date_and_split(env):
     assert sum(j["split_percent"] for j in jars.values()) == 100
     assert jars["quy_don"]["goal_date"] == "2027-01-03"
     assert jars["quy_don"]["goal_vnd"] == 920_000
+    assert jars["quy_don"]["sinking_items"] == commitments
+    assert env.svc.jar_detail_response(user, "quy_don")["jar"]["sinking_items"] == commitments
     detail = env.svc.jar_detail_response(user, "tich_luy_dai_han")["jar"]
     assert detail["purpose"] == "long_term" and detail["goal_date"] == "2029-01-01"
 
     older_request = [
-        {k: v for k, v in j.items() if k not in ("purpose", "goal_date", "goal_vnd")}
+        {k: v for k, v in j.items() if k not in ("purpose", "goal_date", "goal_vnd", "sinking_items")}
         if j["code"] in ("quy_don", "tich_luy_dai_han")
         else j
         for j in _editable(jars.values())
@@ -238,6 +246,11 @@ def test_onboarding_and_edit_purpose_amount_date_and_split(env):
         env.act(user, "save_jars", {"jars": older_request})
     assert error.value.code == ErrorCode.PARAMS_INVALID
     dated.pop("goal_date")
+    dated["sinking_items"] = [{**commitments[0], "needed_date": "2027-03-01"}, commitments[1]]
+    with pytest.raises(YofinaError) as error:
+        env.act(user, "save_jars", {"jars": older_request})
+    assert error.value.code == ErrorCode.PARAMS_INVALID
+    dated.pop("sinking_items")
     older_request[0]["split_percent"] += 1
     with pytest.raises(YofinaError) as error:
         env.act(user, "save_jars", {"jars": older_request})
@@ -445,6 +458,12 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
         "BNPL demo", impact["cost"]["due_date"], after["runout_date"], after["min_balance_p50_vnd"]
     )
     assert after["status"] == "short"
+    window = after["obligations_before_payday"]
+    assert [row["date"] for row in window["items"]] == sorted(row["date"] for row in window["items"])
+    assert [row["amount_vnd"] for row in window["items"] if row["label"] == bnpl["name"]] == [
+        2_200_000
+    ]
+    assert window["first_shortfall"]["shortfall_vnd"] > 0
     assert after["runout_date"] < daily["payday_date"].isoformat()
 
     gathered = ResilienceEngine(pipeline).gather(user, env.clock())
@@ -472,3 +491,20 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
         "goal",
     )
     assert allocation.goals["muc_tieu"].target_date == date(2027, 4, 1)
+
+
+def test_forecast_context_counts_only_essential_types_in_daily_jar(env):
+    user = "six-essential"
+    env.act(user, "update_profile", {"monthly_salary_vnd": 9_000_000, "payday_day": 5})
+    env.act(user, "record_transaction", {"kind": "income", "amount_vnd": 9_000_000, "tx_type": "salary"})
+    salary = env.svc.salary_events_response(user, status="pending")["salary_events"][0]
+    env.act(user, "confirm_salary", {"salary_event_id": salary["id"], "decision": "split"})
+    for tx_type, amount in (("food_drink", 45_000), ("public_transport", 12_000), ("entertainment", 74_000)):
+        env.act(user, "record_transaction", {
+            "kind": "expense", "tx_type": tx_type, "jar": "chi_hang_ngay", "amount_vnd": amount,
+        })
+    pipeline = Pipeline(ForecastRepo(env.db), make_settings(), None, clock=env.clock)
+    ctx = pipeline.load_context(user, env.clock() + timedelta(days=1))
+    daily = next(j for j in ctx.jars if j["code"] == "chi_hang_ngay")
+    assert daily["spend"][-1] == 131_000
+    assert daily["essential_spend"][-1] == 57_000

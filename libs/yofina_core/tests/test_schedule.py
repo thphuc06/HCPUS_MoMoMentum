@@ -13,6 +13,7 @@ from yofina_core.schedule import (
     expand_due_dates,
     first_due_from_day,
     midpoint,
+    obligation_window,
 )
 
 
@@ -151,7 +152,7 @@ def test_moc_bieu_do_cua_hu_hoa_don(origin):
         ("2026-12-05", "salary", "Lương về", 2_790_000, None),
         ("2026-12-06", "obligation", "Tiền thuê phòng", 2_000_000, None),
     ]
-    # nghĩa vụ không có hũ trả được gán cho hũ nghĩa vụ đầu tiên
+    # nghĩa vụ không có hũ trả được gán cho hũ Nghĩa vụ chung
     nv = build_timeline_events(
         jar_code="nghia_vu", obligations=obligations, origin=origin, horizon_days=30, default_pay_jar="nghia_vu",
         salary_vnd=9_000_000, payday_day=5, split_shares=shares, salary_label="Lương về",
@@ -163,3 +164,36 @@ def test_moc_bieu_do_cua_hu_hoa_don(origin):
         salary_vnd=9_000_000, payday_day=5, split_shares=shares, salary_label="Lương về",
     )  # fmt: skip
     assert all(e.label != "Trả sau" for e in none)
+
+
+def test_obligation_window_orders_dues_and_excludes_payday():
+    def due(day, label, amount):
+        return {"date": day, "kind": "obligation", "label": label, "amount_vnd": amount}
+
+    rent = due("2026-12-01", "Tiền nhà", 600_000)
+    bill = due("2026-12-03", "Hóa đơn", 100_000)
+    bnpl = due("2026-12-03", "Trả sau", 333_000)
+    on_payday = due("2026-12-05", "Khoản vay", 900_000)
+    window = obligation_window(
+        [bnpl, on_payday, rent, bill],
+        "2026-12-05",
+        {"2026-12-01": 450_000, "2026-12-03": -70_000},
+    )
+    assert window == {
+        "items": [rent, bill, bnpl],
+        "first_shortfall": {
+            "date": "2026-12-03", "label": "Trả sau", "shortfall_vnd": 70_000,
+        },
+    }
+
+
+def test_due_today_stays_before_payday_even_when_model_debits_it_on_payday():
+    window = obligation_window(
+        [{"date": "2026-12-05", "original_due_date": "2026-12-04",
+          "kind": "obligation", "label": "Tiền nhà", "amount_vnd": 600_000}],
+        "2026-12-05",
+        {"2026-12-05": 1_000_000},
+        opening_balance_vnd=500_000,
+    )
+    assert window["items"][0]["date"] == "2026-12-04"
+    assert window["first_shortfall"]["shortfall_vnd"] == 100_000

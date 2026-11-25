@@ -33,7 +33,7 @@ from yofina_core.blocks import BehaviorProfileData, format_instant, new_trace_id
 from yofina_core.clock import app_today
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
 from yofina_core.pii import mask_names, mask_pii
-from yofina_core.wallet import BEHAVIOR_INSIGHT_KINDS
+from yofina_core.wallet import BEHAVIOR_INSIGHT_KINDS, DEFAULT_SPENDING_JAR
 from yofina_forecast.common import int_of, to_date
 from yofina_ledger import proactive
 from yofina_ml.behavior import (
@@ -427,7 +427,8 @@ def compute_and_store(pipeline: Any, user_id: str, now: datetime, *, trigger: st
 def _avg_daily_spend(ctx_jars: Iterable[Mapping[str, Any]], window: int) -> dict[str, int]:
     out: dict[str, int] = {}
     for j in ctx_jars:
-        tail = [max(int_of(v), 0) for v in (j.get("spend") or [])][-window:]
+        key = "essential_spend" if j["code"] == DEFAULT_SPENDING_JAR else "spend"
+        tail = [max(int_of(v), 0) for v in (j.get(key) or [])][-window:]
         if tail:
             out[str(j["code"])] = round(sum(tail) / len(tail))
     return out
@@ -468,12 +469,16 @@ def run_nudge_gate(
     res_today = frepo.resilience(user_id, today)
     if res_today is not None and to_date(res_today.get("app_date")) != today:
         res_today = None
+    avg_spend = _avg_daily_spend(ctx.jars, pipeline.settings.resilience_window_days)
+    essential_codes = set(pipeline.settings.essential_jar_codes) - {DEFAULT_SPENDING_JAR}
+    if avg_spend.get(DEFAULT_SPENDING_JAR, 0) > 0:
+        essential_codes.add(DEFAULT_SPENDING_JAR)
     candidates = proactive.gather_candidates(
         today=today,
         jars=jars,
         forecasts=forecasts,
-        essential_jar_codes=pipeline.settings.essential_jar_codes,
-        avg_daily_spend=_avg_daily_spend(ctx.jars, pipeline.settings.resilience_window_days),
+        essential_jar_codes=essential_codes,
+        avg_daily_spend=avg_spend,
         obligations=frepo.obligations(user_id, "active"),
         roadmap=repo.proposed_roadmap(user_id),
         review_ask=repo.review_ask(user_id, today),

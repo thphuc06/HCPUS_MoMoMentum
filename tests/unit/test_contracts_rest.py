@@ -475,7 +475,7 @@ def test_get_jars_cua_phase_1_khong_doi_hinh_dang():
     jb = load_json(CONTRACTS / "blocks/jar_summary.schema.json")["$defs"]["JarBalance"]
     phase1 = {"code", "name", "color_key", "icon_key", "balance_vnd", "split_percent"}
     assert set(jb["required"]) == phase1
-    assert set(jb["properties"]) == phase1 | {"kind", "purpose", "goal_vnd", "goal_date"}
+    assert set(jb["properties"]) == phase1 | {"kind", "purpose", "goal_vnd", "goal_date", "sinking_items"}
     assert "system" not in jb["properties"]["kind"]["enum"]
 
 

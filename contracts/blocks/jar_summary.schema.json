@@ -16,6 +16,16 @@
     "data": { "$ref": "#/$defs/JarSummaryData" }
   },
   "$defs": {
+    "SinkingItem": {
+      "type": "object",
+      "required": ["name", "amount_vnd", "needed_date"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "amount_vnd": { "$ref": "envelope.schema.json#/$defs/VndPositive" },
+        "needed_date": { "$ref": "envelope.schema.json#/$defs/IsoDate" }
+      }
+    },
     "JarBalance": {
       "description": "Một hũ và số dư hiện tại.",
       "type": "object",
@@ -50,6 +60,11 @@
           "description": "Vai trò của hũ để dành. Dữ liệu cũ có thể chưa khai.",
           "type": "string",
           "enum": ["buffer", "sinking", "goal", "long_term"]
+        },
+        "sinking_items": {
+          "type": "array",
+          "maxItems": 40,
+          "items": { "$ref": "#/$defs/SinkingItem" }
         },
         "goal_vnd": {
           "description": "Mục tiêu tiết kiệm GỐC người dùng đã khai (cột jars.goal_vnd), phase 4, tùy chọn. Vắng khi hũ không có mục tiêu.",

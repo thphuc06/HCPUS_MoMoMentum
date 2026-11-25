@@ -59,7 +59,7 @@ class ConfirmClaim:
     receipt_for: Callable[[MoveResult], Mapping[str, Any]]
 
 
-SQL_JAR_VIEW = "SELECT * FROM app_get_jar_state_with_purpose(:uid)"
+SQL_JAR_VIEW = "SELECT * FROM app_get_jar_state_with_commitments(:uid)"
 
 SQL_QUERY_TRANSACTIONS = (
     "SELECT * FROM app_query_transactions("

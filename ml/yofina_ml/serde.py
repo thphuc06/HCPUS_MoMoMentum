@@ -33,6 +33,7 @@ def _flow_from(o: dict[str, Any]) -> ScheduledFlow:
         date=_d(o["date"]), kind=o["kind"], label=o["label"], amount_vnd=o["amount_vnd"],
         amount_min_vnd=o.get("amount_min_vnd"), amount_max_vnd=o.get("amount_max_vnd"),
         ref_id=o.get("ref_id"),
+        original_due_date=_d(o["original_due_date"]) if o.get("original_due_date") else None,
     )  # fmt: skip
 
 
@@ -46,6 +47,8 @@ def _flow_to(f: ScheduledFlow) -> dict[str, Any]:
     for key in ("amount_min_vnd", "amount_max_vnd", "ref_id"):
         if getattr(f, key) is not None:
             out[key] = getattr(f, key)
+    if f.original_due_date is not None:
+        out["original_due_date"] = f.original_due_date.isoformat()
     return out
 
 
@@ -54,7 +57,7 @@ def _jar_from(o: dict[str, Any]) -> JarInput:
         code=o["code"], kind=o["kind"], balance_vnd=o["balance_vnd"], split_percent=o["split_percent"],
         history_start=_d(o["history_start"]), daily_spend_vnd=tuple(o["daily_spend_vnd"]),
         inflows=tuple(_flow_from(x) for x in o.get("inflows", [])),
-        outflows=tuple(_flow_from(x) for x in o.get("outflows", [])),
+        outflows=tuple(_flow_from(x) for x in o.get("outflows", [])), purpose=o.get("purpose"),
     )  # fmt: skip
 
 
@@ -62,6 +65,7 @@ def _jar_to(j: JarInput) -> dict[str, Any]:
     return {
         "code": j.code, "kind": j.kind, "balance_vnd": j.balance_vnd, "split_percent": j.split_percent,
         "history_start": j.history_start.isoformat(), "daily_spend_vnd": list(j.daily_spend_vnd),
+        **({"purpose": j.purpose} if j.purpose is not None else {}),
         "inflows": [_flow_to(f) for f in j.inflows], "outflows": [_flow_to(f) for f in j.outflows],
     }  # fmt: skip
 

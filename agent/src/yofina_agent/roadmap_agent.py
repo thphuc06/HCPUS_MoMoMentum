@@ -566,6 +566,8 @@ def _save_jars_params(
             item["goal_vnd"] = jar.goal_vnd
         if jar.goal_date is not None:
             item["goal_date"] = jar.goal_date
+        if jar.sinking_items is not None:
+            item["sinking_items"] = [entry.model_dump(mode="json") for entry in jar.sinking_items]
         jars.append(item)
     if all(lines[jar.code].split_percent_proposed == jar.split_percent for jar in balances):
         raise ValueError("Tỷ lệ đề xuất trùng tỷ lệ hiện tại. Bỏ action save_jars.")

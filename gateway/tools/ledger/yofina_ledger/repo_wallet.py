@@ -21,7 +21,7 @@ from typing import Any
 from yofina_core.db import DataApi, Row, Transaction
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import to_vnd
-from yofina_core.params import fold_text
+from yofina_core.params import ParamsError, fold_text, jar_commitments
 from yofina_core.wallet import (
     OTHER_INCOME_JAR_CODE,
     TX_TYPE_JAR_TRANSFER,
@@ -196,8 +196,10 @@ SQL_WRITE_CREDIT_TX = (
     "ON CONFLICT (user_id, due_date) WHERE kind = 'bnpl' AND status = 'active' DO UPDATE SET "
     "principal_vnd = obligations.principal_vnd + CAST(:amount AS numeric), "
     "amount_vnd = obligations.amount_vnd + CAST(:amount AS numeric), "
-    "pay_jar_code = coalesce(obligations.pay_jar_code, EXCLUDED.pay_jar_code), updated_at = now() "
-    "RETURNING id, principal_vnd, fee_vnd, amount_vnd, due_date, (xmax = 0) AS created), "
+    "pay_jar_code = coalesce((SELECT j.code FROM jars j "
+    "WHERE j.user_id = obligations.user_id AND j.code = obligations.pay_jar_code AND j.kind <> 'system'), "
+    "EXCLUDED.pay_jar_code), updated_at = now() "
+    "RETURNING id, principal_vnd, fee_vnd, amount_vnd, due_date, pay_jar_code, (xmax = 0) AS created), "
     "cl AS (UPDATE credit_lines SET outstanding_vnd = outstanding_vnd + CAST(:amount AS numeric), updated_at = now() "
     "WHERE user_id = :uid AND EXISTS (SELECT 1 FROM ins) RETURNING outstanding_vnd, limit_vnd), "
     + _PAYEE_CTE
@@ -206,7 +208,8 @@ SQL_WRITE_CREDIT_TX = (
     + " SELECT (SELECT id FROM ins) AS tx_id, (SELECT id FROM ob) AS ob_id, "
     "(SELECT principal_vnd FROM ob) AS ob_principal, (SELECT fee_vnd FROM ob) AS ob_fee, "
     "(SELECT amount_vnd FROM ob) AS ob_amount, (SELECT due_date FROM ob) AS ob_due, "
-    "(SELECT created FROM ob) AS ob_created, (SELECT outstanding_vnd FROM cl) AS outstanding, "
+    "(SELECT created FROM ob) AS ob_created, (SELECT pay_jar_code FROM ob) AS ob_pay_jar, "
+    "(SELECT outstanding_vnd FROM cl) AS outstanding, "
     "(SELECT limit_vnd FROM cl) AS credit_limit"
 )
 
@@ -373,7 +376,7 @@ SQL_RELEASE_CANCELLED_CREDIT = (
 )
 
 SQL_JARS_FOR_SAVE = (
-    "SELECT j.code, j.name, j.balance_vnd, j.purpose, j.goal_vnd, j.goal_date, "
+    "SELECT j.code, j.name, j.balance_vnd, j.purpose, j.goal_vnd, j.goal_date, j.sinking_items, "
     "(SELECT count(*) FROM obligations o WHERE o.user_id = j.user_id AND o.pay_jar_code = j.code "
     "AND o.status = 'active') AS active_obligations, "
     "(SELECT count(*) FROM transactions t WHERE t.user_id = j.user_id AND t.jar_code = j.code) AS tx_count "
@@ -389,14 +392,14 @@ SQL_DELETE_JARS = (
 )
 SQL_UPSERT_JARS = (
     "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind, "
-    "goal_vnd, goal_date, purpose) "
+    "goal_vnd, goal_date, purpose, sinking_items) "
     "SELECT CAST(:uid AS text), r.code, r.name, r.color_key, r.icon_key, 0, r.split_percent, r.sort_order, r.kind, r.goal_vnd, "
-    "r.goal_date, r.purpose FROM jsonb_to_recordset(CAST(:jars AS jsonb)) AS r(code text, name text, color_key text, "
-    "icon_key text, split_percent numeric, sort_order integer, kind text, goal_vnd numeric, goal_date date, purpose text) "
+    "r.goal_date, r.purpose, r.sinking_items FROM jsonb_to_recordset(CAST(:jars AS jsonb)) AS r(code text, name text, color_key text, "
+    "icon_key text, split_percent numeric, sort_order integer, kind text, goal_vnd numeric, goal_date date, purpose text, sinking_items jsonb) "
     "ON CONFLICT (user_id, code) DO UPDATE SET name = EXCLUDED.name, color_key = EXCLUDED.color_key, "
     "icon_key = EXCLUDED.icon_key, kind = EXCLUDED.kind, split_percent = EXCLUDED.split_percent, "
     "sort_order = EXCLUDED.sort_order, goal_vnd = EXCLUDED.goal_vnd, goal_date = EXCLUDED.goal_date, "
-    "purpose = EXCLUDED.purpose, "
+    "purpose = EXCLUDED.purpose, sinking_items = EXCLUDED.sinking_items, "
     "updated_at = now() RETURNING code, name, balance_vnd"
 )
 
@@ -713,6 +716,7 @@ class WalletRepo:
                 facts={
                     "obligation_id": str(row["ob_id"]),
                     "obligation_created": bool(row["ob_created"]),
+                    "pay_jar": row["ob_pay_jar"],
                     "principal_vnd": _vnd(row["ob_principal"]),
                     "fee_vnd": _vnd(row["ob_fee"]),
                     "amount_vnd": _vnd(row["ob_amount"]),
@@ -1226,26 +1230,11 @@ class WalletRepo:
             payload = []
             for i, jar in enumerate(norm["jars"]):
                 old = previous.get(jar["code"], {})
-                purpose = jar.get("purpose", old.get("purpose")) if jar["kind"] == "saving" else None
-                if (
-                    purpose == old.get("purpose") == "sinking"
-                    and old.get("goal_date") is not None
-                    and "goal_date" in jar
-                    and jar["goal_date"] != str(old["goal_date"])
-                ):
-                    raise YofinaError(
-                        ErrorCode.PARAMS_INVALID, "Ngày đã cam kết của Quỹ dồn được giữ nguyên."
-                    )
-                preserve_commitment = purpose == "sinking" or (purpose and "purpose" not in jar)
-                goal_date = old.get("goal_date") if preserve_commitment else None
-                goal_vnd = old.get("goal_vnd") if preserve_commitment else None
-                payload.append({
-                    **jar,
-                    "sort_order": i,
-                    "purpose": purpose,
-                    "goal_vnd": jar.get("goal_vnd", int(goal_vnd) if goal_vnd is not None else None),
-                    "goal_date": jar.get("goal_date", str(goal_date) if goal_date is not None else None),
-                })
+                try:
+                    metadata = jar_commitments(jar, old)
+                except ParamsError as exc:
+                    raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
+                payload.append({**jar, **metadata, "sort_order": i})
             out = t.execute(SQL_UPSERT_JARS, {"uid": user_id, "jars": payload})
             t.execute(
                 SQL_AUDIT_TX,
