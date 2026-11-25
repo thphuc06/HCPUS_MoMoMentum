@@ -2,13 +2,26 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: **2026-11-25 rạng sáng** (Claude Code điều phối các worker `kiro-cli`). Phase 5 đã code xong, đã deploy, đã đo; **chưa đóng chính thức** (còn tiêu chí 3 OCR và đi lại 6 cảnh trên giao diện mới, xem mục B).
+Cập nhật lần cuối: **2026-11-25 tối** (Claude Code điều phối Codex và Kiro cho lộ trình bộ hũ mặc định). Phase 5 đã code xong, đã deploy, đã đo; **chưa đóng chính thức** (còn tiêu chí 3 OCR và đi lại 6 cảnh trên giao diện mới, xem mục B).
 
-## Bộ sáu hũ mặc định (25/11, nhánh feat/default-six-jars)
+## Bộ hũ mặc định: ba hũ onboarding, bốn hũ demo (25/11, nhánh `feat/default-six-jars`, chỉ local)
 
-Onboarding và lần đặt lại demo đã xác nhận dùng Chi hằng ngày (35%), Nghĩa vụ (35%), Dự phòng (15%), Quỹ dồn (5%), Mục tiêu (5%) và Tích lũy dài hạn (5%). Tỷ lệ là giả định thử nghiệm, có thể chỉnh và phải cộng đủ 100%. Migration 0055 thêm purpose cho hũ để dành và cập nhật danh mục, giữ dữ liệu tài khoản cũ trước khi đặt lại.
+Lộ trình: [default-six-jars-rollout.md](docs/plan/default-six-jars-rollout.md). Bước 1–5 xong; Bước 6 xong phần cục bộ; Bước 7 (phát hành) **chưa làm**. Chưa push, chưa merge vào main, chưa deploy, chưa chạy eval.
 
-Hai cảnh đầu của [kịch bản demo](docs/plan/demo-script.md) đã chạy bằng engine và PostgreSQL cục bộ. Các mục sau ghi lại trạng thái trước thay đổi này. Lượt Kiro Opus 5.5 đang chờ phê duyệt credits.
+- **Đã có trên nhánh**: cấu hình hũ riêng cho onboarding (Chi hằng ngày 42 / Nghĩa vụ 33 / Dự phòng 25) và demo (45/35/15/5, có Mục tiêu) ở `gateway/tools/ledger/yofina_ledger/jar_layout.py`; `YOFINA_ONBOARDING_JAR_LAYOUT=legacy` quay về bộ bảy. Migration 0055 (cột `purpose` và hàm đọc `*_with_purpose`), 0056 (`sinking_items`), 0057 (bật bộ ba, **phải là migration cuối**). Nguồn trả nghĩa vụ dùng chung `resolve_obligation_pay_jar` (đã lưu, chọn rõ, `nghia_vu`, hũ obligation đầu tiên; không có hũ obligation nào thì phải chọn). Đề xuất tỷ lệ theo số khai ở bước 3 onboarding (`POST /jars/split-proposal`, chỉ đọc), bản xem trước `save_jars` có tiền mỗi kỳ và kỳ áp dụng.
+- **Test cục bộ cuối** (đã chặn credential AWS): unit + `libs/yofina_core` 3957 qua, 0 lỗi; PostgreSQL cục bộ 246 qua, 0 lỗi (lượt chạy trước W4; W4 không đụng Ledger/SQL); frontend typecheck và lint sạch, vitest 997 qua / 10 lỗi khi chạy cả bộ; chạy riêng các file lỗi thì chỉ còn 2 ca (`phase3Chat` "Vì sao" H4, `spending` B5) và hai ca này lỗi y hệt ở `865fba9` (có sẵn, lúc qua lúc lỗi, không do nhánh này). Các ca còn lại lỗi do tải máy.
+- **Lệnh PostgreSQL cục bộ cần thêm `--with scipy --with ruptures`** (thiếu thì 7 ca lỗi lúc thu thập hoặc ở PELT). Venv dựng sẵn: `C:\moMo-wt\.pgvenv` (`python -m pytest tests/local_pg`).
+- **Số demo mới** (engine cục bộ, ngày mô phỏng 21/11): cảnh 1 Chi hằng ngày 1.080.000 ₫, cạn 02/12 hoặc 03/12 tùy hạt Monte Carlo (sinh từ mã người dùng), lương 05/12. Cảnh 2 đến hạn 2.200.000 ₫ ngày 03/12 (967.000 gốc cũ + 33.000 phí + 1.200.000 tai nghe), khoản thiếu đầu tiên là Trả Sau, thiếu 760.784 ₫. Cảnh 3 mất việc 2 tháng: điểm 26 → 13, trụ 31 ngày. Đã sửa lời ở [demo-script.md](docs/plan/demo-script.md).
+- **Việc còn mở**:
+  - Bước 6 ca 1: 10 file `tests/integration` còn truy vấn `an_uong` (73 chỗ) sau reset; sửa cùng lúc được chạy tích hợp.
+  - Agent hỏi hũ trả khi khai nghĩa vụ (ví không có hũ obligation): lượt trả lời tên hũ cần router giữ lại chi tiết khoản nghĩa vụ; chưa thử trên agent thật.
+  - Thẻ hũ ngoài onboarding chưa hiện "chưa có số khai".
+  - Ví không có hũ obligation mà dùng Trả Sau ngoài màn chuyển tiền (ví dụ ghi giao dịch qua chat) vẫn cần truyền `pay_jar`.
+- **Cần chạy khi được duyệt** (tốn tiền hoặc cần AWS, chưa chạy):
+  - Cảnh 4 (lộ trình sinh lại, "Vì sao", từ chối câu hỏi cổ phiếu) trên agent thật.
+  - `tests/integration` sau khi sửa các ca `an_uong`.
+  - Phát hành theo Bước 7: migrator áp **mọi** file theo thứ tự tên, nên phải deploy 0055 + 0056 trước (giữ 0057 ngoài gói), cập nhật bên đọc rồi Ledger, rồi mới thêm 0057. Kiểm ví cũ và ví có `purpose` trên môi trường thử, chạy lại cảnh 1–3 trên đúng tài khoản demo.
+  - Vài ca eval `--only` cho luồng Trả Sau và khai nghĩa vụ sau deploy.
 
 ## Cập nhật rạng sáng 25/11 (sau khi viết bản trên)
 
