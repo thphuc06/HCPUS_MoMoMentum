@@ -341,13 +341,15 @@ def _sql_business_code(exc: Exception) -> ErrorCode | None:
 def _translate(exc: Exception) -> Exception:
     """Lỗi boto3 khác -> `YofinaError` không rò chi tiết SQL; log giữ nguyên chi tiết.
 
-    Lỗi nghiệp vụ dự kiến của hàm SQL (mã 4xx) ghi INFO như mọi mã 4xx của handler (dòng `rest_request`, `gateway_call`): đây là việc
-    người dùng hoặc dữ liệu, không phải sự cố. Lỗi còn lại là lỗi hệ thống, ghi ERROR. Chữ có dấu trong thông điệp của Postgres có thể
-    đã bị Data API thay bằng U+FFFD trước khi tới đây (xem `roadmap_logic.DB_ERROR_FALLBACK`); log ghi nguyên văn những gì nhận."""
+    Lỗi nghiệp vụ dự kiến của hàm SQL (mã 4xx, ví dụ `ROADMAP_VERSION_CONFLICT`) là việc của người dùng hoặc dữ liệu, không phải sự cố:
+    ghi WARNING, không ghi ERROR. Không hạ xuống INFO vì tầng này không biết bên gọi trả mã nào: lộ trình đổi về đúng mã 4xx
+    (`roadmap_logic.db_business_error`), còn các đường khác vẫn trả `INTERNAL_ERROR` khi hàm SQL chặn một tham số mà REST lẽ ra đã chặn
+    trước. Lỗi còn lại là lỗi hệ thống, ghi ERROR. Chữ có dấu trong thông điệp của Postgres có thể đã bị Data API thay bằng U+FFFD trước
+    khi tới đây (xem `roadmap_logic.DB_ERROR_FALLBACK`); log ghi nguyên văn những gì nhận."""
     code = _error_code(exc)
     business = _sql_business_code(exc)
     if business is not None:
-        log.info(
+        log.warning(
             json.dumps(
                 {"msg": "data_api_business_error", "code": str(business), "aws_code": code, "detail": str(exc)[:500]},
                 ensure_ascii=False,

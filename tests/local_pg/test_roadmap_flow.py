@@ -548,9 +548,9 @@ def test_quyet_dinh_buoc_loi(minh):
     assert status == 400
 
 
-def test_loi_nghiep_vu_cua_ham_sql_ghi_info_khong_ghi_error(minh, caplog):
+def test_loi_nghiep_vu_cua_ham_sql_ghi_warning_khong_ghi_error(minh, caplog):
     """#39: hàm SQL thật ném `RAISE EXCEPTION 'ROADMAP_VERSION_CONFLICT: ...'` ("Dùng bản mới" trên bản đã bỏ, đường của
-    `app_decide_roadmap_version`), đi qua đúng `DataApi` và handler REST: API trả 409 như cũ, log là một dòng INFO
+    `app_decide_roadmap_version`), đi qua đúng `DataApi` và handler REST: API trả 409 như cũ, log là một dòng WARNING
     `data_api_business_error` kèm mã, không có dòng ERROR nào (dòng ERROR là việc của lỗi hệ thống)."""
     import logging
 

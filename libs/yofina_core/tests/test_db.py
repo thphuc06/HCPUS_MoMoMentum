@@ -190,13 +190,13 @@ def _db_records(caplog, fake: FakeRds) -> list[logging.LogRecord]:
     ],
     ids=["conflict_hong_dau", "not_found", "params_invalid"],
 )
-def test_loi_nghiep_vu_4xx_cua_ham_sql_ghi_info_khong_phai_error(caplog, message):
-    """Lỗi nghiệp vụ dự kiến (`RAISE EXCEPTION 'MÃ: ...'` với MÃ là `ErrorCode` nhóm 4xx) ghi INFO như mọi mã 4xx khác của handler
-    (dòng `rest_request`/`gateway_call` mức INFO); không có dòng ERROR. Dòng log là JSON giữ nguyên chữ tiếng Việt (không `\\uXXXX`)."""
+def test_loi_nghiep_vu_4xx_cua_ham_sql_ghi_warning_khong_phai_error(caplog, message):
+    """Lỗi nghiệp vụ dự kiến (`RAISE EXCEPTION 'MÃ: ...'` với MÃ là `ErrorCode` nhóm 4xx) ghi WARNING, không có dòng ERROR (ERROR dành
+    cho lỗi hệ thống). Dòng log là JSON giữ nguyên chữ tiếng Việt (không `\\uXXXX`)."""
     fake = FakeRds()
     fake.script = [AwsError("BadRequestException", message)]
     records = _db_records(caplog, fake)
-    assert [r.levelno for r in records] == [logging.INFO]
+    assert [r.levelno for r in records] == [logging.WARNING]
     line = json.loads(records[0].getMessage())
     code = message.split(": ")[1]
     assert line["msg"] == "data_api_business_error" and line["code"] == code and line["aws_code"] == "BadRequestException"
