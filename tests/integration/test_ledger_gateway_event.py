@@ -4,6 +4,7 @@ client context, `user_id` ở sự kiện như interceptor sẽ ghi đè), cho c
 from __future__ import annotations
 
 import pytest
+from conftest import demo_jars
 
 from yofina_core.confirm import params_hash
 
@@ -91,7 +92,7 @@ def test_user_id_quyet_dinh_du_lieu_nen_interceptor_phai_ghi_de(invoke, subs):
     """Lambda tin `user_id` trong sự kiện (interceptor ghi đè từ JWT). Với user_id của lan, kết quả là
     dữ liệu của lan: không có cách nào đọc dữ liệu minh nếu interceptor đặt đúng user_id."""
     res = invoke("get_jar_balances", {"user_id": subs["lan"]})
-    assert len(res["data"]["jars"]) == 5
+    assert len(res["data"]["jars"]) == len(demo_jars("lan"))  # ví demo của lan sau đặt lại (issue #39)
 
 
 def test_thieu_user_id_hoac_tool_la(invoke, subs, schema_validator):

@@ -10,7 +10,7 @@ import json
 
 import pytest
 from agentcore_helpers import McpFailure, raw_gateway_post
-from conftest import REPO
+from conftest import REPO, demo_jars
 
 # Mười tool của target `ledger` (chín tool của overview và save_turn); save_jars và confirm_salary KHÔNG lộ cho agent.
 EXPECTED_TOOLS = {
@@ -62,7 +62,7 @@ def test_tools_list_dung_ten_co_tien_to_target(gw):
 def test_minh_doc_hu_qua_gateway_khop_rest(gw, api):
     reply = gw("minh").call("ledger___get_jar_balances")
     assert not reply.is_error
-    assert len(reply.data["data"]["jars"]) == 7
+    assert len(reply.data["data"]["jars"]) == len(demo_jars("minh"))  # bộ hũ demo sau đặt lại (issue #39)
     assert gw_balances(reply) == rest_balances(api, "minh")
 
 

@@ -17,7 +17,7 @@ import time
 import uuid
 
 import pytest
-from conftest import REPO
+from conftest import REPO, demo_balances
 
 pytestmark = pytest.mark.usefixtures("fresh")
 
@@ -418,7 +418,7 @@ def test_15_optimize_allocation_qua_gateway_chay_that_proxy_ledger_sang_forecast
     }
     # goals ghi đè: mục tiêu tuỳ ý cho một hũ có thật vẫn ra kết quả đúng schema
     reply = gw("minh").call(
-        "planner___optimize_allocation", {"goals": [{"jar": "du_lich", "weight": 3}]}
+        "planner___optimize_allocation", {"goals": [{"jar": "muc_tieu", "weight": 3}]}  # hũ goal Du lịch của ví demo (#39)
     )
     assert reply.status == "OK", reply.text
     schema_validator(f"{TOOLS}/planner.results.schema.json#/$defs/OptimizeAllocationResult", reply.data)
@@ -469,7 +469,8 @@ def test_18_save_roadmap_chay_lai_suitability_va_khong_luu_ban_vi_pham(gw, api, 
 
     reset_account(api, "minh")
     n_before = len(api("minh", "GET", "/roadmap/versions")[1]["versions"])
-    # đề xuất dồn toàn bộ hũ Hóa đơn (hũ trả nghĩa vụ thiết yếu) sang Du lịch khi nghĩa vụ chưa trả: luật obligations_first phải chặn
+    # đề xuất dồn toàn bộ hũ Nghĩa vụ (hũ trả nghĩa vụ thiết yếu; ví demo của issue #39 gộp Hóa đơn vào đây) sang hũ goal Du lịch khi
+    # nghĩa vụ chưa trả: luật obligations_first phải chặn
     draft = {
         "reason_code": "user_request",
         "feasibility": "on_track",
@@ -486,11 +487,11 @@ def test_18_save_roadmap_chay_lai_suitability_va_khong_luu_ban_vi_pham(gw, api, 
                     {
                         "step_id": "rut_tien_lon",
                         "kind": "set_aside",
-                        "title": "Dành toàn bộ hũ Hóa đơn cho Du lịch",
+                        "title": "Dành toàn bộ hũ Nghĩa vụ cho Du lịch",
                         "reason": "Thử bước vượt khả năng.",
-                        "amount_vnd": 450_000,
-                        "jar_code": "hoa_don",
-                        "to_jar_code": "du_lich",
+                        "amount_vnd": demo_balances("minh")["nghia_vu"],
+                        "jar_code": "nghia_vu",
+                        "to_jar_code": "muc_tieu",
                     }
                 ],
             }

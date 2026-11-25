@@ -177,6 +177,32 @@ def reset_account(api, who: str) -> dict:
     return body
 
 
+#: ngày neo của ví demo (YOFINA_DEMO_ANCHOR_DATE của Lambda ledger)
+DEMO_ANCHOR = "2026-11-21"
+
+
+def demo_wallet(persona: str):
+    """Ví demo mà `POST /demo/reset` nạp cho persona (bộ hũ demo của issue #39): `PersonaData` sau `apply_demo_layout`, suy từ bộ sinh
+    qua đúng ánh xạ mã hũ mà đặt lại dùng, không chép số. Ví dụ `credit_due_day` của minh là 3 (`DEMO_CREDIT_DUE_DAY`)."""
+    from datetime import date
+
+    from personas import generate
+    from personas.six_jars import apply_demo_layout
+    from yofina_ledger.jar_layout import DEMO_LAYOUT
+
+    return apply_demo_layout(generate(persona, anchor=date.fromisoformat(DEMO_ANCHOR)), DEMO_LAYOUT)
+
+
+def demo_jars(persona: str) -> dict:
+    """Hũ của ví demo sau đặt lại, theo mã. Không có Hóa đơn (gộp vào Nghĩa vụ), Du lịch thành hũ goal `muc_tieu` (tên vẫn là
+    "Du lịch"), thêm Đầu tư 0 ₫; `minh` 7 hũ, `lan` và `khoa` 6 hũ."""
+    return {j.code: j for j in demo_wallet(persona).jars}
+
+
+def demo_balances(persona: str) -> dict[str, int]:
+    return {code: j.balance_vnd for code, j in demo_jars(persona).items()}
+
+
 @pytest.fixture(scope="module")
 def fresh(api):
     """Đặt lại `minh`, `lan` và `khoa` về dữ liệu ban đầu trước và sau mỗi module."""

@@ -5,11 +5,15 @@ from __future__ import annotations
 
 import pytest
 from _yofina import REGION, ssm_param
+from conftest import demo_jars
 
 from yofina_core.db import DataApi, DataApiSettings
 from yofina_core.errors import YofinaError
 
 pytestmark = pytest.mark.usefixtures("fresh")
+
+# hũ của lan sau đặt lại (bộ hũ demo, issue #39: Hóa đơn gộp vào Nghĩa vụ, thêm Đầu tư) cộng hai hũ hệ thống
+LAN_JAR_ROWS = len(demo_jars("lan")) + 2
 
 
 @pytest.fixture(scope="module")
@@ -46,12 +50,12 @@ def test_nguoi_dung_nay_khong_doc_duoc_nguoi_dung_kia(db, subs):
         txs = tx.execute(
             "SELECT count(*) AS n FROM transactions WHERE user_id = :other", {"other": subs["minh"]}
         )[0]["n"]
-    assert (mine, theirs, txs) == (7, 0, 0)  # 5 hũ của Lan và 2 hũ hệ thống
+    assert (mine, theirs, txs) == (LAN_JAR_ROWS, 0, 0)
 
 
 def test_ham_doc_theo_user_id_chi_tra_du_lieu_cua_user_do(db, subs):
     rows = db.query("SELECT * FROM app_get_jar_state(:u)", {"u": subs["lan"]})
-    assert len(rows) == 7  # 5 hũ và 2 hũ hệ thống
+    assert len(rows) == LAN_JAR_ROWS
     assert db.query("SELECT * FROM app_get_jar_state(:u)", {"u": "khong-ton-tai"}) == []
 
 

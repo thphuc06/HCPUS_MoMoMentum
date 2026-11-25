@@ -32,7 +32,8 @@ BAD_MODEL_ID = (
 
 WHAT_IF_JAR_Q = "Nếu mua tai nghe 500 nghìn từ hũ Giải trí thì sao"
 WHAT_IF_CREDIT_Q = "Nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao"
-AFFORD_Q = "Chuyển 250 nghìn từ hũ Hóa đơn cho người nhận demo có ổn không"
+# ví demo (issue #39) không có hũ Hóa đơn: hóa đơn và tiền nhà nằm trong hũ Nghĩa vụ
+AFFORD_Q = "Chuyển 250 nghìn từ hũ Nghĩa vụ cho người nhận demo có ổn không"
 
 pytestmark = pytest.mark.usefixtures("fresh")
 
@@ -181,8 +182,8 @@ def test_kiem_tra_truoc_khi_chi_van_co_the_affordability(
     assert (data["amount_vnd"], data["funding_source"], data["selected_jar_code"]) == (
         250_000,
         "jar",
-        "hoa_don",
+        "nghia_vu",
     )
     assert data["verdict"] in ("ok", "tight", "short")
     (args,) = tool_args(run, "affordability_check")
-    assert (args["amount_vnd"], args["jar"]) == (250_000, "hoa_don"), args
+    assert (args["amount_vnd"], args["jar"]) == (250_000, "nghia_vu"), args

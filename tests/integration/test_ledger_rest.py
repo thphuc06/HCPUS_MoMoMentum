@@ -8,7 +8,7 @@ import urllib.request
 
 import pytest
 from _yofina import ssm_param
-from conftest import token_payload
+from conftest import demo_balances, demo_jars, token_payload
 
 from yofina_core.blocks import parse_block
 from yofina_core.confirm import issue_token, params_hash
@@ -16,16 +16,9 @@ from yofina_core.confirm import issue_token, params_hash
 TOOL = "move_between_jars"
 MOVE = {"from_jar": "giai_tri", "to_jar": "an_uong", "amount_vnd": 100_000}
 
-# Bảng số Figma §5 (kỳ vọng của test, không nằm trong mã sản phẩm)
-MINH_BALANCES = {
-    "an_uong": 380_000,
-    "di_lai": 640_000,
-    "hoa_don": 450_000,
-    "giai_tri": 760_000,
-    "du_lich": 1_800_000,
-    "du_phong": 2_700_000,
-    "nghia_vu": 1_000_000,
-}
+# Ví demo của minh sau đặt lại (bộ hũ demo, issue #39), suy từ bộ sinh persona qua cùng ánh xạ mã hũ: Hóa đơn gộp vào Nghĩa vụ,
+# Du lịch là hũ goal `muc_tieu`, thêm Đầu tư 0 ₫; tổng vẫn 7.730.000 ₫ của bảng số Figma §5
+MINH_BALANCES = demo_balances("minh")
 
 pytestmark = pytest.mark.usefixtures("fresh")
 
@@ -95,7 +88,7 @@ def test_get_jars_minh_khop_bang_so_figma(api, schema_validator):
 
 def test_lan_thay_du_lieu_cua_lan(api):
     bal, body = balances(api, "lan")
-    assert set(bal) == {"an_uong", "di_lai", "hoa_don", "giai_tri", "du_phong"}
+    assert set(bal) == set(demo_jars("lan"))  # ví demo của lan: không có Hóa đơn (gộp vào Nghĩa vụ), có Đầu tư
     assert bal["an_uong"] == 520_000 and body["jars_total_vnd"] == sum(bal.values())
 
 
@@ -269,7 +262,7 @@ def test_loi_nghiep_vu_khi_xin_token(api, schema_validator, params, status, code
 def test_lan_khong_doc_duoc_du_lieu_minh_du_gui_user_id_cua_minh(api, subs):
     status, body = api("lan", "GET", "/jars?user_id=" + subs["minh"])
     assert status == 200 and "an_uong" in {j["code"] for j in body["jars"]}
-    assert len(body["jars"]) == 5  # của lan, không phải 7 hũ của minh
+    assert len(body["jars"]) == len(demo_jars("lan")) != len(demo_jars("minh"))  # của lan, không phải của minh
 
 
 def test_lan_khong_ghi_duoc_vao_du_lieu_minh_du_gui_user_id_cua_minh(api, subs):
@@ -297,7 +290,7 @@ def test_dat_lai_dua_ve_dung_so_ban_dau(api, schema_validator):
     status, body = api("minh", "POST", "/demo/reset", timeout=60)
     assert status == 200, body
     schema_validator.openapi("ResetResponse", body)
-    assert body["jars_count"] == 7 and body["transactions_count"] >= 100
+    assert body["jars_count"] == len(MINH_BALANCES) and body["transactions_count"] >= 100
     assert balances(api, "minh")[0] == MINH_BALANCES
     # đồng hồ mô phỏng về ngày neo: ngày mô phỏng = 2026-11-21 ngay sau khi đặt lại
     assert body["app_date"] == "2026-11-21"

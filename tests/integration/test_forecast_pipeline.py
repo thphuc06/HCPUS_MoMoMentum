@@ -14,20 +14,16 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import flow, master_data_api
+from conftest import demo_balances, demo_wallet, flow, master_data_api
 from measure_wallet import lambda_side
 
 pytestmark = pytest.mark.usefixtures("fresh")
 
-FIGMA_BALANCES = {
-    "an_uong": 380_000,
-    "di_lai": 640_000,
-    "hoa_don": 450_000,
-    "giai_tri": 760_000,
-    "du_lich": 1_800_000,
-    "du_phong": 2_700_000,
-    "nghia_vu": 1_000_000,
-}
+# số dư ví demo của minh sau đặt lại (issue #39: Hóa đơn gộp vào Nghĩa vụ, Du lịch là hũ goal `muc_tieu`, thêm Đầu tư 0 ₫), suy từ
+# bộ sinh persona qua cùng ánh xạ mã hũ của đặt lại; tổng 7.730.000 ₫ như bảng số Figma
+DEMO_BALANCES = demo_balances("minh")
+# Trả sau của minh trên ví demo đến hạn ngày 3 (`DEMO_CREDIT_DUE_DAY`, trước lương 05/12) thay vì ngày 5 của spec
+MINH_BNPL_DUE = f"2026-12-{demo_wallet('minh').credit_due_day:02d}"
 
 
 def get(api, who, path, **kw):
@@ -83,7 +79,7 @@ def test_sau_dat_lai_minh_hu_an_uong_can_23_11_con_12_ngay_toi_ky_luong(api):
     body = api("minh", "POST", "/demo/reset", timeout=60)[1]
     assert body["forecast_ready"] is True and body["app_date"] == "2026-11-21"
     ov = get(api, "minh", "/overview")
-    assert {j["code"]: j["balance_vnd"] for j in ov["jars"]} == FIGMA_BALANCES
+    assert {j["code"]: j["balance_vnd"] for j in ov["jars"]} == DEMO_BALANCES
     assert ov["forecast"] is not None and ov["forecast"]["stale"] is False
     block = forecast(api, "minh", "an_uong")
     d = block["data"]
@@ -98,11 +94,13 @@ def test_sau_dat_lai_minh_hu_an_uong_can_23_11_con_12_ngay_toi_ky_luong(api):
     assert an["forecast_floor_vnd"] < 0  # vạch "mực dự báo" của thẻ hũ
     card = ov["proactive_card"]
     assert card["data"]["kind"] == "runout_warning" and "23/11" in card["fallback_text"]
-    # các hũ khác: không hũ nào báo hụt, hũ Hóa đơn sát vì tiền điện 26/11
+    # các hũ khác: không hũ nào báo hụt; Nghĩa vụ (gộp Hóa đơn) sát vì tiền điện 26/11 và Trả sau 03/12 (rollout Bước 5: khả năng hụt
+    # 0,26); hũ goal Du lịch và Đầu tư 0 ₫ (không gì rút tiền) đủ
     status = {j["code"]: j["status"] for j in ov["jars"]}
     assert (
-        status["hoa_don"] in ("tight", "ok")
-        and status["du_lich"] == "ok"
+        status["nghia_vu"] in ("tight", "ok")
+        and status["muc_tieu"] == "ok"
+        and status["dau_tu"] == "ok"
         and status["di_lai"] == "ok"
     )
 
@@ -121,7 +119,7 @@ def test_ket_qua_dat_lai_on_dinh_qua_nhieu_lan(api):
 def test_khoa_uoc_luong_ban_dau_khong_co_xac_suat(api):
     body = api("khoa", "POST", "/demo/reset", timeout=60)[1]
     assert body["forecast_ready"] is True
-    for jar in ("an_uong", "hoa_don"):
+    for jar in ("an_uong", "nghia_vu"):  # ví demo: Hóa đơn của khoa gộp vào Nghĩa vụ
         d = forecast(api, "khoa", jar)["data"]
         assert d["is_initial_estimate"] is True and d["confidence_band"] == "low"
         assert (
@@ -223,12 +221,12 @@ def test_mua_tra_sau_300k_hien_thanh_moc_va_dong_du_bao_hu_nghia_vu(api, subs, m
         return next(
             e
             for e in blk["data"]["events"]
-            if e["kind"] == "obligation" and e["date"] == "2026-12-05"
+            if e["kind"] == "obligation" and e["date"] == MINH_BNPL_DUE
         )
 
     before = forecast(api, "minh", "nghia_vu")
     assert mark(before)["amount_vnd"] == 1_000_000
-    p50_before = next(d["p50_vnd"] for d in before["data"]["days"] if d["date"] == "2026-12-05")
+    p50_before = next(d["p50_vnd"] for d in before["data"]["days"] if d["date"] == MINH_BNPL_DUE)
     status, receipt = flow(
         api, "minh", "record_transaction",
         {"kind": "expense", "amount_vnd": 300_000, "jar": "giai_tri", "tx_type": "entertainment", "funding": "credit", "counterparty": "Tiki"},
@@ -244,7 +242,7 @@ def test_mua_tra_sau_300k_hien_thanh_moc_va_dong_du_bao_hu_nghia_vu(api, subs, m
         return b if b["data"]["computed_at"] > before["data"]["computed_at"] else None
 
     after = wait_for(recomputed, 60, what="dự báo hũ Nghĩa vụ sau khi nghĩa vụ đổi")
-    p50_after = next(d["p50_vnd"] for d in after["data"]["days"] if d["date"] == "2026-12-05")
+    p50_after = next(d["p50_vnd"] for d in after["data"]["days"] if d["date"] == MINH_BNPL_DUE)
     assert p50_before - p50_after == pytest.approx(
         300_000, abs=1
     )  # cùng dãy ngẫu nhiên: lệch đúng bằng khoản thêm

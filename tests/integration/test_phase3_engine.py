@@ -20,13 +20,15 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
-from conftest import REPO, flow, master_data_api
+from conftest import REPO, demo_balances, demo_wallet, flow, master_data_api
 
 pytestmark = pytest.mark.usefixtures("fresh")
 
 TOOLS = "https://contracts.yofina.invalid/tools"
 BLOCKS = "https://contracts.yofina.invalid/blocks"
 REPORT_DIR = REPO / "build" / "reports"
+# Trả sau của minh trên ví demo đến hạn ngày 3 (`DEMO_CREDIT_DUE_DAY`, trước lương 05/12) thay vì ngày 5 của spec (#39)
+MINH_BNPL_DUE = f"2026-12-{demo_wallet('minh').credit_due_day:02d}"
 MEASURES: dict[str, object] = {}
 
 
@@ -118,10 +120,11 @@ def test_chuyen_250k_cho_nguoi_nhan_demo_the_theo_hu_va_tong_tra_sau_1_250_000(
     jars = {c["jar"]["code"]: c for c in d["jar_checks"]}
     assert jars["di_lai"]["status"] == "ok" and jars["giai_tri"]["status"] == "ok"
     assert jars["an_uong"]["status"] == "short" and jars["an_uong"]["balance_after_vnd"] == 130_000
-    # Lệch so với câu chữ tiêu chí 3 (Hóa đơn vàng): số engine ra Hóa đơn hụt vì tiền điện 26/11 (không còn đủ sau khi trừ 250.000 ₫).
+    # Ví demo (issue #39) không có Hóa đơn: hóa đơn trả từ Nghĩa vụ (gộp Hóa đơn). Trừ 250.000 ₫ thì Nghĩa vụ không còn đủ cho tiền điện
+    # 26/11 và Trả sau 03/12 trước lương (rollout Bước 5), nên sát hoặc hụt; số dư sau suy từ ví demo của bộ sinh.
     assert (
-        jars["hoa_don"]["status"] in ("tight", "short")
-        and jars["hoa_don"]["balance_after_vnd"] == 200_000
+        jars["nghia_vu"]["status"] in ("tight", "short")
+        and jars["nghia_vu"]["balance_after_vnd"] == demo_balances("minh")["nghia_vu"] - 250_000
     )
     cost = d["credit"]["cost"]
     assert (cost["principal_vnd"], cost["fee_added_vnd"], cost["item_cost_vnd"]) == (
@@ -130,7 +133,7 @@ def test_chuyen_250k_cho_nguoi_nhan_demo_the_theo_hu_va_tong_tra_sau_1_250_000(
         250_000,
     )
     assert (cost["existing_due_vnd"], cost["total_due_vnd"]) == (1_000_000, 1_250_000)
-    assert cost["due_date"] == "2026-12-05"
+    assert cost["due_date"] == MINH_BNPL_DUE
     assert cost["total_due_vnd"] == cost["existing_due_vnd"] + cost["item_cost_vnd"]
     assert (
         d["credit"]["cautions"] and d["credit"]["cautions"][0]["rule_id"] == "obligation_to_income"
@@ -247,7 +250,7 @@ def scenario_specs(payday: str) -> dict[str, dict]:
             "from_jar": "giai_tri",
             "to_jar": "an_uong",
         },
-        "goal_delay": {"kind": "goal_delay", "jar_code": "du_lich", "delay_months": 2},
+        "goal_delay": {"kind": "goal_delay", "jar_code": "muc_tieu", "delay_months": 2},  # hũ goal dựng từ Du lịch (#39)
     }
 
 
@@ -297,7 +300,7 @@ def test_mua_tai_nghe_1_2_trieu_bang_tra_sau_tong_den_han_05_12_la_2_200_000(
         1_200_000,
     )
     assert (cost["existing_due_vnd"], cost["total_due_vnd"]) == (1_000_000, 2_200_000)
-    assert cost["due_date"] == "2026-12-05"
+    assert cost["due_date"] == MINH_BNPL_DUE
     assert (
         cost["available_before_vnd"] - cost["available_after_vnd"] == 1_200_000
     )  # hạn mức giảm đúng giá món

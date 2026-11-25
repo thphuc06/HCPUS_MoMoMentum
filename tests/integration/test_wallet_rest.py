@@ -11,21 +11,15 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import flow
+from conftest import demo_balances, demo_jars, flow
 
 from yofina_core.blocks import block_to_wire, build_confirm_action, parse_block
 
 pytestmark = pytest.mark.usefixtures("fresh")
 
-MINH_BALANCES = {
-    "an_uong": 380_000,
-    "di_lai": 640_000,
-    "hoa_don": 450_000,
-    "giai_tri": 760_000,
-    "du_lich": 1_800_000,
-    "du_phong": 2_700_000,
-    "nghia_vu": 1_000_000,
-}
+# ví demo của minh sau đặt lại (bộ hũ demo, issue #39: Hóa đơn gộp vào Nghĩa vụ, Du lịch là hũ goal `muc_tieu`, thêm Đầu tư 0 ₫),
+# suy từ bộ sinh persona qua cùng ánh xạ mã hũ của đặt lại; tổng vẫn 7.730.000 ₫
+MINH_BALANCES = demo_balances("minh")
 
 
 def jars(api, who):
@@ -89,9 +83,9 @@ def test_tong_quan_minh_dung_so_va_thu_chua_co_du_bao(api):
     # dự báo là việc của đợt sau: chưa có lần chạy thì null đúng hợp đồng, jar không có trường dự báo
     if ov["forecast"] is None:
         assert all("status" not in j for j in ov["jars"])
-    # GET /jars giữ hình dạng phase 1: bảy hũ, không có hũ hệ thống
+    # GET /jars giữ hình dạng phase 1: các hũ của ví demo, không có hũ hệ thống
     status, body = api("minh", "GET", "/jars")
-    assert status == 200 and len(body["jars"]) == 7 and body["jars_total_vnd"] == 7_730_000
+    assert status == 200 and len(body["jars"]) == len(MINH_BALANCES) and body["jars_total_vnd"] == 7_730_000
 
 
 def test_du_bao_chua_co_thi_tra_503_forecast_unavailable_dung_hinh_dang(api):
@@ -118,8 +112,8 @@ def test_giao_dich_loc_va_phan_trang_con_tro_khong_trung_dong(api):
     )
     inc = get(api, "minh", "/transactions?kind=income&limit=50")
     assert inc["transactions"] and all(t["kind"] == "income" for t in inc["transactions"])
-    jar = get(api, "minh", "/transactions?jar=du_lich&limit=50")
-    assert all(t["jar"] == "du_lich" for t in jar["transactions"])
+    jar = get(api, "minh", "/transactions?jar=muc_tieu&limit=50")  # hũ goal dựng từ Du lịch (chia lương các kỳ trước)
+    assert jar["transactions"] and all(t["jar"] == "muc_tieu" for t in jar["transactions"])
     assert api("minh", "GET", "/transactions?cursor=rac")[0] == 400
     assert api("minh", "GET", "/transactions?from=21-11-2026")[0] == 400
     assert api("minh", "GET", "/transactions?kind=xyz")[0] == 400
@@ -128,8 +122,8 @@ def test_giao_dich_loc_va_phan_trang_con_tro_khong_trung_dong(api):
 
 def test_lan_va_khoa_co_du_lieu_rieng(api):
     lan, khoa = get(api, "lan", "/overview"), get(api, "khoa", "/overview")
-    assert lan["profile"]["monthly_salary_vnd"] == 4_500_000 and len(lan["jars"]) == 5
-    assert khoa["profile"]["monthly_salary_vnd"] == 7_000_000 and len(khoa["jars"]) == 5
+    assert lan["profile"]["monthly_salary_vnd"] == 4_500_000 and len(lan["jars"]) == len(demo_jars("lan"))
+    assert khoa["profile"]["monthly_salary_vnd"] == 7_000_000 and len(khoa["jars"]) == len(demo_jars("khoa"))
     assert lan["credit_line"]["outstanding_vnd"] == 0 and lan["balance"]["unclassified_vnd"] == 0
     assert not [o for o in get(api, "lan", "/obligations")["obligations"] if o["kind"] == "bnpl"]
 
@@ -306,15 +300,9 @@ def test_luong_ve_xac_nhan_chia_dung_luat_va_khong_xac_nhan_hai_lan(api):
     )
     assert status == 200, done
     after = jars(api, "minh")
-    shares = {
-        "hoa_don": 2_790_000,
-        "an_uong": 2_700_000,
-        "di_lai": 630_000,
-        "giai_tri": 630_000,
-        "du_lich": 900_000,
-        "du_phong": 900_000,
-        "nghia_vu": 450_000,
-    }
+    # tỷ lệ chia của ví demo (tổng tỷ lệ của hũ nguồn trong spec, issue #39): 9.000.000 ₫ chia chẵn theo từng tỷ lệ, không có phần dư
+    shares = {c: 9_000_000 * int(j.split_percent) // 100 for c, j in demo_jars("minh").items()}
+    assert sum(shares.values()) == 9_000_000
     assert {c: after[c] - before[c] for c in shares} == shares
     assert get(api, "minh", "/overview")["balance"]["other_income_vnd"] == 350_000
     assert get(api, "minh", "/salary-events")["salary_events"] == []
@@ -481,7 +469,7 @@ def test_a_khong_doc_khong_ghi_duoc_du_lieu_cua_b_tren_endpoint_moi(api):
     assert minh_tx not in {
         t["id"] for t in get(api, "lan", "/transactions?limit=50")["transactions"]
     }
-    assert api("lan", "GET", "/jars/du_lich")[0] == 404  # hũ Du lịch chỉ Minh có
+    assert api("lan", "GET", "/jars/muc_tieu")[0] == 404  # hũ goal Du lịch chỉ ví demo của Minh có
     before_minh = get(api, "minh", "/overview")["balance"]
     for tool, params, expected in (
         ("assign_jar", {"transaction_id": minh_tx, "jar": "an_uong"}, "TRANSACTION_NOT_FOUND"),
@@ -693,12 +681,14 @@ def test_onboarding_tai_khoan_trang_chi_voi_luong_va_ngay_nhan(
     status, ov = call("GET", "/overview")
     schema_validator.openapi("OverviewResponse", ov)
     assert ov["profile"]["onboarded"] and ov["profile"]["monthly_salary_vnd"] == 12_000_000
-    assert len(ov["jars"]) == 7 and round(sum(j["split_percent"] for j in ov["jars"]), 2) == 100
+    # tài khoản mới nhận bộ hũ onboarding (rollout Q1: ba hũ mặc định của danh mục), không phải bảy hũ cũ
+    templates = call("GET", "/jar-templates")[1]["templates"]
+    defaults = {t["code"] for t in templates if t["is_default"]}
+    assert len(ov["jars"]) == len(defaults) and round(sum(j["split_percent"] for j in ov["jars"]), 2) == 100
     assert [j["code"] for j in ov["system_jars"]] == ["tien_vao_khac", "chua_phan_loai"]
     assert ov["next_payday"]["date"].endswith("-15") and ov["balance"]["total_vnd"] == 0
     assert ov["credit_line"]["status"] == "active"
-    templates = call("GET", "/jar-templates")[1]["templates"]
-    assert {j["code"] for j in ov["jars"]} == {t["code"] for t in templates if t["is_default"]}
+    assert {j["code"] for j in ov["jars"]} == defaults
     # đã onboard thì ghi được tiền vào ngay
     status, rec = call(
         "POST",
