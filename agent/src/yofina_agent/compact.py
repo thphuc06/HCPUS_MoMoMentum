@@ -11,6 +11,7 @@ from datetime import date
 from typing import Any
 
 from yofina_agent.textutil import extract_amounts
+from yofina_core.blocks import no_outflow_expected
 from yofina_core.money import format_vnd, to_vnd
 from yofina_core.wallet import OBLIGATION_KIND_LABELS
 
@@ -168,6 +169,9 @@ def compact_forecast(payload: Mapping[str, Any]) -> dict[str, Any]:
         out["runout"] = None  # không cạn trong kỳ dự báo
     if d.get("p_shortfall") is not None:
         out["p_shortfall_percent"] = round(float(d["p_shortfall"]) * 100)
+    if no_outflow_expected(d):
+        # #39: hũ 0 ₫ "đủ" vì không có gì để chi (hũ để dành chưa có tiền): dữ kiện cho model, không phải câu mẫu
+        out["no_outflow_expected"] = True
     if before_payday:
         low = to_vnd(min(before_payday))
         out["lowest_balance_before_payday_vnd"] = low

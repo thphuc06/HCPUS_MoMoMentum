@@ -47,7 +47,8 @@ TASKS: dict[str, str] = {
         "Biểu đồ dự báo của một hũ đã hiện. status là hũ đủ, sát hay hụt tới kỳ lương (payday.date_text). runout là ngày dự kiến "
         "cạn (date_text) và số ngày cạn trước kỳ lương (days_before_payday); runout null nghĩa là hũ không cạn trước kỳ lương. "
         "p_shortfall_percent là xác suất hụt, confidence là độ tin cậy của dự báo. is_initial_estimate true nghĩa là ước lượng ban "
-        "đầu vì còn ít dữ liệu, stale true nghĩa là số liệu có thể đã cũ: người dùng cần biết hai điều này khi chúng đúng."
+        "đầu vì còn ít dữ liệu, stale true nghĩa là số liệu có thể đã cũ: người dùng cần biết hai điều này khi chúng đúng. "
+        "no_outflow_expected true nghĩa là dự báo không thấy khoản chi hay khoản đến hạn nào rút tiền khỏi hũ, số dư không giảm."
     ),
     "confirm_move": (
         "Thẻ xác nhận chuyển tiền giữa hai hũ đã hiện, có số dư trước và sau. Chưa có khoản tiền nào được chuyển cho tới khi "

@@ -211,6 +211,30 @@ def test_hu_thua_khong_dua_ngay_can_cho_model(with_date):
     assert compact_forecast(shown)["runout"]["date_text"] == "29/11"
 
 
+def _idle_payload(code: str, name: str, purpose: str | None, balance: int) -> dict[str, Any]:
+    """Tool trả dự báo của hũ không chi, không khoản đến hạn (#39): đủ, không ngày cạn, mọi ngày giữ đúng số dư hôm nay."""
+    p = copy.deepcopy(fixture("get_forecast.ok.json"))
+    d = p["data"]
+    d["jar"] = {**d["jar"], "code": code, "name": name, **({"purpose": purpose} if purpose else {})}
+    d.update(status="ok", start_balance_vnd=balance, events=[])
+    for k in ("runout_date", "p_shortfall", "p_shortfall_se"):
+        d.pop(k, None)
+    d["days"] = [{"date": x["date"], "p10_vnd": balance, "p50_vnd": balance, "p90_vnd": balance} for x in d["days"]]
+    return p
+
+
+def test_ban_gon_noi_cho_model_biet_hu_khong_co_gi_rut_tien():
+    """#39: hũ để dành 0 ₫ không lịch sử, hũ mục tiêu có tiền: bản gọn có cờ `no_outflow_expected` (dữ kiện, không phải câu mẫu) để model
+    không suy "đủ" của hũ 0 ₫ thành "đang hết tiền"; hũ có chi (fixture) không có cờ. Nhóm của "hũ nào sắp cạn?" không đổi."""
+    empty = compact_forecast(_idle_payload("dau_tu", "Đầu tư", "long_term", 0))
+    goal = compact_forecast(_idle_payload("muc_tieu", "Du lịch", "goal", 2_000_000))
+    spending = compact_forecast(_forecast_payload("di_lai"))
+    assert empty["no_outflow_expected"] is True and empty["status"] == "đủ" and empty["runout"] is None
+    assert goal["no_outflow_expected"] is True
+    assert "no_outflow_expected" not in spending
+    assert compact_forecast_overview([empty, goal, spending], [])["enough"] == ["Đầu tư", "Du lịch", "Đi lại"]
+
+
 #: Chỉ Giải trí hụt (cạn 29/11, trước lương 05/12), mọi hũ khác đủ.
 _ONLY_GIAI_TRI = {code: (name, "short", "2026-11-29") if code == "giai_tri" else (name, "ok", None) for code, (name, _, _) in _PLAN.items()}
 

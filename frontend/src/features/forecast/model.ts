@@ -189,6 +189,22 @@ export function lowestP50BeforePayday(d: ForecastTimelineData): number {
   return Math.min(d.start_balance_vnd, ...rows.map((r) => r.p50_vnd))
 }
 
+/**
+ * Dự báo không thấy gì rút tiền khỏi hũ (#39): đủ, không ngày cạn, không khoản đến hạn, số dư hôm nay không âm và không ngày nào (kể
+ * cả cận dưới P10) xuống dưới số dư hôm nay. Ví dụ hũ để dành chưa có tiền, hũ mục tiêu chỉ nhận lương. Chỉ đọc số server trả (không
+ * theo mã hũ, không tính lại); cùng định nghĩa với `no_outflow_expected` của `yofina_core.blocks`.
+ */
+export function noOutflowExpected(d: ForecastTimelineData): boolean {
+  const start = d.start_balance_vnd
+  return (
+    d.status === 'ok' &&
+    !d.runout_date &&
+    start >= 0 &&
+    !d.events.some((e) => e.kind === 'obligation') &&
+    d.days.every((day) => day.p10_vnd >= start)
+  )
+}
+
 /** Mức tham chiếu để vẽ hũ: mục tiêu nếu có, không thì số lớn nhất mà dự báo cho thấy (số dư, P90). */
 export function jarReference(d: ForecastTimelineData, goalVnd?: number): number {
   if (goalVnd && goalVnd > 0) return goalVnd

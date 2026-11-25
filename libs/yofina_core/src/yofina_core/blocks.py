@@ -1952,6 +1952,21 @@ def build_receipt_action(
     )
 
 
+def no_outflow_expected(data: Mapping[str, Any]) -> bool:
+    """Dự báo của MỘT hũ (dạng wire của `ForecastTimelineData`) không thấy gì rút tiền khỏi hũ (#39): đủ, không ngày cạn, không khoản
+    đến hạn, số dư hôm nay không âm và không ngày nào (kể cả cận dưới P10) xuống dưới số dư hôm nay. Ví dụ hũ để dành chưa có tiền,
+    hũ mục tiêu chỉ nhận lương. Chỉ đọc số của dự báo (không theo mã hũ, không tính lại); frontend dùng cùng định nghĩa
+    (`noOutflowExpected` trong `features/forecast/model.ts`)."""
+    start = to_vnd(data["start_balance_vnd"])
+    return (
+        data.get("status") == "ok"
+        and not data.get("runout_date")
+        and start >= 0
+        and not any(e.get("kind") == "obligation" for e in data.get("events") or ())
+        and all(to_vnd(d["p10_vnd"]) >= start for d in data.get("days") or ())
+    )
+
+
 def _forecast_sentence(
     name: str,
     status: str,
@@ -1960,8 +1975,19 @@ def _forecast_sentence(
     stale: bool,
     initial: bool,
     date_shown: bool = True,
+    *,
+    idle_balance_vnd: int | None = None,
+    horizon_days: int = 30,
 ) -> str:
-    if status == "short" and not date_shown:
+    """`idle_balance_vnd`: số dư hôm nay khi dự báo không thấy gì rút tiền khỏi hũ (`no_outflow_expected`), không thì None."""
+    if idle_balance_vnd is not None:
+        # #39: "đủ tới kỳ lương" của hũ không có gì để chi (hũ để dành chưa có tiền) nói sai tình huống
+        text = (
+            f"Hũ {name} chưa có tiền và không có khoản chi nào dự kiến trong {horizon_days} ngày tới."
+            if idle_balance_vnd == 0
+            else f"Hũ {name} không có khoản chi nào dự kiến trong {horizon_days} ngày tới; số dư không giảm."
+        )
+    elif status == "short" and not date_shown:
         # hũ thưa (#25): không nêu ngày cạn cụ thể
         text = f"Hũ {name} có thể cạn trước ngày lương {_dm(payday)}."
     elif status == "short" and runout:
@@ -2120,6 +2146,12 @@ def build_forecast_timeline_from_data(
         text = _forecast_sentence(
             d.jar.name, d.status, d.runout_date, d.payday.date, d.stale, d.is_initial_estimate,
             d.runout_date_shown is not False,
+            idle_balance_vnd=(
+                d.start_balance_vnd
+                if no_outflow_expected(d.model_dump(include={"status", "runout_date", "start_balance_vnd", "days", "events"}))
+                else None
+            ),
+            horizon_days=d.horizon_days,
         )  # fmt: skip
         window = d.obligations_before_payday
         default_id = f"forecast_timeline:{trace_id}:{d.jar.code}"

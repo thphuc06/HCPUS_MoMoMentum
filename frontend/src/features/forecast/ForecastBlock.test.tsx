@@ -243,6 +243,60 @@ describe('ForecastBlock: cách nói số của server (lỗi nhỏ phase 2)', ()
   })
 })
 
+describe('ForecastBlock: hũ không có gì rút tiền (#39)', { timeout: 20_000 }, () => {
+  /** Đường dự báo của hũ không chi, không khoản đến hạn: mọi ngày giữ đúng số dư hôm nay, cộng phần lương (nếu có) từ ngày lương. */
+  function idle(jar: Partial<ForecastTimelineData['jar']>, balance: number, salary = 0): ForecastTimelineData {
+    const d = data('forecast_timeline.short')
+    d.jar = { ...d.jar, ...jar }
+    d.status = 'ok'
+    delete d.runout_date
+    delete d.p_shortfall
+    delete d.p_shortfall_se
+    d.start_balance_vnd = balance
+    d.days = d.days.map((day) => {
+      const v = balance + (day.date >= d.payday.date ? salary : 0)
+      return { date: day.date, p10_vnd: v, p50_vnd: v, p90_vnd: v }
+    })
+    d.events = salary > 0 ? [{ date: d.payday.date, kind: 'salary', label: 'Lương về', amount_vnd: salary }] : []
+    return d
+  }
+
+  it('hũ để dành 0 ₫ không lịch sử: nói chưa có tiền và không có khoản chi dự kiến, không nói "hết tiền"; chip theo server', async () => {
+    const d = idle({ code: 'dau_tu', name: 'Đầu tư', purpose: 'long_term' }, 0)
+    expect(forecastHeadline(d)).toBe(`Chưa có tiền, không có khoản chi dự kiến trong ${d.horizon_days} ngày.`)
+    expect(forecastSummary(d)).toBe(`Hũ Đầu tư chưa có tiền và không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới.`)
+    const { container } = await mount(d)
+    expect(container.querySelector('header')).toHaveTextContent(/Đủ$/)
+    expect(container.textContent).not.toMatch(/hết tiền/i)
+  })
+
+  it('hũ chi tiêu 0 ₫ vẫn còn chi (đã cạn thật): giữ câu "Đang hết tiền" và chip "Đang hết tiền"', async () => {
+    const d = data('forecast_timeline.short')
+    const shift = d.start_balance_vnd
+    d.start_balance_vnd = 0
+    d.runout_date = d.days[0]!.date
+    d.days = d.days.map((day) => ({ ...day, p10_vnd: day.p10_vnd - shift, p50_vnd: day.p50_vnd - shift, p90_vnd: day.p90_vnd - shift }))
+    expect(forecastHeadline(d)).toBe(`Đang hết tiền, ${d.payday.days_until} ngày nữa tới lương 05/12.`)
+    const { container } = await mount(d)
+    expect(container.querySelector('header')).toHaveTextContent(/Đang hết tiền$/)
+  })
+
+  it('hũ mục tiêu có tiền, chỉ nhận lương: không có khoản chi dự kiến, số dư không giảm (không nói "đủ tới lương")', () => {
+    const d = idle({ code: 'muc_tieu', name: 'Du lịch', purpose: 'goal' }, 2_000_000, 500_000)
+    expect(forecastHeadline(d)).toBe(`Không có khoản chi dự kiến trong ${d.horizon_days} ngày.`)
+    expect(forecastSummary(d)).toBe(`Hũ Du lịch không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới; số dư không giảm.`)
+  })
+
+  it('còn một khoản đến hạn hoặc số dư có ngày giảm (kể cả cận dưới): vẫn là câu "đủ tới lương" như cũ', () => {
+    const due = idle({ code: 'du_phong', name: 'Dự phòng', purpose: 'buffer' }, 1_000_000)
+    due.events = [{ date: '2026-11-26', kind: 'obligation', label: 'Tiền điện', amount_vnd: 300_000 }]
+    expect(forecastHeadline(due)).toBe('Đủ tới lương 05/12, còn 14 ngày.')
+    const dips = idle({ code: 'du_phong', name: 'Dự phòng', purpose: 'buffer' }, 1_000_000)
+    dips.days[3] = { ...dips.days[3]!, p10_vnd: 900_000 }
+    expect(forecastHeadline(dips)).toBe('Đủ tới lương 05/12, còn 14 ngày.')
+  })
+})
+
 describe('ForecastBlock: cảnh 2, đường "Sau" vẽ dần và nhãn đọc được', { timeout: 20_000 }, () => {
   beforeEach(() => sessionStorage.clear())
   afterEach(() => vi.unstubAllGlobals())

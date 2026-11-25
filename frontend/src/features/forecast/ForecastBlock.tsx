@@ -9,7 +9,7 @@ import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd, 
 import { diffDays, formatDayMonth } from '@/lib/dates'
 import { useEntranceMotion } from '@/lib/motion'
 import type { ForecastCompare, ForecastTimelineData } from '@/contracts/blocks'
-import { buildChartModel, rowAt } from './model'
+import { buildChartModel, noOutflowExpected, rowAt } from './model'
 
 // Recharts (~118 KB gzip) tải riêng, không nằm trong phần tải đầu.
 const ForecastChart = lazy(() => import('./ForecastChart'))
@@ -19,6 +19,12 @@ export function forecastSummary(d: ForecastTimelineData): string {
   const name = d.jar.name
   const payday = formatDayMonth(d.payday.date)
   const runout = shownRunoutDate(d)
+  // Hũ không có gì rút tiền (#39, hũ để dành chưa có tiền): không nói "hết tiền" hay "đủ tới kỳ lương" như thể có khoản để chi.
+  if (noOutflowExpected(d)) {
+    return d.start_balance_vnd === 0
+      ? `Hũ ${name} chưa có tiền và không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới.`
+      : `Hũ ${name} không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới; số dư không giảm.`
+  }
   // Hũ đã hết tiền (0 ₫): không nói "dự kiến cạn" như thể còn tiền để cạn.
   if (d.start_balance_vnd <= 0) {
     return `Hũ ${name} đang hết tiền (${formatVnd(d.start_balance_vnd)}). Kỳ lương kế tiếp ngày ${payday}, còn ${d.payday.days_until} ngày nữa.`
@@ -46,6 +52,10 @@ export function forecastSummary(d: ForecastTimelineData): string {
 export function forecastHeadline(d: ForecastTimelineData): string {
   const payday = formatDayMonth(d.payday.date)
   const runout = shownRunoutDate(d)
+  if (noOutflowExpected(d)) {
+    const days = `trong ${d.horizon_days} ngày.`
+    return d.start_balance_vnd === 0 ? `Chưa có tiền, không có khoản chi dự kiến ${days}` : `Không có khoản chi dự kiến ${days}`
+  }
   if (d.start_balance_vnd <= 0) return `Đang hết tiền, ${d.payday.days_until} ngày nữa tới lương ${payday}.`
   if (mayRunOutBeforePayday(d)) return `${mayRunOutText(d.p_shortfall)}.`
   if (runout) {

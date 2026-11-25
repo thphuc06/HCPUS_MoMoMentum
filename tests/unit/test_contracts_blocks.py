@@ -394,6 +394,66 @@ def test_khoi_what_if_hu_thua_cau_thay_the_khong_neu_ngay():
     assert "trước ngày lương 05/12" in block.fallback_text
 
 
+def _idle_forecast(jar: dict, balance: int, salary: int = 0) -> dict:
+    """`data` của hũ không chi, không khoản đến hạn (#39): đủ, không ngày cạn, mọi ngày giữ số dư hôm nay, cộng phần lương từ ngày lương."""
+    data = load_json(CONTRACTS / "fixtures/blocks/valid/forecast_timeline.short.json")["data"]
+    payday = data["payday"]["date"]
+    for k in ("runout_date", "p_shortfall", "p_shortfall_se"):
+        data.pop(k, None)
+
+    def level(day: str) -> int:
+        return balance + (salary if day >= payday else 0)
+
+    days = [{"date": d["date"], **dict.fromkeys(("p10_vnd", "p50_vnd", "p90_vnd"), level(d["date"]))} for d in data["days"]]
+    events = [{"date": payday, "kind": "salary", "label": "Lương về", "amount_vnd": salary}] if salary else []
+    return {
+        **data, "jar": {**data["jar"], **jar}, "status": "ok", "start_balance_vnd": balance, "days": days, "events": events,
+    }  # fmt: skip
+
+
+def _fallback(data: dict) -> str:
+    return b.build_forecast_timeline_from_data(
+        data=data, trace_id="t1", source_tool="forecast___get_forecast",
+        as_of=datetime(2026, 12, 10, tzinfo=UTC), app_date=date(2026, 11, 21),
+    ).fallback_text  # fmt: skip
+
+
+def test_cau_thay_the_hu_de_danh_0_dong_khong_lich_su_noi_chua_co_tien_khong_co_khoan_chi():
+    """#39: hũ Đầu tư 0 ₫ không chi, không khoản đến hạn (dự báo đủ, không ngày cạn): câu nói đúng tình huống, không "đủ tới kỳ lương"."""
+    data = _idle_forecast({"code": "dau_tu", "name": "Đầu tư", "purpose": "long_term"}, 0)
+    assert b.no_outflow_expected(data)
+    assert _fallback(data) == "Hũ Đầu tư chưa có tiền và không có khoản chi nào dự kiến trong 30 ngày tới."
+
+
+def test_cau_thay_the_hu_muc_tieu_co_tien_chi_nhan_luong():
+    data = _idle_forecast({"code": "muc_tieu", "name": "Du lịch", "purpose": "goal"}, 2_000_000, salary=500_000)
+    assert b.no_outflow_expected(data)
+    assert _fallback(data) == "Hũ Du lịch không có khoản chi nào dự kiến trong 30 ngày tới; số dư không giảm."
+
+
+def test_cau_thay_the_hu_chi_tieu_0_dong_con_chi_van_la_can():
+    """Hũ chi tiêu đã cạn thật (0 ₫, còn chi theo lịch sử): dự báo hụt, câu nói ngày cạn như cũ."""
+    data = load_json(CONTRACTS / "fixtures/blocks/valid/forecast_timeline.short.json")["data"]
+    shift = data["start_balance_vnd"]
+    data = {
+        **data, "start_balance_vnd": 0, "runout_date": data["days"][0]["date"],
+        "days": [{**d, **{k: d[k] - shift for k in ("p10_vnd", "p50_vnd", "p90_vnd")}} for d in data["days"]],
+    }  # fmt: skip
+    assert not b.no_outflow_expected(data)
+    assert _fallback(data) == "Hũ Ăn uống dự kiến cạn ngày 22/11, còn 13 ngày tới kỳ lương 05/12."
+
+
+def test_co_khoan_den_han_hoac_so_du_co_ngay_giam_thi_khong_phai_hu_khong_rut_tien():
+    jar = {"code": "du_phong", "name": "Dự phòng", "purpose": "buffer"}
+    due = _idle_forecast(jar, 1_000_000)
+    due["events"] = [{"date": "2026-11-26", "kind": "obligation", "label": "Tiền điện", "amount_vnd": 300_000}]
+    dips = _idle_forecast(jar, 1_000_000)
+    dips["days"][3]["p10_vnd"] = 900_000
+    for data in (due, dips):
+        assert not b.no_outflow_expected(data)
+        assert _fallback(data) == "Hũ Dự phòng đủ tới kỳ lương 05/12."
+
+
 def test_builders_confirm_action_va_receipt_action_chi_nhan_tool_khac_chuyen_hu():
     kw = dict(trace_id="t1", source_tool="x", app_date=date(2026, 11, 21))
     now = datetime(2026, 12, 10, tzinfo=UTC)

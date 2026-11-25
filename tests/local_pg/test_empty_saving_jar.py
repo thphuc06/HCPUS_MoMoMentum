@@ -17,6 +17,7 @@ from conftest import REPO
 from ledger_fakes import http_event
 from pipeline_helpers import make_settings
 
+from yofina_core.blocks import block_to_wire, no_outflow_expected
 from yofina_forecast.afford import AffordabilityEngine
 from yofina_forecast.allocation import AllocationEngine
 from yofina_forecast.repo import ForecastRepo
@@ -113,6 +114,23 @@ def test_tool_get_forecast_va_ban_gon_cua_agent_xep_hu_rong_vao_nhom_du(demo):
     names = {c["jar"] for c in compacts[: len(empty)]}
     assert names <= set(overview["enough"])
     assert not names & {r["jar"] for r in overview["runout_before_payday"]} and not names & set(overview["tight"])
+
+
+def test_khoi_du_bao_cua_hu_rong_noi_chua_co_tien_khong_noi_het_tien(demo):
+    """Màn Chi tiết hũ (`GET /forecasts/{jar}` của ledger) và chat (tool `get_forecast`) trên dự báo thật của hũ rỗng: dữ liệu cho thấy
+    không gì rút tiền (`no_outflow_expected`), câu thay thế nói hũ chưa có tiền và không có khoản chi dự kiến, bản gọn của agent mang
+    đúng dữ kiện đó. Hũ chi tiêu cạn thật (Ăn uống, cảnh 1) không đổi."""
+    env, p, empty = demo
+    reader = ForecastReader(env.repo, ReadSettings(900, "Asia/Ho_Chi_Minh"), env.clock)
+    for code in empty:
+        screen = env.svc.forecast_block(USER, code, trace_id=TRACE, source_tool="rest:GET /forecasts")
+        out = get_forecast(reader, p, USER, code, trace_id=TRACE)
+        for data in (block_to_wire(screen)["data"], out["data"]):
+            assert data["start_balance_vnd"] == 0 and no_outflow_expected(data), data
+        assert "chưa có tiền" in screen.fallback_text and "hết tiền" not in screen.fallback_text, screen.fallback_text
+        assert compact_forecast(out)["no_outflow_expected"] is True
+    spending = get_forecast(reader, p, USER, "an_uong", trace_id=TRACE)
+    assert not no_outflow_expected(spending["data"]) and "no_outflow_expected" not in compact_forecast(spending)
 
 
 def test_what_if_va_kiem_tra_truoc_khi_chi_khong_bao_hu_rong_hut(demo):
