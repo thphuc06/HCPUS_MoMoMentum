@@ -51,6 +51,7 @@ def test_cac_endpoint_cua_phase_1_va_phase_2_va_bearer_jwt():
         ("GET", "/forecasts/{jar_code}"),
         # phase 3: kiểm tra trước khi quẹt (không LLM), bảng "Vì sao", phản hồi phương án
         ("POST", "/affordability"),
+        ("POST", "/jars/split-proposal"),  # chỉ tính đề xuất tỷ lệ (bước 3 onboarding), không ghi; lưu đi qua save_jars
         ("GET", "/traces/{trace_id}"),
         ("POST", "/feedback"),
         # phase 5 (F6): nạp dữ liệu
@@ -107,6 +108,7 @@ def test_khong_co_duong_ghi_tat_chi_post_confirmations_actions_va_reset():
         ("POST", "/actions"),
         ("POST", "/demo/reset"),
         ("POST", "/affordability"),
+        ("POST", "/jars/split-proposal"),  # chỉ tính đề xuất tỷ lệ (bước 3 onboarding), không ghi; lưu đi qua save_jars
         ("POST", "/feedback"),
         ("POST", "/ingest/uploads"),
         ("POST", "/ingest/rows/{row_id}/jar"),
