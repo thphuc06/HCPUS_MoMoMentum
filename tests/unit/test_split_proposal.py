@@ -318,8 +318,60 @@ def test_share_line_shows_share_amount_and_difference():
     assert sp.jar_amounts(SALARY, [("a", 33), ("b", 33), ("c", 33)]) is None  # tổng khác 100
 
 
-def test_legacy_wallet_without_purpose_keeps_saved_source_and_takes_from_spending():
-    jars = [
+def test_legacy_wallet_without_purpose_keeps_saved_source_and_takes_from_non_essential_spending():
+    jars = legacy_jars()
+    obs = [ob("Tiền trọ", 2_500_000, pay="hoa_don"), ob("Khoản vay", 900_000, kind="loan")]
+    result = propose(jars=jars, obligations=obs, essential_jars=essential(jars))
+    assert result["obligations_monthly_vnd"] == 900_000  # tiền trọ trả từ Hóa đơn (nguồn đã lưu)
+    shares = after(result)
+    # BR-21, BR-54: phần chênh lấy từ hũ chi không thiết yếu (Giải trí), không cắt Ăn uống
+    assert (shares["nghia_vu"], shares["giai_tri"], shares["an_uong"]) == (10, 5, 25)
+    assert shares["du_phong"] == 15 and shares["hoa_don"] == 30
+
+
+# --- nguồn bù trên ví không có Chi hằng ngày (BR-21, BR-54): hũ chi không thiết yếu trước, thiết yếu sau cùng ----------------------
+def _seed_tx_types():
+    """Bảng tra loại giao dịch thật của sản phẩm (`db/seed/tx_type_map.sql`), không dựng tay."""
+    import re
+    from pathlib import Path
+
+    from yofina_core.params import TxTypeInfo
+
+    sql = (Path(__file__).resolve().parents[2] / "db" / "seed" / "tx_type_map.sql").read_text(encoding="utf-8")
+    values = sql.split("VALUES", 1)[1].split("ON CONFLICT", 1)[0]
+    out = {}
+    for ln in values.splitlines():
+        if not re.match(r"\s*\('", ln):
+            continue
+        tx_type, _label, direction, jar_code, role, *_ = re.findall(r"'[^']*'|[A-Za-z0-9_]+", ln)
+        unq = lambda s: None if s == "NULL" else s.strip("'")  # noqa: E731
+        out[unq(tx_type)] = TxTypeInfo(unq(tx_type), unq(direction), unq(jar_code), unq(role))
+    return out
+
+
+TX_TYPES = _seed_tx_types()
+CATEGORIES = sp.DEFAULT_ESSENTIAL_CATEGORIES
+
+
+def essential(jars):
+    return sp.essential_spending_jars(jars, TX_TYPES, CATEGORIES)
+
+
+def demo_jars():
+    """Bộ hũ demo (issue #39) theo `jar_layout.DEMO_LAYOUT`, tỷ lệ của `minh`."""
+    return [
+        jar("an_uong", "spending", 30, sort_order=10),
+        jar("di_lai", "spending", 7, sort_order=20),
+        jar("nghia_vu", "obligation", 36, sort_order=30),
+        jar("giai_tri", "spending", 7, sort_order=40),
+        jar("muc_tieu", "saving", 10, "goal", goal_vnd=6_000_000, goal_date=date(2027, 4, 1), sort_order=50),
+        jar("du_phong", "saving", 10, "buffer", sort_order=60),
+        jar("dau_tu", "saving", 0, "long_term", sort_order=70),
+    ]
+
+
+def legacy_jars():
+    return [
         jar("an_uong", "spending", 25, sort_order=10),
         jar("di_lai", "spending", 10, sort_order=20),
         jar("hoa_don", "spending", 30, sort_order=30),
@@ -328,9 +380,53 @@ def test_legacy_wallet_without_purpose_keeps_saved_source_and_takes_from_spendin
         jar("du_phong", "saving", 15, sort_order=60),
         jar("nghia_vu", "obligation", 5, sort_order=70),
     ]
-    obs = [ob("Tiền trọ", 2_500_000, pay="hoa_don"), ob("Khoản vay", 900_000, kind="loan")]
-    result = propose(jars=jars, obligations=obs)
-    assert result["obligations_monthly_vnd"] == 900_000  # tiền trọ trả từ Hóa đơn (nguồn đã lưu)
+
+
+def test_essential_spending_jars_follow_transaction_types_not_codes():
+    # hũ chi chỉ nhận loại giao dịch thiết yếu (ăn uống, đi lại, hóa đơn) là thiết yếu; hũ trộn (Chi hằng ngày nhận cả giải trí)
+    # và hũ giải trí thì không
+    assert essential(demo_jars()) == {"an_uong", "di_lai"}
+    assert essential(legacy_jars()) == {"an_uong", "di_lai", "hoa_don"}
+    assert essential(three()) == set()
+    renamed = [jar("an_uong", "spending", 50), jar("nghia_vu", "obligation", 50)]
+    assert essential(renamed) == {"an_uong"}
+
+
+@pytest.mark.parametrize(
+    ("rent", "expected"),
+    [
+        # 3.900.000 = 39%: +3 điểm từ Giải trí
+        (3_000_000, {"giai_tri": 4, "an_uong": 30, "di_lai": 7, "muc_tieu": 10, "du_phong": 10, "nghia_vu": 39}),
+        # 53%: Giải trí về 0, Dự phòng giữ sàn 10, rồi hũ mục tiêu; Ăn uống, Đi lại giữ nguyên
+        (4_400_000, {"giai_tri": 0, "an_uong": 30, "di_lai": 7, "muc_tieu": 0, "du_phong": 10, "nghia_vu": 53}),
+        # 69%: hết nguồn không thiết yếu mới tới hũ thiết yếu (hũ chi đầu tiên trước)
+        (6_000_000, {"giai_tri": 0, "an_uong": 14, "di_lai": 7, "muc_tieu": 0, "du_phong": 10, "nghia_vu": 69}),
+    ],
+)
+def test_demo_wallet_takes_from_non_essential_spending_then_savings_then_essential(rent, expected):
+    jars = demo_jars()
+    obs = [ob("Tiền nhà", rent, pay="nghia_vu"), ob("Khoản vay", 900_000, kind="loan")]
+    result = propose(jars=jars, obligations=obs, salary_vnd=10_000_000, essential_jars=essential(jars))
+    assert result["status"] == "proposed"
     shares = after(result)
-    assert (shares["nghia_vu"], shares["an_uong"]) == (10, 20)
-    assert shares["du_phong"] == 15 and shares["hoa_don"] == 30
+    assert {k: shares[k] for k in expected} == expected
+    assert shares["dau_tu"] == 0 and sum(shares.values()) == 100
+
+
+def test_demo_wallet_excess_returns_to_first_spending_jar_as_before():
+    jars = demo_jars()
+    obs = [ob("Tiền nhà", 2_000_000, pay="nghia_vu"), ob("Khoản vay", 900_000, kind="loan")]
+    result = propose(jars=jars, obligations=obs, salary_vnd=10_000_000, essential_jars=essential(jars))
+    shares = after(result)  # 29%: 7 điểm thừa về hũ chi đầu tiên (như trước), không về Giải trí
+    assert (shares["nghia_vu"], shares["an_uong"], shares["giai_tri"]) == (29, 37, 7)
+
+
+def test_three_jar_wallet_keeps_daily_then_buffer():
+    jars = three()
+    for rent, expected in (
+        (2_500_000, {"chi_hang_ngay": 47, "nghia_vu": 28, "du_phong": 25}),
+        (8_100_000, {"chi_hang_ngay": 0, "nghia_vu": 90, "du_phong": 10}),
+    ):
+        result = propose(jars=jars, obligations=[ob("Tiền trọ", rent)], essential_jars=essential(jars))
+        assert after(result) == expected
+        assert after(result) == after(propose(jars=jars, obligations=[ob("Tiền trọ", rent)]))

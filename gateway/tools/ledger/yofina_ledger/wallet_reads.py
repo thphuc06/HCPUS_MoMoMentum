@@ -470,6 +470,9 @@ class WalletReads:
                 salary_events=self.repo.salary_events(user_id, "all"),
                 deviation_ask_percent=self.settings.salary_deviation_ask_percent,
                 buffer_min_percent=split_proposal.buffer_min_split_percent(),
+                essential_jars=split_proposal.essential_spending_jars(
+                    jars, self.ref.tx_types(), split_proposal.essential_categories()
+                ),
                 sinking_template=(
                     {
                         "code": template.code,

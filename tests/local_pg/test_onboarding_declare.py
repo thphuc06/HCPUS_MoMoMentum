@@ -207,3 +207,20 @@ def test_rest_route_reads_only_and_validates_known_items(env):
     ):
         res = handle_http(http_event("POST", "/jars/split-proposal", sub=user, body=bad), env.svc)
         assert json.loads(res["body"])["error"]["code"] == "PARAMS_INVALID", res
+
+
+def test_demo_wallet_proposal_keeps_essential_jars_and_takes_from_entertainment_first(env):
+    """Ví demo (không có Chi hằng ngày): khai thêm khoản vay thì phần chênh lấy từ Giải trí (hũ chi không thiết yếu theo loại
+    giao dịch của bảng tra thật), không từ Ăn uống hay Đi lại (BR-21, BR-54)."""
+    user = "declare-demo"
+    assert handle_http(http_event("POST", "/demo/reset", sub=user, groups="persona-minh"), env.svc)["statusCode"] == 200
+    before = _shares(env, user)
+    _declare(env, user, "loan", "Khoản vay", 1_500_000, 10)
+    result = env.svc.split_proposal_response(user, {})
+    assert result["status"] == "proposed"
+    after = {j["code"]: j["split_after"] for j in result["jars"]}
+    gained = after["nghia_vu"] - before["nghia_vu"]
+    assert gained > 0
+    assert after["an_uong"] == before["an_uong"] and after["di_lai"] == before["di_lai"]
+    assert after["giai_tri"] == before["giai_tri"] - min(gained, before["giai_tri"])
+    assert sum(after.values()) == 100

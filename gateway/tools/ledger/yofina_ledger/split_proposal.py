@@ -12,9 +12,10 @@ Quy tắc:
   lần không lặp nên không vào tỷ lệ; nó vẫn vào phần kiểm tra theo ngày.
 - **Quỹ dồn**: tỷ lệ cần = tổng (phần còn thiếu của từng khoản / số kỳ lương còn lại trước ngày cần) / lương, làm tròn lên.
   Số dư Quỹ dồn đang có được trừ vào khoản cần sớm nhất trước.
-- Chỉ đề xuất khi tỷ lệ cần lệch tỷ lệ đang đặt từ 1 điểm (hoặc có khoản biết trước mới). Phần chênh lấy từ hũ chi theo
-  kỳ (Chi hằng ngày trước), rồi Dự phòng nhưng không xuống dưới sàn `buffer_min_split_percent`, rồi hũ để dành khác (mục
-  tiêu, dài hạn xếp sau nghĩa vụ theo BR-65). Phần thừa trả về Chi hằng ngày.
+- Chỉ đề xuất khi tỷ lệ cần lệch tỷ lệ đang đặt từ 1 điểm (hoặc có khoản biết trước mới). Phần chênh lấy từ hũ chi không
+  thiết yếu theo LOẠI giao dịch (Chi hằng ngày, hũ trộn, trước; rồi hũ như Giải trí), rồi Dự phòng nhưng không xuống dưới sàn
+  `buffer_min_split_percent`, rồi hũ để dành khác (mục tiêu, dài hạn xếp sau nghĩa vụ theo BR-65), hũ chi thiết yếu (chỉ nhận
+  loại ăn uống, đi lại, hóa đơn) sau cùng (BR-21, BR-54). Phần thừa trả về hũ chi đầu tiên (Chi hằng ngày trước).
 - Nghĩa vụ + Quỹ dồn + sàn Dự phòng vượt 100%: không đề xuất tỷ lệ, không gợi ý cắt khoản thiết yếu (BR-21); trả danh sách
   nghĩa vụ theo thứ tự ưu tiên (nhà ở, điện nước, rồi nợ) để giao diện mở lộ trình.
 - Mẫu số chỉ là lương đã khai. Lần lương nhận gần nhất lệch số khai quá ngưỡng BR-12 thì hỏi cập nhật lương trước.
@@ -34,14 +35,16 @@ from typing import Any
 from yofina_core.clock import next_payday, payday_dates, payday_in_month
 from yofina_core.config import Config
 from yofina_core.money import format_vnd
-from yofina_core.params import ParamsError, normalize_sinking_items, unique_jar_code
+from yofina_core.params import ParamsError, TxTypeInfo, normalize_sinking_items, unique_jar_code
 from yofina_core.schedule import expand_due_dates
 from yofina_core.wallet import (
+    DEFAULT_ESSENTIAL_CATEGORIES,
     DEFAULT_SPENDING_JAR,
     SYSTEM_JAR_CODES,
     is_buffer_jar,
     resolve_obligation_pay_jar,
     split_amount,
+    transaction_jar,
 )
 from yofina_ledger import convert
 
@@ -76,6 +79,35 @@ def buffer_min_split_percent() -> int:
     if not 0 <= value <= 100:
         raise ValueError("buffer_min_split_percent phải trong khoảng 0..100")
     return value
+
+
+@lru_cache(maxsize=1)
+def essential_categories() -> tuple[str, ...]:
+    """Nhóm loại giao dịch thiết yếu (cấu hình `essential_jar_codes`, cùng khóa và mặc định với dự báo), đọc một lần mỗi tiến trình."""
+    raw = str(Config().get("essential_jar_codes", default=",".join(DEFAULT_ESSENTIAL_CATEGORIES)))
+    return tuple(c.strip() for c in raw.split(",") if c.strip())
+
+
+def essential_spending_jars(
+    jars: Iterable[Mapping[str, Any]],
+    tx_types: Mapping[str, TxTypeInfo],
+    categories: Iterable[str],
+) -> frozenset[str]:
+    """Hũ chi tiêu THIẾT YẾU của ví này, theo LOẠI giao dịch (không theo mã hũ): hũ chi mà mọi loại chi được xếp vào nó (bảng tra
+    `tx_type_map` qua `transaction_jar`, cùng đường với ghi giao dịch và phân loại) đều thuộc nhóm thiết yếu. Hũ trộn (Chi hằng ngày
+    nhận cả giải trí) và hũ chỉ nhận loại không thiết yếu (Giải trí) không thiết yếu: phần chênh lấy từ đó trước (BR-21, BR-54)."""
+    rows = list(jars)
+    codes = {str(j["code"]) for j in rows}
+    spending = {str(j["code"]) for j in rows if j["kind"] == "spending"}
+    wanted = set(categories)
+    routed: dict[str, set[bool]] = {}
+    for tx_type, info in tx_types.items():
+        if info.direction != "out" or info.default_jar_code is None:
+            continue
+        dest = transaction_jar(info.default_jar_code, codes, tx_type=tx_type)
+        if dest in spending:
+            routed.setdefault(dest, set()).add(info.default_jar_code in wanted)
+    return frozenset(code for code, flags in routed.items() if flags == {True})
 
 
 @dataclass(frozen=True)
@@ -394,18 +426,19 @@ def rebalance(
     shares: Mapping[str, Decimal],
     targets: Mapping[str, Decimal],
     sources: Sequence[tuple[str, Decimal]],
+    refund_to: str | None = None,
 ) -> dict[str, Decimal] | None:
     """Đặt `targets`, lấy phần thiếu từ `sources` theo thứ tự (mỗi nguồn không xuống dưới sàn của nó) hoặc trả phần thừa về
-    nguồn đầu tiên. None nếu các nguồn không đủ."""
+    `refund_to` (vắng thì nguồn đầu tiên). None nếu các nguồn không đủ."""
     out = dict(shares)
     need = ZERO
     for code, target in targets.items():
         need += target - out.get(code, ZERO)
         out[code] = target
     if need < 0:
-        if not sources:
+        if refund_to is None and not sources:
             return None
-        out[sources[0][0]] += -need
+        out[refund_to or sources[0][0]] += -need
         return out
     for code, floor in sources:
         if need <= 0:
@@ -474,8 +507,10 @@ def build_proposal(
     deviation_ask_percent: Decimal,
     buffer_min_percent: int,
     sinking_template: Mapping[str, Any] | None,
+    essential_jars: frozenset[str] | None = None,
 ) -> dict[str, Any]:
-    """Đề xuất tỷ lệ chia lương (xem docstring của module). `jars` là hũ người dùng theo thứ tự hiển thị."""
+    """Đề xuất tỷ lệ chia lương (xem docstring của module). `jars` là hũ người dùng theo thứ tự hiển thị; `essential_jars` là hũ
+    chi thiết yếu theo loại giao dịch (`essential_spending_jars`), vắng thì mọi hũ chi coi như không thiết yếu."""
     shares = {str(j["code"]): Decimal(str(j["split_percent"])) for j in jars}
     by_code = {str(j["code"]): j for j in jars}
 
@@ -587,7 +622,11 @@ def build_proposal(
     spending = sorted(
         (j for j in jars if j["kind"] == "spending"), key=lambda j: j["code"] != DEFAULT_SPENDING_JAR
     )
-    sources = [(str(j["code"]), ZERO) for j in spending]
+    # BR-21, BR-54: không cắt khoản thiết yếu trước. Lấy từ hũ chi không thiết yếu (theo loại giao dịch, `essential_spending_jars`;
+    # Chi hằng ngày là hũ trộn nên đứng đầu như trước), rồi Dự phòng xuống tới sàn, rồi hũ để dành khác, hũ chi thiết yếu sau cùng.
+    essential_codes = essential_jars or frozenset()
+    flexible = [(str(j["code"]), ZERO) for j in spending if str(j["code"]) not in essential_codes]
+    sources = list(flexible)
     if buffer is not None:
         sources.append((str(buffer["code"]), floor))
     sources += [
@@ -595,11 +634,14 @@ def build_proposal(
         for j in jars
         if j["kind"] == "saving" and j is not buffer and j.get("purpose") != "sinking"
     ]
+    sources += [(str(j["code"]), ZERO) for j in spending if str(j["code"]) in essential_codes]
     sources = [s for s in sources if s[0] not in targets]
+    # phần thừa trả về hũ chi đầu tiên (Chi hằng ngày trước) như trước
+    refund_to = next((str(j["code"]) for j in spending if str(j["code"]) not in targets), None)
     current = dict(shares)
     if new_jar is not None:
         current[str(new_jar["code"])] = ZERO
-    after = rebalance(current, targets, sources) if targets else current
+    after = rebalance(current, targets, sources, refund_to) if targets else current
     if after is None:
         return {
             **base,

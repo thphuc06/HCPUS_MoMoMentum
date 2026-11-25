@@ -35,6 +35,12 @@ LEGACY_JAR_ALIASES = {
 }
 
 
+#: Nhóm LOẠI giao dịch thiết yếu: loại có `tx_type_map.default_jar_code` thuộc tập này là chi thiết yếu (ăn uống, đi lại, hóa đơn
+#: theo mẫu hũ mặc định `db/seed/jar_templates.sql`). Cấu hình `essential_jar_codes` (`YOFINA_ESSENTIAL_JAR_CODES`) ghi đè; dự báo
+#: (`yofina_forecast.settings`) và đề xuất tỷ lệ của ledger (`yofina_ledger.split_proposal`) đọc cùng khóa và cùng mặc định.
+DEFAULT_ESSENTIAL_CATEGORIES = ("an_uong", "di_lai", "hoa_don")
+
+
 def is_buffer_jar(kind: str, purpose: str | None, goal_vnd: object) -> bool:
     return kind == "saving" and (purpose == "buffer" or (purpose is None and goal_vnd is None))
 

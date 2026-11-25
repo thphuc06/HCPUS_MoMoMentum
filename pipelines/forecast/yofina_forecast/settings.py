@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, fields
 from zoneinfo import ZoneInfo
 
 from yofina_core.config import Config
+from yofina_core.wallet import DEFAULT_ESSENTIAL_CATEGORIES
 from yofina_ml.allocation import AllocationParams
 
 #: Tham số bộ tối ưu phân bổ (phase 4 luồng A). TẤT CẢ là giá trị mô phỏng, chưa hiệu chỉnh trên người dùng thật. Mỗi tham số đọc
@@ -34,8 +35,8 @@ DEFAULT_ALLOCATION_PARAMS = AllocationParams(
 #: hũ chi tiêu thiết yếu theo mẫu hũ mặc định (`db/seed/jar_templates.sql`: ăn uống, đi lại, hóa đơn); hũ người dùng tự thêm thì không
 #: thiết yếu. Cũng là nhóm LOẠI giao dịch thiết yếu: loại có `tx_type_map.default_jar_code` thuộc tập này là chi thiết yếu khi nằm ở
 #: Chi hằng ngày hoặc ở hũ obligation (chuỗi `essential_spend` của ngữ cảnh dự báo; ví demo, ví ba hũ trả hóa đơn từ hũ Nghĩa vụ chung).
-#: Đọc được từ `YOFINA_ESSENTIAL_JAR_CODES` (cách nhau bằng dấu phẩy).
-DEFAULT_ESSENTIAL_JAR_CODES = ("an_uong", "di_lai", "hoa_don")
+#: Đọc được từ `YOFINA_ESSENTIAL_JAR_CODES` (cách nhau bằng dấu phẩy). Mặc định dùng chung với ledger (`yofina_core.wallet`).
+DEFAULT_ESSENTIAL_JAR_CODES = DEFAULT_ESSENTIAL_CATEGORIES
 
 
 @dataclass(frozen=True)
