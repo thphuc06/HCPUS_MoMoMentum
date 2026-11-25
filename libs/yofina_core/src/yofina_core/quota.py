@@ -166,6 +166,13 @@ class AccountQuota:
             )
         return cls(kind, store=store, cap=CapSource(kind, env, ssm))
 
+    def warm(self) -> int | None:
+        """Làm nóng (`AgentRuntime.warm`): đọc trần một lần để client SSM đã có và trần đã nhớ (`CapSource`), nên lượt đầu chỉ còn
+        một `UpdateItem`. Không tính lượt nào. Trả trần đã đọc; bộ đếm tắt (`store=None`) thì không đọc gì và trả None, như `take`."""
+        if self._store is None:
+            return None
+        return self._cap()
+
     def take(self, sub: str) -> int | None:
         """Tính một lượt cho tài khoản `sub`. Đủ trần thì ném `DailyQuotaExceeded`; trả số lượt đã dùng (None nếu không đếm được)."""
         if self._store is None:

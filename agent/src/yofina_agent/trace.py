@@ -227,11 +227,20 @@ def step_timings(steps: Iterable[TurnStep | tuple[str, int]]) -> list[dict[str, 
 
 
 def token_usage(usage_by_model: Sequence[Mapping[str, Any]], model_calls: int) -> dict[str, Any]:
-    return {
+    """`token_usage` của bản ghi lượt. `input_tokens` là TỔNG token vào (gồm cả phần đọc/ghi cache, như `inputTokens` của
+    `TurnScope.usage_by_model`); `cache_read_tokens` là phần đọc từ cache (`cachedInputTokens`), chỉ có khi khác 0.
+
+    Phần ghi cache (`cacheWriteInputTokens`) chưa ghi: `Usage` của `record_turn` và schema `TokenUsage` của hợp đồng audit chưa có
+    trường đó (`extra="forbid"`, `additionalProperties: false`), ghi vào thì cả bản ghi lượt bị từ chối."""
+    out: dict[str, Any] = {
         "input_tokens": sum(int(u.get("inputTokens", 0)) for u in usage_by_model),
         "output_tokens": sum(int(u.get("outputTokens", 0)) for u in usage_by_model),
         "model_calls": model_calls,
     }
+    cache_read = sum(int(u.get("cachedInputTokens", 0) or 0) for u in usage_by_model)
+    if cache_read > 0:
+        out["cache_read_tokens"] = cache_read
+    return out
 
 
 def build_record(

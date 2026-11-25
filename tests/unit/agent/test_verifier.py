@@ -9,6 +9,7 @@ from yofina_agent.trace import build_record, confidence, data_used, merge_rules,
 from yofina_agent.tools import ToolKind, ToolOutcome
 from yofina_agent.verifier import Allowed, NumericGrounding, assemble_verdict, salvage_options, suitability_status
 
+from yofina_audit.record import parse_turn_record
 from yofina_core.suitability import SuitabilityVerdict
 
 PAYLOAD = {
@@ -252,6 +253,36 @@ def test_ban_ghi_luot_khop_cot_migration():
     assert set(rec) >= {"trace_id", "conversation_id", "intent", "outcome", "data_used", "rules_checked", "confidence",
                         "blocks_emitted", "token_usage", "step_timings", "duration_ms"}
     assert rec["token_usage"] == {"input_tokens": 10, "output_tokens": 5, "model_calls": 3}
+
+
+def test_ban_ghi_luot_ghi_token_doc_cache_va_record_turn_nhan():
+    # `inputTokens` của usage_by_model là tổng token vào, gồm cả phần đọc/ghi cache (`yofina_core.llm.TurnScope.usage_by_model`)
+    rec = build_record(
+        trace_id="4bf92f3577b34da6a3ce929d0e0e4736",
+        conversation_id="c",
+        intent="what_if",
+        outcome="ok",
+        code=None,
+        outcomes=[],
+        suitability=[verdict()],
+        extra_rules=[],
+        bases=[],
+        blocks=[{"id": "b1", "type": "options"}],
+        usage_by_model=[
+            {"inputTokens": 6000, "outputTokens": 300, "cachedInputTokens": 4000, "cacheWriteInputTokens": 1000},
+            {"inputTokens": 500, "outputTokens": 50},
+        ],
+        model_calls=3,
+        steps=[("router", 1)],
+        duration_ms=1234,
+    )
+    assert rec["token_usage"] == {
+        "input_tokens": 6500,
+        "output_tokens": 350,
+        "model_calls": 3,
+        "cache_read_tokens": 4000,
+    }
+    assert parse_turn_record(rec)["token_usage"] == rec["token_usage"]
 
 
 def test_params_do_model_nho_tra_thanh_chuoi_van_doc_duoc():

@@ -4,8 +4,8 @@ Thứ tự (mã điều khiển, model KHÔNG quyết định thứ tự):
 
     1. Orchestrator (vai `planner`, 1 lượt gọi): dựng `ScenarioSpec` từ câu hỏi, tham số của router, danh sách hũ thật và ngày mô phỏng.
        Model không dùng được hoặc spec sai thì dựng bằng mã từ tham số router (`deterministic_spec`), không có thì báo chưa dựng được.
-       Khóa `whatif_spec_source` = `code_first` (#23, mặc định `model`): router đủ tham số thì dựng bằng mã luôn (`code_spec`, 0 lượt
-       gọi); không đủ thì vai `small`, vai đó lỗi hoặc spec sai thì `planner`.
+       Khóa `whatif_spec_source` = `code_first` (#23, mặc định `model`): router đủ tham số, kể cả loại kịch bản, thì dựng bằng mã luôn
+       (`code_spec`, 0 lượt gọi); không đủ thì vai `small`, vai đó lỗi hoặc spec sai thì `planner`.
     2. Kế hoạch (`schemas.Plan`, chỉ tool ĐỌC, `limits` từ cấu hình): song song `get_obligations`, `get_fee_schedule` (Trả sau),
        `get_forecast` (hũ chính), rồi `run_scenario` (engine tất định, ghi `scenarios`).
     3. Phát khối số liệu NGAY (forecast_timeline trước-sau, obligation_impact) trước mọi văn bản.
@@ -556,13 +556,12 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
     )
     guess = deterministic_spec(r, turn.jar_rows)
     list_early = bool(turn.conversation_id) and guess is not None and pay_jar(guess) is not None
-    ready = None
-    if code_first:
-        with turn.step("orchestrator"):
-            ready = code_spec(r, turn.jar_rows)
+    # một bước `orchestrator` mỗi lượt: đường mã đo bước dựng kế hoạch đọc ngay (0 lời gọi model), đường model đo lời gọi model
+    ready = code_spec(r, turn.jar_rows) if code_first else None
     if ready is not None:
-        log.info(json.dumps({"event": "whatif_spec", "source": "code"}))
-        early = [step for step in build_plan(ready, limits).steps if step.parallel_group == 0]
+        with turn.step("orchestrator"):
+            log.info(json.dumps({"event": "whatif_spec", "source": "code"}))
+            early = [step for step in build_plan(ready, limits).steps if step.parallel_group == 0]
         *reads, listed = await asyncio.gather(
             *(_step_call(turn, step) for step in early),
             _list_scenarios(turn) if list_early else _none(),
@@ -673,9 +672,11 @@ async def _orchestrate(
 def code_spec(r: IntentResult, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Spec dựng bằng mã khi router đã trích ĐỦ tham số (#23, `code_first`), None nếu chưa đủ (khi đó Orchestrator gọi model).
 
-    Đủ nghĩa là `deterministic_spec` dựng được spec hợp lệ với mã hũ thật, và router không trích điều gì mà spec dựng bằng mã bỏ
-    qua: `deterministic_spec` không đọc ngày, nên câu có cụm chỉ thời gian (`date_text`) để model đổi ra ngày cụ thể."""
-    if r.params.date_text:
+    Đủ nghĩa là router đã trích loại kịch bản (`scenario_kind`), `deterministic_spec` dựng được spec hợp lệ với mã hũ thật, và router
+    không trích điều gì mà spec dựng bằng mã bỏ qua. Loại trống thì `deterministic_spec` đoán loại từ nguồn tiền (Trả sau, hũ): đủ
+    cho đường dự phòng khi model lỗi, nhưng câu chi lặp lại mà router bỏ sót loại sẽ thành mua một lần, nên để model dựng.
+    `deterministic_spec` không đọc ngày, nên câu có cụm chỉ thời gian (`date_text`) cũng để model đổi ra ngày cụ thể."""
+    if r.params.scenario_kind is None or r.params.date_text:
         return None
     spec = deterministic_spec(r, rows)
     spec = validate_spec(spec) if spec is not None else None
@@ -1301,7 +1302,6 @@ async def whatif_advice(
     saved = await _what_if_saved(
         turn,
         checked,
-        recommended,
         rounds if rounds is not None else [checked],
         scenario,
         c.personal if c else (),
@@ -1335,7 +1335,6 @@ async def whatif_advice(
 async def _what_if_saved(
     turn: Turn,
     checked: list[tuple[Any, SuitabilityVerdict]],
-    recommended: str | None,
     rounds: list[list[tuple[Any, SuitabilityVerdict]]],
     scenario: Mapping[str, Any] | None,
     personal: Iterable[str],
@@ -1345,14 +1344,16 @@ async def _what_if_saved(
 
     - Bước được nhắc hũ của kịch bản (kết quả `run_scenario`: hũ bị ảnh hưởng, hũ trả nghĩa vụ đến hạn, hũ của spec) và hũ của các
       phương án sắp phát (hũ của phương án, hũ của đề xuất đã kiểm luật, hũ trong tham số hành động).
-    - Kết luận được nhắc hũ của kịch bản và hũ của phương án mang nhãn "Gợi ý", cộng hũ mà nguồn cá nhân hóa nó khai có nói tới: sở thích
-      trong bộ nhớ (`memory.jars_mentioned`, như nhãn `hu` Analyst thấy) và câu thói quen của hồ sơ hành vi.
+    - Kết luận được nhắc hũ của kịch bản và hũ của MỌI phương án sắp phát (mọi phương án đều nằm trong kết quả người dùng thấy, nên
+      câu so phương án được gợi ý với phương án còn lại, "trả bằng hũ Du lịch thay vì hũ Giải trí", vẫn khớp), cộng hũ mà nguồn cá
+      nhân hóa nó khai có nói tới: sở thích trong bộ nhớ (`memory.jars_mentioned`, như nhãn `hu` Analyst thấy) và câu thói quen của hồ
+      sơ hành vi. Kết luận vẫn phải trỏ đúng phương án mang nhãn "Gợi ý" (`target_ok` của `verify_conclusion`).
     - Luật đã loại hũ nào: phán quyết của mọi vòng Verifier, theo hũ nguồn của đề xuất (`proposal.jar_code`)."""
     names = {
         str(j["code"]): str(j["name"]) for j in turn.jar_rows if j.get("code") and j.get("name")
     }
     scenario_jars = advisor.jar_codes((scenario or {}).get("data"))
-    option_jars = {o.option_id: advisor.jar_codes(o.model_dump(mode="json")) for o, _ in checked}
+    emitted_jars = scenario_jars.union(*(advisor.jar_codes(o.model_dump(mode="json")) for o, _ in checked))
     sources = set(personal)
     personal_jars: set[str] = set()
     if "memory" in sources:
@@ -1373,10 +1374,8 @@ async def _what_if_saved(
     judged = [(o.proposal.jar_code, v) for pairs in rounds for o, v in pairs]
     return advisor.SavedResult(
         jar_names=names,
-        step_jars=frozenset(scenario_jars.union(*option_jars.values())),
-        conclusion_jars=frozenset(
-            scenario_jars | option_jars.get(recommended or "", set()) | personal_jars
-        ),
+        step_jars=frozenset(emitted_jars),
+        conclusion_jars=frozenset(emitted_jars | personal_jars),
         rejected=advisor.rule_rejections(judged),
     )
 

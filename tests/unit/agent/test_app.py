@@ -3,6 +3,7 @@ import json
 import threading
 import time
 
+import pytest
 from agent_helpers import (
     FakeTools,
     FakeUsage,
@@ -179,6 +180,50 @@ def test_lam_nong_khong_goi_model_va_khong_goi_tool(monkeypatch):
     assert ev[-1]["result"]["warm"] is True
     # không Bedrock, không DynamoDB, không tool
     assert llm[1].calls == [] and llm[2].calls == [] and tools.calls == []
+
+
+class SpyQuota:
+    """Bộ đếm quota giả: đếm số lần làm nóng; `fail` thì làm nóng ném lỗi (như SSM, DynamoDB trục trặc)."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.warmed, self.fail = 0, fail
+
+    def warm(self) -> int:
+        self.warmed += 1
+        if self.fail:
+            raise ConnectionError("ssm không trả lời")
+        return 100
+
+
+def warm_runtime(quota) -> AgentRuntime:
+    return AgentRuntime(
+        agent_settings(),
+        llm=lambda: make_llm([])[0],
+        store=UnconfiguredTurnBlockStore(),
+        tools_factory=lambda identity: FakeTools(),
+        quota=quota,
+    )
+
+
+def test_lam_nong_dung_san_bo_dem_quota_va_doc_tran():
+    spy = SpyQuota()
+    info = warm_runtime(lambda: spy).warm()
+    assert info["warm"] is True and info["quota"] is True and spy.warmed == 1
+
+
+@pytest.mark.parametrize("broken", ["warm", "factory"])
+def test_lam_nong_quota_loi_thi_warm_van_xong_va_ghi_log(broken, caplog):
+    spy = SpyQuota(fail=broken == "warm")
+
+    def factory():
+        if broken == "factory":
+            raise RuntimeError("không có Region")
+        return spy
+
+    with caplog.at_level("WARNING", logger="yofina.agent.app"):
+        info = warm_runtime(factory).warm()
+    assert info["warm"] is True and info["quota"] is False
+    assert any("quota_warm_failed" in r.getMessage() for r in caplog.records)
 
 
 def test_loi_bat_ngo_truoc_khi_co_luong_van_co_run_started_va_run_error(monkeypatch):
