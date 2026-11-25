@@ -864,11 +864,11 @@ _AMBIGUOUS_SURNAMES = frozenset(
 )
 
 
-def mask_names(text: str, policy: PiiPolicy | None = None) -> str:
-    """Che các dãy giống tên người Việt trong văn bản tự do (lời nhắn, nội dung chuyển khoản)."""
-    spans = _name_spans(text, policy or PiiPolicy())
+def _mask_names(text: str, policy: PiiPolicy, kinds: set[str]) -> str:
+    spans = _name_spans(text, policy)
     if not spans:
         return text
+    kinds.add("name")
     out, last = [], 0
     for a, b in spans:
         out.append(text[last:a])
@@ -876,6 +876,11 @@ def mask_names(text: str, policy: PiiPolicy | None = None) -> str:
         last = b
     out.append(text[last:])
     return "".join(out)
+
+
+def mask_names(text: str, policy: PiiPolicy | None = None) -> str:
+    """Che các dãy giống tên người Việt trong văn bản tự do (lời nhắn, nội dung chuyển khoản)."""
+    return _mask_names(text, policy or PiiPolicy(), set())
 
 
 def looks_like_person(name: str | None, policy: PiiPolicy | None = None) -> bool:
@@ -897,14 +902,62 @@ def mask_person(name: str | None) -> str | None:
     return initial_mask(name)
 
 
-def mask_row_text(text: str | None, policy: PiiPolicy | None = None) -> str | None:
-    """Che số và tên người trong văn bản tự do. None hoặc chuỗi rỗng thì None."""
+#: các LOẠI PII mà nhóm B che, theo thứ tự hiển thị: tên người, số điện thoại, số tài khoản, số thẻ (dãy số dạng thẻ: ba nhóm 4 chữ
+#: số rồi một nhóm nữa, 13 tới 19 chữ số). Loại đi kèm chữ đã che để màn duyệt nói "đã che loại gì" mà KHÔNG bao giờ cần giá trị gốc.
+ROW_PII_KINDS: tuple[str, ...] = ("name", "phone", "account", "card")
+
+
+@dataclass(frozen=True)
+class RowMask:
+    """Chữ đã che (None khi đầu vào None hoặc rỗng) và tập loại PII đã che trong đó (rỗng khi không che gì)."""
+
+    text: str | None
+    kinds: frozenset[str] = frozenset()
+
+
+def ordered_kinds(kinds: Iterable[str]) -> list[str]:
+    """Tập loại theo thứ tự của `ROW_PII_KINDS` (bỏ loại lạ), để lưu và hiển thị ổn định."""
+    have = set(kinds)
+    return [k for k in ROW_PII_KINDS if k in have]
+
+
+def _clean(text: str | None) -> str | None:
     if text is None:
         return None
-    t = " ".join(str(text).split())
-    if not t:
-        return None
-    return mask_names(mask_numbers(t), policy)
+    return " ".join(str(text).split()) or None
+
+
+def mask_row_text_kinds(text: str | None, policy: PiiPolicy | None = None) -> RowMask:
+    """Như `mask_row_text`, kèm tập loại đã che."""
+    t = _clean(text)
+    if t is None:
+        return RowMask(None)
+    kinds: set[str] = set()
+    out = _mask_names(_mask_numbers(t, kinds), policy or PiiPolicy(), kinds)
+    return RowMask(out, frozenset(kinds))
+
+
+def mask_row_text(text: str | None, policy: PiiPolicy | None = None) -> str | None:
+    """Che số và tên người trong văn bản tự do. None hoặc chuỗi rỗng thì None."""
+    return mask_row_text_kinds(text, policy).text
+
+
+def mask_counterparty_kinds(
+    name: str | None, *, is_person: bool | None = None, policy: PiiPolicy | None = None
+) -> RowMask:
+    """Như `mask_counterparty`, kèm tập loại đã che. Đối tác là người thì có `name`, cộng loại của các số nằm trong chuỗi (cũng bị
+    che theo)."""
+    policy = policy or PiiPolicy()
+    t = _clean(name)
+    if t is None:
+        return RowMask(None)
+    kinds: set[str] = set()
+    if policy.is_self(t) or policy.is_business(t):
+        return RowMask(_mask_numbers(t, kinds), frozenset(kinds))
+    if is_person or looks_like_person(t, policy):
+        _mask_numbers(t, kinds)
+        return RowMask(mask_person(t), frozenset(kinds | {"name"}))
+    return mask_row_text_kinds(t, policy)
 
 
 def mask_counterparty(
@@ -912,37 +965,33 @@ def mask_counterparty(
 ) -> str | None:
     """Che tên đối tác. Doanh nghiệp (từ khóa hoặc thương hiệu đã biết) và tên của chính người dùng thì giữ (vẫn che số);
     `is_person` đúng hoặc chuỗi giống tên người thì che cả tên; còn lại che như văn bản tự do."""
-    policy = policy or PiiPolicy()
-    if name is None:
-        return None
-    t = " ".join(str(name).split())
-    if not t:
-        return None
-    if policy.is_self(t) or policy.is_business(t):
-        return mask_numbers(t)
-    if is_person or looks_like_person(t, policy):
-        return mask_person(t)
-    return mask_row_text(t, policy)
+    return mask_counterparty_kinds(name, is_person=is_person, policy=policy).text
 
 
 __all__ = [
     # B. dòng nạp (phase 5)
+    "BUSINESS_HEADS",
     "BUSINESS_KEYWORDS",
     "MASK",
     # A. chat (phase 3)
     "PLACEHOLDERS",
+    "ROW_PII_KINDS",
     "MaskResult",
     "PiiPolicy",
+    "RowMask",
     "fold",
     "initial_mask",
     "is_epoch_at",
     "looks_like_person",
     "mask_counterparty",
+    "mask_counterparty_kinds",
     "mask_names",
     "mask_numbers",
     "mask_person",
     "mask_pii",
     "mask_row_text",
+    "mask_row_text_kinds",
     "mask_text",
+    "ordered_kinds",
     "strip_epoch_timestamps",
 ]

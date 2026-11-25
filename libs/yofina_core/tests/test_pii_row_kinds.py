@@ -9,7 +9,14 @@ from __future__ import annotations
 
 import pytest
 
-from yofina_core.pii import mask_row_text
+from yofina_core.pii import (
+    PiiPolicy,
+    mask_counterparty,
+    mask_counterparty_kinds,
+    mask_row_text,
+    mask_row_text_kinds,
+    ordered_kinds,
+)
 
 
 @pytest.mark.parametrize(
@@ -66,3 +73,43 @@ def test_ten_sau_danh_tu_loai_hinh_kinh_doanh_la_ten_cua_hang(text):
 )
 def test_ten_nguoi_canh_danh_tu_kinh_doanh_van_bi_che(text, expected):
     assert mask_row_text(text) == expected
+
+
+# --- loại đã che ------------------------------------------------------------------------------------------------------------
+def test_tra_loai_da_che_cho_cau_co_ten_sdt_so_tai_khoan():
+    out = mask_row_text_kinds(
+        "Chuyển cho Bùi Quốc Khánh, SĐT 0901 234 567, STK 0071 0004 56789, ngày 20/11/2026 07:24"
+    )
+    assert out.text == "Chuyển cho B***, SĐT ****4567, STK ****6789, ngày 20/11/2026 07:24"
+    assert out.kinds == {"name", "phone", "account"}
+    assert ordered_kinds(out.kinds) == ["name", "phone", "account"]
+
+
+def test_so_the_nhom_bon_la_loai_the():
+    out = mask_row_text_kinds("Thẻ 4111 1111 1111 1234")
+    assert (out.text, out.kinds) == ("Thẻ ****1234", {"card"})
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Bánh mì Huỳnh Hoa", "Thanh toán hóa đơn tiền nước 126.000 VND", "20/11/2026 07:24", None, ""],
+)
+def test_cau_khong_co_pii_tra_tap_rong(text):
+    assert mask_row_text_kinds(text).kinds == frozenset()
+
+
+def test_doi_tac_tra_loai_da_che():
+    assert mask_counterparty_kinds("BÙI QUỐC KHÁNH").kinds == {"name"}
+    assert mask_counterparty_kinds("Nguyen Van An", is_person=True).text == "N***"
+    assert mask_counterparty_kinds("Công ty ABC 0901234567").kinds == {"phone"}
+    keep = PiiPolicy.build(keep=["Huỳnh Hoa"])
+    assert mask_counterparty_kinds("Huỳnh Hoa", policy=keep).kinds == frozenset()
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Chuyển cho Bùi Quốc Khánh 0901 234 567", "STK 0071 0004 56789", "Bánh mì Huỳnh Hoa", None],
+)
+def test_chu_trung_voi_ham_cu(text):
+    assert mask_row_text_kinds(text).text == mask_row_text(text)
+    assert mask_counterparty_kinds(text).text == mask_counterparty(text)
