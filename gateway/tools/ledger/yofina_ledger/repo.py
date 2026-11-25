@@ -528,13 +528,17 @@ class LedgerRepo(WalletRepo, Phase3Repo):
         from yofina_ledger.jar_layout import DEMO_LAYOUT_ID
 
         persona = details.get("persona")
-        layout = DEMO_LAYOUT_ID if details.get("jar_layout") == DEMO_LAYOUT_ID else None
-        if roadmap_seed.load_seed(persona, layout=layout) is None:
+        aliases = None
+        if details.get("jar_layout") == DEMO_LAYOUT_ID:  # ví demo: cùng file seed, mã hũ theo ánh xạ của bộ hũ demo
+            from personas.six_jars import JAR_ALIASES
+
+            aliases = JAR_ALIASES
+        if roadmap_seed.load_seed(persona, jar_aliases=aliases) is None:
             return 0
         if app_date is None:
             if not transactions:
                 return 0
             app_date = max(t["app_date"] for t in transactions) + timedelta(days=1)
         return roadmap_seed.seed_roadmaps(
-            tx, user_id, persona=persona, app_date=app_date, jars=list(jars), layout=layout
+            tx, user_id, persona=persona, app_date=app_date, jars=list(jars), jar_aliases=aliases
         )

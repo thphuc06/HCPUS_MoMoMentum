@@ -1617,12 +1617,17 @@ class SeedTx:
     """Transaction giả cho `roadmap_seed.seed_roadmaps`: trả hàng như các hàm DB sau khi đặt lại persona (số dư hũ, hồ sơ, nghĩa vụ
     của `materialize`) và GHI LẠI mọi câu SQL, để test nhìn thấy đúng những gì seed ghi vào DB. Câu lạ thì báo lỗi."""
 
-    def __init__(self, persona: str) -> None:
+    def __init__(self, persona: str, *, demo_layout: bool = False) -> None:
         from personas import generate, materialize
+        from personas.six_jars import apply_demo_layout
+        from yofina_ledger.jar_layout import DEMO_LAYOUT
 
         data = generate(persona, anchor=TODAY)
+        if demo_layout:  # như `reset_demo`: bộ hũ demo, hũ có `purpose` của cấu hình
+            data = apply_demo_layout(data, DEMO_LAYOUT)
         m = materialize(data, anchor=TODAY, now=NOW, tz=ZoneInfo("Asia/Ho_Chi_Minh"))
-        self.jars = m.jars
+        purposes = {j.code: j.purpose for j in DEMO_LAYOUT} if demo_layout else {}
+        self.jars = [{**j, "purpose": purposes.get(j["code"])} for j in m.jars]
         self.balances = {j.code: j.balance_vnd for j in data.jars}
         self.user = {
             "monthly_salary_vnd": data.monthly_salary_vnd,
@@ -1697,6 +1702,61 @@ def test_seed_minh_nap_v1_v2_va_khong_ghi_dau_hieu_doi_hanh_vi():
     assert v2["bu_an_uong"]["title"] == "Bù 100.000 ₫ mỗi tuần cho Ăn uống"
     edited = tx.states[2]["bu_an_uong"]
     assert edited["status"] == "accepted" and edited["edited"] is True
+
+
+JAR_KEYS = ("jar_code", "to_jar_code", "from_jar", "to_jar")
+
+
+def _jar_codes(node: Any) -> list[str]:
+    """Mọi mã hũ mà một phần của lộ trình tham chiếu (bước, tham số hành động, khóa mức dành cho mục tiêu)."""
+    out: list[str] = []
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k in JAR_KEYS and isinstance(v, str):
+                out.append(v)
+            elif k == "goal_monthly_plan_vnd":
+                out.extend(v)
+            else:
+                out.extend(_jar_codes(v))
+    elif isinstance(node, list):
+        for v in node:
+            out.extend(_jar_codes(v))
+    return out
+
+
+def _without_jar_codes(node: Any) -> Any:
+    if isinstance(node, dict):
+        return {
+            k: _without_jar_codes(v) for k, v in node.items() if k not in (*JAR_KEYS, "goal_monthly_plan_vnd")
+        }  # fmt: skip
+    if isinstance(node, list):
+        return [_without_jar_codes(v) for v in node]
+    return node
+
+
+def test_seed_lo_trinh_bo_hu_demo_dung_file_cua_minh_qua_cung_anh_xa_ma_hu():
+    """Bộ hũ demo không có file lộ trình riêng (issue #39): lộ trình seed là `roadmaps/minh.json` đổi mã hũ theo đúng `JAR_ALIASES` của
+    bộ hũ demo, nên hai bản không lệch nhau; mọi hũ được tham chiếu đều có trong ví demo."""
+    from personas.six_jars import JAR_ALIASES
+    from yofina_ledger import roadmap_seed as rs
+
+    base = rs.load_seed("minh")
+    demo = rs.load_seed("minh", jar_aliases=JAR_ALIASES)
+    assert not rs.seed_path("minh_six_jars").exists()
+    codes = _jar_codes(base["versions"])
+    assert "du_lich" in codes and "du_lich" not in _jar_codes(demo["versions"])
+    assert _jar_codes(demo["versions"]) == [JAR_ALIASES.get(c, c) for c in codes]
+    assert _without_jar_codes(demo) == _without_jar_codes(base)
+
+    tx = SeedTx("minh", demo_layout=True)
+    assert set(_jar_codes(demo["versions"])) <= {j["code"] for j in tx.jars}
+    n = rs.seed_roadmaps(
+        tx, U, persona="minh", app_date=TODAY, jars=tx.jars, jar_aliases=JAR_ALIASES
+    )
+    assert n == 2 and [p["reason_code"] for p in tx.saved] == ["initial", "step_edited"]
+    assert all(p["flag"] is None for p in tx.saved)
+    assert [g["jar"]["code"] for g in tx.saved[0]["plan"]["goals"]] == ["muc_tieu"]
+    assert not any("behavior_flags" in s for s in tx.sql)
 
 
 def test_project_goal_chieu_muc_tieu_theo_muc_danh_moi_thang():

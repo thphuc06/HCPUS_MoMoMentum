@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -19,7 +20,7 @@ from personas import (
     parse_groups_claim,
     persona_from_groups,
 )
-from personas.six_jars import use_default_jars
+from personas.six_jars import apply_demo_layout
 from yofina_core.wallet import TX_TYPE_SALARY_SPLIT
 from yofina_ledger.jar_layout import DEMO_LAYOUT
 
@@ -52,49 +53,134 @@ def test_co_bon_persona():
     assert available_personas() == ["khoa", "lan", "minh", "vy"]
 
 
-@pytest.mark.parametrize("persona", ["minh", "khoa", "lan", "vy"])
-def test_demo_layout_folds_historical_salary_splits_and_preserves_wallet_totals(persona):
+#: Bộ hũ demo (issue #39): hũ cũ của persona gộp vào hũ nào. KỲ VỌNG của test, viết tay theo bảng của brief, không đọc từ mã.
+DEMO_SOURCES = {
+    "an_uong": ("an_uong",),
+    "di_lai": ("di_lai",),
+    "nghia_vu": ("nghia_vu", "hoa_don"),
+    "giai_tri": ("giai_tri",),
+    "muc_tieu": ("du_lich",),
+    "du_phong": ("du_phong",),
+    "dau_tu": (),
+}
+DEMO_KINDS = {
+    "an_uong": ("spending", None),
+    "di_lai": ("spending", None),
+    "nghia_vu": ("obligation", None),
+    "giai_tri": ("spending", None),
+    "muc_tieu": ("saving", "goal"),
+    "du_phong": ("saving", "buffer"),
+    "dau_tu": ("saving", "long_term"),
+}
+
+
+def _demo(persona):
     original = generate(persona, anchor=ANCHOR)
-    demo = use_default_jars(original, DEMO_LAYOUT)
-    balances = {j.code: j.balance_vnd for j in demo.jars}
-    assert sum(balances.values()) == sum(j.balance_vnd for j in original.jars)
-    assert [(j.code, j.split_percent) for j in demo.jars] == [
-        ("chi_hang_ngay", 45),
-        ("nghia_vu", 35),
-        ("du_phong", 15),
-        ("muc_tieu", 5),
-    ]
-    seeded = materialize(
-        demo, anchor=ANCHOR, now=NOW, tz=TZ, user_id=persona, obligation_pay_jar="nghia_vu"
-    )
-    assert {o["pay_jar"] for o in seeded.obligations} == {"nghia_vu"}
-    goal = next(j for j in seeded.jars if j["code"] == "muc_tieu")
-    assert (goal["goal_vnd"], goal["goal_date"]) == (6_000_000, date(2027, 4, 1))
+    return original, apply_demo_layout(original, DEMO_LAYOUT)
+
+
+@pytest.mark.parametrize("persona", ["minh", "khoa", "lan", "vy"])
+def test_bo_hu_demo_gop_theo_anh_xa_va_bao_toan_tong_vi(persona):
+    original, demo = _demo(persona)
+    old = {j.code: j for j in original.jars}
+    # hũ mục tiêu chỉ có khi persona có hũ nguồn mang mục tiêu (hũ goal phải có số tiền và hạn); mọi hũ khác luôn có
+    expected_codes = [c for c in DEMO_SOURCES if c != "muc_tieu" or "du_lich" in old]
+    assert [j.code for j in demo.jars] == expected_codes
+    purposes = {j.code: j.purpose for j in DEMO_LAYOUT}
+    assert {j.code: (j.kind, purposes[j.code]) for j in demo.jars} == {
+        c: DEMO_KINDS[c] for c in expected_codes
+    }
     for jar in demo.jars:
+        sources = [old[c] for c in DEMO_SOURCES[jar.code] if c in old]
+        assert jar.balance_vnd == sum(s.balance_vnd for s in sources)
+        assert jar.split_percent == sum(s.split_percent for s in sources)
+    assert sum(j.split_percent for j in demo.jars) == 100
+    assert sum(j.balance_vnd for j in demo.jars) == sum(j.balance_vnd for j in original.jars)
+    assert demo.system_balances == original.system_balances
+    for jar in demo.jars:  # bất biến của bộ sinh: số dư mỗi hũ = tổng dòng trả bằng hũ
         assert jar.balance_vnd == sum(
-            t.amount_vnd
-            for t in demo.transactions
-            if t.jar_code == jar.code and t.funding_source == "jar"
+            t.amount_vnd for t in demo.transactions if t.jar_code == jar.code and t.funding_source == "jar"
         )
+    if "du_lich" in old:
+        goal = next(j for j in demo.jars if j.code == "muc_tieu")
+        assert (goal.goal_vnd, goal.goal_date) == (old["du_lich"].goal_vnd, old["du_lich"].goal_date)
+    dau_tu = next(j for j in demo.jars if j.code == "dau_tu")
+    assert (dau_tu.balance_vnd, dau_tu.split_percent) == (0, 0)
+    assert not any(t.jar_code == "dau_tu" for t in demo.transactions)
+
+
+def test_bo_hu_demo_cua_minh_theo_ty_le_spec():
+    _, demo = _demo("minh")
+    assert {j.code: (int(j.split_percent), j.balance_vnd) for j in demo.jars} == {
+        "an_uong": (30, 380_000),
+        "di_lai": (7, 640_000),
+        "nghia_vu": (36, 1_450_000),
+        "giai_tri": (7, 760_000),
+        "muc_tieu": (10, 1_800_000),
+        "du_phong": (10, 2_700_000),
+        "dau_tu": (0, 0),
+    }
+    goal = next(j for j in demo.jars if j.code == "muc_tieu")
+    assert (goal.goal_vnd, goal.goal_date) == (6_000_000, date(2027, 4, 1))
+    # không còn khoản chuyển "Để riêng tiền trả nghĩa vụ" từ hũ Chi hằng ngày (ví demo không có hũ đó)
+    assert not any(t.jar_code == "chi_hang_ngay" for t in demo.transactions)
+    assert not any(t.note == "Để riêng tiền trả nghĩa vụ" for t in demo.transactions)
+    # Trả sau của minh đến hạn ngày 3 (trước kỳ lương ngày 5) để khoản đến hạn nằm trong cửa sổ "trước lương" của cảnh 2
+    assert demo.credit_due_day == 3
+
+
+@pytest.mark.parametrize("persona", ["minh", "khoa", "lan", "vy"])
+def test_bo_hu_demo_giu_nguyen_tung_dong_cua_hu_chi_tieu(persona):
+    """Ăn uống, Đi lại, Giải trí giữ nguyên mã: mọi dòng của chúng (chi, chia lương, chuyển giữa hũ, khoản trả nghĩa vụ) giữ số tiền và
+    ngày như ví persona, nên chuỗi chi, PELT và hồ sơ hành vi của cảnh 1 và cảnh 4 như trên `main`."""
+    original, demo = _demo(persona)
+    for code in ("an_uong", "di_lai", "giai_tri"):
+        def series(data, code=code):
+            return sorted(
+                (t.days_ago, t.local_time, t.kind, t.tx_type, t.amount_vnd, t.merchant, t.obligation_key)
+                for t in data.transactions
+                if t.jar_code == code
+            )
+
+        assert series(demo) == series(original)
+
+
+@pytest.mark.parametrize("persona", ["minh", "khoa", "lan", "vy"])
+def test_bo_hu_demo_nghia_vu_tra_tu_hu_anh_xa_va_luong_chia_gop(persona):
+    original, demo = _demo(persona)
+    alias = {src: code for code, srcs in DEMO_SOURCES.items() for src in srcs}
+    assert [(o.key, o.pay_jar) for o in demo.obligations] == [
+        (o.key, alias.get(o.pay_jar, o.pay_jar) if o.pay_jar else None) for o in original.obligations
+    ]
+    seeded = materialize(demo, anchor=ANCHOR, now=NOW, tz=TZ, user_id=persona, obligation_pay_jar="nghia_vu")
+    assert all(o["pay_jar"] in {j.code for j in demo.jars} for o in seeded.obligations if o["pay_jar"])
     for old_event, event in zip(original.salary_events, demo.salary_events, strict=True):
-        old_shares = dict(old_event.split)
-        expected = {
-            "chi_hang_ngay": sum(old_shares.get(c, 0) for c in ("an_uong", "di_lai", "giai_tri")),
-            "nghia_vu": old_shares.get("hoa_don", 0) + old_shares.get("nghia_vu", 0),
-            "du_phong": old_shares.get("du_phong", 0),
-            "muc_tieu": old_shares.get("du_lich", 0),
-        }
-        assert dict(event.split) == {c: v for c, v in expected.items() if v}
-        lines = [
-            t
-            for t in demo.transactions
-            if t.tx_type == TX_TYPE_SALARY_SPLIT
-            and t.days_ago == event.days_ago
-            and t.amount_vnd > 0
-        ]
-        assert len(lines) == len(event.split)
-        assert {t.jar_code: t.amount_vnd for t in lines} == dict(event.split)
-        assert sum(t.amount_vnd for t in lines) == event.amount_vnd
+        expected: dict[str, int] = {}
+        for code, value in old_event.split:
+            expected[alias[code]] = expected.get(alias[code], 0) + value
+        assert dict(event.split) == expected
+    split_days = {t.days_ago for t in original.transactions if t.tx_type == TX_TYPE_SALARY_SPLIT}
+    for day in split_days:
+        def lines(data, day=day):
+            out: dict[str, int] = {}
+            for t in data.transactions:
+                if t.tx_type == TX_TYPE_SALARY_SPLIT and t.days_ago == day and t.amount_vnd > 0:
+                    out[t.jar_code] = out.get(t.jar_code, 0) + t.amount_vnd
+            return out
+
+        folded: dict[str, int] = {}
+        for code, value in lines(original).items():
+            folded[alias[code]] = folded.get(alias[code], 0) + value
+        assert lines(demo) == folded
+        assert sum(1 for t in demo.transactions if t.tx_type == TX_TYPE_SALARY_SPLIT and t.days_ago == day
+                   and t.amount_vnd > 0) == len(folded)  # fmt: skip
+
+
+def test_bo_hu_demo_tu_choi_hu_persona_khong_co_trong_anh_xa():
+    original = generate("lan", anchor=ANCHOR)
+    stray = replace(original.jars[0], code="hu_la")
+    with pytest.raises(PersonaError):
+        apply_demo_layout(replace(original, jars=(*original.jars, stray)), DEMO_LAYOUT)
 
 
 def test_minh_khop_bang_so_figma():

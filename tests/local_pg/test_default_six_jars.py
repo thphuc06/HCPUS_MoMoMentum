@@ -27,12 +27,37 @@ ONBOARDING = {
     "nghia_vu": ("obligation", None, 33),
     "du_phong": ("saving", "buffer", 25),
 }
-DEMO = {
-    "chi_hang_ngay": ("spending", None, 45),
-    "nghia_vu": ("obligation", None, 35),
-    "du_phong": ("saving", "buffer", 15),
-    "muc_tieu": ("saving", "goal", 5),
+# Bộ hũ demo (issue #39): hai hũ mặc định cộng các hũ người dùng tự thêm; tỷ lệ là tỷ lệ của hũ nguồn trong spec persona.
+DEMO_SOURCES = {
+    "an_uong": ("spending", None, ("an_uong",)),
+    "di_lai": ("spending", None, ("di_lai",)),
+    "nghia_vu": ("obligation", None, ("nghia_vu", "hoa_don")),
+    "giai_tri": ("spending", None, ("giai_tri",)),
+    "muc_tieu": ("saving", "goal", ("du_lich",)),
+    "du_phong": ("saving", "buffer", ("du_phong",)),
+    "dau_tu": ("saving", "long_term", ()),
 }
+DEMO = {  # minh: 30 / 7 / 31+5 / 7 / 10 / 10 / 0
+    "an_uong": ("spending", None, 30),
+    "di_lai": ("spending", None, 7),
+    "nghia_vu": ("obligation", None, 36),
+    "giai_tri": ("spending", None, 7),
+    "muc_tieu": ("saving", "goal", 10),
+    "du_phong": ("saving", "buffer", 10),
+    "dau_tu": ("saving", "long_term", 0),
+}
+
+
+def _demo_layout(persona):
+    """Bộ hũ demo kỳ vọng của persona, suy từ spec qua ánh xạ của test: hũ mục tiêu chỉ có khi persona có hũ Du lịch."""
+    from personas import generate
+
+    old = {j.code: j for j in generate(persona, anchor=date(2026, 11, 21)).jars}
+    return {
+        code: (kind, purpose, sum(old[s].split_percent for s in sources if s in old))
+        for code, (kind, purpose, sources) in DEMO_SOURCES.items()
+        if code != "muc_tieu" or "du_lich" in old
+    }
 LEGACY = {
     "an_uong": ("spending", None, 25),
     "di_lai": ("spending", None, 10),
@@ -274,40 +299,91 @@ def test_reset_preserves_legacy_until_allowed_and_is_repeatable(env):
     assert first["statusCode"] == 200, first
     jars = _read_jars(env, user)
     assert _layout(jars) == DEMO
+    # Ăn uống, Đi lại, Giải trí giữ số dư của ví persona; Nghĩa vụ = Nghĩa vụ + Hóa đơn; Mục tiêu = Du lịch; Đầu tư mới
     assert {j["code"]: j["balance_vnd"] for j in jars} == {
-        "chi_hang_ngay": 1_080_000,
-        "nghia_vu": 2_150_000,
-        "du_phong": 2_700_000,
+        "an_uong": 380_000,
+        "di_lai": 640_000,
+        "nghia_vu": 1_450_000,
+        "giai_tri": 760_000,
         "muc_tieu": 1_800_000,
+        "du_phong": 2_700_000,
+        "dau_tu": 0,
     }
+    assert sum(j["balance_vnd"] for j in jars) == sum(j["balance_vnd"] for j in before)
     assert _reset(env, user, "persona-minh")["statusCode"] == 200
     assert _read_jars(env, user) == jars and _read_jars(env, other) == other_before
     rows = env.repo.jar_view(user).jars
-    assert len(rows) == 6
-    assert {
-        o["pay_jar_code"] for o in env.repo.list_obligations(user, status="active", limit=100)
-    } == {"nghia_vu"}
+    assert len(rows) == 9
+    pay = {o["name"]: o["pay_jar_code"] for o in env.repo.list_obligations(user, status="active", limit=100)}
+    # hũ trả theo cùng ánh xạ: cơm văn phòng vẫn trả từ Ăn uống (cảnh 1), Netflix từ Giải trí, hóa đơn và Trả sau từ Nghĩa vụ
+    assert pay["Tiền cơm văn phòng"] == "an_uong" and pay["Netflix"] == "giai_tri"
+    assert {pay[n] for n in ("Tiền điện", "Tiền thuê phòng", "Internet FPT", "Cước điện thoại")} == {"nghia_vu"}
+    assert [c for n, c in pay.items() if n not in (
+        "Tiền cơm văn phòng", "Netflix", "Tiền điện", "Tiền thuê phòng", "Internet FPT", "Cước điện thoại"
+    )] == ["nghia_vu"]  # fmt: skip
     roadmaps = handle_http(http_event("GET", "/roadmap/versions", sub=user), env.svc)
     assert roadmaps["statusCode"] == 200
-    assert len(json.loads(roadmaps["body"])["versions"]) == 3
+    versions = json.loads(roadmaps["body"])["versions"]
+    assert sorted(v["version"] for v in versions) == [1, 2]  # v1 đã thay, v2 đang dùng, như ví persona (#22)
 
 
 @pytest.mark.parametrize("persona", ["minh", "khoa", "lan", "vy"])
-def test_reset_uses_four_demo_jars_for_each_persona(env, persona):
+def test_reset_uses_demo_layout_for_each_persona(env, persona):
+    from personas import generate
+
     user = f"layout-demo-{persona}"
     response = _reset(env, user, f"persona-{persona}")
     assert response["statusCode"] == 200, response
-    assert json.loads(response["body"])["jars_count"] == 4
+    expected = _demo_layout(persona)
+    assert json.loads(response["body"])["jars_count"] == len(expected)
     jars = _read_jars(env, user)
-    assert len(jars) == 4 and _layout(jars) == DEMO
+    assert _layout(jars) == expected and "chi_hang_ngay" not in {j["code"] for j in jars}
     assert sum(j["split_percent"] for j in jars) == 100
-    goal = next(j for j in jars if j["code"] == "muc_tieu")
-    assert (goal["goal_vnd"], goal["goal_date"]) == (6_000_000, "2027-04-01")
-    assert {
-        o["pay_jar_code"] for o in env.repo.list_obligations(user, status="active", limit=100)
-    } == {"nghia_vu"}
+    data = generate(persona, anchor=date(2026, 11, 21))
+    old = {j.code: j for j in data.jars}
+    assert sum(j["balance_vnd"] for j in jars) == sum(j.balance_vnd for j in data.jars)
+    if "du_lich" in old:
+        goal = next(j for j in jars if j["code"] == "muc_tieu")
+        assert (goal["goal_vnd"], goal["goal_date"]) == (
+            old["du_lich"].goal_vnd, old["du_lich"].goal_date.isoformat()
+        )
+    codes = {j["code"] for j in jars}
+    obligations = env.repo.list_obligations(user, status="active", limit=100)
+    assert {o["pay_jar_code"] for o in obligations} <= codes
+    assert {o["pay_jar_code"] for o in obligations if o["kind"] == "bnpl"} <= {"nghia_vu"}
     assert _reset(env, user, f"persona-{persona}")["statusCode"] == 200
     assert _read_jars(env, user) == jars
+
+
+def test_demo_and_three_jar_wallets_route_new_transactions_by_type(env):
+    """Giao dịch mới trên ví demo vào hũ theo loại (ăn uống, đi lại, giải trí, hóa đơn); trên ví ba hũ mới, chi vào Chi hằng ngày và
+    hóa đơn vào Nghĩa vụ. Cùng một quy tắc cho `/tx-types` (hũ gợi ý) và ghi giao dịch không kèm hũ."""
+    demo, fresh = "route-demo", "route-three"
+    assert _reset(env, demo, "persona-minh")["statusCode"] == 200
+    env.act(fresh, "update_profile", {"monthly_salary_vnd": 9_000_000, "payday_day": 5})
+    env.act(fresh, "record_transaction", {"kind": "income", "amount_vnd": 9_000_000, "tx_type": "salary"})
+    salary = env.svc.salary_events_response(fresh, status="pending")["salary_events"][0]
+    env.act(fresh, "confirm_salary", {"salary_event_id": salary["id"], "decision": "split"})
+    expected = {
+        demo: {
+            "food_drink": "an_uong", "grocery": "an_uong", "ride_hailing": "di_lai", "fuel": "di_lai",
+            "entertainment": "giai_tri", "bill_electricity": "nghia_vu", "bill_water": "nghia_vu",
+            "phone_topup": "nghia_vu", "rent": "nghia_vu",
+        },
+        fresh: {
+            "food_drink": "chi_hang_ngay", "grocery": "chi_hang_ngay", "ride_hailing": "chi_hang_ngay",
+            "fuel": "chi_hang_ngay", "entertainment": "chi_hang_ngay", "bill_electricity": "nghia_vu",
+            "bill_water": "nghia_vu", "phone_topup": "nghia_vu", "rent": "nghia_vu",
+        },
+    }  # fmt: skip
+    for user, routes in expected.items():
+        types = {row["tx_type"]: row for row in env.svc.tx_types_response(user)["tx_types"]}
+        assert {k: types[k]["default_jar"] for k in routes} == routes
+        for tx_type, jar in routes.items():
+            before = {j["code"]: j["balance_vnd"] for j in _read_jars(env, user)}
+            env.act(user, "record_transaction", {"kind": "expense", "amount_vnd": 1_000, "tx_type": tx_type})
+            after = {j["code"]: j["balance_vnd"] for j in _read_jars(env, user)}
+            assert after == {**before, jar: before[jar] - 1_000}, tx_type
 
 
 def test_rollback_uses_legacy_onboarding_and_keeps_demo_layout(env, monkeypatch):
@@ -321,7 +397,7 @@ def test_rollback_uses_legacy_onboarding_and_keeps_demo_layout(env, monkeypatch)
         if t["is_default"]
     } == LEGACY
     assert _reset(env, "layout-rollback-demo", "persona-lan")["statusCode"] == 200
-    assert _layout(_read_jars(env, "layout-rollback-demo")) == DEMO
+    assert _layout(_read_jars(env, "layout-rollback-demo")) == _demo_layout("lan")
 
 
 def test_new_obligations_and_bnpl_choose_and_charge_the_explicit_source(env):
@@ -428,17 +504,22 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
     assert pipeline.run_user(user, trigger="reset").status == "ok"
     summaries = {row["jar_code"]: row for row in env.repo.forecast_summaries(user)}
     assert set(summaries) == set(DEMO)
-    daily = summaries["chi_hang_ngay"]
+    daily = summaries["an_uong"]
     print("Runout demo", daily["start_balance_vnd"], daily["runout_date"], daily["payday_date"])
     assert daily["status"] == "short" and daily["runout_date"] < daily["payday_date"]
 
     ctx = pipeline.load_context(user, env.clock())
+    # ví demo không có Chi hằng ngày: không có chuỗi chi thiết yếu riêng, Ăn uống và Đi lại là hũ thiết yếu theo mã như ví cũ
+    assert not any("essential_spend" in j for j in ctx.jars)
     built = build_inputs(ctx, settings, user, n_paths=1000)
     source = next(j for j in built.inputs.jars if j.code == "nghia_vu")
     bnpl = next(o for o in ctx.obligations if o["kind"] == "bnpl")
     (due,) = [flow for flow in source.outflows if flow.ref_id == bnpl["id"]]
     assert due.amount_vnd == 1_000_000
-    assert all(not j.outflows for j in built.inputs.jars if j.code != source.code)
+    assert due.date == date(2026, 12, 3)  # ngày đến hạn 3 của ví demo, trước lương 05/12
+    assert all(
+        flow.ref_id != bnpl["id"] for j in built.inputs.jars if j.code != source.code for flow in j.outflows
+    )
 
     engine = ScenarioEngine(pipeline, env.repo, env.svc.ref, settings)
     data = engine.run(
@@ -488,10 +569,14 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
         allow_relaxation=True,
     )
     roles = {j.code: j.role for j in allocation.problem.jars}
-    assert (roles["du_phong"], roles["muc_tieu"]) == (
-        "emergency",
-        "goal",
-    )
+    assert {c: roles[c] for c in ("an_uong", "di_lai", "giai_tri", "du_phong", "muc_tieu", "dau_tu")} == {
+        "an_uong": "essential",
+        "di_lai": "essential",
+        "giai_tri": "discretionary",
+        "du_phong": "emergency",
+        "muc_tieu": "goal",
+        "dau_tu": "saving",
+    }
     assert allocation.goals["muc_tieu"].target_date == date(2027, 4, 1)
 
 

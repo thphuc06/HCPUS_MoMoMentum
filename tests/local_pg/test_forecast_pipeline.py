@@ -299,8 +299,12 @@ def test_dat_lai_tinh_du_bao_dong_bo_va_tra_forecast_ready_true(env):
     assert r["forecast_ready"] is True and fc.computed == [(MINH, "reset")]
     ov = env.svc.overview_response(MINH)
     assert ov["forecast"] is not None and ov["forecast"]["stale"] is False and fc.requested == []
-    assert len(ov["jars"]) == 4
-    assert all("status" in jar for jar in ov["jars"])
+    an = next(j for j in ov["jars"] if j["code"] == "an_uong")
+    assert an["status"] == "short" and an["runout_date"] == "2026-11-23"
+    assert ov["proactive_card"]["data"]["kind"] == "runout_warning"
+    assert "23/11" in ov["proactive_card"]["fallback_text"] or "2026-11-23" in json.dumps(
+        ov["proactive_card"]
+    )
 
 
 def test_tong_quan_chua_co_du_bao_hoac_cu_thi_kich_hoat_nen_khong_cho(env):

@@ -807,14 +807,14 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         từ bảng `fee_schedules`), hạn mức, sổ cái có `tx_type`, sự kiện lương; số dư hũ được dựng lại từ sổ cái. Sau đó TÍNH
         DỰ BÁO ĐỒNG BỘ (gọi `yofina-forecast-batch`) để mở app là có số (`forecast_ready`), rồi phát `profile.updated`."""
         import personas  # dữ liệu seed (data/personas), đóng gói cùng Lambda
-        from personas.six_jars import JAR_ALIASES, use_default_jars
+        from personas.six_jars import JAR_ALIASES, apply_demo_layout
         from yofina_core.wallet import DEFAULT_OBLIGATION_JAR
         from yofina_ledger.jar_layout import DEMO_LAYOUT, DEMO_LAYOUT_ID
 
         s = self.settings
         now = self.now()
         try:
-            data = use_default_jars(personas.generate(persona, anchor=s.demo_anchor_date), DEMO_LAYOUT)
+            data = apply_demo_layout(personas.generate(persona, anchor=s.demo_anchor_date), DEMO_LAYOUT)
         except personas.PersonaError as exc:
             raise YofinaError(ErrorCode.PARAMS_INVALID, f"Persona không hợp lệ: {exc}") from exc
         fee = self.ref.bnpl_monthly_fee(s.demo_anchor_date)

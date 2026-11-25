@@ -1,11 +1,16 @@
-"""Adapt the historical demo ledgers to the configured demo layout."""
+"""Adapt the historical demo ledgers to the configured demo layout (issue #39).
+
+The demo wallet keeps the onboarding defaults Nghĩa vụ and Dự phòng and the jars the user added: Ăn uống, Đi lại, Giải trí
+(Chi hằng ngày split by category, so behaviour signals stay per jar), Mục tiêu and Đầu tư. Each persona jar folds into one
+demo jar (`JAR_ALIASES`, identity for a code the layout keeps): balances, split shares, history, salary splits, obligation
+sources and the roadmap seed all follow the same mapping, so the wallet total and every line of the kept jars are unchanged.
+"""
 
 from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import replace
-from datetime import time
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -13,7 +18,6 @@ from personas.generator import JarSeed, PersonaData, PersonaError, TxSeed
 from yofina_core.wallet import (
     DEFAULT_GOAL_JAR,
     DEFAULT_OBLIGATION_JAR,
-    DEFAULT_SPENDING_JAR,
     TX_TYPE_JAR_TRANSFER,
     TX_TYPE_SALARY_SPLIT,
 )
@@ -21,26 +25,63 @@ from yofina_core.wallet import (
 if TYPE_CHECKING:
     from yofina_ledger.jar_layout import DemoJar
 
+#: persona jar -> demo jar, for codes the demo layout does not keep
 JAR_ALIASES = {
-    "an_uong": DEFAULT_SPENDING_JAR,
-    "di_lai": DEFAULT_SPENDING_JAR,
-    "giai_tri": DEFAULT_SPENDING_JAR,
-    "quy_don": DEFAULT_SPENDING_JAR,
-    "tich_luy_dai_han": DEFAULT_SPENDING_JAR,
     "hoa_don": DEFAULT_OBLIGATION_JAR,
     "du_lich": DEFAULT_GOAL_JAR,
 }
 
+#: simulated BNPL due day per persona on the demo wallet. Minh's spec uses the payday (5); the demo moves the December
+#: installment two days earlier so it falls inside the "due before payday" window of the Nghĩa vụ forecast (scene 2).
+DEMO_CREDIT_DUE_DAY = {"minh": 3}
 
-def use_default_jars(data: PersonaData, layout: Sequence[DemoJar]) -> PersonaData:
-    """Fold old demo history into the configured jars while preserving the wallet total."""
-    jar_names = {j.code: j.name for j in layout}
-    if len(jar_names) != len(layout) or sum(j.split_percent for j in layout) != 100:
-        raise PersonaError("Cấu hình hũ demo phải có mã duy nhất và tổng tỷ lệ 100%.")
+
+def demo_jar_code(code: str) -> str:
+    return JAR_ALIASES.get(code, code)
+
+
+def apply_demo_layout(data: PersonaData, layout: Sequence[DemoJar]) -> PersonaData:
+    """Fold the persona wallet into the demo layout while preserving the wallet total."""
+    layout_codes = [j.code for j in layout]
+    if len(set(layout_codes)) != len(layout_codes):
+        raise PersonaError("Cấu hình hũ demo phải có mã duy nhất.")
+    stray = sorted({j.code for j in data.jars} - {c for c in JAR_ALIASES} - set(layout_codes))
+    if stray or any(target not in layout_codes for target in JAR_ALIASES.values()):
+        raise PersonaError(f"Hũ của persona không có trong cấu hình hũ demo: {', '.join(stray) or 'ánh xạ'}.")
+
+    sources: dict[str, list[JarSeed]] = defaultdict(list)
+    for old in data.jars:
+        sources[demo_jar_code(old.code)].append(old)
+    jars: list[JarSeed] = []
+    for j in layout:
+        own = sources.get(j.code, [])
+        goal = next((s for s in own if s.goal_vnd is not None), None)
+        if j.purpose == "goal" and goal is None:
+            if own:
+                raise PersonaError(f"Hũ {j.name} của bộ hũ demo cần mục tiêu từ hũ của persona.")
+            continue  # a goal jar needs an amount and a date; the persona has none to bring
+        jars.append(
+            JarSeed(
+                code=j.code,
+                name=j.name,
+                color_key=j.color_key,
+                icon_key=j.icon_key,
+                kind=j.kind,
+                split_percent=sum((Decimal(s.split_percent) for s in own), Decimal(0)),
+                balance_vnd=sum(s.balance_vnd for s in own),
+                sort_order=j.sort_order,
+                goal_vnd=goal.goal_vnd if goal else None,
+                goal_date=goal.goal_date if goal else None,
+            )
+        )
+    if sum(j.split_percent for j in jars) != 100:
+        raise PersonaError("Tỷ lệ chia của bộ hũ demo phải có tổng 100%.")
 
     mapped = [
-        replace(t, jar_code=JAR_ALIASES.get(t.jar_code, t.jar_code)) for t in data.transactions
+        replace(t, jar_code=demo_jar_code(t.jar_code)) if t.jar_code is not None else t
+        for t in data.transactions
     ]
+    # a transfer between two persona jars that fold into the same demo jar nets to zero: drop both legs
     transfers: dict[str, list[TxSeed]] = defaultdict(list)
     for t in mapped:
         if t.transfer_key and t.tx_type == TX_TYPE_JAR_TRANSFER:
@@ -52,83 +93,42 @@ def use_default_jars(data: PersonaData, layout: Sequence[DemoJar]) -> PersonaDat
         and pair[0].jar_code == pair[1].jar_code
         and pair[0].amount_vnd + pair[1].amount_vnd == 0
     }
+    names = {j.code: j.name for j in jars}
     transactions: list[TxSeed] = []
     salary_lines: dict[tuple[str, str], TxSeed] = {}
     for t in mapped:
         if t.transfer_key in collapsed:
             continue
-        if (
-            t.tx_type == TX_TYPE_SALARY_SPLIT
-            and t.transfer_key
-            and t.jar_code is not None
-            and t.jar_code in jar_names
-        ):
+        if t.tx_type == TX_TYPE_SALARY_SPLIT and t.transfer_key and t.jar_code in names:
+            # one salary-split line per demo jar, like confirm_salary writes it
             key = (t.transfer_key, t.jar_code)
             prior = salary_lines.get(key)
             salary_lines[key] = replace(
                 t,
                 key=f"{t.transfer_key}:{t.jar_code}",
                 amount_vnd=t.amount_vnd + (prior.amount_vnd if prior else 0),
-                note=f"Lương chia vào hũ {jar_names[t.jar_code]}",
+                note=f"Lương chia vào hũ {names[t.jar_code]}",
             )
         else:
             transactions.append(t)
     transactions.extend(salary_lines.values())
+    transactions.sort(key=lambda t: (-t.days_ago, t.local_time, t.key))
 
-    balances: Counter[str] = Counter()
-    for old in data.jars:
-        balances[JAR_ALIASES.get(old.code, old.code)] += old.balance_vnd
-    credit_due_day = data.credit_due_day
-    if data.persona == "minh":
-        # Demo: part of the daily jar was set aside for bills yesterday. The
-        # December BNPL installment falls two days before the simulated payday.
-        amount = 700_000
-        transfer = "six_jars_reserve_bills"
-        for code, signed in ((DEFAULT_SPENDING_JAR, -amount), (DEFAULT_OBLIGATION_JAR, amount)):
-            balances[code] += signed
-            transactions.append(
-                TxSeed(
-                    key=f"{transfer}:{code}",
-                    days_ago=1,
-                    local_time=time(20),
-                    kind="transfer",
-                    jar_code=code,
-                    amount_vnd=signed,
-                    merchant=None,
-                    note="Để riêng tiền trả nghĩa vụ",
-                    tx_type=TX_TYPE_JAR_TRANSFER,
-                    transfer_key=transfer,
-                )
-            )
-        credit_due_day = 3
-    jars = tuple(
-        JarSeed(
-            code=j.code,
-            name=j.name,
-            color_key=j.color_key,
-            icon_key=j.icon_key,
-            kind=j.kind,
-            split_percent=Decimal(j.split_percent),
-            balance_vnd=balances[j.code],
-            sort_order=j.sort_order,
-            goal_vnd=j.goal_vnd,
-            goal_date=j.goal_date,
-        )
-        for j in layout
-    )
     events = []
     for event in data.salary_events:
         amounts: Counter[str] = Counter()
         for code, value in event.split:
-            amounts[JAR_ALIASES.get(code, code)] += value
+            amounts[demo_jar_code(code)] += value
         events.append(replace(event, split=tuple(amounts.items())))
 
-    transactions.sort(key=lambda t: (-t.days_ago, t.local_time, t.key))
     return replace(
         data,
-        jars=jars,
+        jars=tuple(jars),
         transactions=tuple(transactions),
-        obligations=tuple(replace(ob, pay_jar=DEFAULT_OBLIGATION_JAR) for ob in data.obligations),
+        obligations=tuple(
+            replace(ob, pay_jar=demo_jar_code(ob.pay_jar) if ob.pay_jar else None)
+            for ob in data.obligations
+        ),
         salary_events=tuple(events),
-        credit_due_day=credit_due_day,
+        credit_due_day=DEMO_CREDIT_DUE_DAY.get(data.persona, data.credit_due_day),
     )
