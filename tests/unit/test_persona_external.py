@@ -342,9 +342,11 @@ def test_anh_bien_lai_da_commit_la_png_hop_le_va_dong_nhat_voi_nguon_receipts(vy
             im.verify()
 
 
-def test_tai_khoan_giamkhao3_la_vy_con_giamkhao1_2_van_la_minh():
+def test_ba_tai_khoan_giam_khao_deu_la_minh_vy_khong_gan_tai_khoan_nao():
+    # issue #8: giamkhao3 thôi là vy; vy vẫn nạp được bằng `scripts/seed_persona.py <tài khoản> --persona vy`
     m = load_accounts()["demo_accounts"]
-    assert m["giamkhao3"] == "vy" and m["giamkhao1"] == m["giamkhao2"] == "minh"
+    assert m["giamkhao1"] == m["giamkhao2"] == m["giamkhao3"] == "minh"
+    assert "vy" not in m.values()
 
 
 def test_out_of_wallet_chi_cho_persona_khai_khoi_nay():
