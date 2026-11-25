@@ -27,11 +27,12 @@ from yofina_agent.schemas import Intent
 from yofina_agent.textutil import strip_accents
 from yofina_agent.tools import classify_result
 from yofina_agent.turn import (
-    _GOAL_BAD_DATE,
     _GOAL_ADD_GOAL_JAR,
+    _GOAL_BAD_DATE,
+    _GOAL_BUFFER_NOT_PLANNED,
     _GOAL_NOT_SAVING,
-    _GOAL_USE_GOAL_JAR,
     _GOAL_UNKNOWN_JAR,
+    _GOAL_USE_GOAL_JAR,
     Turn,
 )
 from yofina_agent.writer import WRITER_SYSTEM, build_writer_prompt
@@ -411,26 +412,32 @@ THREE_JARS = [
 ]
 
 
+LONG_TERM_JAR = {"code": "tich_luy", "name": "Tích lũy dài hạn", "kind": "saving", "purpose": "long_term", "split_percent": 0}
+GOAL_JAR = {"code": "muc_tieu", "name": "Du lịch", "kind": "saving", "purpose": "goal", "goal_vnd": 6_000_000,
+            "goal_date": "2027-04-01", "split_percent": 0}
+
+
 @pytest.mark.parametrize(
-    ("rows", "note"),
+    ("rows", "jar_text", "note"),
     [
-        # ví ba hũ: chưa có hũ nào đặt mục tiêu được
-        (THREE_JARS, _GOAL_ADD_GOAL_JAR.format(name="Dự phòng")),
-        # đã có hũ mục tiêu: chỉ ra hũ đó
+        # hũ Dự phòng (`buffer`, BR-64) có mức mục tiêu riêng: không nói "không đặt mục tiêu được", không đẩy sang hũ khác (#39)
+        (THREE_JARS, "hũ Dự phòng", _GOAL_BUFFER_NOT_PLANNED.format(name="Dự phòng")),
+        ([*THREE_JARS, GOAL_JAR], "hũ Dự phòng", _GOAL_BUFFER_NOT_PLANNED.format(name="Dự phòng")),
+        # hũ tiết kiệm dài hạn: chưa có hũ mục tiêu thì chỉ chỗ thêm, có rồi thì chỉ ra hũ đó
+        ([*THREE_JARS, LONG_TERM_JAR], "hũ Tích lũy dài hạn", _GOAL_ADD_GOAL_JAR.format(name="Tích lũy dài hạn")),
         (
-            [*THREE_JARS, {"code": "muc_tieu", "name": "Du lịch", "kind": "saving", "purpose": "goal",
-                           "goal_vnd": 6_000_000, "goal_date": "2027-04-01", "split_percent": 0}],
-            _GOAL_USE_GOAL_JAR.format(name="Dự phòng", goal_jars="Du lịch"),
+            [*THREE_JARS, LONG_TERM_JAR, GOAL_JAR], "hũ Tích lũy dài hạn",
+            _GOAL_USE_GOAL_JAR.format(name="Tích lũy dài hạn", goal_jars="Du lịch"),
         ),
     ],
 )  # fmt: skip
-def test_lo_trinh_muc_tieu_o_hu_du_phong_noi_dung_tinh_huong(monkeypatch, rows, note):
-    """Hũ Dự phòng LÀ hũ tiết kiệm, chỉ không đặt mục tiêu được: câu báo nói đúng điều đó và chỉ chỗ đặt mục tiêu, không nói
-    "không phải hũ tiết kiệm"."""
+def test_lo_trinh_muc_tieu_o_hu_tiet_kiem_khong_phai_hu_muc_tieu_noi_dung_tinh_huong(monkeypatch, rows, jar_text, note):
+    """Hũ Dự phòng và hũ dài hạn LÀ hũ tiết kiệm, chỉ không phải hũ mục tiêu: câu báo nói đúng tình huống của từng loại, không nói
+    "không phải hũ tiết kiệm"; mục tiêu không gửi cho bộ tối ưu và lộ trình vẫn lập."""
     tools = roadmap_tools()
     tools.results["get_jar_balances"] = lambda _a: classify_result("get_jar_balances", mcp_ok(_jars_payload(rows)))
     events, _, _ = goal_turn(
-        monkeypatch, tools=tools, roadmap_action="create", amount_vnd=3_000_000, jar_text="hũ Dự phòng", date_text="3 tháng nữa"
+        monkeypatch, tools=tools, roadmap_action="create", amount_vnd=3_000_000, jar_text=jar_text, date_text="3 tháng nữa"
     )
     check_agui_order(events)
     assert texts_of(events)[0] == note

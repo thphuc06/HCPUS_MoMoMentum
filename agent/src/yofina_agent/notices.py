@@ -188,6 +188,8 @@ ROADMAP_REASON_LABELS: dict[str, str] = {
     "step_edited": "bạn sửa một bước",
 }
 ROADMAP_REASON_FALLBACK = "có thay đổi"
+#: Người dùng nêu mục tiêu lộ trình (số tiền hoặc hạn) mà chưa rõ hũ nào: đúng một câu hỏi, chip là các hũ gắn được mục tiêu lộ trình.
+ROADMAP_GOAL_JAR_QUESTION = "Mục tiêu này thuộc hũ nào để mình lập lộ trình?"
 #: Bản vừa lưu làm bản đề xuất đang chờ bị bỏ (`discarded`). {old}: số phiên bản bị thay; {reason}: nhãn lý do ở trên;
 #: {active}: số phiên bản đang dùng.
 ROADMAP_PROPOSAL_REPLACED_TITLE = "Đã thay bản đề xuất đang chờ"

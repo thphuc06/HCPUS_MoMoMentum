@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from yofina_agent.clarify import CLARIFY_INTENTS, missing_slot
 from yofina_agent.fallback import _CREDIT, _has, _jar_phrase, classify_by_rules
 from yofina_agent.schemas import IntentResult
-from yofina_agent.textutil import normalize, parse_amount_vnd
+from yofina_agent.textutil import goal_date_phrase, normalize, parse_amount_vnd
 from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
 from yofina_core.resilience import load_shock_set
 
@@ -129,6 +129,9 @@ def build_router_prompt(question: str, history: str) -> str:
 # --- ghép câu trả lời cụt với câu đang chờ (bằng mã) -------------------------------------------
 #: Ý định có thể đang chờ đủ tham số qua khối `clarify` (cùng tập với `pending_intent` của hợp đồng): đúng tập được hỏi lại.
 PENDING_INTENTS = CLARIFY_INTENTS
+#: Ý định có câu đang chờ ghép được với câu trả lời cụt: các ý định trên, và lộ trình có mục tiêu (số tiền hoặc hạn) mà handler lộ trình
+#: hỏi lại hũ của mục tiêu (#39). Lộ trình không có trong `pending_intent` của hợp đồng khối nên khối hỏi lại của nó không mang trường đó.
+_MERGE_INTENTS = PENDING_INTENTS | {"roadmap"}
 #: Tham số mang qua lượt trả lời câu hỏi lại. Chỉ điền vào ô router để trống; giá trị mới (khác None) luôn thắng.
 _CARRY_KEYS = (
     "amount_vnd",
@@ -138,6 +141,7 @@ _CARRY_KEYS = (
     "funding",
     "label",
     "scenario_kind",
+    "date_text",
 )
 
 
@@ -157,12 +161,20 @@ def is_fragment(text: str) -> bool:
 
 
 def _code_params(text: str) -> dict[str, Any]:
-    """Tham số đọc được bằng mã từ một câu (số tiền, hũ, cách trả, món/người nhận). Chỉ trả khóa có giá trị."""
+    """Tham số đọc được bằng mã từ một câu (số tiền, hũ, cách trả, món/người nhận; với câu lộ trình có mục tiêu thêm cụm chỉ hạn).
+    Chỉ trả khóa có giá trị."""
     r = classify_by_rules(text)
     out: dict[str, Any] = {}
     if r is not None and r.intent in PENDING_INTENTS:
         out = {k: v for k, v in r.params.model_dump().items() if k in _CARRY_KEYS and v is not None}
         out["_intent"] = r.intent
+    elif r is not None and r.intent == "roadmap":
+        # Lộ trình có mục tiêu (số tiền hoặc hạn): handler có thể đang hỏi hũ của mục tiêu. Câu lộ trình không nêu mục tiêu (xem, vì
+        # sao...) không thành câu đang chờ.
+        goal = {"amount_vnd": parse_amount_vnd(text), "date_text": goal_date_phrase(text)}
+        if any(v is not None for v in goal.values()):
+            out = {k: v for k, v in {**r.params.model_dump(), **goal}.items() if k in _CARRY_KEYS and v is not None}
+            out["_intent"] = r.intent
     norm = normalize(text)
     if "amount_vnd" not in out and (amount := parse_amount_vnd(text)) is not None:
         out["amount_vnd"] = amount
@@ -214,12 +226,16 @@ def merge_pending(
     if not pending or not is_fragment(question):
         return routed
     intent = routed.intent
-    if intent == "lookup" and pending.get("_intent") in PENDING_INTENTS:
+    if intent == "lookup" and pending.get("_intent") in _MERGE_INTENTS:
         # "Hũ Hóa đơn" đứng riêng dễ bị xếp là tra số dư; đang có câu chờ trả lời thì đó là câu trả lời cho câu chờ.
         intent = pending["_intent"]
-    if intent not in PENDING_INTENTS:
+    if intent not in _MERGE_INTENTS or (intent == "roadmap" and pending.get("_intent") != "roadmap"):
+        # lộ trình chỉ ghép với câu lộ trình đang chờ (không lấy số tiền của câu what-if đang chờ làm mục tiêu lộ trình)
         return routed
     new = _code_params(question)
+    if intent == "roadmap" and not (routed.params.jar_text or new.get("jar_text")):
+        # lộ trình chỉ hỏi lại hũ của mục tiêu: câu cụt không nêu hũ nào ("Giữ bản cũ") không phải câu trả lời cho câu hỏi đó
+        return routed
     params = routed.params.model_dump() if intent == routed.intent else {}
     filled = False
     for key in _CARRY_KEYS:

@@ -204,7 +204,7 @@ def test_lo_trinh_co_muc_tieu_trich_nhu_router(text, amount, jar, date_text, tar
     # tên hũ vẫn ánh xạ bằng dữ liệu; cụm hạn đổi ra ngày bằng đúng tiện ích handler dùng
     assert resolve_jar(p.jar_text, JARS).code == jar
     assert parse_goal_date(p.date_text, TODAY) == target_date
-    assert resolve_clarify(r) is None  # lộ trình không bao giờ hỏi lại
+    assert resolve_clarify(r) is None  # đủ số tiền, hũ, hạn: không hỏi lại (handler lộ trình chỉ hỏi hũ khi thiếu)
 
 
 @pytest.mark.parametrize(

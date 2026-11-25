@@ -14,7 +14,7 @@ def test_prompt_router_day_trich_muc_tieu_lo_trinh_va_khong_tu_doi_ngay():
     for key in ("amount_vnd", "jar_text", "date_text", '"create"'):
         assert key in rule
     assert "không tự đổi thành ngày" in rule
-    # roadmap vẫn không bao giờ hỏi lại: mã bỏ câu hỏi lại của router (clarify.CLARIFY_INTENTS)
+    # mã bỏ câu hỏi lại router đặt cho roadmap (clarify.CLARIFY_INTENTS); handler lộ trình tự hỏi hũ khi mục tiêu chưa có hũ
     from yofina_agent.clarify import resolve_clarify
 
     asked = IntentResult.model_validate(
