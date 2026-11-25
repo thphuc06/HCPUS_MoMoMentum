@@ -298,6 +298,89 @@ export type JarTemplate = z.infer<typeof JarTemplate>
 export const JarTemplatesResponse = z.object({ templates: z.array(JarTemplate).max(20) })
 export type JarTemplatesResponse = z.infer<typeof JarTemplatesResponse>
 
+// ---------------------------------------------------------------- đề xuất tỷ lệ theo số đã khai (onboarding bước 3)
+
+export const SplitProposalKnownItem = z.object({
+  name: z.string().min(1).max(80),
+  amount_vnd: VndPositive,
+  needed_date: IsoDate,
+})
+export type SplitProposalKnownItem = z.infer<typeof SplitProposalKnownItem>
+export const SplitProposalRequest = z.object({ sinking_items: z.array(SplitProposalKnownItem).max(40).optional() })
+export type SplitProposalRequest = z.infer<typeof SplitProposalRequest>
+
+export const SplitProposalJar = z.object({
+  code: JarCode,
+  name: z.string().min(1).max(40),
+  kind: z.enum(['spending', 'saving', 'obligation']),
+  purpose: JarPurpose.optional(),
+  split_before: z.number().min(0).max(100),
+  split_after: z.number().min(0).max(100),
+  amount_before_vnd: Vnd.optional(),
+  amount_after_vnd: Vnd.optional(),
+  delta_vnd: z.int().optional(),
+})
+export type SplitProposalJar = z.infer<typeof SplitProposalJar>
+
+const ProposalDue = z.object({ label: z.string().max(80), date: IsoDate, amount_vnd: Vnd })
+export const SplitProposalCheck = z.object({
+  jar_code: JarCode,
+  jar_name: z.string().max(40),
+  payday: IsoDate,
+  due_vnd: Vnd,
+  available_vnd: z.int(),
+  items: z.array(ProposalDue).max(20),
+  shortfall: z.object({ label: z.string().max(80), date: IsoDate, shortfall_vnd: VndPositive }).optional(),
+})
+export type SplitProposalCheck = z.infer<typeof SplitProposalCheck>
+
+export const SplitProposalResponse = z.object({
+  app_date: IsoDate,
+  as_of: IsoDateTime,
+  status: z.enum(['no_salary', 'salary_mismatch', 'no_obligation_jar', 'no_declarations', 'aligned', 'proposed', 'infeasible']),
+  salary_vnd: VndPositive.optional(),
+  obligation_basis: z.enum(['declared', 'template']).optional(),
+  obligations_monthly_vnd: Vnd.optional(),
+  required_percent: z.number().min(0).optional(),
+  reasons: z.array(z.object({ jar_code: z.string().max(32), text: z.string().min(1).max(160) })).max(5).optional(),
+  jars: z.array(SplitProposalJar).max(21),
+  sinking_items: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(80),
+        amount_vnd: VndPositive,
+        needed_date: IsoDate,
+        remaining_vnd: Vnd,
+        paydays: z.int().min(0),
+        per_payday_vnd: VndPositive.optional(),
+      }),
+    )
+    .max(40)
+    .optional(),
+  checks: z.array(SplitProposalCheck).max(4).optional(),
+  /** Tham số `save_jars` do server dựng, chỉ có khi `status` là `proposed`; giao diện gửi nguyên văn. */
+  params: z.object({ jars: z.array(z.record(z.string(), z.unknown())).min(1).max(20) }).optional(),
+  priority_obligations: z
+    .array(
+      z.object({
+        id: Uuid,
+        name: z.string().max(80),
+        kind: z.enum(OBLIGATION_KINDS),
+        cycle: z.enum(OBLIGATION_CYCLES),
+        amount_vnd: VndPositive,
+        monthly_vnd: Vnd,
+        is_essential: z.boolean(),
+      }),
+    )
+    .max(20)
+    .optional(),
+  salary_check: z
+    .object({ salary_event_id: Uuid, received_vnd: VndPositive, declared_vnd: VndPositive, deviation_percent: z.number() })
+    .optional(),
+  pending_salary: z.object({ salary_event_id: Uuid, amount_vnd: VndPositive }).optional(),
+})
+export type SplitProposalResponse = z.infer<typeof SplitProposalResponse>
+
 export type TransactionQuery = {
   jar?: string
   kind?: 'expense' | 'income' | 'transfer'

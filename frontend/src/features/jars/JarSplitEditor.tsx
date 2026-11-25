@@ -5,15 +5,17 @@ import { Input } from '@/components/ui/input'
 import { MoneyInput } from '@/components/MoneyInput'
 import { JarIcon } from '@/components/JarIcon'
 import { jarColor } from '@/components/jarTheme'
-import { useWriteFlow } from '@/api/useWrite'
-import type { ActionResponse, JarFull, JarPurpose, JarTemplate } from '@/api/schemas'
+import type { ActionResponse, JarFull, JarPurpose, JarTemplate, ToolParams } from '@/api/schemas'
 import { formatPercent } from '@/lib/format'
 import { isChanged, isTotalOk, parsePercent, rowFromTemplate, rowsFromJars, saveJarsParams, totalHundredths, type JarRowState } from './params'
+import { SaveJarsReview } from './SaveJarsReview'
 
 /**
  * Chỉnh hũ và tỷ lệ chia lương (O2 của onboarding và màn "Thêm hoặc sửa hũ"): sửa tỷ lệ và tên, thêm hũ từ mẫu
  * `GET /jar-templates`, bỏ hũ (chỉ khi hũ không còn tiền; server kiểm lại). Tổng tỷ lệ phải đúng 100% mới lưu được.
- * Lưu = `save_jars` (thay cả danh sách) qua /confirmations -> /actions. Không có đổi gì thì `onUnchanged` thay vì gọi ghi.
+ * Bấm lưu thì hiện bản xem trước của server (`SaveJarsReview`) để chọn Đồng ý, Sửa số hoặc Không đổi; chỉ Đồng ý mới ghi
+ * `save_jars` (thay cả danh sách) qua /confirmations -> /actions. Không có đổi gì thì `onUnchanged` thay vì gọi ghi.
+ * `initialRows` (tùy chọn): bắt đầu từ tỷ lệ server đã đề xuất thay vì tỷ lệ đang đặt.
  */
 const PURPOSE_LABEL: Record<JarPurpose, string> = {
   buffer: 'Dự phòng',
@@ -30,6 +32,7 @@ export function JarSplitEditor({
   onSkip,
   submitLabel = 'Lưu',
   skipLabel,
+  initialRows,
 }: {
   jars: JarFull[]
   templates: JarTemplate[]
@@ -38,9 +41,10 @@ export function JarSplitEditor({
   onSkip?: () => void
   submitLabel?: string
   skipLabel?: string
+  initialRows?: JarRowState[]
 }) {
-  const [rows, setRows] = useState<JarRowState[]>(() => rowsFromJars(jars))
-  const write = useWriteFlow()
+  const [rows, setRows] = useState<JarRowState[]>(() => initialRows ?? rowsFromJars(jars))
+  const [review, setReview] = useState<ToolParams | null>(null)
   const total = totalHundredths(rows)
   const ok = isTotalOk(rows)
   const namesOk = rows.length > 0 && rows.every((r) => r.name.trim().length > 0)
@@ -52,10 +56,24 @@ export function JarSplitEditor({
 
   const setRow = (i: number, p: Partial<JarRowState>) => setRows((rs) => rs.map((r, k) => (k === i ? { ...r, ...p } : r)))
 
-  const save = async () => {
+  const save = () => {
     if (!changed) return onUnchanged?.()
-    const r = await write.submit('save_jars', saveJarsParams(rows))
-    if (r) onSaved(r)
+    setReview(saveJarsParams(rows))
+  }
+
+  if (review) {
+    return (
+      <SaveJarsReview
+        params={review}
+        onSaved={onSaved}
+        onEdit={() => setReview(null)}
+        onKeep={() => {
+          setReview(null)
+          setRows(rowsFromJars(jars))
+          onUnchanged?.()
+        }}
+      />
+    )
   }
 
   return (
@@ -182,18 +200,12 @@ export function JarSplitEditor({
         </div>
       )}
 
-      {write.error && (
-        <p role="alert" className="mt-3 rounded-2xl bg-bad-bg px-3 py-2 text-small font-semibold text-bad-fg">
-          {write.error.message}
-        </p>
-      )}
-
       <div className="mt-5 flex flex-col gap-3">
-        <Button type="button" disabled={!ok || !namesOk || !targetsOk || write.working || write.phase === 'blocked' || (!changed && !onUnchanged)} onClick={() => void save()} aria-busy={write.working}>
-          {write.working ? 'Đang lưu…' : submitLabel}
+        <Button type="button" disabled={!ok || !namesOk || !targetsOk || (!changed && !onUnchanged)} onClick={save}>
+          {submitLabel}
         </Button>
         {onSkip && (
-          <Button type="button" variant="ghost" onClick={onSkip} disabled={write.working}>
+          <Button type="button" variant="ghost" onClick={onSkip}>
             {skipLabel ?? 'Bỏ qua'}
           </Button>
         )}

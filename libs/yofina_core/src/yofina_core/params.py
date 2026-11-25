@@ -495,6 +495,32 @@ def jar_commitments(jar: Mapping[str, Any], old: Mapping[str, Any]) -> dict[str,
     return {"purpose": purpose, "goal_vnd": goal_vnd, "goal_date": goal_date, "sinking_items": items}
 
 
+SINKING_ITEMS_MAX = 40
+
+
+def normalize_sinking_items(raw: Any) -> list[dict[str, Any]]:
+    """Khoản của Quỹ dồn (tên, số tiền, ngày cần): tên không trùng (không phân biệt hoa thường), tối đa 40 khoản, giữ thứ tự.
+
+    Dùng chung `save_jars` và đề xuất tỷ lệ của onboarding (khoản biết trước trong 12 tháng tới)."""
+    if not isinstance(raw, list) or len(raw) > SINKING_ITEMS_MAX:
+        raise ParamsError(f"sinking_items phải là danh sách tối đa {SINKING_ITEMS_MAX} khoản")
+    entries: list[dict[str, Any]] = []
+    names: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, Mapping) or set(entry) != {"name", "amount_vnd", "needed_date"}:
+            raise ParamsError("Khoản Quỹ dồn cần tên, số tiền và ngày cần")
+        title = _text("sinking_items.name", entry["name"], max_len=80)
+        if title is None or title.casefold() in names:
+            raise ParamsError("Tên khoản Quỹ dồn phải có và không được trùng")
+        names.add(title.casefold())
+        entries.append({
+            "name": title,
+            "amount_vnd": _amount("sinking_items.amount_vnd", entry["amount_vnd"]),
+            "needed_date": _iso_date("sinking_items.needed_date", entry["needed_date"]).isoformat(),
+        })
+    return entries
+
+
 # --- save_jars ------------------------------------------------------------------------------------------
 def normalize_save_jars(params: Mapping[str, Any], ctx: NormContext | None) -> dict[str, Any]:
     raw = params.get("jars")
@@ -534,26 +560,7 @@ def normalize_save_jars(params: Mapping[str, Any], ctx: NormContext | None) -> d
         if gdate is not None:
             jar["goal_date"] = _iso_date("goal_date", gdate).isoformat()
         if "sinking_items" in item:
-            raw_items = item["sinking_items"]
-            if not isinstance(raw_items, list) or len(raw_items) > 40:
-                raise ParamsError("sinking_items phải là danh sách tối đa 40 khoản")
-            entries = []
-            names: set[str] = set()
-            for entry in raw_items:
-                if not isinstance(entry, Mapping) or set(entry) != {
-                    "name", "amount_vnd", "needed_date"
-                }:
-                    raise ParamsError("Khoản Quỹ dồn cần tên, số tiền và ngày cần")
-                title = _text("sinking_items.name", entry["name"], max_len=80)
-                if title is None or title.casefold() in names:
-                    raise ParamsError("Tên khoản Quỹ dồn phải có và không được trùng")
-                names.add(title.casefold())
-                entries.append({
-                    "name": title,
-                    "amount_vnd": _amount("sinking_items.amount_vnd", entry["amount_vnd"]),
-                    "needed_date": _iso_date("sinking_items.needed_date", entry["needed_date"]).isoformat(),
-                })
-            jar["sinking_items"] = entries
+            jar["sinking_items"] = normalize_sinking_items(item["sinking_items"])
         if given_code is None or (ctx is not None and given_code not in ctx.jar_codes):
             jar_commitments(jar, {})
         jars.append(jar)

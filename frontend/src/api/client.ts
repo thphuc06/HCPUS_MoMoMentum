@@ -20,6 +20,7 @@ import {
   ProfileResponse,
   ResetResponse,
   SalaryEventsResponse,
+  SplitProposalResponse,
   TransactionsResponse,
   TxTypesResponse,
   INGEST_TOOL_NAMES,
@@ -28,6 +29,7 @@ import {
   type FeedbackRequest,
   type CancelConfirmationRequest,
   type ConfirmationRequest,
+  type SplitProposalRequest,
   type TransactionQuery,
 } from './schemas'
 import {
@@ -72,6 +74,8 @@ export type ApiClient = ReturnType<typeof createRoadmapApi> & ReturnType<typeof 
   getCreditLine(): Promise<CreditLineResponse>
   listSalaryEvents(): Promise<SalaryEventsResponse>
   listJarTemplates(): Promise<JarTemplatesResponse>
+  /** Tỷ lệ chia lương đề xuất theo số đã khai (chỉ đọc, không ghi; POST để gửi khoản biết trước chưa lưu). */
+  proposeJarSplit(req: SplitProposalRequest): Promise<SplitProposalResponse>
   createConfirmation(req: ConfirmationRequest): Promise<ConfirmationResponse>
   /** Ghi việc người dùng bấm "Không" với một đề nghị trong chat (server lưu `cancelled`). */
   cancelConfirmation(req: CancelConfirmationRequest): Promise<CancelConfirmationResponse>
@@ -197,6 +201,7 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     getCreditLine: () => call('GET', '/credit-line', CreditLineResponse),
     listSalaryEvents: () => call('GET', '/salary-events', SalaryEventsResponse),
     listJarTemplates: () => call('GET', '/jar-templates', JarTemplatesResponse),
+    proposeJarSplit: (req) => call('POST', '/jars/split-proposal', SplitProposalResponse, req),
     createConfirmation: (req) => call('POST', confirmPath(req.tool), ConfirmationResponse, req),
     cancelConfirmation: (req) => call('POST', '/confirmations/cancel', CancelConfirmationResponse, req),
     applyAction: (req) => call('POST', actionPath(req.tool), ActionResponse, req),

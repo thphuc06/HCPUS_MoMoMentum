@@ -178,6 +178,8 @@ def _dispatch(
         return 200, service.salary_events_response(sub, status=_query(event).get("status"))
     if route == "GET /jar-templates":
         return 200, service.jar_templates_response()
+    if route == "POST /jars/split-proposal":
+        return 200, service.split_proposal_response(sub, _body(event))
     if route.startswith("GET /traces/"):
         return 200, service.trace_response(sub, _path_param(event, "trace_id", "/traces/"))
     if route.startswith("GET /forecasts/"):

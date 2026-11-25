@@ -430,6 +430,51 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '500':
           $ref: '#/components/responses/InternalError'
+  /jars/split-proposal:
+    post:
+      tags: [wallet]
+      operationId: proposeJarSplit
+      summary: Tỷ lệ chia lương đề xuất theo số đã khai (onboarding bước 3)
+      x-lambda: ledger
+      description: |
+        Chỉ đọc, không ghi gì (dùng POST để có thân yêu cầu). Server tính tỷ lệ hũ Nghĩa vụ = tổng nghĩa vụ đã khai trả từ
+        hũ này, quy về tháng (tuần x 52/12, năm / 12, khoản một lần không lặp), chia lương ĐÃ KHAI, làm tròn lên điểm
+        nguyên. `sinking_items` là các khoản biết trước trong 12 tháng tới CHƯA lưu: có khai thì đề xuất Quỹ dồn với tỷ lệ =
+        tổng (phần còn thiếu / số kỳ lương còn lại trước ngày cần) / lương, làm tròn lên. Phần chênh lấy từ hoặc trả về Chi
+        hằng ngày trước, rồi Dự phòng không xuống dưới sàn `buffer_min_split_percent`.
+
+        `status`: `proposed` (lệch từ 1 điểm hoặc có khoản biết trước mới; `params` là tham số `save_jars` sẵn để xác nhận
+        qua `POST /confirmations` rồi `POST /actions`), `aligned` (không cần đổi), `no_declarations` (chưa khai gì, giữ tỷ lệ
+        mẫu, `obligation_basis` là `template`), `infeasible` (Nghĩa vụ + Quỹ dồn + sàn Dự phòng vượt 100%: không có `params`,
+        `priority_obligations` theo thứ tự nhà ở, điện nước, rồi nợ; giao diện mở lộ trình, không gợi ý cắt khoản thiết yếu),
+        `salary_mismatch` (lương nhận gần nhất lệch lương đã khai quá ngưỡng BR-12: hỏi cập nhật lương trước), `no_salary`,
+        `no_obligation_jar`. `checks` so các khoản đến hạn trước ngày lương của kỳ hiện tại và kỳ kế tiếp với số dư cộng
+        phần chia, nêu khoản đầu tiên bị thiếu và số thiếu. Mọi số do server tính (BR-47, BR-48).
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SplitProposalRequest'
+      responses:
+        '200':
+          description: Đề xuất (có thể là không cần đổi).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SplitProposalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /jars/{jar_code}:
     get:
       tags: [wallet]
@@ -2753,6 +2798,240 @@ components:
           maximum: 100
         is_default:
           type: boolean
+    SplitProposalRequest:
+      type: object
+      additionalProperties: false
+      description: Khoản biết trước trong 12 tháng tới (chưa lưu). Vắng thì chỉ tính theo nghĩa vụ đã khai.
+      properties:
+        sinking_items:
+          type: array
+          maxItems: 40
+          items:
+            $ref: '#/components/schemas/SplitProposalKnownItem'
+    SplitProposalKnownItem:
+      type: object
+      additionalProperties: false
+      required: [name, amount_vnd, needed_date]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        amount_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        needed_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+    SplitProposalJar:
+      type: object
+      additionalProperties: false
+      required: [code, name, kind, split_before, split_after]
+      properties:
+        code:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        kind:
+          type: string
+          enum: [spending, saving, obligation]
+        purpose:
+          type: string
+          enum: [buffer, sinking, goal, long_term]
+        split_before:
+          type: number
+          minimum: 0
+          maximum: 100
+        split_after:
+          type: number
+          minimum: 0
+          maximum: 100
+        amount_before_vnd:
+          description: Phần lương mỗi kỳ trước khi đổi (cùng quy tắc chia của `confirm_salary`).
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        amount_after_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        delta_vnd:
+          type: integer
+    SplitProposalSinkingItem:
+      type: object
+      additionalProperties: false
+      required: [name, amount_vnd, needed_date, remaining_vnd, paydays]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        amount_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        needed_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        remaining_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        paydays:
+          type: integer
+          minimum: 0
+        per_payday_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+    SplitProposalCheck:
+      type: object
+      additionalProperties: false
+      required: [jar_code, jar_name, payday, due_vnd, available_vnd, items]
+      properties:
+        jar_code:
+          $ref: '../blocks/envelope.schema.json#/$defs/JarCode'
+        jar_name:
+          type: string
+          maxLength: 40
+        payday:
+          description: Ngày lương kết thúc kỳ; các khoản tính là khoản đến hạn TRƯỚC ngày này.
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        due_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        available_vnd:
+          type: integer
+        items:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [label, date, amount_vnd]
+            properties:
+              label:
+                type: string
+                maxLength: 80
+              date:
+                $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+              amount_vnd:
+                $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        shortfall:
+          type: object
+          additionalProperties: false
+          required: [label, date, shortfall_vnd]
+          properties:
+            label:
+              type: string
+              maxLength: 80
+            date:
+              $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+            shortfall_vnd:
+              $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+    SplitProposalResponse:
+      type: object
+      additionalProperties: false
+      required: [app_date, as_of, status, jars]
+      properties:
+        app_date:
+          $ref: '../blocks/envelope.schema.json#/$defs/IsoDate'
+        as_of:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [no_salary, salary_mismatch, no_obligation_jar, no_declarations, aligned, proposed, infeasible]
+        salary_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+        obligation_basis:
+          type: string
+          enum: [declared, template]
+          description: '`template`: hũ Nghĩa vụ chưa có số khai, đang giữ tỷ lệ mẫu.'
+        obligations_monthly_vnd:
+          $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+        required_percent:
+          type: number
+          minimum: 0
+        reasons:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [jar_code, text]
+            properties:
+              jar_code:
+                type: string
+                maxLength: 32
+              text:
+                type: string
+                minLength: 1
+                maxLength: 160
+        jars:
+          type: array
+          maxItems: 21
+          items:
+            $ref: '#/components/schemas/SplitProposalJar'
+        sinking_items:
+          type: array
+          maxItems: 40
+          items:
+            $ref: '#/components/schemas/SplitProposalSinkingItem'
+        checks:
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/SplitProposalCheck'
+        params:
+          type: object
+          description: Tham số `save_jars` (thay cả danh sách hũ) chỉ có khi `status` là `proposed`.
+          required: [jars]
+          properties:
+            jars:
+              type: array
+              minItems: 1
+              maxItems: 20
+              items:
+                type: object
+        priority_obligations:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, kind, cycle, amount_vnd, monthly_vnd, is_essential]
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+                maxLength: 80
+              kind:
+                type: string
+                enum: [bnpl, loan, rent, bill, subscription]
+              cycle:
+                type: string
+                enum: [once, weekly, monthly, yearly]
+              amount_vnd:
+                $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+              monthly_vnd:
+                $ref: '../blocks/envelope.schema.json#/$defs/Vnd'
+              is_essential:
+                type: boolean
+        salary_check:
+          type: object
+          additionalProperties: false
+          required: [salary_event_id, received_vnd, declared_vnd, deviation_percent]
+          properties:
+            salary_event_id:
+              type: string
+              format: uuid
+            received_vnd:
+              $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+            declared_vnd:
+              $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
+            deviation_percent:
+              type: number
+        pending_salary:
+          type: object
+          additionalProperties: false
+          required: [salary_event_id, amount_vnd]
+          properties:
+            salary_event_id:
+              type: string
+              format: uuid
+            amount_vnd:
+              $ref: '../blocks/envelope.schema.json#/$defs/VndPositive'
     JarTemplatesResponse:
       type: object
       required: [templates]

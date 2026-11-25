@@ -11,8 +11,11 @@ import { useOverview } from '@/api/OverviewProvider'
 import { useWriteFlow } from '@/api/useWrite'
 import { useChatLauncher } from '@/chat/launcher'
 import { JarSplitEditor } from '@/features/jars/JarSplitEditor'
+import { KnownItemsEditor } from '@/features/jars/KnownItemsEditor'
+import { SplitProposalCard } from '@/features/jars/SplitProposalCard'
 import { ObligationFormView } from '@/features/obligations/ObligationForm'
 import { CYCLE_LABEL, KIND_LABEL } from '@/features/obligations/params'
+import type { SplitProposalKnownItem } from '@/api/schemas'
 import { formatVnd } from '@/lib/format'
 import { cn } from '@/lib/cn'
 
@@ -190,6 +193,10 @@ function ObligationsStep({ onBack, onFinish }: { onBack: () => void; onFinish: (
   const ov = useOverview()
   const list = useApiResource((api) => api.listObligations(), [])
   const [adding, setAdding] = useState(false)
+  const [known, setKnown] = useState<SplitProposalKnownItem[]>([])
+  const [saved, setSaved] = useState(false)
+  // Đề xuất tỷ lệ do server tính từ nghĩa vụ đã khai (tự tải lại sau mỗi lần ghi) và khoản biết trước chưa lưu.
+  const proposal = useApiResource((api) => api.proposeJarSplit(known.length > 0 ? { sinking_items: known } : {}), [known])
   const declared = (list.data?.obligations ?? []).filter((o) => o.source === 'declared')
   return (
     <StepShell step={3} onBack={onBack}>
@@ -237,6 +244,33 @@ function ObligationsStep({ onBack, onFinish }: { onBack: () => void; onFinish: (
         <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
         Khoản trả sau không cần khai: tự sinh khi bạn mua bằng hạn mức Trả sau.
       </p>
+
+      <KnownItemsEditor items={known} onChange={setKnown} today={ov.data?.app_date} />
+
+      {saved && (
+        <p role="status" data-testid="split-saved" className="mt-4 rounded-2xl bg-ok-bg px-4 py-3 text-small font-semibold text-ok-fg">
+          Đã lưu tỷ lệ mới. Dự báo đang tính lại theo tỷ lệ này.
+        </p>
+      )}
+      {proposal.status === 'error' && !proposal.data && (
+        <p className="mt-4 text-small text-ink-2" data-testid="split-proposal-error">
+          Chưa tính được tỷ lệ đề xuất: {proposal.error.message}{' '}
+          <button type="button" className="font-semibold text-brand-text underline" onClick={() => void proposal.reload()}>
+            Thử lại
+          </button>
+        </p>
+      )}
+      {proposal.data && ov.data && (
+        <SplitProposalCard
+          key={`${proposal.data.status}:${JSON.stringify(proposal.data.params ?? null)}`}
+          proposal={proposal.data}
+          jars={ov.data.jars}
+          onSaved={() => {
+            setSaved(true)
+            setKnown([])
+          }}
+        />
+      )}
 
       <Button type="button" className="mt-6 w-full" onClick={onFinish}>
         {declared.length > 0 ? 'Xong, xem dự báo' : 'Xong'}
