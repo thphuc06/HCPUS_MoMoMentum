@@ -568,6 +568,24 @@ def test_lich_su_minh_khong_co_diem_gay_hanh_vi():
     assert 0.8 < now / before < 1.4
 
 
+@pytest.mark.parametrize("persona", PERSONAS)
+def test_hu_chi_hang_ngay_cua_vi_demo_khong_co_diem_gay_hanh_vi(persona):
+    """Hũ Chi hằng ngày của ví demo không tạo dấu hiệu đổi hành vi nào (không chen vào cảnh 4): chuỗi chi lặt vặt mỗi ngày (chi trừ
+    tiền hũ, không gắn nghĩa vụ, như `app_get_daily_spend`) qua bộ phát hiện của sản phẩm không xác nhận, không nghi."""
+    import numpy as np
+
+    from yofina_ml import change as ch
+
+    params = ch.load_params()
+    _, demo = _demo(persona)
+    daily = np.zeros(demo.history_days)
+    for t in demo.transactions:
+        if t.jar_code == DAILY and t.kind == "expense" and t.funding_source == "jar" and t.obligation_key is None:
+            daily[demo.history_days - t.days_ago] += -t.amount_vnd
+    s = ch.prepare_weekly(daily, params)
+    assert s.skipped or (ch.detect_confirmed(s, params) is None and ch.detect_suspect(s, params) is None)
+
+
 def test_minh_chi_deu_nhu_ban_47_ngay():
     # số khoản chi mỗi ngày giữ như bản 47 ngày (Ăn uống 110, Đi lại 14 khoản trong 47 ngày)
     d = generate("minh", anchor=ANCHOR)

@@ -17,7 +17,7 @@ from yofina_core.wallet import DEFAULT_SPENDING_JAR
 from yofina_forecast.allocation import AllocationEngine
 from yofina_forecast.inputs import build_inputs
 from yofina_forecast.repo import ForecastRepo
-from yofina_forecast.resilience import ResilienceEngine
+from yofina_forecast.resilience import ResilienceEngine, variable_monthly_spend
 from yofina_forecast.runner import Pipeline
 from yofina_forecast.scenario import ScenarioEngine
 from yofina_forecast.stress import StressEngine
@@ -604,6 +604,15 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
     assert after["runout_date"] < daily["payday_date"].isoformat()
 
     gathered = ResilienceEngine(pipeline).gather(user, env.clock())
+    # điểm chống chịu: mỗi hũ tính một lần (Chi hằng ngày cộng số dư và chi lặt vặt của chính nó, không đếm lại chi của Ăn uống)
+    demo_jars = _read_jars(env, user)
+    assert gathered.inputs.liquid_balance_vnd == sum(j["balance_vnd"] for j in demo_jars)
+    window, month_days = settings.resilience_window_days, settings.allocation.month_days
+    per_jar = {j["code"]: variable_monthly_spend(j.get("spend") or [], window, month_days) for j in ctx.jars}
+    assert per_jar[DEFAULT_SPENDING_JAR] > 0
+    assert gathered.inputs.variable_spend_vnd == round(
+        sum(per_jar[j["code"]] for j in demo_jars) * window / month_days
+    )
     facts = facts_from_rows(
         today=gathered.app_date,
         user=env.repo.user_row(user),
@@ -611,7 +620,7 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
         obligations=gathered.obligations,
         window_days=30,
     )
-    assert facts.emergency_fund_vnd() == 2_700_000
+    assert facts.emergency_fund_vnd() == 2_700_000  # quỹ dự phòng chỉ là hũ `buffer`, không cộng Chi hằng ngày
     assert gathered.emergency_jar_code == "du_phong"
     stress = StressEngine(pipeline).run(user, "om_mot_tuan")["data"]
     assert stress["emergency_jar"]["code"] == "du_phong"

@@ -1,10 +1,11 @@
-"""Cảnh 1–3 của kịch bản demo trên ví demo (issue #39), engine thật trên PostgreSQL cục bộ: `POST /demo/reset` của `minh` (bộ hũ demo:
-Nghĩa vụ, Dự phòng cộng Ăn uống, Đi lại, Giải trí, Mục tiêu, Đầu tư), ngày mô phỏng 21/11/2026, pipeline dự báo, what-if, cú sốc với
-cùng số đường như cấu hình CDK (10.000 đường đầy đủ, 5.000 đường cho what-if). Không gọi AWS, không gọi model.
+"""Cảnh 1–3 của kịch bản demo trên ví demo (issue #39), engine thật trên PostgreSQL cục bộ: `POST /demo/reset` của `minh` (bộ hũ demo từ
+26/11: Chi hằng ngày, Nghĩa vụ, Dự phòng cộng Ăn uống, Đi lại, Giải trí, Mục tiêu, Đầu tư), ngày mô phỏng 21/11/2026, pipeline dự báo,
+what-if, cú sốc với cùng số đường như cấu hình CDK (10.000 đường đầy đủ, 5.000 đường cho what-if). Không gọi AWS, không gọi model.
 
 Test chỉ khẳng định điều bộ hũ demo phải giữ: hũ Ăn uống, Đi lại, Giải trí dự báo Y HỆT ví persona (cùng người dùng, cùng hạt), Ăn uống
-cạn trước kỳ lương (mốc 23/11 đã hiệu chỉnh ở phase 2); what-if Trả sau liệt kê khoản đến hạn trước lương ở hũ Nghĩa vụ và khoản thiếu
-đầu tiên; cú sốc làm điểm tụt. Số đo in ra khi chạy với `-s` (báo cáo #39):
+cạn trước kỳ lương (mốc 23/11 đã hiệu chỉnh ở phase 2) và là thẻ chủ động của Tổng quan, Chi hằng ngày đủ tới lương; what-if Trả sau
+liệt kê khoản đến hạn trước lương ở hũ Nghĩa vụ và khoản thiếu đầu tiên; cú sốc làm điểm tụt. Số đo in ra khi chạy với `-s` (báo cáo
+#39):
 
     uv run --python 3.12 --no-project --with pgserver --with "psycopg[binary]" --with pydantic --with pytest --with jsonschema \
         --with pyyaml --with referencing --with numpy --with boto3 --with scipy --with ruptures \
@@ -28,6 +29,7 @@ from yofina_ledger.rest_api import handle_http
 
 USER = "sub-minh"
 SPENDING = ("an_uong", "di_lai", "giai_tri")
+DAILY = "chi_hang_ngay"
 SUMMARY_KEYS = (
     "start_balance_vnd", "status", "runout_date", "runout_date_shown", "days_to_payday", "p_shortfall",
     "confidence_band", "payday_date",
@@ -65,9 +67,12 @@ def test_canh_1_hu_chi_tieu_cua_vi_demo_du_bao_y_het_vi_persona(env):
     an = demo["an_uong"]
     assert an["status"] == "short" and an["runout_date"] == date(2026, 11, 23)
     assert an["runout_date"] < an["payday_date"]
+    # hũ Chi hằng ngày (chi lặt vặt của khối `demo_jars`) đủ tới lương: không có thẻ cạn nào chen trước Ăn uống
+    daily = demo[DAILY]
+    assert daily["status"] == "ok" and daily["runout_date"] is None
     card = env.svc.overview_response(USER)["proactive_card"]
     print("  thẻ chủ động:", card["data"]["kind"], "|", card["fallback_text"])
-    assert card["data"]["kind"] == "runout_warning"
+    assert card["data"]["kind"] == "runout_warning" and card["data"]["jar_code"] == "an_uong"
 
 
 def test_canh_2_mua_tai_nghe_tra_sau_hu_nghia_vu_liet_ke_khoan_den_han_truoc_luong(env):
