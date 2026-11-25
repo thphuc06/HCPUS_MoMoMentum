@@ -108,7 +108,9 @@ jobs:
           echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum -c -
           tar -xzf "$tarball" gitleaks
           ./gitleaks version
+      # Quét mọi commit tổ tiên của HEAD (cả lịch sử nhánh/PR đang chạy). Mặc định của gitleaks là --all, tức cả nhánh
+      # khác mà fetch-depth 0 kéo về; giới hạn ở HEAD để kết quả của một nhánh chỉ phụ thuộc chính nó (nhánh khác có lần chạy riêng).
       # --redact: log công khai chỉ hiện file, dòng, luật; không in giá trị bí mật.
       # Dương tính giả đã kiểm tay nằm trong .gitleaks.toml (allowlist theo đúng giá trị giả).
       - name: Quét bí mật
-        run: '"$RUNNER_TEMP/gitleaks" git . --config .gitleaks.toml --redact --no-banner --verbose --exit-code 1'
+        run: '"$RUNNER_TEMP/gitleaks" git . --log-opts="--full-history HEAD" --config .gitleaks.toml --redact --no-banner --verbose --exit-code 1'
