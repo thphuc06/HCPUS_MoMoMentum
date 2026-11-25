@@ -88,7 +88,16 @@ export interface ToolsConfig {
   readonly apiThrottleBurst: number;
   /** Origin cho phép ngoài domain Amplify (đọc từ SSM). */
   readonly extraCorsOrigins: string[];
+  /**
+   * Bộ hũ của tài khoản mới (công tắc quay lui #39, `yofina_ledger.jar_layout.onboarding_override`): `catalogue` (mặc định, bộ
+   * hũ `is_default` của danh mục `jar_templates`) hoặc `legacy` (bộ bảy hũ cũ). Chỉ đổi lần tạo ví sau; ví đã tạo giữ nguyên.
+   */
+  readonly onboardingJarLayout: OnboardingJarLayout;
 }
+
+/** Giá trị của `YOFINA_ONBOARDING_JAR_LAYOUT` mà Lambda ledger nhận (`jar_layout.py`). */
+export const ONBOARDING_JAR_LAYOUTS = ['catalogue', 'legacy'] as const;
+export type OnboardingJarLayout = (typeof ONBOARDING_JAR_LAYOUTS)[number];
 
 function ctxNum(app: App, key: string, dflt: number): number {
   const v = app.node.tryGetContext(key);
@@ -109,6 +118,10 @@ export function loadToolsConfig(app: App): ToolsConfig {
   if (ttl < 1 || ttl > 120) throw new Error('confirmTokenTtlSeconds phải trong 1..120 (ADR-0002)');
   const resume = ctxNum(app, 'dbResumeMaxWaitSeconds', 18);
   if (resume >= timeout) throw new Error('dbResumeMaxWaitSeconds phải nhỏ hơn ledgerTimeoutSeconds');
+  const layout = ctxStr(app, 'onboardingJarLayout', 'catalogue');
+  if (!(ONBOARDING_JAR_LAYOUTS as readonly string[]).includes(layout)) {
+    throw new Error(`onboardingJarLayout phải là ${ONBOARDING_JAR_LAYOUTS.join(' hoặc ')}, nhận được: ${layout}`);
+  }
   return {
     ledgerZip: path.resolve(
       __dirname,
@@ -138,6 +151,7 @@ export function loadToolsConfig(app: App): ToolsConfig {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
+    onboardingJarLayout: layout as OnboardingJarLayout,
   };
 }
 
@@ -264,6 +278,7 @@ export class ToolsStack extends Stack {
         YOFINA_SUITABILITY_WINDOW_DAYS: String(props.forecast.horizonDays),
         YOFINA_APP_TIMEZONE: tools.appTimezone,
         YOFINA_DEMO_ANCHOR_DATE: tools.demoAnchorDate,
+        YOFINA_ONBOARDING_JAR_LAYOUT: tools.onboardingJarLayout,
       },
     });
 

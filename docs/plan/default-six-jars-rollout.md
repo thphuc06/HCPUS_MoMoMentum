@@ -133,6 +133,7 @@ Chỉ chạy test đã kiểm tra là dùng tài nguyên cục bộ. Đợt trư
 2. Cập nhật các bên đọc dữ liệu hũ, sau đó cập nhật Ledger và các luồng ghi. Kiểm tra cả ví cũ và ví có `purpose` trên môi trường đã được phép kiểm thử.
 3. Bật cấu hình demo (bảng "Demo (Reset data)"), rồi bật bộ ba cho onboarding. Kiểm tra lại hai luồng với tài khoản thử.
 4. Nếu cần quay lui, chuyển cấu hình cho các lần tạo ví và reset tiếp theo. Giữ schema và các bên đọc tương thích để những ví đã tạo vẫn hoạt động.
+   - Công tắc: context `onboardingJarLayout` của `infra-cdk` thành biến `YOFINA_ONBOARDING_JAR_LAYOUT` của Lambda ledger (mặc định `catalogue`). Quay lui bộ bảy hũ cho tài khoản mới: `uv run scripts/cdk.py deploy YofinaTools --require-approval never -c onboardingJarLayout=legacy` (giữ `-c` này ở mọi lần deploy `YofinaTools` sau cho tới khi bật lại); bật lại: deploy không có `-c` hoặc `-c onboardingJarLayout=catalogue`. Reset demo không đọc công tắc này (bảng [`infra-cdk/README.md`](../../infra-cdk/README.md), test `infra-cdk/test/onboarding-jar-layout.test.ts`).
 
 ## Chưa làm trong lượt này
 

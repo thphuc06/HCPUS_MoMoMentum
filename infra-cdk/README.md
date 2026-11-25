@@ -57,6 +57,7 @@ Cấu hình riêng của `YofinaTools` (`loadToolsConfig` trong `lib/tools-stack
 | `dbResumeMaxWaitSeconds` | 18 | Chờ Aurora dậy trong Lambda (nhỏ hơn timeout) |
 | `apiThrottleRate` / `apiThrottleBurst` | 20 / 40 | Giới hạn mặc định của API |
 | `extraCorsOrigins` | `http://localhost:5173` | Origin CORS ngoài Amplify (phân cách bằng dấu phẩy) |
+| `onboardingJarLayout` | `catalogue` | Công tắc quay lui bộ hũ của tài khoản mới (#39), thành `YOFINA_ONBOARDING_JAR_LAYOUT` của Lambda ledger: `catalogue` là bộ hũ `is_default` của `jar_templates` (ba hũ sau 0059), `legacy` là bộ bảy hũ cũ. Quay lui: `uv run scripts/cdk.py deploy YofinaTools --require-approval never -c onboardingJarLayout=legacy`; chỉ đổi lần tạo ví sau, ví đã tạo và reset demo giữ nguyên. Lần deploy `YofinaTools` sau phải giữ `-c onboardingJarLayout=legacy` (hoặc đặt trong `cdk.context.json`), không thì về `catalogue`. Giá trị khác bị từ chối lúc synth |
 
 Cấu hình pipeline dự báo (`loadForecastConfig` trong `lib/forecast-pipeline.ts`, đổi bằng `-c`; truyền vào Lambda dưới dạng `YOFINA_FORECAST_*`, đọc ở `pipelines/forecast/yofina_forecast/settings.py`):
 
