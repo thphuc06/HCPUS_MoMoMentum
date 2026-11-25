@@ -71,6 +71,24 @@ export function rowFromTemplate(t: JarTemplate): JarRowState {
   return { name: t.name, color_key: t.color_key, icon_key: t.icon_key, kind: t.kind, purpose: t.purpose, percent: '0', balance_vnd: 0 }
 }
 
+/** Mục đích có ô số tiền và ngày (Quỹ dồn, Mục tiêu, Tích lũy dài hạn; hũ cũ chưa đặt mục đích giữ như trước). */
+const hasTarget = (purpose: JarPurpose | undefined): boolean => purpose !== 'buffer'
+
+/**
+ * Đổi mục đích của một hàng: bỏ trường không còn hợp với mục đích mới để không gửi dữ liệu ẩn lên server (server từ chối
+ * `sinking_items` ngoài Quỹ dồn). Hết là Quỹ dồn thì bỏ khoản của Quỹ dồn; thành Dự phòng thì bỏ số tiền và ngày (ô đã ẩn).
+ */
+export function withPurpose(row: JarRowState, purpose: JarPurpose): JarRowState {
+  if (purpose === row.purpose) return row
+  const next: JarRowState = { ...row, purpose }
+  if (purpose !== 'sinking') delete next.sinking_items
+  if (!hasTarget(purpose)) {
+    delete next.goal_vnd
+    delete next.goal_date
+  }
+  return next
+}
+
 /** "12,5" -> 12.5; chuỗi hỏng -> NaN. */
 export function parsePercent(s: string): number {
   const v = Number(s.trim().replace(',', '.'))
@@ -116,9 +134,9 @@ export function saveJarsParams(rows: readonly JarRowState[]): ToolParams {
       }
       if (r.code) j.code = r.code
       if (r.purpose) j.purpose = r.purpose
-      if (r.goal_vnd) j.goal_vnd = r.goal_vnd
-      if (r.goal_date) j.goal_date = r.goal_date
-      if (r.sinking_items && r.sinking_items.length > 0) j.sinking_items = r.sinking_items
+      if (hasTarget(r.purpose) && r.goal_vnd) j.goal_vnd = r.goal_vnd
+      if (hasTarget(r.purpose) && r.goal_date) j.goal_date = r.goal_date
+      if (r.purpose === 'sinking' && r.sinking_items && r.sinking_items.length > 0) j.sinking_items = r.sinking_items
       return j
     }),
   }

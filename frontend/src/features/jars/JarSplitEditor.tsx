@@ -7,7 +7,7 @@ import { JarIcon } from '@/components/JarIcon'
 import { jarColor } from '@/components/jarTheme'
 import type { ActionResponse, JarFull, JarPurpose, JarTemplate, ToolParams } from '@/api/schemas'
 import { formatPercent } from '@/lib/format'
-import { isChanged, isTotalOk, parsePercent, rowFromTemplate, rowsFromJars, saveJarsParams, totalHundredths, type JarRowState } from './params'
+import { isChanged, isTotalOk, parsePercent, rowFromTemplate, rowsFromJars, saveJarsParams, totalHundredths, withPurpose, type JarRowState } from './params'
 import { SaveJarsReview } from './SaveJarsReview'
 
 /**
@@ -131,7 +131,7 @@ export function JarSplitEditor({
                       aria-label={`Mục đích của ${r.name}`}
                       className="mt-1 block h-10 w-full rounded-xl border border-line bg-surface px-2"
                       value={r.purpose ?? ''}
-                      onChange={(e) => setRow(i, { purpose: e.target.value as JarPurpose })}
+                      onChange={(e) => setRows((rs) => rs.map((row, k) => (k === i ? withPurpose(row, e.target.value as JarPurpose) : row)))}
                     >
                       <option value="" disabled>Chưa đặt mục đích</option>
                       {Object.entries(PURPOSE_LABEL).map(([purpose, label]) => (

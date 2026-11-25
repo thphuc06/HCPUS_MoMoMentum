@@ -150,6 +150,34 @@ describe('O2 hũ và tỷ lệ chia', () => {
     }))
   })
 
+  it('đổi mục đích bỏ trường không còn hợp: hết là Quỹ dồn thì bỏ sinking_items, thành Dự phòng thì bỏ goal_vnd/goal_date', async () => {
+    const overview = restFixture('OverviewResponse.minh') as Json
+    const items = [{ name: 'Tết', amount_vnd: 920000, needed_date: '2027-01-03' }]
+    const jars = [
+      { code: 'chi_hang_ngay', name: 'Chi hằng ngày', kind: 'spending', split_percent: 40 },
+      { code: 'nghia_vu', name: 'Nghĩa vụ', kind: 'obligation', split_percent: 35 },
+      { code: 'quy_don', name: 'Quỹ dồn', kind: 'saving', purpose: 'sinking', split_percent: 10, goal_vnd: 920000, goal_date: '2027-01-03', sinking_items: items },
+      { code: 'muc_tieu', name: 'Mục tiêu', kind: 'saving', purpose: 'goal', split_percent: 15, goal_vnd: 6000000, goal_date: '2027-04-01' },
+    ].map((j) => ({ color_key: 'teal', icon_key: 'wallet', balance_vnd: 0, ...j }))
+    const { calls } = mountApp(backend({ 'GET /overview': { ...overview, jars } }), '/onboarding')
+    const user = userEvent.setup()
+    await screen.findByRole('list', { name: 'Các hũ và tỷ lệ chia lương' })
+    await user.selectOptions(screen.getByLabelText('Mục đích của Quỹ dồn'), 'goal')
+    await user.selectOptions(screen.getByLabelText('Mục đích của Mục tiêu'), 'buffer')
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }))
+    await clickWhenEnabled(user, 'Đồng ý')
+    await screen.findByRole('heading', { name: 'Chi phí cố định' })
+    const { params } = bodyOf(callsTo(calls, 'POST', '/confirmations')[0]!)
+    const byCode = new Map(params.jars.map((j: Json) => [j.code, j]))
+    const wasSinking = byCode.get('quy_don') as Json
+    expect(wasSinking).toMatchObject({ purpose: 'goal', goal_vnd: 920000, goal_date: '2027-01-03' })
+    expect(wasSinking).not.toHaveProperty('sinking_items')
+    const nowBuffer = byCode.get('muc_tieu') as Json
+    expect(nowBuffer).toMatchObject({ purpose: 'buffer' })
+    expect(nowBuffer).not.toHaveProperty('goal_vnd')
+    expect(nowBuffer).not.toHaveProperty('goal_date')
+  })
+
   it('tổng khác 100% thì không cho tiếp tục và nói rõ tổng hiện tại', async () => {
     await openO2()
     const user = userEvent.setup()
