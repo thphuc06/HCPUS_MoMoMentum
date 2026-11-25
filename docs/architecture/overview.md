@@ -8,11 +8,15 @@ Chắt từ proposal §8, §9, §10, §11 (số mục để tra ngược). Chi t
 > - **[đọc tài liệu]** mới đọc tài liệu chính thức hoặc ghi chú nghiên cứu, chưa chạy;
 > - **[đề xuất]** suy ra từ kết quả, chưa được chủ dự án chốt.
 >
-> Phần không có nhãn là nội dung nguyên của proposal, chưa kiểm. Hai quyết định **chưa được chủ dự án chốt chính thức**: cơ chế xác nhận trước khi ghi và bộ model. Chronos-2 và các câu hỏi §16 khác cũng chưa chốt. Cả ba chỉ là [đề xuất] ở đây ([open-questions](../requirements/open-questions.md#rút-ra-từ-nghiên-cứu-2026-11-21)). Toàn bộ số đo ML chạy trên dữ liệu **tổng hợp**; Region triển khai chưa chốt (giả định `ap-southeast-1`).
+> Phần không có nhãn là nội dung nguyên của proposal, chưa kiểm. Toàn bộ số đo ML chạy trên dữ liệu **tổng hợp**.
+>
+> **Cập nhật 25/11/2026 (issue #32)**: thân file vẫn là ảnh chụp ngày 21/11, nhãn [đề xuất] chưa được đổi hết sang trạng thái đang chạy (việc I2 của phase 6). Các quyết định đã chốt từ đó: Region `ap-southeast-1`, cơ chế xác nhận ([ADR-0002](../decisions/0002-xac-nhan-truoc-khi-ghi.md)), bộ model, Chronos-2 ngoài MVP ([open-questions](../requirements/open-questions.md#rút-ra-từ-nghiên-cứu-2026-11-21)). Bảy stack CDK đã deploy ([aws-resources.md](../aws-resources.md)). Mọi lệch so với proposal, kèm việc đang chạy và lý do, gom ở [ADR-0004](../decisions/0004-lech-so-voi-proposal.md). Đã sửa theo mã: mục Kiến trúc AWS, bảng harness (L2, L3), danh mục tool, bảng mô hình dữ liệu.
 
 Viết tắt file spike (đều ở [../research/](../research/README.md)): **Gateway** = [spike-agentcore-gateway-identity.md](../research/spike-agentcore-gateway-identity.md), **Runtime** = [spike-agentcore-runtime-cors.md](../research/spike-agentcore-runtime-cors.md), **Aurora** = [spike-aurora-data-api.md](../research/spike-aurora-data-api.md), **Bedrock** = [spike-bedrock-models.md](../research/spike-bedrock-models.md), **Strands** = [spike-strands-agui-local.md](../research/spike-strands-agui-local.md), **ML** = [spike-ml-forecasting.md](../research/spike-ml-forecasting.md), **Frontend** = [spike-frontend-stack.md](../research/spike-frontend-stack.md).
 
 ## Chỗ lệch so với proposal (tóm tắt)
+
+Bảng đầy đủ, có cột "vì sao" và nguồn: [ADR-0004](../decisions/0004-lech-so-voi-proposal.md).
 
 | Proposal | Hiện hành | Mục |
 |---|---|---|
@@ -20,12 +24,14 @@ Viết tắt file spike (đều ở [../research/](../research/README.md)): **Ga
 | Chỉ có đường agent | Thêm REST API (HTTP API + JWT) cho màn hình không cần LLM | [REST API](#rest-api-đề-xuất) |
 | Tool tên `ledger.get_jar_balances` (§9) | `ledger___get_jar_balances` (target + `___` + tool) | [Danh mục tool](#danh-mục-tool-9) |
 | Cedar ép `user_id`; Identity truyền danh tính (§8, §9) | Interceptor ghi đè `user_id` từ JWT + Cedar; Identity không dùng cho tool Lambda | [Danh tính](#danh-tính-xuống-tool) |
-| Cedar cho tool ghi chạy khi tham số có cờ xác nhận (§9) | Token xác nhận dùng một lần + interrupt AG-UI; Cedar là lớp phụ (**[đề xuất]**, chưa chốt) | [Xác nhận](#xác-nhận-trước-khi-ghi-đề-xuất-chưa-chốt) |
+| Cedar cho tool ghi chạy khi tham số có cờ xác nhận (§9) | Token xác nhận dùng một lần do server cấp; Cedar là lớp phụ, chốt ở [ADR-0002](../decisions/0002-xac-nhan-truoc-khi-ghi.md) | [Xác nhận](#xác-nhận-trước-khi-ghi-đề-xuất-chưa-chốt) |
 | Composer trả một JSON duy nhất (§9) | Khối UI phát bằng `ACTIVITY_SNAPSHOT` từ tool; JSON gộp giữ làm bản ghi lượt | [Khối UI](#khối-ui) |
-| Sonnet 5.5 / Haiku 5.5 | Sonnet 4.6, Haiku 4.5, Nova, Kimi K3, Cohere (**[đề xuất]**, chưa chốt) | [Model](#model-đề-xuất-chưa-chốt) |
-| Chronos-2 "MVP nếu kịp" (§14) | Hurdle tự viết + StatsForecast; Chronos-2 ngoài MVP (**[đề xuất]**, chưa chốt) | [ML](#ml-kết-quả-đã-đo) |
-| Bedrock Data Automation, Automated Reasoning, SageMaker | Bỏ hoặc hoãn | [Bỏ và hoãn](#bỏ-và-hoãn) |
+| Sonnet 5.5 / Haiku 5.5 | Sonnet 4.6 và Kimi K3 (vai lớn), Nova 2 Lite và Haiku 4.5 (vai nhỏ), Cohere Embed Multilingual v3; chốt 21/11, cấu hình ở `libs/yofina_core/src/yofina_core/llm_defaults.json` | [Model](#model-đề-xuất-chưa-chốt) |
+| Chronos-2 "MVP nếu kịp" (§14) | Hurdle tự viết trong Lambda zip (numpy, scipy); Chronos-2 ngoài MVP (chốt 21/11); StatsForecast chỉ chạy trên máy để so backtest | [ML](#ml-kết-quả-đã-đo) |
+| Bedrock Data Automation, Automated Reasoning, SageMaker | Bỏ (chốt 21/11) | [Bỏ và hoãn](#bỏ-và-hoãn) |
 | Graph của Strands cho F3 (§9) | Code tuần tự có timeout | [Harness](#agentic-harness-6-tầng-9) |
+| Bedrock Knowledge Bases, `knowledge.search` (§8, §9) | Cắt 24/11; biểu phí có cấu trúc kèm trích dẫn nguồn | [Danh mục tool](#danh-mục-tool-9) |
+| WAF, batch tuần, AgentCore Evaluations (§8, §9) | Không làm (phase 6 mục 3, Q11) | [ADR-0004](../decisions/0004-lech-so-voi-proposal.md) |
 
 ## Nguyên tắc
 
@@ -62,7 +68,7 @@ Người dùng (web mobile)
   Quan sát và bảo mật xuyên suốt: CloudWatch, CloudTrail, KMS, WAF
 ```
 
-Hạ tầng tự viết bằng CDK; khung FAST chỉ để tham khảo — xem [project-structure.md](project-structure.md). Chưa chạy `cdk deploy` nào; spike dựng bằng CLI/boto3 và đã xóa hết tài nguyên.
+Hạ tầng tự viết bằng CDK; khung FAST chỉ để tham khảo — xem [project-structure.md](project-structure.md). Bảy stack CDK đã deploy ở `ap-southeast-1` (`YofinaFoundation`, `YofinaData`, `YofinaIdentity`, `YofinaFrontend`, `YofinaTools`, `YofinaAgent`, `YofinaIngest`, khai ở `infra-cdk/bin/yofina.ts`; danh sách tài nguyên ở [aws-resources.md](../aws-resources.md)). Sơ đồ trên là bản 21/11; bản đang chạy khác ở: không WAF, không Knowledge Bases, không AgentCore Evaluations, không CloudTrail hay khóa KMS riêng (dùng khóa do AWS quản), dự báo chạy trong Lambda zip numpy + scipy thay cho container StatsForecast (lý do ở [ADR-0004](../decisions/0004-lech-so-voi-proposal.md)).
 
 Điểm cần biết thêm:
 
@@ -167,7 +173,7 @@ Aurora PostgreSQL Serverless v2 (+ pgvector) là nguồn sự thật duy nhất;
 
 - **Dự báo mặc định cho hũ chi tiêu: hurdle tự viết** (theo ô cuối tuần × nửa đầu kỳ lương, bootstrap số tiền; chỉ cần numpy). Pinball tương đối khoảng 0,55 so với seasonal naive, thắng seasonal naive từ khoảng 21–30 ngày lịch sử. Giữ `ForecastModel.predict(...) -> bảng phân vị` để cắm model khác. **[đã chạy thử]** ([ML §3](../research/spike-ml-forecasting.md))
 - **StatsForecast chỉ làm baseline** (SeasonalNaive; AutoETS chỉ cho chuỗi từ 90 ngày và hũ dày, vì dưới khoảng 60 ngày tệ hơn seasonal naive). **Cần Lambda container image**: 332 MB sau khi cài (wheel Windows), vượt giới hạn 250 MB của zip, `pyarrow` bắt buộc. Croston/TSB/ADIDA/IMAPA chỉ có khoảng conformal, thua hurdle ở hũ thưa. **[đã chạy thử]** ([ML §2–§3](../research/spike-ml-forecasting.md))
-- **Chronos-2 ngoài MVP.** **[đề xuất]**; câu hỏi §16 về Chronos-2 **chưa được chủ dự án chốt chính thức**. Cơ sở: hòa với hurdle (tỉ lệ pinball 1,007), thắng ETS_native (0,67, thắng 31/31 origin); cần torch cộng model 478 MB, RAM đỉnh khoảng 1,2 GB, container; chưa đo trên vCPU Lambda. **[đã chạy thử]** ([ML §3–§4](../research/spike-ml-forecasting.md)) Nên chờ dữ liệu thật hoặc persona khác họ bộ sinh để so A/B.
+- **Chronos-2 ngoài MVP** (chủ dự án chốt 21/11, cùng SageMaker). Cơ sở: hòa với hurdle (tỉ lệ pinball 1,007), thắng ETS_native (0,67, thắng 31/31 origin); cần torch cộng model 478 MB, RAM đỉnh khoảng 1,2 GB, container; chưa đo trên vCPU Lambda. **[đã chạy thử]** ([ML §3–§4](../research/spike-ml-forecasting.md)) Nên chờ dữ liệu thật hoặc persona khác họ bộ sinh để so A/B.
 - **Khoảng dự báo**: conformal mặc định của StatsForecast (`n_windows=2`) phủ thiếu (0,54–0,60 so với 0,80 danh định); ACI tự viết (khoảng 25 dòng, γ = 0,005–0,01) sửa được (0,61 → 0,81). **Khoảng tổng 30 ngày phủ thiếu ở mọi model** (0,48–0,61 ở hũ dày), cần xử lý trước khi hiện xác suất hụt cho người dùng. **[đã chạy thử]** ([ML §3, §5](../research/spike-ml-forecasting.md))
 - **Monte Carlo có tương quan giữa các ngày** (copula Gaussian AR(1)), vector hóa bằng numpy: lấy mẫu độc lập đánh giá thấp xác suất hụt khi rủi ro thấp (5,8% thay vì 10% ở hũ ăn uống). Hũ thưa mô phỏng hurdle trực tiếp, không qua nội suy phân vị. ρ chọn theo độ phủ trên backtest; không có một ρ đúng cho mọi đại lượng. **[đã chạy thử]** ([ML §6](../research/spike-ml-forecasting.md))
 - **Phát hiện đổi hành vi**: PELT theo **tuần** (`ruptures`, cost `l2`, chuỗi đã cắt khoản lớn, penalty 2–3 × σ²·ln n; rất nhạy penalty); CUSUM/PageHinkley tự viết chỉ để "nghi"; **bỏ ADWIN** (không bắt được điểm gãy +49%). River không có CUSUM. **Bỏ PyOD**: z bền MAD một chiều ngang ECOD cho khoản lớn. **[đã chạy thử]** ([ML §7](../research/spike-ml-forecasting.md))
@@ -203,8 +209,8 @@ Thư mục tương ứng: `pipelines/event`, `pipelines/nightly`, `pipelines/wee
 |---|---|---|
 | L0 Cổng vào | Xác thực, chặn prompt injection, che định danh | JWT authorizer của Runtime (**[đã chạy thử]**), Bedrock Guardrails cho đầu vào và đầu ra (**[đọc tài liệu]**: không kiểm kết quả tool) |
 | L1 Intent Router | Phân loại ý định, rút tham số, đường nhanh hay đầy đủ | LLM nhỏ, JSON có cấu trúc bằng ép tool (**[đã chạy thử]**) |
-| L2 Orchestrator | Lập kế hoạch, gọi specialist/tool song song, giữ ngân sách lượt | LLM lớn, agents-as-tools; đặt `limits` |
-| L3 Specialist | Phân tích, mô phỏng, lộ trình, đọc tài liệu | 4 Strands Agent: Analyst, Simulation, Roadmap, Ingestion |
+| L2 Orchestrator | Lập kế hoạch, gọi specialist/tool song song, giữ ngân sách lượt | **Khác proposal**: mã điều khiển thứ tự (`agent/src/yofina_agent/turn.py`, `whatif.py`), không dùng agents-as-tools. Trong what-if, một lượt gọi vai `planner` chỉ dựng `ScenarioSpec` (hoặc mã dựng khi router đủ tham số, khóa `whatif_spec_source`); kế hoạch đọc tool là `schemas.Plan` có `limits`; trần 4 lượt gọi model mỗi lượt |
+| L3 Specialist | Phân tích, mô phỏng, lộ trình, đọc tài liệu | **Khác proposal** (không có 4 Strands Agent): Analyst là một lượt gọi vai `planner` trên bản gọn; Simulation là engine tất định `forecast___run_scenario`; lộ trình là `roadmap_agent.py` (planner dựng nháp, LP và luật kiểm); đọc ảnh nằm trong Lambda nạp (`pipelines/ingest/`, vai `ingest`) |
 | L4 Verifier | Đối chiếu số với kết quả tool, luật suitability, trả lỗi có cấu trúc (tối đa 2 vòng) | Luật Python (Automated Reasoning hoãn) |
 | L5 Composer | Ghép văn bản và khối UI, gắn nhãn AI và trace_id | LLM nhỏ; khối UI do tool phát bằng `ACTIVITY_SNAPSHOT` (xem [Khối UI](#khối-ui)) |
 
@@ -216,18 +222,20 @@ Tên tool qua Gateway là `<target>___<tool>`: thư mục `gateway/tools/<target
 
 | Nhóm (target) | Tool (tên đầy đủ qua Gateway) | Thư mục |
 |---|---|---|
-| `ledger` | `ledger___get_jar_balances`, `ledger___query_transactions`, `ledger___get_cashflow_summary`, `ledger___get_obligations`, `ledger___get_unclassified` (đọc); `ledger___update_profile`, `ledger___record_transaction`, `ledger___move_between_jars`, `ledger___assign_jar` (ghi, cần xác nhận) | `gateway/tools/ledger/` |
-| `forecast` | `forecast___get_forecast`, `forecast___run_scenario`, `forecast___stress_test`, `forecast___affordability_check`, `forecast___get_resilience_score`, `forecast___get_behavior_profile` (đều chỉ đọc/tính) | `gateway/tools/forecast/` |
-| `planner` | `planner___optimize_allocation`, `planner___check_suitability` (không ghi); `planner___save_roadmap`, `planner___get_roadmap`, `planner___schedule_nudge` (ghi) | `gateway/tools/planner/` |
-| `knowledge` | `knowledge___search`, `knowledge___get_fee_schedule` | `gateway/tools/knowledge/` |
+| `ledger` | `ledger___get_jar_balances`, `ledger___query_transactions`, `ledger___get_cashflow_summary`, `ledger___get_obligations`, `ledger___get_unclassified` (đọc); `ledger___update_profile`, `ledger___record_transaction`, `ledger___move_between_jars`, `ledger___assign_jar` (ghi, cần xác nhận); `ledger___save_turn` (lưu khối UI của lượt) | `gateway/tools/ledger/` |
+| `forecast` | `forecast___get_forecast`, `forecast___run_scenario`, `forecast___list_scenarios`, `forecast___stress_test`, `forecast___affordability_check`, `forecast___get_resilience_score`, `forecast___get_behavior_profile` (đều chỉ đọc/tính; `run_scenario` ghi bảng `scenarios`) | `gateway/tools/forecast/` |
+| `planner` | `planner___optimize_allocation`, `planner___check_suitability` (không ghi); `planner___save_roadmap`, `planner___get_roadmap`, `planner___schedule_nudge` (ghi; nhắc ghi bảng `nudges`, không dùng EventBridge Scheduler) | `gateway/tools/planner/` |
+| `knowledge` | `knowledge___get_fee_schedule` (biểu phí có cấu trúc kèm nguồn), `knowledge___get_exchange_rate` (tỷ giá bán Vietcombank theo ngày). Không có `knowledge___search`: RAG đã cắt 24/11 | `gateway/tools/knowledge/` |
 | `ingest` | `ingest___start_job`, `ingest___get_job_status`, `ingest___confirm_rows` (ghi) | `gateway/tools/ingest/` |
-| `audit` | `audit___get_trace` | `gateway/tools/audit/` |
+| `audit` | `audit___get_trace`, `audit___record_turn` (ghi bản ghi lượt) | `gateway/tools/audit/` |
+
+Danh sách trên khớp `contracts/tools/*.json` ngày 25/11; mỗi tool có một file Cedar ở `gateway/policies/`.
 
 Mapping đầy đủ (chức năng, phía sau, ghi hay không) ở [proposal-summary.md §9](../proposal/proposal-summary.md#9-agentic-harness-9) (dùng tên có dấu chấm). Mỗi tool Lambda đọc tên tool từ `context.client_context.custom["bedrockAgentCoreToolName"]` rồi cắt tiền tố target. **[đọc tài liệu]**
 
 ## Mô hình dữ liệu
 
-(§7) Aurora PostgreSQL Serverless v2, pgvector cho bước embedding của phân loại; truy cập qua Data API với role riêng và RLS (xem [Dữ liệu](#dữ-liệu)). Schema thực là chuỗi [migration](../../db/README.md) (0001 tới 0006 tới phase 2). Bảng đã có (phase 1 và 2) và bảng dự kiến (phase 3 trở đi):
+(§7) Aurora PostgreSQL Serverless v2, pgvector cho bước embedding của phân loại; truy cập qua Data API với role riêng và RLS (xem [Dữ liệu](#dữ-liệu)). Schema thực là chuỗi [migration](../../db/README.md) (0001 tới 0054 ngày 25/11). Bảng chính:
 
 | Bảng | Nội dung | Trạng thái |
 |---|---|---|
@@ -242,9 +250,10 @@ Mapping đầy đủ (chức năng, phía sau, ghi hay không) ở [proposal-sum
 | `tx_type_map`, `jar_templates` | Bảng tra: loại giao dịch sang hũ (bước 0 của phân loại), hũ mặc định cho onboarding | 0005, seed |
 | `forecast_runs`, `forecast_jar_summaries`, `forecasts` | Lần chạy dự báo (model, ngày gốc, độ phủ, nhãn tin cậy, cờ ước lượng ban đầu), tóm tắt mỗi hũ (ngày cạn, xác suất hụt, đủ/sát/hụt), phân vị chi tiêu ngày và số dư theo ngày | 0006 |
 | `conversation_turns`, `turn_blocks`, `confirm_resolutions` | Lượt hội thoại, khối UI đã phát, trạng thái đã thực hiện của khối xác nhận | 0001, 0003, 0004 |
-| `resilience_scores` | Điểm và 4 thành phần theo ngày | dự kiến |
-| `roadmaps` | Lộ trình JSON có phiên bản và lý do sinh lại | dự kiến |
-| `scenarios`, `nudges`, `feedback` | Kịch bản đã chạy, nhắc đã gửi, phản hồi | dự kiến |
+| `resilience_scores` | Điểm và 4 thành phần theo ngày | 0052 |
+| `roadmaps` | Lộ trình JSON có phiên bản và lý do sinh lại (kèm `roadmap_jobs`, `behavior_flags` cho điểm gãy hành vi) | 0052 |
+| `scenarios`, `nudges`, `feedback` | Kịch bản đã chạy, nhắc đã gửi, phản hồi | 0010 (0053 nới loại nhắc cho bản tin của batch đêm) |
+| `behavior_profiles` | Hồ sơ hành vi do batch đêm ghi (nhận xét kèm bằng chứng) | 0053 |
 | `audit_events` | Mỗi gợi ý: trace_id, dữ liệu đã dùng, luật đã kiểm, kết quả; có thể thêm khối UI đã phát (để phát lại) | 0001 |
 
 Sự kiện của sổ cái (`transaction.recorded`, `salary.confirmed`, `obligation.changed`, `profile.updated`) và của dự báo (`forecast.updated`) đi qua EventBridge bus `yofina-bus`: hợp đồng ở [contracts/README.md](../../contracts/README.md#sự-kiện-eventbridge-bus-yofina-bus).
@@ -293,7 +302,7 @@ Khối có phong bì `v`, `id`, `trace_id`, `fallback_text` và schema Zod ở f
 
 ## ML và kỹ thuật (§11)
 
-Chi tiết và số đo ở mục [ML (kết quả đã đo)](#ml-kết-quả-đã-đo) phía trên. Danh sách kỹ thuật proposal §11, sau khi cập nhật: dự báo (hurdle tự viết, seasonal naive, StatsForecast baseline; Chronos-2 ngoài MVP, chưa chốt), adaptive conformal inference, Monte Carlo cho ngày cạn/xác suất hụt, điểm chống chịu theo Spend/Save/Borrow/Plan, PELT (`ruptures`) theo tuần + CUSUM/PageHinkley tự viết (bỏ ADWIN, bỏ PyOD), quy hoạch tuyến tính bằng `scipy` phân bổ hũ, phân loại giao dịch bước 0 + thác luật → embedding (pgvector) → LLM. Phía agent: routing, orchestrator-workers, evaluator-optimizer, agents-as-tools, context engineering, Mem0 + AgentCore Memory, ReasoningBank, proactive agent, hybrid search + rerank, Cedar, AG-UI (phần agent chưa kiểm).
+Chi tiết và số đo ở mục [ML (kết quả đã đo)](#ml-kết-quả-đã-đo) phía trên. Danh sách kỹ thuật proposal §11, sau khi cập nhật: dự báo (hurdle tự viết; seasonal naive làm mốc so sánh; StatsForecast chỉ chạy trên máy để so backtest; Chronos-2 ngoài MVP, chốt 21/11), adaptive conformal inference (chỉ chỉnh phân vị chi tiêu ngày; dải số dư người dùng thấy đến từ Monte Carlo đã hiệu chỉnh, cộng CQR và PAV từ #25, xem [backtest-final.md](../research/backtest-final.md)), Monte Carlo cho ngày cạn/xác suất hụt, điểm chống chịu theo Spend/Save/Borrow/Plan, PELT (`ruptures`) theo tuần + CUSUM tự viết (bỏ ADWIN, bỏ PyOD; điểm gãy chỉ dùng để sinh lại lộ trình, không cắt cửa sổ dự báo), quy hoạch tuyến tính bằng `scipy` phân bổ hũ, phân loại giao dịch bước 0 + thác luật → embedding (pgvector) → LLM. Phía agent: routing, mã điều khiển thứ tự thay cho orchestrator-workers tự do, evaluator-optimizer (Verifier tối đa 2 vòng trong trần 4 lượt gọi), context engineering, AgentCore Memory (hai strategy override, không Mem0, không ReasoningBank), proactive agent (cổng giá trị của batch đêm), Cedar, AG-UI. Không có hybrid search + rerank (RAG đã cắt). Chi tiết lệch: [ADR-0004](../decisions/0004-lech-so-voi-proposal.md).
 
 ## Khả năng quan sát và đánh giá (§9)
 

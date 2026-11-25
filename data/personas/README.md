@@ -62,14 +62,17 @@ Muốn đổi số kịch bản thì sửa các số trong `specs/vy.json` (`ext
 
 ## Tệp mẫu cho cảnh 5
 
-`samples/` do `samples/make_samples.py` sinh, tất định theo seed của spec và ngày neo (chạy lại: `uv run --with pillow python data/personas/samples/make_samples.py`, cần font Windows như `scripts/make_ingest_synthetic.py`). Test `test_tep_csv_da_commit_khop_bo_sinh` bắt tệp CSV lệch bộ sinh. Mọi tên, mã, số tham chiếu là hư cấu; ngày lấy theo ngày mô phỏng của `vy` (ngày neo 21/11/2026, nên tệp chỉ hợp lệ trên tài khoản đã đặt lại về ngày neo).
+`samples/` do `samples/make_samples.py` sinh, tất định theo seed của spec và ngày neo (chạy lại: `uv run --with pillow python data/personas/samples/make_samples.py`, cần font Windows như `scripts/make_ingest_synthetic.py`). Test `test_tep_csv_da_commit_khop_bo_sinh` bắt tệp CSV lệch bộ sinh. Mọi tên, mã, số tham chiếu là hư cấu; ngày lấy theo ngày mô phỏng của persona (ngày neo 21/11/2026, nên tệp chỉ hợp lệ trên tài khoản đã đặt lại về ngày neo). Tệp của `minh` được chép sang `frontend/public/samples/`, nên trên app tải được ở `/samples/<tên tệp>`.
 
-| Tệp | Nội dung | Dùng ở cảnh 5 |
+| Tệp | Nội dung | Dùng ở |
 |---|---|---|
-| `vy_sao_ke_vcb.csv` | Sao kê kiểu Vietcombank (cùng cột và cách ghi với `evals/ingest/synthetic/csv/c01_vcb_50.csv`), 41 dòng từ 7/10 đến 19/11: 39 khoản chi (Highlands, GrabFood, Bách Hóa Xanh, Grab, CGV, Viettel, vé máy bay Vietjet...) và 2 dòng tiền vào freelance | **TẢI TỆP NÀY TRƯỚC**: độ phủ 0,664 -> 0,839, hai dòng tiền vào hiện là "trùng", hũ gợi ý đúng cho hầu hết dòng chi |
-| `vy_bien_lai_1.png`, `vy_bien_lai_2.png` | Ảnh biên lai chuyển khoản dựng bằng Pillow (kiểu Techcombank trả Grab, kiểu MB trả CGV), ngày 20/11, KHÁC mọi dòng của sao kê | Cảnh tải ảnh (nếu kịch bản cần một giao dịch lẻ); tải sau CSV thì độ phủ lên 0,850 |
+| `minh_bien_lai_1.png` | Ảnh biên lai chuyển khoản kiểu Vietcombank dựng bằng Pillow: 345.000 VND ngày 20/11/2026 cho một người (góp tiền ăn), có họ tên, số điện thoại, số tài khoản hư cấu nhìn rõ. Spec: `samples/minh_receipts.json` (issue #16) | Cảnh 5 trên `minh`, `giamkhao1`–`3`: PII bị che, dòng chi gợi ý hũ Ăn uống ([demo-script](../../docs/plan/demo-script.md), mục "Cảnh 5") |
+| `minh_bien_lai_2.png` | Ảnh thanh toán hóa đơn tiền nước 126.000 VND ngày 20/11/2026, cùng spec | Cảnh 5, ảnh dự phòng (hũ Hóa đơn) |
+| `minh_sao_ke_2_tuan.csv` | Sao kê 32 dòng chi hũ Ăn uống từ 07/11 đến 20/11/2026 (tổng 1.190.000 ₫), đưa chi hai tuần cuối lên 2,1 lần mức cũ. Sinh bằng `samples/make_scene4_csv.py` (issue #22), hệ số lấy từ `scripts/measure_scene4_pelt.py` | **Cảnh 4**: tải ngay sau "Đặt lại dữ liệu", trong cùng ngày; PELT xác nhận điểm gãy, lộ trình sinh lại ([2026-11-26-canh4-pelt.md](../../docs/research/2026-11-26-canh4-pelt.md)) |
+| `vy_sao_ke_vcb.csv` | Sao kê kiểu Vietcombank (cùng cột và cách ghi với `evals/ingest/synthetic/csv/c01_vcb_50.csv`), 41 dòng từ 7/10 đến 19/11: 39 khoản chi (Highlands, GrabFood, Bách Hóa Xanh, Grab, CGV, Viettel, vé máy bay Vietjet...) và 2 dòng tiền vào freelance | Persona `vy`, **TẢI TỆP NÀY TRƯỚC**: độ phủ 0,664 -> 0,839, hai dòng tiền vào hiện là "trùng", hũ gợi ý đúng cho hầu hết dòng chi |
+| `vy_bien_lai_1.png`, `vy_bien_lai_2.png` | Ảnh biên lai chuyển khoản dựng bằng Pillow (kiểu Techcombank trả Grab, kiểu MB trả CGV), ngày 20/11, KHÁC mọi dòng của sao kê | Persona `vy`, cảnh tải ảnh (nếu kịch bản cần một giao dịch lẻ); tải sau CSV thì độ phủ lên 0,850 |
 
-Tài khoản demo: `giamkhao3` (persona `vy`). Trước buổi demo bấm "Đặt lại dữ liệu" để độ phủ về 0,664 và xóa sạch lần nạp trước (đặt lại xóa cả dòng external, job nạp và đồng ý).
+Tài khoản demo: từ issue #8, `giamkhao1`–`3` đều là persona `minh` (`accounts.json`), nên tệp của `minh` dùng được trên cả bốn tài khoản. Tệp của `vy` chỉ dùng được trên tài khoản đã nạp persona `vy` (`scripts/seed_persona.py ... --persona vy`, mục dưới); độ phủ của `minh` đã ở 100% nên muốn thấy độ phủ tăng thì dùng `vy`. Trước buổi demo bấm "Đặt lại dữ liệu" để xóa sạch lần nạp trước (đặt lại xóa cả dòng external, job nạp và đồng ý).
 
 ## Nạp persona mới lên AWS
 

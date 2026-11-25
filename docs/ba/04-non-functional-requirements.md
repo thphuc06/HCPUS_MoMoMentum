@@ -36,7 +36,7 @@
 | ID | Yêu cầu | Chỉ tiêu | Cách đo | Hiện trạng | Trạng thái |
 |---|---|---|---|---|---|
 | NFR-10 | Tốt hơn baseline | Pinball loss thấp hơn seasonal naive trên **cả hai** bộ sinh dữ liệu | Backtest rolling-origin | Pinball bằng 0,64 lần seasonal naive ([backtest](../research/backtest-phase-2.md)) | Đạt |
-| NFR-11 | Khoảng 80% đúng nghĩa | Độ phủ tổng 30 ngày trong **0,75–0,85**; chưa đạt thì hiện nhóm tin cậy thay cho % (BR-31) | Backtest | Độ phủ 0,79–0,82 sau ACI | Đạt |
+| NFR-11 | Khoảng 80% đúng nghĩa | Độ phủ tổng 30 ngày trong **0,75–0,85**; chưa đạt thì hiện nhóm tin cậy thay cho % (BR-31) | Backtest | Dải hiển thị đến từ Monte Carlo (hiệu chỉnh `rho`, `level_sigma`), ACI không phải nguồn: ACI chỉ chỉnh phân vị chi tiêu ngày, cột không hiện trên giao diện. Phase 2: 0,79–0,82 theo họ bộ sinh ([backtest](../research/backtest-phase-2.md)). Theo độ dài lịch sử: hũ dày đạt từ 47 ngày, hũ thưa từ 120 ngày; dưới ngưỡng thì ẩn % (#9). Từ #25, CQR (dải hũ dày) và PAV (`p_shortfall`) hiệu chỉnh lại SAU Monte Carlo: hũ dày ở 120 ngày phủ 0,798, mỗi đuôi khoảng 10% ([backtest-final](../research/backtest-final.md)). PELT/CUSUM chỉ phát hiện đổi hành vi để sinh lại lộ trình, không nối vào cửa sổ dự báo (mô hình không cắt lịch sử sau điểm gãy) | Đạt (dữ liệu tổng hợp) |
 | NFR-12 | Báo trước đủ sớm | Số ngày cảnh báo trước khi hũ cạn, tỷ lệ cảnh báo đúng (KPI proposal §6) | Backtest 3 persona | — | Chưa đo; Đề xuất: ghi vào báo cáo phase 6 |
 
 ## 4. Phân loại giao dịch

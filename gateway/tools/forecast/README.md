@@ -24,7 +24,7 @@ Mã của tool không nằm riêng ở đây: nó dùng chung **một zip** vớ
 - `get_resilience_score {refresh?}`: `data` là `ResilienceScoreData` (điểm 0 đến 100, bốn thành phần có trọng số, đầu vào, câu giải thích dựng bằng mẫu của `resilience_defaults.json`; nhóm yếu, vừa, tốt; `weakest`; `previous_score`; `basis`). Cùng khối và cùng số với `GET /resilience`.
 - `stress_test {shock_id}`: `shock_id` thuộc `shocks.json` (`mat_viec_2_thang`, `tien_tro_tang`, `om_mot_tuan`); mã lạ thì `SHOCK_NOT_FOUND`. `data` là `StressResultData` (điểm trước và sau, số ngày trụ được của toàn bộ tiền và của hũ Dự phòng, khoản thiếu, `common_random_numbers`). Cùng khối và cùng số với `POST /resilience/stress`.
 - Mã lỗi: `PROFILE_INCOMPLETE`, `FORECAST_UNAVAILABLE`, `PARAMS_INVALID`, `SHOCK_NOT_FOUND`, `UNAUTHENTICATED`.
-- REST (Lambda `yofina-forecast` qua HTTP API, như `POST /affordability`): `GET /resilience`, `GET /resilience/shocks`, `POST /resilience/stress`. Route chưa thêm vào `infra-cdk/lib/tools-stack.ts` (việc của người điều phối).
+- REST (Lambda `yofina-forecast` qua HTTP API, như `POST /affordability`): `GET /resilience`, `GET /resilience/shocks`, `POST /resilience/stress`. Ba route đã có ở `infra-cdk/lib/tools-stack.ts` (danh sách route của `yofina-forecast`, phase 4).
 - **`planner___optimize_allocation` KHÔNG ở Lambda này**: target `planner` giữ trên Lambda ledger, ledger gọi `Invoke` đồng bộ Lambda `yofina-forecast-batch` với op `optimize_allocation` (hợp đồng nội bộ N1) để giải LP.
 
 ## Cedar

@@ -1,6 +1,6 @@
 # Yofina Foresight — chỉ mục cho AI agent
 
-Trợ lý tài chính "Hũ nhìn trước" cho MoMo Tech Contest 2026: dự báo từng hũ chi tiêu cạn ngày nào (tính cả nợ nhỏ), tự đổi lộ trình khi hành vi lệch. Dự án đang ở giai đoạn scaffold, chưa có code tính năng. Chi tiết nằm ở `docs/`; file này chỉ trỏ đường.
+Trợ lý tài chính "Hũ nhìn trước" cho MoMo Tech Contest 2026: dự báo từng hũ chi tiêu cạn ngày nào (tính cả nợ nhỏ), tự đổi lộ trình khi hành vi lệch. Bảy tính năng F1–F7 đã có code và chạy trên AWS (`ap-southeast-1`); dự án đang ở phase 6 (đánh giá, cứng hóa, đóng gói), hạn nộp 03/12/2026. Chi tiết nằm ở `docs/`; file này chỉ trỏ đường.
 
 Tài liệu viết tiếng Việt, thuật ngữ kỹ thuật giữ tiếng Anh.
 

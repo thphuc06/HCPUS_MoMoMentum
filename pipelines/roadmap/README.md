@@ -44,7 +44,7 @@ Giới hạn model, tool và số vòng sửa lấy từ `yofina_agent/defaults.
 
 ## Hạ tầng (CDK) và giá trị đã chọn
 
-Construct `RoadmapRegen` ở `infra-cdk/lib/roadmap-regen.ts`, nối vào `YofinaTools` (`infra-cdk/lib/tools-stack.ts`), test `infra-cdk/test/roadmap-regen.test.ts`. **Chưa deploy.** Tài nguyên: [docs/aws-resources.md](../../docs/aws-resources.md).
+Construct `RoadmapRegen` ở `infra-cdk/lib/roadmap-regen.ts`, nối vào `YofinaTools` (`infra-cdk/lib/tools-stack.ts`), test `infra-cdk/test/roadmap-regen.test.ts`. **Đã deploy** ngày 23/11 tối (stack `YofinaTools`), cập nhật mã nhiều lần sau đó. Tài nguyên: [docs/aws-resources.md](../../docs/aws-resources.md).
 
 Đóng zip (chạy ở gốc repo; ra `build/lambda/roadmap-arm64.zip`, khoảng 13 MB nén, `handler.py` ở gốc, `strands-agents` 1.65.0 và gói native cài theo `aarch64`):
 
@@ -74,5 +74,5 @@ Lệnh chép cả gói `yofina_agent` (nhiều hơn danh sách module tối thi�
 ## Bàn giao
 
 1. ~~Migration `0052` và các tool Phase 4~~: đã deploy 23/11. Ledger dispatch `planner___get_roadmap`, `planner___optimize_allocation`, `planner___save_roadmap`, `planner___check_suitability` (`gateway/tools/ledger/yofina_ledger/gateway_api.py`, `tool_name` lấy phần sau `___` cuối cùng nên tiền tố `planner___` dùng được). Forecast dispatch `forecast___get_resilience_score` (`pipelines/forecast/yofina_forecast/tool.py`). Nguồn sự kiện: ledger phát `roadmap.regeneration_requested` và `profile.updated` (`yofina_ledger/events.py`), forecast phát `behavior.changed` sau PELT (`yofina_forecast/events.py`).
-2. ~~Construct CDK~~: đã có (`RoadmapRegen`, mục trên), chưa deploy.
+2. ~~Construct CDK~~: đã có (`RoadmapRegen`, mục trên), đã deploy 23/11.
 3. Khi deploy: build zip, `uv run scripts/cdk.py diff YofinaTools`, `deploy YofinaTools`. Theo dõi DLQ `yofina-roadmap-events-dlq` và số job `failed` sau lần chạy đầu.

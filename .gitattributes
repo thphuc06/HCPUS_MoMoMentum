@@ -4,3 +4,4 @@
 # nếu không thì clone trên Linux (CI) nhận LF và hai test trên đỏ.
 data/personas/samples/*.csv -text
 evals/ingest/synthetic/csv/*.csv -text
+frontend/public/samples/*.csv -text

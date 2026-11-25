@@ -1,6 +1,6 @@
 # pipelines/classify/
 
-**Lambda `yofina-classify`** (phase 4 luồng B, F2 phân hũ tự động): nghe `transaction.recorded` có `needs_classification` (khoản chi đang ở Chưa phân loại) qua SQS và gán hũ. Construct hạ tầng: [../../infra-cdk/lib/classify.ts](../../infra-cdk/lib/classify.ts) (CHƯA nối vào stack nào). Phần ghi nằm ở `yofina_ledger/classify_write.py`, phần đọc và REST ở `yofina_ledger/review_*.py`; ngưỡng ở `yofina_ledger/classify_defaults.json`.
+**Lambda `yofina-classify`** (phase 4 luồng B, F2 phân hũ tự động): nghe `transaction.recorded` có `needs_classification` (khoản chi đang ở Chưa phân loại) qua SQS và gán hũ. Construct hạ tầng: [../../infra-cdk/lib/classify.ts](../../infra-cdk/lib/classify.ts), nối vào `YofinaTools` (`infra-cdk/lib/tools-stack.ts`, `ClassifyPipeline`) và đã deploy ngày 23/11 ([aws-resources.md](../../docs/aws-resources.md)). Phần ghi nằm ở `yofina_ledger/classify_write.py`, phần đọc và REST ở `yofina_ledger/review_*.py`; ngưỡng ở `yofina_ledger/classify_defaults.json`.
 
 ## Thứ tự phân loại (`yofina_classify/pipeline.py`)
 
