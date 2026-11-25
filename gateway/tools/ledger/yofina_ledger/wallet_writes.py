@@ -45,7 +45,7 @@ from yofina_core.wallet import (
     split_amount,
     transaction_jar,
 )
-from yofina_ledger import classify_write, convert, events
+from yofina_ledger import classify_write, convert, events, split_proposal
 from yofina_ledger.classify_config import load_thresholds as classify_thresholds
 from yofina_ledger.repo_wallet import ClaimSpec, WriteResult
 
@@ -725,6 +725,10 @@ class WalletWrites:
         return f"Khai {ob['name']} {amount_text}", values
 
     def _prep_save_jars(self, user_id: str, norm: dict[str, Any], st: UserState) -> Prepared:
+        """Bản xem trước của `save_jars` (BR-47, BR-48): mỗi hũ đổi tỷ lệ có tỷ lệ và tiền mỗi kỳ lương trước và sau cùng
+        phần chênh (theo `split_amount` trên lương đã khai, cùng quy tắc `confirm_salary`), lý do bằng số đo khi tỷ lệ Nghĩa
+        vụ hoặc khoản Quỹ dồn đổi, kỳ áp dụng và việc dự báo tính lại. Tỷ lệ mới chỉ áp từ lần chia lương đầu tiên sau khi
+        lưu (BR-45); có lương đang chờ chia thì người dùng chọn chia lương đó trước (từ kỳ sau) hay sau khi lưu (kỳ này)."""
         if not st.exists:
             raise YofinaError(
                 ErrorCode.PROFILE_INCOMPLETE, "Bạn chưa khai lương và ngày nhận lương."
@@ -733,19 +737,48 @@ class WalletWrites:
         wanted = [j["code"] for j in norm["jars"]]
         usage = {u["code"]: u for u in self.repo.jars_usage(user_id)}
         changes: list[dict[str, str]] = []
+        row = self.repo.user_row(user_id)
+        salary = (
+            convert.vnd(row["monthly_salary_vnd"])
+            if row and row.get("monthly_salary_vnd") is not None
+            else None
+        )
+        before_amt = split_proposal.jar_amounts(
+            salary, [(c, j["split_percent"]) for c, j in existing.items()]
+        )
+        after_amt = split_proposal.jar_amounts(
+            salary, [(j["code"], j["split_percent"]) for j in norm["jars"]]
+        )
+        amounts = before_amt is not None and after_amt is not None
+        share_changed = False
+        changed_codes: set[str] = set()
         for j in norm["jars"]:
             cur = existing.get(j["code"])
             try:
                 jar_commitments(j, cur or {})
             except ParamsError as exc:
                 raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
-            pct = convert.percent(j["split_percent"])
+            pct = Decimal(str(j["split_percent"]))
             if cur is None:
-                changes.append(_change(f"Hũ mới: {j['name']}", f"{pct}% lương"))
-            else:
-                old = convert.percent(cur["split_percent"])
-                if old != pct or cur["name"] != j["name"]:
-                    changes.append(_change(f"Hũ {j['name']}", f"{pct}%", f"{old}%"))
+                share_changed = share_changed or pct > 0
+                changed_codes.add(j["code"])
+                new_vnd = after_amt.get(j["code"]) if after_amt is not None else None
+                _, after = split_proposal.share_line(None, pct, None, new_vnd)
+                text = after if amounts else f"{convert.percent(pct)}% lương"
+                changes.append(_change(f"Hũ mới: {j['name']}", text))
+                continue
+            old = Decimal(str(cur["split_percent"]))
+            if old != pct:
+                share_changed = True
+                changed_codes.add(j["code"])
+            if old != pct or cur["name"] != j["name"]:
+                before, after = split_proposal.share_line(
+                    old,
+                    pct,
+                    before_amt.get(j["code"]) if before_amt is not None and amounts else None,
+                    after_amt.get(j["code"]) if after_amt is not None and amounts else None,
+                )
+                changes.append(_change(f"Hũ {j['name']}", after, before))
         for code, cur in existing.items():
             if code in wanted:
                 continue
@@ -763,18 +796,83 @@ class WalletWrites:
                 raise YofinaError(
                     ErrorCode.JAR_PROTECTED, f"Hũ {cur['name']} {reason} nên chưa bỏ được."
                 )
+            share_changed = share_changed or Decimal(str(cur["split_percent"])) > 0
             changes.append(_change(f"Bỏ hũ {cur['name']}", "không còn"))
+        reasons = self._save_jars_reasons(user_id, norm, st, salary, changed_codes)
         if not changes:
             changes.append(_change("Danh sách hũ", "không đổi"))
+        warnings: list[str] = []
+        extra: dict[str, Any] = {}
+        if share_changed:
+            pending = self.repo.salary_events(user_id, "pending")
+            if pending:
+                ev = pending[0]
+                extra["pending_salary_event_id"] = str(ev["id"])
+                warnings.append(
+                    f"Lương {format_vnd(convert.vnd(ev['amount_vnd']))} đang chờ chia: "
+                    "chọn áp tỷ lệ mới cho kỳ này hay từ kỳ sau."
+                )
+            warnings.append(
+                "Tỷ lệ mới áp từ lần chia lương đầu tiên sau khi lưu. Dự báo tính lại ngay sau khi lưu."
+            )
         return Prepared(
             SAVE_JARS,
             norm,
             f"Lưu {len(norm['jars'])} hũ và tỷ lệ chia lương",
-            changes[:20],
-            [],
+            (reasons + changes)[:20],
+            warnings,
             st,
-            {},
+            extra,
         )
+
+    def _save_jars_reasons(
+        self,
+        user_id: str,
+        norm: dict[str, Any],
+        st: UserState,
+        salary: int | None,
+        changed_codes: set[str],
+    ) -> list[dict[str, str]]:
+        """Lý do bằng số đo cho các hũ có tỷ lệ đổi: nghĩa vụ đã khai quy về tháng so với lương đã khai, và số cần trích mỗi kỳ
+        cho các khoản của Quỹ dồn. Chưa khai nghĩa vụ thì nói rõ "chưa có số khai"."""
+        if not salary or not changed_codes:
+            return []
+        row = self.repo.user_row(user_id)
+        payday = int(row["payday_day"]) if row and row.get("payday_day") is not None else None
+        after_jars = [
+            {**existing, **j} if (existing := st.jars.get(j["code"])) else {**j, "balance_vnd": 0}
+            for j in norm["jars"]
+        ]
+        out: list[dict[str, str]] = []
+        ob_jar = resolve_obligation_pay_jar((j["code"], j["kind"]) for j in after_jars)
+        if ob_jar is not None and ob_jar in changed_codes:
+            obligations = self.repo.list_obligations(user_id, status="active", limit=100)
+            declared, monthly = split_proposal.declared_need(obligations, after_jars, ob_jar)
+            name = self._jar_name(st, ob_jar)
+            text = (
+                split_proposal.obligation_reason(monthly, salary)
+                if declared
+                else "chưa có số khai"
+            )
+            out.append(_change(f"Lý do: hũ {name}", text))
+        for j in after_jars:
+            if (
+                j["code"] not in changed_codes
+                or j.get("purpose") != "sinking"
+                or not j.get("sinking_items")
+                or payday is None
+            ):
+                continue
+            plan = split_proposal.sinking_plan(
+                split_proposal.stored_items(j),
+                today=st.today,
+                payday_day=payday,
+                saved_vnd=convert.vnd(j.get("balance_vnd") or 0),
+            )
+            out.append(
+                _change(f"Lý do: hũ {j['name']}", split_proposal.sinking_reason(plan, salary))
+            )
+        return out
 
     # --- xem trước (không ghi) ---------------------------------------------------------------------------------
     def _confirm_block(

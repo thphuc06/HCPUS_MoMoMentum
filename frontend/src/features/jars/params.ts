@@ -1,5 +1,7 @@
 import type { JarFull, JarPurpose, JarTemplate, ToolParams } from '@/api/schemas'
 
+export type SinkingItemState = { name: string; amount_vnd: number; needed_date: string }
+
 export type JarRowState = {
   /** Có `code` là hũ đã có (sửa); không có là hũ mới (server sinh mã từ tên). */
   code?: string
@@ -12,6 +14,8 @@ export type JarRowState = {
   purpose?: JarPurpose
   goal_vnd?: number
   goal_date?: string
+  /** Khoản của Quỹ dồn (tên, số tiền, ngày cần): giữ nguyên văn để lưu lại không làm mất khoản đã cam kết. */
+  sinking_items?: SinkingItemState[]
   /** Số dư hiện có (chỉ để biết hũ còn tiền thì chưa bỏ được). */
   balance_vnd: number
 }
@@ -29,8 +33,38 @@ export function rowsFromJars(jars: readonly JarFull[]): JarRowState[] {
       purpose: j.purpose,
       goal_vnd: j.goal_vnd,
       goal_date: j.goal_date,
+      sinking_items: j.sinking_items,
       balance_vnd: j.balance_vnd,
     }))
+}
+
+const KINDS = ['spending', 'saving', 'obligation'] as const
+const PURPOSES = ['buffer', 'sinking', 'goal', 'long_term'] as const
+
+/**
+ * Hàng của trình sửa từ tham số `save_jars` do server dựng (đề xuất theo số đã khai, "Sửa số"): giữ đúng mã, tỷ lệ, mục đích
+ * và khoản Quỹ dồn server đã tính; số dư lấy từ hũ hiện có (hũ mới là 0).
+ */
+export function rowsFromParams(params: readonly Record<string, unknown>[], jars: readonly JarFull[]): JarRowState[] {
+  const balance = new Map(jars.map((j) => [j.code, j.balance_vnd]))
+  return params.map((p) => {
+    const kind = KINDS.find((k) => k === p.kind) ?? 'spending'
+    const purpose = PURPOSES.find((k) => k === p.purpose)
+    const code = typeof p.code === 'string' ? p.code : undefined
+    return {
+      code,
+      name: String(p.name ?? ''),
+      color_key: String(p.color_key ?? ''),
+      icon_key: String(p.icon_key ?? ''),
+      kind,
+      percent: String(p.split_percent ?? '0'),
+      purpose,
+      goal_vnd: typeof p.goal_vnd === 'number' ? p.goal_vnd : undefined,
+      goal_date: typeof p.goal_date === 'string' ? p.goal_date : undefined,
+      sinking_items: Array.isArray(p.sinking_items) ? (p.sinking_items as SinkingItemState[]) : undefined,
+      balance_vnd: (code && balance.get(code)) || 0,
+    }
+  })
 }
 
 export function rowFromTemplate(t: JarTemplate): JarRowState {
@@ -64,11 +98,12 @@ export function isChanged(rows: readonly JarRowState[], original: readonly JarFu
     const o = orig[i]!
     return r.code !== o.code || r.name.trim() !== o.name ||
       r.purpose !== o.purpose || r.goal_vnd !== o.goal_vnd || r.goal_date !== o.goal_date ||
+      JSON.stringify(r.sinking_items ?? []) !== JSON.stringify(o.sinking_items ?? []) ||
       Math.round(parsePercent(r.percent) * 100) !== Math.round(parsePercent(o.percent) * 100)
   })
 }
 
-/** Tham số `save_jars`: thay cả danh sách hũ người dùng theo thứ tự hiển thị (giữ mục tiêu đã có). */
+/** Tham số `save_jars`: thay cả danh sách hũ người dùng theo thứ tự hiển thị (giữ mục tiêu và khoản Quỹ dồn đã có). */
 export function saveJarsParams(rows: readonly JarRowState[]): ToolParams {
   return {
     jars: rows.map((r) => {
@@ -83,6 +118,7 @@ export function saveJarsParams(rows: readonly JarRowState[]): ToolParams {
       if (r.purpose) j.purpose = r.purpose
       if (r.goal_vnd) j.goal_vnd = r.goal_vnd
       if (r.goal_date) j.goal_date = r.goal_date
+      if (r.sinking_items && r.sinking_items.length > 0) j.sinking_items = r.sinking_items
       return j
     }),
   }

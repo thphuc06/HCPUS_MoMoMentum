@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -21,10 +22,10 @@ from yofina_core.blocks import (
 )
 from yofina_core.clock import latest_payday, next_payday
 from yofina_core.errors import ErrorCode, YofinaError
-from yofina_core.params import JAR_CODE_RE, UUID_RE
+from yofina_core.params import JAR_CODE_RE, UUID_RE, ParamsError
 from yofina_core.schedule import build_timeline_events
 from yofina_core.wallet import resolve_obligation_pay_jar, transaction_jar
-from yofina_ledger import convert, review_reads
+from yofina_ledger import convert, review_reads, split_proposal
 from yofina_ledger.proactive import choose_proactive_card
 
 CURSOR_MAX = 200
@@ -429,6 +430,60 @@ class WalletReads:
                 item["system_role"] = info.system_role
             out.append(item)
         return {"tx_types": out}
+
+    # --- đề xuất tỷ lệ chia lương theo số đã khai (onboarding bước 3) ------------------------------------------
+    def split_proposal_response(self, user_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        """`POST /jars/split-proposal`: tỷ lệ đề xuất từ nghĩa vụ đã khai và khoản biết trước (chưa lưu), kèm số tiền mỗi kỳ
+        trước và sau, kiểm tra hai kỳ lương và tham số `save_jars` sẵn để xác nhận. Chỉ đọc, không ghi gì."""
+        now = self.now()
+        view = self.repo.jar_view(user_id)
+        row = self.repo.user_row(user_id)
+        if view.clock_offset_days is None or row is None:
+            raise YofinaError(
+                ErrorCode.PROFILE_INCOMPLETE, "Bạn chưa khai lương và ngày nhận lương."
+            )
+        today = self._app_date(view.clock_offset_days, now)
+        unknown = set(body) - {"sinking_items"}
+        if unknown:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Chỉ nhận sinking_items.")
+        jars = sorted(
+            (j for j in view.jars if j.get("kind") != "system"),
+            key=lambda j: (j.get("sort_order") or 0, j["code"]),
+        )
+        template = next(
+            (t for t in self.ref.templates() if t.kind == "saving" and t.purpose == "sinking"),
+            None,
+        )
+        try:
+            items = split_proposal.parse_known_items(body.get("sinking_items"), today)
+            data = split_proposal.build_proposal(
+                today=today,
+                salary_vnd=(
+                    convert.vnd(row["monthly_salary_vnd"])
+                    if row.get("monthly_salary_vnd") is not None
+                    else None
+                ),
+                payday_day=int(row["payday_day"]) if row.get("payday_day") is not None else None,
+                jars=jars,
+                obligations=self.repo.list_obligations(user_id, status="active", limit=100),
+                known_items=items,
+                salary_events=self.repo.salary_events(user_id, "all"),
+                deviation_ask_percent=self.settings.salary_deviation_ask_percent,
+                buffer_min_percent=split_proposal.buffer_min_split_percent(),
+                sinking_template=(
+                    {
+                        "code": template.code,
+                        "name": template.name,
+                        "color_key": template.color_key,
+                        "icon_key": template.icon_key,
+                    }
+                    if template
+                    else None
+                ),
+            )
+        except ParamsError as exc:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
+        return {"app_date": today.isoformat(), "as_of": format_instant(now), **data}
 
     def jar_templates_response(self) -> dict[str, Any]:
         return {

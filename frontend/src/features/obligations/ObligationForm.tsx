@@ -42,12 +42,12 @@ export function ObligationFormView({
   const userJars = jars.filter((j) => j.kind !== 'system')
   const defaultJar = userJars.find((j) => j.kind === 'obligation' && j.code === 'nghia_vu') ??
     userJars.find((j) => j.kind === 'obligation')
-  const [f, setF] = useState<FormState>(() => ({
-    ...(initial ?? emptyForm()),
-    payJar: initial?.payJar || defaultJar?.code || '',
-  }))
+  const [f, setF] = useState<FormState>(() => initial ?? emptyForm())
+  // Hũ trả mặc định suy từ danh sách hũ ở mỗi lần vẽ: danh sách có thể về sau lần vẽ đầu (mở thẳng /obligations/new), nên
+  // không chốt nó vào state lúc khởi tạo. Người dùng chọn hũ khác thì giữ lựa chọn đó.
+  const payJar = f.payJar || defaultJar?.code || ''
   const [touched, setTouched] = useState(false)
-  const payJarError = touched && !f.payJar ? 'Chọn hũ sẽ dùng để trả.' : undefined
+  const payJarError = touched && !payJar ? 'Chọn hũ sẽ dùng để trả.' : undefined
   const write = useWriteFlow()
   const errors = validateForm(f)
   const invalid = Object.keys(errors).length > 0
@@ -57,8 +57,8 @@ export function ObligationFormView({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setTouched(true)
-    if (invalid || !f.payJar) return
-    const r = await write.submit('update_profile', obligationUpsertParams(f))
+    if (invalid || !payJar) return
+    const r = await write.submit('update_profile', obligationUpsertParams({ ...f, payJar }))
     if (r) onSaved(r)
   }
 
@@ -140,7 +140,7 @@ export function ObligationFormView({
 
       <label className="block">
         <span className="mb-1.5 block text-small font-semibold text-ink-2">Hũ dùng để trả</span>
-        <select value={f.payJar} onChange={(e) => set({ payJar: e.target.value })} className={selectCls} aria-invalid={!!payJarError}>
+        <select value={payJar} onChange={(e) => set({ payJar: e.target.value })} className={selectCls} aria-invalid={!!payJarError}>
           <option value="" disabled>Chọn hũ</option>
           {userJars.map((j) => (
             <option key={j.code} value={j.code}>
