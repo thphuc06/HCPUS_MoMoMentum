@@ -123,13 +123,14 @@ _PERSISTING: set[asyncio.Task[None]] = set()
 
 def background_busy() -> bool:
     """True khi còn việc nền sau `RUN_FINISHED` (ghi lượt, ghi bộ nhớ): `/ping` trả `HealthyBusy` để Runtime giữ phiên."""
-    return bool(_PERSISTING) or agent_memory.busy()
+    return any(not t.done() for t in _PERSISTING) or agent_memory.busy()
 
 
 async def drain_background() -> None:
-    """Chờ mọi việc nền xong (test, và khi tắt tiến trình)."""
-    while _PERSISTING:
-        await asyncio.gather(*list(_PERSISTING), return_exceptions=True)
+    """Chờ mọi việc nền xong (test, và khi tắt tiến trình). Như `memory.drain`: chỉ chờ tác vụ chưa xong của vòng lặp hiện tại."""
+    loop = asyncio.get_running_loop()
+    while pending := [t for t in _PERSISTING if not t.done() and t.get_loop() is loop]:
+        await asyncio.gather(*pending, return_exceptions=True)
     await agent_memory.drain()
 
 #: lỗi tạm thời của tool đáng thử lại một lần (lỗi nghiệp vụ như hết tiền, từ chối quyền thì không)
