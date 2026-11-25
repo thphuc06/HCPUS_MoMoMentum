@@ -1,7 +1,8 @@
 """Nạp lộ trình seed của persona khi đặt lại demo (`POST /demo/reset`, phase 4 N4): `data/personas/roadmaps/<persona>.json`.
 
-Với `minh`: v1 `superseded`, v2 `active`, v3 `proposed` với lý do `behavior_changed` có `behavior_flag_id` trỏ MỘT dòng `behavior_flags` đã
-xác nhận (cũng seed ở đây). Khớp frame L1 của Figma.
+Với `minh`: v1 `superseded`, v2 `active` (sửa một bước), để màn So với bản cũ có hai bản. Seed KHÔNG có dấu hiệu đổi hành vi hay bản đề
+xuất (issue #22): bản `behavior_changed` của cảnh 4 do bộ phát hiện thật tạo sau khi người dùng nạp sao kê; một dấu hiệu `confirmed`
+cài sẵn sẽ làm batch đêm bỏ qua hũ đó. Phiên bản seed có lý do `behavior_changed` bị từ chối (`ROADMAP_INVALID`, thiếu dấu hiệu).
 
 Không có đường ghi tắt: mỗi phiên bản đi qua đúng các bước của đường thật (chạy luật suitability cho TỪNG bước bằng `yofina_planner`,
 `app_save_roadmap` để tính phiên bản và trạng thái, quyết định từng bước bằng `app_set_roadmap_step_state`, sửa một bước bằng cùng hàm
@@ -31,12 +32,6 @@ from yofina_planner.facts import facts_from_rows
 from yofina_planner.rules import cached_rules, rules_version
 
 SQL_BALANCES = "SELECT code, balance_vnd FROM jars WHERE user_id = :uid"
-SQL_INSERT_FLAG = (
-    "INSERT INTO behavior_flags (user_id, jar_code, status, method, direction, old_weekly_vnd, new_weekly_vnd, "
-    "suspected_app_date, change_point_date, confirmed_app_date, weeks_held, detail) "
-    "VALUES (:uid, :jar, 'confirmed', :method, :direction, :old, :new, CAST(:suspected AS date), CAST(:cp AS date), "
-    "CAST(:confirmed AS date), :weeks, CAST(:detail AS jsonb)) RETURNING id"
-)
 #: số ngày kỳ tính tổng nghĩa vụ của luật `obligation_to_income` (mặc định của cấu hình ledger): bước lộ trình không thêm nghĩa vụ nên
 #: luật đó bị bỏ qua và con số này không ảnh hưởng kết quả; lấy từ mặc định của cấu hình để không đặt thêm một số.
 _WINDOW_DAYS = next(
@@ -152,38 +147,6 @@ def seed_roadmaps(
     )
     basis = {**seed["basis"], "computed_at": _now_text(tx)}
 
-    flag: dict[str, Any] | None = None
-    flag_id: str | None = None
-    if "behavior_flag" in seed:
-        f = seed["behavior_flag"]
-        flag = {
-            "jar_code": f["jar"],
-            "old_weekly_vnd": f["old_weekly_vnd"],
-            "new_weekly_vnd": f["new_weekly_vnd"],
-            "weeks_held": f["weeks_held"],
-        }
-        flag_id = str(
-            tx.execute(
-                SQL_INSERT_FLAG,
-                {
-                    "uid": user_id,
-                    "jar": f["jar"],
-                    "method": f["method"],
-                    "direction": f["direction"],
-                    "old": f["old_weekly_vnd"],
-                    "new": f["new_weekly_vnd"],
-                    "suspected": app_date - timedelta(days=f["suspected_days_ago"]),
-                    "cp": app_date - timedelta(days=f["change_point_days_ago"]),
-                    "confirmed": app_date - timedelta(days=f["confirmed_days_ago"]),
-                    "weeks": f["weeks_held"],
-                    "detail": {
-                        "source": "persona_seed",
-                        "note": "Dấu hiệu cài sẵn của persona (dữ liệu seed), không do bộ phát hiện tính.",
-                    },
-                },
-            )[0]["id"]
-        )
-
     prev: dict[str, Any] | None = None  # bản vừa lưu: {version, plan, states, feasibility}
     saved_count = 0
     for v in seed["versions"]:
@@ -215,11 +178,12 @@ def seed_roadmaps(
                 project_goal(meta[code], balances[code], int(plan_vnd), app_date)
                 for code, plan_vnd in v.get("goal_monthly_plan_vnd", {}).items()
             ]
+            # seed không có dấu hiệu đổi hành vi: bản `behavior_changed` thiếu `behavior_flag_id` nên `parse_draft` từ chối
             draft = rl.parse_draft(
                 {
                     "reason_code": v["reason_code"],
                     "based_on_version": prev["version"] if prev else None,
-                    "behavior_flag_id": flag_id if v["reason_code"] == "behavior_changed" else None,
+                    "behavior_flag_id": None,
                     "feasibility": v["feasibility"],
                     "goals": goals,
                     "phases": _resolve_phases(v["phases"], app_date),
@@ -240,12 +204,7 @@ def seed_roadmaps(
                 checked=checked,
                 basis=basis,
             )
-            is_flag = v["reason_code"] == "behavior_changed"
-            text, detail = rl.reason_for(
-                v["reason_code"],
-                flag=flag if is_flag else None,
-                jar_name=meta[flag["jar_code"]]["name"] if is_flag and flag else None,
-            )
+            text, detail = rl.reason_for(v["reason_code"])
             states = {}
             feasibility, flag_ref, based_on = (
                 draft.feasibility,
@@ -267,7 +226,6 @@ def seed_roadmaps(
             status=status_for_new_version(v["reason_code"], has_active),
             trace_id=None,
             step_states=states or None,
-            apply_flag=False,  # dấu hiệu seed giữ trạng thái `confirmed` (xem README của thư mục roadmaps)
         )
         if int(saved["version"]) != int(v["version"]):
             raise YofinaError(

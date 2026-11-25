@@ -1499,24 +1499,22 @@ def test_seed_minh_dung_dinh_dang_va_quy_chieu_nhat_quan():
     )
     assert "DỮ LIỆU SEED" in seed["nguon"]  # nguồn của con số được ghi rõ
     versions = seed["versions"]
-    assert [v["version"] for v in versions] == [1, 2, 3]
-    assert [v["reason_code"] for v in versions] == ["initial", "step_edited", "behavior_changed"]
+    # cảnh 4 chạy thật (issue #22): seed chỉ còn v1 và v2 (cho màn So với bản cũ), không có dấu hiệu đổi hành vi cài sẵn
+    assert [v["version"] for v in versions] == [1, 2]
+    assert [v["reason_code"] for v in versions] == ["initial", "step_edited"]
+    assert "behavior_flag" not in seed
     first_steps = {s["step_id"] for p in versions[0]["phases"] for s in p["steps"]}
     assert (
         versions[1]["edit"]["step_id"] in first_steps
         and set(versions[0]["decisions"]) <= first_steps
     )
-    flag = seed["behavior_flag"]
-    assert flag["old_weekly_vnd"] != flag["new_weekly_vnd"] and flag["jar"] == "an_uong"
-    for v in (versions[0], versions[2]):
+    for v in versions[:1]:
         phases = rs._resolve_phases(v["phases"], TODAY)
         draft = RoadmapDraft.model_validate(
             {
                 "reason_code": v["reason_code"],
-                "based_on_version": None if v["reason_code"] == "initial" else 2,
-                "behavior_flag_id": str(uuid.uuid4())
-                if v["reason_code"] == "behavior_changed"
-                else None,
+                "based_on_version": None,
+                "behavior_flag_id": None,
                 "feasibility": v["feasibility"],
                 "goals": [],
                 "alternatives": [],
@@ -1539,13 +1537,92 @@ def test_seed_minh_dung_dinh_dang_va_quy_chieu_nhat_quan():
                         st.action.params["fire_on"] == st.due_date
                     )  # `fire_on_day` đã đổi thành ngày ISO
         assert phases[0]["start_date"] == TODAY.isoformat()  # ngày tính từ ngày neo
-    # tiêu đề v1 và v3 của cùng một bước khác nhau ở đúng chỗ seed muốn (số tiền bù Ăn uống đổi qua v2 rồi về lại)
-    v3 = {s["step_id"]: s for p in versions[2]["phases"] for s in p["steps"]}
-    assert (
-        v3["bu_an_uong"]["amount_vnd"] == 150_000
-        and "danh_cho_du_phong" in v3
-        and "cat_giai_tri" not in v3
-    )
+
+
+class SeedTx:
+    """Transaction giả cho `roadmap_seed.seed_roadmaps`: trả hàng như các hàm DB sau khi đặt lại persona (số dư hũ, hồ sơ, nghĩa vụ
+    của `materialize`) và GHI LẠI mọi câu SQL, để test nhìn thấy đúng những gì seed ghi vào DB. Câu lạ thì báo lỗi."""
+
+    def __init__(self, persona: str) -> None:
+        from personas import generate, materialize
+
+        data = generate(persona, anchor=TODAY)
+        m = materialize(data, anchor=TODAY, now=NOW, tz=ZoneInfo("Asia/Ho_Chi_Minh"))
+        self.jars = m.jars
+        self.balances = {j.code: j.balance_vnd for j in data.jars}
+        self.user = {
+            "monthly_salary_vnd": data.monthly_salary_vnd,
+            "payday_day": data.payday_day,
+            "risk_tolerance": data.risk_tolerance,
+        }
+        self.obligations = [
+            {
+                "kind": o["kind"], "name": o["name"], "amount_vnd": o["amount"], "due_date": o["due_date"],
+                "cycle": o["cycle"], "due_day": o["due_day"], "pay_jar_code": o["pay_jar"],
+                "is_essential": o["is_essential"], "status": "active",
+            }
+            for o in m.obligations
+        ]  # fmt: skip
+        self.sql: list[str] = []
+        self.saved: list[dict[str, Any]] = []  # tham số của từng lần app_save_roadmap
+        self.states: dict[int, dict[str, Any]] = {}
+
+    def execute(self, sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        self.sql.append(sql)
+        p = params or {}
+        if sql.startswith("SELECT code, balance_vnd FROM jars"):
+            return [{"code": c, "balance_vnd": b} for c, b in self.balances.items()]
+        if "app_get_user(" in sql:
+            return [self.user]
+        if "app_get_jar_state(" in sql:
+            return [
+                {**j, "balance_vnd": self.balances[j["code"]]}
+                for j in self.jars
+                if j["kind"] != "system"
+            ]
+        if "app_list_obligations(" in sql:
+            return self.obligations
+        if sql.startswith("SELECT now()"):
+            return [{"ts": NOW}]
+        if "app_save_roadmap(" in sql:
+            self.saved.append(dict(p))
+            return [{"version": len(self.saved)}]
+        if sql.startswith("UPDATE roadmaps SET step_states"):
+            self.states[int(p["version"])] = dict(p["states"])
+            return []
+        if "app_set_roadmap_step_state(" in sql:
+            self.states.setdefault(int(p["version"]), {})[p["step_id"]] = {"status": p["status"]}
+            return [{"version": p["version"]}]
+        if "app_get_roadmap(" in sql:
+            v = int(p["version"])
+            return [{"plan": self.saved[v - 1]["plan"], "step_states": self.states.get(v, {})}]
+        raise AssertionError(f"SQL lạ trong seed lộ trình: {sql[:80]}")
+
+
+def test_seed_minh_nap_v1_v2_va_khong_ghi_dau_hieu_doi_hanh_vi():
+    """Đặt lại `minh` nạp v1 (bản đầu, ba quyết định bước) và v2 (sửa bước `bu_an_uong`), và KHÔNG ghi dòng `behavior_flags` nào: dấu
+    hiệu `confirmed` cài sẵn từng làm batch đêm bỏ qua hũ Ăn uống, nên cảnh 4 không chạy thật được (issue #22)."""
+    from yofina_ledger import roadmap_seed as rs
+
+    tx = SeedTx("minh")
+    n = rs.seed_roadmaps(tx, U, persona="minh", app_date=TODAY, jars=tx.jars)
+    assert n == 2
+    assert [p["reason_code"] for p in tx.saved] == ["initial", "step_edited"]
+    assert [p["status"] for p in tx.saved] == ["active", "active"]
+    assert [p["based_on"] for p in tx.saved] == [None, 1]
+    assert all(p["flag"] is None for p in tx.saved)
+    # phát hiện thật của batch đêm không bị chặn: seed không chạm bảng dấu hiệu
+    assert not any("behavior_flags" in s for s in tx.sql)
+    assert {k: s["status"] for k, s in tx.states[1].items()} == {
+        "giu_san_com_van_phong": "accepted",
+        "bu_an_uong": "accepted",
+        "cat_giai_tri": "rejected",
+    }
+    v2 = {s["step_id"]: s for ph in tx.saved[1]["plan"]["phases"] for s in ph["steps"]}
+    assert v2["bu_an_uong"]["amount_vnd"] == 100_000
+    assert v2["bu_an_uong"]["title"] == "Bù 100.000 ₫ mỗi tuần cho Ăn uống"
+    edited = tx.states[2]["bu_an_uong"]
+    assert edited["status"] == "accepted" and edited["edited"] is True
 
 
 def test_project_goal_chieu_muc_tieu_theo_muc_danh_moi_thang():
