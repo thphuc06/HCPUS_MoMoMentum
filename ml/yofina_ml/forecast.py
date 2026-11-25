@@ -95,7 +95,7 @@ def _make_ctx(inputs: ForecastInputs, cal: Calibration | None = None) -> _Ctx:
     run_label: ConfidenceBand = (
         "low"
         if is_initial
-        else band_for(history_days, coverage, cal.dense.probability_ok, cfg, prm)
+        else band_for(history_days, coverage, cal.dense.probability_ok_at(history_days), cfg, prm)
     )
     return _Ctx(
         inputs=inputs,
@@ -191,18 +191,20 @@ def _jar_result(
         for i in range(ctx.horizon)
     )
     p_pub = round(float(sim.p_shortfall), 4)
+    # BR-31: % chỉ hiện khi khoảng của loại chuỗi này đã đạt độ phủ mục tiêu ở ĐỘ DÀI LỊCH SỬ của hũ
+    calibrated = cal_kind.probability_ok_at(jar.history_days)
     show = (
         ctx.cfg.probability_enabled
         and not ctx.is_initial
         and kind != "cold_start"
-        and cal_kind.probability_ok
+        and calibrated
     )
     band: ConfidenceBand = (
         "low"
         if kind == "cold_start"
         else min_band(
             ctx.run_label,
-            band_for(jar.history_days, ctx.coverage, cal_kind.probability_ok, ctx.cfg, ctx.prm),
+            band_for(jar.history_days, ctx.coverage, calibrated, ctx.cfg, ctx.prm),
         )
     )
     summary = JarSummary(

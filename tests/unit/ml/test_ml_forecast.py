@@ -187,6 +187,46 @@ def test_chi_phat_xac_suat_khi_bat_va_hieu_chuan_dat():
     assert [jf.summary.status for jf in on.jars] == [jf.summary.status for jf in off.jars]
 
 
+def _gate(dense_days: int, sparse_days: int) -> dict:
+    return {
+        "calibration": {
+            "dense": {"probability_ok": True, "probability_min_history_days": dense_days},
+            "sparse": {"probability_ok": True, "probability_min_history_days": sparse_days},
+        }
+    }
+
+
+def _two_jars(n: int) -> tuple:
+    return (
+        jar("an_uong", n=n, seed=1, balance=900_000),
+        jar("giai_tri", n=n, seed=2, p=0.2, med=90_000, balance=700_000),
+    )
+
+
+def test_hu_lich_su_duoi_nguong_cua_loai_hu_thi_an_xac_suat_giu_nhan_va_trang_thai():
+    inp = with_config(inputs(_two_jars(60)), probability_enabled=True, extra=_gate(40, 90))
+    res = forecast_user(inp)
+    _ok(inp, res)
+    by = {jf.summary.jar_code: jf.summary for jf in res.jars}
+    dense, sparse = by["an_uong"], by["giai_tri"]
+    assert dense.series_kind == "dense" and sparse.series_kind == "sparse"
+    assert dense.show_probability and dense.p_shortfall is not None  # 60 >= 40: hũ dày vẫn hiện %
+    assert not sparse.show_probability and sparse.p_shortfall is None  # 60 < 90: hũ thưa ẩn %
+    assert sparse.p_shortfall_se is None
+    # ẩn % không làm mất nhãn tin cậy và trạng thái hũ: trạng thái giống hệt khi không có cổng lịch sử
+    ungated = forecast_user(with_config(inp, extra=_gate(0, 0)))
+    ref = {jf.summary.jar_code: jf.summary for jf in ungated.jars}
+    assert sparse.status == ref["giai_tri"].status
+    assert sparse.confidence_band in ("low", "medium", "high")
+
+
+def test_hu_thua_du_lich_su_tu_nguong_thi_hien_xac_suat():
+    inp = with_config(inputs(_two_jars(90)), probability_enabled=True, extra=_gate(40, 90))
+    res = forecast_user(inp)
+    _ok(inp, res)
+    assert all(jf.summary.show_probability for jf in res.jars)  # đúng bằng ngưỡng là đủ
+
+
 def test_xac_suat_hut_tang_khi_so_du_giam():
     ps = []
     for bal in (3_000_000, 1_500_000, 600_000):
