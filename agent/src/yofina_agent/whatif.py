@@ -1301,7 +1301,6 @@ async def whatif_advice(
     saved = await _what_if_saved(
         turn,
         checked,
-        recommended,
         rounds if rounds is not None else [checked],
         scenario,
         c.personal if c else (),
@@ -1335,7 +1334,6 @@ async def whatif_advice(
 async def _what_if_saved(
     turn: Turn,
     checked: list[tuple[Any, SuitabilityVerdict]],
-    recommended: str | None,
     rounds: list[list[tuple[Any, SuitabilityVerdict]]],
     scenario: Mapping[str, Any] | None,
     personal: Iterable[str],
@@ -1345,14 +1343,16 @@ async def _what_if_saved(
 
     - Bước được nhắc hũ của kịch bản (kết quả `run_scenario`: hũ bị ảnh hưởng, hũ trả nghĩa vụ đến hạn, hũ của spec) và hũ của các
       phương án sắp phát (hũ của phương án, hũ của đề xuất đã kiểm luật, hũ trong tham số hành động).
-    - Kết luận được nhắc hũ của kịch bản và hũ của phương án mang nhãn "Gợi ý", cộng hũ mà nguồn cá nhân hóa nó khai có nói tới: sở thích
-      trong bộ nhớ (`memory.jars_mentioned`, như nhãn `hu` Analyst thấy) và câu thói quen của hồ sơ hành vi.
+    - Kết luận được nhắc hũ của kịch bản và hũ của MỌI phương án sắp phát (mọi phương án đều nằm trong kết quả người dùng thấy, nên
+      câu so phương án được gợi ý với phương án còn lại, "trả bằng hũ Du lịch thay vì hũ Giải trí", vẫn khớp), cộng hũ mà nguồn cá
+      nhân hóa nó khai có nói tới: sở thích trong bộ nhớ (`memory.jars_mentioned`, như nhãn `hu` Analyst thấy) và câu thói quen của hồ
+      sơ hành vi. Kết luận vẫn phải trỏ đúng phương án mang nhãn "Gợi ý" (`target_ok` của `verify_conclusion`).
     - Luật đã loại hũ nào: phán quyết của mọi vòng Verifier, theo hũ nguồn của đề xuất (`proposal.jar_code`)."""
     names = {
         str(j["code"]): str(j["name"]) for j in turn.jar_rows if j.get("code") and j.get("name")
     }
     scenario_jars = advisor.jar_codes((scenario or {}).get("data"))
-    option_jars = {o.option_id: advisor.jar_codes(o.model_dump(mode="json")) for o, _ in checked}
+    emitted_jars = scenario_jars.union(*(advisor.jar_codes(o.model_dump(mode="json")) for o, _ in checked))
     sources = set(personal)
     personal_jars: set[str] = set()
     if "memory" in sources:
@@ -1373,10 +1373,8 @@ async def _what_if_saved(
     judged = [(o.proposal.jar_code, v) for pairs in rounds for o, v in pairs]
     return advisor.SavedResult(
         jar_names=names,
-        step_jars=frozenset(scenario_jars.union(*option_jars.values())),
-        conclusion_jars=frozenset(
-            scenario_jars | option_jars.get(recommended or "", set()) | personal_jars
-        ),
+        step_jars=frozenset(emitted_jars),
+        conclusion_jars=frozenset(emitted_jars | personal_jars),
         rejected=advisor.rule_rejections(judged),
     )
 

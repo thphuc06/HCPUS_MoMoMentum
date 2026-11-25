@@ -339,6 +339,68 @@ def test_whatif_analyst_lap_luan_mau_thuan_thi_khoi_khong_con_buoc_vi_pham(monke
     )
 
 
+def two_jar_analysis(conclusion_text: str) -> dict[str, Any]:
+    """Analyst đưa hai phương án trả bằng tiền hũ (Du lịch được gợi ý, Giải trí), lập luận nhất quán và một câu kết luận."""
+    out = switch_analysis(
+        "du_lich",
+        reasoning=[SHORTFALL, STEP_BEHAVIOR],
+        conclusion={"text": conclusion_text, "option_id": "switch", "personal": []},
+    )
+    out["options"][0] = {
+        "option_id": "giai_tri",
+        "kind": "switch_jar",
+        "label": "Mua bằng hũ Giải trí",
+        "summary": "Trả bằng tiền hũ.",
+        "proposal": {
+            "kind": "switch_jar",
+            "funding_source": "jar",
+            "jar_code": "giai_tri",
+            **PROPOSAL_BASE,
+        },
+        "jar_code": "giai_tri",
+    }
+    return out
+
+
+def whatif_turn(analysis_payload: dict[str, Any], monkeypatch: Any) -> list[Any]:
+    llm = make_llm(
+        [
+            route_response(**ROUTE_WHAT_IF),
+            tool_response("plan_scenario", SCENARIO),
+            tool_response("analyze", analysis_payload),
+        ]
+    )
+    events, _, _ = run_turn(WHAT_IF_Q, llm=llm, tools=FakeTools(), monkeypatch=monkeypatch)
+    return events
+
+
+def test_whatif_ket_luan_so_hai_phuong_an_deu_da_phat_thi_giu_khoi(monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="yofina.agent.advisor")
+    text = "Bạn nên trả bằng hũ Du lịch thay vì hũ Giải trí để hũ Nghĩa vụ không hụt ngày 05/12."
+    events = whatif_turn(two_jar_analysis(text), monkeypatch)
+    options = [b for b in blocks_of(events) if b["type"] == "options"]
+    assert {o["option_id"] for o in options[-1]["data"]["options"]} == {
+        "switch_giai_tri",
+        "switch_du_lich",
+    }
+    final = reasoning_of(events)[-1]["data"]
+    assert [s["seen"] for s in final["steps"]] == [SHORTFALL["seen"], STEP_BEHAVIOR["seen"]]
+    assert final["conclusion"]["text"] == text
+    assert final["conclusion"]["option_id"] == "switch_du_lich"
+    (logged,) = advisor_logs(caplog)
+    assert logged["conclusion"] == "kept" and logged["block"] == "kept"
+
+
+def test_whatif_ket_luan_nhac_hu_ngoai_moi_phuong_an_van_bo_ca_khoi(monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="yofina.agent.advisor")
+    # hũ Đi lại không thuộc phương án nào đã phát, cũng không thuộc kịch bản
+    text = "Bạn nên trả bằng hũ Du lịch thay vì hũ Đi lại để hũ Nghĩa vụ không hụt ngày 05/12."
+    events = whatif_turn(two_jar_analysis(text), monkeypatch)
+    assert reasoning_of(events) == []
+    (logged,) = advisor_logs(caplog)
+    assert logged["conclusion"] == "jar_mismatch" and logged["block"] == "conclusion_conflict"
+
+
 # --- lộ trình trong chat, planner giả trả lập luận nói hũ nguồn khác bản đã lưu ----------------------------------------------
 def saved_from(old: str, new: str) -> dict[str, Any]:
     """`save_roadmap.ok` với hũ nguồn `old` của mọi bước đổi thành `new` (bản đã lưu chuyển tiền từ hũ khác)."""

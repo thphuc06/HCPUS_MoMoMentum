@@ -145,7 +145,8 @@ class SavedResult:
 
     - `jar_names`: mã -> tên các hũ thật của lượt (`jar_rows`), để nhận ra hũ nào được nhắc trong chữ (`mentioned_jars`).
     - `step_jars`: các hũ một bước lập luận được nhắc tới (hũ có mặt trong kết quả).
-    - `conclusion_jars`: các hũ câu kết luận được nhắc tới (thường hẹp hơn: hũ của phương án hay bản được khuyên).
+    - `conclusion_jars`: các hũ câu kết luận được nhắc tới (what-if: hũ của kịch bản và của mọi phương án đã phát, cộng hũ mà nguồn cá
+      nhân hóa có nói tới; lộ trình: như `step_jars`).
     - `rejected`: rule_id -> các hũ nguồn mà luật đó đã loại trong lượt (`rule_rejections`).
     """
 
