@@ -85,14 +85,53 @@ def test_hu_hut_co_ngay_can_som_nhat_va_xac_suat_chi_hien_khi_duoc_phep():
     assert c.data.title == "Hũ Ăn uống dự kiến cạn ngày 23/11"
     assert (
         c.data.reason
-        == "Còn 380.000 ₫, cạn xong còn 12 ngày nữa mới tới kỳ lương 05/12. Xác suất hụt khoảng 71%."
+        == "Còn 380.000 ₫, cạn xong còn 12 ngày nữa mới tới kỳ lương 05/12. Khả năng hụt: 70%."
     )
     assert [a.kind for a in c.data.actions] == ["open_forecast", "ask_why", "snooze", "mute_kind"]
     assert c.data.actions[1].prompt == "Vì sao hũ Ăn uống sắp cạn?"
     f["an_uong"] = fc(
         "short", date(2026, 11, 23), 0.71, False
     )  # chưa đủ tin cậy: không phát phần trăm
-    assert "Xác suất" not in card(jars=jars, forecasts=f).data.reason
+    assert "Khả năng hụt" not in card(jars=jars, forecasts=f).data.reason
+
+
+@pytest.mark.parametrize(
+    ("p", "tail"),
+    [
+        (1.0, "Khả năng hụt: gần như chắc chắn."),
+        (0.98, "Khả năng hụt: gần như chắc chắn."),
+        (0.96, "Khả năng hụt: 95%."),
+        (0.62, "Khả năng hụt: 60%."),
+        (0.63, "Khả năng hụt: 65%."),
+        (0.03, "Khả năng hụt: 5%."),
+        (0.01, "Khả năng hụt: dưới 5%."),
+        (0.0, "Khả năng hụt: dưới 5%."),
+    ],
+)
+def test_the_chu_dong_lam_tron_kha_nang_hut_buoc_5_va_khong_noi_100_hay_0(p, tail):
+    """Lỗi P12-07: thẻ ghi "Xác suất hụt khoảng 100%". Cùng luật với `formatShortfallChance` của frontend (backtest phase 2 mục
+    2.5: xác suất hũ dày lệch 2 đến 8 điểm % nên làm tròn bước 5%)."""
+    c = card(jars=[jar("an_uong", "Ăn uống", 380_000)], forecasts={"an_uong": fc("short", date(2026, 11, 23), p, True)})
+    assert c.data.reason.endswith(" " + tail)
+    assert "100%" not in c.data.reason and " 0%" not in c.data.reason
+
+
+def test_tai_khoan_0_dong_khong_hien_the_du_kien_can():
+    """Lỗi P12-08: sau "Xóa dữ liệu của tôi" rồi onboarding lại, mọi hũ 0 ₫ mà thẻ vẫn ghi "dự kiến cạn … Còn 0 ₫"."""
+    jars = [jar("an_uong", "Ăn uống", 0), jar("giai_tri", "Giải trí", 0)]
+    f = {c: fc("short", TODAY, 1.0, True, initial=True, history=0) for c in ("an_uong", "giai_tri")}
+    c = card(jars=jars, forecasts=f)
+    assert c.data.kind == "low_data"
+    assert c.data.reason == "Chưa có giao dịch nào. Khai nghĩa vụ hoặc nhập giao dịch để có dự báo."
+    assert card(jars=jars, forecasts={k: {**v, "is_initial_estimate": False} for k, v in f.items()}) is None
+
+
+def test_hu_het_tien_trong_tai_khoan_co_tien_noi_da_het_khong_noi_con_0_dong():
+    jars = [jar("an_uong", "Ăn uống", 0), jar("giai_tri", "Giải trí", 760_000)]
+    c = card(jars=jars, forecasts={"an_uong": fc("short", TODAY, 1.0, True), "giai_tri": fc("ok")})
+    assert c.data.kind == "runout_warning" and c.data.jar_code == "an_uong"
+    assert c.data.title == "Hũ Ăn uống đã hết tiền"
+    assert c.data.reason == "Còn 14 ngày nữa mới tới kỳ lương 05/12."
 
 
 def test_hu_sat_va_nghia_vu_den_han_va_xem_lai_va_du_lieu_it_theo_thu_tu():

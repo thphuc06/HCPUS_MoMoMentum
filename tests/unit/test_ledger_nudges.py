@@ -108,6 +108,17 @@ def test_ung_vien_hu_thiet_yeu_can_truoc_ky_luong():
     assert tight.score < 1.0  # sát thì chưa vượt ngưỡng
 
 
+def test_ung_vien_tai_khoan_0_dong_khong_co_ban_tin_can_va_hu_het_tien_noi_da_het():
+    """Lỗi P12-08 ở cổng bản tin: tài khoản chưa có tiền không nhận "dự kiến cạn … Còn 0 ₫"."""
+    f = {"status": "short", "runout_date": TODAY.isoformat(), "payday_date": "2026-12-05"}
+    empty = [{**j, "balance_vnd": 0} for j in JARS]
+    assert gather(jars=empty, forecasts={"an_uong": f, "hoa_don": f}) == []
+    funded = [{**JARS[0], "balance_vnd": 0}, *JARS[1:]]
+    (c,) = gather(jars=funded, forecasts={"an_uong": f})
+    assert c.kind == "runout_warning" and c.status == "short"
+    assert c.title == "Hũ Ăn uống đã hết tiền" and "0 ₫" not in c.body and "05/12" in c.body
+
+
 def test_ung_vien_nghia_vu_ba_ngay_ma_hu_khong_du():
     obs = [
         {"name": "Tiền điện", "amount_vnd": 375_000, "due_date": "2026-11-23", "pay_jar_code": "hoa_don", "status": "active"},

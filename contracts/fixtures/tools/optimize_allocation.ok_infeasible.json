@@ -6,7 +6,7 @@
     "status": "infeasible",
     "headline": "Chưa khả thi: sàn bắt buộc vượt thu nhập 500.000 ₫ mỗi tháng, mục tiêu Du lịch không kịp.",
     "horizon_months": 4,
-    "period_start": "2026-11-21",
+    "period_start": "2026-12-05",
     "income_monthly_vnd": 12000000,
     "obligations_monthly_vnd": 3800000,
     "lines": [

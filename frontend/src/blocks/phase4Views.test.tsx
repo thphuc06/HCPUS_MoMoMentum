@@ -113,6 +113,15 @@ describe('lộ trình', () => {
     }
     expect(screen.getByText(/Chi Ăn uống mỗi tuần tăng.*giữ mức đó 2 tuần/)).toBeInTheDocument()
   })
+
+  it('"Loại bước" không ghi mã thô kể cả khi phản hồi cũ còn mã (lỗi P4-01)', () => {
+    const raw = validBlock('roadmap_diff.v2_v3') as { data: { changes: Array<{ kind: string; fields?: unknown[] }> } }
+    const changed = raw.data.changes.find((c) => c.kind === 'changed')!
+    changed.fields = [{ label: 'Loại bước', before: 'set_aside', after: 'cut_spending' }]
+    render(<BlockRenderer raw={raw as unknown as Record<string, unknown>} blockId="x" />)
+    expect(screen.getByText('Để dành → Giảm chi')).toBeInTheDocument()
+    expect(screen.queryByText(/set_aside|cut_spending/)).toBeNull()
+  })
 })
 
 describe('lộ trình trong chat: lối sang trang Lộ trình', () => {

@@ -14,6 +14,7 @@ Phase 5 (FR13, luồng B): CỔNG GIÁ TRỊ của bản tin chủ động (ph�
 from __future__ import annotations
 
 import json
+import math
 import re
 import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -33,6 +34,18 @@ _MUTE = {"kind": "mute_kind", "label": "Ít nhắc loại này"}
 
 def _dm(value: date) -> str:
     return f"{value.day:02d}/{value.month:02d}"
+
+
+def shortfall_chance_text(p: float) -> str:
+    """Khả năng hụt (0..1) thành chữ, CÙNG LUẬT với `formatShortfallChance` của frontend (`frontend/src/lib/format.ts`): làm tròn
+    bước 5% (backtest phase 2 mục 2.5: xác suất hũ dày lệch 2 đến 8 điểm %), tròn lên 100% thì "Gần như chắc chắn", tròn về 0% thì
+    "Dưới 5%" (mô hình không chắc tuyệt đối). Làm tròn nửa lên như `Math.round`, không theo kiểu ngân hàng của `round`."""
+    step = math.floor(float(p) * 20 + 0.5)
+    if step >= 20:
+        return "Gần như chắc chắn"
+    if step <= 0:
+        return "Dưới 5%"
+    return f"{step * 5}%"
 
 
 def choose_proactive_card(
@@ -88,7 +101,9 @@ def choose_proactive_card(
         "short": [],
         "tight": [],
     }
-    for jar in jars:
+    # Tài khoản chưa có đồng nào trong hũ (mới onboarding, hoặc vừa "Xóa dữ liệu của tôi"): chưa có gì để cạn, không cảnh báo hũ.
+    funded = _has_money(jars)
+    for jar in jars if funded else ():
         f = forecasts.get(jar["code"])
         if f is not None and f.get("status") in by_status:
             by_status[f["status"]].append((jar, f))
@@ -106,7 +121,11 @@ def choose_proactive_card(
         days = int(f["days_to_payday"])
         runout = to_date(f.get("runout_date"))
         balance = format_vnd(vnd(jar["balance_vnd"]))
-        if status == "short":
+        if status == "short" and vnd(jar["balance_vnd"]) <= 0:
+            # Hũ đã hết tiền: "dự kiến cạn … Còn 0 ₫" sai nghĩa, nói thẳng là đã hết và còn bao lâu tới lương.
+            title = f"Hũ {name} đã hết tiền"
+            reason = f"Còn {days} ngày nữa mới tới kỳ lương {_dm(payday)}."  # type: ignore[arg-type]
+        elif status == "short":
             title = (
                 f"Hũ {name} dự kiến cạn ngày {_dm(runout)}"  # type: ignore[arg-type]
                 if runout
@@ -121,7 +140,7 @@ def choose_proactive_card(
             else:
                 reason = f"Còn {balance}, còn {days} ngày tới kỳ lương {_dm(payday)}."  # type: ignore[arg-type]
             if f.get("show_probability") and f.get("p_shortfall") is not None:
-                reason += f" Xác suất hụt khoảng {round(float(f['p_shortfall']) * 100)}%."
+                reason += f" Khả năng hụt: {shortfall_chance_text(float(f['p_shortfall'])).lower()}."
         else:
             title = f"Hũ {name} đang sát số dư"
             reason = f"Còn {balance}, dự kiến còn rất ít trước kỳ lương {_dm(payday)}."  # type: ignore[arg-type]
@@ -182,10 +201,19 @@ def choose_proactive_card(
             "low_data",
             "ok",
             "Dự báo mới là ước lượng ban đầu",
-            f"Mới có {days} ngày dữ liệu. Khai thêm nghĩa vụ hoặc nhập thêm giao dịch để dự báo chính xác hơn.",
+            (
+                f"Mới có {days} ngày dữ liệu. Khai thêm nghĩa vụ hoặc nhập thêm giao dịch để dự báo chính xác hơn."
+                if days > 0
+                else "Chưa có giao dịch nào. Khai nghĩa vụ hoặc nhập giao dịch để có dự báo."
+            ),
             [{"kind": "open_obligations", "label": "Khai nghĩa vụ"}, _SNOOZE, _MUTE],
         )
     return None
+
+
+def _has_money(jars: Iterable[Mapping[str, Any]]) -> bool:
+    """Có ít nhất một hũ người dùng còn tiền (tài khoản 0 ₫ thì không cảnh báo cạn: lỗi P12-08)."""
+    return any(vnd(j["balance_vnd"]) > 0 for j in jars)
 
 
 # =====================================================================================================
@@ -396,10 +424,11 @@ def gather_candidates(
     out: list[GateCandidate] = []
     essential = set(essential_jar_codes)
     by_code = {j["code"]: j for j in jars}
+    funded = _has_money(jars)
 
     for code, f in forecasts.items():
         jar = by_code.get(code)
-        if jar is None or code not in essential or f.get("status") not in ("short", "tight"):
+        if not funded or jar is None or code not in essential or f.get("status") not in ("short", "tight"):
             continue
         payday = to_date(f.get("payday_date"))
         runout = to_date(f.get("runout_date"))
@@ -407,12 +436,18 @@ def gather_candidates(
         if f["status"] == "short" and runout is not None and payday is not None and runout < payday:
             gap = (payday - runout).days
             value = int(avg_daily_spend.get(code, 0)) * gap
+            empty = vnd(jar["balance_vnd"]) <= 0
             out.append(
                 GateCandidate(
                     kind="runout_warning",
                     score=1.0 + min(gap, 28) / 7,
-                    title=_clip(f"Hũ {name} dự kiến cạn ngày {_dm(runout)}", 80),
-                    body=_clip(f"Còn {balance}, cạn xong còn {gap} ngày nữa mới tới kỳ lương {_dm(payday)}.", 200),
+                    title=_clip(f"Hũ {name} đã hết tiền" if empty else f"Hũ {name} dự kiến cạn ngày {_dm(runout)}", 80),
+                    body=_clip(
+                        f"Còn {(payday - today).days} ngày nữa mới tới kỳ lương {_dm(payday)}."
+                        if empty
+                        else f"Còn {balance}, cạn xong còn {gap} ngày nữa mới tới kỳ lương {_dm(payday)}.",
+                        200,
+                    ),
                     status="short",
                     jar_code=code,
                     value_vnd=value or None,

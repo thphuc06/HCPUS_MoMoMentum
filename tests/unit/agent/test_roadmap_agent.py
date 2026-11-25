@@ -195,10 +195,10 @@ def test_save_grounded_roadmap_and_report_stages():
     assert stored["alternatives"] == data["alternatives"]
     first, second, third = stored["phases"]
     # giai đoạn đầu là tháng đầu (việc làm ngay), các giai đoạn sau chia đều phần còn lại, nối liền và theo thứ tự thời gian
-    assert first["start_date"] == data["period_start"] == "2026-11-21"
-    assert first["end_date"] == "2026-12-21" == second["start_date"]
+    assert first["start_date"] == data["period_start"] == "2026-12-05"
+    assert first["end_date"] == "2027-01-05" == second["start_date"]
     assert second["end_date"] == third["start_date"]
-    assert third["end_date"] == "2027-03-21"  # horizon trả về là bốn tháng
+    assert third["end_date"] == "2027-04-05"  # horizon trả về là bốn tháng
     move, nudge = first["steps"][0], second["steps"][0]
     line = next(line for line in data["lines"] if line["jar"]["code"] == "du_phong")
     expected = line["proposed_monthly_vnd"] - line["current_monthly_vnd"]
@@ -981,9 +981,14 @@ def test_future_step_over_current_balance_but_within_monthly_income_passes_like_
 
 def test_step_starting_now_over_current_balance_is_still_blocked(caplog):
     # Cùng bước đó ở giai đoạn đầu (bắt đầu hôm nay, trước kỳ lương kế): tiền lấy từ số dư hiện có nên vẫn bị chặn và sửa.
+    # Từ #19 kỳ lộ trình bắt đầu ngày lương kế tiếp; kỳ chỉ còn bắt đầu hôm nay khi hồ sơ chưa có ngày lương (allocation giữ hôm nay).
     caplog.set_level("WARNING", logger="yofina.agent.roadmap")
     balances, facts = low_entertainment_balances(200_000)
-    tools = scripted_tools(get_jar_balances=balances, checks=suitability_from_engine(facts))
+    ok = fixture("optimize_allocation.ok.json")
+    today_start = {**ok, "data": {**ok["data"], "period_start": facts.today.isoformat()}}
+    tools = scripted_tools(
+        allocation=today_start, get_jar_balances=balances, checks=suitability_from_engine(facts)
+    )
     fixed = outline(step(kind="adjust_split", jar_code="du_phong", to_jar_code=None, action=None))
     result, client, scope = build(tools, outline(step()), fixed)
     assert result.outcome.ok and scope.calls == 2

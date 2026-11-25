@@ -7,6 +7,20 @@ const CHANGE_KIND = {
   changed: { kind: 'warn', label: 'Đổi' },
 } as const
 
+/** Cùng bảng nhãn với `STEP_KIND_LABELS` của server (roadmap_logic.py). Server đã gửi nhãn; bảng này đỡ cho phản hồi cũ còn mã thô. */
+const STEP_KIND_LABEL: Record<string, string> = {
+  set_aside: 'Để dành',
+  adjust_split: 'Đổi tỷ lệ chia lương',
+  pay_obligation: 'Trả nghĩa vụ',
+  cut_spending: 'Giảm chi',
+  review_goal: 'Xem lại mục tiêu',
+  remind: 'Nhắc việc',
+}
+
+function fieldValue(label: string, value: string): string {
+  return label === 'Loại bước' ? (STEP_KIND_LABEL[value] ?? value) : value
+}
+
 export function RoadmapDiff({ data }: { data: RoadmapDiffData }) {
   return (
     <section data-block="roadmap_diff" className="space-y-3 rounded-card bg-surface p-4 shadow-card">
@@ -29,7 +43,7 @@ export function RoadmapDiff({ data }: { data: RoadmapDiffData }) {
                   {change.fields.map((field, i) => (
                     <div key={`${field.label}-${i}`} className="flex flex-wrap justify-between gap-x-3">
                       <dt>{field.label}</dt>
-                      <dd className="num">{field.before && `${field.before} → `}{field.after}</dd>
+                      <dd className="num">{field.before && `${fieldValue(field.label, field.before)} → `}{fieldValue(field.label, field.after)}</dd>
                     </div>
                   ))}
                 </dl>

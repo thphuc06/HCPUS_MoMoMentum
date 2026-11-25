@@ -122,12 +122,16 @@ describe('dates', () => {
   })
 })
 
-describe('formatShortfallChance (lỗi nhỏ phase 2: "100%")', () => {
-  it('tròn 100% nói "gần như chắc chắn"; gần 0 nói "dưới 1%"; còn lại là phần trăm', () => {
+describe('formatShortfallChance (lỗi P12-07: "100%", bước 5% theo backtest phase 2)', () => {
+  it('làm tròn bước 5%; tròn lên 100% nói "gần như chắc chắn"; tròn về 0% nói "dưới 5%"', () => {
     expect(formatShortfallChance(1)).toBe('Gần như chắc chắn')
-    expect(formatShortfallChance(0.996)).toBe('Gần như chắc chắn')
-    expect(formatShortfallChance(0.71)).toBe('71%')
-    expect(formatShortfallChance(0.002)).toBe('Dưới 1%')
-    expect(formatShortfallChance(0)).toBe('0%')
+    expect(formatShortfallChance(0.98)).toBe('Gần như chắc chắn')
+    expect(formatShortfallChance(0.96)).toBe('95%')
+    expect(formatShortfallChance(0.71)).toBe('70%')
+    expect(formatShortfallChance(0.62)).toBe('60%')
+    expect(formatShortfallChance(0.63)).toBe('65%')
+    expect(formatShortfallChance(0.03)).toBe('5%')
+    expect(formatShortfallChance(0.01)).toBe('Dưới 5%')
+    expect(formatShortfallChance(0)).toBe('Dưới 5%')
   })
 })

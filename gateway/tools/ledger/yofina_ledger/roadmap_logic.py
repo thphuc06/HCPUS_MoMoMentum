@@ -49,6 +49,15 @@ STEP_CATEGORY = {
     "pay_obligation": "debt_payment",
     "cut_spending": "spending",
 }
+#: nhãn tiếng Việt của sáu loại bước (`RoadmapStep.kind` trong contracts/blocks/roadmap.schema.json), dùng ở màn So với bản cũ
+STEP_KIND_LABELS = {
+    "set_aside": "Để dành",
+    "adjust_split": "Đổi tỷ lệ chia lương",
+    "pay_obligation": "Trả nghĩa vụ",
+    "cut_spending": "Giảm chi",
+    "review_goal": "Xem lại mục tiêu",
+    "remind": "Nhắc việc",
+}
 MAX_DIFF_CHANGES = 30
 
 
@@ -541,10 +550,14 @@ def diff_roadmaps(
     def index(data: Mapping[str, Any]) -> dict[str, tuple[str, Mapping[str, Any]]]:
         return {s["step_id"]: (p["phase_id"], s) for p in data["phases"] for s in p["steps"]}
 
+    def titles(data: Mapping[str, Any]) -> dict[str, str]:
+        return {p["phase_id"]: str(p.get("title") or p["phase_id"]) for p in data["phases"]}
+
     def jar(code: str | None) -> str:
         return jar_names.get(code or "", code or "")
 
     old_idx, new_idx = index(old), index(new)
+    old_titles, new_titles = titles(old), titles(new)
     changed: list[dict[str, Any]] = []
     added: list[dict[str, Any]] = []
     removed: list[dict[str, Any]] = []
@@ -592,8 +605,13 @@ def diff_roadmaps(
             jar(ostep.get("to_jar_code")) or None,
             jar(step.get("to_jar_code")) or None,
         )
-        add("Loại bước", ostep["kind"], step["kind"])
-        add("Giai đoạn", old_phase, phase)
+        add(
+            "Loại bước",
+            STEP_KIND_LABELS.get(ostep["kind"], ostep["kind"]),
+            STEP_KIND_LABELS.get(step["kind"], step["kind"]),
+        )
+        if old_phase != phase:  # so theo mã giai đoạn, hiện tên giai đoạn (lỗi P4-01: không ghi mã thô)
+            add("Giai đoạn", old_titles[old_phase], new_titles[phase])
         if not fields:
             add("Tên bước", ostep["title"], step["title"])
         reason_changed = ostep["reason"] != step["reason"]

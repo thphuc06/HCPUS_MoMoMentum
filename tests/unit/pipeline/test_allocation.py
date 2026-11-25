@@ -245,6 +245,8 @@ def test_engine_tra_dung_hop_dong_va_bao_toan_tien():
         and d.solver.elapsed_ms >= 0
     )
     assert d.obligations_monthly_vnd == 2_000_000 + 375_000 + round(1_000_000 / 3)
+    # lỗi P4-02 (E5): kỳ lộ trình bắt đầu từ ngày lương kế tiếp theo hồ sơ (ngày 5), không phải hôm nay 21/11
+    assert d.period_start == "2026-12-05"
     assert (
         res["app_date"] == APP_DATE.isoformat() and w.score_saves == 0
     )  # không ghi gì (kể cả điểm chống chịu)

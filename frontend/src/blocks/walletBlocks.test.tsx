@@ -36,7 +36,7 @@ describe('forecast_timeline trong chat', () => {
       </Providers>,
     )
     expect(await screen.findByTestId('forecast-summary')).toHaveTextContent(forecastSummary(block.data))
-    expect(screen.getByTestId('p-shortfall')).toHaveTextContent('71%')
+    expect(screen.getByTestId('p-shortfall')).toHaveTextContent('70%')
     expect(screen.queryByRole('button', { name: 'Vì sao' })).toBeNull() // trong chat không có nút Vì sao của màn hình
   })
 })

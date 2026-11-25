@@ -32,6 +32,7 @@ from yofina_core.blocks import (
     RoadmapAlternative,
     format_instant,
 )
+from yofina_core.clock import next_payday
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
 from yofina_core.money import format_vnd
 from yofina_core.roadmap import (
@@ -368,7 +369,7 @@ class AllocationEngine:
             status=sol.status,
             headline=self._headline(b, sol),
             horizon_months=b.horizon_months,
-            period_start=today.isoformat(),
+            period_start=self._period_start(g).isoformat(),
             income_monthly_vnd=income,
             obligations_monthly_vnd=b.obligations_monthly_vnd,
             lines=[AllocationLine.model_validate(x) for x in lines],
@@ -440,6 +441,15 @@ class AllocationEngine:
         if late:
             reasons.append(f"mục tiêu {', '.join(late)} không kịp")
         return clip("Chưa khả thi: " + ", ".join(reasons or ["không đủ thu nhập"]) + ".", 160)
+
+    @staticmethod
+    def _period_start(g: Gathered) -> date:
+        """Kỳ lộ trình bắt đầu từ ngày lương KẾ TIẾP theo `payday_day` của hồ sơ (lỗi P4-02, E5): tỷ lệ chia mới áp từ lần lương sau,
+        và agent dựng các mốc tháng theo ngày-trong-tháng của `period_start`. Hồ sơ chưa có ngày lương thì giữ hôm nay."""
+        payday_day = (g.ctx.meta.get("profile") or {}).get("payday_day")
+        if payday_day is None:
+            return g.app_date
+        return next_payday(int(payday_day), g.app_date)
 
     def _alternatives(self, b: Built, sol: AllocationSolution, today: date) -> list[dict[str, Any]]:
         """Đúng hai lựa chọn nói thẳng khi vẫn vô nghiệm sau một vòng nới."""

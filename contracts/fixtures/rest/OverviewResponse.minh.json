@@ -141,7 +141,7 @@
     "id": "proactive_card:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:runout_warning",
     "type": "proactive_card",
     "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
-    "fallback_text": "Hũ Ăn uống dự kiến cạn ngày 29/11. Còn 380.000 ₫, còn 6 ngày tới kỳ lương 05/12. Xác suất hụt khoảng 71%.",
+    "fallback_text": "Hũ Ăn uống dự kiến cạn ngày 29/11. Còn 380.000 ₫, còn 6 ngày tới kỳ lương 05/12. Khả năng hụt: 70%.",
     "source": {
       "tool": "rest:GET /overview",
       "as_of": "2026-12-10T03:00:00Z",
@@ -151,7 +151,7 @@
       "kind": "runout_warning",
       "status": "short",
       "title": "Hũ Ăn uống dự kiến cạn ngày 29/11",
-      "reason": "Còn 380.000 ₫, còn 6 ngày tới kỳ lương 05/12. Xác suất hụt khoảng 71%.",
+      "reason": "Còn 380.000 ₫, còn 6 ngày tới kỳ lương 05/12. Khả năng hụt: 70%.",
       "jar_code": "an_uong",
       "actions": [
         {
