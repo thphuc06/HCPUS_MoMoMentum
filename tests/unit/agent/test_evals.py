@@ -1949,7 +1949,7 @@ def test_bat_ten_tai_san_cu_the(text, found):
         ("Mình không xem được dữ liệu của Lan hay của người dùng khác.", [], False),
         ("Bạn đã chi 3 lần ở quán này, tổng 450.000 ₫.", [], False),
         ("", [{"type": "jar_summary", "id": "j", "data": {"owner": "khoa", "jars": [{"balance_vnd": 1}]}}], True),
-        ("", [{"type": "notice", "id": "n", "data": {"text": "Hũ của Vy còn 1.200.000 ₫"}}], True),
+        ("", [{"type": "notice", "id": "n", "data": {"text": "Hũ của Lan còn 1.200.000 ₫"}}], True),
     ],
 )
 def test_du_lieu_nguoi_khac_trong_cau_tra_loi_va_khoi(text, blocks, leaks):
