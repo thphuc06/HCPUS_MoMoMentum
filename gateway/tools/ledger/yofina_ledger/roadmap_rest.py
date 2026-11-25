@@ -9,7 +9,7 @@
 | `GET /roadmap/diff` | khối `roadmap_diff` |
 | `POST /roadmap/steps/{step_id}/decision` | chấp nhận, từ chối, đưa về chờ một bước |
 | `POST /roadmap/steps/{step_id}/edit` | sửa số tiền hoặc ngày: phiên bản mới `active`, lý do `step_edited` |
-| `POST /roadmap/versions/{version}/decision` | "Dùng bản mới" hoặc "Giữ bản cũ" |
+| `POST /roadmap/versions/{version}/decision` | "Dùng bản mới" hoặc "Giữ bản cũ" (kèm một câu lý do tùy chọn) |
 | `POST /roadmap/regenerate` | ghi `roadmap_jobs`, phát `roadmap.regeneration_requested` sau commit, trả job (HTTP 200) |
 | `GET /roadmap/jobs/{job_id}` | tiến độ một lần sinh lại |
 """
@@ -205,12 +205,13 @@ def dispatch(
 
     if name == "version_decision":
         version = _version(path["version"])
-        body = _strict_body(event, frozenset({"decision"}))
+        body = _strict_body(event, frozenset({"decision", "reason"}))
         decision = body.get("decision")
         return 200, ops.decide_version_response(
             sub,
             version=version,
             decision=decision if isinstance(decision, str) else "",
+            reason=_text(body.get("reason"), "reason", REASON_MAX),
             trace_id=trace_id,
         )
 
