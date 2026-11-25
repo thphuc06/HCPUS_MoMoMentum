@@ -151,19 +151,21 @@ def test_mua_300k_bang_tra_sau_sinh_nghia_vu_gom_phi_tu_bang_va_han_ngay_5(env, 
     env.reset(LAN)
     fee = fee_from_table(env)
     before = balances(env, LAN)
+    purchase = {
+        "kind": "expense",
+        "amount_vnd": 300_000,
+        "jar": "giai_tri",
+        "tx_type": "entertainment",
+        "funding": "credit",
+        "counterparty": "Tiki",
+    }
+    # ví cũ của Lan chưa có hũ Nghĩa vụ và chưa có nguồn trả đã lưu: phải chọn hũ trả (Bước 2 lộ trình bộ hũ)
+    with pytest.raises(YofinaError) as e:
+        env.act(LAN, "record_transaction", purchase)
+    assert e.value.code == ErrorCode.PARAMS_INVALID
+    assert balances(env, LAN) == before
     env.events.sent.clear()
-    r = env.act(
-        LAN,
-        "record_transaction",
-        {
-            "kind": "expense",
-            "amount_vnd": 300_000,
-            "jar": "giai_tri",
-            "tx_type": "entertainment",
-            "funding": "credit",
-            "counterparty": "Tiki",
-        },
-    )
+    r = env.act(LAN, "record_transaction", {**purchase, "pay_jar": "giai_tri"})
     block = parse_block(r)
     assert block.data.jars_after == []  # trả sau không đổi số dư hũ
     assert balances(env, LAN) == before
@@ -1036,7 +1038,8 @@ def test_hai_lan_mua_tra_sau_song_song_cong_don_dung_va_phi_chi_tinh_mot_lan(env
 
     env.reset(LAN)
     fee = fee_from_table(env)
-    p = {"kind": "expense", "amount_vnd": 300_000, "jar": "giai_tri", "funding": "credit"}
+    # ví cũ chưa có hũ Nghĩa vụ: chọn hũ trả rõ ràng
+    p = {"kind": "expense", "amount_vnd": 300_000, "jar": "giai_tri", "funding": "credit", "pay_jar": "giai_tri"}
     errors: list[Exception] = []
 
     def run():
@@ -1089,7 +1092,8 @@ def test_xem_truoc_do_server_tinh_gom_phi_tra_sau_va_khong_ghi_gi(env):
     env.reset(LAN)
     fee = fee_from_table(env)
     before = balances(env, LAN)
-    p = {"kind": "expense", "amount_vnd": 300_000, "jar": "giai_tri", "funding": "credit"}
+    # ví cũ chưa có hũ Nghĩa vụ: chọn hũ trả rõ ràng
+    p = {"kind": "expense", "amount_vnd": 300_000, "jar": "giai_tri", "funding": "credit", "pay_jar": "giai_tri"}
     issued, preview = env.svc.issue_confirmation_with_preview(
         LAN, tool="record_transaction", params=p, client_params_hash=None, trace_id="a" * 8
     )
