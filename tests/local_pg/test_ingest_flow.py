@@ -450,6 +450,8 @@ def test_vy_nap_tep_mau_canh_5_qua_duong_chinh_do_phu_tang_dung_cong_thuc(env):
     from persona_coverage import coverage_facts as persona_facts
 
     from personas import generate, generate_out_of_wallet
+    from personas.six_jars import apply_demo_layout
+    from yofina_ledger.jar_layout import DEMO_LAYOUT
     from yofina_ml import quality
     from yofina_ml.types import CoverageInputs
 
@@ -457,8 +459,9 @@ def test_vy_nap_tep_mau_canh_5_qua_duong_chinh_do_phu_tang_dung_cong_thuc(env):
     env.svc.reset_demo(vy, "vy", trace_id="t" * 8)
     ing = Ctx(env)
     data = generate("vy", anchor=ANCHOR)
+    demo = apply_demo_layout(data, DEMO_LAYOUT)  # ví mà đặt lại nạp: thành phần độ phủ tính trên ví này
     before = coverage_ratio(ing.repo.coverage_facts(vy, env.clock.now, TZ, 330))
-    assert before == quality.data_coverage(CoverageInputs(**persona_facts(data))) < 1.0
+    assert before == quality.data_coverage(CoverageInputs(**persona_facts(demo))) < 1.0
     bal_before = balances(env, vy)
 
     up = ing.upload(vy, kind="csv", mime="text/csv")
@@ -488,7 +491,7 @@ def test_vy_nap_tep_mau_canh_5_qua_duong_chinh_do_phu_tang_dung_cong_thuc(env):
     spent = sum(r["amount_vnd"] for r in take)
     assert cov["rows_added"] == len(take) and cov["external_spend_added_vnd"] == spent
     assert cov.get("external_income_added_vnd", 0) == 0
-    after = quality.data_coverage(CoverageInputs(**persona_facts(data, extra_expenses=spent)))
+    after = quality.data_coverage(CoverageInputs(**persona_facts(demo, extra_expenses=spent)))
     assert (cov["before"], cov["after"]) == (before, after) and after > before
     assert cov["after"] == coverage_ratio(ing.repo.coverage_facts(vy, env.clock.now, TZ, 330))
     assert balances(env, vy) == bal_before  # dòng external không đổi số dư hũ

@@ -35,6 +35,11 @@ Cách dựng sổ cái (đúng cách ví thật ghi, nên các hàm dự báo đ
    ở bước 4 (nên hũ đích chi được nhiều hơn phần lương chia mà vẫn về đúng số dư cần đạt), tiền chuyển đi trừ khỏi hũ nguồn.
    Spec không khai thì không có dòng nào.
 
+10. Hũ chỉ ví demo có (tùy chọn, issue #39): spec khai `demo_jars` (mỗi hũ: `code`, `split_from` là mã hũ demo -> số điểm % lấy
+   sang, cộng các khóa của một hũ thường: `opening_vnd`, `target_vnd`, `expense_count`, `recent_share`, `rhythm`, `merchants`) thì bộ
+   sinh dựng dòng của riêng hũ đó (số dư đầu kỳ, khoản chi) vào `PersonaData.demo_jars` bằng `random.Random` riêng. Ví persona
+   (`jars`, `transactions`, `materialize`) không đổi một byte; `personas.six_jars.apply_demo_layout` mới gộp hũ này vào ví demo.
+
 Kết quả chỉ dùng "số ngày trước ngày neo" và giờ địa phương; việc ghép với đồng hồ mô phỏng (ngày neo, offset, UTC) và dựng id
 làm ở `materialize`, theo ADR-0003.
 """
@@ -48,7 +53,7 @@ import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -157,6 +162,28 @@ class SalaryEventSeed:
 
 
 @dataclass(frozen=True)
+class DemoJarSeed:
+    """Hũ chỉ ví demo có (spec `demo_jars`, issue #39): hũ Chi hằng ngày cạnh các hũ tự thêm. Bộ sinh dựng sẵn dòng của riêng hũ này
+    (số dư đầu kỳ, khoản chi) bằng dòng ngẫu nhiên riêng; `personas.six_jars.apply_demo_layout` thêm dòng chia lương mỗi kỳ
+    (`split_line_vnd`) và bớt đúng phần đó ở hũ nguồn (`split_from`: mã hũ demo, số điểm %, số tiền mỗi kỳ). Ví persona (`jars`,
+    `transactions`, `materialize`) không có hũ này."""
+
+    code: str
+    split_from: tuple[tuple[str, Decimal, int], ...]
+    opening_vnd: int
+    target_vnd: int
+    transactions: tuple[TxSeed, ...]
+
+    @property
+    def split_percent(self) -> Decimal:
+        return sum((pts for _, pts, _ in self.split_from), Decimal(0))
+
+    @property
+    def split_line_vnd(self) -> int:
+        return sum(amount for _, _, amount in self.split_from)
+
+
+@dataclass(frozen=True)
 class PersonaData:
     persona: str
     display_name: str
@@ -179,6 +206,8 @@ class PersonaData:
     seed_salary_events: bool = False
     #: thu nhập hằng tháng về tài khoản ngân hàng khác (spec `external_income_monthly_vnd`); None là không khai (ba persona cũ)
     external_income_monthly_vnd: int | None = None
+    #: hũ chỉ ví demo có (spec `demo_jars`), chưa gộp vào ví; `apply_demo_layout` gộp. Ví persona bỏ qua trường này.
+    demo_jars: tuple[DemoJarSeed, ...] = ()
 
 
 # --- đọc spec và bảng tài khoản ---------------------------------------------------------------
@@ -351,6 +380,74 @@ def _merchants(jar: Mapping[str, Any]) -> list[tuple[str, str, float]]:
     return out
 
 
+def _expense_lines(
+    rng: random.Random,
+    code: str,
+    j: Mapping[str, Any],
+    spend: int,
+    merchants: list[tuple[str, str, float]],
+    *,
+    income_days: list[int],
+    history_days: int,
+    end_ago: int,
+    anchor: date,
+    payday_day: int,
+    rhythm: Mapping[str, float],
+) -> list[TxSeed]:
+    """Khoản chi của một hũ (bước 4 và 5 ở đầu file): `spend` chia theo `recent_share` cho khoảng sau ngày lương gần nhất, phần còn
+    lại theo số ngày cho các khoảng trước; trong mỗi khoảng chọn ngày theo nhịp, số tiền theo lognormal, cửa hàng theo trọng số.
+    Mọi giá trị ngẫu nhiên lấy từ `rng` của riêng hũ này, theo đúng thứ tự gọi như trước khi tách hàm (băm đầu ra không đổi)."""
+    out: list[TxSeed] = []
+    segs = _segments(income_days, history_days, end_ago)
+    recent_share = Decimal(str(j.get("recent_share", 0.5)))
+    last_seg, earlier = segs[-1], segs[:-1]
+    recent_total = _round_amount(Decimal(spend) * recent_share) if earlier else spend
+    allocations: list[tuple[tuple[int, int], int]] = [(last_seg, recent_total)]
+    rest = spend - recent_total
+    if earlier and rest:
+        days = [s[0] - s[1] + 1 for s in earlier]
+        acc = 0
+        for i, seg in enumerate(earlier):
+            part = (
+                rest - acc
+                if i == len(earlier) - 1
+                else _round_amount(Decimal(rest) * days[i] / sum(days))
+            )
+            acc += part
+            allocations.append((seg, part))
+    n_total = int(j.get("expense_count", 0)) or max(1, spend // 100_000)
+    names = [m[0] for m in merchants]
+    types = {m[0]: m[1] for m in merchants}
+    mweights = [m[2] for m in merchants]
+    seq = 0
+    for (first, last), amount in allocations:
+        if amount <= 0:
+            continue
+        n = max(1, round(n_total * amount / spend))
+        money = _split_total(rng, amount, n, float(rhythm["amount_sigma"]))
+        span = list(range(first, last - 1, -1))
+        agos = _pick_days(
+            rng,
+            span,
+            _day_weights(span, anchor, payday_day, rhythm),
+            len(money),
+            int(rhythm["max_per_day"]),
+        )
+        rng.shuffle(money)
+        for m_amount, ago in zip(money, agos, strict=False):
+            name = rng.choices(names, weights=mweights, k=1)[0]
+            seq += 1
+            out.append(
+                TxSeed(
+                    f"exp:{code}:{seq}", ago, time(rng.randint(7, 21), rng.randint(0, 59)),
+                    "expense", code, -m_amount, name, None, types[name], classified_by="seed",
+                )
+            )  # fmt: skip
+        if len(agos) < len(money):  # hết chỗ trong khoảng
+            raise PersonaError(f"Hũ {code}: max_per_day quá thấp cho {len(money)} khoản chi")
+    return out
+
+
 def generate(
     persona: str,
     *,
@@ -474,57 +571,12 @@ def generate(
             raise PersonaError(f"Hũ {code}: có chi tiêu nhưng không khai merchants")
 
         if spend:
-            segs = _segments(income_days, history_days, end_ago)
-            recent_share = Decimal(str(j.get("recent_share", 0.5)))
-            last_seg, earlier = segs[-1], segs[:-1]
-            recent_total = _round_amount(Decimal(spend) * recent_share) if earlier else spend
-            allocations: list[tuple[tuple[int, int], int]] = [(last_seg, recent_total)]
-            rest = spend - recent_total
-            if earlier and rest:
-                days = [s[0] - s[1] + 1 for s in earlier]
-                acc = 0
-                for i, seg in enumerate(earlier):
-                    part = (
-                        rest - acc
-                        if i == len(earlier) - 1
-                        else _round_amount(Decimal(rest) * days[i] / sum(days))
-                    )
-                    acc += part
-                    allocations.append((seg, part))
-            n_total = int(j.get("expense_count", 0)) or max(1, spend // 100_000)
-            names = [m[0] for m in merchants]
-            types = {m[0]: m[1] for m in merchants}
-            mweights = [m[2] for m in merchants]
-            seq = 0
-            for (first, last), amount in allocations:
-                if amount <= 0:
-                    continue
-                n = max(1, round(n_total * amount / spend))
-                money = _split_total(rng, amount, n, float(rhythm["amount_sigma"]))
-                span = list(range(first, last - 1, -1))
-                agos = _pick_days(
-                    rng,
-                    span,
-                    _day_weights(span, anchor, payday_day, rhythm),
-                    len(money),
-                    int(rhythm["max_per_day"]),
+            jar_txs.extend(
+                _expense_lines(
+                    rng, code, j, spend, merchants, income_days=income_days, history_days=history_days,
+                    end_ago=end_ago, anchor=anchor, payday_day=payday_day, rhythm=rhythm,
                 )
-                rng.shuffle(money)
-                for m_amount, ago in zip(money, agos, strict=False):
-                    name = rng.choices(names, weights=mweights, k=1)[0]
-                    seq += 1
-                    jar_txs.append(
-                        TxSeed(
-                            f"exp:{code}:{seq}", ago, time(rng.randint(7, 21), rng.randint(0, 59)),
-                            "expense", code, -m_amount, name, None, types[name], classified_by="seed",
-                        )
-                    )  # fmt: skip
-                if len(agos) < len(
-                    money
-                ):  # hết chỗ trong khoảng: dồn phần còn lại vào khoản lớn nhất cùng ngày
-                    raise PersonaError(
-                        f"Hũ {code}: max_per_day quá thấp cho {len(money)} khoản chi"
-                    )
+            )  # fmt: skip
 
         # dòng tiền vào của hũ để mô phỏng số dư chạy: lương chia và số dư đầu kỳ
         income_lines = [
@@ -639,6 +691,18 @@ def generate(
     if credit is not None and bnpl_total > int(credit["limit_vnd"]):
         raise PersonaError("Tổng gốc Trả sau vượt hạn mức khai trong spec")
 
+    # --- hũ chỉ ví demo có (spec `demo_jars`): dòng ngẫu nhiên riêng, không đụng sổ cái của ví persona ---------------------
+    demo_jars = tuple(
+        _demo_jar(
+            spec, d, persona=persona, seed=seed, salary=salary, income_days=income_days,
+            history_days=history_days, end_ago=end_ago, anchor=anchor, payday_day=payday_day,
+            jar_codes=jar_codes,
+        )
+        for d in spec.get("demo_jars", [])
+    )  # fmt: skip
+    if len({d.code for d in demo_jars}) != len(demo_jars):
+        raise PersonaError("demo_jars: mã hũ phải duy nhất")
+
     txs.sort(key=lambda t: (-t.days_ago, t.local_time, t.key))
     return PersonaData(
         persona=persona,
@@ -663,7 +727,79 @@ def generate(
             if spec.get("external_income_monthly_vnd")
             else None
         ),
+        demo_jars=demo_jars,
     )
+
+
+def _demo_jar(
+    spec: Mapping[str, Any],
+    d: Mapping[str, Any],
+    *,
+    persona: str,
+    seed: int,
+    salary: int,
+    income_days: list[int],
+    history_days: int,
+    end_ago: int,
+    anchor: date,
+    payday_day: int,
+    jar_codes: set[str],
+) -> DemoJarSeed:
+    """Hũ của khối `demo_jars` (README "Bộ hũ demo sau khi đặt lại"): `split_from` (mã hũ demo -> số điểm % lấy sang hũ này),
+    `opening_vnd`, `target_vnd`, `expense_count`, `recent_share`, `rhythm`, `merchants` như một hũ của `jars`. Mỗi kỳ lương hũ nhận
+    `floor(lương x điểm / 100)` của từng hũ nguồn (quy tắc làm tròn của `split_amount`); chi = đầu kỳ + lương chia - số dư cần đạt,
+    chia theo cùng nhịp và cùng hàm với hũ của ví persona nhưng bằng `random.Random` riêng của hũ này, nên thêm, bớt hay chỉnh hũ demo
+    không đổi một dòng nào của hũ khác."""
+    code = str(d.get("code") or "")
+    if not code.isidentifier() or code in jar_codes:
+        raise PersonaError(f"demo_jars: mã hũ {code!r} không hợp lệ hoặc trùng hũ của ví persona")
+    raw = d.get("split_from") or {}
+    if not raw or any(Decimal(str(p)) <= 0 for p in raw.values()):
+        raise PersonaError(f"demo_jars {code}: split_from phải lấy số điểm dương từ ít nhất một hũ")
+    split_from = tuple(
+        (
+            str(src),
+            Decimal(str(p)),
+            int((Decimal(salary) * Decimal(str(p)) / 100).to_integral_value(rounding=ROUND_FLOOR)),
+        )
+        for src, p in raw.items()
+    )
+    line = sum(a for _, _, a in split_from)
+    opening = int(d.get("opening_vnd", 0))
+    target = int(d["target_vnd"])
+    rng = random.Random(f"{seed}:{persona}:demo:{code}")
+    rhythm = _rhythm(spec, d)
+    txs: list[TxSeed] = []
+    if opening > 0:
+        txs.append(
+            TxSeed(
+                f"open:{code}", history_days, _OPENING_TIME, "transfer", code, opening, "Số dư đầu kỳ", None,
+                "jar_transfer", transfer_key=f"open:{code}",
+            )
+        )  # fmt: skip
+    spend = opening + line * len(income_days) - target
+    if spend < 0:
+        raise PersonaError(f"demo_jars {code}: tiền vào nhỏ hơn số dư cần đạt {target}; thêm opening_vnd")
+    if spend % _ROUND:
+        raise PersonaError(f"demo_jars {code}: tổng chi {spend} phải là bội của {_ROUND}")
+    merchants = _merchants({**d, "code": code})
+    if spend and not merchants:
+        raise PersonaError(f"demo_jars {code}: có chi tiêu nhưng không khai merchants")
+    if spend:
+        txs.extend(
+            _expense_lines(
+                rng, code, d, spend, merchants, income_days=income_days, history_days=history_days,
+                end_ago=end_ago, anchor=anchor, payday_day=payday_day, rhythm=rhythm,
+            )
+        )  # fmt: skip
+    split_lines = [
+        TxSeed(f"split:{ago}:{code}", ago, _SPLIT_TIME, "transfer", code, line, None, None, "salary_split")
+        for ago in income_days
+    ]
+    _simulate_non_negative(code, txs + split_lines)
+    if sum(t.amount_vnd for t in txs + split_lines) != target:  # bất biến của bộ sinh
+        raise PersonaError(f"demo_jars {code}: số dư cuối khác mục tiêu {target}")
+    return DemoJarSeed(code, split_from, opening, target, tuple(txs))
 
 
 def _external_income_lines(spec: Mapping[str, Any], start: date, anchor: date) -> list[TxSeed]:

@@ -63,6 +63,19 @@
       "expense_count": 0, "recent_share": 0.5, "merchants": []
     }
   ],
+  "demo_jars": [
+    {
+      "code": "chi_hang_ngay", "split_from": {"du_phong": 3}, "opening_vnd": 60000, "target_vnd": 120000,
+      "expense_count": 10, "recent_share": 0.35,
+      "rhythm": {"max_per_day": 2},
+      "merchants": [
+        {"name": "Tạp hóa Bà Tư", "tx_type": "qr_other", "weight": 3},
+        {"name": "Photocopy Ánh Dương", "tx_type": "qr_other", "weight": 2},
+        {"name": "Pharmacity", "tx_type": "other_expense"},
+        {"name": "Shopee - Đồ dùng học tập", "tx_type": "other_expense"}
+      ]
+    }
+  ],
   "payees": [
     {"name": "Phạm Thanh Mai", "account_hint": "•••• 2284", "is_favorite": true, "used_days_ago": 9},
     {"name": "Bố", "account_hint": "•••• 5517", "is_favorite": true, "used_days_ago": 35}
