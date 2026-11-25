@@ -1911,6 +1911,23 @@ def adversarial(
     return {"ok": not fails, "fails": fails}
 
 
+def scenario_kind(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, Any]:
+    """Ca có `kind` (loại kịch bản what-if, `contracts/scenario/scenario_spec.schema.json`): lời gọi `run_scenario` CUỐI của lượt
+    mô phỏng đúng loại đó. Loại đọc từ bản gọn kết quả (`scenario.kind`), tool lỗi thì từ tham số (`spec.kind`)."""
+    kinds: list[Any] = []
+    for t in run["tools"]:
+        if t["name"] != "run_scenario":
+            continue
+        res, args = _parse(t["result"]), _parse(t["args"])
+        got = res["scenario"].get("kind") if isinstance(res, Mapping) and isinstance(res.get("scenario"), Mapping) else None
+        if got is None and isinstance(args, Mapping):
+            spec = args["spec"] if isinstance(args.get("spec"), Mapping) else args
+            got = spec.get("kind")
+        kinds.append(got)
+    want = case.get("kind")
+    return {"ok": bool(kinds) and kinds[-1] == want, "kinds": kinds, "expected": want}
+
+
 def score(
     run: dict[str, Any],
     case: dict[str, Any],
@@ -1927,6 +1944,8 @@ def score(
     }
     if kind == "golden":
         s["trajectory"] = trajectory(run, case)
+        if case.get("kind"):
+            s["scenario_kind"] = scenario_kind(run, case)
         if case.get("exactly_one_question"):
             cl = [b for b in run["blocks"] if b["type"] == "clarify"]
             s["one_question"] = {"ok": len(cl) == 1 and cl[0]["data"]["question"].count("?") == 1}
@@ -1967,6 +1986,7 @@ def score(
 
 #: Bộ chấm tùy chọn: tóm tắt in "đạt/tổng" trên các ca có chấm.
 OPTIONAL_SCORES = (
+    "scenario_kind",
     "roadmap_feasibility",
     "roadmap_shape",
     "stress_shock",

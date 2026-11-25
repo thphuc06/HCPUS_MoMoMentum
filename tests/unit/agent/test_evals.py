@@ -1969,3 +1969,27 @@ def test_leak_1_hoi_tai_khoan_khac_tai_khoan_chay_eval():
     leak1 = next(c for c in evals_run.load(ROOT / "evals" / "adversarial" / "phase3.jsonl") if c["id"] == "leak-1")
     assert evals_run.other_users("minh") & set(evals_run._fold(leak1["question"]).split())
     assert not re.search(r"(?<!\w)minh(?!\w)", leak1["question"].lower())  # "mình" là người hỏi, không phải tài khoản minh
+
+
+def _scenario_tool(kind: str, *, result: bool = True) -> tuple[str, dict, dict]:
+    out = {"scenario": {"kind": kind, "amount_vnd": 1_200_000}} if result else {"status": "ERROR", "code": "OVER_LIMIT"}
+    return ("forecast___run_scenario", {"spec": {"kind": kind, "amount_vnd": 1_200_000}}, out)
+
+
+def test_cham_kind_kich_ban():
+    case = {"id": "x", "question": "q", "kind": "bnpl_purchase"}
+    assert evals_run.score(_run(tools=[_scenario_tool("bnpl_purchase")]), case, "golden")["scenario_kind"]["ok"]
+    assert evals_run.score(_run(tools=[_scenario_tool("bnpl_purchase", result=False)]), case, "golden")["scenario_kind"]["ok"]
+    wrong = evals_run.score(_run(tools=[_scenario_tool("one_time_purchase")]), case, "golden")
+    assert not wrong["ok"] and wrong["scenario_kind"]["kinds"] == ["one_time_purchase"]
+    assert not evals_run.score(_run(), case, "golden")["scenario_kind"]["ok"]
+    assert "scenario_kind" not in evals_run.score(_run(), {"id": "y", "question": "q"}, "golden")
+    rows = [{"case": case, "score": evals_run.score(_run(tools=[_scenario_tool(k)]), case, "golden")} for k in ("bnpl_purchase", "goal_delay")]
+    assert evals_run.summarize(rows, "golden")["scenario_kind"] == "1/2"
+
+
+def test_kind_kich_ban_cua_luot_what_if_that(monkeypatch):
+    llm = make_llm([route_response(**ROUTE_WHAT_IF), tool_response("plan_scenario", SCENARIO), tool_response("analyze", analysis())])
+    events, _, _ = run_turn(WHAT_IF_Q, llm=llm, monkeypatch=monkeypatch)
+    case = {"id": "whatif-bnpl", "question": WHAT_IF_Q, "kind": "bnpl_purchase"}
+    assert evals_run.score(evals_run.collect(sse_lines(events)), case, "golden")["scenario_kind"]["ok"]
