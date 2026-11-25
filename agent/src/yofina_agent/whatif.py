@@ -4,6 +4,8 @@ Thứ tự (mã điều khiển, model KHÔNG quyết định thứ tự):
 
     1. Orchestrator (vai `planner`, 1 lượt gọi): dựng `ScenarioSpec` từ câu hỏi, tham số của router, danh sách hũ thật và ngày mô phỏng.
        Model không dùng được hoặc spec sai thì dựng bằng mã từ tham số router (`deterministic_spec`), không có thì báo chưa dựng được.
+       Khóa `whatif_spec_source` = `code_first` (#23, mặc định `model`): router đủ tham số thì dựng bằng mã luôn (`code_spec`, 0 lượt
+       gọi); không đủ thì vai `small`, vai đó lỗi hoặc spec sai thì `planner`.
     2. Kế hoạch (`schemas.Plan`, chỉ tool ĐỌC, `limits` từ cấu hình): song song `get_obligations`, `get_fee_schedule` (Trả sau),
        `get_forecast` (hũ chính), rồi `run_scenario` (engine tất định, ghi `scenarios`).
     3. Phát khối số liệu NGAY (forecast_timeline trước-sau, obligation_impact) trước mọi văn bản.
@@ -535,18 +537,45 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
         return st
 
     # 1) Orchestrator, cùng lúc đọc những thứ không phụ thuộc spec (#11): nghĩa vụ (bước nhóm 0 của kế hoạch) và, khi câu hỏi
-    #    là khoản chi từ một hũ, các kịch bản trước của cuộc trò chuyện (gộp khoản trước, bước 1b)
+    #    là khoản chi từ một hũ, các kịch bản trước của cuộc trò chuyện (gộp khoản trước, bước 1b).
+    #    `code_first` (#23): router đã trích đủ tham số thì spec dựng bằng mã ngay, không gọi model; khi đó mọi tool đọc nhóm 0
+    #    của kế hoạch (nghĩa vụ, biểu phí, dự báo hũ) và các kịch bản trước cùng bắt đầu ngay sau router. Không đủ thì Orchestrator
+    #    gọi vai `small`, rồi `planner` dự phòng.
+    s = turn.s
+    code_first = s.whatif_spec_source == "code_first"
+    roles = ("small", "planner") if code_first else ("planner",)
+
     async def orchestrate() -> dict[str, Any] | None:
         with turn.step("orchestrator"):
-            return await _orchestrate(turn, r, question, history)
+            return await _orchestrate(turn, r, question, history, roles)
 
+    limits = PlanLimits(
+        max_rounds=s.verifier_max_rounds,
+        max_tokens=s.plan_max_tokens,
+        max_model_calls=s.max_model_calls_per_turn,
+    )
     guess = deterministic_spec(r, turn.jar_rows)
     list_early = bool(turn.conversation_id) and guess is not None and pay_jar(guess) is not None
-    spec, obligations, listed = await asyncio.gather(
-        orchestrate(),
-        _step_call(turn, PlanStep(tool=OBLIGATIONS_TOOL, args={}, parallel_group=0)),
-        _list_scenarios(turn) if list_early else _none(),
-    )
+    ready = None
+    if code_first:
+        with turn.step("orchestrator"):
+            ready = code_spec(r, turn.jar_rows)
+    if ready is not None:
+        log.info(json.dumps({"event": "whatif_spec", "source": "code"}))
+        early = [step for step in build_plan(ready, limits).steps if step.parallel_group == 0]
+        *reads, listed = await asyncio.gather(
+            *(_step_call(turn, step) for step in early),
+            _list_scenarios(turn) if list_early else _none(),
+        )
+        spec: dict[str, Any] | None = ready
+        prefetched = {step.tool: res for step, res in zip(early, reads, strict=True)}
+    else:
+        spec, obligations, listed = await asyncio.gather(
+            orchestrate(),
+            _step_call(turn, PlanStep(tool=OBLIGATIONS_TOOL, args={}, parallel_group=0)),
+            _list_scenarios(turn) if list_early else _none(),
+        )
+        prefetched = {OBLIGATIONS_TOOL: obligations}
     if spec is None:
         return st  # người gọi (Turn.on_what_if) quyết định: thẻ kiểm tra tất định hoặc thông báo chưa dựng được
     st.spec = spec
@@ -559,18 +588,14 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
         return st
     st.with_scenarios = with_scenarios
 
-    # 2) kế hoạch và tool đọc
-    s = turn.s
+    # 2) kế hoạch và tool đọc (bước đã đọc ở 1 dùng lại kết quả, không đọc lần hai)
     plan = build_plan(
-        spec,
-        PlanLimits(max_rounds=s.verifier_max_rounds, max_tokens=s.plan_max_tokens, max_model_calls=s.max_model_calls_per_turn),
-        with_scenarios=with_scenarios,
-        conversation_id=turn.conversation_id,
+        spec, limits, with_scenarios=with_scenarios, conversation_id=turn.conversation_id
     )
     missing: list[str] = []
     with turn.step("tools"):
         scenario_res, st.behavior = await asyncio.gather(
-            _execute_plan(turn, plan, missing, prefetched={OBLIGATIONS_TOOL: obligations}), _read_behavior(turn, spec)
+            _execute_plan(turn, plan, missing, prefetched=prefetched), _read_behavior(turn, spec)
         )
     if scenario_res is None:
         return st  # run_scenario lỗi: tool_failure đã phát
@@ -594,12 +619,21 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
     return st
 
 
-async def _orchestrate(turn: Turn, r: IntentResult, question: str, history: str) -> dict[str, Any] | None:
+async def _orchestrate(
+    turn: Turn, r: IntentResult, question: str, history: str, roles: tuple[str, ...] = ("planner",)
+) -> dict[str, Any] | None:
+    """Dựng spec bằng model theo thứ tự `roles`: vai lỗi hoặc trả spec sai thì thử vai kế (`code_first`: `small` rồi `planner`).
+    Không vai nào cho spec dùng được thì dựng bằng mã từ tham số router (`deterministic_spec`), không có thì None. Chỉ lỗi của lần
+    thử cuối được ghi là suy giảm (`llm_failed`): vai nhỏ lỗi mà `planner` còn gọi được thì lượt không bị coi là mất model."""
     rows = turn.jar_rows
-    if not turn.llm_down and turn.model_calls_left() >= 1:
+    failure: BaseException | None = None
+    for i, role in enumerate(roles):
+        if turn.llm_down or turn.model_calls_left() < 1:
+            break
+        failure = None
         try:
             res = await turn.llm.astructured_json(
-                "planner",
+                role,
                 output_model=OrchestratorOutput,
                 messages=[user_message(_orchestrator_prompt(question, history, r, rows, turn.app_date))],
                 system=ORCHESTRATOR_SYSTEM,
@@ -611,14 +645,41 @@ async def _orchestrate(turn: Turn, r: IntentResult, question: str, history: str)
             )
             spec = validate_spec(res.value.scenario.model_dump())
             if spec is not None and _jar_codes_ok(spec, rows):
+                log.info(
+                    json.dumps({"event": "whatif_spec", "source": role, "model": res.model_id})
+                )
                 return with_converted_amount(spec, r)
-            log.warning(json.dumps({"event": "orchestrator_invalid_spec"}))
+            log.warning(json.dumps({"event": "orchestrator_invalid_spec", "role": role}))
         except Exception as exc:  # noqa: BLE001 (ModelBudgetExceeded, AllModelsFailed, StructuredOutputError...)
-            turn.llm_failed(exc)
+            failure = exc
+            if i < len(roles) - 1:
+                log.warning(
+                    json.dumps(
+                        {
+                            "event": "orchestrator_fallback",
+                            "role": role,
+                            "error": type(exc).__name__,
+                        }
+                    )
+                )
+    if failure is not None:
+        turn.llm_failed(failure)
     spec = deterministic_spec(r, rows)
     if spec is not None:
         spec = validate_spec(spec)
     return spec
+
+
+def code_spec(r: IntentResult, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Spec dựng bằng mã khi router đã trích ĐỦ tham số (#23, `code_first`), None nếu chưa đủ (khi đó Orchestrator gọi model).
+
+    Đủ nghĩa là `deterministic_spec` dựng được spec hợp lệ với mã hũ thật, và router không trích điều gì mà spec dựng bằng mã bỏ
+    qua: `deterministic_spec` không đọc ngày, nên câu có cụm chỉ thời gian (`date_text`) để model đổi ra ngày cụ thể."""
+    if r.params.date_text:
+        return None
+    spec = deterministic_spec(r, rows)
+    spec = validate_spec(spec) if spec is not None else None
+    return spec if spec is not None and _jar_codes_ok(spec, rows) else None
 
 
 def with_converted_amount(spec: dict[str, Any], r: IntentResult) -> dict[str, Any]:

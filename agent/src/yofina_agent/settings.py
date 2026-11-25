@@ -36,6 +36,18 @@ def _as_bool(raw: str) -> bool:
     raise ValueError(raw)
 
 
+#: Nguồn spec của what-if (#23). `model`: Orchestrator luôn gọi vai `planner`, dựng bằng mã chỉ khi model không dùng được (hành vi
+#: trước #23). `code_first`: router đủ tham số thì dựng bằng mã, không gọi model; không đủ thì vai `small`, rồi `planner` dự phòng.
+WHATIF_SPEC_SOURCES = ("model", "code_first")
+
+
+def _spec_source(raw: str) -> str:
+    v = str(raw).strip().lower()
+    if v not in WHATIF_SPEC_SOURCES:
+        raise ValueError(raw)
+    return v
+
+
 def _ssm_get(cfg: Config, name: str) -> str | None:
     """Tra SSM một khóa lười; lỗi quyền/mạng không làm hỏng việc nạp cấu hình (guardrail sẽ tự tắt và ghi log)."""
     try:
@@ -169,6 +181,7 @@ class AgentSettings:
     guardrail_version: str | None
     tool_retry_attempts: int
     orchestrator_max_tokens: int
+    whatif_spec_source: str  # một trong WHATIF_SPEC_SOURCES; env YOFINA_WHATIF_SPEC_SOURCE
     analyst_max_tokens: int
     verifier_max_rounds: int
     plan_max_tokens: int
@@ -235,6 +248,7 @@ class AgentSettings:
             or _ssm_get(cfg, "guardrail/version"),
             tool_retry_attempts=get("tool_retry_attempts", int),
             orchestrator_max_tokens=get("orchestrator_max_tokens", int),
+            whatif_spec_source=get("whatif_spec_source", _spec_source),
             analyst_max_tokens=get("analyst_max_tokens", int),
             verifier_max_rounds=get("verifier_max_rounds", int),
             plan_max_tokens=get("plan_max_tokens", int),

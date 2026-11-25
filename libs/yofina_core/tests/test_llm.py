@@ -130,6 +130,20 @@ def test_mac_dinh_dong_goi_co_cac_vai_va_tran():
     assert s.roles["planner"][1].temperature is False  # Kimi K3 không nhận temperature
 
 
+def test_mac_dinh_dong_goi_bat_cache_chi_cho_sonnet_4_6():
+    """#24: chỉ Sonnet 4.6 (tài liệu xác nhận cachePoint ở system và tools) của vai planner (Orchestrator, Analyst, phác thảo
+    lộ trình) bật cache; Kimi K3 và mọi model khác tắt."""
+    s = load_settings(Config({}), env={})
+    on = {(role, m.id) for role, chain in s.roles.items() for m in chain if m.prompt_cache}
+    assert on == {("planner", "global.anthropic.claude-sonnet-4-6")}
+    assert all(not m.prompt_cache for chain in s.roles.values() for m in chain if "kimi" in m.id)
+    # cấu hình vai ghi đè bằng JSON (env/SSM) cũng đọc được cờ
+    env = {
+        "YOFINA_LLM_ROLES": json.dumps({"planner": {"models": [{"id": "x", "prompt_cache": True}]}})
+    }
+    assert load_settings(Config(env), env=env).roles["planner"][0].prompt_cache is True
+
+
 def test_env_ghi_de_tran_theo_vai_va_roles_json():
     env = {
         "YOFINA_LLM_DAILY_CAP_PLANNER": "0",
@@ -511,6 +525,115 @@ def test_structured_json_tran_ngay_di_thang_ra_ngoai():
     gw = gateway(FakeClient([]), FakeUsage(caps_hit={"m-small-a"}))
     with pytest.raises(ModelBudgetExceeded):
         gw.structured_json("small", output_model=Out, messages=[user_message("hi")])
+
+
+# --- prompt caching (#24) ---------------------------------------------------------------------
+CACHE_POINT = {"cachePoint": {"type": "default"}}
+
+
+def cached_settings() -> LlmSettings:
+    """Vai planner: model a bật cache (như Sonnet 4.6), model b tắt (như Kimi K3)."""
+    return settings(
+        roles={
+            "planner": (
+                ModelSpec("m-plan-a", rpm=0, daily_cap=9, prompt_cache=True),
+                ModelSpec("m-plan-b", rpm=0, daily_cap=9, temperature=False),
+            )
+        }
+    )
+
+
+def test_cache_bat_thi_co_cache_point_sau_system_va_sau_tool():
+    client = FakeClient([tool_response("report", {"intent": "a"})])
+    gw = gateway(client, settings=cached_settings())
+    gw.structured_json("planner", output_model=Out, messages=[user_message("hi")], system="quy tắc")
+    req = client.calls[0]
+    assert req["system"] == [{"text": "quy tắc"}, CACHE_POINT]
+    tools = req["toolConfig"]["tools"]
+    assert [next(iter(t)) for t in tools] == ["toolSpec", "cachePoint"] and tools[-1] == CACHE_POINT
+    assert tools[0]["toolSpec"]["name"] == "report"
+    assert req["toolConfig"]["toolChoice"] == {"tool": {"name": "report"}}
+    assert "cachePoint" not in json.dumps(
+        req["messages"]
+    )  # phần thay đổi theo lượt không bị đánh dấu
+
+
+def test_cache_tat_hoac_kimi_du_phong_thi_khong_co_cache_point():
+    """Sonnet bị throttle, rẽ sang model tắt cache (Kimi K3 trả ValidationException nếu thấy cachePoint): request thứ hai sạch."""
+    client = FakeClient(
+        [client_error("ThrottlingException"), tool_response("report", {"intent": "b"})]
+    )
+    gw = gateway(client, settings=cached_settings())
+    r = gw.structured_json(
+        "planner", output_model=Out, messages=[user_message("hi")], system="quy tắc"
+    )
+    assert r.model_id == "m-plan-b"
+    first, second = client.calls
+    assert "cachePoint" in json.dumps(first["system"]) and "cachePoint" in json.dumps(
+        first["toolConfig"]
+    )
+    assert "cachePoint" not in json.dumps(second)
+    assert second["system"] == [{"text": "quy tắc"}]
+    # model tắt cache ngay từ đầu chuỗi (mặc định của ModelSpec) cũng không có
+    plain = FakeClient([ok_response()])
+    gateway(plain).converse("small", messages=[user_message("hi")], system="s")
+    assert "cachePoint" not in json.dumps(plain.calls[0])
+
+
+def cached_usage_response(tin: int, tout: int, read: int, write: int) -> dict[str, Any]:
+    resp = ok_response("chào", tin, tout)
+    resp["usage"].update({"cacheReadInputTokens": read, "cacheWriteInputTokens": write})
+    return resp
+
+
+def test_doc_token_cache_doc_ghi_vao_ket_qua_log_va_luot(caplog):
+    """Bedrock: có cache thì `inputTokens` chỉ còn phần không qua cache. Tổng token vào giữ nghĩa cũ (đủ mọi token đã gửi, như
+    AG-UI `TokenUsage.inputTokens`), phần đọc/ghi cache tách riêng để log và trace đếm được."""
+    scope = TurnScope()
+    client = FakeClient(
+        [cached_usage_response(40, 9, 0, 1_500), cached_usage_response(45, 7, 1_500, 0)]
+    )
+    gw = gateway(client, settings=cached_settings())
+    with caplog.at_level("INFO", logger="yofina.llm"):
+        first = gw.converse("planner", messages=[user_message("a")], system="s", scope=scope)
+        second = gw.converse("planner", messages=[user_message("b")], system="s", scope=scope)
+    assert (first.input_tokens, first.cache_write_tokens, first.cache_read_tokens) == (
+        1_540,
+        1_500,
+        0,
+    )
+    assert (second.input_tokens, second.cache_read_tokens, second.cache_write_tokens) == (
+        1_545,
+        1_500,
+        0,
+    )
+    lines = [json.loads(r.message) for r in caplog.records if r.name == "yofina.llm"]
+    calls = [ln for ln in lines if ln["event"] == "llm_call"]
+    assert [
+        (c["input_tokens"], c["cache_read_tokens"], c["cache_write_tokens"]) for c in calls
+    ] == [
+        (1_540, 0, 1_500),
+        (1_545, 1_500, 0),
+    ]
+    (u,) = scope.usage_by_model()
+    assert u["inputTokens"] == 3_085 and u["outputTokens"] == 16 and u["totalTokens"] == 3_101
+    assert u["cachedInputTokens"] == 1_500 and u["cacheWriteInputTokens"] == 1_500
+
+
+def test_khong_co_cache_thi_dang_usage_cua_luot_khong_doi():
+    scope = TurnScope()
+    gateway(FakeClient([ok_response("chào", 11, 7)])).converse(
+        "small", messages=[user_message("hi")], scope=scope
+    )
+    assert scope.usage_by_model() == [
+        {
+            "provider": "bedrock",
+            "model": "m-small-a",
+            "inputTokens": 11,
+            "outputTokens": 7,
+            "totalTokens": 18,
+        }
+    ]
 
 
 def test_schema_phang_khong_con_ref_va_moi_truong_la_required():

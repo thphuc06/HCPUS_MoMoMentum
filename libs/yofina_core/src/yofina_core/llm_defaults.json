@@ -1,11 +1,11 @@
 {
-  "_ghi_chu": "Cấu hình mặc định của yofina_core.llm. Ghi đè bằng biến môi trường YOFINA_LLM_<TÊN> hoặc SSM /yofina/llm/<tên> (roles, daily_cap_<vai>, rate_limit_max_wait_seconds, budget_timezone, usage_ttl_days, read_timeout_seconds). Model id, tốc độ và trần ngày chỉ nằm ở đây và ở các nguồn ghi đè đó, không nằm trong logic.",
+  "_ghi_chu": "Cấu hình mặc định của yofina_core.llm. Ghi đè bằng biến môi trường YOFINA_LLM_<TÊN> hoặc SSM /yofina/llm/<tên> (roles, daily_cap_<vai>, rate_limit_max_wait_seconds, budget_timezone, usage_ttl_days, read_timeout_seconds). Model id, tốc độ và trần ngày chỉ nằm ở đây và ở các nguồn ghi đè đó, không nằm trong logic. prompt_cache (mặc định false): gắn cachePoint sau system và sau tool schema; chỉ bật cho model mà tài liệu Bedrock xác nhận nhận cachePoint ở cả system lẫn tools của Converse (Sonnet 4.6); Kimi K3 trả ValidationException nên tắt. Đang bật ở vai planner (Orchestrator, Analyst, phác thảo lộ trình); vai ingest (đọc ảnh) chưa bật vì chưa kiểm đường đó. Ghi đè roles bằng SSM thì phải ghi lại cả cờ này.",
   "roles": {
     "planner": {
       "daily_cap": 400,
       "models": [
-        { "id": "global.anthropic.claude-sonnet-4-6", "rpm": 8 },
-        { "id": "global.moonshotai.kimi-k3", "rpm": 8, "temperature": false }
+        { "id": "global.anthropic.claude-sonnet-4-6", "rpm": 8, "prompt_cache": true },
+        { "id": "global.moonshotai.kimi-k3", "rpm": 8, "temperature": false, "prompt_cache": false }
       ]
     },
     "ingest": {
