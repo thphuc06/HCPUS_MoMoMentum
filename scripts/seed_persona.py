@@ -162,7 +162,10 @@ def apply(args, account: str, persona: str, mapping_prefix: str) -> int:
     )
 
     if not args.skip_group:
-        ensure_groups(sess, {account: persona}, mapping_prefix, {account: {"email": email}})
+        ops = json.loads(ACCOUNTS_FILE.read_text(encoding="utf-8"))["ops_accounts"]
+        ensure_groups(
+            sess, {account: persona}, mapping_prefix, {account: {"email": email}}, ops_accounts=ops
+        )
 
     db = DataApi(
         DataApiSettings(

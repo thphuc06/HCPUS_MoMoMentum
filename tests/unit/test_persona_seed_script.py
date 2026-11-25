@@ -135,7 +135,9 @@ def test_apply_noi_dung_mach_dat_lai_cua_ledger_voi_sub_cua_tai_khoan(sp, monkey
 
     monkeypatch.setattr(_yofina, "session", lambda: FakeSession())
     monkeypatch.setattr(_yofina, "ssm_param", lambda name, sess=None: f"ssm:{name}")
-    monkeypatch.setattr(seed_demo, "ensure_groups", lambda *a: seen.setdefault("groups", a[1:]))
+    monkeypatch.setattr(
+        seed_demo, "ensure_groups", lambda *a, **kw: seen.setdefault("groups", (*a[1:], kw))
+    )
     monkeypatch.setattr(core_db, "DataApi", FakeDb)
     monkeypatch.setattr(service_mod, "LedgerService", FakeService)
     monkeypatch.setattr(events_mod, "EventPublisher", lambda bus, region=None: ("pub", bus))
@@ -146,6 +148,7 @@ def test_apply_noi_dung_mach_dat_lai_cua_ledger_voi_sub_cua_tai_khoan(sp, monkey
         {"giamkhao3": "vy"},
         "persona-",
         {"giamkhao3": {"email": "giamkhao3@demo.yofina.example"}},
+        {"ops_accounts": ["minh"]},  # theo accounts.json: giamkhao3 không có, nên bị gỡ ops nếu đang có (#17)
     )
     assert seen["settings"].demo_anchor_date == ANCHOR and seen["forecast"] is not None
     assert (
