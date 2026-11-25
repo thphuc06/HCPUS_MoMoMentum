@@ -247,15 +247,18 @@ def keep_previous_question(previous: list[dict[str, Any]], spec: Mapping[str, An
     )
 
 
-async def bundle_with_previous(turn: Turn, r: IntentResult, spec: Mapping[str, Any]) -> tuple[list[dict[str, Any]], bool]:
-    """(các spec trước để gộp, đã hỏi lại hay chưa). Đọc các kịch bản đã chạy trong cuộc trò chuyện bằng `forecast___list_scenarios`.
+async def bundle_with_previous(
+    turn: Turn, r: IntentResult, spec: Mapping[str, Any], *, listed: Any = None
+) -> tuple[list[dict[str, Any]], bool]:
+    """(các spec trước để gộp, đã hỏi lại hay chưa). Đọc các kịch bản đã chạy trong cuộc trò chuyện bằng `forecast___list_scenarios`
+    (`listed`: kết quả đã đọc sẵn cùng lúc với Orchestrator, nếu có).
 
     Có khoản trước cùng hũ mà người dùng chưa nói giữ hay bỏ thì hỏi lại đúng một câu (khối `clarify`) và kết thúc lượt; lượt sau router
     ghép câu trả lời với câu hỏi cũ và đặt `keep_previous`. Không đọc được thì chạy khoản mới một mình (không đoán).
     """
     if pay_jar(spec) is None or not turn.conversation_id:
         return [], False
-    res = await turn.call_tool_retry("list_scenarios", {"conversation_id": turn.conversation_id}, target="forecast")
+    res = listed if listed is not None else await _list_scenarios(turn)
     if not res.outcome.ok:
         log.warning(json.dumps({"event": "list_scenarios_failed", "code": res.outcome.code}))
         return [], False
@@ -455,16 +458,26 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
         st.handled = True
         return st
 
-    # 1) Orchestrator
-    with turn.step("orchestrator"):
-        spec = await _orchestrate(turn, r, question, history)
+    # 1) Orchestrator, cùng lúc đọc những thứ không phụ thuộc spec (#11): nghĩa vụ (bước nhóm 0 của kế hoạch) và, khi câu hỏi
+    #    là khoản chi từ một hũ, các kịch bản trước của cuộc trò chuyện (gộp khoản trước, bước 1b)
+    async def orchestrate() -> dict[str, Any] | None:
+        with turn.step("orchestrator"):
+            return await _orchestrate(turn, r, question, history)
+
+    guess = deterministic_spec(r, turn.jar_rows)
+    list_early = bool(turn.conversation_id) and guess is not None and pay_jar(guess) is not None
+    spec, obligations, listed = await asyncio.gather(
+        orchestrate(),
+        _step_call(turn, PlanStep(tool=OBLIGATIONS_TOOL, args={}, parallel_group=0)),
+        _list_scenarios(turn) if list_early else _none(),
+    )
     if spec is None:
         return st  # người gọi (Turn.on_what_if) quyết định: thẻ kiểm tra tất định hoặc thông báo chưa dựng được
     st.spec = spec
 
     # 1b) khoản trước cùng hũ trong cuộc trò chuyện: hỏi giữ hay bỏ, giữ thì gộp
     with turn.step("bundle"):
-        with_scenarios, asked = await bundle_with_previous(turn, r, spec)
+        with_scenarios, asked = await bundle_with_previous(turn, r, spec, listed=listed)
     if asked:
         st.handled = True
         return st
@@ -481,7 +494,7 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
     missing: list[str] = []
     with turn.step("tools"):
         scenario_res, st.behavior = await asyncio.gather(
-            _execute_plan(turn, plan, missing), _read_behavior(turn, spec)
+            _execute_plan(turn, plan, missing, prefetched={OBLIGATIONS_TOOL: obligations}), _read_behavior(turn, spec)
         )
     if scenario_res is None:
         return st  # run_scenario lỗi: tool_failure đã phát
@@ -562,8 +575,26 @@ async def _read_behavior(turn: Turn, spec: Mapping[str, Any]) -> dict[str, Any] 
     return advisor.behavior_view(res.outcome.payload) if res.outcome.ok else None
 
 
-async def _execute_plan(turn: Turn, plan: Plan, missing: list[str]) -> Any:
-    """Chạy kế hoạch theo nhóm. Trả `CallResult` của run_scenario, hoặc None nếu nó lỗi (đã phát thông báo)."""
+OBLIGATIONS_TOOL = "ledger___get_obligations"
+
+
+async def _list_scenarios(turn: Turn) -> Any:
+    return await turn.call_tool_retry("list_scenarios", {"conversation_id": turn.conversation_id}, target="forecast")
+
+
+async def _none() -> None:
+    return None
+
+
+async def _ready(value: Any) -> Any:
+    return value
+
+
+async def _execute_plan(turn: Turn, plan: Plan, missing: list[str], prefetched: Mapping[str, Any] | None = None) -> Any:
+    """Chạy kế hoạch theo nhóm. Trả `CallResult` của run_scenario, hoặc None nếu nó lỗi (đã phát thông báo).
+
+    Bước có trong `prefetched` (đã đọc cùng lúc với Orchestrator) dùng lại kết quả đó, không gọi lần hai."""
+    prefetched = prefetched or {}
     labels = {
         "ledger___get_obligations": "nghĩa vụ sắp đến hạn",
         "knowledge___get_fee_schedule": "biểu phí Trả sau",
@@ -572,7 +603,7 @@ async def _execute_plan(turn: Turn, plan: Plan, missing: list[str]) -> Any:
     result = None
     for group in sorted({st.parallel_group for st in plan.steps}):
         steps = [st for st in plan.steps if st.parallel_group == group]
-        calls = [_step_call(turn, st) for st in steps]
+        calls = [_ready(prefetched[st.tool]) if st.tool in prefetched else _step_call(turn, st) for st in steps]
         done = await asyncio.gather(*calls)
         for st, res in zip(steps, done, strict=True):
             if st.tool == "forecast___run_scenario":
@@ -1024,14 +1055,14 @@ async def _emit_options(turn: Turn, checked: list[tuple[Any, SuitabilityVerdict]
     """Tool ghi KHÔNG token lấy khối xác nhận -> khối `options` -> các khối xác nhận mà phương án tham chiếu."""
     items: list[B.OptionItem] = []
     pending_blocks: list[Any] = []
-    for o, verdict in checked:
+    # tool ghi không token của các phương án chạy cùng lúc (#11); kết quả theo đúng thứ tự phương án nên khối vẫn tất định
+    prepared_all = await asyncio.gather(*(_prepare_action(turn, o) if o.action is not None else _none() for o, _ in checked))
+    for (o, verdict), prepared in zip(checked, prepared_all, strict=True):
         action, metrics = None, None
         short = jar_short_for_option(o, turn.jar_rows)
-        if o.action is not None:
-            prepared = await _prepare_action(turn, o)
-            if prepared is not None:
-                block, action, metrics = prepared
-                pending_blocks.append(block)
+        if prepared is not None:
+            block, action, metrics = prepared
+            pending_blocks.append(block)
         items.append(
             B.OptionItem(
                 option_id=o.option_id,

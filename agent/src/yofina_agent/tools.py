@@ -17,6 +17,7 @@ nên `_GatewayMCPClient` giữ lại ngoại lệ gốc qua hook `_handle_tool_e
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
@@ -246,6 +247,11 @@ class GatewayTools:
                 self._client = client
         return self._client
 
+    async def prewarm(self) -> None:
+        """Mở phiên MCP sẵn trong lúc router chạy (#11). Lỗi bỏ qua: lời gọi tool đầu tiên mở lại và báo lỗi đúng chỗ."""
+        with contextlib.suppress(Exception):
+            await self._ensure()
+
     async def call(self, name: str, arguments: dict[str, Any]) -> ToolOutcome:
         outcome = await self._call(name, arguments)
         outcome.args = dict(arguments)
@@ -296,7 +302,8 @@ class GatewayTools:
         return classify_result(name, result, getattr(client, "last_exception", None))
 
     async def aclose(self) -> None:
-        client, self._client = self._client, None
+        async with self._lock:  # phiên đang mở dở (prewarm) thì chờ mở xong rồi đóng, không để sót phiên
+            client, self._client = self._client, None
         if client is not None:
             try:
                 await asyncio.to_thread(client.stop, None, None, None)

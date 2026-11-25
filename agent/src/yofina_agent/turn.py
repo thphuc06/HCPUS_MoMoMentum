@@ -818,6 +818,9 @@ class Turn:
             )
         ).text
         agent_memory.start_recall(self, question)  # đọc bộ nhớ song song với router và Guardrail
+        if (prewarm := getattr(self.tools, "prewarm", None)) is not None:
+            # mở phiên MCP song song với router (#11); aclose chờ phiên mở xong nên không sót phiên
+            self._prewarm_task = asyncio.create_task(prewarm())
 
         await self.ensure_llm()
         routed = await self.classify_guarded(question, self.history)
