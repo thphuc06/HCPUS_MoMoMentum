@@ -435,17 +435,20 @@ def render(result: dict[str, Any]) -> str:
     lines += [
         "",
         "| Lịch sử | Nhóm | n | Brier trước → sau | Brier tần suất chung | Sai lệch độ tin cậy lớn nhất trước → sau "
-        "| Độ tin cậy sau (p TB → tần suất thật) |",
-        "|---|---|---|---|---|---|---|",
+        "| Độ tin cậy trước (p TB → tần suất thật) | Độ tin cậy sau |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     sb, sa = result["shortfall"]["before"], result["shortfall"]["after"]
+
+    def rel(cell: dict[str, Any]) -> str:
+        return "; ".join(f"{_f(t['mean_p'], 2)}→{_f(t['freq'], 2)}" for t in cell["table"])
+
     for length, cells in sa.items():
         for kind, a in cells.items():
             b = sb[length][kind]
-            table = "; ".join(f"{_f(t['mean_p'], 2)}→{_f(t['freq'], 2)}" for t in a["table"])
             lines.append(
                 f"| {length} | {kind} | {a['n']} | {_arrow(b['brier'], a['brier'], 4)} | {_f(a['brier_climatology'], 4)} "
-                f"| {_arrow(b['max_gap'], a['max_gap'])} | {table} |"
+                f"| {_arrow(b['max_gap'], a['max_gap'])} | {rel(b)} | {rel(a)} |"
             )
     lines += [
         "",
