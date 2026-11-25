@@ -8,6 +8,9 @@ Luồng cho MỖI hũ (`forecast_user`):
    phân vị của biên tại các mức (alpha_t / 2, 0,5, 1 - alpha_t / 2).
 4. Monte Carlo số dư (`montecarlo`) với tham số hiệu chỉnh của loại chuỗi (`calibration`): phân vị số dư P10/P50/P90 theo ngày,
    ngày cạn, xác suất hụt trước kỳ lương và sai số chuẩn.
+   Khi hiệu chỉnh bật `recalibrate` (#25, `recalibration`): dải P10/P90 số dư của hũ dày dời theo bảng CQR bất đối xứng (P50 và
+   ngày cạn không đổi), `p_shortfall` qua bảng PAV (`p_shortfall_se` vẫn là sai số chuẩn Monte Carlo của p thô), và
+   `run.params["show_runout_date"]` báo hũ thưa không nêu ngày cạn cụ thể.
 5. Cổng chất lượng: nhãn tin cậy, trạng thái đủ/sát/hụt, có phát xác suất hay không.
 
 `update_forecast` chạy lại riêng bước 4-5 cho vài hũ, trên biên đã ghi ở `previous.run.params["jar_state"]` (fit và ACI giữ
@@ -39,7 +42,7 @@ from yofina_ml.marginals import (
     marginal_from_state,
 )
 from yofina_ml.models import COLD_START, HURDLE, MODEL_VERSION, select_model
-from yofina_ml.montecarlo import SimSpec, jar_seed_sequence, simulate_jar
+from yofina_ml.montecarlo import SimSpec, SimSummary, jar_seed_sequence, simulate_jar
 from yofina_ml.params import MLParams
 from yofina_ml.quality import (
     COVERAGE_FORMULA,
@@ -48,6 +51,7 @@ from yofina_ml.quality import (
     min_band,
     status_for,
 )
+from yofina_ml.recalibration import apply_cqr, select_cqr
 from yofina_ml.types import (
     ConfidenceBand,
     DayQuantiles,
@@ -155,6 +159,33 @@ def _series_kind(y: np.ndarray, ctx: _Ctx) -> SeriesKind:
     return "sparse" if zero_share > ctx.prm.sparse_zero_share else "dense"
 
 
+def _recalibrated_p(
+    p: float, spec: SimSpec, jar: JarInput, cal_kind: SeriesCalibration, ctx: _Ctx
+) -> float:
+    """`p_shortfall` sau PAV (#25) khi bật `Calibration.recalibrate` và loại chuỗi có bảng isotonic. Giữ nguyên p khi nó
+    tất định (số dư đã âm: chắc chắn hụt; không còn ngày nào trước kỳ lương: không thể hụt) và ở hũ nghĩa vụ (bảng chỉ học
+    trên hũ chi tiêu và tiết kiệm, p của hũ nghĩa vụ đi theo lịch nghĩa vụ)."""
+    iso = cal_kind.p_isotonic
+    if not ctx.cal.recalibrate or iso is None or jar.kind == "obligation":
+        return p
+    if spec.balance_vnd < 0 or spec.window < 1:
+        return p
+    return iso(p)
+
+
+def _recalibrated_band(
+    sim: SimSummary, jar: JarInput, kind: SeriesKind, cal_kind: SeriesCalibration, ctx: _Ctx
+) -> tuple[np.ndarray, np.ndarray]:
+    """P10, P90 số dư sau CQR bất đối xứng (#25): chỉ hũ dày, chỉ khi bật `Calibration.recalibrate` và có bảng. Đơn vị độ
+    lệch là chi TB ngày của `scale_days` ngày lịch sử cuối của hũ nhân số ngày tới mốc (như lúc fit trên backtest)."""
+    band = select_cqr(cal_kind.cqr, jar.history_days)
+    if not ctx.cal.recalibrate or band is None or kind != "dense":
+        return sim.balance_p10, sim.balance_p90
+    recent = jar.daily_spend_vnd[-band.scale_days :]
+    scale = float(np.mean(recent)) if recent else 0.0
+    return apply_cqr(band, sim.balance_p10, sim.balance_p50, sim.balance_p90, scale)
+
+
 def _jar_result(
     jar: JarInput,
     marg: Marginal,
@@ -178,26 +209,24 @@ def _jar_result(
     ss = jar_seed_sequence(ctx.cfg.seed, inputs.app_date, jar.code)
     sim = simulate_jar(spec, cal_kind, ctx.n_paths, ss, float(ctx.prm.runout_balance_threshold_vnd))
     sq = _spend_quantiles(marg, alpha, ctx)
+    b10, b90 = _recalibrated_band(sim, jar, kind, cal_kind, ctx)
     days = tuple(
         DayQuantiles(
             date=inputs.app_date + timedelta(days=i + 1),
             spend_p10_vnd=int(sq[0, i]),
             spend_p50_vnd=int(sq[1, i]),
             spend_p90_vnd=int(sq[2, i]),
-            balance_p10_vnd=int(sim.balance_p10[i]),
+            balance_p10_vnd=int(b10[i]),
             balance_p50_vnd=int(sim.balance_p50[i]),
-            balance_p90_vnd=int(sim.balance_p90[i]),
+            balance_p90_vnd=int(b90[i]),
         )
         for i in range(ctx.horizon)
     )
-    p_pub = round(float(sim.p_shortfall), 4)
+    p_pub = round(_recalibrated_p(float(sim.p_shortfall), spec, jar, cal_kind, ctx), 4)
     # BR-31: % chỉ hiện khi khoảng của loại chuỗi này đã đạt độ phủ mục tiêu ở ĐỘ DÀI LỊCH SỬ của hũ
     calibrated = cal_kind.probability_ok_at(jar.history_days)
     show = (
-        ctx.cfg.probability_enabled
-        and not ctx.is_initial
-        and kind != "cold_start"
-        and calibrated
+        ctx.cfg.probability_enabled and not ctx.is_initial and kind != "cold_start" and calibrated
     )
     band: ConfidenceBand = (
         "low"
@@ -303,6 +332,20 @@ def fit_jar(jar: JarInput, ctx: _Ctx) -> JarFit:
     return JarFit(model.name, kind, marg, alpha)
 
 
+def _add_runout_display(
+    params: dict[str, Any], jars: Sequence[JarInput], out: Sequence[JarForecast], ctx: _Ctx
+) -> None:
+    """Ghi `params["show_runout_date"]` = {mã hũ: có nêu ngày cạn không} khi bật `recalibrate` (#25): hũ thưa không nêu ngày
+    cụ thể (backtest: sai TB 5-6 ngày), trừ hũ nghĩa vụ (ngày cạn đi theo lịch nghĩa vụ đã biết). Công tắc tắt thì không ghi
+    khóa, đầu ra như trước. Đọc bằng `yofina_ml.api.runout_date_shown`."""
+    if not ctx.cal.recalibrate:
+        return
+    params["show_runout_date"] = {
+        jf.summary.jar_code: not (jf.summary.series_kind == "sparse" and j.kind != "obligation")
+        for j, jf in zip(jars, out, strict=True)
+    }
+
+
 def make_context(inputs: ForecastInputs, cal: Calibration | None = None) -> _Ctx:
     return _make_ctx(inputs, cal)
 
@@ -325,6 +368,7 @@ def forecast_user(inputs: ForecastInputs) -> ForecastResult:
     params = _base_params(ctx)
     params["jar_models"] = {j.code: m for j, m in zip(inputs.jars, models_used, strict=True)}
     params["jar_state"] = states
+    _add_runout_display(params, inputs.jars, out, ctx)
     return ForecastResult(run=_run_meta(ctx, run_model, params), jars=tuple(out))
 
 
@@ -402,5 +446,6 @@ def update_forecast(
         out.append(_jar_result(jar, marg, alpha, kind, ctx))
     params = _base_params(ctx)
     params["jar_state"] = states
+    _add_runout_display(params, [jars_by[c] for c in jar_codes], out, ctx)
     params["updated_from_model"] = previous.run.model
     return ForecastResult(run=_run_meta(ctx, previous.run.model, params), jars=tuple(out))

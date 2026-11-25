@@ -27,6 +27,8 @@ def forecast_user(inputs: ForecastInputs) -> ForecastResult:
     khi `show_probability` sai; `run.is_initial_estimate` đúng khi `run.history_days < config.cold_start_min_days`, khi đó
     `confidence_label` là low và `show_probability` sai ở mọi hũ. `show_probability` cũng sai khi hũ có ít ngày lịch sử hơn
     `probability_min_history_days` của loại chuỗi (hiệu chỉnh, BR-31); khi đó vẫn có `status` và `confidence_band`.
+    Khi hiệu chỉnh bật `recalibrate` (#25): dải số dư hũ dày qua CQR, `p_shortfall` qua PAV, và `run.params` có thêm
+    `show_runout_date` ({mã hũ: bool}, đọc bằng `runout_date_shown`); tắt thì đầu ra như trước #25.
     """
     return _impl.forecast_user(inputs)
 
@@ -45,3 +47,15 @@ def update_forecast(
     (pipeline rơi về `forecast_user` đầy đủ). Thuần hàm như `forecast_user`.
     """
     return _impl.update_forecast(inputs, previous, jar_codes)
+
+
+def runout_date_shown(result: ForecastResult, jar_code: str) -> bool:
+    """Có nên nêu NGÀY cạn (`JarSummary.runout_date`) của hũ này không.
+
+    Sai khi hiệu chỉnh bật `recalibrate` (#25) và hũ là hũ thưa (trừ hũ nghĩa vụ): ngày cạn của hũ thưa sai trung bình 5-6
+    ngày trên backtest, nên bên dùng hiện "có thể cạn trước ngày lương" kèm `p_shortfall` (khi `show_probability`) thay cho
+    một ngày cụ thể. Đọc từ `result.run.params["show_runout_date"]` ({mã hũ: bool}); kết quả cũ hoặc công tắc tắt không có
+    khóa đó thì luôn đúng (như trước). `runout_date` vẫn được ghi như cũ để không vỡ bên dùng chưa đọc cờ này.
+    """
+    shown = (result.run.params or {}).get("show_runout_date") or {}
+    return bool(shown.get(jar_code, True))

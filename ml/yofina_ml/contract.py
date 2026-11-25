@@ -90,6 +90,15 @@ def check_result(
         errs.append("is_initial_estimate phải đúng khi history_days < config.cold_start_min_days")
     if run.is_initial_estimate and run.confidence_label != "low":
         errs.append("ước lượng ban đầu thì confidence_label phải là low")
+    shown = (run.params or {}).get("show_runout_date")
+    if shown is not None and (
+        not isinstance(shown, dict)
+        or set(shown) != set(got)
+        or any(not isinstance(v, bool) for v in shown.values())
+    ):
+        errs.append(
+            "params.show_runout_date (nếu có) phải là {mã hũ: bool} cho đúng các hũ của kết quả"
+        )
 
     days_to_payday = (inputs.next_payday - inputs.app_date).days
     for jf in result.jars:
