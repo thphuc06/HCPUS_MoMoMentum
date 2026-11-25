@@ -254,13 +254,7 @@ describe('ChatSession: lỗi', () => {
     expect(notices(session.getSnapshot().items)[0]).toMatchObject({ code: 'ACCESS_DENIED', retry: false })
   })
 
-  it('409 SESSION_BUSY: thông báo bận, cho thử lại', async () => {
-    const { session } = makeSession([
-      () => new Response(sseBody([runError('SESSION_BUSY')]), { status: 409, headers: { 'content-type': 'text/event-stream' } }),
-    ])
-    await session.send('hi')
-    expect(notices(session.getSnapshot().items)[0]).toMatchObject({ code: 'SESSION_BUSY', retry: true })
-  })
+  // 409 SESSION_BUSY (thử lại có lùi rồi mới báo bận): xem sessionBusy.test.ts.
 
   it('retry() bỏ phần dở dang và gửi lại cùng lịch sử (không nhân đôi tin nhắn người dùng)', async () => {
     const { session, calls } = makeSession([
