@@ -130,8 +130,8 @@ Cấu hình riêng của `YofinaIngest` (`loadIngestConfig` trong `lib/ingest-st
 Đóng zip (một zip cho cả hai Lambda; `--extra` lặp được, đường dẫn tính từ gốc repo, `NGUỒN:ĐÍCH` chép thư mục vào gốc zip; `yofina_core` tự kèm):
 
 ```bash
-uv run scripts/build_lambda.py gateway/tools/ingest --arch arm64 --name ingest --extra pipelines/ingest/yofina_ingest:yofina_ingest --extra gateway/tools/ledger/yofina_ledger:yofina_ledger --extra db/seed:seed
-# -> build/lambda/ingest-arm64.zip; handler: handler_api.handler (REST), handler_worker.handler (SQS)
+uv run scripts/build_lambda.py gateway/tools/ingest --arch arm64 --name ingest --extra pipelines/ingest/yofina_ingest:yofina_ingest --extra gateway/tools/ledger/yofina_ledger:yofina_ledger --extra pipelines/classify/yofina_classify:yofina_classify --extra db/seed:seed
+# -> build/lambda/ingest-arm64.zip; handler: handler_api.handler (REST), handler_worker.handler (SQS). Lệnh chuẩn là INGEST_BUILD_COMMAND trong lib/ingest-stack.ts: thiếu yofina_classify thì Lambda API lỗi ImportModuleError (500) sau deploy
 ```
 
 Synth riêng: `uv run scripts/cdk.py synth YofinaIngest`. Nếu app đầy đủ dừng vì thiếu luật Cedar của `YofinaAgent` (nhánh phase 3 chưa ghép), synth riêng stack này bằng một entry chỉ dựng `IngestStack` (`--app "npx tsx bin/<entry>.ts"`). App dựng mọi stack, nên synth cần cả zip ledger, forecast và các luật Cedar của YofinaAgent; thiếu chúng thì app dừng trước khi tới stack này. Stack ingest thiếu zip của chính nó thì KHÔNG ném lỗi lúc dựng mà gắn lỗi (annotation) vào `YofinaIngest`: CLI từ chối synth/deploy stack này, stack khác vẫn synth được.
