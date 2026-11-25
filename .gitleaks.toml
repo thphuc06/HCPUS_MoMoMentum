@@ -1,0 +1,36 @@
+# Cấu hình gitleaks cho job `secrets` của .github/workflows/ci.yml (quét toàn bộ lịch sử git).
+# Giữ nguyên mọi luật mặc định; chỉ thêm allowlist hẹp cho các dương tính giả đã kiểm tay ngày 25/11/2026.
+# Mỗi mục khớp đúng giá trị giả (hoặc đúng dòng lỗi), không bỏ qua cả file, nên bí mật thật nằm cùng file vẫn bị bắt.
+# Thêm mục mới thì ghi rõ vì sao là dương tính giả; bí mật thật thì thu hồi/đổi ngay, không allowlist.
+title = "Yofina Foresight gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """confirm_token giả trong fixture REST (contracts/fixtures/rest/**), tests/unit/test_contracts_rest.py và \
+frontend/src/blocks/confirm.test.tsx: base64url của {"sub":"x"} hoặc {"tool":"delete_my_data"} nối chữ ký 'sig', \
+và chuỗi abc123.def456. Token xác nhận thật do server ký HMAC lúc chạy, không nằm trong repo."""
+targetRules = ["generic-api-key"]
+regexes = [
+  '''eyJzdWIiOiJ4In0\.c2ln''',
+  '''eyJ0b29sIjoiZGVsZXRlX215X2RhdGEifQ\.c2ln''',
+  '''abc123\.def456''',
+]
+
+[[allowlists]]
+description = """JWT giả trong tests/unit/test_ledger_turns.py: header {"alg":"RS256"}, payload {"sub":"xxxxx"}, \
+chữ ký là chữ 'signature' (base64url), không ký bằng khóa nào."""
+targetRules = ["jwt"]
+regexes = [
+  '''eyJhbGciOiJSUzI1NiJ9\.eyJzdWIiOiJ4eHh4eCJ9\.c2lnbmF0dXJl''',
+]
+
+[[allowlists]]
+description = """Kết quả spike spikes/bedrock-models/results_*.txt: thông báo lỗi AccessDeniedException của Bedrock, \
+luật generic-api-key bắt chữ 'Access...: <model id>'. Giá trị là model ID công khai (anthropic.claude-*), không phải khóa."""
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^spikes/bedrock-models/results_[^/]+\.txt$''']
+regexTarget = "line"
+regexes = ['''AccessDeniedException: anthropic\.claude-''']
