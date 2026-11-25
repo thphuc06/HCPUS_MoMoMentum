@@ -19,6 +19,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from yofina_ml.calibration import default as _default
+from yofina_ml.recalibration import Isotonic
 from yofina_ml.types import ForecastConfig
 
 KINDS = ("dense", "sparse", "cold_start")
@@ -30,6 +31,7 @@ class SeriesCalibration:
     level_sigma: float
     probability_ok: bool
     probability_min_history_days: int = 0
+    p_isotonic: Isotonic | None = None  # PAV cho p_shortfall (#25), chỉ áp khi `Calibration.recalibrate`
 
     def probability_ok_at(self, history_days: int) -> bool:
         """Khoảng của loại chuỗi này đã đạt độ phủ mục tiêu ở độ dài lịch sử `history_days` (được phát %)."""
@@ -42,12 +44,13 @@ class Calibration:
     dense: SeriesCalibration
     sparse: SeriesCalibration
     cold_start: SeriesCalibration
+    recalibrate: bool = False  # công tắc hiệu chỉnh sau Monte Carlo (#25): PAV, CQR, ẩn ngày cạn hũ thưa
 
     def for_kind(self, kind: str) -> SeriesCalibration:
         return getattr(self, kind)
 
     def to_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"version": self.version}
+        out: dict[str, Any] = {"version": self.version, "recalibrate": self.recalibrate}
         for k in KINDS:
             c = self.for_kind(k)
             out[k] = {
@@ -55,13 +58,24 @@ class Calibration:
                 "level_sigma": c.level_sigma,
                 "probability_ok": c.probability_ok,
                 "probability_min_history_days": c.probability_min_history_days,
+                "p_isotonic": c.p_isotonic.to_dict() if c.p_isotonic else None,
             }
         return out
 
 
+def _opt(src: dict[str, Any], key: str, parse: Any, cur: Any) -> Any:
+    """Khóa vắng thì giữ giá trị gốc; có khóa mà giá trị None thì bỏ (tắt riêng phần đó)."""
+    if key not in src:
+        return cur
+    return None if src[key] is None else parse(src[key])
+
+
 def calibration_from_dict(o: dict[str, Any], base: Calibration | None = None) -> Calibration:
     """Dựng `Calibration` từ dict; khóa vắng lấy từ `base` (nếu có)."""
-    kw: dict[str, Any] = {"version": str(o.get("version", base.version if base else "custom"))}
+    kw: dict[str, Any] = {
+        "version": str(o.get("version", base.version if base else "custom")),
+        "recalibrate": bool(o.get("recalibrate", base.recalibrate if base else False)),
+    }
     for k in KINDS:
         src = o.get(k)
         prev = base.for_kind(k) if base else None
@@ -78,6 +92,7 @@ def calibration_from_dict(o: dict[str, Any], base: Calibration | None = None) ->
             probability_min_history_days=int(
                 src.get("probability_min_history_days", cur.probability_min_history_days)
             ),
+            p_isotonic=_opt(src, "p_isotonic", Isotonic.from_dict, cur.p_isotonic),
         )
     return Calibration(**kw)
 
