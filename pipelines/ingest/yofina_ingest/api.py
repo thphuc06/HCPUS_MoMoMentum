@@ -38,6 +38,8 @@ from yofina_core.ingest import (
 )
 from yofina_core.money import format_vnd
 from yofina_core.params import JAR_CODE_RE
+from yofina_core.quota import UPLOAD, AccountQuota
+from yofina_core.quota import shared as shared_quota
 from yofina_core.wallet import CONFIRM_ROWS, INGEST_ACTION_TOOLS
 from yofina_ingest.context import jars_from_rows
 from yofina_ingest.repo import IngestRepo, UserContext, row_amount
@@ -105,6 +107,7 @@ class IngestApi:
         presigner: Presigner,
         forecast_trigger: ForecastTrigger | None = None,
         clock: Callable[[], datetime] | None = None,
+        upload_quota: AccountQuota | None = None,
     ) -> None:
         self.repo = repo
         self.confirm = confirm
@@ -112,6 +115,8 @@ class IngestApi:
         self._presign = presigner
         self._forecast = forecast_trigger
         self._clock = clock or (lambda: datetime.now(UTC))
+        # None: trần nạp tệp của tiến trình (`yofina_core.quota.shared`, bảng `YOFINA_USAGE_TABLE`; vắng thì tắt), tạo lười
+        self._upload_quota = upload_quota
 
     # --- tiện ích ----------------------------------------------------------------------------------------------------------
     def now(self) -> datetime:
@@ -165,6 +170,9 @@ class IngestApi:
                     "Bạn cần đồng ý cho Yofina đọc loại tệp này trước khi tải lên.",
                 )
             self.repo.grant_consent(uid, source, s.ingest_consent_version)
+        # Trần nạp tệp theo tài khoản mỗi ngày (#13): sau mọi bước kiểm (yêu cầu hỏng, chưa đồng ý thì không tính), trước khi tạo
+        # job và ký URL. Chạm trần thì DAILY_QUOTA_EXCEEDED (429): không job, không URL; các route đọc khác không bị ảnh hưởng.
+        (self._upload_quota or shared_quota(UPLOAD)).take(uid)
         # Ledger cũ đặt lại demo mà không xóa bảng nạp: dọn job mồ côi để nạp lại cùng tệp không vướng khóa trùng
         healed = self.repo.heal_after_reset(uid)
         if healed:
@@ -215,7 +223,12 @@ class IngestApi:
         return {"jobs": jobs}
 
     def get_job(
-        self, uid: str, job_id_raw: Any, *, trace_id: str, source_tool: str = "rest:GET /ingest/jobs"
+        self,
+        uid: str,
+        job_id_raw: Any,
+        *,
+        trace_id: str,
+        source_tool: str = "rest:GET /ingest/jobs",
     ) -> dict[str, Any]:
         job_id = _uuid("job_id", job_id_raw, code=ErrorCode.INGEST_JOB_NOT_FOUND)
         found = self.repo.get_job(uid, job_id, REVIEW_ROW_LIMIT)
