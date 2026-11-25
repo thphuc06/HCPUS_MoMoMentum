@@ -46,7 +46,8 @@ class ScheduledFlow:
     amount_vnd: int
     amount_min_vnd: int | None = None
     amount_max_vnd: int | None = None
-    ref_id: str | None = None  # obligation_id; vắng với lương
+    ref_id: str | None = None
+    original_due_date: date | None = None  # obligation_id; vắng với lương
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,7 @@ class JarInput:
     daily_spend_vnd: tuple[int, ...]
     inflows: tuple[ScheduledFlow, ...] = ()
     outflows: tuple[ScheduledFlow, ...] = ()
+    purpose: str | None = None
 
     @property
     def history_days(self) -> int:

@@ -226,7 +226,7 @@ export function ProfilePage() {
         <section className="rounded-card bg-surface p-4 shadow-card" aria-label="Dữ liệu demo">
           <h2 className="text-subtitle font-semibold text-ink">Dữ liệu demo</h2>
           <p className="mt-1 text-small text-ink-2">
-            Ví này là mô phỏng. Đặt lại sẽ đưa hũ, giao dịch và cuộc trò chuyện của tài khoản này về trạng thái ban đầu.
+            Ví này là mô phỏng. Đặt lại sẽ thay các hũ hiện tại bằng bộ sáu hũ mặc định, nạp lại giao dịch mẫu và xóa hội thoại.
           </p>
           <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => setConfirming(true)} disabled={busy}>
             <RotateCcw className="size-5" aria-hidden />
@@ -256,7 +256,7 @@ export function ProfilePage() {
         <AlertDialogContent container={frame}>
           <AlertDialogTitle>Đặt lại dữ liệu?</AlertDialogTitle>
           <AlertDialogDescription>
-            Hũ, giao dịch và cuộc trò chuyện của tài khoản này sẽ quay về trạng thái ban đầu. Việc này không ảnh hưởng tài khoản khác.
+            Tài khoản này sẽ nhận sáu hũ mặc định và giao dịch mẫu. Hội thoại hiện tại sẽ bị xóa.
           </AlertDialogDescription>
           <div className="mt-5 flex flex-col gap-3">
             <Button type="button" onClick={() => void reset()} disabled={busy} aria-busy={busy}>

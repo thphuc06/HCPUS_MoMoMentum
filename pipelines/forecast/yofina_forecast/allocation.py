@@ -41,6 +41,13 @@ from yofina_core.roadmap import (
     AllocationRelaxation,
     AllocationSolver,
 )
+from yofina_core.wallet import (
+    DEFAULT_SPENDING_JAR,
+    is_buffer_jar,
+    is_goal_jar,
+    pay_jar_or_default,
+    resolve_obligation_pay_jar,
+)
 from yofina_forecast.common import clip, int_of, to_date
 from yofina_forecast.resilience import (
     Gathered,
@@ -179,7 +186,11 @@ class AllocationEngine:
         jars = {j["code"]: j for j in g.jar_rows}
         codes = [j["code"] for j in g.jar_rows]
         spend = {j["code"]: j.get("spend") or [] for j in g.ctx.jars}
-        default_pay = next((j["code"] for j in g.jar_rows if j["kind"] == "obligation"), None)
+        daily_spend = next(
+            (j.get("essential_spend") or [] for j in g.ctx.jars if j["code"] == DEFAULT_SPENDING_JAR),
+            [],
+        )
+        default_pay = resolve_obligation_pay_jar((j["code"], j["kind"]) for j in g.jar_rows)
 
         # nghĩa vụ quy về tháng (có cú sốc tăng giá thì loại bị tăng nặng hơn)
         oblig_floor = dict.fromkeys(codes, 0)
@@ -193,7 +204,7 @@ class AllocationEngine:
                 monthly = round(monthly * (1.0 + pct / 100.0 * share))
             obligations_total += monthly
             hard = bool(ob.get("is_essential")) or ob["kind"] in DEBT_KINDS
-            pay = ob.get("pay_jar_code") or default_pay
+            pay = pay_jar_or_default(jars, ob.get("pay_jar_code"), default_pay)
             if hard and pay in oblig_floor:
                 oblig_floor[pay] += monthly
             elif not hard:
@@ -201,8 +212,12 @@ class AllocationEngine:
 
         # mục tiêu: khai ở hũ, rồi ghi đè theo tham số
         goals: dict[str, _Goal] = {}
+        explicit_buffer = any(j.get("purpose") == "buffer" for j in jars.values())
         for code, j in jars.items():
-            if j.get("goal_vnd") is not None and j["kind"] != "obligation":
+            if j.get("goal_vnd") is not None and (
+                is_goal_jar(j["kind"], j.get("purpose"))
+                or (j["kind"] == "spending" and j.get("purpose") is None)
+            ):
                 goals[code] = _Goal(
                     code,
                     int_of(j["goal_vnd"]),
@@ -215,10 +230,10 @@ class AllocationEngine:
             j = jars.get(code)
             if j is None:
                 raise YofinaError(ErrorCode.JAR_NOT_FOUND, f"Không tìm thấy hũ {code}.")
-            if j["kind"] != "saving":
+            if not is_goal_jar(j["kind"], j.get("purpose")):
                 raise YofinaError(
                     ErrorCode.PARAMS_INVALID,
-                    f"Hũ {j['name']} không phải hũ tiết kiệm nên không đặt mục tiêu được.",
+                    f"Hũ {j['name']} không dùng cho mục tiêu trong lộ trình.",
                 )
             old = goals.get(code)
             target = ga.get("target_vnd") or (old.target_vnd if old else None)
@@ -253,16 +268,23 @@ class AllocationEngine:
             pct = float(j["split_percent"])
             split[code] = pct
             goal = goals.get(code)
+            essential_spend = daily_spend if code == DEFAULT_SPENDING_JAR else spend.get(code, [])
             monthly_spend = variable_monthly_spend(
-                spend.get(code, []), s.resilience_window_days, month_days
+                essential_spend, s.resilience_window_days, month_days
             )
             if kind == "obligation":
                 role = "obligation"
-            elif goal is not None:
+            elif goal is not None or j.get("purpose") == "goal":
                 role = "goal"
-            elif kind == "saving":
+            elif is_buffer_jar(kind, j.get("purpose"), j.get("goal_vnd")) and (
+                j.get("purpose") == "buffer" or not explicit_buffer
+            ):
                 role = "emergency"
-            elif code in s.essential_jar_codes:
+            elif kind == "saving":
+                role = "saving"
+            elif (
+                monthly_spend > 0 if code == DEFAULT_SPENDING_JAR else code in s.essential_jar_codes
+            ):
                 role = "essential"
             else:
                 role = "discretionary"
@@ -311,6 +333,7 @@ class AllocationEngine:
     @staticmethod
     def _ref(j: Mapping[str, Any]) -> dict[str, str]:
         return {
+            **({"purpose": j["purpose"]} if j.get("purpose") is not None else {}),
             "code": j["code"],
             "name": j["name"],
             "color_key": j["color_key"],

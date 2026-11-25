@@ -49,7 +49,8 @@ from yofina_core.confirm import (
     params_hash,
 )
 from yofina_core.money import format_vnd, to_vnd
-from yofina_core.wallet import GENERIC_ACTION_TOOLS
+from yofina_core.schedule import obligation_window
+from yofina_core.wallet import DEFAULT_OBLIGATION_JAR, GENERIC_ACTION_TOOLS, JarPurpose
 
 SCHEMA_VERSION = 1
 MAX_VND = 99_999_999_999_999
@@ -99,6 +100,12 @@ class _BlockBase(_Strict):
 
 
 # --- jar_summary --------------------------------------------------------------------------
+class SinkingItem(_Strict):
+    name: Annotated[str, Field(min_length=1, max_length=80)]
+    amount_vnd: VndPositive
+    needed_date: IsoDate
+
+
 class JarBalance(_Strict):
     code: JarCode
     name: JarName
@@ -108,12 +115,16 @@ class JarBalance(_Strict):
     split_percent: Annotated[float, Field(ge=0, le=100)]
     # Phase 4 (tùy chọn, tương thích ngược): loại hũ và mục tiêu GỐC đọc từ bảng `jars`, để lộ trình dựng được `save_jars`.
     kind: UserJarKind | None = None
+    purpose: JarPurpose | None = None
     goal_vnd: VndPositive | None = None
     goal_date: IsoDate | None = None
+    sinking_items: Annotated[list[SinkingItem], Field(max_length=40)] | None = None
 
     @model_validator(mode="after")
     def _goal_pair(self) -> JarBalance:
-        if self.goal_date is not None and self.goal_vnd is None:
+        if self.purpose is not None and self.kind != "saving":
+            raise ValueError("purpose chỉ dành cho hũ để dành")
+        if self.goal_date is not None and self.goal_vnd is None and self.purpose not in ("sinking", "long_term"):
             raise ValueError("goal_date cần goal_vnd")
         return self
 
@@ -240,6 +251,7 @@ class ForecastJar(_Strict):
     name: JarName
     color_key: KeyName
     icon_key: KeyName
+    purpose: JarPurpose | None = None
 
 
 class ForecastPayday(_Strict):
@@ -260,6 +272,17 @@ class ForecastEvent(_Strict):
     label: Annotated[str, Field(min_length=1, max_length=60)]
     amount_vnd: VndPositive
     amount_max_vnd: VndPositive | None = None
+
+
+class ForecastDueShortfall(_Strict):
+    date: IsoDate
+    label: Annotated[str, Field(min_length=1, max_length=60)]
+    shortfall_vnd: VndPositive
+
+
+class ForecastObligationWindow(_Strict):
+    items: list[ForecastEvent]
+    first_shortfall: ForecastDueShortfall | None = None
 
 
 ScenarioKindName = Literal[
@@ -285,6 +308,7 @@ class ForecastScenarioPath(_Strict):
     min_balance_p50_vnd: VndSigned | None = None
     days: Annotated[list[ForecastDay], Field(min_length=1, max_length=90)]
     events: Annotated[list[ForecastEvent], Field(max_length=60)] | None = None
+    obligations_before_payday: ForecastObligationWindow | None = None
 
 
 class ForecastCompareDelta(_Strict):
@@ -324,6 +348,7 @@ class ForecastTimelineData(_Strict):
     stale: bool
     days: Annotated[list[ForecastDay], Field(min_length=1, max_length=90)]
     events: Annotated[list[ForecastEvent], Field(max_length=60)]
+    obligations_before_payday: ForecastObligationWindow | None = None
     compare: ForecastCompare | None = None
 
 
@@ -1619,6 +1644,8 @@ def _jar_row(row: Mapping[str, Any]) -> JarBalance:
         balance_vnd=to_vnd(row["balance_vnd"]),
         split_percent=_percent(row["split_percent"]),
         kind=row.get("kind"),
+        purpose=row.get("purpose"),
+        sinking_items=row.get("sinking_items") or None,
         goal_vnd=to_vnd(goal_vnd) if goal_vnd is not None else None,
         goal_date=goal_date,
     )
@@ -1986,13 +2013,48 @@ def build_forecast_timeline(
     runout = summary.get("runout_date") if date_shown else None
     coverage = summary.get("data_coverage")
     payday = _date_text(summary["payday_date"])
+    timeline_days = [
+        ForecastDay(
+            date=_date_text(d["day"]),
+            p10_vnd=to_vnd(d["balance_p10_vnd"]),
+            p50_vnd=to_vnd(d["balance_p50_vnd"]),
+            p90_vnd=to_vnd(d["balance_p90_vnd"]),
+        )
+        for d in days
+    ]
+    event_rows = list(events)
+    timeline_events = [
+        {
+            "date": _date_text(e["date"]),
+            "kind": e["kind"],
+            "label": e["label"],
+            "amount_vnd": to_vnd(e["amount_vnd"]),
+            **({"amount_max_vnd": to_vnd(e["amount_max_vnd"])} if e.get("amount_max_vnd") is not None else {}),
+        }
+        for e in event_rows
+    ]
+    opening_balance = to_vnd(summary["start_balance_vnd"])
+    due_window = (
+        ForecastObligationWindow.model_validate(obligation_window(
+            (
+                {**wire, "original_due_date": _date_text(raw["original_due_date"])}
+                if raw.get("original_due_date") is not None else wire
+                for wire, raw in zip(timeline_events, event_rows, strict=True)
+            ),
+            payday,
+            {d.date: d.p50_vnd for d in timeline_days},
+            opening_balance_vnd=opening_balance,
+        ))
+        if jar["code"] == DEFAULT_OBLIGATION_JAR and jar.get("kind") == "obligation" else None
+    )
     data = ForecastTimelineData(
         jar=ForecastJar(
-            code=jar["code"], name=jar["name"], color_key=jar["color_key"], icon_key=jar["icon_key"]
+            code=jar["code"], name=jar["name"], color_key=jar["color_key"], icon_key=jar["icon_key"],
+            purpose=jar.get("purpose"),
         ),
         status=summary["status"],
         origin_date=_date_text(summary["run_app_date"]),
-        start_balance_vnd=to_vnd(summary["start_balance_vnd"]),
+        start_balance_vnd=opening_balance,
         horizon_days=int(summary["horizon_days"]),
         payday=ForecastPayday(date=payday, days_until=int(summary["days_to_payday"])),
         runout_date=_date_text(runout) if runout else None,
@@ -2010,27 +2072,9 @@ def build_forecast_timeline(
         model=summary["model"],
         computed_at=_instant_text(summary["computed_at"]),
         stale=stale,
-        days=[
-            ForecastDay(
-                date=_date_text(d["day"]),
-                p10_vnd=to_vnd(d["balance_p10_vnd"]),
-                p50_vnd=to_vnd(d["balance_p50_vnd"]),
-                p90_vnd=to_vnd(d["balance_p90_vnd"]),
-            )
-            for d in days
-        ],
-        events=[
-            ForecastEvent(
-                date=_date_text(e["date"]),
-                kind=e["kind"],
-                label=e["label"],
-                amount_vnd=to_vnd(e["amount_vnd"]),
-                amount_max_vnd=(
-                    to_vnd(e["amount_max_vnd"]) if e.get("amount_max_vnd") is not None else None
-                ),
-            )
-            for e in events
-        ],
+        days=timeline_days,
+        events=[ForecastEvent.model_validate(e) for e in timeline_events[:60]],
+        obligations_before_payday=due_window,
     )
     return build_forecast_timeline_from_data(
         data=data,
@@ -2070,13 +2114,18 @@ def build_forecast_timeline_from_data(
             ),
             280,
         )  # fmt: skip
+        window = cmp.after.obligations_before_payday
         default_id = f"forecast_timeline:{trace_id}:{d.jar.code}:what_if"
     else:
         text = _forecast_sentence(
             d.jar.name, d.status, d.runout_date, d.payday.date, d.stale, d.is_initial_estimate,
             d.runout_date_shown is not False,
         )  # fmt: skip
+        window = d.obligations_before_payday
         default_id = f"forecast_timeline:{trace_id}:{d.jar.code}"
+    if window is not None and (short := window.first_shortfall) is not None:
+        notice = f" {short.label} ngày {_dm(short.date)} thiếu {format_vnd(short.shortfall_vnd)}."
+        text = _clip(text, 280 - len(notice)) + notice
     return ForecastTimelineBlock(
         v=SCHEMA_VERSION,
         id=block_id or default_id,

@@ -9,6 +9,7 @@ import { ScreenHeader } from '@/components/ScreenHeader'
 import { useApiResource } from '@/api/resource'
 import { useOverview } from '@/api/OverviewProvider'
 import { amountOf, useTransferFlow } from '@/features/transfer/TransferFlow'
+import { payJarChoices } from '@/features/transfer/params'
 import { formatVnd, formatVndNumber, vndInWords } from '@/lib/format'
 import { cn } from '@/lib/cn'
 import { Avatar } from './TransferPayeePage'
@@ -27,6 +28,7 @@ export function TransferAmountPage() {
   const [open, setOpen] = useState(state.source === null)
   const amount = amountOf(state)
   const jars = ov.data?.jars ?? []
+  const payChoices = payJarChoices(jars)
   const line = credit.data?.credit_line ?? null
 
   useEffect(() => {
@@ -54,7 +56,8 @@ export function TransferAmountPage() {
       : sourceJar
         ? `Còn ${formatVnd(sourceJar.balance_vnd)}`
         : 'Hũ hoặc Trả sau (mô phỏng)'
-  const canContinue = amount > 0 && state.source !== null
+  const needsPayJar = state.source?.kind === 'credit' && payChoices.length > 0
+  const canContinue = amount > 0 && state.source !== null && (!needsPayJar || state.payJar !== '')
 
   return (
     <>
@@ -174,6 +177,27 @@ export function TransferAmountPage() {
               ))}
             </select>
             <span className="mt-1 block text-note text-ink-2">Mua bằng Trả sau không trừ tiền hũ ngay; hũ này chỉ để tính chi tiêu.</span>
+          </label>
+        )}
+
+        {needsPayJar && (
+          <label className="mt-3 block">
+            <span className="mb-1 block text-small font-semibold text-ink-2">Hũ trả khi đến hạn</span>
+            <select
+              value={state.payJar}
+              onChange={(e) => patch({ payJar: e.target.value })}
+              aria-label="Hũ trả khi đến hạn"
+              className="h-12 w-full rounded-2xl border border-line bg-surface px-4 text-body text-ink"
+            >
+              <option value="" disabled>
+                Chọn hũ
+              </option>
+              {payChoices.map((j) => (
+                <option key={j.code} value={j.code}>
+                  {j.name}
+                </option>
+              ))}
+            </select>
           </label>
         )}
 

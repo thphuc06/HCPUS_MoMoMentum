@@ -37,7 +37,7 @@ from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd, to_vnd
 from yofina_core.schedule import bnpl_due_date
 from yofina_core.suitability import Proposal
-from yofina_core.wallet import BNPL_PRODUCT_CODE
+from yofina_core.wallet import BNPL_PRODUCT_CODE, resolve_obligation_pay_jar
 from yofina_forecast.common import (
     STATUS_RANK,
     STATUS_WORD,
@@ -259,12 +259,17 @@ class AffordabilityEngine:
         amount_vnd: Any,
         funding_source: Any = None,
         jar: Any = None,
+        pay_jar: Any = None,
         label: Any = None,
         pay_date: Any = None,
     ) -> dict[str, Any]:
         amount, funding, jar_code, text, when = self._args(
             amount_vnd, funding_source, jar, label, pay_date
         )
+        if pay_jar is not None and (
+            not isinstance(pay_jar, str) or not JAR_CODE_RE.fullmatch(pay_jar)
+        ):
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Mã hũ trả không hợp lệ.")
         now = self.pipeline.now()
         with ThreadPoolExecutor(max_workers=5) as pool:
             f_view = pool.submit(self.repo.jar_view, user_id)
@@ -325,7 +330,7 @@ class AffordabilityEngine:
             obligations,
             facts,
             user_jars,
-            jar_code,
+            pay_jar,
         )
         needed = [j["code"] for j in candidates]
         if credit_ctx is not None and credit_ctx["pay_jar"] not in needed:
@@ -468,6 +473,7 @@ class AffordabilityEngine:
     @staticmethod
     def _ref(j: Mapping[str, Any]) -> dict[str, str]:
         return {
+            **({"purpose": j["purpose"]} if j.get("purpose") is not None else {}),
             "code": j["code"],
             "name": j["name"],
             "color_key": j["color_key"],
@@ -557,7 +563,7 @@ class AffordabilityEngine:
         obligations: Sequence[Mapping[str, Any]],
         facts: SuitabilityFacts,
         user_jars: Sequence[Mapping[str, Any]],
-        jar_code: str | None,
+        pay_jar: str | None,
     ) -> dict[str, Any] | None:
         """Chi phí của món và hũ trả nghĩa vụ; None khi không xét Trả sau hoặc không dùng được (không có hạn mức, vượt hạn mức).
         Chỉ xét riêng Trả sau (`funding = credit`) mà không dùng được thì báo lỗi."""
@@ -598,11 +604,14 @@ class AffordabilityEngine:
             if funding == "credit" or exc.code != ErrorCode.CREDIT_LIMIT_EXCEEDED:
                 raise
             return None
-        default_pay = next((j["code"] for j in user_jars if j["kind"] == "obligation"), None)
-        pay = (existing.get("pay_jar_code") if existing else None) or default_pay
-        if pay is None or all(j["code"] != pay for j in user_jars):
-            pay = jar_code or next((j["code"] for j in user_jars if j["kind"] == "spending"), None)
+        pay = resolve_obligation_pay_jar(
+            ((j["code"], j["kind"]) for j in user_jars),
+            saved=existing.get("pay_jar_code") if existing else None,
+            selected=pay_jar,
+        )
         if pay is None:
+            if funding == "credit" or pay_jar is not None:
+                raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản Trả sau này.")
             return None
         dues = [
             ob.amount_vnd

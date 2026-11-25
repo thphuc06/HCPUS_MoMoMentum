@@ -94,6 +94,7 @@ class ScenarioDraft(BaseModel):
         default=None, description="one_time_purchase: jar; bnpl_purchase: credit."
     )
     jar_code: str | None = Field(default=None, description="Mã hũ (một trong danh sách hũ).")
+    pay_jar: str | None = Field(default=None, description="bnpl_purchase: hũ trả khi đến hạn nếu người dùng chọn rõ.")
     date: str | None = Field(default=None, description="Ngày YYYY-MM-DD; để null nếu là hôm nay.")
     label: str | None = Field(default=None, description="Tên món hoặc khoản, tối đa 80 ký tự.")
     new_monthly_salary_vnd: int | None = Field(default=None, description="income_change: lương MỚI mỗi tháng.")
@@ -114,9 +115,9 @@ Nhiệm vụ DUY NHẤT: đổi câu hỏi "nếu ... thì sao" của người d
 
 Sáu loại kịch bản (kind) và trường bắt buộc:
 - one_time_purchase: mua một lần bằng tiền hũ. Cần amount_vnd, funding_source="jar", jar_code (hũ trừ tiền).
-- bnpl_purchase: mua bằng Trả sau (mô phỏng). Cần amount_vnd, funding_source="credit". jar_code tùy chọn (hũ tính chi tiêu).
+- bnpl_purchase: mua bằng Trả sau (mô phỏng). Cần amount_vnd, funding_source="credit". jar_code tùy chọn (hũ tính chi tiêu), pay_jar chỉ điền nếu người dùng chọn hũ trả khoản đến hạn.
 - income_change: lương đổi. Cần new_monthly_salary_vnd (lương MỚI mỗi tháng, không phải mức chênh). date tùy chọn.
-- recurring_expense: khoản chi lặp lại. Cần amount_vnd, cycle (weekly, monthly, yearly), date (lần đầu), jar_code. end_date tùy chọn.
+- recurring_expense: khoản chi lặp lại. Cần amount_vnd, cycle (weekly, monthly, yearly), date (lần đầu). Chỉ điền jar_code khi người dùng chọn hũ trả. end_date tùy chọn.
 - jar_transfer: chuyển tiền giữa hai hũ. Cần amount_vnd, from_jar, to_jar (khác nhau).
 - goal_delay: hoãn mục tiêu tiết kiệm. Cần jar_code, delay_months (1 đến 60).
 
@@ -695,7 +696,7 @@ def with_converted_amount(spec: dict[str, Any], r: IntentResult) -> dict[str, An
 
 def _jar_codes_ok(spec: Mapping[str, Any], rows: list[dict[str, Any]]) -> bool:
     codes = {j["code"] for j in rows}
-    return all(spec[k] in codes for k in ("jar_code", "from_jar", "to_jar") if spec.get(k))
+    return all(spec[k] in codes for k in ("jar_code", "pay_jar", "from_jar", "to_jar") if spec.get(k))
 
 
 async def _read_behavior(turn: Turn, spec: Mapping[str, Any]) -> dict[str, Any] | None:

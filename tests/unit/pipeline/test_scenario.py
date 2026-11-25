@@ -9,6 +9,8 @@ import pytest
 from conftest import BASE, build_registry
 from jsonschema import Draft202012Validator
 from phase3_helpers import APP_DATE, USER, build
+from pipeline_helpers import jar_row
+
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_forecast import scenario as scenario_mod
 from yofina_forecast.scenario import ScenarioEngine
@@ -250,3 +252,31 @@ def test_tra_sau_den_han_dung_ngay_luong_lam_hu_can_thi_trang_thai_sau_la_hut(sa
     eff = d["effects"][0]
     assert eff["status_after"] == "short" and "p_shortfall_after" not in eff
     assert tl["status"] == eff["status_before"]  # TRƯỚC giữ đúng trạng thái của dự báo nền
+
+
+def test_recurring_obligation_defaults_to_shared_jar(saved):
+    eng, _ = engine()
+    data = run(eng, {
+        "kind": "recurring_expense", "amount_vnd": 250_000, "cycle": "monthly",
+        "date": "2026-12-01", "label": "Tiền nhà",
+    }, saved)
+    assert data["spec"]["jar_code"] == "nghia_vu"
+    window = data["timelines"][0]["compare"]["after"]["obligations_before_payday"]
+    assert any(due["label"] == "Tiền nhà" for due in window["items"])
+
+
+def test_bnpl_legacy_wallet_requires_explicit_source_when_none_saved(saved):
+    eng, _ = engine(
+        context={
+            "jars": [jar_row("an_uong", "spending", 1_000_000, 100, 1, [0] * 47)],
+            "obligations": [],
+        },
+        obligations=[],
+    )
+    spec = {"kind": "bnpl_purchase", "amount_vnd": 500_000, "funding_source": "credit"}
+    with pytest.raises(YofinaError) as error:
+        run(eng, {**spec, "jar_code": "an_uong"}, saved)
+    assert error.value.code == ErrorCode.SCENARIO_INVALID
+    data = run(eng, {**spec, "pay_jar": "an_uong"}, saved)
+    assert data["obligation_impact"]["at_due"][0]["jar"]["code"] == "an_uong"
+    assert data["obligation_impact"]["cost"]["total_due_vnd"] == 533_000

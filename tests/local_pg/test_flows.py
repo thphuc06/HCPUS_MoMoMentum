@@ -151,19 +151,21 @@ def test_mua_300k_bang_tra_sau_sinh_nghia_vu_gom_phi_tu_bang_va_han_ngay_5(env, 
     env.reset(LAN)
     fee = fee_from_table(env)
     before = balances(env, LAN)
+    purchase = {
+        "kind": "expense",
+        "amount_vnd": 300_000,
+        "jar": "giai_tri",
+        "tx_type": "entertainment",
+        "funding": "credit",
+        "counterparty": "Tiki",
+    }
+    # ví cũ của Lan chưa có hũ Nghĩa vụ và chưa có nguồn trả đã lưu: phải chọn hũ trả (Bước 2 lộ trình bộ hũ)
+    with pytest.raises(YofinaError) as e:
+        env.act(LAN, "record_transaction", purchase)
+    assert e.value.code == ErrorCode.PARAMS_INVALID
+    assert balances(env, LAN) == before
     env.events.sent.clear()
-    r = env.act(
-        LAN,
-        "record_transaction",
-        {
-            "kind": "expense",
-            "amount_vnd": 300_000,
-            "jar": "giai_tri",
-            "tx_type": "entertainment",
-            "funding": "credit",
-            "counterparty": "Tiki",
-        },
-    )
+    r = env.act(LAN, "record_transaction", {**purchase, "pay_jar": "giai_tri"})
     block = parse_block(r)
     assert block.data.jars_after == []  # trả sau không đổi số dư hũ
     assert balances(env, LAN) == before
@@ -446,7 +448,7 @@ def test_onboarding_tai_khoan_trang_chi_voi_luong_va_ngay_nhan(env, schema):
     assert parse_block(r).data.summary.startswith("Đã tạo hồ sơ")
     ov = env.svc.overview_response("sub-moi")
     assert ov["profile"]["onboarded"] and ov["profile"]["display_name"] == "Hà"
-    assert len(ov["jars"]) == 7 and sum(j["split_percent"] for j in ov["jars"]) == 100
+    assert len(ov["jars"]) == 3 and sum(j["split_percent"] for j in ov["jars"]) == 100
     assert [j["code"] for j in ov["system_jars"]] == ["tien_vao_khac", "chua_phan_loai"]
     assert ov["next_payday"]["date"] == "2026-12-15" and ov["credit_line"]["limit_vnd"] == 3_000_000
     assert ov["balance"]["total_vnd"] == 0
@@ -906,7 +908,7 @@ def test_tong_quan_thu_hu_chi_tiet_va_dong_thoi_khong_vo_khi_co_du_bao(env, sche
     assert e.value.code == ErrorCode.JAR_NOT_FOUND
     for name, fn in (
         ("PayeesResponse", env.svc.payees_response),
-        ("TxTypesResponse", lambda u: env.svc.tx_types_response()),
+        ("TxTypesResponse", lambda u: env.svc.tx_types_response(u)),
         ("JarTemplatesResponse", lambda u: env.svc.jar_templates_response()),
         ("SalaryEventsResponse", env.svc.salary_events_response),
         ("CreditLineResponse", env.svc.credit_line_response),
@@ -1036,7 +1038,8 @@ def test_hai_lan_mua_tra_sau_song_song_cong_don_dung_va_phi_chi_tinh_mot_lan(env
 
     env.reset(LAN)
     fee = fee_from_table(env)
-    p = {"kind": "expense", "amount_vnd": 300_000, "jar": "giai_tri", "funding": "credit"}
+    # ví cũ chưa có hũ Nghĩa vụ: chọn hũ trả rõ ràng
+    p = {"kind": "expense", "amount_vnd": 300_000, "jar": "giai_tri", "funding": "credit", "pay_jar": "giai_tri"}
     errors: list[Exception] = []
 
     def run():
@@ -1089,7 +1092,8 @@ def test_xem_truoc_do_server_tinh_gom_phi_tra_sau_va_khong_ghi_gi(env):
     env.reset(LAN)
     fee = fee_from_table(env)
     before = balances(env, LAN)
-    p = {"kind": "expense", "amount_vnd": 300_000, "jar": "giai_tri", "funding": "credit"}
+    # ví cũ chưa có hũ Nghĩa vụ: chọn hũ trả rõ ràng
+    p = {"kind": "expense", "amount_vnd": 300_000, "jar": "giai_tri", "funding": "credit", "pay_jar": "giai_tri"}
     issued, preview = env.svc.issue_confirmation_with_preview(
         LAN, tool="record_transaction", params=p, client_params_hash=None, trace_id="a" * 8
     )
@@ -1134,7 +1138,7 @@ def test_xem_truoc_do_server_tinh_gom_phi_tra_sau_va_khong_ghi_gi(env):
 
 def test_tx_types_co_co_chuyen_tien_cho_nguoi_khac(env):
     env.reset(MINH)
-    types = env.svc.tx_types_response()["tx_types"]
+    types = env.svc.tx_types_response(MINH)["tx_types"]
     flagged = [t["tx_type"] for t in types if t["is_person_transfer"]]
     assert flagged == ["transfer_person"] and all("is_person_transfer" in t for t in types)
 

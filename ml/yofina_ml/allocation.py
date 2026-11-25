@@ -37,7 +37,7 @@ from scipy.optimize import linprog
 
 from yofina_ml.resilience import monthly_needed_vnd
 
-Role = Literal["obligation", "essential", "discretionary", "goal", "emergency"]
+Role = Literal["obligation", "essential", "discretionary", "goal", "emergency", "saving"]
 FloorTier = Literal["obligation", "essential"]
 #: sai số coi là 0 của các biến elastic, tính bằng VND
 GAP_TOLERANCE_VND = 0.5
@@ -200,6 +200,7 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
         cut = {
             "discretionary": prm.weight_discretionary,
             "goal": prm.weight_goal * j.weight,
+            "saving": prm.weight_goal,
             "essential": prm.weight_essential,
             "obligation": prm.weight_essential,
             "emergency": prm.weight_emergency,

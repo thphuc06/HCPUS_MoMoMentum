@@ -25,7 +25,7 @@ from typing import Any, Protocol
 from yofina_core.blocks import ProactiveCardBlock, block_to_wire, build_proactive_card
 from yofina_core.money import format_vnd
 from yofina_core.pii import fold
-from yofina_core.wallet import NUDGE_GATE_ORDER
+from yofina_core.wallet import NUDGE_GATE_ORDER, resolve_obligation_pay_jar
 from yofina_ledger.convert import percent, to_date, vnd
 
 _SNOOZE = {"kind": "snooze", "label": "Để sau"}
@@ -429,6 +429,7 @@ def gather_candidates(
     essential = set(essential_jar_codes)
     by_code = {j["code"]: j for j in jars}
     funded = _has_money(jars)
+    sources = [(j["code"], j.get("kind", "")) for j in jars]
 
     for code, f in forecasts.items():
         jar = by_code.get(code)
@@ -483,7 +484,8 @@ def gather_candidates(
         if due is None or not 0 <= (due - today).days <= config.obligation_days:
             continue
         amount = vnd(ob["amount_vnd"])
-        pay = by_code.get(ob.get("pay_jar_code") or "")
+        source = resolve_obligation_pay_jar(sources, saved=ob.get("pay_jar_code"))
+        pay = by_code.get(source) if source is not None else None
         balance = vnd(pay["balance_vnd"]) if pay else 0
         short = max(amount - max(balance, 0), 0)
         if amount <= 0:

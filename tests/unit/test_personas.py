@@ -19,6 +19,9 @@ from personas import (
     parse_groups_claim,
     persona_from_groups,
 )
+from personas.six_jars import use_default_jars
+from yofina_core.wallet import TX_TYPE_SALARY_SPLIT
+from yofina_ledger.jar_layout import DEMO_LAYOUT
 
 ANCHOR = date(2026, 11, 21)
 TZ = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -47,6 +50,51 @@ FIGMA_SPLIT = {
 
 def test_co_bon_persona():
     assert available_personas() == ["khoa", "lan", "minh", "vy"]
+
+
+@pytest.mark.parametrize("persona", ["minh", "khoa", "lan", "vy"])
+def test_demo_layout_folds_historical_salary_splits_and_preserves_wallet_totals(persona):
+    original = generate(persona, anchor=ANCHOR)
+    demo = use_default_jars(original, DEMO_LAYOUT)
+    balances = {j.code: j.balance_vnd for j in demo.jars}
+    assert sum(balances.values()) == sum(j.balance_vnd for j in original.jars)
+    assert [(j.code, j.split_percent) for j in demo.jars] == [
+        ("chi_hang_ngay", 45),
+        ("nghia_vu", 35),
+        ("du_phong", 15),
+        ("muc_tieu", 5),
+    ]
+    seeded = materialize(
+        demo, anchor=ANCHOR, now=NOW, tz=TZ, user_id=persona, obligation_pay_jar="nghia_vu"
+    )
+    assert {o["pay_jar"] for o in seeded.obligations} == {"nghia_vu"}
+    goal = next(j for j in seeded.jars if j["code"] == "muc_tieu")
+    assert (goal["goal_vnd"], goal["goal_date"]) == (6_000_000, date(2027, 4, 1))
+    for jar in demo.jars:
+        assert jar.balance_vnd == sum(
+            t.amount_vnd
+            for t in demo.transactions
+            if t.jar_code == jar.code and t.funding_source == "jar"
+        )
+    for old_event, event in zip(original.salary_events, demo.salary_events, strict=True):
+        old_shares = dict(old_event.split)
+        expected = {
+            "chi_hang_ngay": sum(old_shares.get(c, 0) for c in ("an_uong", "di_lai", "giai_tri")),
+            "nghia_vu": old_shares.get("hoa_don", 0) + old_shares.get("nghia_vu", 0),
+            "du_phong": old_shares.get("du_phong", 0),
+            "muc_tieu": old_shares.get("du_lich", 0),
+        }
+        assert dict(event.split) == {c: v for c, v in expected.items() if v}
+        lines = [
+            t
+            for t in demo.transactions
+            if t.tx_type == TX_TYPE_SALARY_SPLIT
+            and t.days_ago == event.days_ago
+            and t.amount_vnd > 0
+        ]
+        assert len(lines) == len(event.split)
+        assert {t.jar_code: t.amount_vnd for t in lines} == dict(event.split)
+        assert sum(t.amount_vnd for t in lines) == event.amount_vnd
 
 
 def test_minh_khop_bang_so_figma():

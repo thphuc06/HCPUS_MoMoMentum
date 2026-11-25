@@ -48,11 +48,15 @@ def _compact_jar(j: Mapping[str, Any]) -> dict[str, Any]:
     # Phase 4 (tùy chọn): loại hũ và mục tiêu GỐC; vắng thì không thêm khóa.
     if j.get("kind") is not None:
         row["kind"] = j["kind"]
+    if j.get("purpose") is not None:
+        row["purpose"] = j["purpose"]
     if j.get("goal_vnd") is not None:
         row["goal_vnd"] = to_vnd(j["goal_vnd"])
         row["goal_text"] = format_vnd(j["goal_vnd"])
-        if j.get("goal_date") is not None:
-            row["goal_date"] = j["goal_date"]
+    if j.get("goal_date") is not None:
+        row["goal_date"] = j["goal_date"]
+    if j.get("sinking_items"):
+        row["sinking_items"] = j["sinking_items"]
     return row
 
 
@@ -167,6 +171,10 @@ def compact_forecast(payload: Mapping[str, Any]) -> dict[str, Any]:
         low = to_vnd(min(before_payday))
         out["lowest_balance_before_payday_vnd"] = low
         out["lowest_balance_before_payday_text"] = format_vnd(low)
+    if (window := d.get("obligations_before_payday")) is not None:
+        out["obligations_before_payday"] = window
+        if first := window.get("first_shortfall"):
+            out["first_shortfall_text"] = format_vnd(first["shortfall_vnd"])
     out["upcoming"] = [
         {
             "label": e["label"],

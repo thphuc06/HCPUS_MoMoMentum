@@ -151,7 +151,7 @@ def test_move_between_jars_theo_dac_ta():
 def test_record_transaction_theo_dac_ta():
     schema = BY_NAME["record_transaction"]["inputSchema"]
     assert set(schema["properties"]) == {
-        "user_id", "kind", "amount_vnd", "jar", "tx_type", "funding", "payee_id", "counterparty",
+        "user_id", "kind", "amount_vnd", "jar", "tx_type", "funding", "pay_jar", "payee_id", "counterparty",
         "note", "obligation_id", "client_ref", "confirm_token",
     }  # fmt: skip
     assert set(schema["required"]) == {"kind", "amount_vnd"}

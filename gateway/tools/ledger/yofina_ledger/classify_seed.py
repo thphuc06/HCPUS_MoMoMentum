@@ -14,7 +14,7 @@ import base64
 import json
 import logging
 import struct
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from typing import Any
@@ -78,7 +78,9 @@ def load_seed_set(persona: str) -> SeedSet | None:
     )
 
 
-def apply_seed_labels(db: DataApi, user_id: str, persona: str) -> int:
+def apply_seed_labels(
+    db: DataApi, user_id: str, persona: str, *, jar_aliases: Mapping[str, str] | None = None
+) -> int:
     """Thay toàn bộ nhãn `seed` của người dùng bằng nhãn của persona (nhãn do người dùng sửa, nguồn `user`, giữ nguyên).
 
     Một transaction. Trả số nhãn đã nạp (0 nếu persona không có file nhãn)."""
@@ -100,12 +102,12 @@ def apply_seed_labels(db: DataApi, user_id: str, persona: str) -> int:
             {
                 "uid": user_id,
                 "txt": lab.text_norm,
-                "jar": lab.jar_code,
+                "jar": code,
                 "model": seed.model,
                 "vec": vector_literal(decode_vector(lab.embedding_b64)),
             }
             for lab in seed.labels
-            if lab.jar_code in jars
+            if (code := (jar_aliases or {}).get(lab.jar_code, lab.jar_code)) in jars
         ]
         sql = (
             "INSERT INTO tx_embeddings_labeled (user_id, text_norm, jar_code, source, model, embedding) "

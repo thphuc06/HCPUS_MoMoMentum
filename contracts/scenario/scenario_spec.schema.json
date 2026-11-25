@@ -52,6 +52,10 @@
         "kind": { "const": "bnpl_purchase" },
         "amount_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive" },
         "funding_source": { "const": "credit" },
+        "pay_jar": {
+          "description": "Hũ trả khi đến hạn do người dùng chọn nếu chưa lưu nguồn trả.",
+          "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
+        },
         "jar_code": {
           "description": "Hũ để tính chi tiêu của món này (không đổi số dư hũ lúc mua). Vắng thì engine dùng hũ chi tiêu mặc định theo cấu hình.",
           "$ref": "../blocks/envelope.schema.json#/$defs/JarCode"
@@ -82,9 +86,9 @@
       }
     },
     "RecurringExpense": {
-      "description": "Thêm một khoản chi định kỳ từ một hũ (ví dụ thuê bao, học phí trả góp). Lần đầu vào `date`, lặp theo `cycle` cho tới `end_date` (vắng thì hết khoảng dự báo).",
+      "description": "Thêm một khoản chi định kỳ từ một hũ (ví dụ thuê bao, học phí trả góp). Nếu chưa chọn hũ, dùng hũ Nghĩa vụ chung khi có. Lần đầu vào `date`, lặp theo `cycle` cho tới `end_date` (vắng thì hết khoảng dự báo).",
       "type": "object",
-      "required": ["kind", "amount_vnd", "cycle", "date", "jar_code"],
+      "required": ["kind", "amount_vnd", "cycle", "date"],
       "additionalProperties": false,
       "properties": {
         "kind": { "const": "recurring_expense" },

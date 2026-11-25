@@ -29,8 +29,8 @@ from yofina_core.clock import latest_payday, next_payday
 from yofina_core.confirm import ParamsError
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd
-from yofina_core.params import NormContext, compute_dedupe_key, normalize_params
-from yofina_core.schedule import advance_due, bnpl_due_date, bnpl_pay_jar
+from yofina_core.params import NormContext, compute_dedupe_key, jar_commitments, normalize_params
+from yofina_core.schedule import advance_due, bnpl_due_date
 from yofina_core.wallet import (
     ASSIGN_JAR,
     BNPL_PRODUCT_CODE,
@@ -41,9 +41,11 @@ from yofina_core.wallet import (
     SCHEDULE_NUDGE,
     UNCLASSIFIED_JAR_CODE,
     UPDATE_PROFILE,
+    resolve_obligation_pay_jar,
     split_amount,
+    transaction_jar,
 )
-from yofina_ledger import classify_write, convert, events
+from yofina_ledger import classify_write, convert, events, split_proposal
 from yofina_ledger.classify_config import load_thresholds as classify_thresholds
 from yofina_ledger.repo_wallet import ClaimSpec, WriteResult
 
@@ -130,9 +132,7 @@ class WalletWrites:
             today=st.today,
             tx_types=self.ref.tx_types(),
             jar_codes=frozenset(st.jars),
-            obligation_jar=next(
-                (j["code"] for j in user_jars if j.get("kind") == "obligation"), None
-            ),
+            obligation_jar=resolve_obligation_pay_jar((j["code"], j["kind"]) for j in user_jars),
         )
 
     def _normalize(
@@ -140,7 +140,16 @@ class WalletWrites:
     ) -> tuple[dict[str, Any], UserState]:
         st = self._load_state(user_id)
         try:
-            norm = normalize_params(tool, params, self._norm_ctx(st))
+            ctx = self._norm_ctx(st)
+            norm = normalize_params(tool, params, ctx)
+            if tool == RECORD_TRANSACTION and "obligation_id" in norm and not params.get("jar"):
+                ob = self._find_obligation(user_id, norm["obligation_id"])
+                pay = resolve_obligation_pay_jar(
+                    ((j["code"], j["kind"]) for j in st.user_jars()), saved=ob.get("pay_jar_code")
+                )
+                if pay is None:
+                    raise ParamsError("Chọn hũ để trả khoản nghĩa vụ này.")
+                norm["jar"] = pay
         except ParamsError as exc:
             raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
         return norm, st
@@ -259,6 +268,10 @@ class WalletWrites:
                     f"đến hạn {_dm(ob['due_date'])}",
                 )
             )
+            if amount != expected and ob["kind"] == "bnpl":
+                raise YofinaError(
+                    ErrorCode.PARAMS_INVALID, f"Trả sau cần thanh toán đủ {format_vnd(expected)}."
+                )
             if amount != expected:
                 warnings.append(f"Số tiền khác số phải trả dự kiến ({format_vnd(expected)}).")
             summary = f"Trả {ob['name']} {format_vnd(amount)} từ hũ {jar['name']}"
@@ -343,6 +356,13 @@ class WalletWrites:
             ),
             None,
         )
+        pay_jar = resolve_obligation_pay_jar(
+            ((j["code"], j["kind"]) for j in st.user_jars()),
+            saved=existing.get("pay_jar_code") if existing else None,
+            selected=norm.get("pay_jar"),
+        )
+        if pay_jar is None:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản Trả sau này.")
         before_total = convert.vnd(existing["amount_vnd"]) if existing else 0
         after_total = before_total + amount + (0 if existing else fee)
         extra.update(
@@ -352,6 +372,7 @@ class WalletWrites:
             fee=fee,
             fee_row=fee_row,
             existing_bnpl=existing,
+            pay_jar=pay_jar,
             after_total=after_total,
         )
         changes.append(_change("Nguồn trả", label))
@@ -369,6 +390,7 @@ class WalletWrites:
                 format_vnd(limit - outstanding),
             )
         )
+        changes.append(_change("Hũ trả khi đến hạn", self._jar_name(st, pay_jar)))
         changes.append(_change("Tính chi tiêu vào hũ", jar["name"]))
         if who:
             changes.append(_change("Đối tác", who))
@@ -644,7 +666,14 @@ class WalletWrites:
                     ErrorCode.PARAMS_INVALID, "Khoản Trả sau tự sinh khi mua, không sửa được."
                 )
             extra["obligation_current"] = cur
-            values = {"op": "update", **{k: v for k, v in ob.items() if k != "op"}}
+            if pay is None:
+                pay = resolve_obligation_pay_jar(
+                    ((j["code"], j["kind"]) for j in st.user_jars()),
+                    saved=cur.get("pay_jar_code"),
+                )
+            if pay is None:
+                raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản nghĩa vụ này.")
+            values = {**ob, "op": "update", "pay_jar": pay}
             if "amount_vnd" in ob:
                 changes.append(
                     _change(
@@ -664,7 +693,14 @@ class WalletWrites:
             if "name" in ob:
                 changes.append(_change("Tên khoản", ob["name"], cur["name"]))
             return f"Sửa khoản {ob.get('name') or cur['name']}", values
-        values = {"op": "create", **{k: v for k, v in ob.items() if k != "op"}}
+        available = (
+            ((t.code, t.kind) for t in self.ref.templates() if t.is_default)
+            if onboarding else ((j["code"], j["kind"]) for j in st.user_jars())
+        )
+        pay = resolve_obligation_pay_jar(available, selected=pay)
+        if pay is None:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản nghĩa vụ này.")
+        values = {**ob, "op": "create", "pay_jar": pay}
         if "due_date" not in values:
             raise YofinaError(ErrorCode.PARAMS_INVALID, "Khoản nghĩa vụ mới cần ngày đến hạn.")
         amount_text = format_vnd(ob["amount_vnd"])
@@ -689,6 +725,10 @@ class WalletWrites:
         return f"Khai {ob['name']} {amount_text}", values
 
     def _prep_save_jars(self, user_id: str, norm: dict[str, Any], st: UserState) -> Prepared:
+        """Bản xem trước của `save_jars` (BR-47, BR-48): mỗi hũ đổi tỷ lệ có tỷ lệ và tiền mỗi kỳ lương trước và sau cùng
+        phần chênh (theo `split_amount` trên lương đã khai, cùng quy tắc `confirm_salary`), lý do bằng số đo khi tỷ lệ Nghĩa
+        vụ hoặc khoản Quỹ dồn đổi, kỳ áp dụng và việc dự báo tính lại. Tỷ lệ mới chỉ áp từ lần chia lương đầu tiên sau khi
+        lưu (BR-45); có lương đang chờ chia thì người dùng chọn chia lương đó trước (từ kỳ sau) hay sau khi lưu (kỳ này)."""
         if not st.exists:
             raise YofinaError(
                 ErrorCode.PROFILE_INCOMPLETE, "Bạn chưa khai lương và ngày nhận lương."
@@ -697,15 +737,48 @@ class WalletWrites:
         wanted = [j["code"] for j in norm["jars"]]
         usage = {u["code"]: u for u in self.repo.jars_usage(user_id)}
         changes: list[dict[str, str]] = []
+        row = self.repo.user_row(user_id)
+        salary = (
+            convert.vnd(row["monthly_salary_vnd"])
+            if row and row.get("monthly_salary_vnd") is not None
+            else None
+        )
+        before_amt = split_proposal.jar_amounts(
+            salary, [(c, j["split_percent"]) for c, j in existing.items()]
+        )
+        after_amt = split_proposal.jar_amounts(
+            salary, [(j["code"], j["split_percent"]) for j in norm["jars"]]
+        )
+        amounts = before_amt is not None and after_amt is not None
+        share_changed = False
+        changed_codes: set[str] = set()
         for j in norm["jars"]:
             cur = existing.get(j["code"])
-            pct = convert.percent(j["split_percent"])
+            try:
+                jar_commitments(j, cur or {})
+            except ParamsError as exc:
+                raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
+            pct = Decimal(str(j["split_percent"]))
             if cur is None:
-                changes.append(_change(f"Hũ mới: {j['name']}", f"{pct}% lương"))
-            else:
-                old = convert.percent(cur["split_percent"])
-                if old != pct or cur["name"] != j["name"]:
-                    changes.append(_change(f"Hũ {j['name']}", f"{pct}%", f"{old}%"))
+                share_changed = share_changed or pct > 0
+                changed_codes.add(j["code"])
+                new_vnd = after_amt.get(j["code"]) if after_amt is not None else None
+                _, after = split_proposal.share_line(None, pct, None, new_vnd)
+                text = after if amounts else f"{convert.percent(pct)}% lương"
+                changes.append(_change(f"Hũ mới: {j['name']}", text))
+                continue
+            old = Decimal(str(cur["split_percent"]))
+            if old != pct:
+                share_changed = True
+                changed_codes.add(j["code"])
+            if old != pct or cur["name"] != j["name"]:
+                before, after = split_proposal.share_line(
+                    old,
+                    pct,
+                    before_amt.get(j["code"]) if before_amt is not None and amounts else None,
+                    after_amt.get(j["code"]) if after_amt is not None and amounts else None,
+                )
+                changes.append(_change(f"Hũ {j['name']}", after, before))
         for code, cur in existing.items():
             if code in wanted:
                 continue
@@ -723,18 +796,83 @@ class WalletWrites:
                 raise YofinaError(
                     ErrorCode.JAR_PROTECTED, f"Hũ {cur['name']} {reason} nên chưa bỏ được."
                 )
+            share_changed = share_changed or Decimal(str(cur["split_percent"])) > 0
             changes.append(_change(f"Bỏ hũ {cur['name']}", "không còn"))
+        reasons = self._save_jars_reasons(user_id, norm, st, salary, changed_codes)
         if not changes:
             changes.append(_change("Danh sách hũ", "không đổi"))
+        warnings: list[str] = []
+        extra: dict[str, Any] = {}
+        if share_changed:
+            pending = self.repo.salary_events(user_id, "pending")
+            if pending:
+                ev = pending[0]
+                extra["pending_salary_event_id"] = str(ev["id"])
+                warnings.append(
+                    f"Lương {format_vnd(convert.vnd(ev['amount_vnd']))} đang chờ chia: "
+                    "chọn áp tỷ lệ mới cho kỳ này hay từ kỳ sau."
+                )
+            warnings.append(
+                "Tỷ lệ mới áp từ lần chia lương đầu tiên sau khi lưu. Dự báo tính lại ngay sau khi lưu."
+            )
         return Prepared(
             SAVE_JARS,
             norm,
             f"Lưu {len(norm['jars'])} hũ và tỷ lệ chia lương",
-            changes[:20],
-            [],
+            (reasons + changes)[:20],
+            warnings,
             st,
-            {},
+            extra,
         )
+
+    def _save_jars_reasons(
+        self,
+        user_id: str,
+        norm: dict[str, Any],
+        st: UserState,
+        salary: int | None,
+        changed_codes: set[str],
+    ) -> list[dict[str, str]]:
+        """Lý do bằng số đo cho các hũ có tỷ lệ đổi: nghĩa vụ đã khai quy về tháng so với lương đã khai, và số cần trích mỗi kỳ
+        cho các khoản của Quỹ dồn. Chưa khai nghĩa vụ thì nói rõ "chưa có số khai"."""
+        if not salary or not changed_codes:
+            return []
+        row = self.repo.user_row(user_id)
+        payday = int(row["payday_day"]) if row and row.get("payday_day") is not None else None
+        after_jars = [
+            {**existing, **j} if (existing := st.jars.get(j["code"])) else {**j, "balance_vnd": 0}
+            for j in norm["jars"]
+        ]
+        out: list[dict[str, str]] = []
+        ob_jar = resolve_obligation_pay_jar((j["code"], j["kind"]) for j in after_jars)
+        if ob_jar is not None and ob_jar in changed_codes:
+            obligations = self.repo.list_obligations(user_id, status="active", limit=100)
+            declared, monthly = split_proposal.declared_need(obligations, after_jars, ob_jar)
+            name = self._jar_name(st, ob_jar)
+            text = (
+                split_proposal.obligation_reason(monthly, salary)
+                if declared
+                else "chưa có số khai"
+            )
+            out.append(_change(f"Lý do: hũ {name}", text))
+        for j in after_jars:
+            if (
+                j["code"] not in changed_codes
+                or j.get("purpose") != "sinking"
+                or not j.get("sinking_items")
+                or payday is None
+            ):
+                continue
+            plan = split_proposal.sinking_plan(
+                split_proposal.stored_items(j),
+                today=st.today,
+                payday_day=payday,
+                saved_vnd=convert.vnd(j.get("balance_vnd") or 0),
+            )
+            out.append(
+                _change(f"Lý do: hũ {j['name']}", split_proposal.sinking_reason(plan, salary))
+            )
+        return out
 
     # --- xem trước (không ghi) ---------------------------------------------------------------------------------
     def _confirm_block(
@@ -942,7 +1080,9 @@ class WalletWrites:
         unclassified = jar.get("system_role") == "unclassified"
         if unclassified:
             classified_by = None
-        elif info is not None and info.default_jar_code == norm["jar"]:
+        elif info is not None and transaction_jar(
+            info.default_jar_code, prep.state.jars if prep.state else (), tx_type=tx_type
+        ) == norm["jar"]:
             classified_by = "type_map"
         else:
             classified_by = "user"
@@ -996,18 +1136,6 @@ class WalletWrites:
                 "id": fee_row.id if fee_row else None,
                 "name": extra["credit_label"],
             }
-            # cùng quy tắc với what-if và kiểm tra trước khi chi: không có hũ Nghĩa vụ thì hũ của món mua (#15)
-            existing = extra.get("existing_bnpl")
-            pay_jar = (
-                bnpl_pay_jar(
-                    prep.state.user_jars(),
-                    existing_pay_jar=existing.get("pay_jar_code") if existing else None,
-                    chosen_jar=norm["jar"],
-                )
-                if prep.state
-                else None
-            )
-
             def limit_check(line: Mapping[str, Any]) -> None:
                 if not line or line.get("status") != "active":
                     raise YofinaError(
@@ -1023,7 +1151,7 @@ class WalletWrites:
                 user_id,
                 tx=tx,
                 fee=fee,
-                pay_jar=pay_jar,
+                pay_jar=extra["pay_jar"],
                 audit=audit,
                 claim=claim,
                 tool=tool,
@@ -1215,7 +1343,7 @@ class WalletWrites:
                         app_date=res.app_date,
                         change="created" if f.get("obligation_created") else "updated",
                         kind="bnpl",
-                        pay_jar=None,
+                        pay_jar=f.get("pay_jar"),
                         due_date=f.get("due_date"),
                     )
                 )

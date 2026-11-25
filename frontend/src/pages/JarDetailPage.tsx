@@ -164,12 +164,11 @@ export function JarDetailPage() {
                   <dt className="text-ink-2">Chia từ lương</dt>
                   <dd className="num font-semibold text-ink">{formatPercent(jar.split_percent)}</dd>
                 </div>
-                {jar.goal_vnd && (
+                {(jar.goal_vnd || jar.goal_date) && (
                   <div className="flex justify-between gap-3">
-                    <dt className="text-ink-2">Mục tiêu</dt>
+                    <dt className="text-ink-2">{jar.purpose === 'sinking' ? 'Khoản dự kiến' : 'Mục tiêu'}</dt>
                     <dd className="num font-semibold text-ink">
-                      {formatVnd(jar.goal_vnd)}
-                      {jar.goal_date ? ` · ${formatAppDate(jar.goal_date)}` : ''}
+                      {[jar.goal_vnd && formatVnd(jar.goal_vnd), jar.goal_date && formatAppDate(jar.goal_date)].filter(Boolean).join(' · ')}
                     </dd>
                   </div>
                 )}

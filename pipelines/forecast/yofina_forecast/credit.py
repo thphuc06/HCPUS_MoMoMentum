@@ -115,6 +115,7 @@ def jar_at_due(
             "name": jar["name"],
             "color_key": jar["color_key"],
             "icon_key": jar["icon_key"],
+            **({"purpose": jar["purpose"]} if jar.get("purpose") is not None else {}),
         },
         "status": status,
         "balance_before_due_vnd": p50 + due_vnd,

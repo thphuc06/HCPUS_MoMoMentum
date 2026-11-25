@@ -75,6 +75,13 @@ export const BlockEnvelope = z.object({
 })
 export type BlockEnvelope = z.infer<typeof BlockEnvelope>
 
+export const SinkingItem = z.object({
+  name: z.string().min(1).max(80),
+  amount_vnd: VndPositive,
+  needed_date: IsoDate,
+})
+export type SinkingItem = z.infer<typeof SinkingItem>
+
 /** Một hũ và số dư hiện tại. */
 export const JarBalance = z.object({
   code: JarCode,
@@ -84,6 +91,8 @@ export const JarBalance = z.object({
   balance_vnd: Vnd,
   split_percent: z.number().min(0).max(100),
   kind: z.enum(["spending", "saving", "obligation"]).optional(),
+  purpose: z.enum(["buffer", "sinking", "goal", "long_term"]).optional(),
+  sinking_items: z.array(SinkingItem).max(40).optional(),
   goal_vnd: VndPositive.optional(),
   goal_date: IsoDate.optional(),
 })
@@ -225,6 +234,7 @@ export type ConfidenceBand = z.infer<typeof ConfidenceBand>
 export const ForecastJar = z.object({
   code: JarCode,
   name: z.string().min(1).max(40),
+  purpose: z.enum(["buffer", "sinking", "goal", "long_term"]).optional(),
   color_key: z.string().regex(new RegExp("^[a-z][a-z0-9_-]{0,31}$")),
   icon_key: z.string().regex(new RegExp("^[a-z][a-z0-9_-]{0,31}$")),
 })
@@ -256,12 +266,24 @@ export const ForecastEvent = z.object({
 })
 export type ForecastEvent = z.infer<typeof ForecastEvent>
 
+/** Các khoản đến hạn của hũ Nghĩa vụ trước kỳ lương, theo ngày rồi theo tên. Khoản thiếu đầu tiên tính từ số dư P50 của ngày đó. */
+export const ForecastObligationWindow = z.object({
+  items: z.array(ForecastEvent),
+  first_shortfall: z.object({
+    date: IsoDate,
+    label: z.string().min(1).max(60),
+    shortfall_vnd: VndPositive,
+  }).optional(),
+})
+export type ForecastObligationWindow = z.infer<typeof ForecastObligationWindow>
+
 /** Đường dự báo của hũ SAU khi áp kịch bản. */
 export const ForecastScenarioPath = z.object({
   status: JarStatus,
   runout_date: IsoDate.optional(),
   p_shortfall: Ratio.optional(),
   p_shortfall_se: Ratio.optional(),
+  obligations_before_payday: ForecastObligationWindow.optional(),
   min_balance_p50_vnd: VndSigned.optional(),
   days: z.array(ForecastDay).min(1).max(90),
   events: z.array(ForecastEvent).max(60).optional(),
@@ -304,6 +326,7 @@ export const ForecastTimelineData = z.object({
   stale: z.boolean(),
   days: z.array(ForecastDay).min(1).max(90),
   events: z.array(ForecastEvent).max(60),
+  obligations_before_payday: ForecastObligationWindow.optional(),
   compare: ForecastCompare.optional(),
 })
 export type ForecastTimelineData = z.infer<typeof ForecastTimelineData>

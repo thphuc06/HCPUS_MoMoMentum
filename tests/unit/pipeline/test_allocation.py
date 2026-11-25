@@ -464,3 +464,26 @@ def test_cau_hinh_mac_dinh_la_gia_tri_mo_phong_co_the_ghi_de_bang_cau_hinh():
         over.essential_jar_codes == ("an_uong", "hoa_don") and over.allocation_horizon_months == 6
     )
     assert over.resilience_window_days == 14
+
+
+def test_mixed_daily_jar_floor_uses_only_essential_transaction_history():
+    w = world()
+    engine = AllocationEngine(pipe(w))
+    gathered = engine.resilience.gather(USER, NOW)
+    jars = tuple(
+        {**j, "code": "chi_hang_ngay"} if j["code"] == "an_uong" else j
+        for j in gathered.jar_rows
+    )
+    for daily_essential in (0, 20_000):
+        ctx = replace(gathered.ctx, jars=tuple(
+            {**j, "code": "chi_hang_ngay", "spend": [100_000] * 30,
+             "essential_spend": [daily_essential] * 30}
+            if j["code"] == "an_uong" else j
+            for j in gathered.ctx.jars
+        ))
+        built = engine.build(
+            replace(gathered, ctx=ctx, jar_rows=jars),
+            horizon_months=3, goal_args=[], shock_id=None, allow_relaxation=False,
+        )
+        daily = next(j for j in built.problem.jars if j.code == "chi_hang_ngay")
+        assert daily.floor_vnd == daily_essential * P.month_days * P.essential_floor_percent / 100

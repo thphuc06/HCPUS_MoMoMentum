@@ -42,9 +42,14 @@ from yofina_core.clock import app_today
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd_short
 from yofina_core.scenario import parse_scenario, scenario_hash, scenario_to_wire
-from yofina_core.schedule import advance_due, bnpl_due_date
+from yofina_core.schedule import advance_due, bnpl_due_date, obligation_window
 from yofina_core.suitability import Proposal
-from yofina_core.wallet import BNPL_PRODUCT_CODE, split_amount
+from yofina_core.wallet import (
+    BNPL_PRODUCT_CODE,
+    DEFAULT_OBLIGATION_JAR,
+    resolve_obligation_pay_jar,
+    split_amount,
+)
 from yofina_forecast import repo as forecast_repo
 from yofina_forecast.common import (
     STATUS_RANK,
@@ -105,6 +110,7 @@ class JarMeta:
     balance_vnd: int
     goal_vnd: int | None = None
     goal_date: date | None = None
+    purpose: str | None = None
 
     @classmethod
     def from_row(cls, r: Mapping[str, Any]) -> JarMeta:
@@ -117,10 +123,12 @@ class JarMeta:
             balance_vnd=int_of(r["balance_vnd"]),
             goal_vnd=int_of(r["goal_vnd"]) if r.get("goal_vnd") is not None else None,
             goal_date=to_date(r.get("goal_date")),
+            purpose=r.get("purpose"),
         )
 
     def ref(self) -> dict[str, str]:
         return {
+            **({"purpose": self.purpose} if self.purpose is not None else {}),
             "code": self.code,
             "name": self.name,
             "color_key": self.color_key,
@@ -187,6 +195,17 @@ def _add_outflow(inputs: ForecastInputs, code: str, flow: ScheduledFlow) -> Fore
     jar = inputs.jars[_jar_index(inputs, code)]
     outs = sorted((*jar.outflows, flow), key=lambda f: (f.date, f.label))
     return _with_jar(inputs, code, outflows=tuple(outs))
+
+
+def _with_bnpl_due(
+    inputs: ForecastInputs, code: str, due: date, label: str, total: int,
+    existing: Mapping[str, Any] | None,
+) -> ForecastInputs:
+    jar = inputs.jars[_jar_index(inputs, code)]
+    ref = str(existing["id"]) if existing else None
+    flows = tuple(flow for flow in jar.outflows if not ref or flow.ref_id != ref or flow.date != due)
+    out = _with_jar(inputs, code, outflows=flows)
+    return _add_outflow(out, code, _flow(due, label, total, "obligation"))
 
 
 def _add_inflow(inputs: ForecastInputs, code: str, flow: ScheduledFlow) -> ForecastInputs:
@@ -259,7 +278,6 @@ def apply_scenario(
     kind = spec.kind
     wire = scenario_to_wire(spec)
     item = item_name(getattr(spec, "label", None))
-    first_forecast = inputs.jars[0].code if inputs.jars else None
 
     if kind == "one_time_purchase":
         d = to_date(spec.date) or today
@@ -304,18 +322,13 @@ def apply_scenario(
             fee=credit.fee,
             late_fee=credit.late_fee,
         )
-        default_pay = next((m.code for m in metas.values() if m.kind == "obligation"), None)
-        pay = (existing.get("pay_jar_code") if existing else None) or default_pay
-        pay = pay if pay in {j.code for j in inputs.jars} else None
-        if (
-            pay is None
-        ):  # không có hũ nghĩa vụ: giả định trả từ hũ chi tiêu người dùng nêu, không thì hũ đầu tiên
-            pick = (
-                spec.jar_code if spec.jar_code in {j.code for j in inputs.jars} else first_forecast
-            )
-            pay = pick
+        pay = resolve_obligation_pay_jar(
+            ((j.code, j.kind) for j in inputs.jars),
+            saved=existing.get("pay_jar_code") if existing else None,
+            selected=spec.pay_jar,
+        )
         if pay is None:
-            raise YofinaError(ErrorCode.FORECAST_UNAVAILABLE, "Chưa có hũ nào để dự báo.")
+            raise YofinaError(ErrorCode.SCENARIO_INVALID, "Chọn hũ để trả khoản Trả sau này.")
         label = _label(
             spec,
             f"mua {item + ' ' if item else ''}{_short(spec.amount_vnd)} bằng {credit.label}",
@@ -324,11 +337,13 @@ def apply_scenario(
         events = {}
         charge = cost["principal_vnd"] + cost["fee_added_vnd"]
         if today < due <= today + timedelta(days=horizon):
-            out = _add_outflow(out, pay, _flow(due, credit.label, charge, "obligation"))
+            out = _with_bnpl_due(out, pay, due, credit.label, cost["total_due_vnd"], existing)
             events[pay] = [_event(due, credit.label, charge)]
         existing_on_jar = sum(
-            f.amount_vnd for f in inputs.jars[_jar_index(inputs, pay)].outflows if f.date == due
-        )
+            flow.amount_vnd
+            for flow in inputs.jars[_jar_index(inputs, pay)].outflows
+            if flow.date == due and (not existing or flow.ref_id != str(existing["id"]))
+        ) + (cost.get("existing_due_vnd") or 0)
         return Applied(
             out,
             [pay],
@@ -386,7 +401,14 @@ def apply_scenario(
         assert start is not None
         _check_date(start, today, horizon, what="Ngày bắt đầu")
         end = to_date(spec.end_date)
-        code = spec.jar_code
+        code = resolve_obligation_pay_jar(
+            ((j.code, j.kind) for j in inputs.jars), selected=spec.jar_code
+        )
+        if code is None:
+            if spec.jar_code is not None:
+                _forecastable(metas, inputs, spec.jar_code)
+            raise YofinaError(ErrorCode.SCENARIO_INVALID, "Chọn hũ để trả khoản định kỳ này.")
+        wire["jar_code"] = code
         _forecastable(metas, inputs, code)
         out = inputs
         events = {code: []}
@@ -461,7 +483,7 @@ def apply_scenario(
     code = spec.jar_code
     _forecastable(metas, inputs, code)
     meta = metas[code]
-    if meta.goal_vnd is None or meta.goal_date is None:
+    if meta.purpose not in (None, "goal") or meta.goal_vnd is None or meta.goal_date is None:
         raise YofinaError(ErrorCode.SCENARIO_INVALID, f"Hũ {meta.name} chưa có mục tiêu để lùi.")
     remaining = max(meta.goal_vnd - meta.balance_vnd, 0)
     days_left = max((meta.goal_date - today).days, 0)
@@ -593,7 +615,7 @@ def _days_payload(jf: JarForecast) -> list[dict[str, Any]]:
     ]
 
 
-def _events_payload(jar: Any) -> list[dict[str, Any]]:
+def _events_payload(jar: Any, *, include_original_dates: bool = False) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for f in (*jar.outflows, *jar.inflows):
         item: dict[str, Any] = {
@@ -602,11 +624,13 @@ def _events_payload(jar: Any) -> list[dict[str, Any]]:
             "label": f.label,
             "amount_vnd": f.amount_vnd,
         }
+        if include_original_dates and f.original_due_date is not None:
+            item["original_due_date"] = f.original_due_date.isoformat()
         if f.amount_max_vnd is not None and f.amount_max_vnd > f.amount_vnd:
             item["amount_max_vnd"] = f.amount_max_vnd
         out.append(item)
     out.sort(key=lambda e: (e["date"], 0 if e["kind"] == "obligation" else 1, e["label"]))
-    return out[:60]
+    return out
 
 
 def _min_p50(jf: JarForecast) -> int:
@@ -1045,7 +1069,7 @@ class ScenarioEngine:
                 "computed_at": basis["computed_at"],
                 "stale": False,
                 "days": _days_payload(b),
-                "events": _events_payload(jar_in),
+                "events": _events_payload(jar_in)[:60],
                 "compare": {
                     "label": applied.label,
                     "kind": applied.kind,
@@ -1056,6 +1080,15 @@ class ScenarioEngine:
                     "common_random_numbers": True,
                 },
             }
+            if code == DEFAULT_OBLIGATION_JAR and meta.kind == "obligation":
+                jar_after = applied.inputs.jars[_jar_index(applied.inputs, code)]
+                for target, source, forecast in ((tl, jar_in, b), (path, jar_after, a)):
+                    target["obligations_before_payday"] = obligation_window(
+                        _events_payload(source, include_original_dates=True),
+                        forecast.summary.payday_date.isoformat(),
+                        {d.date.isoformat(): d.balance_p50_vnd for d in forecast.days},
+                        opening_balance_vnd=source.balance_vnd,
+                    )
             if runout_b:
                 tl["runout_date"] = runout_b.isoformat()
             if not date_shown:

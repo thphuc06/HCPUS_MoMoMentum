@@ -45,6 +45,7 @@
               "type": "integer",
               "description": "Lương tháng mới (không phải mức chênh), số nguyên dương. Bắt buộc với income_change."
             },
+            "pay_jar": {"type":"string","description":"Hũ trả khi Trả sau đến hạn nếu người dùng đã chọn."},
             "funding_source": {
               "type": "string",
               "description": "Nguồn trả: jar (tiền hũ) hoặc credit (Trả sau (mô phỏng)). one_time_purchase luôn là jar; bnpl_purchase luôn là credit."
@@ -109,6 +110,7 @@
                 "type": "integer",
                 "description": "Lương tháng mới (không phải mức chênh), số nguyên dương. Bắt buộc với income_change."
               },
+              "pay_jar": {"type":"string","description":"Hũ trả khi Trả sau đến hạn nếu người dùng đã chọn."},
               "funding_source": {
                 "type": "string",
                 "description": "Nguồn trả: jar (tiền hũ) hoặc credit (Trả sau (mô phỏng)). one_time_purchase luôn là jar; bnpl_purchase luôn là credit."
@@ -198,6 +200,10 @@
         "funding_source": {
           "type": "string",
           "description": "Nguồn trả cần xét: jar hoặc credit. Vắng thì xét cả hai (kiểm từng hũ và cả Trả sau)."
+        },
+        "pay_jar": {
+          "type": "string",
+          "description": "Hũ trả khoản Trả sau khi đến hạn nếu chưa có nguồn đã lưu."
         },
         "jar": {
           "type": "string",

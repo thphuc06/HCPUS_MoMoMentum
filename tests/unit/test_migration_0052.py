@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import subprocess
+from pathlib import Path
 
 import pytest
 from conftest import REPO
@@ -204,7 +205,7 @@ def test_khong_sua_migration_cu():
     out = subprocess.run(
         ["git", "diff", "--name-only", "HEAD", "--", "db/migrations"], cwd=REPO, capture_output=True, text=True, check=True
     ).stdout.split()
-    assert not [f for f in out if f != "db/migrations/0052_resilience_roadmap_classify.sql"], out
+    assert all(Path(f).name >= SQL_PATH.name for f in out), out
     names = sorted(p.name for p in (REPO / "db" / "migrations").glob("*.sql"))
     i = names.index("0052_resilience_roadmap_classify.sql")  # phase 5 thêm 0053 sau nó
     assert names[i - 1].startswith("0051") and all(n > names[i] for n in names[i + 1 :])

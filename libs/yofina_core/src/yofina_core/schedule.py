@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from yofina_core.clock import next_payday, payday_dates, payday_in_month
-from yofina_core.wallet import split_amount
+from yofina_core.wallet import pay_jar_or_default, split_amount
 
 
 def _add_months(day: date, months: int, due_day: int | None = None) -> date:
@@ -103,10 +103,7 @@ class TimelineEvent:
     label: str
     amount_vnd: int
     amount_max_vnd: int | None = None
-
-
-def _jar_of(ob: Mapping[str, Any], default_pay_jar: str | None) -> str | None:
-    return ob.get("pay_jar_code") or default_pay_jar
+    original_due_date: date | None = None
 
 
 def build_timeline_events(
@@ -123,15 +120,16 @@ def build_timeline_events(
 ) -> list[TimelineEvent]:
     """Mốc trên biểu đồ của MỘT hũ: nghĩa vụ đang hoạt động trả bằng hũ này và phần lương của hũ.
 
-    Ngày dự báo bắt đầu từ `origin + 1` (hợp đồng). Nghĩa vụ không có `pay_jar_code` gán cho `default_pay_jar` (hũ
-    `obligation` đầu tiên); không có hũ như vậy thì không mô phỏng. Phần lương dùng `split_amount` (cùng quy tắc
+    Ngày dự báo bắt đầu sau origin. Nghĩa vụ cũ thiếu hũ trả dùng default_pay_jar nếu có. Phần lương dùng `split_amount` (cùng quy tắc
     `confirm_salary`) nên số trên biểu đồ khớp số được chia thật. Sắp theo ngày, nghĩa vụ trước lương cùng ngày.
     """
     first = origin + timedelta(days=1)
     through = origin + timedelta(days=horizon_days)
     events: list[TimelineEvent] = []
+    codes = {code for code, _ in split_shares}
     for ob in obligations:
-        if ob.get("status", "active") != "active" or _jar_of(ob, default_pay_jar) != jar_code:
+        source = pay_jar_or_default(codes, ob.get("pay_jar_code"), default_pay_jar)
+        if ob.get("status", "active") != "active" or source != jar_code:
             continue
         due: date = ob["due_date"]
         amount = int(ob["amount_vnd"])
@@ -146,6 +144,7 @@ def build_timeline_events(
                     str(ob["name"])[:60],
                     amount,
                     int(high) if high is not None and int(high) > amount else None,
+                    original_due_date=due if d == first and due < first else None,
                 )
             )
     if salary_vnd and payday_day and split_shares:
@@ -155,4 +154,52 @@ def build_timeline_events(
                 if d >= first:
                     events.append(TimelineEvent(d, "salary", salary_label[:60], part))
     events.sort(key=lambda e: (e.date, 0 if e.kind == "obligation" else 1, e.label))
-    return events[:60]
+    return events
+
+
+def obligation_window(
+    events: Iterable[Mapping[str, Any]],
+    payday: str,
+    end_balances: Mapping[str, int],
+    *,
+    opening_balance_vnd: int = 0,
+) -> dict[str, Any]:
+    """List dues before payday and identify the first underfunded item in the median forecast."""
+    dues = []
+    for event in events:
+        if event["kind"] != "obligation":
+            continue
+        due = dict(event)
+        due["date"] = due.pop("original_due_date", None) or due["date"]
+        if due["date"] < payday:
+            dues.append(due)
+    dues.sort(key=lambda e: (e["date"], e["label"], e["amount_vnd"]))
+    daily_totals: dict[str, int] = {}
+    for due in dues:
+        day = due["date"]
+        daily_totals[day] = daily_totals.get(day, 0) + due["amount_vnd"]
+    available_by_day = {
+        day: end_balances[day] + amount for day, amount in daily_totals.items() if day in end_balances
+    }
+    result: dict[str, Any] = {"items": dues}
+    first_forecast_day = min(end_balances, default=payday)
+    current_balance = opening_balance_vnd
+    for due in dues:
+        day = due["date"]
+        if day < first_forecast_day:
+            available = max(current_balance, 0)
+        elif day in available_by_day:
+            available = max(available_by_day[day], 0)
+        else:
+            continue
+        amount = due["amount_vnd"]
+        if available < amount:
+            result["first_shortfall"] = {
+                "date": day, "label": due["label"], "shortfall_vnd": amount - available
+            }
+            break
+        if day < first_forecast_day:
+            current_balance -= amount
+        else:
+            available_by_day[day] -= amount
+    return result

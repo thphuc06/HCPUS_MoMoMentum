@@ -574,14 +574,22 @@ def test_du_bao_loi_khong_lam_hong_viec_da_ghi(ing, env):
 
 # --- khử trùng, luật, nội dung ----------------------------------------------------------------------------------------------
 def test_dong_trung_giao_dich_da_co_trong_vi_thanh_duplicate_va_khong_chot_duoc(ing, env):
+    amount = 59_371
+    merchant = "Highlands Coffee"
+    env.act(MINH, "record_transaction", {
+        "kind": "expense", "amount_vnd": amount, "jar": "an_uong", "counterparty": merchant,
+    })
     tx = q(
         env,
-        "SELECT id, app_date, abs(amount_vnd) FROM transactions WHERE user_id = %s AND kind = 'expense' AND funding_source = 'jar' ORDER BY app_date DESC LIMIT 1",
-        MINH,
+        "SELECT id, app_date, abs(amount_vnd) FROM transactions WHERE user_id = %s "
+        "AND kind = 'expense' AND funding_source = 'jar' AND amount_vnd = %s AND merchant = %s",
+        MINH, -amount, merchant,
     )[0]
     near = tx[1].isoformat()
     up = ing.upload()
-    ing.process(up, PNG, doc(tx_row(date=near, amount_vnd=int(tx[2])), tx_row(amount_vnd=777_000)))
+    ing.process(
+        up, PNG, doc(tx_row(date=near, amount_vnd=amount, counterparty=merchant), tx_row(amount_vnd=777_000))
+    )
     job = ing.job(up["job_id"])
     rows = ids_by_amount(job)
     dup = rows[int(tx[2])]

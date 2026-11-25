@@ -45,7 +45,7 @@ from yofina_core.roadmap import (
     RoadmapDraftStep,
 )
 from yofina_core.suitability import Proposal, SuitabilityVerdict
-from yofina_core.wallet import SAVE_JARS
+from yofina_core.wallet import SAVE_JARS, is_goal_jar
 
 ROADMAP_SYSTEM = """Bạn là Yofina, trợ lý lập lộ trình quản lý chi tiêu theo hũ. Viết tiếng Việt ngắn gọn, tự nhiên.
 Khuôn lộ trình:
@@ -451,7 +451,10 @@ def _date_text(value: Any) -> str | None:
 def _user_goal_entry(goal: UserGoal, jars: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Mục tiêu người dùng nói, dạng một phần tử `goals` của optimize_allocation. Chỉ hũ tiết kiệm; chỉ có hạn thì hũ phải có sẵn
     goal_vnd. Không hợp lệ thì None (không gửi, bộ tối ưu dùng mục tiêu đã khai ở hũ)."""
-    jar = next((j for j in jars if j.get("code") == goal.jar and j.get("kind") == "saving"), None)
+    jar = next(
+        (j for j in jars if j.get("code") == goal.jar and is_goal_jar(j.get("kind"), j.get("purpose"))),
+        None,
+    )
     if jar is None or not (
         goal.target_vnd is not None or (goal.target_date and "goal_vnd" in jar)
     ):
@@ -557,10 +560,14 @@ def _save_jars_params(
             "kind": jar.kind,
             "split_percent": lines[jar.code].split_percent_proposed,
         }
+        if jar.purpose is not None:
+            item["purpose"] = jar.purpose
         if jar.goal_vnd is not None:
             item["goal_vnd"] = jar.goal_vnd
-            if jar.goal_date is not None:
-                item["goal_date"] = jar.goal_date
+        if jar.goal_date is not None:
+            item["goal_date"] = jar.goal_date
+        if jar.sinking_items is not None:
+            item["sinking_items"] = [entry.model_dump(mode="json") for entry in jar.sinking_items]
         jars.append(item)
     if all(lines[jar.code].split_percent_proposed == jar.split_percent for jar in balances):
         raise ValueError("Tỷ lệ đề xuất trùng tỷ lệ hiện tại. Bỏ action save_jars.")
@@ -1344,7 +1351,7 @@ async def build_roadmap(
     # tiết kiệm đã có mục tiêu (hũ khác trả PARAMS_INVALID): lọc bằng mã, không tin model. Mục tiêu người dùng nói thay cho trọng số
     # model chọn với cùng hũ.
     goal_jars = {
-        j["code"] for j in compact["jars"] if j.get("kind") == "saving" and "goal_vnd" in j
+        j["code"] for j in compact["jars"] if is_goal_jar(j.get("kind"), j.get("purpose")) and "goal_vnd" in j
     }
     goals: dict[str, dict[str, Any]] = {
         goal.jar: {"jar": goal.jar, "weight": goal.weight}

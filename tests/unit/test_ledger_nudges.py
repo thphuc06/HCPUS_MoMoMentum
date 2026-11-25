@@ -74,9 +74,9 @@ def test_cung_loai_lay_diem_cao_hon():
 
 
 JARS = [
-    {"code": "an_uong", "name": "Ăn uống", "balance_vnd": 80_000},
-    {"code": "hoa_don", "name": "Hóa đơn", "balance_vnd": 150_000},
-    {"code": "giai_tri", "name": "Giải trí", "balance_vnd": 20_000},
+    {"code": "an_uong", "name": "Ăn uống", "kind": "spending", "balance_vnd": 80_000},
+    {"code": "hoa_don", "name": "Hóa đơn", "kind": "spending", "balance_vnd": 150_000},
+    {"code": "giai_tri", "name": "Giải trí", "kind": "spending", "balance_vnd": 20_000},
 ]
 
 

@@ -21,12 +21,13 @@ from typing import Any
 from yofina_core.db import DataApi, Row, Transaction
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import to_vnd
-from yofina_core.params import fold_text
+from yofina_core.params import ParamsError, fold_text, jar_commitments
 from yofina_core.wallet import (
     OTHER_INCOME_JAR_CODE,
     TX_TYPE_JAR_TRANSFER,
     TX_TYPE_SALARY_SPLIT,
 )
+from yofina_ledger.jar_layout import onboarding_override
 
 ALREADY_APPLIED_MESSAGE = "Đề nghị này đã được thực hiện rồi. Chưa ghi thêm gì."
 CANCELLED_MESSAGE = "Đề nghị này đã bị hủy. Hãy hỏi lại nếu bạn vẫn muốn thực hiện."
@@ -58,9 +59,10 @@ class ClaimSpec:
 
 
 # --- đọc -----------------------------------------------------------------------------------------------------
-SQL_JAR_STATE = "SELECT * FROM app_get_jar_state(:uid)"
-SQL_OVERVIEW = "SELECT app_get_overview(:uid, CAST(:now AS timestamptz), :tz) AS data"
-SQL_JAR_DETAIL = "SELECT app_get_jar_detail(:uid, :jar, CAST(:now AS timestamptz), :tz) AS data"
+SQL_OVERVIEW = "SELECT app_get_overview_with_purpose(:uid, CAST(:now AS timestamptz), :tz) AS data"
+SQL_JAR_DETAIL = (
+    "SELECT app_get_jar_detail_with_purpose(:uid, :jar, CAST(:now AS timestamptz), :tz) AS data"
+)
 SQL_LIST_TRANSACTIONS = (
     "SELECT * FROM app_list_transactions(CAST(:uid AS text), CAST(:jar AS text), CAST(:from_date AS date), "
     "CAST(:to_date AS date), CAST(:kind AS text), CAST(:tx_type AS text), CAST(:needs_review AS boolean), "
@@ -95,10 +97,17 @@ SQL_REF_FEES = (
     "condition_note, source_name, source_url, effective_from, effective_to "
     "FROM fee_schedules ORDER BY product_code, fee_type, effective_from DESC LIMIT 100"
 )
-SQL_REF_TEMPLATES = (
-    "SELECT code, name, color_key, icon_key, kind, default_split_percent, is_default, sort_order "
-    "FROM jar_templates ORDER BY sort_order, code LIMIT 40"
+SQL_ONBOARDING_TEMPLATES = (
+    "SELECT t.code, t.name, t.color_key, t.icon_key, t.kind, "
+    "coalesce(l.split_percent, t.default_split_percent) AS default_split_percent, "
+    "CASE WHEN CAST(:layout AS jsonb) IS NULL THEN t.is_default ELSE l.code IS NOT NULL END AS is_default, "
+    "coalesce(l.sort_order, t.sort_order) AS sort_order, "
+    "CASE WHEN l.code IS NULL THEN t.purpose END AS purpose "
+    "FROM jar_templates t LEFT JOIN "
+    "jsonb_to_recordset(coalesce(CAST(:layout AS jsonb), '[]'::jsonb)) "
+    "AS l(code text, split_percent numeric, sort_order smallint) ON l.code = t.code"
 )
+SQL_REF_TEMPLATES = SQL_ONBOARDING_TEMPLATES + " ORDER BY sort_order, code LIMIT 40"
 
 # --- ghi: dùng chung --------------------------------------------------------------------------------------
 SQL_AUDIT_TX = (
@@ -186,8 +195,11 @@ SQL_WRITE_CREDIT_TX = (
     "'bnpl_auto', (SELECT id FROM ins), CAST(:fee_id AS uuid) WHERE EXISTS (SELECT 1 FROM ins) "
     "ON CONFLICT (user_id, due_date) WHERE kind = 'bnpl' AND status = 'active' DO UPDATE SET "
     "principal_vnd = obligations.principal_vnd + CAST(:amount AS numeric), "
-    "amount_vnd = obligations.amount_vnd + CAST(:amount AS numeric), updated_at = now() "
-    "RETURNING id, principal_vnd, fee_vnd, amount_vnd, due_date, (xmax = 0) AS created), "
+    "amount_vnd = obligations.amount_vnd + CAST(:amount AS numeric), "
+    "pay_jar_code = coalesce((SELECT j.code FROM jars j "
+    "WHERE j.user_id = obligations.user_id AND j.code = obligations.pay_jar_code AND j.kind <> 'system'), "
+    "EXCLUDED.pay_jar_code), updated_at = now() "
+    "RETURNING id, principal_vnd, fee_vnd, amount_vnd, due_date, pay_jar_code, (xmax = 0) AS created), "
     "cl AS (UPDATE credit_lines SET outstanding_vnd = outstanding_vnd + CAST(:amount AS numeric), updated_at = now() "
     "WHERE user_id = :uid AND EXISTS (SELECT 1 FROM ins) RETURNING outstanding_vnd, limit_vnd), "
     + _PAYEE_CTE
@@ -196,7 +208,8 @@ SQL_WRITE_CREDIT_TX = (
     + " SELECT (SELECT id FROM ins) AS tx_id, (SELECT id FROM ob) AS ob_id, "
     "(SELECT principal_vnd FROM ob) AS ob_principal, (SELECT fee_vnd FROM ob) AS ob_fee, "
     "(SELECT amount_vnd FROM ob) AS ob_amount, (SELECT due_date FROM ob) AS ob_due, "
-    "(SELECT created FROM ob) AS ob_created, (SELECT outstanding_vnd FROM cl) AS outstanding, "
+    "(SELECT created FROM ob) AS ob_created, (SELECT pay_jar_code FROM ob) AS ob_pay_jar, "
+    "(SELECT outstanding_vnd FROM cl) AS outstanding, "
     "(SELECT limit_vnd FROM cl) AS credit_limit"
 )
 
@@ -321,9 +334,9 @@ SQL_UPSERT_USER = (
     "RETURNING (xmax = 0) AS created, display_name, monthly_salary_vnd, payday_day, risk_tolerance"
 )
 SQL_TEMPLATE_JARS = (
-    "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind) "
-    "SELECT CAST(:uid AS text), t.code, t.name, t.color_key, t.icon_key, 0, t.default_split_percent, t.sort_order, t.kind "
-    "FROM jar_templates t WHERE t.is_default AND NOT EXISTS "
+    "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind, purpose) "
+    "SELECT CAST(:uid AS text), t.code, t.name, t.color_key, t.icon_key, 0, t.default_split_percent, t.sort_order, t.kind, t.purpose "
+    f"FROM ({SQL_ONBOARDING_TEMPLATES}) t WHERE t.is_default AND NOT EXISTS "
     "(SELECT 1 FROM jars j WHERE j.user_id = :uid AND j.kind <> 'system') RETURNING code"
 )
 SQL_DEFAULT_CREDIT_LINE = (
@@ -363,7 +376,7 @@ SQL_RELEASE_CANCELLED_CREDIT = (
 )
 
 SQL_JARS_FOR_SAVE = (
-    "SELECT j.code, j.name, j.balance_vnd, "
+    "SELECT j.code, j.name, j.balance_vnd, j.purpose, j.goal_vnd, j.goal_date, j.sinking_items, "
     "(SELECT count(*) FROM obligations o WHERE o.user_id = j.user_id AND o.pay_jar_code = j.code "
     "AND o.status = 'active') AS active_obligations, "
     "(SELECT count(*) FROM transactions t WHERE t.user_id = j.user_id AND t.jar_code = j.code) AS tx_count "
@@ -379,13 +392,14 @@ SQL_DELETE_JARS = (
 )
 SQL_UPSERT_JARS = (
     "INSERT INTO jars (user_id, code, name, color_key, icon_key, balance_vnd, split_percent, sort_order, kind, "
-    "goal_vnd, goal_date) "
+    "goal_vnd, goal_date, purpose, sinking_items) "
     "SELECT CAST(:uid AS text), r.code, r.name, r.color_key, r.icon_key, 0, r.split_percent, r.sort_order, r.kind, r.goal_vnd, "
-    "r.goal_date FROM jsonb_to_recordset(CAST(:jars AS jsonb)) AS r(code text, name text, color_key text, "
-    "icon_key text, split_percent numeric, sort_order integer, kind text, goal_vnd numeric, goal_date date) "
+    "r.goal_date, r.purpose, r.sinking_items FROM jsonb_to_recordset(CAST(:jars AS jsonb)) AS r(code text, name text, color_key text, "
+    "icon_key text, split_percent numeric, sort_order integer, kind text, goal_vnd numeric, goal_date date, purpose text, sinking_items jsonb) "
     "ON CONFLICT (user_id, code) DO UPDATE SET name = EXCLUDED.name, color_key = EXCLUDED.color_key, "
     "icon_key = EXCLUDED.icon_key, kind = EXCLUDED.kind, split_percent = EXCLUDED.split_percent, "
     "sort_order = EXCLUDED.sort_order, goal_vnd = EXCLUDED.goal_vnd, goal_date = EXCLUDED.goal_date, "
+    "purpose = EXCLUDED.purpose, sinking_items = EXCLUDED.sinking_items, "
     "updated_at = now() RETURNING code, name, balance_vnd"
 )
 
@@ -523,7 +537,7 @@ class WalletRepo:
         return self.db.query(SQL_REF_FEES, max_rows=100)
 
     def reference_templates(self) -> list[Row]:
-        return self.db.query(SQL_REF_TEMPLATES, max_rows=40)
+        return self.db.query(SQL_REF_TEMPLATES, {"layout": onboarding_override()}, max_rows=40)
 
     # --- ghi: tiện ích -----------------------------------------------------------------------------------------
     @staticmethod
@@ -702,6 +716,7 @@ class WalletRepo:
                 facts={
                     "obligation_id": str(row["ob_id"]),
                     "obligation_created": bool(row["ob_created"]),
+                    "pay_jar": row["ob_pay_jar"],
                     "principal_vnd": _vnd(row["ob_principal"]),
                     "fee_vnd": _vnd(row["ob_fee"]),
                     "amount_vnd": _vnd(row["ob_amount"]),
@@ -743,6 +758,10 @@ class WalletRepo:
                 )
             next_due = next_due_for(ob)
             is_bnpl = ob["kind"] == "bnpl"
+            if is_bnpl and amount != _vnd(ob["amount_vnd"]):
+                raise YofinaError(
+                    ErrorCode.PARAMS_INVALID, "Trả sau cần thanh toán đủ tổng tiền đến hạn."
+                )
             params = {
                 **self._tx_params({**tx, "uid": user_id}),
                 "next_due": next_due,
@@ -1078,7 +1097,7 @@ class WalletRepo:
             jars_after: list[dict[str, Any]] = []
             if created:
                 t.execute(SQL_ENSURE_SYSTEM_JARS, {"uid": user_id})
-                made = t.execute(SQL_TEMPLATE_JARS, {"uid": user_id})
+                made = t.execute(SQL_TEMPLATE_JARS, {"uid": user_id, "layout": onboarding_override()})
                 facts["template_jars"] = [m["code"] for m in made]
                 t.execute(
                     SQL_DEFAULT_CREDIT_LINE,
@@ -1207,20 +1226,15 @@ class WalletRepo:
             if removed_codes:
                 t.execute(SQL_RELEASE_PAY_JAR, {"uid": user_id, "removed": removed_codes})
                 t.execute(SQL_DELETE_JARS, {"uid": user_id, "removed": removed_codes})
-            payload = [
-                {
-                    "code": j["code"],
-                    "name": j["name"],
-                    "color_key": j["color_key"],
-                    "icon_key": j["icon_key"],
-                    "kind": j["kind"],
-                    "split_percent": j["split_percent"],
-                    "sort_order": i,
-                    "goal_vnd": j.get("goal_vnd"),
-                    "goal_date": j.get("goal_date"),
-                }
-                for i, j in enumerate(norm["jars"])
-            ]
+            previous = {j["code"]: j for j in existing}
+            payload = []
+            for i, jar in enumerate(norm["jars"]):
+                old = previous.get(jar["code"], {})
+                try:
+                    metadata = jar_commitments(jar, old)
+                except ParamsError as exc:
+                    raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
+                payload.append({**jar, **metadata, "sort_order": i})
             out = t.execute(SQL_UPSERT_JARS, {"uid": user_id, "jars": payload})
             t.execute(
                 SQL_AUDIT_TX,

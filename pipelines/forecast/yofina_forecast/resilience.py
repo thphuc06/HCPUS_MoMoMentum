@@ -39,6 +39,7 @@ from yofina_core.clock import app_today
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
 from yofina_core.resilience import ResilienceConfig, band_for_score, load_resilience_config
 from yofina_core.schedule import expand_due_dates
+from yofina_core.wallet import is_buffer_jar, is_goal_jar
 from yofina_forecast.common import int_of, min_band, to_date
 from yofina_forecast.inputs import Context
 from yofina_forecast.runner import Pipeline
@@ -72,9 +73,9 @@ class Gathered:
 
 
 def emergency_jar(jar_rows: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
-    """Hũ Dự phòng: hũ tiết kiệm KHÔNG gắn mục tiêu (cùng định nghĩa với `yofina_planner.facts.emergency_fund_vnd`); nhiều hũ thì
-    hũ đứng đầu theo thứ tự hiển thị."""
-    return next((j for j in jar_rows if j["kind"] == "saving" and j.get("goal_vnd") is None), None)
+    """Use the explicit buffer if present, with the legacy no-goal fallback."""
+    buffers = [j for j in jar_rows if is_buffer_jar(j["kind"], j.get("purpose"), j.get("goal_vnd"))]
+    return next((j for j in buffers if j.get("purpose") == "buffer"), buffers[0] if buffers else None)
 
 
 def monthly_equivalent(
@@ -243,7 +244,10 @@ class ResilienceEngine:
         on_time = paid / (paid + overdue) if paid + overdue > 0 else 1.0
         goals: list[GoalFact] = []
         for j in jar_rows:
-            if j.get("goal_vnd") is None or j.get("goal_date") is None:
+            if (
+                j.get("goal_vnd") is None or j.get("goal_date") is None
+                or (j.get("purpose") is not None and not is_goal_jar(j["kind"], j.get("purpose")))
+            ):
                 continue
             remaining = max(int_of(j["goal_vnd"]) - int_of(j["balance_vnd"]), 0)
             days_left = (to_date(j["goal_date"]) - today).days  # type: ignore[operator]

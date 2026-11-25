@@ -254,7 +254,13 @@ def test_reset_sinh_lai_persona_dat_dong_ho_ve_ngay_neo(schema_ok, groups):
     assert body["app_date"] == "2026-11-21" and body["clock_offset_days"] == -19
     (reset,) = repo.resets
     assert reset["uid"] == "sub-moi" and reset["profile"]["salary"] == 9_000_000
-    assert len(reset["jars"]) == 7 and body["jars_count"] == 7
+    assert len(reset["jars"]) == 4 and body["jars_count"] == 4
+    assert {j["code"]: j["purpose"] for j in reset["jars"]} == {
+        "chi_hang_ngay": None,
+        "nghia_vu": None,
+        "du_phong": "buffer",
+        "muc_tieu": "goal",
+    }
     assert body["transactions_count"] == len(reset["transactions"]) > 100
     assert (
         body["obligations_count"] == len(reset["obligations"]) == 7
@@ -263,7 +269,7 @@ def test_reset_sinh_lai_persona_dat_dong_ho_ve_ngay_neo(schema_ok, groups):
     # số dư dựng từ sổ cái (bản thật làm bằng SQL; bản giả cộng các dòng trả bằng hũ)
     jars = repo.users["sub-moi"]["jars"]
     assert (
-        jars["an_uong"]["balance_vnd"] == 380_000 and jars["du_phong"]["balance_vnd"] == 2_700_000
+        jars["chi_hang_ngay"]["balance_vnd"] == 1_080_000 and jars["du_phong"]["balance_vnd"] == 2_700_000
     )
     assert reset["credit_line"]["lim"] == 5_000_000 and len(reset["payees"]) == 4
 
