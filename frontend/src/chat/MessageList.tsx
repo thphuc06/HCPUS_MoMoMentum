@@ -119,6 +119,7 @@ export function MessageList({
   const superseded = supersededAssistantIds(items)
   const referenced = referencedConfirmIds(items)
   const stale = staleBlockIds(items)
+  const modelStepGroup = running ? modelStepGroupId(grouped) : undefined
   const rows: ReactNode[] = grouped.map((g, idx) => {
     const next = grouped[idx + 1]
     switch (g.kind) {
@@ -134,7 +135,7 @@ export function MessageList({
         )
       }
       case 'tools':
-        return <ToolProgress key={g.id} tools={g.tools} />
+        return <ToolProgress key={g.id} tools={g.tools} modelStepRunning={g.id === modelStepGroup} />
       case 'block':
         // Khối xác nhận do một phương án tham chiếu: ẩn cho tới khi chọn phương án (đã thực hiện, hủy hay hết hạn thì luôn hiện).
         if (referenced.has(g.id) && !shown.has(g.id) && !g.resolved && !g.ui) return null
@@ -175,6 +176,19 @@ export function MessageList({
 }
 
 const EMPTY: ReadonlySet<string> = new Set()
+
+/**
+ * Lượt đang chạy mà mọi công cụ của thẻ công cụ cuối (sau tin cuối của người dùng) đã xong: bước model (Analyst, người viết)
+ * đang chạy, chưa có event riêng nào báo. Trả id của thẻ đó; gọi chỉ khi lượt đang chạy (chưa RUN_FINISHED).
+ */
+function modelStepGroupId(grouped: ReturnType<typeof groupItems>): string | undefined {
+  for (let i = grouped.length - 1; i >= 0; i--) {
+    const g = grouped[i]!
+    if (g.kind === 'user') return undefined
+    if (g.kind === 'tools') return g.tools.every((t) => t.status === 'done') ? g.id : undefined
+  }
+  return undefined
+}
 
 function lastNoticeId(items: readonly ChatItem[]): string | undefined {
   for (let i = items.length - 1; i >= 0; i--) {
