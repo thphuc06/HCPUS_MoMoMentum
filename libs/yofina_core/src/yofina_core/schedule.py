@@ -34,6 +34,27 @@ def bnpl_due_date(due_day: int, today: date) -> date:
     return next_payday(due_day, today)
 
 
+def bnpl_pay_jar(
+    jars: Sequence[Mapping[str, Any]],
+    *,
+    existing_pay_jar: str | None = None,
+    chosen_jar: str | None = None,
+) -> str | None:
+    """Hũ trả khoản Trả sau, một quy tắc cho lúc mua (ledger), dự báo, what-if và kiểm tra trước khi chi.
+
+    `jars` là các hũ người dùng (có `code`, `kind`) theo `sort_order`. Thứ tự: hũ trả của khoản Trả sau cùng ngày đến hạn
+    đã có, rồi hũ `obligation` đầu tiên; không có hũ đó (tài khoản như `lan`, `khoa`) thì hũ người dùng chọn cho món mua,
+    rồi hũ `spending` đầu tiên. None khi không có hũ nào hợp lệ.
+    """
+    codes = {j["code"] for j in jars}
+    pay = existing_pay_jar or next((j["code"] for j in jars if j.get("kind") == "obligation"), None)
+    if pay in codes:
+        return pay
+    if chosen_jar in codes:
+        return chosen_jar
+    return next((j["code"] for j in jars if j.get("kind") == "spending"), None)
+
+
 def advance_due(due: date, cycle: str, due_day: int | None) -> date | None:
     """Ngày đến hạn kế tiếp sau khi trả kỳ `due`; `once` thì None (nghĩa vụ xong)."""
     if cycle == "weekly":
