@@ -12,6 +12,8 @@ Việc làm (idempotent, chạy lại bao nhiêu lần cũng được):
 2. Bảo đảm nhóm Cognito `<tiền tố><persona>` tồn tại trong user pool `yofina-users`; đặt mỗi tài khoản
    vào đúng nhóm (và gỡ khỏi nhóm persona khác). Persona của người gọi ở API lấy từ nhóm này
    (claim `cognito:groups` của access token), không rẽ nhánh theo email trong mã.
+   Nhóm `ops` (xem trace của mọi người dùng): chỉ tài khoản vận hành trong `ops_accounts` của accounts.json;
+   tài khoản khác đang có `ops` bị GỠ ra; danh sách có tài khoản `giamkhao*` thì dừng trước mọi lệnh ghi.
 3. Đăng nhập SRP từng tài khoản (mật khẩu từ secret trong bộ nhớ) và gọi `POST /demo/reset`
    (xóa dữ liệu của CHÍNH tài khoản đó, sinh lại persona, đặt đồng hồ mô phỏng về ngày neo).
 """
@@ -21,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Collection
 from pathlib import Path
 
 from _demo_auth import api_url, call_api, demo_accounts, login_access_token
@@ -29,9 +32,23 @@ from botocore.exceptions import ClientError
 
 ROOT = Path(__file__).resolve().parent.parent
 ACCOUNTS_FILE = ROOT / "data" / "personas" / "accounts.json"
+# Nhóm xem bảng vận hành và trace của mọi người dùng (infra-cdk/lib/identity-stack.ts tạo nhóm, script chỉ gán thành viên).
+OPS_GROUP = "ops"
+JUDGE_PREFIX = "giamkhao"  # tài khoản đưa giám khảo: không bao giờ thuộc OPS_GROUP
 
 
-def ensure_groups(sess, mapping: dict[str, str], prefix: str, accounts: dict) -> None:
+def ensure_groups(
+    sess,
+    mapping: dict[str, str],
+    prefix: str,
+    accounts: dict,
+    *,
+    ops_accounts: Collection[str],
+) -> None:
+    """Đặt mỗi tài khoản của `mapping` vào đúng nhóm persona; tài khoản trong `ops_accounts` vào OPS_GROUP, tài khoản khác bị gỡ khỏi nó."""
+    judges = sorted(n for n in ops_accounts if n.startswith(JUDGE_PREFIX))
+    if judges:
+        raise SystemExit(f"tài khoản giám khảo không được thuộc nhóm {OPS_GROUP}: {judges}")
     idp = sess.client("cognito-idp")
     pool = ssm_param("auth/user-pool-id", sess=sess)
     wanted_groups = {prefix + persona for persona in mapping.values()}
@@ -57,6 +74,12 @@ def ensure_groups(sess, mapping: dict[str, str], prefix: str, accounts: dict) ->
         if target not in current:
             idp.admin_add_user_to_group(UserPoolId=pool, Username=email, GroupName=target)
             print(f"{name}: thêm vào nhóm {target}", file=sys.stderr)
+        if name in ops_accounts and OPS_GROUP not in current:
+            idp.admin_add_user_to_group(UserPoolId=pool, Username=email, GroupName=OPS_GROUP)
+            print(f"{name}: thêm vào nhóm {OPS_GROUP}", file=sys.stderr)
+        elif name not in ops_accounts and OPS_GROUP in current:
+            idp.admin_remove_user_from_group(UserPoolId=pool, Username=email, GroupName=OPS_GROUP)
+            print(f"{name}: gỡ khỏi nhóm {OPS_GROUP}", file=sys.stderr)
 
 
 def main() -> int:
@@ -75,7 +98,13 @@ def main() -> int:
 
     sess = session()
     accounts = demo_accounts(sess)
-    ensure_groups(sess, {n: mapping[n] for n in names}, cfg["group_prefix"], accounts)
+    ensure_groups(
+        sess,
+        {n: mapping[n] for n in names},
+        cfg["group_prefix"],
+        accounts,
+        ops_accounts=cfg["ops_accounts"],
+    )
 
     base = api_url(sess)
     failed = 0

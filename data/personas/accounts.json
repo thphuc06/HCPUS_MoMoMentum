@@ -8,5 +8,7 @@
     "giamkhao1": "minh",
     "giamkhao2": "minh",
     "giamkhao3": "minh"
-  }
+  },
+  "$comment_ops": "Tài khoản vận hành thuộc nhóm Cognito `ops` (xem /ops/* và trace của MỌI người dùng). Chỉ người trình bày dùng để quay video, không đưa giám khảo. scripts/seed_demo.py thêm `ops` cho tài khoản trong danh sách, GỠ `ops` khỏi mọi tài khoản demo khác và từ chối tài khoản giamkhao* (issue #17).",
+  "ops_accounts": ["minh"]
 }
