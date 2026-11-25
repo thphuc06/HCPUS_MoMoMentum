@@ -65,10 +65,10 @@ export class FrontendStack extends Stack {
       name: `${cfg.prefix}-web`,
       description: 'Yofina Foresight web app (SPA, deploy thu cong bang zip)',
       platform: 'WEB',
-      // Mọi đường dẫn không phải tệp tĩnh trả index.html (React Router).
+      // Mọi đường dẫn không phải tệp tĩnh trả index.html (React Router). csv, pdf: tệp mẫu cho giám khảo ở /samples/ (#22, #36).
       customRules: [
         {
-          source: '</^[^.]+$|\\.(?!(css|gif|ico|jpg|jpeg|js|png|txt|svg|woff|woff2|ttf|map|json|webp|webmanifest|xml)$)([^.]+$)/>',
+          source: '</^[^.]+$|\\.(?!(css|csv|gif|ico|jpg|jpeg|js|pdf|png|txt|svg|woff|woff2|ttf|map|json|webp|webmanifest|xml)$)([^.]+$)/>',
           target: '/index.html',
           status: '200',
         },

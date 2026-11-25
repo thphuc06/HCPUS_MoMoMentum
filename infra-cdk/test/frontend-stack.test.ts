@@ -80,3 +80,29 @@ describe('FrontendStack custom headers', () => {
     assert.ok(!JSON.stringify(h).includes(ACCOUNT));
   });
 });
+
+/** Luật rewrite SPA của Amplify (`</regex/>`) dưới dạng RegExp của JS: khớp thì trả index.html. */
+function spaRewrite(): RegExp {
+  const app = new App({ context: { region: 'ap-southeast-1' } });
+  const cfg = loadConfig(app);
+  const stack = new FrontendStack(app, 'F', { env: { account: ACCOUNT, region: cfg.region }, cfg });
+  const apps = Template.fromStack(stack).findResources('AWS::Amplify::App');
+  const rules = (Object.values(apps)[0] as any).Properties.CustomRules as { Source: string; Target: string }[];
+  const spa = rules.find((r) => r.Target === '/index.html');
+  assert.ok(spa, 'thiếu luật rewrite về /index.html');
+  return new RegExp(spa.Source.replace(/^<\//, '').replace(/\/>$/, ''));
+}
+
+describe('FrontendStack rewrite SPA', () => {
+  it('đường dẫn của router trả index.html', () => {
+    const re = spaRewrite();
+    for (const p of ['/roadmap', '/ingest', '/foresight/stress/abc']) assert.ok(re.test(p), `${p} phải về index.html`);
+  });
+
+  it('tệp mẫu cho giám khảo (CSV sao kê, ảnh, PDF) được phục vụ nguyên, không bị rewrite thành index.html', () => {
+    const re = spaRewrite();
+    for (const p of ['/samples/minh_sao_ke_2_tuan.csv', '/samples/minh_bien_lai_1.png', '/samples/huong-dan.pdf', '/assets/index-abc.js']) {
+      assert.ok(!re.test(p), `${p} không được rewrite`);
+    }
+  });
+});
