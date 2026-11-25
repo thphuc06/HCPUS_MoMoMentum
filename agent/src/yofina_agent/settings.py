@@ -6,14 +6,20 @@ Không có URL, tên tài nguyên hay model id nào nằm trong code. Model id, 
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
-from collections.abc import Mapping
+import threading
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from importlib import resources
 from typing import Any
 
 from yofina_core.config import SSM_PREFIX_ENV, Config
+
+log = logging.getLogger("yofina.agent.settings")
 
 
 def _defaults() -> dict[str, Any]:
@@ -36,6 +42,90 @@ def _ssm_get(cfg: Config, name: str) -> str | None:
         return cfg.get(name, default=None) or None
     except Exception:  # noqa: BLE001
         return None
+
+
+class ReasoningSwitch:
+    """Công tắc khối `reasoning` của người tư vấn (luồng K, #7), đổi được không cần deploy. Mặc định bật.
+
+    Thứ tự: biến môi trường `YOFINA_REASONING_ENABLED` (ghi đè, không tra SSM), rồi SSM `<YOFINA_SSM_PREFIX>/agent/reasoning_enabled`
+    (String `true`/`false`), rồi mặc định đóng gói `reasoning_enabled`. Vắng khóa, lỗi quyền hay mạng, giá trị sai dạng: dùng mặc
+    định (giữ hành vi hiện tại); lỗi thì ghi log (chỉ tên lỗi).
+
+    Đọc lười: nạp cấu hình không tra khóa này (mỗi khóa SSM là một lời gọi, tốn cả giây ở phiên lạnh, xem `AgentSettings.load`), lượt
+    đầu tiên cần tới mới đọc, trong luồng nền (`asyncio.to_thread`) để không chặn event loop. Kết quả, kể cả mặc định khi lỗi, nhớ
+    `refresh_seconds` giây rồi mới đọc lại. Không có `YOFINA_SSM_PREFIX` (test, chạy tại máy) thì không tra SSM.
+    """
+
+    KEY = "agent/reasoning_enabled"
+
+    def __init__(
+        self,
+        env: Mapping[str, str],
+        *,
+        default: bool,
+        refresh_seconds: float,
+        ssm: Any | None = None,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._env = dict(env)
+        self._default = default
+        self._refresh_seconds = refresh_seconds
+        self._ssm = ssm
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._value: bool | None = None
+        self._read_at = 0.0
+        prefix = self._env.get(SSM_PREFIX_ENV)
+        self._path = f"{prefix.rstrip('/')}/{self.KEY}" if prefix else None
+        self._override = self._env_override()
+
+    def _env_override(self) -> bool | None:
+        raw = Config({k: v for k, v in self._env.items() if k != SSM_PREFIX_ENV}).get(
+            "reasoning_enabled", default=None
+        )
+        if raw is None:
+            return None
+        try:
+            return _as_bool(raw)
+        except ValueError:
+            log.warning(json.dumps({"event": "reasoning_switch_invalid", "source": "env"}))
+            return None
+
+    def _fresh(self) -> bool:
+        return self._value is not None and self._clock() - self._read_at < self._refresh_seconds
+
+    async def enabled(self) -> bool:
+        """Khối `reasoning` có bật không (không bao giờ ném lỗi)."""
+        if self._override is not None:
+            return self._override
+        if self._path is None:
+            return self._default
+        if self._fresh():
+            return bool(self._value)
+        return await asyncio.to_thread(self._load)
+
+    def _load(self) -> bool:
+        with self._lock:  # nhiều lượt cùng hết chu kỳ: chỉ một lần đọc
+            if not self._fresh():
+                self._value, self._read_at = self._read(), self._clock()
+            return bool(self._value)
+
+    def _read(self) -> bool:
+        try:
+            if self._ssm is None:
+                import boto3  # chỉ import khi thật sự tra SSM
+
+                self._ssm = boto3.client("ssm", region_name=Config(self._env).region())
+            resp = self._ssm.get_parameter(Name=self._path, WithDecryption=False)
+            return _as_bool(str(resp["Parameter"]["Value"]))
+        except Exception as exc:  # vắng khóa, quyền, mạng, sai dạng: giữ mặc định
+            if type(exc).__name__ != "ParameterNotFound":
+                log.warning(
+                    json.dumps(
+                        {"event": "reasoning_switch_unreadable", "error": type(exc).__name__}
+                    )
+                )
+            return self._default
 
 
 @dataclass(frozen=True)
@@ -88,6 +178,10 @@ class AgentSettings:
     low_coverage_threshold: float
     turn_record_tool: str
     turn_record_timeout_seconds: float
+    # Luồng K: khối `reasoning` còn ít hơn số bước này sau khi bỏ bước mâu thuẫn với kết quả đã lưu thì bỏ cả khối (#7)
+    reasoning_min_steps: int
+    # Luồng K: công tắc bật/tắt khối `reasoning` (SSM, đọc lười, #7)
+    reasoning_switch: ReasoningSwitch
 
     @classmethod
     def load(cls, env: Mapping[str, str] | None = None) -> AgentSettings:
@@ -150,6 +244,13 @@ class AgentSettings:
             low_coverage_threshold=get("low_coverage_threshold", float),
             turn_record_tool=get("turn_record_tool"),
             turn_record_timeout_seconds=get("turn_record_timeout_seconds", float),
+            reasoning_min_steps=get("reasoning_min_steps", int),
+            # không tra SSM lúc nạp: công tắc đọc lười ở lượt đầu tiên cần tới
+            reasoning_switch=ReasoningSwitch(
+                env,
+                default=bool(d["reasoning_enabled"]),
+                refresh_seconds=get("reasoning_refresh_seconds", float),
+            ),
         )
 
     def tool(self, short_name: str, *, target: str = "ledger") -> str:

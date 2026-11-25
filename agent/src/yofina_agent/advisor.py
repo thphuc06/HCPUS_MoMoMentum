@@ -12,16 +12,23 @@ Mã kiểm trước khi phát (mã quyết định, không tin model):
   phải `skipped`) cho phương án hoặc bước đã kiểm. Bước không còn căn cứ hợp lệ nào bị bỏ. Nhãn căn cứ do mã dựng.
 - Kết luận: số có căn cứ; trỏ đúng phương án được gợi ý (what-if) hoặc một bước của bản đã lưu (lộ trình); nguồn cá nhân hóa khai
   trong `personal` phải có thật trong lượt (khối bộ nhớ khác rỗng, hồ sơ hành vi sẵn sàng), không thì bỏ cả câu.
+- Nhất quán với kết quả đã lưu (#7, chạy sau các kiểm trên; `SavedResult`): hũ nhận bằng tên/mã hũ thật của lượt, luật bằng mã căn
+  cứ bước đã khai, không đọc ý câu chữ. Bước trích một luật đã loại hũ nó nhắc (`rule_conflict`) hoặc nhắc hũ không có trong kết quả
+  (`jar_mismatch`) bị bỏ; kết luận nhắc hũ ngoài kết quả, hoặc còn ít hơn số bước tối thiểu sau khi bỏ bước mâu thuẫn, thì bỏ cả khối
+  (`settle`).
 
-Không có lập luận (model không trả, hoặc mọi bước và kết luận bị bỏ) thì lượt chạy như cũ và không có khối `reasoning`.
+Không có lập luận (model không trả, hoặc mọi bước và kết luận bị bỏ) thì lượt chạy như cũ và không có khối `reasoning`. Công tắc
+`AgentSettings.reasoning_switch` (SSM `agent/reasoning_enabled`) tắt thì không xin model lập luận và không có khối này.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
+import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 from yofina_agent.tools import ToolKind, ToolOutcome
@@ -131,17 +138,126 @@ def behavior_view(payload: Mapping[str, Any] | None) -> dict[str, Any] | None:
     return out
 
 
+@dataclass(frozen=True)
+class SavedResult:
+    """Kết quả ĐÃ LƯU (đã phát) của lượt mà lập luận phải khớp. Mọi trường là dữ liệu có cấu trúc do mã dựng từ kết quả tool, không
+    đọc chữ của model.
+
+    - `jar_names`: mã -> tên các hũ thật của lượt (`jar_rows`), để nhận ra hũ nào được nhắc trong chữ (`mentioned_jars`).
+    - `step_jars`: các hũ một bước lập luận được nhắc tới (hũ có mặt trong kết quả).
+    - `conclusion_jars`: các hũ câu kết luận được nhắc tới (thường hẹp hơn: hũ của phương án hay bản được khuyên).
+    - `rejected`: rule_id -> các hũ nguồn mà luật đó đã loại trong lượt (`rule_rejections`).
+    """
+
+    jar_names: Mapping[str, str]
+    step_jars: frozenset[str]
+    conclusion_jars: frozenset[str]
+    rejected: Mapping[str, frozenset[str]] = field(default_factory=dict)
+
+
+#: lý do bỏ một bước vì mâu thuẫn với kết quả đã lưu (mã ổn định để ghi log)
+CONFLICT_REASONS: tuple[str, ...] = ("rule_conflict", "jar_mismatch")
+
+
+def _jar_pattern(token: str) -> re.Pattern[str] | None:
+    words = unicodedata.normalize("NFC", token).split()
+    if not words:
+        return None
+    return re.compile(r"(?<!\w)" + r"\s+".join(map(re.escape, words)) + r"(?!\w)")
+
+
+def mentioned_jars(text: str, jar_names: Mapping[str, str]) -> frozenset[str]:
+    """Mã các hũ mà chữ nhắc tới, nhận bằng tên (hoặc mã) hũ THẬT của lượt: mẫu dựng từ dữ liệu hũ, không có danh sách từ khóa.
+
+    So nguyên cụm từ và đúng chữ hoa như tên trong dữ liệu (model chép tên hũ từ danh sách hũ, "hũ Giải trí"): tên hũ tiếng Việt là danh
+    từ chung, nên chữ thường ("dùng hũ khác", "khoản nghĩa vụ", "quỹ dự phòng") không tính là nhắc tới hũ "Khác", "Nghĩa vụ", "Dự
+    phòng". Tên dài khớp trước, đoạn đã khớp không khớp lần hai ("Du lịch Đà Lạt" không bị tính thêm là "Du lịch")."""
+    t = unicodedata.normalize("NFC", text or "")
+    tokens = [(name, code) for code, name in jar_names.items()] + [
+        (code, code) for code in jar_names
+    ]
+    taken: list[tuple[int, int]] = []
+    found: set[str] = set()
+    for token, code in sorted(tokens, key=lambda tc: -len(tc[0])):
+        if (pattern := _jar_pattern(token)) is None:
+            continue
+        for m in pattern.finditer(t):
+            if not any(m.start() < end and start < m.end() for start, end in taken):
+                taken.append(m.span())
+                found.add(code)
+    return frozenset(found)
+
+
+#: Trường mang mã hũ dạng chuỗi trong kết quả tool, phương án và bước lộ trình.
+_JAR_KEYS = frozenset({"jar_code", "from_jar", "to_jar"})
+
+
+def jar_codes(node: Any) -> set[str]:
+    """Mọi mã hũ trong một kết quả có cấu trúc (đệ quy): `jar.code` và các trường `jar_code`, `from_jar`, `to_jar`. Danh sách hũ
+    trong tham số `save_jars` (khóa `code` trần) không tính: bước đổi tỷ lệ chia không phải bước "nói về" mọi hũ."""
+    out: set[str] = set()
+    if isinstance(node, Mapping):
+        jar = node.get("jar")
+        if isinstance(jar, Mapping) and isinstance(jar.get("code"), str):
+            out.add(jar["code"])
+        for key, value in node.items():
+            if key in _JAR_KEYS and isinstance(value, str) and value:
+                out.add(value)
+            else:
+                out |= jar_codes(value)
+    elif isinstance(node, list):
+        for item in node:
+            out |= jar_codes(item)
+    return out
+
+
+def rule_rejections(
+    judged: Iterable[tuple[str | None, SuitabilityVerdict]],
+) -> dict[str, frozenset[str]]:
+    """rule_id -> hũ nguồn của các đề xuất mà luật đó đã LOẠI (`fail`, mức block) trong lượt, mọi vòng kiểm. `judged` là các cặp (hũ
+    nguồn của đề xuất, phán quyết `check_suitability`); đề xuất không lấy tiền từ hũ nào không gắn được với hũ nên bỏ qua. Luật chỉ
+    cảnh báo (`warn`) không loại phương án nên không tính."""
+    out: dict[str, set[str]] = {}
+    for jar, v in judged:
+        if not jar:
+            continue
+        for c in v.checked:
+            if c.outcome == "fail":
+                out.setdefault(c.rule_id, set()).add(jar)
+    return {rule: frozenset(jars) for rule, jars in out.items()}
+
+
+def step_conflict(step: ReasoningStepIn, saved: SavedResult) -> str | None:
+    """Lý do bước mâu thuẫn với kết quả đã lưu, hoặc None:
+
+    - `rule_conflict`: bước khai căn cứ `rule:<id>` mà luật đó đã loại đề xuất lấy tiền từ một hũ bước nhắc tới (ví dụ trích "Hũ nguồn
+      đủ tiền" khi nói hũ mà chính luật đó bác là đủ). Mã không đọc được bước khen hay chê hũ đó, nên bước nhắc hũ bị luật mình trích
+      loại đều bị bỏ.
+    - `jar_mismatch`: bước nhắc một hũ không có trong kết quả (`step_jars`)."""
+    jars: set[str] = set()
+    for text in (step.seen, step.why, step.effect):
+        jars |= mentioned_jars(text, saved.jar_names)
+    cited = {key.split(":", 1)[1] for key in step.basis if key.startswith("rule:")}
+    if any(jars & saved.rejected.get(rule, frozenset()) for rule in cited):
+        return "rule_conflict"
+    if jars - saved.step_jars:
+        return "jar_mismatch"
+    return None
+
+
 def verify_steps(
     steps: Sequence[ReasoningStepIn],
     *,
     grounded: Callable[[str], bool],
     tools: Iterable[str],
     rules: Mapping[str, str],
+    saved: SavedResult | None = None,
 ) -> tuple[list[B.ReasoningStep], dict[str, int]]:
-    """Các bước giữ được (đánh lại `s1`, `s2`...) và số bước bị bỏ theo lý do (`grounding`, `basis`)."""
+    """Các bước giữ được (đánh lại `s1`, `s2`...) và số bước bị bỏ theo lý do (`grounding`, `basis`, rồi `rule_conflict`,
+    `jar_mismatch` khi có `saved`: kiểm nhất quán với kết quả đã lưu chạy SAU kiểm số và căn cứ)."""
     usable_tools = set(tools)
     kept: list[B.ReasoningStep] = []
-    dropped = {"grounding": 0, "basis": 0}
+    dropped = {"grounding": 0, "basis": 0, **dict.fromkeys(CONFLICT_REASONS, 0)}
     seen_texts: set[str] = set()
     for s in steps:
         if len(kept) >= B.REASONING_MAX_STEPS:
@@ -159,6 +275,9 @@ def verify_steps(
                 basis.append(B.ReasoningBasis(kind="rule", ref=ref, label=rules[ref][:60]))
         if not basis:
             dropped["basis"] += 1
+            continue
+        if saved is not None and (conflict := step_conflict(s, saved)) is not None:
+            dropped[conflict] += 1
             continue
         if texts[0] in seen_texts:  # cùng một điều nói hai lần
             continue
@@ -185,8 +304,12 @@ def verify_conclusion(
     has_behavior: bool,
     option_id: str | None = None,
     step_id: str | None = None,
+    saved: SavedResult | None = None,
 ) -> tuple[B.ReasoningConclusion | None, str]:
-    """(kết luận đã kiểm hoặc None, lý do để ghi log: `kept`, `none`, `grounding`, `target`, `personal`)."""
+    """(kết luận đã kiểm hoặc None, lý do để ghi log: `kept`, `none`, `grounding`, `target`, `personal`, `jar_mismatch`).
+
+    `jar_mismatch` (chỉ khi có `saved`, kiểm sau cùng): câu nhắc một hũ ngoài `saved.conclusion_jars`, tức mâu thuẫn với kết quả đã
+    lưu; người gọi bỏ cả khối (`settle`)."""
     if text is None or not text.strip():
         return None, "none"
     clean = text.strip()
@@ -197,6 +320,8 @@ def verify_conclusion(
     sources = list(dict.fromkeys(personal))
     if ("memory" in sources and not has_memory) or ("behavior" in sources and not has_behavior):
         return None, "personal"
+    if saved is not None and mentioned_jars(clean, saved.jar_names) - saved.conclusion_jars:
+        return None, "jar_mismatch"
     return (
         B.ReasoningConclusion(
             text=clean[:240],
@@ -208,10 +333,36 @@ def verify_conclusion(
     )
 
 
+def settle(
+    context: Context,
+    steps: Sequence[B.ReasoningStep],
+    conclusion: B.ReasoningConclusion | None,
+    dropped: Mapping[str, int],
+    conclusion_reason: str,
+    *,
+    min_steps: int,
+) -> tuple[Advice, str]:
+    """Khối cuối sau kiểm nhất quán, và mã của khối để ghi log (`kept`, `conclusion_conflict`, `too_few_steps`).
+
+    Bỏ CẢ khối khi câu kết luận mâu thuẫn với kết quả đã lưu, hoặc khi đã bỏ bước vì mâu thuẫn mà còn ít hơn `min_steps` bước (số
+    bước tối thiểu của khối): phần còn lại không đủ để thành một lập luận đáng tin. Không bước nào bị bỏ vì mâu thuẫn thì giữ như cũ."""
+    if conclusion_reason == "jar_mismatch":
+        return Advice(context=context), "conclusion_conflict"
+    if any(dropped.get(reason, 0) for reason in CONFLICT_REASONS) and len(steps) < min_steps:
+        return Advice(context=context), "too_few_steps"
+    return Advice(context=context, steps=tuple(steps), conclusion=conclusion), "kept"
+
+
 def log_advice(
-    context: Context, steps_in: int, kept: int, dropped: Mapping[str, int], conclusion: str
+    context: Context,
+    steps_in: int,
+    kept: int,
+    dropped: Mapping[str, int],
+    conclusion: str,
+    block: str = "kept",
 ) -> None:
-    """Một dòng JSON mỗi lượt có lập luận (chỉ số đếm và mã lý do, không chữ, không tiền) để đo trên Runtime."""
+    """Một dòng JSON mỗi lượt có lập luận (chỉ số đếm và mã lý do, không chữ, không tiền) để đo trên Runtime. `block` là mã của khối
+    sau kiểm nhất quán (`settle`): `kept`, `conclusion_conflict`, `too_few_steps`."""
     log.info(
         json.dumps(
             {
@@ -221,7 +372,10 @@ def log_advice(
                 "steps_kept": kept,
                 "dropped_grounding": dropped.get("grounding", 0),
                 "dropped_basis": dropped.get("basis", 0),
+                "dropped_rule_conflict": dropped.get("rule_conflict", 0),
+                "dropped_jar_mismatch": dropped.get("jar_mismatch", 0),
                 "conclusion": conclusion,
+                "block": block,
             }
         )
     )
@@ -257,14 +411,21 @@ def emit(turn: Turn, advice: Advice | None) -> None:
 
 
 __all__ = [
+    "CONFLICT_REASONS",
     "RULE_TITLES",
     "TOOL_BASIS_LABELS",
     "Advice",
+    "SavedResult",
     "basis_catalog",
     "behavior_view",
     "checked_rules",
     "emit",
+    "jar_codes",
     "log_advice",
+    "mentioned_jars",
+    "rule_rejections",
+    "settle",
+    "step_conflict",
     "tools_ok",
     "verify_conclusion",
     "verify_steps",
