@@ -105,8 +105,17 @@ def _dense_history(values: Sequence[Any], days: int) -> tuple[int, ...]:
 
 
 def make_config(settings: ForecastSettings, user_id: str, *, n_paths: int) -> ForecastConfig:
-    """`ForecastConfig` từ cấu hình: gốc là `calibrated_config()` (cờ xác suất theo kết quả backtest); công tắc cấu hình tắt được."""
+    """`ForecastConfig` từ cấu hình: gốc là `calibrated_config()` (cờ xác suất theo kết quả backtest); công tắc cấu hình tắt được.
+    Ngưỡng lịch sử của cổng xác suất (BR-31) mặc định theo hiệu chỉnh; có cấu hình thì ghi đè qua `extra["calibration"]`."""
     base = calibrated_config()
+    gate = {
+        kind: {"probability_min_history_days": days}
+        for kind, days in (
+            ("dense", settings.probability_min_history_days_dense),
+            ("sparse", settings.probability_min_history_days_sparse),
+        )
+        if days is not None
+    }
     return replace(
         base,
         n_paths=n_paths,
@@ -120,6 +129,7 @@ def make_config(settings: ForecastSettings, user_id: str, *, n_paths: int) -> Fo
         band_high_min_coverage=settings.band_high_min_coverage,
         band_medium_min_days=settings.band_medium_min_days,
         probability_enabled=bool(settings.probability_enabled and base.probability_enabled),
+        extra={**base.extra, "calibration": gate} if gate else base.extra,
     )
 
 
