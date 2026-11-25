@@ -12,7 +12,8 @@ Với mỗi loại chuỗi (`dense`, `sparse`, `cold_start`) có ba thứ:
 
 Hiệu chỉnh lại SAU Monte Carlo (#25, `yofina_ml.recalibration`), chỉ có hiệu lực khi `Calibration.recalibrate` đúng:
 - `p_isotonic`: bảng PAV đưa `p_shortfall` thô về tần suất thật (hũ dày và hũ thưa, không áp hũ nghĩa vụ).
-- `cqr`: độ lệch CQR bất đối xứng của dải số dư P10-P90, chỉ áp cho hũ dày (bảng ở loại chuỗi khác bị bỏ qua).
+- `cqr`: độ lệch CQR bất đối xứng của dải số dư P10-P90, một bảng cho mỗi nhóm độ dài lịch sử (`min_history_days`), chỉ áp
+  cho hũ dày (bảng ở loại chuỗi khác bị bỏ qua).
 - cùng công tắc đó, hũ thưa không nêu ngày cạn cụ thể (`RunMeta.params["show_runout_date"]`).
 Tệp hiệu chỉnh cũ không có các khóa này thì hành vi như trước (công tắc tắt, không bảng nào).
 
@@ -25,7 +26,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from yofina_ml.calibration import default as _default
-from yofina_ml.recalibration import CQRBand, Isotonic
+from yofina_ml.recalibration import CQRBand, Isotonic, parse_cqr
 from yofina_ml.types import ForecastConfig
 
 KINDS = ("dense", "sparse", "cold_start")
@@ -39,8 +40,8 @@ class SeriesCalibration:
     probability_min_history_days: int = 0
     #: PAV cho p_shortfall (#25), chỉ áp khi `Calibration.recalibrate`
     p_isotonic: Isotonic | None = None
-    #: CQR bất đối xứng cho dải số dư (#25), chỉ áp cho hũ dày khi `Calibration.recalibrate`
-    cqr: CQRBand | None = None
+    #: CQR bất đối xứng cho dải số dư (#25) theo nhóm độ dài lịch sử, chỉ áp cho hũ dày khi `Calibration.recalibrate`
+    cqr: tuple[CQRBand, ...] | None = None
 
     def probability_ok_at(self, history_days: int) -> bool:
         """Khoảng của loại chuỗi này đã đạt độ phủ mục tiêu ở độ dài lịch sử `history_days` (được phát %)."""
@@ -69,7 +70,7 @@ class Calibration:
                 "probability_ok": c.probability_ok,
                 "probability_min_history_days": c.probability_min_history_days,
                 "p_isotonic": c.p_isotonic.to_dict() if c.p_isotonic else None,
-                "cqr": c.cqr.to_dict() if c.cqr else None,
+                "cqr": [b.to_dict() for b in c.cqr] if c.cqr else None,
             }
         return out
 
@@ -104,7 +105,7 @@ def calibration_from_dict(o: dict[str, Any], base: Calibration | None = None) ->
                 src.get("probability_min_history_days", cur.probability_min_history_days)
             ),
             p_isotonic=_opt(src, "p_isotonic", Isotonic.from_dict, cur.p_isotonic),
-            cqr=_opt(src, "cqr", CQRBand.from_dict, cur.cqr),
+            cqr=_opt(src, "cqr", parse_cqr, cur.cqr),
         )
     return Calibration(**kw)
 

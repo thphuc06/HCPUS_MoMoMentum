@@ -48,7 +48,7 @@ from yofina_ml.quality import (
     min_band,
     status_for,
 )
-from yofina_ml.recalibration import apply_cqr
+from yofina_ml.recalibration import apply_cqr, select_cqr
 from yofina_ml.types import (
     ConfidenceBand,
     DayQuantiles,
@@ -175,7 +175,7 @@ def _recalibrated_band(
 ) -> tuple[np.ndarray, np.ndarray]:
     """P10, P90 số dư sau CQR bất đối xứng (#25): chỉ hũ dày, chỉ khi bật `Calibration.recalibrate` và có bảng. Đơn vị độ
     lệch là chi TB ngày của `scale_days` ngày lịch sử cuối của hũ nhân số ngày tới mốc (như lúc fit trên backtest)."""
-    band = cal_kind.cqr
+    band = select_cqr(cal_kind.cqr, jar.history_days)
     if not ctx.cal.recalibrate or band is None or kind != "dense":
         return sim.balance_p10, sim.balance_p90
     recent = jar.daily_spend_vnd[-band.scale_days :]

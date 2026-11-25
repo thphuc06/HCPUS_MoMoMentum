@@ -102,6 +102,20 @@ def test_cqr_qua_api_doi_dai_hu_day_giu_p50_va_khong_ap_cho_hu_thua():
     assert on.jars[1].days == off.jars[1].days  # hũ thưa: không áp CQR dù hiệu chỉnh có bảng
 
 
+def test_cqr_chon_bang_theo_do_dai_lich_su_cua_hu():
+    # hai nhóm (Mondrian): dưới 100 ngày lịch sử dùng bảng thứ nhất (dưới 0,5), từ 100 ngày dùng bảng thứ hai (dưới 0,25)
+    table = {
+        "cqr": [
+            {"h": [1, 30], "lo": [0.5, 0.5], "hi": [0.0, 0.0], "min_history_days": 0},
+            {"h": [1, 30], "lo": [0.25, 0.25], "hi": [0.0, 0.0], "min_history_days": 100},
+        ]
+    }
+    for n, shift in ((60, 200_000), (120, 100_000)):  # ngày 10, đơn vị 40.000 x 10
+        inp = inputs((jar("an_uong", n=n, spend=(40_000,) * n, balance=3_000_000),))
+        off, on = _run(inp, False, dense=table), _run(inp, True, dense=table)
+        assert off.jars[0].days[9].balance_p10_vnd - on.jars[0].days[9].balance_p10_vnd == shift
+
+
 # --- hũ thưa không nêu ngày cạn cụ thể ---------------------------------------------------------------------------
 def test_hu_thua_bao_khong_hien_ngay_can_khi_bat_va_van_giu_runout_date():
     thua = jar("giai_tri", n=60, seed=2, p=0.3, med=90_000, balance=100_000)
@@ -193,7 +207,9 @@ def test_hieu_chinh_khu_hoi_khoa_moi_va_tep_cu_thieu_khoa_thi_nhu_truoc():
     cal = calibration_from_dict(_with_tables(old, recalibrate=True))
     d = cal.to_dict()
     assert d["recalibrate"] is True
-    assert d["dense"]["cqr"] == {"h": [1, 30], "lo": [0.5, 0.5], "hi": [0.2, 0.2], "scale_days": 28}
+    assert d["dense"]["cqr"] == [
+        {"h": [1, 30], "lo": [0.5, 0.5], "hi": [0.2, 0.2], "scale_days": 28, "min_history_days": 0}
+    ]
     assert (
         d["sparse"]["p_isotonic"] == {"x": [0.0, 1.0], "y": [0.6, 0.6]}
         and d["sparse"]["cqr"] is None

@@ -82,12 +82,16 @@ def fit_isotonic(
 class CQRBand:
     """Độ lệch CQR của dải số dư theo số ngày tới mốc `h` (tăng dần). Đơn vị của `lo`, `hi` là chi TB ngày của hũ (TB
     `scale_days` ngày lịch sử cuối) nhân h. `lo` dương hạ P10 xuống, `hi` dương nâng P90 lên; âm thì thu dải lại. Giữa hai
-    nút nội suy tuyến tính theo h; trước nút đầu và sau nút cuối giữ hệ số của nút đầu mút (độ lệch vẫn tăng theo h)."""
+    nút nội suy tuyến tính theo h; trước nút đầu và sau nút cuối giữ hệ số của nút đầu mút (độ lệch vẫn tăng theo h).
+
+    `min_history_days`: bảng dùng cho hũ có từ ngần này ngày lịch sử (CQR theo nhóm, kiểu Mondrian conformal: mỗi nhóm độ
+    dài lịch sử một bảng, vì hũ ít lịch sử lệch đuôi dưới nhiều hơn). Chọn bảng bằng `select_cqr`."""
 
     h: tuple[int, ...]
     lo: tuple[float, ...]
     hi: tuple[float, ...]
     scale_days: int = 28
+    min_history_days: int = 0
 
     def offsets(self, horizon: int) -> tuple[np.ndarray, np.ndarray]:
         """Hệ số (chưa nhân đơn vị) của ngày 1..horizon."""
@@ -100,6 +104,7 @@ class CQRBand:
             "lo": list(self.lo),
             "hi": list(self.hi),
             "scale_days": self.scale_days,
+            "min_history_days": self.min_history_days,
         }
 
     @staticmethod
@@ -108,11 +113,34 @@ class CQRBand:
         lo = tuple(float(v) for v in o["lo"])
         hi = tuple(float(v) for v in o["hi"])
         scale_days = int(o.get("scale_days", 28))
+        min_days = int(o.get("min_history_days", 0))
         if not h or not len(h) == len(lo) == len(hi):
             raise ValueError("bảng CQR cần h, lo, hi cùng độ dài, không rỗng")
         if h[0] < 1 or any(b <= a for a, b in itertools.pairwise(h)) or scale_days < 1:
             raise ValueError("bảng CQR cần h tăng ngặt từ 1 và scale_days >= 1")
-        return CQRBand(h, lo, hi, scale_days)
+        if min_days < 0:
+            raise ValueError("min_history_days của bảng CQR phải >= 0")
+        return CQRBand(h, lo, hi, scale_days, min_days)
+
+
+def parse_cqr(o: dict[str, Any] | list[dict[str, Any]]) -> tuple[CQRBand, ...]:
+    """Các bảng CQR theo nhóm độ dài lịch sử, sắp theo `min_history_days`. Nhận một bảng (dict) hoặc danh sách bảng."""
+    items = [o] if isinstance(o, dict) else list(o)
+    bands = tuple(sorted((CQRBand.from_dict(x) for x in items), key=lambda b: b.min_history_days))
+    if not bands:
+        raise ValueError("cần ít nhất một bảng CQR")
+    if len({b.min_history_days for b in bands}) != len(bands):
+        raise ValueError("hai bảng CQR trùng min_history_days")
+    return bands
+
+
+def select_cqr(bands: Sequence[CQRBand] | None, history_days: int) -> CQRBand | None:
+    """Bảng của nhóm có `min_history_days` lớn nhất mà không vượt `history_days`; không nhóm nào khớp thì None."""
+    chosen = None
+    for b in bands or ():
+        if b.min_history_days <= history_days:
+            chosen = b
+    return chosen
 
 
 def _conformal_quantile(scores: np.ndarray, tail: float) -> float:
@@ -132,11 +160,13 @@ def fit_cqr(
     scale: Sequence[float],
     tail: float = 0.1,
     scale_days: int = 28,
+    min_history_days: int = 0,
 ) -> CQRBand:
     """Fit CQR bất đối xứng trên tập hiệu chỉnh: mỗi phần tử là một (hũ, origin, mốc h) với P10, P90 dự báo, số dư thật và
     chi TB ngày `scale` của hũ tại origin. Ở từng mốc h: điểm dưới (P10 - thật) / (scale x h), điểm trên
     (thật - P90) / (scale x h); độ lệch mỗi phía là lượng tử hiệu chỉnh của điểm phía đó ở mức 1 - `tail` (Romano và cs.
-    2019, Định lý 2: mỗi đuôi tối đa `tail`, độ phủ ít nhất 1 - 2 `tail`). Phần tử có scale <= 0 bị bỏ."""
+    2019, Định lý 2: mỗi đuôi tối đa `tail`, độ phủ ít nhất 1 - 2 `tail`). Phần tử có scale <= 0 bị bỏ. Fit theo nhóm độ dài
+    lịch sử thì gọi một lần cho mỗi nhóm với các phần tử của nhóm đó và `min_history_days` của nhóm."""
     hh = np.asarray(h, dtype=int)
     lo = np.asarray(lower, dtype=float)
     up = np.asarray(upper, dtype=float)
@@ -153,7 +183,7 @@ def fit_cqr(
         off_hi.append(round(_conformal_quantile((y[m] - up[m]) / unit[m], tail), 6))
     if not knots:
         raise ValueError("không có điểm hiệu chỉnh nào có chi TB dương")
-    return CQRBand(tuple(knots), tuple(off_lo), tuple(off_hi), scale_days)
+    return CQRBand(tuple(knots), tuple(off_lo), tuple(off_hi), scale_days, min_history_days)
 
 
 def apply_cqr(

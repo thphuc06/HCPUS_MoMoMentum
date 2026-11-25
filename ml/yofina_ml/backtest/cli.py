@@ -17,6 +17,7 @@ import numpy as np
 
 from yofina_ml.backtest import calibrate as cal_mod
 from yofina_ml.backtest import evaluate as ev
+from yofina_ml.backtest import recalibrate as recal
 from yofina_ml.backtest import report, studies
 from yofina_ml.backtest.common import CAL_SEEDS, EVAL_SEEDS, HORIZON, personas
 from yofina_ml.calibration import default as calibration_default
@@ -31,10 +32,12 @@ CALIBRATION_PATH = Path(__file__).resolve().parents[1] / "calibration" / "defaul
 
 
 def _cal_dict(result: dict[str, Any]) -> dict[str, Any]:
-    """Tham số mới của hiệu chỉnh; ngưỡng lịch sử BR-31 giữ nguyên từ bản hiện hành (do `scripts/ml_history_gate.py` chọn)."""
+    """Tham số mới của hiệu chỉnh; ngưỡng lịch sử BR-31 giữ nguyên từ bản hiện hành (do `scripts/ml_history_gate.py` chọn).
+    Bảng hiệu chỉnh lại (#25) học trên dải của (rho, level_sigma) cũ nên không còn đúng khi hai số này đổi: bỏ bảng và tắt
+    công tắc (đo cổng xác suất trên dải thô), chạy lại `--write-recalibration` sau đó."""
     kinds = result["kinds"]
     current = default_calibration()
-    out: dict[str, Any] = {}
+    out: dict[str, Any] = {"recalibrate": False}
     for k in ("dense", "sparse", "cold_start"):
         src = kinds.get(k) or kinds["dense"]
         out[k] = {
@@ -42,6 +45,8 @@ def _cal_dict(result: dict[str, Any]) -> dict[str, Any]:
             "level_sigma": src["level_sigma"],
             "probability_ok": False,
             "probability_min_history_days": current.for_kind(k).probability_min_history_days,
+            "p_isotonic": None,
+            "cqr": None,
         }
     return out
 
@@ -120,10 +125,11 @@ def write_calibration(args: argparse.Namespace) -> dict[str, Any]:
 
 
 UNCALIBRATED = {
+    "recalibrate": False,
     "dense": {"rho": 0.3, "level_sigma": 0.0},
     "sparse": {"rho": 0.0, "level_sigma": 0.0},
     "cold_start": {"rho": 0.3, "level_sigma": 0.0},
-}  # trước hiệu chỉnh: copula AR(1) với rho cỡ tự tương quan lag-1 của sai số, không hệ số mức
+}  # trước hiệu chỉnh: copula AR(1) với rho cỡ tự tương quan lag-1 của sai số, không hệ số mức, không hiệu chỉnh lại
 
 
 def run_evaluation(args: argparse.Namespace):
@@ -224,6 +230,16 @@ def main(argv: list[str] | None = None) -> None:
         "--transfer", action="store_true", help="hiệu chỉnh trên một họ, đo trên họ kia"
     )
     ap.add_argument("--timing", action="store_true", help="đo thời gian chạy")
+    ap.add_argument(
+        "--recalibrate",
+        action="store_true",
+        help="CQR và PAV (#25): học trên seed hiệu chỉnh, đo trước/sau trên seed giữ ra ngoài (in, không ghi file)",
+    )
+    ap.add_argument(
+        "--write-recalibration",
+        action="store_true",
+        help="như --recalibrate rồi ghi bảng và công tắc recalibrate vào calibration/default.py",
+    )
     ap.add_argument("--all", action="store_true", help="mọi khảo sát trừ StatsForecast")
     ap.add_argument("--paths", type=int, default=2000, help="số đường Monte Carlo khi đo")
     ap.add_argument("--cal-paths", type=int, default=1500)
@@ -237,6 +253,7 @@ def main(argv: list[str] | None = None) -> None:
     chosen = [
         args.calibrate, args.write_calibration, args.evaluate, args.shortfall,
         args.short_history, args.ablation, args.statsforecast, args.timing, args.transfer,
+        args.recalibrate, args.write_recalibration,
     ]  # fmt: skip
     if not any(chosen):
         ap.error("chọn ít nhất một việc (--all, --evaluate, ...)")
@@ -253,6 +270,15 @@ def main(argv: list[str] | None = None) -> None:
         res = run_calibration(args)
         results["calibration_dry"] = res
         md += ["### Hiệu chỉnh (chạy thử, không ghi)", report.render_calibration(res), ""]
+    if args.recalibrate or args.write_recalibration:
+        rr = recal.run(quick=args.quick, n_paths=args.paths)
+        results["recalibration"] = rr
+        md += ["### Hiệu chỉnh lại CQR và PAV (#25)", recal.render(rr), ""]
+        if args.write_recalibration:
+            payload = recal.calibration_payload(calibration_default.CALIBRATION, rr)
+            report.write_default_calibration(CALIBRATION_PATH, payload)
+            importlib.reload(calibration_default)  # các bước đo sau dùng bản vừa ghi
+            print(f"[hiệu chỉnh lại] đã ghi {CALIBRATION_PATH}", flush=True)
     if args.evaluate:
         data, _rows = run_evaluation(args)
         results["evaluate"] = data
