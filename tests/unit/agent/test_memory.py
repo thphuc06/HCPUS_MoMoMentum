@@ -125,6 +125,39 @@ def test_che_pii_ten_nguoi_khac_va_so_tien_truoc_khi_ghi_nhung_giu_gio():
 
 
 @pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Hôm qua chị Lan mượn tiền", "Hôm qua chị L*** mượn tiền"),
+        ("nhớ nhắc anh Minh Tuấn trả nợ", "nhớ nhắc anh M*** trả nợ"),
+        ("Chị Hoa bảo mình góp quỹ", "Chị H*** bảo mình góp quỹ"),
+        ("đi ăn với em Thảo. Anh Dũng trả", "đi ăn với em T***. Anh D*** trả"),
+        ("cô Hằng, chú Tư, bác Hùng", "cô H***, chú T***, bác H***"),
+        ("biếu ông Nam và bà Tư", "biếu ông N*** và bà T***"),
+        ("trả chị Lan anh Minh mỗi người một ít", "trả chị L*** anh M*** mỗi người một ít"),
+    ],
+)
+def test_che_ten_nguoi_sau_tu_xung_ho(text, expected):
+    assert m.sanitize_for_memory(text, 2000) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "anh ấy hứa cuối tháng trả",
+        "Anh ấy hứa cuối tháng trả",
+        "mua quà cho chị gái",
+        "cô đơn quá nên hay đi cà phê",
+        "em trai đi học thêm",
+        "ông bà nội ở quê",
+        "bác sĩ dặn ăn uống điều độ",
+        "cuối tuần đi Bà Nà",
+    ],
+)
+def test_giu_cum_tu_thuong_sau_tu_xung_ho(text):
+    assert m.sanitize_for_memory(text, 2000) == text
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "mua điện thoại 5tr",

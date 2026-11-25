@@ -47,7 +47,7 @@ from yofina_core.memory import SESSION_ID_RE, kind_of_namespace, namespace_for
 from yofina_core.memory_text import dedupe_by_meaning, drop_empty_labels
 from yofina_core.memory_text import record_text as _record_text
 from yofina_core.memory_text import same_meaning as _same_meaning
-from yofina_core.pii import mask_names, mask_pii, strip_epoch_timestamps
+from yofina_core.pii import initial_mask, mask_names, mask_pii, strip_epoch_timestamps
 
 if TYPE_CHECKING:  # tránh vòng import: turn.py nhập module này
     from yofina_agent.schemas import IntentResult
@@ -215,11 +215,50 @@ def _clip(text: str, max_chars: int) -> str:
     return (cut[: stop + 1] if stop > max_chars // 2 else cut).rstrip() + "…"
 
 
+#: Từ xưng hô, thân tộc hay đứng trước tên người ("chị Lan", "anh Minh").
+_KIN_WORDS = frozenset({"anh", "chị", "em", "cô", "chú", "bác", "ông", "bà"})
+_LETTERS_RE = re.compile(r"[^\W\d_]+")
+
+
+def _mask_kin_names(text: str) -> str:
+    """Che tên sau từ xưng hô: "chị Lan" -> "chị L***", "anh Minh Tuấn" -> "anh M***". Tên là 1 tới 4 từ viết hoa chữ đầu, cách từ
+    xưng hô bằng khoảng trắng; từ viết thường ("anh ấy", "chị gái", "cô đơn", "bác sĩ") giữ nguyên. Từ xưng hô viết hoa chỉ tính ở
+    đầu câu, để địa danh giữa câu ("đi Bà Nà") không bị che."""
+    t = unicodedata.normalize("NFC", text)
+    words = list(_LETTERS_RE.finditer(t))
+
+    def title(w: str) -> bool:
+        return w[:1].isupper() and (len(w) == 1 or w[1:].islower())
+
+    def spaced(j: int) -> bool:
+        gap = t[words[j - 1].end() : words[j].start()]
+        return bool(gap) and not gap.strip(" \t")
+
+    out, last, i = [], 0, 0
+    while i < len(words):
+        kin = words[i].group(0)
+        before = t[: words[i].start()].rstrip(" \t")
+        kin_ok = kin.islower() or (title(kin) and (not before or before[-1] in ".!?…\n"))
+        if kin.lower() in _KIN_WORDS and kin_ok:
+            j = i + 1
+            while j < len(words) and j - i <= 4 and spaced(j) and title(words[j].group(0)):
+                j += 1
+            if j > i + 1:
+                a, b = words[i + 1].start(), words[j - 1].end()
+                out += [t[last:a], initial_mask(t[a:b])]
+                last, i = b, j
+                continue
+        i += 1
+    out.append(t[last:])
+    return "".join(out)
+
+
 def sanitize_for_memory(text: str, max_chars: int) -> str:
-    """Chữ TRƯỚC khi ghi vào Memory: che PII (số điện thoại, CCCD, số tài khoản, thẻ, email), tên người khác, số tiền; gộp khoảng
-    trắng, bỏ ký tự điều khiển, cắt độ dài."""
+    """Chữ TRƯỚC khi ghi vào Memory: che PII (số điện thoại, CCCD, số tài khoản, thẻ, email), tên người khác (cả tên sau từ xưng
+    hô như "chị Lan"), số tiền; gộp khoảng trắng, bỏ ký tự điều khiển, cắt độ dài."""
     t = _CONTROL_RE.sub(" ", text or "")
     t = mask_pii(t).text
+    t = _mask_kin_names(t)
     t = mask_names(t)
     t = mask_amounts(t)
     return _clip(t, max_chars)
