@@ -9,7 +9,7 @@ import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd, 
 import { diffDays, formatDayMonth } from '@/lib/dates'
 import { useEntranceMotion } from '@/lib/motion'
 import type { ForecastCompare, ForecastTimelineData } from '@/contracts/blocks'
-import { buildChartModel, noOutflowExpected, rowAt } from './model'
+import { buildChartModel, idleSaving, noOutflowExpected, rowAt } from './model'
 
 // Recharts (~118 KB gzip) tải riêng, không nằm trong phần tải đầu.
 const ForecastChart = lazy(() => import('./ForecastChart'))
@@ -21,6 +21,11 @@ export function forecastSummary(d: ForecastTimelineData): string {
   const runout = shownRunoutDate(d)
   // Hũ không có gì rút tiền (#39, hũ để dành chưa có tiền): không nói "hết tiền" hay "đủ tới kỳ lương" như thể có khoản để chi.
   if (noOutflowExpected(d)) {
+    // Hũ để dành còn tiền (#39 lần hai): không nói "không có khoản chi"; cùng lời với `_no_outflow_sentence` của yofina_core.blocks.
+    const saving = idleSaving(d)
+    if (saving?.kind === 'salary') return `Hũ ${name} dự kiến nhận thêm ${formatVnd(saving.amountVnd)} khi lương về ${formatDayMonth(saving.date)}.`
+    if (saving?.kind === 'flat') return `Hũ ${name} dự kiến giữ nguyên số dư trong ${d.horizon_days} ngày tới.`
+    if (saving?.kind === 'steady') return `Số dư hũ ${name} dự kiến không xuống dưới mức hôm nay trong ${d.horizon_days} ngày tới.`
     return d.start_balance_vnd === 0
       ? `Hũ ${name} chưa có tiền và không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới.`
       : `Hũ ${name} không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới; số dư không giảm.`
@@ -53,6 +58,10 @@ export function forecastHeadline(d: ForecastTimelineData): string {
   const payday = formatDayMonth(d.payday.date)
   const runout = shownRunoutDate(d)
   if (noOutflowExpected(d)) {
+    const saving = idleSaving(d)
+    if (saving?.kind === 'salary') return `Dự kiến thêm ${formatVnd(saving.amountVnd)} khi lương về ${formatDayMonth(saving.date)}.`
+    if (saving?.kind === 'flat') return `Số dư giữ nguyên trong ${d.horizon_days} ngày tới.`
+    if (saving?.kind === 'steady') return `Số dư không xuống dưới mức hôm nay trong ${d.horizon_days} ngày tới.`
     const days = `trong ${d.horizon_days} ngày.`
     return d.start_balance_vnd === 0 ? `Chưa có tiền, không có khoản chi dự kiến ${days}` : `Không có khoản chi dự kiến ${days}`
   }

@@ -205,6 +205,25 @@ export function noOutflowExpected(d: ForecastTimelineData): boolean {
   )
 }
 
+/**
+ * Hũ để dành còn tiền mà dự báo không thấy gì rút (#39 lần hai): điều cần nói ở hũ này, theo số của khối. Hũ để dành là khối có
+ * `jar.purpose` (chỉ hũ `saving` mới có, ràng buộc của migration 0057). Không nói "không có khoản chi" vì lịch sử có thể có khoản rút
+ * tay mà dự báo không tính. Có mốc lương trong kỳ thì `salary` (số và ngày của mốc sớm nhất); không thì `flat` khi mọi ngày (P10, P50,
+ * P90) bằng số dư hôm nay; còn lại `steady` (chỉ biết số dư không xuống dưới mức hôm nay). Khối không có số mục tiêu nên không nói tiến
+ * độ mục tiêu. Null với hũ 0 ₫, hũ không phải hũ để dành, hoặc dự báo có rút tiền. Cùng định nghĩa với `_no_outflow_sentence` của
+ * `yofina_core.blocks`.
+ */
+export type IdleSaving = { kind: 'salary'; date: string; amountVnd: number } | { kind: 'flat' } | { kind: 'steady' }
+
+export function idleSaving(d: ForecastTimelineData): IdleSaving | null {
+  const start = d.start_balance_vnd
+  if (!d.jar.purpose || start <= 0 || !noOutflowExpected(d)) return null
+  const salary = d.events.filter((e) => e.kind === 'salary').sort((a, b) => a.date.localeCompare(b.date))[0]
+  if (salary) return { kind: 'salary', date: salary.date, amountVnd: salary.amount_vnd }
+  if (d.days.every((day) => day.p10_vnd === start && day.p50_vnd === start && day.p90_vnd === start)) return { kind: 'flat' }
+  return { kind: 'steady' }
+}
+
 /** Mức tham chiếu để vẽ hũ: mục tiêu nếu có, không thì số lớn nhất mà dự báo cho thấy (số dư, P90). */
 export function jarReference(d: ForecastTimelineData, goalVnd?: number): number {
   if (goalVnd && goalVnd > 0) return goalVnd

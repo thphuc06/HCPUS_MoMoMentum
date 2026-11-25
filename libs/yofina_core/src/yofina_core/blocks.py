@@ -1967,6 +1967,39 @@ def no_outflow_expected(data: Mapping[str, Any]) -> bool:
     )
 
 
+def _no_outflow_sentence(data: Mapping[str, Any]) -> str | None:
+    """Câu của hũ mà dự báo không thấy gì rút tiền (`no_outflow_expected`), None nếu không phải. Cùng định nghĩa và cùng lời với
+    `idleSaving`, `forecastSummary` của frontend (`features/forecast/model.ts`, `ForecastBlock.tsx`).
+
+    - Hũ 0 ₫ (mọi loại): chưa có tiền, không có khoản chi dự kiến.
+    - Hũ để dành còn tiền (khối có `jar.purpose`; chỉ hũ `saving` mới có, ràng buộc của migration 0057): không nói "không có khoản
+      chi" (#39: lịch sử có thể có khoản rút tay mà dự báo không tính). Có mốc lương trong kỳ thì nói phần lương vào hũ (số và ngày của
+      mốc sớm nhất); không thì số dư giữ nguyên khi mọi ngày (P10, P50, P90) bằng số dư hôm nay; còn lại chỉ nói số dư không xuống dưới
+      mức hôm nay. Khối không có số mục tiêu nên không nói tiến độ mục tiêu.
+    - Hũ khác còn tiền (hũ chi tiêu, hũ nghĩa vụ, hũ tiết kiệm cũ chưa có `purpose`): câu của #39 lần một."""
+    if not no_outflow_expected(data):
+        return None
+    name = data["jar"]["name"]
+    horizon = int(data["horizon_days"])
+    start = to_vnd(data["start_balance_vnd"])
+    if start == 0:
+        return f"Hũ {name} chưa có tiền và không có khoản chi nào dự kiến trong {horizon} ngày tới."
+    if not data["jar"].get("purpose"):
+        return f"Hũ {name} không có khoản chi nào dự kiến trong {horizon} ngày tới; số dư không giảm."
+    salary = min(
+        (e for e in data.get("events") or () if e.get("kind") == "salary"),
+        key=lambda e: _date_text(e["date"]),
+        default=None,
+    )
+    if salary is not None:
+        return f"Hũ {name} dự kiến nhận thêm {format_vnd(salary['amount_vnd'])} khi lương về {_dm(salary['date'])}."
+    if all(
+        to_vnd(d[k]) == start for d in data.get("days") or () for k in ("p10_vnd", "p50_vnd", "p90_vnd")
+    ):
+        return f"Hũ {name} dự kiến giữ nguyên số dư trong {horizon} ngày tới."
+    return f"Số dư hũ {name} dự kiến không xuống dưới mức hôm nay trong {horizon} ngày tới."
+
+
 def _forecast_sentence(
     name: str,
     status: str,
@@ -1976,17 +2009,12 @@ def _forecast_sentence(
     initial: bool,
     date_shown: bool = True,
     *,
-    idle_balance_vnd: int | None = None,
-    horizon_days: int = 30,
+    idle_text: str | None = None,
 ) -> str:
-    """`idle_balance_vnd`: số dư hôm nay khi dự báo không thấy gì rút tiền khỏi hũ (`no_outflow_expected`), không thì None."""
-    if idle_balance_vnd is not None:
-        # #39: "đủ tới kỳ lương" của hũ không có gì để chi (hũ để dành chưa có tiền) nói sai tình huống
-        text = (
-            f"Hũ {name} chưa có tiền và không có khoản chi nào dự kiến trong {horizon_days} ngày tới."
-            if idle_balance_vnd == 0
-            else f"Hũ {name} không có khoản chi nào dự kiến trong {horizon_days} ngày tới; số dư không giảm."
-        )
+    """`idle_text`: câu của hũ mà dự báo không thấy gì rút tiền (`_no_outflow_sentence`), không thì None."""
+    if idle_text is not None:
+        # #39: "đủ tới kỳ lương" của hũ không có gì để chi (hũ để dành) nói sai tình huống
+        text = idle_text
     elif status == "short" and not date_shown:
         # hũ thưa (#25): không nêu ngày cạn cụ thể
         text = f"Hũ {name} có thể cạn trước ngày lương {_dm(payday)}."
@@ -2146,12 +2174,9 @@ def build_forecast_timeline_from_data(
         text = _forecast_sentence(
             d.jar.name, d.status, d.runout_date, d.payday.date, d.stale, d.is_initial_estimate,
             d.runout_date_shown is not False,
-            idle_balance_vnd=(
-                d.start_balance_vnd
-                if no_outflow_expected(d.model_dump(include={"status", "runout_date", "start_balance_vnd", "days", "events"}))
-                else None
+            idle_text=_no_outflow_sentence(
+                d.model_dump(include={"jar", "status", "runout_date", "start_balance_vnd", "horizon_days", "days", "events"})
             ),
-            horizon_days=d.horizon_days,
         )  # fmt: skip
         window = d.obligations_before_payday
         default_id = f"forecast_timeline:{trace_id}:{d.jar.code}"

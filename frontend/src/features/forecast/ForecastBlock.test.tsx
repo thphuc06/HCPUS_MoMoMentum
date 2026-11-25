@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ForecastTimelineData } from '@/contracts/blocks'
 import { validBlock } from '@/test/fixtures'
 import { chartLabel, ForecastBlock, forecastHeadline, forecastSummary } from './ForecastBlock'
-import { buildChartModel } from './model'
+import { buildChartModel, idleSaving, noOutflowExpected } from './model'
 import { formatVnd } from '@/lib/format'
 
 const data = (name: string): ForecastTimelineData => structuredClone((validBlock(name) as unknown as { data: ForecastTimelineData }).data)
@@ -281,10 +281,45 @@ describe('ForecastBlock: hũ không có gì rút tiền (#39)', { timeout: 20_00
     expect(container.querySelector('header')).toHaveTextContent(/Đang hết tiền$/)
   })
 
-  it('hũ mục tiêu có tiền, chỉ nhận lương: không có khoản chi dự kiến, số dư không giảm (không nói "đủ tới lương")', () => {
+  it('hũ mục tiêu có tiền, nhận phần lương: nói phần lương vào hũ (số và ngày của mốc), không nói "không có khoản chi" (#39 lần hai)', async () => {
     const d = idle({ code: 'muc_tieu', name: 'Du lịch', purpose: 'goal' }, 2_000_000, 500_000)
-    expect(forecastHeadline(d)).toBe(`Không có khoản chi dự kiến trong ${d.horizon_days} ngày.`)
-    expect(forecastSummary(d)).toBe(`Hũ Du lịch không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới; số dư không giảm.`)
+    expect(noOutflowExpected(d)).toBe(true)
+    expect(idleSaving(d)).toEqual({ kind: 'salary', date: d.payday.date, amountVnd: 500_000 })
+    expect(forecastHeadline(d)).toBe(`Dự kiến thêm ${formatVnd(500_000)} khi lương về 05/12.`)
+    expect(forecastSummary(d)).toBe(`Hũ Du lịch dự kiến nhận thêm ${formatVnd(500_000)} khi lương về 05/12.`)
+    const { container } = await mount(d)
+    expect(container.textContent).not.toMatch(/không có khoản chi/i)
+  })
+
+  it.each([
+    ['buffer', 'du_phong', 'Dự phòng'],
+    ['long_term', 'dau_tu', 'Đầu tư'],
+    ['goal', 'muc_tieu', 'Du lịch'],
+  ] as const)('hũ để dành (%s) có tiền, không nhận lương, số dư không đổi ngày nào: "Số dư giữ nguyên"', (purpose, code, name) => {
+    const d = idle({ code, name, purpose }, 2_700_000)
+    expect(idleSaving(d)).toEqual({ kind: 'flat' })
+    expect(forecastHeadline(d)).toBe(`Số dư giữ nguyên trong ${d.horizon_days} ngày tới.`)
+    expect(forecastSummary(d)).toBe(`Hũ ${name} dự kiến giữ nguyên số dư trong ${d.horizon_days} ngày tới.`)
+  })
+
+  it('hũ để dành có tiền, số dư có ngày cao hơn hôm nay mà không có mốc lương (dữ liệu lệch hiếm): không nói "giữ nguyên"', () => {
+    const d = idle({ code: 'du_phong', name: 'Dự phòng', purpose: 'buffer' }, 2_700_000)
+    d.days[10] = { ...d.days[10]!, p90_vnd: 3_000_000 }
+    expect(idleSaving(d)).toEqual({ kind: 'steady' })
+    expect(forecastHeadline(d)).toBe(`Số dư không xuống dưới mức hôm nay trong ${d.horizon_days} ngày tới.`)
+    expect(forecastSummary(d)).toBe(`Số dư hũ Dự phòng dự kiến không xuống dưới mức hôm nay trong ${d.horizon_days} ngày tới.`)
+  })
+
+  it('hũ không phải hũ để dành (khối không có purpose) có tiền mà không có gì rút: giữ câu cũ; hũ để dành 0 ₫ nhận lương vẫn "chưa có tiền"', () => {
+    for (const salary of [0, 500_000]) {
+      const d = idle({ code: 'an_uong', name: 'Ăn uống' }, 2_000_000, salary)
+      expect(idleSaving(d)).toBeNull()
+      expect(forecastHeadline(d)).toBe(`Không có khoản chi dự kiến trong ${d.horizon_days} ngày.`)
+      expect(forecastSummary(d)).toBe(`Hũ Ăn uống không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới; số dư không giảm.`)
+    }
+    const empty = idle({ code: 'muc_tieu', name: 'Du lịch', purpose: 'goal' }, 0, 500_000)
+    expect(idleSaving(empty)).toBeNull()
+    expect(forecastHeadline(empty)).toBe(`Chưa có tiền, không có khoản chi dự kiến trong ${empty.horizon_days} ngày.`)
   })
 
   it('còn một khoản đến hạn hoặc số dư có ngày giảm (kể cả cận dưới): vẫn là câu "đủ tới lương" như cũ', () => {
