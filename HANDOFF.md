@@ -2,7 +2,47 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: **2026-11-25 rạng sáng** (Claude Code điều phối các worker `kiro-cli`). Phase 5 đã code xong, đã deploy, đã đo; **chưa đóng chính thức** (còn tiêu chí 3 OCR và đi lại 6 cảnh trên giao diện mới, xem mục B).
+Cập nhật lần cuối: **2026-11-25 tối** (Kiro CLI điều phối subagent). Đợt 1 và đợt 2 phase 6 (lô A, lô C) đã code và merge vào `main` (`66807ad`), **chưa deploy gì**: xem mục "Cập nhật tối 25/11" ngay dưới. Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B).
+
+## Cập nhật tối 25/11: đợt 2 (lô A + lô C) đã merge vào `main`, CHƯA deploy
+
+Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vòng, gộp qua `p6/wave2`, có một lượt review độc lập (`semantic_reviewer`) giữa hai vòng. Unit sau khi gộp: **4127 passed, 2 skipped**; CDK 89/89; contracts OK; vitest 1011 passed, 2 đỏ là hai test chập chờn có sẵn (`spending.test.tsx`, `phase3Chat.test.tsx`: chạy riêng thì xanh, trên `main` cũ cũng đỏ y vậy khi chạy cả bộ). Mỗi issue đã có comment trạng thái. #26 đã đóng (đo offline, không cần deploy, người điều phối chạy lại ra đúng số).
+
+| Issue | Đã làm | Deploy/kiểm cần |
+|---|---|---|
+| #17 | `seed_demo.py`: nhóm `ops` chỉ cho `minh`, chạy lại gỡ khỏi `giamkhao*` | chạy `seed_demo.py`; `giamkhao1` mở `/ops/summary` bị từ chối |
+| #16 | Ảnh biên lai hư cấu của `minh` có PII ở `/samples/minh_bien_lai_{1,2}.png`; cảnh 5 trong demo-script | frontend; đi cảnh 5 trên `giamkhao1` (≤ 10 s) |
+| #13 | Trần theo tài khoản 100 lượt chat, 20 lần nạp/ngày (`yofina_core.quota`, SSM `/yofina/quota/*`), `warm()` dựng sẵn | zip ingest, `YofinaIngest`, `YofinaAgent` (IAM) + Runtime; thử trần 2; SSM trần chung ngày 2/12 |
+| #7 | Kiểm lập luận với kết quả đã lưu (`advisor`), công tắc SSM `/yofina/agent/reasoning_enabled` (vắng = bật) | `YofinaAgent` + Runtime; `--only whatif-bnpl`, `roadmap-create-emergency-fund`; thử công tắc |
+| #22 | `minh.json` chỉ còn v1, v2; PELT bắt từ hệ số 2,04; `/samples/minh_sao_ke_2_tuan.csv` (hệ số 2,1) | ledger (`YofinaTools`), frontend, `seed_demo.py`; chạy thử cảnh 4 (≤ 30 s) |
+| #23 | Orchestrator `code_first` sau khóa `whatif_spec_source`, **mặc định `model`** (không đổi hành vi) | bật bằng env rồi 9 ca golden `--only` (~$0,4); chỉ đổi mặc định khi 9/9 đạt |
+| #24 | `cachePoint` cho Sonnet 4.6 vai planner; ops tính giá đọc cache | Runtime; metric cache read > 0. Chưa làm: giá ghi cache trên ops |
+| #25 | CQR hũ dày, PAV hũ thưa (bỏ PAV hũ dày), `recalibrate` bật; hũ thưa không nêu ngày cạn ở mọi màn (migration 0055) | `migrate.py`, zip forecast, `YofinaTools`, Runtime, frontend; tính lại dự báo; đi lại cảnh 1 |
+| #27, #29 | Nhãn "Số tính ngày dd/mm" (ngày mô phỏng); "Giữ bản cũ" hỏi lý do tùy chọn, che PII, lưu `feedback.reason` | ledger trước hoặc cùng frontend |
+| #28 | Không đo offline được biến thể có hũ Khác; giới hạn trên chỉ giảm 1,2 điểm (ngưỡng 3) | đề xuất đóng, chờ chủ dự án |
+| #32, #36 | Tài liệu đồng bộ, ADR-0004 (28 dòng lệch), README viết lại (nháp), tờ A4 nháp `docs/submission/huong-dan-a4.md`, `scripts/make_submission_zip.py` | #32 còn vài README sót (ghi ở comment issue); #36 chờ số RC và `scan_repo.py` (B2) |
+
+**Deploy gộp (đợt 1 + đợt 2, từ `main` `66807ad`), CHỜ chủ dự án duyệt.** `cdk diff` từng stack trước; một luồng deploy tại một thời điểm; máy mở suốt khoảng 60–75 phút.
+1. `uv run scripts/migrate.py` (tới 0055; chỉ thêm cột/thay hàm, code cũ và mới đều chạy được).
+2. Đóng zip theo khối lệnh "đóng mọi zip" trong `infra-cdk/README.md` (ledger, agent, forecast) và lệnh zip ingest ở cùng file.
+3. `uv run scripts/cdk.py deploy YofinaTools --require-approval never`, rồi `YofinaIngest`, rồi `YofinaAgent` (IAM đọc `/yofina/quota/*`, `/yofina/agent/reasoning_enabled`: nếu chỉ đẩy zip Runtime mà không deploy stack thì hai khóa này bị AccessDenied, trần giữ 100 và công tắc giữ bật, không báo gì).
+4. `uv run scripts/agent_deploy.py` (Runtime).
+5. Frontend: `uv run scripts/cdk.py deploy YofinaFrontend --require-approval never`; `uv run scripts/print_env.py frontend --write`; `npm.cmd run build` trong `frontend/`; `uv run scripts/deploy_frontend.py frontend/dist`.
+6. `uv run scripts/seed_demo.py minh giamkhao1 giamkhao2 giamkhao3`, tính lại dự báo của 4 tài khoản.
+
+**Kiểm sau deploy**: danh sách của đợt 1 (mục "Cập nhật chiều 25/11") cộng các ô "Deploy/kiểm cần" ở bảng trên. Tiền model ước tính: khoảng $1,5–2,5 (đợt 1 $0,5–1, 9 ca golden $0,4, hai ca #7, đi cảnh 1–6 trên trình duyệt).
+
+**Rollback**: tắt nhanh không cần deploy: `/yofina/agent/reasoning_enabled = false` (khối lập luận), `/yofina/quota/chat_turns_per_day` nâng cao (trần). Lùi hẳn: `git revert` merge tương ứng, đóng lại zip, deploy lại stack/Runtime/frontend như trên. Migration 0055 không cần lùi.
+
+**Lưu ý vận hành mới**:
+- Trần 100 lượt/ngày tính cả tài khoản vận hành `minh`: lượt eval đầy đủ (khoảng 110 lượt, RC chạy 3 lần) sẽ chạm trần. Ngày chạy eval đặt `/yofina/quota/chat_turns_per_day` cao (ví dụ 1000) rồi xóa trước khi nộp (#34, #35).
+- `recalibrate` bật làm đổi dải và % trên màn dự báo; hũ thưa (ví dụ Giải trí) không còn ngày cạn. Kịch bản demo hoặc eval nào nói ngày cạn của hũ thưa sẽ đổi chữ.
+- Tệp CSV cảnh 4 gắn ngày neo 21/11: đặt lại rồi tải trong cùng ngày.
+- `pii.py` có ba lỗi đã thấy (ghi ở comment #16): che sót số tài khoản tách nhóm, che thừa giờ, che nhầm tên quán "Huỳnh Hoa". Chưa có issue riêng.
+
+**Câu hỏi đang chờ chủ dự án**: xem tin nhắn của người điều phối ngày 25/11 tối (vòng 1, đánh số). Tóm tắt: duyệt deploy gộp; #7 thêm trường hũ có cấu trúc vào bước lập luận; #22 hệ số CSV 2,1 hay 3; #28 đóng; #24 làm nốt giá ghi cache; #23 cho router trích `date_text` cho what-if; câu hỏi của #36 về cách khai tài sản có sẵn.
+
+**Nhánh**: mọi nhánh `p6/*` của hai vòng đã nằm trong `main`; worktree `C:\moMo-wt\p*` đều sạch, không còn bản vá chưa merge.
 
 ## Cập nhật trưa 25/11: kiểm toán toàn dự án, hạn nộp thật là 03/12
 
@@ -42,38 +82,24 @@ Cập nhật lần cuối: **2026-11-25 rạng sáng** (Claude Code điều ph�
 
 **Issue chưa làm**: #3 (chờ AWS duyệt quota), #4 (đi 6 cảnh), #7 (lập luận nhất quán + công tắc SSM), #13 (trần lượt gọi), #16 (cảnh 5), #17 (bỏ `ops` khỏi tài khoản giám khảo), #21 (đo sau đợt 1), #22–#29 (đợt 2), #30 (chờ BA chốt C-02), #31 (20 câu giữ riêng), #32 (tài liệu, ADR-0004), #33 (số kinh doanh), #34–#38 (RC và nộp). Lô kế tiếp đề xuất: #7, #13, #17, #16, rồi deploy đợt 1.
 
-## Bàn giao cho người điều phối (tối 25/11, chuyển sang máy khác)
-
-Người điều phối trước (Kiro CLI trên laptop của Phúc) dừng giữa lô A. Worktree `C:\moMo-wt\p6-*` chỉ có trên laptop, nên máy mới tự tạo worktree từ nhánh trên origin.
-
-### Lô A: đang dở (chưa merge vào `main`)
-
-| Nhánh trên origin | Issue | Trạng thái | Phạm vi file của worker |
-|---|---|---|---|
-| `p6/accounts` | #17, #16 | #17 xong 2 commit (`seed_demo.py`: nhóm `ops` chỉ cho `minh`, chạy lại gỡ `ops` khỏi `giamkhao*`; demo-script cảnh 6 kết bằng "Vì sao → Chi tiết kỹ thuật"), chưa chạy đủ bộ test. #16 chưa làm | scripts seed/tạo tài khoản, `data/personas/samples/make_samples.py`, `frontend/public/samples/`, `docs/plan/demo-script.md` |
-| `p6/quota` | #13 (+ B3, B4) | 1 commit WIP: `quota.py`, test, mã lỗi mới ở `errors.py`, `openapi.yaml`, `frontend/src/api/errors.ts`; chưa nối vào `turn.py`, chưa có phần ingest, CDK, CORS | `libs/yofina_core/.../quota.py`, `errors.py`, `turn.py` (chỉ một lời gọi), `pipelines/ingest/`, `infra-cdk/lib/tools-stack.ts`, `ingest-stack.ts`, README hạ tầng |
-| `p6/cqr` | #25 | 1 commit WIP: `ml/yofina_ml/recalibration.py`, test, sửa `calibration/__init__.py`; chưa đo, chưa có công tắc | `ml/yofina_ml/` (trừ `change_defaults.json`), script đo, mục mới trong `docs/research/backtest-final.md` |
-| chưa tạo | #7 | chưa làm | `agent/.../advisor.py`, phần reasoning trong `whatif.py`, `roadmap_agent.py`; IAM SSM nếu cần |
-| chưa tạo | #22 | chưa làm | `data/personas/roadmaps/`, `roadmap_seed.py`, CSV sao kê mới ở `data/personas/samples/` + `frontend/public/samples/`, `change_defaults.json` (chỉ khi đo cho thấy cần) |
-| chưa tạo | #23, #24 | chưa làm | phần Orchestrator trong `whatif.py`, `libs/yofina_core/.../llm.py`, `llm_defaults.json` |
-
-Lô sau: #26 (K5, sau #25), #27 + #29 (giao diện lộ trình, cùng một worker), #28 (hũ Khác: chỉ làm nếu đo offline được mà không gọi Bedrock), #32 (tài liệu, ADR-0004; không sửa `README.md`), bản nháp #36 (README giám khảo, script đóng `.zip`, danh sách tài sản có sẵn/thư viện/công cụ AI). Việc cần người hoặc chờ điều kiện: #3, #4, #21, #30, #31, #33, #34, #35, #37, #38.
+## Quy ước cho người điều phối
 
 ### Chưa duyệt
 
-- **Deploy đợt 1 lên AWS chưa được chủ dự án duyệt.** Không deploy, không seed, không đặt SSM, không chạy eval trên Runtime khi chưa hỏi. Lệnh deploy ở mục "Cập nhật chiều 25/11". Deploy chạy từ máy local, nên máy phải mở suốt 45–60 phút.
-- Các lượt kiểm sau deploy tốn tiền model (khoảng $0,5–1) cần chủ dự án đồng ý trước.
+- **Deploy gộp đợt 1 + đợt 2 lên AWS chưa được chủ dự án duyệt** (lệnh ở mục "Cập nhật tối 25/11"). Không deploy, không seed, không đặt SSM, không chạy eval trên Runtime, không gọi Bedrock khi chưa hỏi. Khi xin duyệt: nêu chi phí, tác động, cách rollback.
+- Việc cần người hoặc chờ điều kiện: #3, #4, #21, #30, #31, #33, #34, #35, #37, #38.
 
-### Quy ước giao việc cho worker (đã dùng ở đợt 1)
+### Quy ước giao việc cho worker (đã dùng ở đợt 1 và đợt 2)
 
 - Mỗi issue một worker, worktree riêng (`git worktree add <thư mục> -b p6/<tên> main`, hoặc `-B p6/<tên> origin/p6/<tên>` cho nhánh đã có), chỉ sửa file trong phạm vi được giao, theo skill `/tdd` với seam do người điều phối chốt sẵn (không hỏi người dùng), commit từng phần xanh ngay (mạng hay làm đứt worker), không push, không đụng `main`.
 - Commit tiếng Việt, kết bằng `(#số issue)`, **không thêm `Co-authored-by` hay trailer nào** (yêu cầu của chủ dự án).
 - Worker không sửa `docs/ai-log/`, `HANDOFF.md`, file phase 6, issue; người điều phối làm các việc đó.
 - Chạy tối đa khoảng 6 worker song song. Lần trước chạy 11 cùng lúc thì 6 cái bị lỗi mạng, phải chạy lại.
-- Gộp qua một nhánh tích hợp (ví dụ `p6/wave2`), xung đột kiểu "cả hai cùng thêm" thì giữ cả hai, chạy `uv run pytest tests/unit libs/yofina_core/tests -q -p no:cacheprovider` (mốc 4007 passed, 3 skipped) trước khi fast-forward `main` và push. `git fetch` trước: BA (bloan0908) hay commit vào `main`, và đầu `docs/ai-log/2026-11.md` hay xung đột (gộp tay, giữ mọi entry, mới nhất ở trên).
+- Gộp qua một nhánh tích hợp (ví dụ `p6/wave2`), xung đột kiểu "cả hai cùng thêm" thì giữ cả hai, chạy `uv run pytest tests/unit libs/yofina_core/tests -q -p no:cacheprovider` (mốc **4127 passed, 2 skipped** sau đợt 2) trước khi fast-forward `main` và push. `git fetch` trước: BA (bloan0908) hay commit vào `main`, và đầu `docs/ai-log/2026-11.md` hay xung đột (gộp tay, giữ mọi entry, mới nhất ở trên).
 - Sau khi gộp: comment trạng thái lên từng issue (`gh issue comment <n> --body-file <tệp>`; PowerShell không có heredoc). **Chỉ đóng issue khi đã deploy và kiểm theo mục "Cách kiểm" của issue**, trừ việc không cần deploy (như #18).
 - Repo public: không ghi email, mật khẩu, account ID, thông tin thật về tài khoản AWS vào file hay issue.
 - Bẫy đã gặp: ca eval `leak-1` phải hỏi tài khoản demo khác `minh` (giờ là `lan`); `giamkhao1–3` đều là persona `minh`.
+- Rút ra ở đợt 2: giữ sẵn số migration cho từng worker (0055, 0056… để không trùng); chỉ rõ dòng nào trong file dùng chung (ví dụ `ReadConfig` của `agent-stack.ts`, khóa cuối `defaults.json`) để xung đột chỉ là "cả hai cùng thêm"; worktree mới cần `uv sync --frozen`, còn worker đụng CDK/frontend/contracts thì cần `npm.cmd ci` trong `infra-cdk/`, `frontend/`, gốc repo; `.venv` không có Pillow nên 2 test ảnh bị skip (`uv run --with pillow pytest …` để chạy); vitest cả bộ có 2 test chập chờn khi máy tải nặng; `scripts/scan_repo.py` (B2) chưa có, quét bí mật bằng regex trên dòng thêm trước khi push. Lượt review độc lập sau vòng đầu bắt được lỗi thật (tập hũ của lập luận, trần chặn eval), nên giữ bước này.
 
 ## Cập nhật rạng sáng 25/11 (sau khi viết bản trên)
 
