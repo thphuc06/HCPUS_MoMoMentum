@@ -143,3 +143,24 @@ def test_doi_tac_la_nguoi_bi_che_doi_tac_doanh_nghiep_giu_nguyen(receipts):
     assert mask_counterparty(dict(transfer.rows)["Tên người hưởng"], policy=policy) == "B***"
     provider = dict(bill.rows)["Nhà cung cấp"]
     assert mask_counterparty(provider, policy=policy) == provider
+
+
+# --- tệp đã commit -------------------------------------------------------------------------------------------------------
+PUBLIC = REPO / "frontend" / "public" / "samples"
+
+
+def test_anh_cua_minh_da_commit_o_hai_noi_giong_tung_byte(receipts):
+    """Ảnh trong data/personas/samples là đầu ra của make_samples.py; bản ở frontend/public/samples (Amplify phục vụ ở
+    `/samples/<tên tệp>`) phải giống từng byte. Đỏ thì chạy lại: uv run --with pillow python data/personas/samples/make_samples.py"""
+    names = [r.file_name for r in receipts]
+    assert sorted(p.name for p in SAMPLES.glob("minh_bien_lai_*.png")) == names
+    assert sorted(p.name for p in PUBLIC.glob("minh_bien_lai_*.png")) == names
+    for n in names:
+        assert (PUBLIC / n).read_bytes() == (SAMPLES / n).read_bytes(), n
+
+
+def test_anh_cua_minh_la_png_hop_le(receipts):
+    pil = pytest.importorskip("PIL.Image")
+    for r in receipts:
+        with pil.open(SAMPLES / r.file_name) as im:
+            im.verify()
