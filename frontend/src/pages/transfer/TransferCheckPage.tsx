@@ -25,12 +25,14 @@ export function TransferCheckPage() {
   const source = state.source
   const payee = state.payee
 
+  const payJar = state.payJar
   const req = useMemo<AffordabilityRequest | null>(() => {
     if (!source || amount <= 0 || !payee) return null
+    // Trả sau trên ví không có hũ nghĩa vụ: gửi hũ trả đã chọn (như `record_transaction`), thiếu thì server trả PARAMS_INVALID.
     return source.kind === 'jar'
       ? { amount_vnd: amount, funding_source: 'jar', jar: source.code, label: payee.name.slice(0, 60) }
-      : { amount_vnd: amount, funding_source: 'credit', label: payee.name.slice(0, 60) }
-  }, [source, amount, payee])
+      : { amount_vnd: amount, funding_source: 'credit', ...(payJar ? { pay_jar: payJar } : {}), label: payee.name.slice(0, 60) }
+  }, [source, amount, payee, payJar])
   const check = useApiResource((api) => api.checkAffordability(req!), [req], req !== null)
 
   if (!payee) return <Navigate to="/transfer" replace />

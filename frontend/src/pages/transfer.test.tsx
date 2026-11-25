@@ -462,6 +462,30 @@ describe('Trả sau: hũ trả khi đến hạn (ví không có hũ nghĩa vụ)
     expect(await screen.findByLabelText(PAY_JAR)).toBeInTheDocument()
   })
 
+  it('kiểm tra trước khi chi bằng Trả sau gửi pay_jar đã chọn tới POST /affordability (không có thì server trả PARAMS_INVALID)', async () => {
+    const o = withoutObligationJar()
+    const { calls } = mountApp(backend({ 'GET /overview': o }), '/transfer')
+    const user = userEvent.setup()
+    await pickPayee(user)
+    await typeAmount(user, ['2', '5', '0', '000'])
+    await chooseSource(user, /Trả sau \(mô phỏng\)/)
+    const chosen = o.jars[1]
+    await user.selectOptions(await screen.findByLabelText(PAY_JAR), chosen.code)
+    await user.click(screen.getByRole('button', { name: 'Kiểm tra trước khi chuyển' }))
+    await screen.findByRole('button', { name: /^(Tiếp tục|Vẫn chuyển)/ })
+    const req = bodyOf(callsTo(calls, 'POST', '/affordability')[0]!)
+    expect(req).toMatchObject({ amount_vnd: 250000, funding_source: 'credit', pay_jar: chosen.code })
+  })
+
+  it('ví có hũ nghĩa vụ: kiểm tra Trả sau không gửi pay_jar (server tự chọn hũ nghĩa vụ)', async () => {
+    const { calls } = mountApp(backend(), '/transfer')
+    const user = userEvent.setup()
+    await toReview(user, /Trả sau \(mô phỏng\)/)
+    const req = bodyOf(callsTo(calls, 'POST', '/affordability')[0]!)
+    expect(req).toMatchObject({ funding_source: 'credit' })
+    expect(req).not.toHaveProperty('pay_jar')
+  })
+
   it('ví có hũ nghĩa vụ: không hiện ô chọn và gửi đúng tham số như trước (không có pay_jar)', async () => {
     const { calls } = mountApp(backend({ 'POST /actions': () => receipt() }), '/transfer')
     const user = userEvent.setup()
