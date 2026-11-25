@@ -1438,6 +1438,8 @@ paths:
         thành `superseded`; `keep_previous` ("Giữ bản cũ") bỏ nó (`discarded`), bản đang dùng giữ nguyên. Idempotent: gửi lại cùng quyết
         định trả cùng kết quả. Trả khối `roadmap` của bản được chọn (ở `adopt` là bản mới, ở `keep_previous` là bản đã bỏ để giao diện
         hiện trạng thái). Bản không còn chờ chọn thì 409 `ROADMAP_VERSION_CONFLICT`; không có phiên bản đó thì 404 `ROADMAP_NOT_FOUND`.
+        Ghi `audit_events` và một dòng `feedback` (`option_id` `version_adopt` hoặc `version_keep_previous`); `reason` của "Giữ bản cũ"
+        (tùy chọn, 1 đến 200 ký tự, dài hơn thì 400 `PARAMS_INVALID`) được che PII và lưu ở dòng `feedback` đó.
       parameters:
         - $ref: '#/components/parameters/Traceparent'
         - $ref: '#/components/parameters/RoadmapVersionPath'
@@ -3810,7 +3812,10 @@ components:
         - required: [amount_vnd]
         - required: [due_date]
     RoadmapVersionDecisionRequest:
-      description: '`adopt` là "Dùng bản mới", `keep_previous` là "Giữ bản cũ" (áp cho bản đang chờ chọn).'
+      description: |
+        `adopt` là "Dùng bản mới", `keep_previous` là "Giữ bản cũ" (áp cho bản đang chờ chọn). `reason` (tùy chọn, người dùng có thể bỏ
+        qua) chỉ có nghĩa khi `keep_previous` ("hỏi một câu lý do" khi từ chối cả bản mới): server che PII rồi lưu cùng quyết định ở
+        dòng `feedback` của bản đó (`option_id` `version_keep_previous`), không đưa vào prompt; với `adopt` thì bỏ qua. Không có `user_id`.
       type: object
       required: [decision]
       additionalProperties: false
@@ -3818,6 +3823,10 @@ components:
         decision:
           type: string
           enum: [adopt, keep_previous]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
     RegenerateRoadmapRequest:
       description: |
         Yêu cầu sinh lại lộ trình. Mọi trường tùy chọn. `based_on_version` vắng thì lấy bản đang dùng. `alternative_id` là `option_id` của một

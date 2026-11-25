@@ -5,6 +5,7 @@ import { Disclosure } from '@/components/ui/Disclosure'
 import type { RoadmapAlternative, RoadmapData } from '@/contracts/blocks'
 import { useJarNames } from '@/features/common/useJarLookup'
 import { RoadmapStep, STEP_STATUS, type StepActions } from './RoadmapStep'
+import { simDayOf } from './computedDay'
 import { formatDayMonth } from '@/lib/dates'
 
 /** "21–30/11" khi cùng tháng, "28/11–05/12" khi khác tháng (ngày của server). */
@@ -45,6 +46,7 @@ export function Roadmap({ data, onAlternative, footer, ...actions }: Props) {
     const ids = data.phases.flatMap((phase) => phase.steps.map((step) => step.step_id))
     return { stepIndex: new Map(ids.map((id, i) => [id, i + 1])), lastStepId: ids.at(-1) }
   }, [data.phases])
+  const computedDay = simDayOf(data.basis.computed_at, data.created_at, data.app_date)
 
   return (
     <section data-block="roadmap" className="space-y-3 rounded-card bg-surface p-4 shadow-card">
@@ -74,6 +76,8 @@ export function Roadmap({ data, onAlternative, footer, ...actions }: Props) {
             <li key={status}>{STEP_STATUS[status].label} <strong className="num text-ink">{data.counts[status]}</strong></li>
           ))}
         </ul>
+        {/* Số trong lộ trình là ảnh chụp lúc lưu (không tự cập nhật theo dự báo): ghi ngày tính, theo ngày mô phỏng. */}
+        {computedDay && <p className="num text-note text-ink-2">Số tính ngày {formatDayMonth(computedDay)}</p>}
       </header>
       {data.feasibility === 'infeasible' && data.alternatives.length > 0 && (
         <div className="space-y-2 rounded-xl bg-warn-bg p-3">

@@ -161,45 +161,105 @@ def draft(env, **over) -> dict:
     return d
 
 
+#: khóa của một bước trong bản nháp `save_roadmap` (planner.json); khối đọc ra còn có trạng thái và luật đã kiểm do Lambda điền
+DRAFT_STEP_KEYS = (
+    "step_id", "kind", "title", "reason", "ai_generated", "amount_vnd", "jar_code", "to_jar_code", "due_date",
+    "metrics", "action",
+)  # fmt: skip
+
+
+def propose_v3(env) -> dict:
+    """Bản đề xuất v3 dựng từ bản đang dùng v2 qua đúng tool `save_roadmap` (seed của minh không còn bản chờ, issue #22): bước
+    `bu_an_uong` đổi 100.000 ₫ thành 150.000 ₫, bỏ bước `cat_giai_tri`, thêm bước `danh_cho_du_phong` vào giai đoạn hai. Trả khối dữ
+    liệu của bản vừa lưu."""
+    _, v2 = rest(env, "GET", "/roadmap")
+    assert v2["data"]["version"] == 2 and v2["data"]["status"] == "active", v2
+    phases = []
+    for ph in v2["data"]["phases"]:
+        steps = []
+        for st in ph["steps"]:
+            if st["step_id"] == "cat_giai_tri":
+                continue
+            s = {k: st[k] for k in DRAFT_STEP_KEYS if k in st}
+            if s["step_id"] == "bu_an_uong":
+                s.update(amount_vnd=150000, title="Bù 150.000 ₫ mỗi tuần cho Ăn uống")
+                s["action"] = {**s["action"], "params": {**s["action"]["params"], "amount_vnd": 150000}}
+            steps.append(s)
+        if ph["phase_id"] == "xay_quy_du_phong":
+            steps.insert(
+                0,
+                {
+                    "step_id": "danh_cho_du_phong",
+                    "kind": "set_aside",
+                    "title": "Dành 200.000 ₫ mỗi tuần cho Dự phòng",
+                    "reason": "Hũ Dự phòng mới đủ khoảng 1 tháng chi tiêu thiết yếu.",
+                    "amount_vnd": 200000,
+                    "jar_code": "giai_tri",
+                    "to_jar_code": "du_phong",
+                    "action": {
+                        "tool": "move_between_jars",
+                        "params": {"from_jar": "giai_tri", "to_jar": "du_phong", "amount_vnd": 200000},
+                    },
+                },
+            )
+        phases.append({**{k: v for k, v in ph.items() if k != "steps"}, "steps": steps})
+    out = tool(
+        env,
+        "save_roadmap",
+        reason_code="user_request",
+        based_on_version=2,
+        feasibility="relaxed",
+        goals=v2["data"]["goals"],
+        alternatives=[],
+        phases=phases,
+    )
+    assert out["status"] == "OK", out
+    assert out["data"]["version"] == 3 and out["data"]["status"] == "proposed"
+    return out["data"]
+
+
+def add_confirmed_flag(env, user: str = MINH) -> str:
+    """Một dấu hiệu đổi hành vi ĐÃ XÁC NHẬN của hũ Ăn uống (520.000 ₫ lên 810.000 ₫ mỗi tuần, giữ 2 tuần), như batch dự báo ghi sau
+    khi PELT xác nhận. Ghi bằng role master vì đây là dữ liệu của pipeline; seed không còn cài sẵn dấu hiệu (issue #22)."""
+    with env.master() as m:
+        return str(
+            m.execute(
+                "INSERT INTO behavior_flags (user_id, jar_code, status, method, direction, old_weekly_vnd, new_weekly_vnd, "
+                "suspected_app_date, change_point_date, confirmed_app_date, weeks_held) "
+                "VALUES (%s, 'an_uong', 'confirmed', 'pelt', 'up', 520000, 810000, '2026-11-14', '2026-11-07', "
+                "'2026-11-21', 2) RETURNING id",
+                (user,),
+            ).fetchone()[0]
+        )
+
+
 # =====================================================================================================
 # Seed persona (N4) và RESET_DELETES (N5)
 # =====================================================================================================
-def test_dat_lai_minh_ra_v1_superseded_v2_active_v3_proposed(minh):
+def test_dat_lai_minh_ra_v1_superseded_v2_active_khong_co_ban_cho_va_dau_hieu(minh):
+    """Seed của minh chỉ còn v1 và v2 (issue #22): không bản chờ chọn, không dấu hiệu đổi hành vi cài sẵn, để cảnh 4 do bộ phát hiện
+    thật tạo bản đề xuất."""
     env = minh
-    assert statuses(env) == {1: "superseded", 2: "active", 3: "proposed"}
+    assert statuses(env) == {1: "superseded", 2: "active"}
     status, versions = rest(env, "GET", "/roadmap/versions")
     valid_rest("RoadmapVersionsResponse", versions)
-    assert versions["active_version"] == 2 and versions["proposed_version"] == 3
+    assert versions["active_version"] == 2 and "proposed_version" not in versions
     assert "current_job" not in versions
 
-    status, v3 = rest(env, "GET", "/roadmap", query={"which": "proposed"})
-    assert status == 200
-    valid_rest("RoadmapResponse", v3)
-    d = v3["data"]
-    assert d["version"] == 3 and d["status"] == "proposed" and d["based_on_version"] == 2
-    assert d["reason"]["code"] == "behavior_changed"
-    assert (
-        d["reason"]["text"]
-        == "Chi Ăn uống mỗi tuần tăng từ 520.000 ₫ lên 810.000 ₫ và giữ mức đó 2 tuần."
-    )
-    assert d["reason"]["detail"] == [
-        {"label": "Chi Ăn uống mỗi tuần", "before": "520.000 ₫", "after": "810.000 ₫"}
-    ]
-    # behavior_flag_id trỏ một dòng behavior_flags ĐÃ XÁC NHẬN của chính minh
-    with env.master() as m:
-        flag = m.execute(
-            "SELECT status, jar_code, method, user_id, detail->>'source' FROM behavior_flags WHERE id = %s",
-            (d["reason"]["behavior_flag_id"],),
-        ).fetchone()
-    assert flag == ("confirmed", "an_uong", "pelt", MINH, "persona_seed")
-    assert d["counts"] == {"pending": 5, "accepted": 0, "rejected": 0}
-    assert d["feasibility"] == "relaxed" and d["alternatives"] == []
+    status, body = rest(env, "GET", "/roadmap", query={"which": "proposed"})
+    assert status == 404 and body["error"]["code"] == "ROADMAP_NOT_FOUND"
+    assert count(env, "behavior_flags", MINH) == 0
 
     status, v2 = rest(env, "GET", "/roadmap")  # mặc định: bản đang dùng
+    assert status == 200
+    valid_rest("RoadmapResponse", v2)
     d2 = v2["data"]
     assert d2["version"] == 2 and d2["status"] == "active" and d2["based_on_version"] == 1
     assert d2["reason"]["code"] == "step_edited" and d2["feasibility"] == "on_track"
     assert d2["counts"] == {"pending": 2, "accepted": 2, "rejected": 1}
+    # basis của seed: số trong file seed, thời điểm tính là lúc nạp (REST trả để màn ghi "Số tính ngày …", #27)
+    assert d2["basis"]["confidence_band"] == "high" and d2["basis"]["history_days"] == 120
+    assert d2["basis"]["computed_at"].endswith("Z")
     edited = next(s for p in d2["phases"] for s in p["steps"] if s["step_id"] == "bu_an_uong")
     assert (
         edited["status"] == "accepted"
@@ -216,8 +276,8 @@ def test_muc_tieu_trong_seed_lay_tu_du_lieu_persona(minh):
     from personas import generate
 
     spec = next(j for j in generate("minh", anchor=TODAY).jars if j.code == "du_lich")
-    _, v3 = rest(minh, "GET", "/roadmap", query={"which": "proposed"})
-    (goal,) = v3["data"]["goals"]
+    _, v2 = rest(minh, "GET", "/roadmap")
+    (goal,) = v2["data"]["goals"]
     assert goal["jar"] == {
         "code": "du_lich",
         "name": spec.name,
@@ -232,7 +292,7 @@ def test_muc_tieu_trong_seed_lay_tu_du_lieu_persona(minh):
     com = next(o for o in ob if o["name"] == "Tiền cơm văn phòng")
     step = next(
         s
-        for p in v3["data"]["phases"]
+        for p in v2["data"]["phases"]
         for s in p["steps"]
         if s["step_id"] == "giu_san_com_van_phong"
     )
@@ -245,7 +305,7 @@ def test_lo_trinh_seed_hop_le_theo_luat_suitability_tung_buoc(minh):
     ctx = ops._context(MINH, with_facts=True)
     rules = cached_rules()
     checked_any = False
-    for version in (1, 2, 3):
+    for version in (1, 2):
         row = minh.svc.repo and ops.repo.get_roadmap(MINH, version)
         violations, checked = rl.check_steps(row["plan"]["phases"], ctx.facts, rules)
         assert violations == [], (version, violations)
@@ -259,11 +319,12 @@ def test_lo_trinh_seed_hop_le_theo_luat_suitability_tung_buoc(minh):
 
 def test_dat_lai_lap_lai_khong_nhan_doi_phien_ban_va_khong_dung_nguoi_khac(minh):
     env = minh
+    propose_v3(env)
     rest(env, "POST", "/roadmap/versions/3/decision", body={"decision": "adopt"})
     assert statuses(env)[3] == "active"
     env.reset(MINH)  # đặt lại: seed nạp lại từ đầu
-    assert statuses(env) == {1: "superseded", 2: "active", 3: "proposed"}
-    assert count(env, "roadmaps", MINH) == 3 and count(env, "behavior_flags", MINH) == 1
+    assert statuses(env) == {1: "superseded", 2: "active"}
+    assert count(env, "roadmaps", MINH) == 2 and count(env, "behavior_flags", MINH) == 0
     assert count(env, "roadmaps", LAN) == 0  # lan không có file seed
 
 
@@ -320,8 +381,15 @@ def test_dat_lai_xoa_sach_du_lieu_moi_cua_0052_dung_nguoi(minh):
                 "ON CONFLICT DO NOTHING",
                 (user,),
             )
+            # dấu hiệu đổi hành vi do batch ghi (seed không còn cài sẵn, issue #22): đặt lại phải xóa của đúng người
+            m.execute(
+                "INSERT INTO behavior_flags (user_id, jar_code, method, direction, old_weekly_vnd, new_weekly_vnd, "
+                "suspected_app_date) VALUES (%s, 'an_uong', 'pelt', 'up', 435000, 870000, '2026-11-21')",
+                (user,),
+            )
     tables = (
         "tx_embeddings", "tx_embeddings_labeled", "review_asks", "resilience_scores", "roadmap_jobs",
+        "behavior_flags",
     )  # fmt: skip
     # bảng nhãn còn có nhãn k-NN seed của persona (nạp lại khi đặt lại): chỉ đếm dòng test vừa thêm
     marker = {"tx_embeddings_labeled": "text_norm = 'abc'"}
@@ -334,7 +402,7 @@ def test_dat_lai_xoa_sach_du_lieu_moi_cua_0052_dung_nguoi(minh):
         assert count(env, t, MINH, w) == 0, t
         assert count(env, t, LAN, w) == 1, t  # người khác nguyên vẹn
     assert count(env, "tx_embeddings_labeled", MINH, "source <> 'seed'") == 0
-    assert count(env, "behavior_flags", MINH) == 1  # đúng một dấu hiệu seed, không nhân đôi
+    assert count(env, "behavior_flags", MINH) == 0  # seed không nạp lại dấu hiệu nào
 
 
 # =====================================================================================================
@@ -360,7 +428,8 @@ def test_get_roadmap_loi_va_rls(minh):
     assert status == 400 and body["error"]["code"] == "PARAMS_INVALID"
 
 
-def test_diff_v2_v3_mac_dinh_la_ban_cho_so_voi_ban_goc(minh):
+def test_diff_ban_cho_so_voi_ban_goc_mac_dinh(minh):
+    propose_v3(minh)
     status, block = rest(minh, "GET", "/roadmap/diff")
     assert status == 200
     valid_rest("RoadmapDiffResponse", block)
@@ -380,7 +449,7 @@ def test_diff_v2_v3_mac_dinh_la_ban_cho_so_voi_ban_goc(minh):
     assert kinds["cat_giai_tri"]["kind"] == "removed"
     assert d["counts"] == {"added": 1, "removed": 1, "changed": 1, "unchanged": 3}
     assert d["headline"] == "Phiên bản 3 khác phiên bản 2 ở 3 bước: thêm 1, bỏ 1, đổi 1."
-    assert d["reason"]["code"] == "behavior_changed"
+    assert d["reason"]["code"] == "user_request"
     # chọn tường minh; so ngược chiều (bản cũ là "to") thì không thể dùng
     status, rev = rest(minh, "GET", "/roadmap/diff", query={"from_version": "3", "to_version": "2"})
     assert status == 200 and rev["data"]["can_adopt"] is False
@@ -402,6 +471,7 @@ def test_diff_v2_v3_mac_dinh_la_ban_cho_so_voi_ban_goc(minh):
 # =====================================================================================================
 def test_quyet_dinh_buoc_ghi_trang_thai_feedback_va_audit_va_idempotent(minh):
     env = minh
+    propose_v3(env)
     body = {"version": 3, "decision": "accepted"}
     audit0 = count(env, "audit_events", MINH, "event_type = 'roadmap_step_decided'")
     status, block = rest(env, "POST", "/roadmap/steps/bu_an_uong/decision", body=body)
@@ -449,6 +519,7 @@ def test_quyet_dinh_buoc_ghi_trang_thai_feedback_va_audit_va_idempotent(minh):
 
 def test_quyet_dinh_buoc_loi(minh):
     env = minh
+    propose_v3(env)
     ok = {"version": 3, "decision": "accepted"}
     status, body = rest(env, "POST", "/roadmap/steps/khong_co/decision", body=ok)
     assert status == 404 and body["error"]["code"] == "ROADMAP_NOT_FOUND"
@@ -482,6 +553,7 @@ def test_quyet_dinh_buoc_loi(minh):
 # =====================================================================================================
 def test_sua_buoc_luu_ban_moi_active_khong_goi_model_giu_trang_thai_buoc_khac(minh):
     env = minh
+    propose_v3(env)  # có bản chờ để kiểm nó bị bỏ khi sửa bản đang dùng
     audit0 = count(env, "audit_events", MINH, "event_type = 'roadmap_step_edited'")
     status, block = rest(
         env, "POST", "/roadmap/steps/bu_an_uong/edit", body={"version": 2, "amount_vnd": 120000}
@@ -530,27 +602,28 @@ def test_sua_ngay_cua_buoc_va_loi_dau_vao(minh):
         body={"version": 2, "due_date": "2027-01-10"},
     )
     assert status == 200, block
+    v = block["data"]["version"]  # bản mới do sửa bước (seed không có bản chờ nên là v3)
     step = next(
         s for p in block["data"]["phases"] for s in p["steps"] if s["step_id"] == "nhac_du_lich"
     )
     assert step["due_date"] == "2027-01-10" and step["action"]["params"]["fire_on"] == "2027-01-10"
     for body, code in (
-        ({"version": 4}, 400),  # thiếu amount_vnd và due_date
-        ({"version": 4, "amount_vnd": 0}, 400),
-        ({"version": 4, "amount_vnd": 1.5}, 400),
-        ({"version": 4, "due_date": "2026-13-45"}, 400),
-        ({"version": 4, "due_date": "2026-11-01"}, 400),  # trước hôm nay
-        ({"version": 4, "amount_vnd": 5000}, 400),  # nhac_du_lich không có số tiền
-        ({"version": 4, "due_date": "2027-01-10"}, 400),  # trùng giá trị hiện tại
-        ({"version": 4, "amount_vnd": 1000, "user_id": "x"}, 400),
+        ({"version": v}, 400),  # thiếu amount_vnd và due_date
+        ({"version": v, "amount_vnd": 0}, 400),
+        ({"version": v, "amount_vnd": 1.5}, 400),
+        ({"version": v, "due_date": "2026-13-45"}, 400),
+        ({"version": v, "due_date": "2026-11-01"}, 400),  # trước hôm nay
+        ({"version": v, "amount_vnd": 5000}, 400),  # nhac_du_lich không có số tiền
+        ({"version": v, "due_date": "2027-01-10"}, 400),  # trùng giá trị hiện tại
+        ({"version": v, "amount_vnd": 1000, "user_id": "x"}, 400),
     ):
         status, out = rest(env, "POST", "/roadmap/steps/nhac_du_lich/edit", body=body)
         assert status == code and out["error"]["code"] == "PARAMS_INVALID", body
     status, out = rest(
-        env, "POST", "/roadmap/steps/khong_co/edit", body={"version": 4, "amount_vnd": 1000}
+        env, "POST", "/roadmap/steps/khong_co/edit", body={"version": v, "amount_vnd": 1000}
     )
     assert status == 404
-    assert statuses(env)[4] == "active" and 5 not in statuses(env)  # không bản nào bị lưu thêm
+    assert statuses(env)[v] == "active" and v + 1 not in statuses(env)  # không bản nào bị lưu thêm
 
 
 def test_sua_buoc_vi_pham_luat_thi_422_va_khong_luu(minh):
@@ -590,6 +663,7 @@ def test_sua_buoc_vi_pham_luat_thi_422_va_khong_luu(minh):
 # =====================================================================================================
 def test_dung_ban_moi_va_giu_ban_cu(minh):
     env = minh
+    propose_v3(env)
     audit0 = count(env, "audit_events", MINH, "event_type = 'roadmap_version_decided'")
     status, block = rest(env, "POST", "/roadmap/versions/3/decision", body={"decision": "adopt"})
     assert status == 200 and block["data"]["version"] == 3 and block["data"]["status"] == "active"
@@ -610,17 +684,34 @@ def test_dung_ban_moi_va_giu_ban_cu(minh):
     assert status == 409 and body["error"]["code"] == "ROADMAP_VERSION_CONFLICT"
 
     env.reset(MINH)
+    add_forecast(env, MINH)  # đặt lại xóa dự báo; lưu bản chờ cần basis
+    propose_v3(env)
+    # "Giữ bản cũ" kèm một câu lý do (#29): chữ người dùng gõ được che PII rồi lưu ở dòng feedback của quyết định
     status, block = rest(
-        env, "POST", "/roadmap/versions/3/decision", body={"decision": "keep_previous"}
+        env,
+        "POST",
+        "/roadmap/versions/3/decision",
+        body={"decision": "keep_previous", "reason": " Gọi mình 0912 345 678 nếu cần "},
     )
     assert status == 200 and block["data"]["status"] == "discarded"
+    valid_rest("RoadmapResponse", block)
     assert statuses(env) == {1: "superseded", 2: "active", 3: "discarded"}
-    assert (
-        count(
-            env, "feedback", MINH, "option_id = 'version_keep_previous' AND decision = 'rejected'"
-        )
-        == 1
-    )
+    with env.master() as m:
+        rows = m.execute(
+            "SELECT decision, reason, block_id, trace_id FROM feedback WHERE user_id = %s "
+            "AND option_id = 'version_keep_previous'",
+            (MINH,),
+        ).fetchall()
+        audits = m.execute(
+            "SELECT params::text, details::text FROM audit_events WHERE user_id = %s "
+            "AND event_type = 'roadmap_version_decided'",
+            (MINH,),
+        ).fetchall()
+    assert len(rows) == 1
+    decision, reason, block_id, trace_id = rows[0]
+    assert decision == "rejected" and reason == "Gọi mình [SĐT] nếu cần"
+    assert block_id == f"roadmap:{trace_id}:v3"
+    assert not any("0912" in p or "0912" in d for p, d in audits)  # lý do không vào audit
     status, again = rest(
         env, "POST", "/roadmap/versions/3/decision", body={"decision": "keep_previous"}
     )
@@ -633,9 +724,31 @@ def test_dung_ban_moi_va_giu_ban_cu(minh):
         env, "POST", "/roadmap/versions/3/decision", LAN, body={"decision": "adopt"}
     )
     assert status == 404
-    for bad in ({"decision": "x"}, {}, {"decision": "adopt", "user_id": "u"}):
+    for bad in (
+        {"decision": "x"},
+        {},
+        {"decision": "adopt", "user_id": "u"},
+        {"decision": "keep_previous", "reason": "x" * 201},
+        {"decision": "keep_previous", "reason": "  "},
+    ):
         status, body = rest(env, "POST", "/roadmap/versions/2/decision", body=bad)
-        assert status == 400, bad
+        assert status == 400 and body["error"]["code"] == "PARAMS_INVALID", bad
+
+
+def test_giu_ban_cu_khong_co_ly_do_van_luu_quyet_dinh(minh):
+    """Yêu cầu cũ (không có `reason`) vẫn hợp lệ: quyết định được lưu, `feedback.reason` rỗng (#29)."""
+    env = minh
+    propose_v3(env)
+    status, block = rest(
+        env, "POST", "/roadmap/versions/3/decision", body={"decision": "keep_previous"}
+    )
+    assert status == 200 and block["data"]["status"] == "discarded"
+    with env.master() as m:
+        row = m.execute(
+            "SELECT decision, reason FROM feedback WHERE user_id = %s AND option_id = 'version_keep_previous'",
+            (MINH,),
+        ).fetchone()
+    assert row == ("rejected", None)
 
 
 # =====================================================================================================
@@ -776,6 +889,7 @@ def test_sinh_lai_su_kien_khop_hop_dong_va_phat_loi_khong_lam_hong_job(minh):
 # =====================================================================================================
 def test_save_roadmap_ban_cho_chon_phien_ban_tang_dan_va_chay_lai_suitability(minh):
     env = minh
+    propose_v3(env)  # có bản chờ để kiểm bản lưu sau thay nó
     audit0 = count(env, "audit_events", MINH, "event_type = 'roadmap_saved'")
     out = tool(env, "save_roadmap", **draft(env))
     assert out["status"] == "OK", out
@@ -812,10 +926,11 @@ def test_save_roadmap_bo_trang_thai_do_agent_tu_khai(minh):
     d["phases"][0]["steps"][0]["checked_rules"] = ["emergency_before_investing", "khong_co_that"]
     out = tool(env, "save_roadmap", **d)
     assert out["status"] == "OK"
+    assert out["data"]["version"] == 3
     assert out["data"]["phases"][0]["steps"][0]["checked_rules"] == ["obligations_first", "source_jar_covers"]
     out = tool(env, "save_roadmap", **draft(env, based_on_version=2, version=9, status="active"))
     assert out["status"] == "OK"  # tham số lạ bị bỏ qua (Gateway không từ chối chúng)
-    assert out["data"]["version"] == 5 and out["data"]["status"] == "proposed"
+    assert out["data"]["version"] == 4 and out["data"]["status"] == "proposed"
 
 
 def test_save_roadmap_buoc_vi_pham_muc_block_thi_roadmap_invalid_va_khong_luu(minh):
@@ -889,8 +1004,7 @@ def test_save_roadmap_tu_choi(minh, mutate, code):
 
 def test_save_roadmap_dau_hieu_hanh_vi_phai_la_cua_chinh_minh_va_da_xac_nhan(minh):
     env = minh
-    _, v3 = rest(env, "GET", "/roadmap", query={"which": "proposed"})
-    flag_id = v3["data"]["reason"]["behavior_flag_id"]
+    flag_id = add_confirmed_flag(env)  # batch dự báo đã xác nhận (seed không cài sẵn, issue #22)
     d = draft(env, reason_code="behavior_changed", behavior_flag_id=flag_id, based_on_version=2)
     # người khác dùng cờ của minh: không thấy (RLS)
     other = tool(env, "save_roadmap", LAN, **{**d, "goals": [], "based_on_version": None})
@@ -899,7 +1013,14 @@ def test_save_roadmap_dau_hieu_hanh_vi_phai_la_cua_chinh_minh_va_da_xac_nhan(min
     out = tool(env, "save_roadmap", **d)
     assert out["status"] == "OK", out
     assert out["data"]["reason"]["behavior_flag_id"] == flag_id
-    assert out["data"]["reason"]["text"].startswith("Chi Ăn uống mỗi tuần tăng từ 520.000 ₫")
+    # lý do dựng từ số của dấu hiệu (code viết, không phải agent)
+    assert (
+        out["data"]["reason"]["text"]
+        == "Chi Ăn uống mỗi tuần tăng từ 520.000 ₫ lên 810.000 ₫ và giữ mức đó 2 tuần."
+    )
+    assert out["data"]["reason"]["detail"] == [
+        {"label": "Chi Ăn uống mỗi tuần", "before": "520.000 ₫", "after": "810.000 ₫"}
+    ]
     with env.master() as m:  # cờ đã được một phiên bản dùng
         assert m.execute(
             "SELECT status FROM behavior_flags WHERE id = %s", (flag_id,)
@@ -928,7 +1049,7 @@ def test_save_roadmap_khong_co_du_bao_thi_forecast_unavailable_va_ho_so_thieu(mi
         m.execute("DELETE FROM forecast_runs WHERE user_id = %s", (MINH,))
     out = tool(env, "save_roadmap", **draft(env))
     assert out["status"] == "ERROR" and out["code"] == "FORECAST_UNAVAILABLE"
-    assert statuses(env) == {1: "superseded", 2: "active", 3: "proposed"}
+    assert statuses(env) == {1: "superseded", 2: "active"}
     # người dùng chưa khai lương: PROFILE_INCOMPLETE
     with env.master() as m:
         m.execute("UPDATE users SET monthly_salary_vnd = NULL WHERE id = %s", (MINH,))
@@ -1036,15 +1157,20 @@ def test_optimize_allocation_la_proxy_sang_lambda_forecast(minh):
 # =====================================================================================================
 def test_chap_nhan_buoc_khong_doi_so_du_hanh_dong_di_qua_confirmations(minh):
     env = minh
+    propose_v3(env)
     before = env.repo.jar_view(MINH)
     bal = {j["code"]: int(j["balance_vnd"]) for j in before.jars}
-    rest(
+    status, _ = rest(
         env,
         "POST",
         "/roadmap/steps/bu_an_uong/decision",
         body={"version": 3, "decision": "accepted"},
     )
-    rest(env, "POST", "/roadmap/steps/bu_an_uong/edit", body={"version": 3, "amount_vnd": 130000})
+    assert status == 200
+    status, edited = rest(
+        env, "POST", "/roadmap/steps/bu_an_uong/edit", body={"version": 3, "amount_vnd": 130000}
+    )
+    assert status == 200 and edited["data"]["status"] == "active"  # bản sửa thành bản đang dùng
     after = {j["code"]: int(j["balance_vnd"]) for j in env.repo.jar_view(MINH).jars}
     assert after == bal
     assert count(env, "transactions", MINH, "kind = 'transfer' AND source = 'move'") == 0

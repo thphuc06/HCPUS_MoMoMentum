@@ -851,6 +851,9 @@ def test_rest_chuyen_tiep_dung_ham_va_danh_tinh_chi_tu_jwt():
         ("POST", "/roadmap/versions/0/decision", {"decision": "adopt"}, None),
         ("POST", "/roadmap/versions/abc/decision", {"decision": "adopt"}, None),
         ("POST", "/roadmap/versions/1/decision", {"decision": "adopt", "x": 1}, None),
+        ("POST", "/roadmap/versions/1/decision", {"decision": "keep_previous", "reason": "x" * 201}, None),
+        ("POST", "/roadmap/versions/1/decision", {"decision": "keep_previous", "reason": "   "}, None),
+        ("POST", "/roadmap/versions/1/decision", {"decision": "keep_previous", "reason": 5}, None),
         ("POST", "/roadmap/regenerate", {"alternative_id": "Có-Dấu"}, None),
         ("POST", "/roadmap/regenerate", {"note": 5}, None),
         ("POST", "/roadmap/regenerate", {"based_on_version": 0}, None),
@@ -863,6 +866,22 @@ def test_rest_kiem_dau_vao_truoc_khi_cham_dich_vu(method, path, body, query):
     status, out, stub = rest_with_stub(method, path, body=body, query=query)
     assert status == 400 and out["error"]["code"] == "PARAMS_INVALID", out
     assert stub.calls == []  # đầu vào sai không chạm kho dữ liệu
+
+
+def test_rest_giu_ban_cu_nhan_ly_do_tuy_chon():
+    """#29: "Giữ bản cũ" gửi kèm MỘT câu lý do tùy chọn; vắng lý do (yêu cầu cũ) vẫn hợp lệ."""
+    _, _, stub = rest_with_stub(
+        "POST",
+        "/roadmap/versions/3/decision",
+        body={"decision": "keep_previous", "reason": "  Chưa muốn đổi kế hoạch  "},
+    )
+    name, kw = stub.calls[0]
+    assert name == "decide_version_response" and kw["user"] == U and kw["version"] == 3
+    assert kw["decision"] == "keep_previous" and kw["reason"] == "Chưa muốn đổi kế hoạch"
+    status, _, stub = rest_with_stub(
+        "POST", "/roadmap/versions/3/decision", body={"decision": "keep_previous"}
+    )
+    assert status == 200 and stub.calls[0][1]["reason"] is None
 
 
 def test_rest_job_id_sai_dang_la_404_nhu_khong_ton_tai_va_can_jwt():
@@ -1267,6 +1286,28 @@ def test_get_roadmap_va_diff_va_phien_ban(ops):
     assert empty.versions_response(U, limit=20) == {"versions": []}
 
 
+def rest_with_ops(ops_: RoadmapOps, method, path, *, body=None, query=None):
+    """REST thật (`handle_http` -> `roadmap_rest.dispatch`) trên `RoadmapOps` dùng kho giả trong bộ nhớ."""
+    svc, _repo, _clock = make_service()
+    svc.__dict__["_roadmap_ops"] = ops_
+    out = handle_http(http_event(method, path, sub=U, body=body, query=query), svc)
+    return out["statusCode"], json.loads(out["body"])
+
+
+def test_get_roadmap_tra_basis_computed_at_cua_ban_dang_xem(ops):
+    """#27: màn lộ trình ghi "Số tính ngày …" từ `basis.computed_at` của bản đang xem, nên REST trả đúng thời điểm đã lưu cùng
+    phiên bản đó (mỗi bản một giá trị), không phải thời điểm đọc."""
+    repo = seed(ops)
+    for row, at in zip(repo.rows, ("2026-12-08T20:00:00Z", "2026-12-09T17:30:00Z"), strict=True):
+        row["plan"]["basis"] = {**row["plan"]["basis"], "computed_at": at}
+    status, block = rest_with_ops(ops, "GET", "/roadmap")
+    assert status == 200 and block["data"]["version"] == 2
+    assert block["data"]["basis"]["computed_at"] == "2026-12-09T17:30:00Z"
+    assert block["source"]["as_of"] == "2026-12-10T03:00:00Z"  # thời điểm đọc khác thời điểm tính
+    status, old = rest_with_ops(ops, "GET", "/roadmap", query={"version": "1"})
+    assert status == 200 and old["data"]["basis"]["computed_at"] == "2026-12-08T20:00:00Z"
+
+
 def test_quyet_dinh_buoc_idempotent_va_loi(ops):
     repo = seed(ops)
     kw = {"step_id": "nhac_du_lich", "version": 2, "reason": None, "trace_id": "t" * 8}
@@ -1385,6 +1426,39 @@ def test_quyet_dinh_phien_ban(ops):
         repo.feedback[-1]["option_id"] == "version_adopt"
         and repo.feedback[-1]["decision"] == "accepted"
     )
+
+
+def test_giu_ban_cu_luu_ly_do_da_che_pii_cung_quyet_dinh(ops):
+    """#29: lý do của "Giữ bản cũ" là chữ người dùng gõ (không tin cậy): che PII rồi lưu ở dòng `feedback` của quyết định, không vào
+    audit. Không có lý do thì vẫn lưu quyết định; `adopt` bỏ qua lý do."""
+    repo = seed(ops)
+    repo.rows.append(make_row(3, "proposed"))
+    block = ops.decide_version_response(
+        U,
+        version=3,
+        decision="keep_previous",
+        reason="Gọi mình 0912 345 678 nếu cần",
+        trace_id="t" * 8,
+    )
+    assert block["data"]["status"] == "discarded"
+    assert repo.feedback[-1] == {
+        "option_id": "version_keep_previous",
+        "decision": "rejected",
+        "reason": "Gọi mình [SĐT] nếu cần",
+        "version": 3,
+    }
+    assert "0912" not in json.dumps(repo.audits[-1], ensure_ascii=False)
+
+    repo.rows.append(make_row(4, "proposed"))
+    ops.decide_version_response(U, version=4, decision="keep_previous", trace_id="t" * 8)
+    assert repo.feedback[-1]["option_id"] == "version_keep_previous"
+    assert repo.feedback[-1]["reason"] is None and repo.feedback[-1]["version"] == 4
+
+    repo.rows.append(make_row(5, "proposed"))
+    ops.decide_version_response(
+        U, version=5, decision="adopt", reason="không dùng cho adopt", trace_id="t" * 8
+    )
+    assert repo.feedback[-1]["option_id"] == "version_adopt" and repo.feedback[-1]["reason"] is None
 
 
 def test_sinh_lai_ghi_job_phat_su_kien_va_tra_lai_job_dang_chay(ops):

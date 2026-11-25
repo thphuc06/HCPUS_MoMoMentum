@@ -26,6 +26,7 @@ from yofina_core.blocks import (
     format_instant,
 )
 from yofina_core.errors import ErrorCode, YofinaError
+from yofina_core.pii import mask_pii
 from yofina_core.roadmap import status_for_new_version
 from yofina_core.wallet import (
     FEEDBACK_DECISIONS,
@@ -49,6 +50,12 @@ REASON_MAX = 200
 ALIVE = ("active", "proposed")
 VERSION_FEEDBACK = {"adopt": "accepted", "keep_previous": "rejected"}
 _PROFILE_MSG = "Bạn chưa khai lương và ngày nhận lương."
+
+
+def _masked_reason(reason: str | None) -> str | None:
+    """Lý do người dùng gõ, đã che PII và cắt theo cột `feedback.reason` (1..200 ký tự; thẻ giữ chỗ có thể dài hơn chữ gốc)."""
+    text = reason.strip() if reason else ""
+    return mask_pii(text).text[:REASON_MAX] if text else None
 
 
 def _ok(now: datetime, today: date, data: Mapping[str, Any]) -> dict[str, Any]:
@@ -487,10 +494,18 @@ class RoadmapOps:
 
     # --- POST /roadmap/versions/{version}/decision --------------------------------------------------------------------------
     def decide_version_response(
-        self, user_id: str, *, version: int, decision: str, trace_id: str
+        self,
+        user_id: str,
+        *,
+        version: int,
+        decision: str,
+        trace_id: str,
+        reason: str | None = None,
     ) -> dict[str, Any]:
         """ "Dùng bản mới" (`adopt`) hoặc "Giữ bản cũ" (`keep_previous`) với bản chờ. Idempotent: quyết định đã có hiệu lực thì không
-        ghi gì. Trả khối của bản được chọn (ở `keep_previous` là bản đã bỏ để giao diện hiện trạng thái)."""
+        ghi gì. Trả khối của bản được chọn (ở `keep_previous` là bản đã bỏ để giao diện hiện trạng thái). `reason` (một câu lý do tùy
+        chọn, chỉ với `keep_previous`) là chữ người dùng gõ: che PII (`yofina_core.pii`, như lý do của bản tin) rồi lưu ở dòng
+        `feedback` của quyết định; không vào audit, không vào prompt."""
         if decision not in ROADMAP_VERSION_DECISIONS:
             raise YofinaError(
                 ErrorCode.PARAMS_INVALID, "decision phải là adopt hoặc keep_previous."
@@ -514,7 +529,7 @@ class RoadmapOps:
                 feedback={
                     "option_id": f"version_{decision}",
                     "decision": VERSION_FEEDBACK[decision],
-                    "reason": None,
+                    "reason": _masked_reason(reason) if decision == "keep_previous" else None,
                 },
             )
         fresh = self._need_row(self.repo.get_roadmap(user_id, version), NO_VERSION)
