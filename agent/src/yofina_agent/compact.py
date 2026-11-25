@@ -13,6 +13,30 @@ from typing import Any
 from yofina_agent.textutil import extract_amounts
 from yofina_core.money import format_vnd, to_vnd
 
+#: Trường chữ chép nguyên từ giao dịch hoặc từ tệp người dùng nạp (đối tác, nội dung chuyển khoản, ghi chú), đã che PII nhưng không bỏ
+#: chỉ dẫn: dữ liệu KHÔNG tin cậy. Prompt người viết đánh dấu chúng (`writer.build_writer_prompt`) và số trong chúng không bao giờ là
+#: căn cứ (`allowed_amounts`, `writer.has_ungrounded_numbers`, bộ chấm `evals/run.py`).
+UNTRUSTED_TEXT_KEYS = frozenset({"merchant", "note", "description", "counterparty"})
+
+
+def has_untrusted_text(node: Any) -> bool:
+    """Bản gọn (hoặc payload) có chữ không tin cậy: trường `UNTRUSTED_TEXT_KEYS` của một DÒNG (phần tử của danh sách: giao dịch, dòng
+    nạp, mục cần duyệt). Trường cùng tên ở cấp ngoài (ví dụ `note` cố định của thẻ xác nhận) do code viết, không tính."""
+    return without_untrusted_text(node) != node
+
+
+def without_untrusted_text(node: Any, *, _in_row: bool = False) -> Any:
+    """Bản sao bỏ chữ không tin cậy của các dòng (xem `has_untrusted_text`): thứ còn lại mới được làm căn cứ cho số."""
+    if isinstance(node, Mapping):
+        return {
+            k: without_untrusted_text(v)
+            for k, v in node.items()
+            if not (_in_row and k in UNTRUSTED_TEXT_KEYS and isinstance(v, str))
+        }
+    if isinstance(node, list):
+        return [without_untrusted_text(x, _in_row=True) for x in node]
+    return node
+
 
 def _compact_jar(j: Mapping[str, Any]) -> dict[str, Any]:
     row: dict[str, Any] = {
@@ -193,8 +217,10 @@ def compact_forecast_overview(
 
 
 def allowed_amounts(compact: Mapping[str, Any]) -> set[int]:
-    """Mọi số tiền (VND) xuất hiện trong bản gọn: căn cứ để kiểm số model viết ra."""
+    """Mọi số tiền (VND) xuất hiện trong bản gọn: căn cứ để kiểm số model viết ra. Chữ không tin cậy của các dòng (ghi chú, đối tác...,
+    `without_untrusted_text`) không tính: số viết trong nội dung chuyển khoản của tệp nạp không thành "có căn cứ"."""
     found: set[int] = set()
+    compact = without_untrusted_text(compact)
 
     def walk(node: Any) -> None:
         if isinstance(node, Mapping):
