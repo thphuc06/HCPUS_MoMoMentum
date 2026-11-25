@@ -19,9 +19,11 @@ Quy tắc (contracts/README.md, mục "Phase 5 (F6)" -> "Che PII"):
 
 - **Số tài khoản, số thẻ**: chuỗi từ 6 chữ số trở lên, có thể ngăn bằng MỘT dấu cách hoặc gạch ngang giữa các nhóm, đứng riêng
   -> `****` + 4 số cuối. Không che: chuỗi số dính chữ cái (mã tham chiếu `FT2656778901`, `PE04000123456`), chuỗi số nằm giữa một
-  mã có dấu chấm (`MBVCB.6397078.CK`), và nhóm ngăn bằng dấu chấm hay dấu phẩy (số tiền `1.250.000`, ngày `22/10/2026`).
+  mã có dấu chấm (`MBVCB.6397078.CK`), và nhóm ngăn bằng dấu chấm, dấu phẩy, gạch chéo hay hai chấm (số tiền `1.250.000`, ngày giờ
+  `22/10/2026 07:24`).
 - **Số điện thoại Việt Nam**: `0` hoặc `+84` rồi 8 tới 10 chữ số (tổng 9 tới 11 số), ngăn bằng dấu cách, chấm hoặc gạch ->
-  `****` + 4 số cuối.
+  `****` + 4 số cuối. Không tính là số điện thoại khi nó là nhóm sau của một số viết tách nhóm (`0071 0004 56789` là MỘT số tài
+  khoản, che cả số).
 - **Tên người** trong văn bản tự do: dãy 2 tới 5 từ (chỉ chữ cái), từ đầu là họ Việt phổ biến, mọi từ viết hoa chữ đầu (hoặc viết
   hoa toàn bộ), không từ nào là từ thông dụng, trừ tên đệm và tên riêng phổ biến (`NAME_WORDS`: "Thị", "Văn", "An", "Tiến" vẫn là
   tên) -> chữ cái đầu + `***` (`chuyen tien cho NGUYEN VAN AN` -> `chuyen tien cho N***`, `NGUYEN THI A;nop tien;` ->
@@ -30,7 +32,8 @@ Quy tắc (contracts/README.md, mục "Phase 5 (F6)" -> "Che PII"):
   người gọi biết là người (model báo, hoặc loại giao dịch chuyển tiền cho người) thì che cả chuỗi bằng `mask_person`.
 - **Giữ nguyên tên doanh nghiệp**: chuỗi chứa từ khóa doanh nghiệp (công ty, cửa hàng, siêu thị, EVN...) hoặc tên thương hiệu người
   gọi truyền vào (`PiiPolicy.keep`, ví dụ tên cửa hàng đã biết) không bị coi là tên người. Tên của chính người dùng
-  (`PiiPolicy.self_names`) được giữ.
+  (`PiiPolicy.self_names`) được giữ. Dãy giống tên người đứng ngay sau một danh từ loại hình kinh doanh viết hoa chữ đầu
+  (`BUSINESS_HEADS`: "Bánh mì", "Phở", "Quán"...) là tên cửa hàng, không che ("Bánh mì Huỳnh Hoa").
 
 Hàm thuần, không I/O. Không danh sách nào ở đây gắn với một người dùng hay tài khoản AWS.
 """
@@ -659,11 +662,24 @@ BUSINESS_KEYWORDS = (
     "nha hang", "quan an", "tiem", "shop", "store", "mart", "market", "cafe", "coffee", "restaurant", "evn",
     "ngan hang", "bank", "benh vien", "phong kham", "nha thuoc", "pharmacy", "truong", "hoc vien", "trung tam",
     "dich vu", "telecom", "vien thong", "xang dau", "petrolimex", "cinema", "cinemas", "hotel", "khach san",
-    "chi nhanh", "branch", "official", "group", "tap doan", "hop tac xa", "htx", "ban quan ly",
+)  # fmt: skip
+#: danh từ chỉ loại hình kinh doanh (món bán, loại cửa hàng; đã bỏ dấu, chữ thường), KHÔNG phải tên quán cụ thể. Viết hoa chữ đầu và
+#: đứng ngay trước một dãy giống tên người thì cả cụm là tên cửa hàng ("Bánh mì Huỳnh Hoa", "Phở Lê Văn Hưu", "Cửa hàng Nguyễn Kim"):
+#: tên riêng tiếng Việt viết hoa từ đầu của cả cụm. Viết thường ("tiền cơm Nguyễn Văn An") hay in hoa toàn bộ ("TIEN COM NGUYEN VAN
+#: AN", chữ in hoa không phân biệt được tên riêng) thì dãy sau vẫn là tên người.
+BUSINESS_HEADS = frozenset(
+    tuple(h.split())
+    for h in (
+        "banh mi", "banh cuon", "banh xeo", "banh canh", "pho", "com", "com tam", "bun", "bun bo", "bun cha", "bun rieu",
+        "hu tieu", "mi", "mi quang", "mien", "chao", "xoi", "lau", "oc", "che", "kem", "tra sua", "ca phe", "cafe", "coffee",
+        "quan", "quan an", "tiem", "tiem banh", "tiem vang", "tiem toc", "cua hang", "nha hang", "nha thuoc", "nha sach",
+        "nha khoa", "nha nghi", "tap hoa", "sieu thi", "shop", "spa", "salon", "karaoke", "khach san", "phong kham", "garage",
+        "gara", "studio", "bakery",
+    )
 )  # fmt: skip
 
 _DIGIT_RUN = re.compile(
-    r"(?<![A-Za-z0-9])(?<![A-Za-z0-9]\.)\d(?:[ \-]?\d){5,}(?![A-Za-z0-9])(?!\.[A-Za-z0-9])"
+    r"(?<![A-Za-z0-9])(?<![A-Za-z0-9][./:])\d(?:[ \-]?\d){5,}(?![A-Za-z0-9])(?![./:][A-Za-z0-9])"
 )
 _PHONE_NUM = re.compile(r"(?<![A-Za-z0-9+])(?:\+84|0)(?:[ .\-]?\d){8,10}(?![A-Za-z0-9])")
 #: một từ chỉ gồm chữ cái, không dính chữ số hay gạch dưới ("T10" không phải từ)
@@ -682,10 +698,35 @@ def _last4(match: str) -> str:
     return MASK + re.sub(r"\D", "", match)[-4:]
 
 
+#: phần dãy số (nhóm ngăn bằng MỘT dấu cách hoặc gạch) đứng ngay trước một vị trí, kết thúc bằng dấu ngăn
+_RUN_BEFORE = re.compile(r"(?<![A-Za-z0-9])\d(?:[ \-]?\d)*[ \-]$")
+
+
+def _inside_digit_run(text: str, start: int) -> bool:
+    """Số điện thoại ứng viên ở `start` là nhóm sau của MỘT số viết tách nhóm ("0004 56789" trong số tài khoản "0071 0004 56789"),
+    không phải một số riêng: phần đứng trước, nối bằng một dấu cách hoặc gạch, là chữ số mà bản thân nó không phải một số điện thoại
+    trọn vẹn (hai số điện thoại cách nhau một dấu cách vẫn là hai số)."""
+    m = _RUN_BEFORE.search(text[max(0, start - 64) : start])
+    return m is not None and not _PHONE_NUM.fullmatch(m.group(0)[:-1])
+
+
+def _mask_numbers(text: str, kinds: set[str]) -> str:
+    def phone(m: re.Match[str]) -> str:
+        if _inside_digit_run(text, m.start()):
+            return m.group(0)  # để bộ bắt dãy số che cả số
+        kinds.add("phone")
+        return _last4(m.group(0))
+
+    def run(m: re.Match[str]) -> str:
+        kinds.add("card" if _CARD.fullmatch(m.group(0)) else "account")
+        return _last4(m.group(0))
+
+    return _DIGIT_RUN.sub(run, _PHONE_NUM.sub(phone, text))
+
+
 def mask_numbers(text: str) -> str:
     """Che số điện thoại Việt Nam và chuỗi số dài (số tài khoản, số thẻ): `****` + 4 số cuối."""
-    out = _PHONE_NUM.sub(lambda m: _last4(m.group(0)), text)
-    return _DIGIT_RUN.sub(lambda m: _last4(m.group(0)), out)
+    return _mask_numbers(text, set())
 
 
 def initial_mask(name: str) -> str:
@@ -756,6 +797,29 @@ def _name_spans(text: str, policy: PiiPolicy) -> list[tuple[int, int]]:
     def joined(j: int) -> bool:
         return not text[words[j - 1].end() : words[j].start()].strip()
 
+    def after_business_head(i: int, j: int) -> bool:
+        """Dãy `i..j-1` là tên cửa hàng: đứng ngay sau một danh từ loại hình kinh doanh viết hoa chữ đầu (`BUSINESS_HEADS`), hoặc
+        mở đầu bằng chính danh từ đó mà phần sau là một tên người ("Quán Trần Thanh": "quán" và họ Quan cùng chữ khi bỏ dấu)."""
+        for head in BUSINESS_HEADS:
+            n = len(head)
+            k = i - n
+            if (
+                k >= 0
+                and tuple(folded[k:i]) == head
+                and _is_title(words[k].group(0))
+                and all(joined(m) for m in range(k + 1, i + 1))
+            ):
+                return True
+            if (
+                j - (i + n) >= 2
+                and tuple(folded[i : i + n]) == head
+                and _is_title(words[i].group(0))
+                and folded[i + n] in SURNAMES
+                and words[i + n].group(0)[:1].isupper()
+            ):
+                return True
+        return False
+
     i = 0
     while i < len(words):
         first = words[i].group(0)
@@ -786,7 +850,7 @@ def _name_spans(text: str, policy: PiiPolicy) -> list[tuple[int, int]]:
                 j += 1
             if j - i >= 2:
                 a, b = words[i].start(), words[j - 1].end()
-                if not policy.is_self(text[a:b]):
+                if not policy.is_self(text[a:b]) and not after_business_head(i, j):
                     spans.append((a, b))
                 i = j
                 continue
@@ -800,11 +864,11 @@ _AMBIGUOUS_SURNAMES = frozenset(
 )
 
 
-def mask_names(text: str, policy: PiiPolicy | None = None) -> str:
-    """Che các dãy giống tên người Việt trong văn bản tự do (lời nhắn, nội dung chuyển khoản)."""
-    spans = _name_spans(text, policy or PiiPolicy())
+def _mask_names(text: str, policy: PiiPolicy, kinds: set[str]) -> str:
+    spans = _name_spans(text, policy)
     if not spans:
         return text
+    kinds.add("name")
     out, last = [], 0
     for a, b in spans:
         out.append(text[last:a])
@@ -812,6 +876,11 @@ def mask_names(text: str, policy: PiiPolicy | None = None) -> str:
         last = b
     out.append(text[last:])
     return "".join(out)
+
+
+def mask_names(text: str, policy: PiiPolicy | None = None) -> str:
+    """Che các dãy giống tên người Việt trong văn bản tự do (lời nhắn, nội dung chuyển khoản)."""
+    return _mask_names(text, policy or PiiPolicy(), set())
 
 
 def looks_like_person(name: str | None, policy: PiiPolicy | None = None) -> bool:
@@ -833,14 +902,62 @@ def mask_person(name: str | None) -> str | None:
     return initial_mask(name)
 
 
-def mask_row_text(text: str | None, policy: PiiPolicy | None = None) -> str | None:
-    """Che số và tên người trong văn bản tự do. None hoặc chuỗi rỗng thì None."""
+#: các LOẠI PII mà nhóm B che, theo thứ tự hiển thị: tên người, số điện thoại, số tài khoản, số thẻ (dãy số dạng thẻ: ba nhóm 4 chữ
+#: số rồi một nhóm nữa, 13 tới 19 chữ số). Loại đi kèm chữ đã che để màn duyệt nói "đã che loại gì" mà KHÔNG bao giờ cần giá trị gốc.
+ROW_PII_KINDS: tuple[str, ...] = ("name", "phone", "account", "card")
+
+
+@dataclass(frozen=True)
+class RowMask:
+    """Chữ đã che (None khi đầu vào None hoặc rỗng) và tập loại PII đã che trong đó (rỗng khi không che gì)."""
+
+    text: str | None
+    kinds: frozenset[str] = frozenset()
+
+
+def ordered_kinds(kinds: Iterable[str]) -> list[str]:
+    """Tập loại theo thứ tự của `ROW_PII_KINDS` (bỏ loại lạ), để lưu và hiển thị ổn định."""
+    have = set(kinds)
+    return [k for k in ROW_PII_KINDS if k in have]
+
+
+def _clean(text: str | None) -> str | None:
     if text is None:
         return None
-    t = " ".join(str(text).split())
-    if not t:
-        return None
-    return mask_names(mask_numbers(t), policy)
+    return " ".join(str(text).split()) or None
+
+
+def mask_row_text_kinds(text: str | None, policy: PiiPolicy | None = None) -> RowMask:
+    """Như `mask_row_text`, kèm tập loại đã che."""
+    t = _clean(text)
+    if t is None:
+        return RowMask(None)
+    kinds: set[str] = set()
+    out = _mask_names(_mask_numbers(t, kinds), policy or PiiPolicy(), kinds)
+    return RowMask(out, frozenset(kinds))
+
+
+def mask_row_text(text: str | None, policy: PiiPolicy | None = None) -> str | None:
+    """Che số và tên người trong văn bản tự do. None hoặc chuỗi rỗng thì None."""
+    return mask_row_text_kinds(text, policy).text
+
+
+def mask_counterparty_kinds(
+    name: str | None, *, is_person: bool | None = None, policy: PiiPolicy | None = None
+) -> RowMask:
+    """Như `mask_counterparty`, kèm tập loại đã che. Đối tác là người thì có `name`, cộng loại của các số nằm trong chuỗi (cũng bị
+    che theo)."""
+    policy = policy or PiiPolicy()
+    t = _clean(name)
+    if t is None:
+        return RowMask(None)
+    kinds: set[str] = set()
+    if policy.is_self(t) or policy.is_business(t):
+        return RowMask(_mask_numbers(t, kinds), frozenset(kinds))
+    if is_person or looks_like_person(t, policy):
+        _mask_numbers(t, kinds)
+        return RowMask(mask_person(t), frozenset(kinds | {"name"}))
+    return mask_row_text_kinds(t, policy)
 
 
 def mask_counterparty(
@@ -848,37 +965,33 @@ def mask_counterparty(
 ) -> str | None:
     """Che tên đối tác. Doanh nghiệp (từ khóa hoặc thương hiệu đã biết) và tên của chính người dùng thì giữ (vẫn che số);
     `is_person` đúng hoặc chuỗi giống tên người thì che cả tên; còn lại che như văn bản tự do."""
-    policy = policy or PiiPolicy()
-    if name is None:
-        return None
-    t = " ".join(str(name).split())
-    if not t:
-        return None
-    if policy.is_self(t) or policy.is_business(t):
-        return mask_numbers(t)
-    if is_person or looks_like_person(t, policy):
-        return mask_person(t)
-    return mask_row_text(t, policy)
+    return mask_counterparty_kinds(name, is_person=is_person, policy=policy).text
 
 
 __all__ = [
     # B. dòng nạp (phase 5)
+    "BUSINESS_HEADS",
     "BUSINESS_KEYWORDS",
     "MASK",
     # A. chat (phase 3)
     "PLACEHOLDERS",
+    "ROW_PII_KINDS",
     "MaskResult",
     "PiiPolicy",
+    "RowMask",
     "fold",
     "initial_mask",
     "is_epoch_at",
     "looks_like_person",
     "mask_counterparty",
+    "mask_counterparty_kinds",
     "mask_names",
     "mask_numbers",
     "mask_person",
     "mask_pii",
     "mask_row_text",
+    "mask_row_text_kinds",
     "mask_text",
+    "ordered_kinds",
     "strip_epoch_timestamps",
 ]

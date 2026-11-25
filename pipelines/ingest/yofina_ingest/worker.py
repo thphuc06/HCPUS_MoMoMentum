@@ -480,7 +480,7 @@ def pick_matches(
 def to_row(c: Candidate, sha: str, match: Mapping[str, Any] | None) -> dict[str, Any]:
     """Dòng cho `app_insert_ingest_rows`. Dòng trùng sổ cái thành `duplicate` (không chọn sẵn, không chốt được). Dòng ngoại tệ mang
     `fx`; chưa có tỷ giá thì không có `amount_vnd` và khóa khử trùng tính với số tiền 0 (khóa vẫn duy nhất nhờ `content_sha256` và
-    `seq`, và là khóa của dòng sổ cái khi chốt)."""
+    `seq`, và là khóa của dòng sổ cái khi chốt). `pii_masked` là các loại PII đã che của dòng (có thể rỗng; cột của 0056)."""
     row: dict[str, Any] = {
         "seq": c.seq,
         "kind": c.kind,
@@ -500,6 +500,8 @@ def to_row(c: Candidate, sha: str, match: Mapping[str, Any] | None) -> dict[str,
             content_sha256=sha,
             seq=c.seq,
         ),
+        # chỉ LOẠI đã che (tên, SĐT, số TK...), không bao giờ là giá trị gốc
+        "pii_masked": list(c.pii_masked),
     }
     if c.fx is not None:
         row["fx"] = c.fx.to_json()

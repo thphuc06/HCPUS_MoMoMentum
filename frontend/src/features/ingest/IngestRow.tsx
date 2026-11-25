@@ -1,4 +1,4 @@
-import { ChevronDown, Copy } from 'lucide-react'
+import { ChevronDown, Copy, ShieldCheck } from 'lucide-react'
 import { JarIcon } from '@/components/JarIcon'
 import { MoneyInput } from '@/components/MoneyInput'
 import { Disclosure } from '@/components/ui/Disclosure'
@@ -22,6 +22,19 @@ export const isOpenRow = (r: Row) => r.review_status === 'auto_added' || r.revie
 
 /** Tên ngắn để đọc màn hình: đối tác, không có thì nội dung, không có nữa thì số thứ tự. */
 export const rowTitle = (r: Row) => r.counterparty ?? r.description ?? `Dòng ${r.seq}`
+
+type PiiKind = NonNullable<Row['pii_masked']>[number]
+
+/** Nhãn của loại thông tin cá nhân đã che: ngắn trên chip, đầy đủ cho trình đọc màn hình. Chỉ loại, không bao giờ là giá trị. */
+const PII_LABEL: Record<PiiKind, { short: string; full: string }> = {
+  name: { short: 'tên', full: 'tên người' },
+  phone: { short: 'SĐT', full: 'số điện thoại' },
+  account: { short: 'số TK', full: 'số tài khoản' },
+  card: { short: 'số thẻ', full: 'số thẻ' },
+}
+
+/** Tổng số loại thông tin cá nhân đã che trên các dòng (mỗi loại của mỗi dòng tính một). */
+export const piiMaskedCount = (rows: readonly Row[]) => rows.reduce((n, r) => n + (r.pii_masked?.length ?? 0), 0)
 
 /** Số theo ngoại tệ như chứng từ, viết kiểu Việt Nam: "111,11 USD". */
 export function formatFxOriginal(fx: IngestFx): string {
@@ -106,6 +119,17 @@ export function IngestRow({ row, jar, selected, onToggle, onPickJar, jarBusy, di
             {status.label}
           </span>
           {income && <span className="rounded-full bg-surface-2 px-2 py-0.5 font-semibold">Thu nhập ngoài ví</span>}
+          {row.pii_masked?.length ? (
+            <span
+              role="note"
+              data-testid="ingest-pii"
+              aria-label={`Đã che trước khi lưu: ${row.pii_masked.map((k) => PII_LABEL[k].full).join(', ')}`}
+              className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 font-semibold"
+            >
+              <ShieldCheck className="size-3" aria-hidden />
+              Đã che: {row.pii_masked.map((k) => PII_LABEL[k].short).join(', ')}
+            </span>
+          ) : null}
         </div>
         {row.fx &&
           (row.fx.status === 'converted' ? (

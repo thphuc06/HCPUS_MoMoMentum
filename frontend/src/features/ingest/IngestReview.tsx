@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { IngestReviewData, IngestRow as Row } from '@/contracts/blocks'
-import { IngestRow, type IngestRowProps } from './IngestRow'
+import { ShieldCheck } from 'lucide-react'
+import { IngestRow, piiMaskedCount, type IngestRowProps } from './IngestRow'
 
 /** Câu tóm tắt số dòng theo trạng thái (số từ `counts` của server). */
 export function countsSummary(d: IngestReviewData): string {
@@ -28,6 +29,7 @@ export function IngestReviewList({
   footer?: ReactNode
 }) {
   const hidden = data.rows_total - data.rows.length
+  const masked = piiMaskedCount(data.rows)
   return (
     <section data-block="ingest_review" aria-labelledby={`ir-${data.job_id}`} className="rounded-card bg-surface-2 p-3">
       <h2 id={`ir-${data.job_id}`} className="px-1 text-subtitle font-semibold text-ink">
@@ -36,6 +38,12 @@ export function IngestReviewList({
       <p className="px-1 text-small text-ink-2" data-testid="ingest-counts">
         {countsSummary(data)}
       </p>
+      {masked > 0 && (
+        <p className="mt-1 flex items-center gap-1 px-1 text-note text-ink-2" data-testid="ingest-pii-total">
+          <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
+          Đã che {masked} thông tin cá nhân trước khi lưu
+        </p>
+      )}
       <ul className="mt-3 space-y-2" aria-label="Dòng đã đọc">
         {data.rows.map((r) => {
           const p = rowProps?.(r)

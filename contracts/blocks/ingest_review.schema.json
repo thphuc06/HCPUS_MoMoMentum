@@ -121,6 +121,13 @@
         "fx": {
           "description": "Có khi chứng từ ghi bằng ngoại tệ (không phải VND).",
           "$ref": "#/$defs/IngestFx"
+        },
+        "pii_masked": {
+          "description": "Các LOẠI thông tin cá nhân đã che trong counterparty và description trước khi lưu, theo thứ tự name (tên người), phone (số điện thoại), account (số tài khoản), card (số thẻ), mỗi loại một lần. Chỉ loại, KHÔNG bao giờ là giá trị trước khi che. Vắng khi dòng không bị che gì (hoặc nạp trước khi có trường này).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "type": "string", "enum": ["name", "phone", "account", "card"] }
         }
       }
     },

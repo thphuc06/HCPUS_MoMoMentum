@@ -25,8 +25,8 @@ Tệp `minh_sao_ke_2_tuan.csv`: tải ở `/samples/minh_sao_ke_2_tuan.csv` trê
 
 1. Hồ sơ → **Đặt lại dữ liệu**. Làm cảnh 4 trong ngày đặt lại hoặc chậm nhất ngày hôm sau, và trước cảnh 5: tệp gắn với ngày mô phỏng 21/11/2026, ngày mô phỏng đi theo ngày thật kể từ lần đặt lại; tải trễ hai ngày trở lên thì PELT không xác nhận và không có lộ trình mới (không báo lỗi gì), phải đặt lại rồi tải lại. Nạp tệp khác vào hũ Ăn uống trước đó cũng làm đổi chuỗi chi.
 2. Tải tệp về máy, mở **Nạp dữ liệu** → **Tải sao kê CSV** → chọn tệp → **Đồng ý và tải lên** (lần đầu sau khi đặt lại).
-3. Chờ đọc xong: 32 dòng chi từ 07/11 tới 20/11 (16 dòng mỗi tuần, 1.501.000 ₫ tuần 07/11–13/11 và 1.597.000 ₫ tuần 14/11–20/11, tổng 3.098.000 ₫), mọi dòng đã chọn sẵn vào hũ Ăn uống (không phải chọn hũ từng dòng) → **Xác nhận thêm 32 dòng**.
-4. Dự báo chạy lại ngay sau khi xác nhận. PELT xác nhận chi Ăn uống tăng từ khoảng 843.000 ₫ lên 2.582.000 ₫ mỗi tuần, giữ 2 tuần (tải ngày hôm sau: khoảng 863.000 ₫ lên 2.316.000 ₫), rồi lộ trình được sinh lại. Mục tiêu: thấy bản đề xuất mới trong 30 giây kể từ lúc xác nhận (chưa đo trên tài khoản giám khảo).
+3. Chờ đọc xong: 32 dòng chi từ 07/11 tới 20/11 (16 dòng mỗi tuần, 1.660.000 ₫ tuần 07/11–13/11 và 1.756.000 ₫ tuần 14/11–20/11, tổng 3.416.000 ₫), mọi dòng đã chọn sẵn vào hũ Ăn uống (không phải chọn hũ từng dòng) → **Xác nhận thêm 32 dòng**.
+4. Dự báo chạy lại ngay sau khi xác nhận. PELT xác nhận chi Ăn uống tăng từ khoảng 843.000 ₫ lên 2.651.000 ₫ mỗi tuần, giữ 2 tuần (tải ngày hôm sau: khoảng 868.000 ₫ lên 2.353.000 ₫), rồi lộ trình được sinh lại. Mục tiêu: thấy bản đề xuất mới trong 30 giây kể từ lúc xác nhận (chưa đo trên tài khoản giám khảo).
 5. Mở **Lộ trình**: chip **Có phiên bản mới** → **So với bản cũ** (bản mới so với v2, lý do hành vi thay đổi) → mở "Vì sao"; chọn **Dùng bản mới** hoặc **Giữ bản cũ**.
 6. Hỏi "nên mua cổ phiếu nào": trợ lý từ chối đúng phạm vi.
 
@@ -47,7 +47,7 @@ Các bước:
 2. Mở `/samples/minh_bien_lai_1.png` trên máy quay và lưu ảnh về máy.
 3. Trong app, mở Nạp dữ liệu (`#/ingest`) → "Chọn ảnh có sẵn" → chọn ảnh vừa lưu. Lần nạp đầu có hộp "Cho phép đọc ảnh": tích đồng ý → "Đồng ý và tải lên".
 4. Màn chờ "Đang đọc các dòng và che thông tin cá nhân…" (cắt đoạn chờ trong video).
-5. Màn duyệt: dòng chi 345.000 ₫ ngày 20/11, đối tác `B***`, không còn họ tên, số điện thoại hay số tài khoản đầy đủ. Hũ gợi ý mong là Ăn uống. Đây là chuyển tiền cho người, nên hũ do model đề xuất từ nội dung và dòng ở trạng thái "Cần duyệt"; hũ trống hay sai thì chạm vào dòng để chọn Ăn uống. Ảnh 2 có loại "Tiền nước", hũ mặc định là Hóa đơn.
+5. Màn duyệt: dòng chi 345.000 ₫ ngày 20/11, đối tác `B***`, không còn họ tên, số điện thoại hay số tài khoản đầy đủ. Dòng có chip "Đã che: tên" (thêm "SĐT", "số TK" nếu model chép các số đó vào nội dung), đầu danh sách có câu "Đã che N thông tin cá nhân trước khi lưu". Chip chỉ nêu loại, không bao giờ hiện giá trị gốc. Hũ gợi ý mong là Ăn uống. Đây là chuyển tiền cho người, nên hũ do model đề xuất từ nội dung và dòng ở trạng thái "Cần duyệt"; hũ trống hay sai thì chạm vào dòng để chọn Ăn uống. Ảnh 2 có loại "Tiền nước", hũ mặc định là Hóa đơn.
 6. "Xong, cập nhật dự báo" → "Xác nhận thêm 1 dòng" → "Đã thêm các dòng ngoài ví". Số dư hũ không đổi. Khoản chi ngoài ví vào lịch sử chi của hũ, và dự báo được xếp lịch tính lại.
 
 Độ phủ dữ liệu của Minh đã ở mức 100% trước khi nạp: tính offline trên 120 ngày lịch sử của bộ sinh, (chi 31.350.000 ₫ + số dư cuối 7.900.000 ₫) / thu nhập 36.000.000 ₫ vượt 1 nên bị kẹp về 1,0. Vì vậy cảnh này không cho thấy độ phủ tăng. Trên AWS, độ phủ tính theo cửa sổ `forecast_history_window_days`, cần kiểm lại. Muốn thấy độ phủ tăng thì dùng persona `vy` với `vy_sao_ke_vcb.csv` (`data/personas/README.md`, mục "Tệp mẫu cho cảnh 5").

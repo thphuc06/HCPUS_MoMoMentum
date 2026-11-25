@@ -55,6 +55,7 @@ class FakeRepo:
         self.row_result: dict[str, Any] | None = None
         self.state: dict[str, Any] | None = None
         self.has_user = True
+        self.found: tuple[dict[str, Any], list[dict[str, Any]]] | None = None
 
     def user(self, uid):
         return UserContext(-19, "Minh") if self.has_user else None
@@ -87,7 +88,7 @@ class FakeRepo:
         return JARS
 
     def get_job(self, uid, job_id, limit):
-        return None
+        return self.found
 
 
 @pytest.fixture()
@@ -380,6 +381,31 @@ def test_job_khong_co_hoac_id_hong_la_404(api):
         code, err = call(svc, "GET", f"/ingest/jobs/{jid}")
         assert (code, err["error"]["code"]) == (404, "INGEST_JOB_NOT_FOUND")
 
+
+def test_job_cho_duyet_tra_loai_pii_da_che_cua_tung_dong(api):
+    """Issue #16, cảnh 5: dòng nạp mang `pii_masked` (cột của 0056) ra khối duyệt; dòng không che gì (mảng rỗng) hay nạp trước 0056
+    (NULL) thì vắng trường."""
+    svc, repo = api
+    jid, r1, r2, r3 = (str(uuid.uuid4()) for _ in range(4))
+    job = {"id": jid, "status": "review", "source_kind": "image", "progress": 100, "rows_total": 3,
+           "created_at": NOW, "updated_at": NOW}  # fmt: skip
+
+    def row(rid, seq, cp, pii):
+        return {"id": rid, "seq": seq, "kind": "expense", "app_date": "2026-11-20", "amount_vnd": "345000",
+                "counterparty": cp, "description": None, "extract_confidence": "0.950", "suggested_jar_code": "an_uong",
+                "jar_confidence": "0.900", "jar_source": "model", "review_status": "pending",
+                "duplicate_of_transaction_id": None, "fx": None, "pii_masked": pii}  # fmt: skip
+
+    repo.found = (
+        job,
+        [row(r1, 1, "B***", ["name", "phone", "account"]), row(r2, 2, "Highlands Coffee", []),
+         row(r3, 3, "Phúc Long", None)],
+    )  # fmt: skip
+    code, body = call(svc, "GET", f"/ingest/jobs/{jid}")
+    assert code == 200
+    rows = body["review"]["data"]["rows"]
+    assert rows[0]["counterparty"] == "B***" and rows[0]["pii_masked"] == ["name", "phone", "account"]
+    assert "pii_masked" not in rows[1] and "pii_masked" not in rows[2]
 
 # --- POST /ingest/rows/{row_id}/jar ------------------------------------------------------------------------------------------
 def test_doi_hu_thanh_cong_tra_hu_day_du(api):

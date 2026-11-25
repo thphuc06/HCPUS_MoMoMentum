@@ -228,6 +228,28 @@ def test_cua_hang_giu_ten_doanh_nghiep(gateway_of):
     assert res.candidates[0].counterparty == "Công ty TNHH Phúc Long"
 
 
+def test_dong_mang_loai_pii_da_che_cua_doi_tac_va_noi_dung(gateway_of):
+    """Issue #16, cảnh 5: chữ như trên biên lai mẫu `minh_bien_lai_1.png` (data/personas/samples/minh_receipts.json). Dòng mang
+    LOẠI đã che (tên, SĐT, số TK) để màn duyệt nói đã che gì, không mang giá trị gốc; dòng không có PII thì tập rỗng."""
+    payload = doc(
+        [
+            row(
+                counterparty="BÙI QUỐC KHÁNH",
+                counterparty_is_person=True,
+                description="chuyen tien an lien hoan nhom SĐT 0901 234 567 STK 19038642097531 Techcombank",
+                tx_type="transfer_person",
+            ),
+            row(date="2026-11-19", amount_vnd=59000),
+        ]
+    )
+    res, _ = run_image(gateway_of, payload)
+    person, shop = res.candidates
+    assert person.counterparty == "B***"
+    assert person.description == "chuyen tien an lien hoan nhom SĐT ****4567 STK ****7531 Techcombank"
+    assert person.pii_masked == ["name", "phone", "account"]
+    assert (shop.counterparty, shop.pii_masked) == ("Highlands Coffee", [])
+
+
 @pytest.mark.parametrize(
     "bad",
     [

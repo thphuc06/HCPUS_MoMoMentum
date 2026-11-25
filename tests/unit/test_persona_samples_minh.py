@@ -128,11 +128,9 @@ def test_bo_che_pii_che_ten_sdt_so_tai_khoan_va_giu_nguyen_phan_giao_dich(receip
     assert pii == set(MASKED)
     for r in receipts:
         # từng dòng chữ như vẽ trên ảnh, và từng cặp nhãn + giá trị như model có thể chép vào nội dung; dòng không có PII (số tiền,
-        # nhà cung cấp, ngân hàng, nội dung, mã tham chiếu) phải còn nguyên để thành dòng giao dịch. Bỏ dòng ngày giờ: model trả ngày ở
-        # trường `date` riêng (extract.parse_date), không qua mask_row_text (hàm này hiện đọc "2026 07" của "dd/mm/yyyy HH:MM" là số)
-        when = dict(r.rows)["Thời gian giao dịch"]
-        drawn = {line: MASKED.get(line, line) for line in r.lines if line != when}
-        joined = {f"{k}: {v}": f"{k}: {MASKED.get(v, v)}" for k, v in r.rows if v != when}
+        # nhà cung cấp, ngân hàng, nội dung, mã tham chiếu, ngày giờ "dd/mm/yyyy HH:MM") phải còn nguyên để thành dòng giao dịch
+        drawn = {line: MASKED.get(line, line) for line in r.lines}
+        joined = {f"{k}: {v}": f"{k}: {MASKED.get(v, v)}" for k, v in r.rows}
         for line, expected in {**drawn, **joined}.items():
             assert mask_row_text(line, policy) == expected, line
 
