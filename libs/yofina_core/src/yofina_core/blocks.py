@@ -434,6 +434,10 @@ class IngestFx(_Strict):
         return self
 
 
+#: loại PII mà bước nạp che (yofina_core.pii.ROW_PII_KINDS): tên người, số điện thoại, số tài khoản, số thẻ
+PiiKind = Literal["name", "phone", "account", "card"]
+
+
 class IngestRow(_Strict):
     row_id: Uuid
     seq: Annotated[int, Field(ge=1, le=10000)]
@@ -450,11 +454,15 @@ class IngestRow(_Strict):
     review_status: IngestRowStatus
     duplicate_of: Uuid | None = None
     fx: IngestFx | None = None
+    #: các LOẠI PII đã che trong đối tác và nội dung (issue #16), không bao giờ là giá trị gốc; vắng khi không che gì
+    pii_masked: Annotated[list[PiiKind], Field(min_length=1, max_length=4)] | None = None
 
     @model_validator(mode="after")
     def _amount_or_pending_rate(self) -> IngestRow:
         if self.amount_vnd is None and (self.fx is None or self.fx.status != "rate_unavailable"):
             raise ValueError("amount_vnd chỉ được vắng ở dòng ngoại tệ chưa có tỷ giá")
+        if self.pii_masked is not None and len(set(self.pii_masked)) != len(self.pii_masked):
+            raise ValueError("pii_masked không được lặp loại")
         return self
 
 

@@ -975,6 +975,8 @@ paths:
         (khối `ingest_review`, id `ingest_review:{job_id}`); `done` có thêm `coverage_change` (khối của lần chốt).
         `failed` và `rejected` có `error_code` (ví dụ `INGEST_NOT_FINANCIAL`) và câu `error_message` hiển thị được.
         Job không có hoặc không thuộc người gọi: 404 `INGEST_JOB_NOT_FOUND` (không phân biệt).
+        Mỗi dòng của `review` có `pii_masked` (tùy chọn, `IngestRow` của khối) khi bước trích đã che thông tin cá nhân trong đối
+        tác hay nội dung: chỉ LOẠI đã che (`name`, `phone`, `account`, `card`), không bao giờ là giá trị trước khi che.
       parameters:
         - $ref: '#/components/parameters/Traceparent'
         - $ref: '#/components/parameters/JobIdPath'

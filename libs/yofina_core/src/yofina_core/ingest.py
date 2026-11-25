@@ -269,6 +269,8 @@ def build_ingest_review(
                 review_status=r["review_status"],
                 duplicate_of=str(dup) if dup and r["review_status"] == "duplicate" else None,
                 fx=IngestFx(**fx) if fx else None,
+                # mảng rỗng (không che gì) hay NULL (dòng nạp trước 0056) đều là vắng
+                pii_masked=list(r["pii_masked"]) if r.get("pii_masked") else None,
             )
         )
     job_id = str(job["id"])

@@ -781,6 +781,7 @@ export const IngestRow = z.object({
   review_status: IngestRowStatus,
   duplicate_of: z.string().regex(new RegExp("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")).optional(),
   fx: IngestFx.optional(),
+  pii_masked: z.array(z.enum(["name", "phone", "account", "card"])).min(1).max(4).optional(),
 })
 export type IngestRow = z.infer<typeof IngestRow>
 

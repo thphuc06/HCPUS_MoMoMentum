@@ -1,0 +1,68 @@
+{
+  "v": 1,
+  "id": "ingest_review:7d4e2a10-3b5c-4f81-9e62-1c0a8b7d5e43",
+  "trace_id": "2b7c9e14d0a84f3c9e61a5d8b3c7f210",
+  "fallback_text": "Đã đọc 2 dòng ngoài ví; 2 dòng chờ bạn duyệt, 0 dòng trùng.",
+  "source": {
+    "tool": "rest:GET /ingest/jobs/{job_id}",
+    "as_of": "2026-11-21T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "ingest_review",
+  "data": {
+    "job_id": "7d4e2a10-3b5c-4f81-9e62-1c0a8b7d5e43",
+    "status": "review",
+    "source_kind": "image",
+    "rows": [
+      {
+        "row_id": "4c8e1f20-6a3b-4d59-8e17-000000000001",
+        "seq": 1,
+        "kind": "expense",
+        "app_date": "2026-11-20",
+        "amount_vnd": 345000,
+        "counterparty": "B***",
+        "description": "chuyen tien an lien hoan nhom SĐT ****4567 STK ****7531",
+        "extract_confidence": 0.96,
+        "suggested_jar": {
+          "code": "an_uong",
+          "name": "Ăn uống",
+          "color_key": "violet",
+          "icon_key": "utensils"
+        },
+        "jar_confidence": 0.9,
+        "jar_source": "model",
+        "review_status": "auto_added",
+        "pii_masked": [
+          "0901 234 567"
+        ]
+      },
+      {
+        "row_id": "4c8e1f20-6a3b-4d59-8e17-000000000002",
+        "seq": 2,
+        "kind": "expense",
+        "app_date": "2026-11-20",
+        "amount_vnd": 126000,
+        "counterparty": "Công ty Cấp nước Sông Xanh",
+        "description": "Thanh toan hoa don tien nuoc",
+        "extract_confidence": 0.95,
+        "review_status": "pending"
+      }
+    ],
+    "rows_total": 2,
+    "counts": {
+      "auto_added": 1,
+      "pending": 1,
+      "approved": 0,
+      "rejected": 0,
+      "duplicate": 0
+    },
+    "jars": [
+      {
+        "code": "an_uong",
+        "name": "Ăn uống",
+        "color_key": "violet",
+        "icon_key": "utensils"
+      }
+    ]
+  }
+}
