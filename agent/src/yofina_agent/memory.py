@@ -825,9 +825,18 @@ def schedule_remember(turn: Turn) -> asyncio.Task[bool] | None:
 
 
 async def drain() -> None:
-    """Chờ mọi lần ghi nền xong (test, và khi tắt tiến trình)."""
-    while _BACKGROUND:
-        await asyncio.gather(*list(_BACKGROUND), return_exceptions=True)
+    """Chờ mọi lần ghi nền xong (test, và khi tắt tiến trình).
+
+    Chỉ chờ tác vụ chưa xong của vòng lặp hiện tại: tác vụ đã xong mà callback bỏ khỏi `_BACKGROUND` chưa chạy thì `gather` trả ngay
+    không nhường vòng lặp, và `while _BACKGROUND` sẽ quay mãi."""
+    loop = asyncio.get_running_loop()
+    while pending := [t for t in _BACKGROUND if not t.done() and t.get_loop() is loop]:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
+def busy() -> bool:
+    """Còn lần ghi bộ nhớ nền chưa xong (`/ping` báo `HealthyBusy`)."""
+    return any(not t.done() for t in _BACKGROUND)
 
 
 # --- ý định `memory`: người dùng nói một sở thích hoặc hỏi trợ lý nhớ gì ----------------------------------

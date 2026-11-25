@@ -16,7 +16,7 @@ from yofina_agent.identity import Identity
 from yofina_agent.settings import AgentSettings
 from yofina_agent.store import UnconfiguredTurnBlockStore
 from yofina_agent.tools import ToolOutcome, classify_result
-from yofina_agent.turn import Turn, TurnDeps, stream_turn
+from yofina_agent.turn import Turn, TurnDeps, drain_background, stream_turn
 
 from yofina_core.config import Config
 from yofina_core.llm import BudgetCapReached, LlmGateway, LlmSettings, ModelSpec
@@ -249,7 +249,9 @@ class FakeWriter:
 
 async def collect(turn: Turn) -> list[Any]:
     # RUN_STARTED do lớp gọi (app.py) phát trước khi nạp cấu hình; test mô phỏng đúng như vậy
-    return [ev.run_started(turn.run_input), *[e async for e in stream_turn(turn)]]
+    events = [ev.run_started(turn.run_input), *[e async for e in stream_turn(turn)]]
+    await drain_background()  # ghi lượt chạy nền sau RUN_FINISHED (#11): chờ xong để test đọc được
+    return events
 
 
 def run_turn(

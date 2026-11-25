@@ -17,6 +17,7 @@ nên `_GatewayMCPClient` giữ lại ngoại lệ gốc qua hook `_handle_tool_e
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
@@ -212,7 +213,7 @@ def _make_mcp_client(url: str, headers: dict[str, str], startup_timeout: int) ->
 class GatewayTools:
     """Một kết nối MCP tới Gateway cho **một lượt hội thoại** (token của đúng người dùng đó).
 
-    Kết nối mở lười ở lần gọi tool đầu tiên và đóng ở `aclose()`. Gọi tuần tự.
+    Kết nối mở lười ở lần gọi tool đầu tiên (có khóa: lời gọi song song chờ cùng một phiên) và đóng ở `aclose()`.
     """
 
     def __init__(
@@ -228,19 +229,28 @@ class GatewayTools:
         self._call_timeout, self._startup_timeout = call_timeout, startup_timeout
         self._factory = client_factory
         self._client: Any | None = None
+        self._lock = asyncio.Lock()  # lời gọi song song (what-if) dùng chung một phiên MCP (#11)
 
     async def _ensure(self) -> Any:
-        if self._client is None:
-            if not self._url:
-                raise RuntimeError("Thiếu YOFINA_GATEWAY_URL")
-            client = self._factory(
-                self._url,
-                {"Authorization": self._identity.authorization},
-                int(self._startup_timeout),
-            )
-            await asyncio.to_thread(client.start)
-            self._client = client
+        if self._client is not None:
+            return self._client
+        async with self._lock:
+            if self._client is None:
+                if not self._url:
+                    raise RuntimeError("Thiếu YOFINA_GATEWAY_URL")
+                client = self._factory(
+                    self._url,
+                    {"Authorization": self._identity.authorization},
+                    int(self._startup_timeout),
+                )
+                await asyncio.to_thread(client.start)
+                self._client = client
         return self._client
+
+    async def prewarm(self) -> None:
+        """Mở phiên MCP sẵn trong lúc router chạy (#11). Lỗi bỏ qua: lời gọi tool đầu tiên mở lại và báo lỗi đúng chỗ."""
+        with contextlib.suppress(Exception):
+            await self._ensure()
 
     async def call(self, name: str, arguments: dict[str, Any]) -> ToolOutcome:
         outcome = await self._call(name, arguments)
@@ -292,7 +302,8 @@ class GatewayTools:
         return classify_result(name, result, getattr(client, "last_exception", None))
 
     async def aclose(self) -> None:
-        client, self._client = self._client, None
+        async with self._lock:  # phiên đang mở dở (prewarm) thì chờ mở xong rồi đóng, không để sót phiên
+            client, self._client = self._client, None
         if client is not None:
             try:
                 await asyncio.to_thread(client.stop, None, None, None)

@@ -11,6 +11,7 @@ Mỗi vòng chỉ còn phương án "bỏ qua" qua luật nên vòng nào cũng 
 from __future__ import annotations
 
 import copy
+import json
 from datetime import date
 from typing import Any
 
@@ -25,7 +26,8 @@ from agent_helpers import (
     run_turn,
     tool_response,
 )
-from test_whatif import ROUTE_WHAT_IF, block_types, call_names, result_of, text_of
+from test_whatif import ROUTE_WHAT_IF, WHAT_IF_Q, analysis, block_types, call_names, result_of, text_of
+from test_whatif import SCENARIO as TAI_NGHE
 from yofina_agent import notices
 from yofina_agent.schemas import AnalysisOption
 from yofina_agent.tools import classify_result
@@ -155,6 +157,36 @@ def test_analyst_thay_so_du_hu_de_chon_hu_du_tien():
     rows = fixture("get_jar_balances.ok.json")["data"]["jars"]
     p = analyst_prompt(QUESTION, {}, rows, date(2026, 11, 21))
     assert '"code": "giai_tri", "name": "Giải trí", "balance_text": "760.000 ₫"' in p
+    assert "covers_amount" not in p  # không có khoản chi (đổi lương, chuyển hũ...) thì không có cờ
+
+
+def _jars_in_prompt(p: str) -> dict[str, dict[str, Any]]:
+    body = p.split("<danh_sach_hu>\n", 1)[1].split("\n</danh_sach_hu>", 1)[0]
+    return {j["code"]: j for j in json.loads(body)}
+
+
+def test_co_hu_nguon_du_tien_do_ma_tinh_cho_tung_hu_truoc_khi_analyst_de_xuat():
+    """#11: mã so số dư thật của từng hũ với số tiền khoản chi; Analyst thấy cờ trước khi đề xuất nên ít khi vấp `source_jar_covers`."""
+    rows = fixture("get_jar_balances.ok.json")["data"]["jars"]
+    jars = _jars_in_prompt(analyst_prompt(QUESTION, {}, rows, date(2026, 11, 21), spend_amount=1_200_000))
+    covers = {code: j["covers_amount"] for code, j in jars.items()}
+    # số dư fixture: Ăn uống 380k, Đi lại 640k, Hóa đơn 450k, Giải trí 760k, Du lịch 1,8 triệu, Dự phòng 2,7 triệu, Nghĩa vụ 1 triệu
+    assert covers == {
+        "an_uong": False, "di_lai": False, "hoa_don": False, "giai_tri": False,
+        "du_lich": True, "du_phong": True, "nghia_vu": False,
+    }  # fmt: skip
+    # đúng bằng số dư là đủ
+    assert _jars_in_prompt(analyst_prompt(QUESTION, {}, rows, date(2026, 11, 21), spend_amount=760_000))["giai_tri"]["covers_amount"] is True
+
+
+def test_luot_what_if_dua_co_du_tien_vao_prompt_analyst(monkeypatch):
+    llm = make_llm(
+        [route_response(**ROUTE_WHAT_IF), tool_response("plan_scenario", TAI_NGHE), tool_response("analyze", analysis())]
+    )
+    run_turn(WHAT_IF_Q, llm=llm, monkeypatch=monkeypatch)
+    analyst_text = llm[1].calls[2]["messages"][0]["content"][0]["text"]
+    jars = _jars_in_prompt(analyst_text)
+    assert jars["giai_tri"]["covers_amount"] is False and jars["du_lich"]["covers_amount"] is True  # khoản tai nghe 1,2 triệu
 
 
 def test_chuan_hoa_de_xuat_chi_sua_dieu_model_mo_ta_sai_khong_bo_kiem_khoan_chi_that():

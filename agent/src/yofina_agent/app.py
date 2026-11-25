@@ -31,7 +31,7 @@ from yofina_agent.guardrail import Guardrail
 from yofina_agent.settings import AgentSettings
 from yofina_agent.store import TurnBlockStore, TurnRecordStore, make_record_store, make_store
 from yofina_agent.tools import GatewayTools
-from yofina_agent.turn import Turn, TurnDeps, stream_turn
+from yofina_agent.turn import Turn, TurnDeps, background_busy, stream_turn
 from yofina_core.blocks import new_trace_id, trace_id_from_traceparent
 from yofina_core.config import Config, ConfigError
 from yofina_core.errors import ErrorCode
@@ -120,7 +120,9 @@ def create_app(runtime: AgentRuntime | None = None) -> FastAPI:
 
     @app.get("/ping")
     async def ping() -> dict[str, Any]:
-        return {"status": "Healthy", "time_of_last_update": int(time.time())}
+        # HealthyBusy khi còn ghi lượt/bộ nhớ nền sau RUN_FINISHED: Runtime giữ phiên tới khi ghi xong (#11).
+        # Không gửi `time_of_last_update`: giờ tăng ở mỗi ping làm phiên không bao giờ hết idle (runtime-long-run.html).
+        return {"status": "HealthyBusy" if background_busy() else "Healthy"}
 
     @app.post("/invocations")
     async def invocations(request: Request) -> Any:

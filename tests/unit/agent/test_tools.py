@@ -180,6 +180,48 @@ def ungrounded(text, allowed):
     return ungrounded_amounts(text, allowed)
 
 
+def test_hai_loi_goi_dau_song_song_chi_mo_mot_phien_mcp():
+    """#11: `_ensure` có khóa nên hai lời gọi tool đầu tiên chạy song song dùng chung MỘT phiên MCP."""
+    import asyncio
+    import time
+
+    from yofina_agent.identity import Identity
+    from yofina_agent.tools import GatewayTools
+
+    made = []
+
+    class FakeClient:
+        last_exception = None
+
+        def start(self):
+            time.sleep(0.05)  # mở phiên mất thời gian: lời gọi thứ hai tới khi phiên đầu chưa xong
+
+        async def call_tool_async(self, tool_use_id, name, arguments, read_timeout_seconds=None):
+            return mcp_ok({"status": "OK", "data": {"tool": name}})
+
+        def stop(self, *a):
+            pass
+
+    def factory(url, headers, startup_timeout):
+        made.append(FakeClient())
+        return made[-1]
+
+    tools = GatewayTools(
+        "https://gw.example/mcp",
+        Identity("user-a", "Bearer x"),
+        call_timeout=5,
+        startup_timeout=5,
+        client_factory=factory,
+    )
+
+    async def main():
+        return await asyncio.gather(tools.call("a", {}), tools.call("b", {}))
+
+    a, b = asyncio.run(main())
+    assert a.ok and b.ok
+    assert len(made) == 1
+
+
 def test_token_het_han_luc_mo_phien_mcp_thanh_can_dang_nhap_lai():
     exc = ExceptionGroup(
         "init", [ExceptionGroup("inner", [MCPError(-32001, "Invalid Bearer token")])]

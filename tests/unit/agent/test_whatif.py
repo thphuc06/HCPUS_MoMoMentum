@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import threading
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -145,6 +146,89 @@ def test_what_if_thu_tu_khoi_so_lieu_roi_phuong_an_roi_van_ban(monkeypatch):
     assert [b["type"] for b in rec["blocks_emitted"]][:2] == ["forecast_timeline", "obligation_impact"]
     assert {s["step"] for s in rec["step_timings"]} >= {"router", "orchestrator", "tools", "analyst", "verifier", "composer"}
     assert any(d["tool"].endswith("run_scenario") for d in rec["data_used"])
+
+
+class BarrierTools(FakeTools):
+    """Các tool trong `together` chỉ trả kết quả khi cả nhóm đã bắt đầu; gọi tuần tự thì chờ quá giờ và bị ghi vào `waited_alone`."""
+
+    def __init__(self, together: set[str], results: dict[str, Any] | None = None) -> None:
+        super().__init__(results)
+        self.together, self.started, self.waited_alone = together, set(), []
+        self.all_started = asyncio.Event()
+
+    async def call(self, name: str, arguments: dict[str, Any]) -> ToolOutcome:
+        short = name.split("___", 1)[-1]
+        if short in self.together:
+            self.started.add(short)
+            if self.started >= self.together:
+                self.all_started.set()
+            try:
+                await asyncio.wait_for(self.all_started.wait(), 1.0)
+            except TimeoutError:
+                self.waited_alone.append(short)
+        return await super().call(name, arguments)
+
+
+def test_phien_mcp_mo_cung_luc_voi_router(monkeypatch):
+    """#11: phiên MCP tới Gateway mở trong lúc router chạy, không đợi router xong mới mở ở lần đọc hũ đầu tiên."""
+    router_running = threading.Event()
+    overlapped: list[bool] = []
+
+    class PrewarmTools(FakeTools):
+        async def prewarm(self) -> None:
+            overlapped.append(await asyncio.to_thread(router_running.wait, 2.0))
+
+    llm = what_if_llm(tool_response("analyze", analysis()))
+    real = llm[1].converse
+
+    def converse(**kw: Any) -> dict[str, Any]:
+        router_running.set()
+        return real(**kw)
+
+    llm[1].converse = converse
+    events, _, _ = run_turn(WHAT_IF_Q, llm=llm, tools=PrewarmTools(), monkeypatch=monkeypatch)
+    check_agui_order(events)
+    assert overlapped == [True]
+
+
+def test_nghia_vu_va_kich_ban_truoc_doc_song_song(monkeypatch):
+    """#11: `list_scenarios` và `get_obligations` không phụ thuộc nhau nên chạy cùng lúc (cùng lúc với Orchestrator)."""
+    tools = BarrierTools({"list_scenarios", "get_obligations"})
+    dep = {"kind": "one_time_purchase", "amount_vnd": 300_000, "funding_source": "jar", "jar_code": "giai_tri", "label": "dép", "date": None}
+    route = route_response(
+        intent="what_if", amount_vnd=300_000, funding="jar", scenario_kind="one_time_purchase", jar_text="Giải trí", label="dép"
+    )
+    llm = make_llm([route, tool_response("plan_scenario", {"scenario": dep}), tool_response("analyze", analysis())])
+    events, _, _ = run_turn("Nếu mua dép 300k từ hũ Giải trí thì sao", llm=llm, tools=tools, monkeypatch=monkeypatch)
+    check_agui_order(events)
+    assert tools.waited_alone == []
+    assert call_names(tools).count("list_scenarios") == 1
+    assert call_names(tools).count("get_obligations") == 1  # kế hoạch dùng lại kết quả đã đọc, không đọc lần hai
+
+
+def test_hanh_dong_cua_cac_phuong_an_chuan_bi_song_song_va_khoi_giu_thu_tu(monkeypatch):
+    """#11: `_prepare_action` của các phương án chạy cùng lúc; khối xác nhận vẫn đi sau `options` theo đúng thứ tự phương án."""
+    a = analysis()
+    a["options"].append(
+        {
+            "option_id": "remind",
+            "kind": "remind_later",
+            "label": "Nhắc xem lại",
+            "summary": "Nhắc bạn xem lại trước kỳ lương.",
+            "proposal": {"kind": "remind_later", "category": "spending", "origin": "recommendation"},
+            "action": {"tool": "schedule_nudge", "params": {"op": "create", "kind": "purchase_review", "fire_on": "2026-11-26", "note": "xem lại tai nghe"}},
+        }
+    )
+    tools = BarrierTools({"move_between_jars", "schedule_nudge"})
+    llm = what_if_llm(tool_response("analyze", a))
+    events, _, _ = run_turn(WHAT_IF_Q, llm=llm, tools=tools, monkeypatch=monkeypatch)
+    check_agui_order(events)
+    assert tools.waited_alone == []
+    assert block_types(events)[-3:] == ["options", "confirm", "confirm_action"]
+    blocks = blocks_of(events)
+    opts = {o["option_id"]: o for o in blocks[-3]["data"]["options"]}
+    assert opts["cover"]["action"]["block_id"] == blocks[-2]["id"]
+    assert opts["remind"]["action"]["block_id"] == blocks[-1]["id"]
 
 
 def test_verifier_so_khong_co_can_cu_thi_tra_loi_loi_cho_analyst_sua_mot_vong(monkeypatch):

@@ -13,13 +13,18 @@ from agent_helpers import (
     blocks_of,
     check_agui_order,
     fixture,
+    make_jwt,
     make_llm,
     mcp_ok,
     route_response,
+    run,
+    run_input,
     run_turn,
     types,
 )
+from yofina_agent.identity import Identity
 from yofina_agent.tools import ToolKind, ToolOutcome, classify_result
+from yofina_agent.turn import Turn, TurnDeps, drain_background, stream_turn
 
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import ModelBudgetExceeded
@@ -634,6 +639,100 @@ def test_loi_khi_luu_khoi_khong_lam_hong_luot(monkeypatch):
     events, _, _ = run_turn("số dư", llm=llm, monkeypatch=monkeypatch, store=Broken())
     check_agui_order(events)
     assert result_of(events)["degraded"] is False
+
+
+def _turn_with(store, records, *, settings=None):
+    llm = make_llm([route_response(intent="balance_lookup")])
+    tools = FakeTools()
+    deps = TurnDeps(
+        settings=settings or agent_settings(),
+        llm=lambda: llm[0],
+        store=store,
+        tools_factory=lambda identity: tools,
+        guardrail=None,
+        records=records,
+    )
+    turn = Turn(
+        deps,
+        run_input("số dư"),
+        Identity("user-a", make_jwt("user-a")),
+        trace_id="8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+        conversation_id="session-1",
+    )
+    return turn, tools
+
+
+def test_run_finished_phat_truoc_khi_ghi_luot_va_ghi_luot_van_xong(monkeypatch):
+    """#11: save_turn và record_turn chạy nền SAU `RUN_FINISHED` (khung chat mở ngay), và vẫn ghi xong."""
+    monkeypatch.setattr("yofina_agent.turn.write_stream", FakeWriter())
+    gate = asyncio.Event()
+    order: list[str] = []
+
+    class SlowStore:
+        async def save(self, **kw):
+            await gate.wait()
+            order.append("save_done")
+            return True
+
+    class SlowRecords:
+        async def save(self, *, tools, record):
+            await gate.wait()
+            order.append(f"record_done:{record['intent']}")
+            return True
+
+    turn, tools = _turn_with(
+        SlowStore(),
+        SlowRecords(),
+        settings=agent_settings(turn_blocks_timeout_seconds=1.0, turn_record_timeout_seconds=1.0),
+    )
+
+    async def main():
+        events = [e async for e in stream_turn(turn)]
+        order.append(f"stream_end:{events[-1].type.value}")
+        gate.set()
+        await drain_background()
+        return events
+
+    run(asyncio.wait_for(main(), 10))
+    assert order[0] == "stream_end:RUN_FINISHED"
+    assert sorted(order[1:]) == ["record_done:lookup", "save_done"]
+    assert tools.closed  # phiên MCP đóng sau khi ghi xong, không đóng trước
+
+
+def test_ghi_luot_loi_hoac_qua_gio_lan_dau_thi_thu_lai_mot_lan(monkeypatch):
+    attempts = {"save": 0, "record": 0}
+
+    class FlakyStore:
+        async def save(self, **kw):
+            attempts["save"] += 1
+            if attempts["save"] == 1:
+                raise RuntimeError("Gateway lỗi tạm thời")
+            return True
+
+    class SlowOnceRecords:
+        def __init__(self):
+            self.saved = []
+
+        async def save(self, *, tools, record):
+            attempts["record"] += 1
+            if attempts["record"] == 1:
+                await asyncio.sleep(5)  # quá turn_record_timeout_seconds
+            self.saved.append(record["trace_id"])
+            return True
+
+    records = SlowOnceRecords()
+    llm = make_llm([route_response(intent="balance_lookup")])
+    events, _, _ = run_turn(
+        "số dư",
+        llm=llm,
+        monkeypatch=monkeypatch,
+        store=FlakyStore(),
+        records=records,
+        settings=agent_settings(turn_blocks_timeout_seconds=0.2, turn_record_timeout_seconds=0.2),
+    )
+    check_agui_order(events)
+    assert attempts == {"save": 2, "record": 2}
+    assert records.saved == ["8f3a21c94b7e4d0aa1c25e6f7b8c9d01"]  # đúng một bản ghi lượt
 
 
 def test_hang_so_ma_loi_khop_errorcode():
