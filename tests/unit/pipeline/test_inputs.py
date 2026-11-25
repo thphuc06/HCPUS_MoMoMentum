@@ -18,6 +18,7 @@ from yofina_forecast.inputs import Context, build_inputs, expand_obligations, us
 from yofina_forecast.scenario import ScenarioEngine
 from yofina_ledger.refdata import ReferenceData
 from yofina_ledger.repo_wallet import WriteResult
+from yofina_ml.api import forecast_user
 from yofina_ml.calibration import calibrated_config
 from yofina_ml.contract import check_inputs
 
@@ -318,3 +319,16 @@ def test_tra_sau_khong_co_hu_nghia_vu_du_bao_what_if_va_kiem_truoc_khi_chi_cung_
     ob = buy_with_bnpl(chosen or "chua_phan_loai")
     assert forecast_jars_charged(ob) == [charged]  # dự báo thật không bỏ khoản nợ
     assert what_if_and_check_jars(monkeypatch, chosen) == (charged, charged)
+
+
+def test_nguong_lich_su_cua_cong_xac_suat_ghi_de_duoc_qua_cau_hinh():
+    # BR-31: ngưỡng số ngày lịch sử để hiện % theo loại hũ, mặc định theo backtest, cấu hình ghi đè được
+    strict = build(
+        probability_min_history_days_dense=400, probability_min_history_days_sparse=400
+    ).inputs
+    res = forecast_user(strict)
+    assert all(not jf.summary.show_probability and jf.summary.p_shortfall is None for jf in res.jars)
+    assert all(jf.summary.confidence_band in ("low", "medium", "high") for jf in res.jars)
+    loose = build(probability_min_history_days_dense=21, probability_min_history_days_sparse=21).inputs
+    shown = [jf.summary for jf in forecast_user(loose).jars if jf.summary.show_probability]
+    assert shown and all(s.p_shortfall is not None for s in shown)  # 47 ngày >= 21: được hiện %

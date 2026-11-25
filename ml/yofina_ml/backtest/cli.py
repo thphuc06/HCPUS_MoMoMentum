@@ -31,11 +31,18 @@ CALIBRATION_PATH = Path(__file__).resolve().parents[1] / "calibration" / "defaul
 
 
 def _cal_dict(result: dict[str, Any]) -> dict[str, Any]:
+    """Tham số mới của hiệu chỉnh; ngưỡng lịch sử BR-31 giữ nguyên từ bản hiện hành (do `scripts/ml_history_gate.py` chọn)."""
     kinds = result["kinds"]
+    current = default_calibration()
     out: dict[str, Any] = {}
     for k in ("dense", "sparse", "cold_start"):
         src = kinds.get(k) or kinds["dense"]
-        out[k] = {"rho": src["rho"], "level_sigma": src["level_sigma"], "probability_ok": False}
+        out[k] = {
+            "rho": src["rho"],
+            "level_sigma": src["level_sigma"],
+            "probability_ok": False,
+            "probability_min_history_days": current.for_kind(k).probability_min_history_days,
+        }
     return out
 
 
@@ -99,6 +106,11 @@ def write_calibration(args: argparse.Namespace) -> dict[str, Any]:
             "gate": gate,
             "cov_after": {k: res["kinds"][k]["cov_after"] for k in res["kinds"]},
             "cov_before_rho0_3": {k: res["kinds"][k]["cov_before_rho0_3"] for k in res["kinds"]},
+            **{
+                k: v
+                for k, v in calibration_default.CALIBRATION.get("meta", {}).items()
+                if k == "history_gate"
+            },  # số đo của ngưỡng lịch sử đi cùng ngưỡng đã giữ lại
         },
     }
     report.write_default_calibration(CALIBRATION_PATH, payload)

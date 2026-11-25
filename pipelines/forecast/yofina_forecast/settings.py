@@ -86,6 +86,10 @@ class ForecastSettings:
     #: số tháng của lộ trình khi `optimize_allocation` không nói rõ
     allocation_horizon_months: int = 3
     allocation: AllocationParams = field(default=DEFAULT_ALLOCATION_PARAMS)
+    #: BR-31: chỉ hiện % xác suất hụt khi hũ dày/thưa có từ ngần này ngày lịch sử. None: theo hiệu chỉnh của backtest
+    #: (`probability_min_history_days` trong `yofina_ml/calibration/default.py`, số đo ở docs/research/backtest-final.md)
+    probability_min_history_days_dense: int | None = None
+    probability_min_history_days_sparse: int | None = None
 
     @property
     def tz(self) -> ZoneInfo:
@@ -133,6 +137,12 @@ class ForecastSettings:
             ),
             allocation_horizon_months=cfg.get_int("allocation_horizon_months", default=3),
             allocation=_allocation_params(cfg),
+            probability_min_history_days_dense=cfg.get_int(
+                "forecast_probability_min_history_days_dense", default=None
+            ),
+            probability_min_history_days_sparse=cfg.get_int(
+                "forecast_probability_min_history_days_sparse", default=None
+            ),
         )
 
 

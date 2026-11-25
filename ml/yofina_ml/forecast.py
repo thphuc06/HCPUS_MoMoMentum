@@ -95,7 +95,7 @@ def _make_ctx(inputs: ForecastInputs, cal: Calibration | None = None) -> _Ctx:
     run_label: ConfidenceBand = (
         "low"
         if is_initial
-        else band_for(history_days, coverage, cal.dense.probability_ok, cfg, prm)
+        else band_for(history_days, coverage, cal.dense.probability_ok_at(history_days), cfg, prm)
     )
     return _Ctx(
         inputs=inputs,
@@ -191,18 +191,20 @@ def _jar_result(
         for i in range(ctx.horizon)
     )
     p_pub = round(float(sim.p_shortfall), 4)
+    # BR-31: % chỉ hiện khi khoảng của loại chuỗi này đã đạt độ phủ mục tiêu ở ĐỘ DÀI LỊCH SỬ của hũ
+    calibrated = cal_kind.probability_ok_at(jar.history_days)
     show = (
         ctx.cfg.probability_enabled
         and not ctx.is_initial
         and kind != "cold_start"
-        and cal_kind.probability_ok
+        and calibrated
     )
     band: ConfidenceBand = (
         "low"
         if kind == "cold_start"
         else min_band(
             ctx.run_label,
-            band_for(jar.history_days, ctx.coverage, cal_kind.probability_ok, ctx.cfg, ctx.prm),
+            band_for(jar.history_days, ctx.coverage, calibrated, ctx.cfg, ctx.prm),
         )
     )
     summary = JarSummary(
@@ -374,8 +376,11 @@ def update_forecast(
         if code not in jars_by:
             raise KeyError(f"hũ {code} không có trong inputs")
     prev_params = previous.run.params or {}
+    # khóa vắng trong hiệu chỉnh đã lưu (lần chạy trước khi có khóa đó, ví dụ ngưỡng lịch sử của BR-31) lấy từ hiệu chỉnh hiện hành
     cal = (
-        calibration_from_dict(prev_params["calibration"]) if "calibration" in prev_params else None
+        calibration_from_dict(prev_params["calibration"], base=resolve_calibration(inputs.config))
+        if "calibration" in prev_params
+        else None
     )
     ctx = _make_ctx(inputs, cal)
     prev_states = prev_params.get("jar_state", {}) or {}

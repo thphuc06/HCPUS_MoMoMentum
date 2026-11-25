@@ -7,6 +7,8 @@ Với mỗi loại chuỗi (`dense`, `sparse`, `cold_start`) có ba thứ:
   không bắt được (spike ML §3.2); chọn theo độ phủ tổng cộng dồn trên backtest.
 - `probability_ok`: backtest giữ-ra-ngoài cho thấy độ phủ khoảng 80% của tổng 30 ngày nằm trong [0,75; 0,85] thì mới được
   phát xác suất hụt; không thì chỉ phát nhóm Cao/Vừa/Thấp.
+- `probability_min_history_days`: độ phủ trên chỉ đạt khi hũ có từ ngần này ngày lịch sử (BR-31, đo theo độ dài lịch sử ở
+  docs/research/backtest-final.md); hũ ít lịch sử hơn thì ẩn % dù `probability_ok` đúng. Dùng `probability_ok_at(history_days)`.
 
 Ghi đè khi gọi: `ForecastConfig.extra["calibration"] = {"dense": {"rho": 0.5, ...}}` (dùng cho backtest và thử nghiệm).
 """
@@ -27,6 +29,11 @@ class SeriesCalibration:
     rho: float
     level_sigma: float
     probability_ok: bool
+    probability_min_history_days: int = 0
+
+    def probability_ok_at(self, history_days: int) -> bool:
+        """Khoảng của loại chuỗi này đã đạt độ phủ mục tiêu ở độ dài lịch sử `history_days` (được phát %)."""
+        return self.probability_ok and history_days >= self.probability_min_history_days
 
 
 @dataclass(frozen=True)
@@ -47,6 +54,7 @@ class Calibration:
                 "rho": c.rho,
                 "level_sigma": c.level_sigma,
                 "probability_ok": c.probability_ok,
+                "probability_min_history_days": c.probability_min_history_days,
             }
         return out
 
@@ -67,6 +75,9 @@ def calibration_from_dict(o: dict[str, Any], base: Calibration | None = None) ->
             rho=float(src.get("rho", cur.rho)),
             level_sigma=float(src.get("level_sigma", cur.level_sigma)),
             probability_ok=bool(src.get("probability_ok", cur.probability_ok)),
+            probability_min_history_days=int(
+                src.get("probability_min_history_days", cur.probability_min_history_days)
+            ),
         )
     return Calibration(**kw)
 
