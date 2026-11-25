@@ -1,8 +1,8 @@
 import { useId, useMemo } from 'react'
-import { Area, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceDot, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from 'recharts'
+import { Area, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceDot, ReferenceLine, ResponsiveContainer, usePlotArea, XAxis, YAxis } from 'recharts'
 import { formatDayMonth, formatVndAxis } from '@/lib/format'
 import type { ForecastTimelineData } from '@/contracts/blocks'
-import { buildChartModel, xToLabel, type ChartModel } from './model'
+import { buildChartModel, layoutEventLabels, xToLabel, type ChartEvent, type ChartModel } from './model'
 
 // Biểu đồ dự báo 30 ngày (Recharts 3): dải P10–P90, đường P50 màu accent/blue, mốc nghĩa vụ và lương, điểm cạn, vùng
 // hụt gạch chéo. Tách chunk riêng (tải lười ở ForecastBlock) vì Recharts nặng. Cách dựng theo spike-frontend-stack §2.
@@ -15,6 +15,39 @@ const LEVEL_PX = 15
 const TICK = { fontSize: LABEL_PX, fill: 'var(--text-secondary)' } as const
 /** Đường "Sau" và dải chênh vẽ dần từ trái sang khi khối xuất hiện (kịch bản cảnh 2: "biểu đồ dịch chuyển"). */
 export const AFTER_DRAW_MS = 700
+
+/**
+ * Nhãn mốc phía trên vùng vẽ, đặt theo bề ngang thật của vùng vẽ (`layoutEventLabels`, #39): không tràn mép (neo theo mép), nhãn gần
+ * nhau lên tầng trên, không quá `levels` tầng mà lề trên đã chừa. Nằm trong ComposedChart để đọc vùng vẽ (Recharts 3 `usePlotArea`).
+ */
+function EventLabels({ events, lastX, levels }: { events: ChartEvent[]; lastX: number; levels: number }) {
+  const plot = usePlotArea()
+  if (!plot || events.length === 0) return null
+  const labels = layoutEventLabels(events, lastX, { left: plot.x, width: plot.width }, levels)
+  return (
+    <g className="forecast-event-labels">
+      {labels.map((l, i) => {
+        const e = events[i]!
+        if (!l) return null
+        return (
+          <text
+            key={`${e.date}-${e.label}`}
+            data-event-label={e.kind}
+            x={l.x}
+            y={plot.y - 4 - l.level * LEVEL_PX}
+            textAnchor={l.anchor}
+            fontSize={LABEL_PX}
+            fontWeight={700}
+            fill={e.kind === 'salary' ? 'var(--status-ok-fg)' : 'var(--status-warn-fg)'}
+            style={HALO}
+          >
+            {l.text}
+          </text>
+        )
+      })}
+    </g>
+  )
+}
 
 export type ForecastChartProps = {
   data: ForecastTimelineData
@@ -32,6 +65,8 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
   const uid = useId().replace(/:/g, '')
   const m = useMemo(() => model ?? buildChartModel(data), [model, data])
   const hatchId = `hatch-${uid}`
+  // Số tầng nhãn mốc mà lề trên chừa sẵn (tính ở bề ngang tham chiếu khổ 390 px); vẽ thật không vượt số tầng này.
+  const levels = 1 + Math.max(0, ...m.eventLevels)
   // Chỉ hai lớp của kịch bản (Sau, dải chênh) chuyển động; dải 80%, đường Trước và các mốc đứng yên để người xem so được.
   const drawIn = animateAfter
     ? ({ isAnimationActive: true, animationBegin: 0, animationDuration: AFTER_DRAW_MS, animationEasing: 'ease-out' } as const)
@@ -46,7 +81,7 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
   const chart = (
     <ComposedChart
       data={m.rows}
-      margin={{ top: 30 + Math.max(0, ...m.eventLevels) * LEVEL_PX, right: 18, bottom: 0, left: 0 }}
+      margin={{ top: 30 + (levels - 1) * LEVEL_PX, right: 18, bottom: 0, left: 0 }}
       {...(fixedSize ? { width: fixedSize.width, height: fixedSize.height } : {})}
       onMouseMove={pick}
       onClick={pick}
@@ -99,7 +134,7 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
       )}
       <ReferenceLine y={0} stroke="var(--text-secondary)" strokeOpacity={0.6} />
 
-      {m.events.map((e, i) => (
+      {m.events.map((e) => (
         <ReferenceLine
           key={`${e.date}-${e.label}`}
           x={e.x}
@@ -107,18 +142,10 @@ export default function ForecastChart({ data, activeX, onActiveChange, height = 
           // Nét mốc nghĩa vụ dùng --status-warn-line (từ 3:1 trên thẻ, WCAG 1.4.11), dày 2 px để đọc được trên máy chiếu.
           strokeWidth={2}
           strokeDasharray={e.kind === 'salary' ? '4 3' : '3 3'}
-          label={{
-            value: `${e.label} ${formatDayMonth(e.date)}`,
-            position: 'top',
-            // Mốc gần nhau xếp lên các tầng khác nhau để nhãn không chồng lên nhau.
-            offset: 4 + (m.eventLevels[i] ?? 0) * LEVEL_PX,
-            fontSize: LABEL_PX,
-            fontWeight: 700,
-            fill: e.kind === 'salary' ? 'var(--status-ok-fg)' : 'var(--status-warn-fg)',
-            style: HALO,
-          }}
         />
       ))}
+      {/* Nhãn mốc vẽ riêng (không dùng nhãn của ReferenceLine, vốn luôn căn giữa vạch nên tràn mép và đè nhau, #39). */}
+      <EventLabels events={m.events} lastX={m.lastX} levels={levels} />
 
       {m.runout && (
         <ReferenceDot

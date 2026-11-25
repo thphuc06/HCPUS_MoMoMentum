@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import type { ForecastTimelineData } from '@/contracts/blocks'
 import { validBlock } from '@/test/fixtures'
-import { buildChartModel, jarReference, LABEL_SPAN, lowestP50BeforePayday, niceTicks, rowAt, stackLevels, xToLabel } from './model'
+import {
+  buildChartModel,
+  type EventLabel,
+  jarReference,
+  LABEL_CHAR_PX,
+  LABEL_GAP_PX,
+  LABEL_SPACE_PX,
+  labelWidth,
+  layoutEventLabels,
+  lowestP50BeforePayday,
+  MAX_LABEL_LEVELS,
+  niceTicks,
+  REF_PLOT_WIDTH_PX,
+  rowAt,
+  xToLabel,
+} from './model'
 
 const data = (name: string): ForecastTimelineData => (validBlock(name) as unknown as { data: ForecastTimelineData }).data
 
@@ -114,15 +129,76 @@ describe('niceTicks', () => {
   })
 })
 
-describe('nhãn mốc không chồng nhau (lỗi nhỏ phase 2)', () => {
-  it('stackLevels: mốc gần nhau (dưới 4 ngày) lên tầng khác nhau, đủ xa thì về tầng 0', () => {
-    expect(stackLevels([0, 2, 3, 20])).toEqual([0, 1, 2, 0])
-    expect(stackLevels([5, 5, 5, 5])).toEqual([0, 1, 2, 0]) // tối đa 3 tầng rồi quay vòng
-    expect(stackLevels([])).toEqual([])
-    expect(stackLevels([1, 10, 20])).toEqual([0, 0, 0])
+describe('nhãn mốc không tràn khỏi vùng vẽ và không chồng nhau (#39, khung chat 390 px)', () => {
+  /** Vùng vẽ của biểu đồ trong thẻ ở khổ 390 px: trục Y rộng 50, lề phải 18. */
+  const PLOT = { left: 50, width: REF_PLOT_WIDTH_PX }
+  const right = PLOT.left + PLOT.width
+  const ev = (x: number, label: string, date: string) => ({ x, label, date })
+  const overlaps = (a: EventLabel, b: EventLabel) => a.level === b.level && a.left < b.right + LABEL_GAP_PX && b.left < a.right + LABEL_GAP_PX
+
+  it('bề rộng ước lượng của nhãn 12 px đậm: khoảng trắng hẹp hơn chữ, cộng dồn theo ký tự', () => {
+    expect(labelWidth('Lương về 05/12')).toBeCloseTo(12 * LABEL_CHAR_PX + 2 * LABEL_SPACE_PX)
+    expect(labelWidth('')).toBe(0)
   })
 
-  it('buildChartModel sắp mốc theo ngày và trả tầng cho từng mốc', () => {
+  it('mốc sát mép trái (ảnh h-c: "Tiền cơm văn phòng 23/11" ở ngày thứ 2): neo mép trái vùng vẽ, không còn tràn ra ngoài', () => {
+    const [l] = layoutEventLabels([ev(2, 'Tiền cơm văn phòng', '2026-11-23')], 30, PLOT)
+    expect(l).toMatchObject({ text: 'Tiền cơm văn phòng 23/11', anchor: 'start', x: PLOT.left, left: PLOT.left, level: 0 })
+    expect(l!.right).toBeCloseTo(PLOT.left + labelWidth('Tiền cơm văn phòng 23/11'))
+    expect(l!.right).toBeLessThanOrEqual(right)
+  })
+
+  it('mốc sát mép phải: neo mép phải vùng vẽ', () => {
+    const [l] = layoutEventLabels([ev(29, 'Trả sau', '2026-12-20')], 30, PLOT)
+    expect(l).toMatchObject({ text: 'Trả sau 20/12', anchor: 'end', x: right, right, level: 0 })
+    expect(l!.left).toBeGreaterThanOrEqual(PLOT.left)
+  })
+
+  it('mốc ở giữa, đủ chỗ: căn giữa đúng vạch mốc', () => {
+    const [l] = layoutEventLabels([ev(15, 'Lương về', '2026-12-06')], 30, PLOT)
+    expect(l).toMatchObject({ anchor: 'middle', x: PLOT.left + PLOT.width / 2, level: 0 })
+  })
+
+  it('hai mốc gần nhau (ảnh h-c: "Tiền cơm văn phòng 23/11" và "Lương về 05/12"): nhãn thứ hai lên tầng trên, không đè nhau', () => {
+    const out = layoutEventLabels([ev(2, 'Tiền cơm văn phòng', '2026-11-23'), ev(14, 'Lương về', '2026-12-05')], 30, PLOT)
+    const [a, b] = out as [EventLabel, EventLabel]
+    expect(a.level).toBe(0)
+    expect(b.level).toBe(1)
+    expect(b.text).toBe('Lương về 05/12')
+    for (const l of [a, b]) expect(l.left >= PLOT.left && l.right <= right).toBe(true)
+  })
+
+  it('hai mốc đủ xa: cùng tầng 0', () => {
+    const out = layoutEventLabels([ev(2, 'Tiền điện', '2026-11-23'), ev(27, 'Lương về', '2026-12-18')], 30, PLOT)
+    expect(out.map((l) => l?.level)).toEqual([0, 0])
+  })
+
+  it('nhiều mốc cùng chỗ: tối đa 3 tầng; hết tầng mà bản rút gọn (chỉ ngày) cũng không có chỗ thì bỏ chữ (mốc vẫn có trong "Chi tiết dự báo")', () => {
+    const many = [0, 1, 2, 3, 4].map((i) => ev(10, `Khoản ${i}`, `2026-12-0${i + 1}`))
+    const out = layoutEventLabels(many, 30, PLOT)
+    expect(out.map((l) => l?.level ?? null)).toEqual([0, 1, 2, null, null])
+    const shown = out.filter((l): l is EventLabel => l !== null)
+    expect(shown.every((l) => l.text.startsWith('Khoản'))).toBe(true)
+    for (const [i, a] of shown.entries()) for (const b of shown.slice(i + 1)) expect(overlaps(a, b)).toBe(false)
+  })
+
+  it('hết tầng nhưng bản rút gọn có chỗ: nhãn chỉ còn ngày, không đè nhãn bên cạnh', () => {
+    const out = layoutEventLabels([ev(5, 'Tiền điện', '2026-11-26'), ev(15, 'Lương về', '2026-12-06')], 30, PLOT, 1)
+    const [a, b] = out as [EventLabel, EventLabel]
+    expect(a.text).toBe('Tiền điện 26/11')
+    expect(b).toMatchObject({ text: '06/12', level: 0, anchor: 'middle' })
+    expect(overlaps(a, b)).toBe(false)
+    expect(MAX_LABEL_LEVELS).toBe(3)
+  })
+
+  it('nhãn dài hơn cả vùng vẽ: rút gọn tên bằng dấu "…", giữ ngày, vừa trong vùng vẽ', () => {
+    const [l] = layoutEventLabels([ev(15, 'Trả góp điện thoại kỳ thứ ba của hợp đồng mua máy mới', '2026-12-06')], 30, PLOT)
+    expect(l!.text).toMatch(/^Trả góp.*… 06\/12$/)
+    expect(l!.right - l!.left).toBeLessThanOrEqual(PLOT.width)
+    expect(l!.left).toBeGreaterThanOrEqual(PLOT.left)
+  })
+
+  it('buildChartModel sắp mốc theo ngày và trả tầng cho từng mốc (ở bề ngang tham chiếu, để chừa lề trên)', () => {
     const d = structuredClone(data('forecast_timeline.short'))
     d.events = [
       { date: '2026-11-25', kind: 'obligation', label: 'A', amount_vnd: 1000 },
@@ -133,11 +209,8 @@ describe('nhãn mốc không chồng nhau (lỗi nhỏ phase 2)', () => {
     expect(m.eventLevels).toEqual([0, 1])
   })
 
-  it('nhãn 12 px: hai mốc cách nhau dưới khoảng một phần ba trục (Tiền điện 26/11, Lương về 05/12) xếp hai tầng', () => {
-    const d = structuredClone(data('forecast_timeline.short'))
-    const m = buildChartModel(d)
-    const [first, second] = m.events
-    expect(second!.x - first!.x).toBeLessThan(m.lastX * LABEL_SPAN)
+  it('fixture: "Tiền điện 26/11" và "Lương về 05/12" chạm nhau ở bề ngang tham chiếu nên xếp hai tầng', () => {
+    const m = buildChartModel(structuredClone(data('forecast_timeline.short')))
     expect(m.eventLevels).toEqual([0, 1])
   })
 })
