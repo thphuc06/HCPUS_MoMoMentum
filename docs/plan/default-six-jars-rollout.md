@@ -61,10 +61,10 @@ Reset data chỉ dùng được với tài khoản thuộc nhóm demo ([`rest_ap
 
 ### Bước 1. Tách cấu hình bộ hũ và migration
 
-- [ ] Thêm cấu hình bộ hũ riêng cho onboarding và cho demo (ví dụ `jar_layout`). Onboarding đọc bộ ba; Reset data đọc bộ demo. Bỏ điều kiện "đúng sáu hũ" trong `use_default_jars`.
-- [ ] Tách [migration 0055](../../db/migrations/0055_default_six_jars.sql) thành phần mở rộng schema và phần bật bộ hũ. Thêm `purpose` cho `jars` và `jar_templates`, chấp nhận `NULL` trên dữ liệu cũ. Giữ hợp đồng đọc cũ trong giai đoạn chạy xen kẽ, kể cả quyền truy cập và RLS.
-- [ ] Phần bật bộ hũ đặt `is_default = true` cho đúng ba hũ, `false` cho Quỹ dồn, Mục tiêu, Tích lũy dài hạn và bảy hũ cũ. Đồng bộ cả migration và seed để chạy seed sớm cũng chưa bật bộ mới.
-- [ ] Đối chiếu snapshot trước và sau migration và seed trên PostgreSQL cục bộ. Hũ, số dư, tỷ lệ, giao dịch và nghĩa vụ của ví cũ phải khớp. Ledger cũ còn phải khởi tạo được bộ bảy sau khi schema mở rộng.
+- [x] Thêm cấu hình bộ hũ riêng cho onboarding và cho demo (ví dụ `jar_layout`). Onboarding đọc bộ ba; Reset data đọc bộ demo. Bỏ điều kiện "đúng sáu hũ" trong `use_default_jars`.
+- [x] Tách [migration 0055](../../db/migrations/0055_default_six_jars.sql) thành phần mở rộng schema và phần bật bộ hũ. Thêm `purpose` cho `jars` và `jar_templates`, chấp nhận `NULL` trên dữ liệu cũ. Giữ hợp đồng đọc cũ trong giai đoạn chạy xen kẽ, kể cả quyền truy cập và RLS.
+- [x] Phần bật bộ hũ đặt `is_default = true` cho đúng ba hũ, `false` cho Quỹ dồn, Mục tiêu, Tích lũy dài hạn và bảy hũ cũ. Đồng bộ cả migration và seed để chạy seed sớm cũng chưa bật bộ mới.
+- [x] Đối chiếu snapshot trước và sau migration và seed trên PostgreSQL cục bộ. Hũ, số dư, tỷ lệ, giao dịch và nghĩa vụ của ví cũ phải khớp. Ledger cũ còn phải khởi tạo được bộ bảy sau khi schema mở rộng.
 
 Chuyển danh mục sớm sẽ khiến Ledger cũ tạo hũ mới mà bỏ trống `purpose`. Chạy Ledger mới trước schema sẽ khiến những truy vấn cần cột đó lỗi.
 
@@ -94,9 +94,9 @@ Chuyển danh mục sớm sẽ khiến Ledger cũ tạo hũ mới mà bỏ trố
 
 ### Bước 5. Demo bốn hũ
 
-- [ ] Viết cấu hình demo bốn hũ theo bảng "Demo (Reset data)". Bỏ ánh xạ sang Quỹ dồn và Tích lũy dài hạn; dòng chia lương cũ của các hũ bị bỏ gộp vào hũ nhận tương ứng.
-- [ ] Cập nhật [lộ trình seed của Minh](../../data/personas/roadmaps/minh_six_jars.json) nếu còn tham chiếu hũ bị bỏ. Lộ trình hiện chỉ dùng Mục tiêu, Nghĩa vụ, Chi hằng ngày và Dự phòng.
-- [ ] Kiểm tra cả bốn persona sau reset. Lan có thêm hũ Nghĩa vụ (C-07).
+- [x] Viết cấu hình demo bốn hũ theo bảng "Demo (Reset data)". Bỏ ánh xạ sang Quỹ dồn và Tích lũy dài hạn; dòng chia lương cũ của các hũ bị bỏ gộp vào hũ nhận tương ứng.
+- [x] Cập nhật [lộ trình seed của Minh](../../data/personas/roadmaps/minh_six_jars.json) nếu còn tham chiếu hũ bị bỏ. Lộ trình hiện chỉ dùng Mục tiêu, Nghĩa vụ, Chi hằng ngày và Dự phòng.
+- [x] Kiểm tra cả bốn persona sau reset. Lan có thêm hũ Nghĩa vụ (C-07).
 - [ ] Chạy lại cảnh 1 đến 4 theo [kịch bản demo](demo-script.md) bằng engine cục bộ. Số đợt trước, cần xác nhận lại:
   - Cảnh 1: Chi hằng ngày có 1.080.000 ₫ và dự kiến cạn ngày 03/12, trước kỳ lương 05/12.
   - Cảnh 2: mua tai nghe 1.200.000 ₫ bằng Trả Sau, Nghĩa vụ có khoản đến hạn 2.200.000 ₫ ngày 03/12, đã gồm phí 33.000 ₫, và dự kiến thiếu khoảng 761.000 ₫.
