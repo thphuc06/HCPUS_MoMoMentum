@@ -2,7 +2,7 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: **2026-11-26 rạng sáng** (Claude Code điều phối worker `kiro-cli` `claude-opus-5.5`). Nhánh `feat/default-six-jars` của Học **đã gộp vào `main` và đã deploy** (Runtime **v29**, Amplify **job 25**, migration tới **0059**), đã kiểm trên app, không chạy eval: xem mục "Cập nhật rạng sáng 26/11" ngay dưới. Đợt 1 và đợt 2 phase 6 đã deploy từ khuya 25/11. Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B).
+Cập nhật lần cuối: **2026-11-26 rạng sáng** (Claude Code điều phối worker `kiro-cli` `claude-opus-5.5`). Nhánh `feat/default-six-jars` của Học **đã gộp vào `main` và đã deploy** (Runtime **v30**, Amplify **job 26**, migration tới **0059**; `main` `c65fa98` là bản đang chạy), đã kiểm trên app, không chạy eval: xem mục "Cập nhật rạng sáng 26/11" ngay dưới. Đợt 1 và đợt 2 phase 6 đã deploy từ khuya 25/11. Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B).
 
 ## Cập nhật rạng sáng 26/11: gộp bộ hũ mặc định theo mục đích (#39), đã deploy, kiểm trên app
 
@@ -24,7 +24,8 @@ Chủ dự án (đêm 25/11) duyệt: gộp nhánh của Học, push, migration,
 **Phát hành lần sau nhớ**: Runtime cũ kiểm chặt trường trả về (`extra=forbid`), nên khi Lambda thêm trường mới phải **deploy Runtime trước, Lambda sau** (`tests/unit/agent/test_runtime_lambda_compat.py`); không quay lui riêng Runtime. `migrate.py` chạy mọi file chờ: muốn dừng ở một số thì dùng `--dir` với thư mục tạm. Snapshot Aurora `yofina-db-pre-0057-20261126` còn giữ (xóa khi không cần lùi nữa).
 
 **Còn mở sau đợt này**
-- Chi tiết hũ Đầu tư 0 ₫ ghi "Đang hết tiền…" dù chip "Đủ"; ledger ghi ERROR cho lỗi nghiệp vụ `ROADMAP_VERSION_CONFLICT`; `test_chuyen_250k…` và `test_phase4_live.py` 06–10 còn theo seed cũ: worker đang sửa lúc viết bản này, xem ai-log.
+- **Đã sửa và deploy lần hai lúc 05:09** (`c65fa98`, Runtime v30, Amplify job 26, đóng lại cả 5 zip Lambda): chi tiết hũ không có khoản chi dự kiến ghi "Chưa có tiền, không có khoản chi dự kiến trong 30 ngày." (hũ 0 ₫) hoặc "Không có khoản chi dự kiến trong 30 ngày." thay cho "Đang hết tiền"; lỗi nghiệp vụ 4xx do hàm SQL ném ghi WARNING `data_api_business_error` thay cho ERROR; `test_chuyen_250k…` và `test_phase4_live.py` 06–10 viết lại theo dữ liệu hiện hành và chạy đạt (6/6). Test: unit 4402, `tests/local_pg` 266, vitest 1060. Cả 6 tài khoản demo đã đặt lại lúc 05:06.
+- Thấy khi kiểm lần hai, chưa sửa: hũ Du lịch và Dự phòng ghi "Không có khoản chi dự kiến trong 30 ngày." dù lịch sử có khoản rút "Bù tiền ăn cuối tháng" (đúng theo số dự báo, cần xem lại lời); trong khung chat, nhãn mốc trên biểu đồ dự báo bị cắt ở mép trái và chồng nhãn "Lương về 05/12"; `JarStatusChip.tsx` ghi "Đã hết tiền" cho mọi hũ 0 ₫ chưa có dự báo; `writer.py` có thêm một câu giải thích trường `no_outflow_expected` chưa đo bằng eval.
 - Trên ví demo, đề xuất tỷ lệ khi kê khai và bản v3 cảnh 4 đưa Giải trí về 0% (đúng quy tắc "cắt hũ không thiết yếu trước", nhưng nên có sàn cho hũ không thiết yếu): chờ chủ dự án quyết.
 - Câu "lập giúp mình lộ trình xây quỹ dự phòng…" không lập bản mới: router không trích hũ nên `turn.py` mất ý định tạo (dòng `create = action == "create" or goal is not None`), và hũ Dự phòng (`buffer`) không đặt mục tiêu được. Chưa sửa vì đổi hành vi agent mà không có eval.
 - Hiếm gặp, chưa sửa: what-if Trả sau có thể tính trùng khoản cũ chưa lưu hũ trả trên ví không có hũ obligation; hũ đã lưu thắng hũ người dùng chọn cho khoản Trả sau cùng ngày đến hạn.
