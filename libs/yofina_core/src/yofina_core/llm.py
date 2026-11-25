@@ -22,12 +22,15 @@ Việc module làm (docs/plan/master-plan.md, mục "Model và giới hạn"):
    hoặc bị Bedrock từ chối trước khi chạy (`REFUSED_OUTCOMES`) được trả chỗ, để model dự phòng còn chỗ.
 4. **Chuỗi dự phòng** bắt `ThrottlingException` **và** `AccessDeniedException` (Claude 5.x bị chặn
    theo kiểu này, xem docs/research/spike-bedrock-models.md §1) cùng vài lỗi tạm thời khác.
-5. **Ghi log** mỗi lời gọi: vai, model, token vào/ra, thời lượng, kết quả (JSON một dòng, logger
-   `yofina.llm`).
+5. **Ghi log** mỗi lời gọi: vai, model, token vào/ra (token vào là tổng, gồm cả phần đọc/ghi cache), token đọc/ghi cache,
+   thời lượng, kết quả (JSON một dòng, logger `yofina.llm`).
 6. **JSON có cấu trúc bằng ép tool** (Nova không hỗ trợ `outputConfig`): `structured_json`, có
    giới hạn số lần thử; mỗi lần thử là một lượt gọi model và được đếm.
 7. **Embedding** (`embed`, vai `embedding` = Cohere Embed v3, `InvokeModel`): gom lô tối đa 96 chuỗi, mỗi lô là một lời gọi được
    đếm và giới hạn như mọi lời gọi khác; mọi lô của một lần gọi dùng cùng một model.
+8. **Prompt caching** theo cờ `prompt_cache` của từng model trong `llm_defaults.json` (mặc định tắt): bật thì `Converse` có
+   `cachePoint` sau tool schema và sau system prompt (nguồn và giới hạn ở `PROMPT_CACHE_POINT`). Cờ theo MODEL chứ không theo vai,
+   vì model dự phòng của cùng vai (Kimi K3) không nhận `cachePoint`.
 
 Strands dùng chung các lớp kiểm này qua `LlmGateway.chain/reserve*/record`; lớp bọc `Model` của
 Strands nằm ở `yofina_agent.metered_model` (để `yofina_core` không phụ thuộc Strands).
@@ -99,6 +102,20 @@ REFUSED_OUTCOMES = frozenset(
     }
 )
 
+#: Điểm cache của Converse (`CachePointBlock`, TTL mặc định 5 phút; không đặt `ttl`).
+#: Theo tài liệu Bedrock (truy cập 2026-11-26):
+#: - https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html : Claude Sonnet 4.6 nhận `cachePoint` trong `system`,
+#:   `messages` và `tools`, tối đa 4 điểm mỗi request, tối thiểu 1.024 token CỘNG DỒN cho cả tiền tố trước mỗi điểm (thứ tự xử lý
+#:   `tools` -> `system` -> `messages`); tiền tố chưa đủ thì request vẫn chạy, chỉ không được cache. Dùng được cùng suy luận liên
+#:   vùng (inference profile `global.`), nhưng request đi máy khác thì ghi cache mới thay vì đọc. Có cache thì `usage.inputTokens`
+#:   CHỈ còn token không qua cache: tổng token vào = `inputTokens + cacheReadInputTokens + cacheWriteInputTokens`.
+#: - https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-4-6.html : Explicit Prompt Caching có,
+#:   1.024 token, 4 điểm, TTL 5 phút hoặc 1 giờ; ID suy luận toàn cầu `global.anthropic.claude-sonnet-4-6`.
+#: - https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k3.html : Converse KHÔNG nhận cache tường minh
+#:   với Kimi K3 (spike 21/11: `ValidationException`, docs/research/spike-bedrock-models.md §4).
+#: - https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html : `cacheReadInputTokens`, `cacheWriteInputTokens`.
+PROMPT_CACHE_POINT: Mapping[str, Any] = {"cachePoint": {"type": "default"}}
+
 
 # --- lỗi có kiểu ----------------------------------------------------------------------------
 class LlmError(RuntimeError):
@@ -160,6 +177,9 @@ class ModelSpec:
     rpm: int  # 0 = không giới hạn
     daily_cap: int
     temperature: bool = True  # False: model không nhận `temperature` (Kimi K3)
+    # True: gắn `cachePoint` sau system và sau tool schema (xem `PROMPT_CACHE_POINT`). Chỉ bật cho model mà tài liệu Bedrock xác
+    # nhận có nhận `cachePoint` ở cả `system` lẫn `tools` của Converse; Kimi K3 trả `ValidationException` nên luôn tắt.
+    prompt_cache: bool = False
 
 
 @dataclass(frozen=True)
@@ -231,6 +251,7 @@ def load_settings(
                         rpm=int(m.get("rpm", body.get("rpm", 0))),
                         daily_cap=int(cap),
                         temperature=bool(m.get("temperature", True)),
+                        prompt_cache=bool(m.get("prompt_cache", False)),
                     )
                 )
         except (KeyError, TypeError, ValueError) as exc:
@@ -396,10 +417,12 @@ class RateLimiter:
 class CallRecord:
     role: str
     model: str
-    input_tokens: int
+    input_tokens: int  # tổng token vào, GỒM cả token đọc và ghi cache (xem `PROMPT_CACHE_POINT`)
     output_tokens: int
     latency_ms: int
     outcome: str
+    cache_read_tokens: int = 0  # phần của `input_tokens` đọc từ cache (`cacheReadInputTokens`)
+    cache_write_tokens: int = 0  # phần của `input_tokens` ghi vào cache (`cacheWriteInputTokens`)
 
     @property
     def counted(self) -> bool:
@@ -453,23 +476,32 @@ class TurnScope:
             return sum(1 for r in self.records if r.counted)
 
     def usage_by_model(self) -> list[dict[str, Any]]:
-        """Dạng `usage` của AG-UI (`TokenUsage`): provider, model, inputTokens, outputTokens."""
+        """Dạng `usage` của AG-UI (`TokenUsage`): provider, model, inputTokens, outputTokens.
+
+        `inputTokens` là tổng token vào (gồm cả phần qua cache), đúng nghĩa của AG-UI; model có token qua cache thì thêm
+        `cachedInputTokens` (đọc) và `cacheWriteInputTokens` (ghi), là PHẦN của `inputTokens` chứ không cộng thêm. Không có cache
+        thì dạng giữ như cũ (không có hai khóa đó)."""
         agg: dict[str, list[int]] = {}
         with self._lock:
             for r in self.records:
-                a = agg.setdefault(r.model, [0, 0])
+                a = agg.setdefault(r.model, [0, 0, 0, 0])
                 a[0] += r.input_tokens
                 a[1] += r.output_tokens
-        return [
-            {
+                a[2] += r.cache_read_tokens
+                a[3] += r.cache_write_tokens
+        out: list[dict[str, Any]] = []
+        for m, a in agg.items():
+            row: dict[str, Any] = {
                 "provider": "bedrock",
                 "model": m,
                 "inputTokens": a[0],
                 "outputTokens": a[1],
                 "totalTokens": a[0] + a[1],
             }
-            for m, a in agg.items()
-        ]
+            if a[2] or a[3]:
+                row["cachedInputTokens"], row["cacheWriteInputTokens"] = a[2], a[3]
+            out.append(row)
+        return out
 
 
 # --- kết quả --------------------------------------------------------------------------------
@@ -479,9 +511,11 @@ class ConverseResult:
     model_id: str
     response: dict[str, Any]
     latency_ms: int
-    input_tokens: int
+    input_tokens: int  # tổng token vào, gồm cả phần đọc/ghi cache
     output_tokens: int
     attempts: list[tuple[str, str]] = field(default_factory=list)  # (model, lý do bỏ qua)
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
     @property
     def content(self) -> list[dict[str, Any]]:
@@ -746,9 +780,23 @@ class LlmGateway:
         latency_ms: int,
         outcome: str,
         scope: TurnScope | None = None,
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
     ) -> None:
+        """Ghi một lần thử. `input_tokens` là tổng token vào; `cache_*_tokens` là phần của nó qua cache (0 nếu không có)."""
         if scope is not None:
-            scope.add(CallRecord(role, model, input_tokens, output_tokens, latency_ms, outcome))
+            scope.add(
+                CallRecord(
+                    role,
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    latency_ms,
+                    outcome,
+                    cache_read_tokens,
+                    cache_write_tokens,
+                )
+            )
         logger.info(
             json.dumps(
                 {
@@ -757,6 +805,8 @@ class LlmGateway:
                     "model": model,
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
+                    "cache_read_tokens": cache_read_tokens,
+                    "cache_write_tokens": cache_write_tokens,
                     "latency_ms": latency_ms,
                     "outcome": outcome,
                 }
@@ -829,9 +879,19 @@ class LlmGateway:
             "messages": messages,
             "inferenceConfig": inference,
         }
+        # Có cache: điểm cache sau tool schema và sau system (phần tĩnh), không đặt trong `messages` (đổi theo lượt). Tạo bản mới,
+        # không sửa `tool_config` của người gọi: model dự phòng (Kimi K3) dùng lại đúng `tool_config` đó và không được có điểm cache.
         if system:
             req["system"] = [{"text": system}]
+            if spec.prompt_cache:
+                req["system"].append(copy.deepcopy(dict(PROMPT_CACHE_POINT)))
         if tool_config:
+            tools = tool_config.get("tools")
+            if spec.prompt_cache and isinstance(tools, list) and tools:
+                tool_config = {
+                    **tool_config,
+                    "tools": [*tools, copy.deepcopy(dict(PROMPT_CACHE_POINT))],
+                }
             req["toolConfig"] = tool_config
         return req
 
@@ -846,7 +906,12 @@ class LlmGateway:
     ) -> ConverseResult:
         latency = int((time.perf_counter() - started) * 1000)
         usage = response.get("usage", {})
-        tin, tout = int(usage.get("inputTokens", 0)), int(usage.get("outputTokens", 0))
+        # Có cache thì Bedrock chỉ để token KHÔNG qua cache ở `inputTokens`: cộng lại để `input_tokens` vẫn là tổng token vào
+        # (cùng nghĩa với lúc chưa có cache, nên log và ước tính chi phí cũ không bị đếm thấp).
+        read = int(usage.get("cacheReadInputTokens", 0) or 0)
+        write = int(usage.get("cacheWriteInputTokens", 0) or 0)
+        tin = int(usage.get("inputTokens", 0)) + read + write
+        tout = int(usage.get("outputTokens", 0))
         self.record(
             role,
             spec.id,
@@ -855,8 +920,12 @@ class LlmGateway:
             latency_ms=latency,
             outcome="ok",
             scope=scope,
+            cache_read_tokens=read,
+            cache_write_tokens=write,
         )
-        return ConverseResult(role, spec.id, response, latency, tin, tout, list(skipped))
+        return ConverseResult(
+            role, spec.id, response, latency, tin, tout, list(skipped), read, write
+        )
 
     # -- JSON có cấu trúc bằng ép tool ------------------------------------------------------
     def structured_json(
