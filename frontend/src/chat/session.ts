@@ -10,6 +10,13 @@ import type { Resolution, StoredTurnInput } from './repository'
 export const BLOCK_ACTIVITY_TYPE = 'yofina.block'
 /** Header session của AgentCore Runtime: UUID ổn định theo cuộc hội thoại (33 đến 256 ký tự). */
 export const SESSION_HEADER = 'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id'
+/**
+ * Trần thời gian một lượt chat chờ lượt làm nóng của cùng phiên (ms). Runtime chỉ nhận một lượt mỗi session id: gửi khi
+ * lượt làm nóng còn chạy thì bị 409 SESSION_BUSY. Quá trần thì gửi luôn để không treo nếu làm nóng kẹt.
+ */
+export const WARMUP_WAIT_MS = 15_000
+/** Thời gian lùi trước mỗi lần thử lại khi Runtime trả 409 SESSION_BUSY (ms); hết danh sách thì hiện lỗi bận. */
+export const SESSION_BUSY_RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000]
 
 /**
  * Trạng thái hiển thị gắn thêm cho một khối `confirm` (ngoài nội dung khối): `cancelled` (người dùng bấm "Không",
@@ -58,6 +65,20 @@ type TurnState = {
   produced: boolean
   /** `fallback_text` của các khối đã phát trong lượt, theo id khối (cùng id thì khối sau thay khối trước). */
   blockTexts: Map<string, string>
+}
+
+/** Chờ `ms` hoặc tới khi `signal` bị hủy (bấm Dừng), tùy cái nào đến trước. */
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve()
+    const done = () => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', done)
+      resolve()
+    }
+    const timer = setTimeout(done, ms)
+    signal.addEventListener('abort', done)
+  })
 }
 
 function str(v: unknown): string | undefined {
@@ -109,7 +130,9 @@ function settleBlock(raw: unknown, res: Resolution | undefined): SettledBlock {
  * gọi thẳng Runtime. Tách khỏi React để test bằng chuỗi event mẫu. Quy tắc cốt lõi:
  * - gửi lại TOÀN BỘ lịch sử (user, assistant, ghi chú hệ thống) mỗi lượt; khối UI không vào lịch sử;
  * - luồng rỗng hoặc đứt giữa chừng (200 + thân rỗng, không RUN_FINISHED) là lỗi, có nút thử lại;
- * - 401: làm mới token và thử lại một lần; 403, 409 SESSION_BUSY: thông báo riêng.
+ * - 401: làm mới token và thử lại một lần; 403: thông báo riêng;
+ * - lượt chat chờ lượt làm nóng của cùng phiên xong (tối đa `WARMUP_WAIT_MS`); 409 SESSION_BUSY: thử lại có lùi
+ *   (`SESSION_BUSY_RETRY_DELAYS_MS`), hết lượt thử mới báo bận.
  */
 export class ChatSession {
   private items: ChatItem[] = []
@@ -121,6 +144,10 @@ export class ChatSession {
   private snapshot: ChatSnapshot
   private agent: HttpAgent | null = null
   private aborted = false
+  /** Hủy các lần chờ trong lượt đang chạy (chờ làm nóng, lùi trước khi thử lại) khi bấm Dừng. */
+  private waitAbort: AbortController | null = null
+  /** Lượt làm nóng đang chạy (theo session id); xong thì xóa. */
+  private warming: { conversationId: string; done: Promise<void> } | null = null
   private turnSeq = 0
   private readonly deps: ChatDeps
 
@@ -300,7 +327,58 @@ export class ChatSession {
   stop(): void {
     if (!this.running) return
     this.aborted = true
+    this.waitAbort?.abort()
     this.agent?.abortRun()
+  }
+
+  /**
+   * Làm nóng phiên Runtime: một lượt `forwardedProps.warmup` (agent chỉ nạp cấu hình và tạo client, không gọi model hay
+   * tool) với cùng session id. Lượt chat gửi trong lúc này sẽ chờ nó xong (xem `runTurn`). Lỗi thì bỏ qua: làm nóng chỉ
+   * là tối ưu độ trễ, lượt chat đầu sẽ chịu cold start. Promise trả về không bao giờ reject.
+   */
+  warmUp(): Promise<void> {
+    const id = this.conversationId
+    const fetchImpl = this.deps.fetchImpl ?? ((...a: Parameters<typeof fetch>) => fetch(...a))
+    const body = { threadId: id, runId: newUuid(), state: {}, messages: [], tools: [], context: [], forwardedProps: { warmup: true } }
+    const done = this.deps
+      .getAccessToken()
+      .then(async (token) => {
+        const res = await fetchImpl(this.deps.agentUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+            [SESSION_HEADER]: id,
+            traceparent: newTraceparent().header,
+          },
+          body: JSON.stringify(body),
+        })
+        // Đọc hết luồng: Runtime chỉ coi phiên rảnh khi lượt làm nóng kết thúc.
+        await res.text()
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (this.warming?.done === done) this.warming = null
+      })
+    this.warming = { conversationId: id, done }
+    return done
+  }
+
+  /** Chờ lượt làm nóng của phiên hiện tại (nếu đang chạy), tối đa `WARMUP_WAIT_MS`; Dừng thì thôi chờ. */
+  private async waitForWarmup(signal: AbortSignal): Promise<void> {
+    const w = this.warming
+    if (!w || w.conversationId !== this.conversationId) return
+    // Bộ hẹn giờ riêng để dọn ngay khi làm nóng xong trước trần.
+    const local = new AbortController()
+    const onAbort = () => local.abort()
+    signal.addEventListener('abort', onAbort)
+    try {
+      await Promise.race([w.done, pause(WARMUP_WAIT_MS, local.signal)])
+    } finally {
+      local.abort()
+      signal.removeEventListener('abort', onAbort)
+    }
   }
 
   private notice(spec: ChatNoticeSpec): void {
@@ -313,21 +391,52 @@ export class ChatSession {
   private async runTurn(): Promise<void> {
     this.running = true
     this.aborted = false
+    const waits = new AbortController()
+    this.waitAbort = waits
     this.emit()
     try {
-      let outcome = await this.attempt(false)
-      if (outcome === 'unauthorized') outcome = await this.attempt(true)
-      if (outcome === 'unauthorized') this.notice(chatErrorForHttp(401))
+      // Giao diện vẫn ở trạng thái đang gửi trong lúc chờ.
+      await this.waitForWarmup(waits.signal)
+      let force = false
+      let refreshed = false
+      let busyRetries = 0
+      while (!this.aborted) {
+        const outcome = await this.attempt(force)
+        force = false
+        if (outcome === 'unauthorized') {
+          if (refreshed) {
+            this.notice(chatErrorForHttp(401))
+            break
+          }
+          refreshed = true
+          force = true
+          continue
+        }
+        if (outcome === 'busy') {
+          const delay = SESSION_BUSY_RETRY_DELAYS_MS[busyRetries++]
+          if (delay === undefined) {
+            this.notice(chatErrorForHttp(409))
+            break
+          }
+          await pause(delay, waits.signal)
+          continue
+        }
+        break
+      }
     } finally {
       this.running = false
       this.agent = null
+      this.waitAbort = null
       this.emit()
       this.deps.onTurnEnd?.()
     }
   }
 
-  /** Một lần gọi Runtime. Trả 'unauthorized' khi gặp 401 để lớp trên làm mới token rồi thử lại. */
-  private async attempt(forceRefresh: boolean): Promise<'done' | 'unauthorized'> {
+  /**
+   * Một lần gọi Runtime. Trả 'unauthorized' khi gặp 401 để lớp trên làm mới token rồi thử lại, 'busy' khi gặp 409
+   * (phiên đang chạy lượt khác) để lớp trên lùi rồi thử lại.
+   */
+  private async attempt(forceRefresh: boolean): Promise<'done' | 'unauthorized' | 'busy'> {
     let token: string
     try {
       token = await this.deps.getAccessToken({ force: forceRefresh })
@@ -379,6 +488,7 @@ export class ChatSession {
       if (typeof status === 'number') {
         if (status === 401) return 'unauthorized'
         this.finishOpenItems()
+        if (status === 409) return 'busy'
         this.notice(chatErrorForHttp(status))
         return 'done'
       }

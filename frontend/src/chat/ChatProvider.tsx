@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useAuth } from '@/auth/AuthProvider'
-import { newConversationId, newTraceparent, newUuid } from '@/lib/ids'
+import { newConversationId } from '@/lib/ids'
 import { ChatActionsContext, type ChatActions } from './actions'
 import {
   clearConversationId,
@@ -8,7 +8,7 @@ import {
   saveConversationId,
   type ConversationRepository,
 } from './repository'
-import { ChatSession, SESSION_HEADER, type ChatSnapshot } from './session'
+import { ChatSession, type ChatSnapshot } from './session'
 
 export type ChatContextValue = {
   snapshot: ChatSnapshot
@@ -81,28 +81,9 @@ export function ChatProvider({ agentUrl, repository, fetchImpl, warmupEnabled = 
     const id = session.getSnapshot().conversationId
     if (warmed.current === id) return
     warmed.current = id
-    const doFetch = fetchImpl ?? ((...a: Parameters<typeof fetch>) => fetch(...a))
-    // Agent hỗ trợ forwardedProps.warmup: chỉ nạp cấu hình và tạo client, không gọi model hay tool.
-    const body = { threadId: id, runId: newUuid(), state: {}, messages: [], tools: [], context: [], forwardedProps: { warmup: true } }
-    void getAccessToken()
-      .then(async (token) => {
-        const res = await doFetch(agentUrl, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            Accept: 'text/event-stream',
-            [SESSION_HEADER]: id,
-            traceparent: newTraceparent().header,
-          },
-          body: JSON.stringify(body),
-        })
-        await res.text()
-      })
-      .catch(() => {
-        // Làm nóng chỉ là tối ưu độ trễ: lỗi thì bỏ qua, lượt chat đầu sẽ chịu cold start.
-      })
-  }, [session, agentUrl, fetchImpl, getAccessToken, warmupEnabled])
+    // ChatSession giữ promise của lượt làm nóng: tin gửi trong lúc đó chờ nó xong (tránh 409 SESSION_BUSY).
+    void session.warmUp()
+  }, [session, warmupEnabled])
 
   const startNew = useCallback(() => {
     clearConversationId(userKey)
