@@ -53,6 +53,10 @@ class MemoryRepo:
                     "confidence_band": s.confidence_band,
                     "show_probability": s.show_probability,
                     "series_kind": s.series_kind,
+                    # như cột cùng tên của migration 0055: cờ hũ thưa của lần chạy, vắng thì đúng
+                    "runout_date_shown": bool(
+                        ((run["params"] or {}).get("show_runout_date") or {}).get(s.jar_code, True)
+                    ),
                 }
         return list(latest.values())
 

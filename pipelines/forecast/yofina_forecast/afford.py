@@ -95,13 +95,17 @@ def jar_check(
     short_floor_vnd: int,
     tight_floor_vnd: int,
     runout_threshold_vnd: int,
+    runout_date_shown: bool = True,
 ) -> dict[str, Any]:
     """`JarCheck` của một hũ nếu chi `amount_vnd` ngày `pay_date` bằng tiền hũ này (xem docstring module cho luật trạng thái).
 
     Chi vào ngày tương lai: số dư lúc chi là số dư P50 cuối ngày hôm trước. Riêng chi ĐÚNG hoặc SAU ngày lương kế (phương án "Hoãn
     tới kỳ lương"): lương đã về hũ trong ngày đó nên số dư lúc chi là số dư P50 cuối chính ngày chi (đã gồm lương và các khoản đến hạn
     cùng ngày, cách tính thận trọng), và cửa sổ xét hụt/sát là từ ngày chi tới hết khoảng dự báo, vì các ngày trước kỳ lương không
-    bị khoản chi này đụng tới."""
+    bị khoản chi này đụng tới.
+
+    `runout_date_shown` sai (hũ thưa, #25: cột cùng tên của dòng tóm tắt dự báo) thì không nêu ngày cạn trước, sau và số ngày cạn
+    sớm hơn (ngày cạn của hũ thưa sai trung bình hơn 6 ngày); trạng thái và phần thiếu tính như cũ."""
     first = origin + timedelta(days=1)
     start = max(pay_date, first)
     after_payday = pay_date >= payday
@@ -129,6 +133,8 @@ def jar_check(
     runout_after = next(
         (d for d, _a, p50, _b in after if d >= start and p50 <= runout_threshold_vnd), None
     )
+    if not runout_date_shown:
+        runout_before = runout_after = None
     out: dict[str, Any] = {
         "jar": dict(jar),
         "status": status,
@@ -356,6 +362,7 @@ class AffordabilityEngine:
                     short_floor_vnd=short_floor,
                     tight_floor_vnd=tight_floor,
                     runout_threshold_vnd=runout_thr,
+                    runout_date_shown=summ.get("runout_date_shown") is not False,
                 )
             )
 
@@ -783,6 +790,7 @@ class AffordabilityEngine:
                 short_floor_vnd=short_floor,
                 tight_floor_vnd=tight_floor,
                 runout_threshold_vnd=runout_thr,
+                runout_date_shown=summ.get("runout_date_shown") is not False,
             )
             deferred = jar_check(amount_vnd=amount, pay_date=payday, **common)  # type: ignore[arg-type]
             out.append(
