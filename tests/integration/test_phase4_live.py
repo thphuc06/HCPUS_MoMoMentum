@@ -329,19 +329,66 @@ def test_11_yeu_cau_sinh_lai_tra_job_goi_lai_tra_dung_job_do(api, schema_validat
     reset_account(api, "minh")
 
 
-def test_12_dung_ban_moi_roi_sua_mot_buoc_ra_ban_active_moi(api, schema_validator):
-    status, adopted = api("minh", "POST", "/roadmap/versions/3/decision", {"decision": "adopt"})
+#: khóa của một bước trong bản nháp `save_roadmap` (planner.json); khối đọc ra còn có trạng thái và luật đã kiểm do Lambda điền
+DRAFT_STEP_KEYS = (
+    "step_id", "kind", "title", "reason", "ai_generated", "amount_vnd", "jar_code", "to_jar_code", "due_date",
+    "metrics", "action",
+)  # fmt: skip
+
+
+def propose_from_active(api, gw, schema_validator) -> dict:
+    """Bản đề xuất dựng từ bản đang dùng qua đúng tool `planner___save_roadmap` của Gateway (seed của minh không còn bản chờ chọn từ
+    #22: sau đặt lại chỉ có v1 đã thay và v2 đang dùng). Bản thứ hai trở đi `save_roadmap` lưu là `proposed`, kiểm lại suitability từng
+    bước như mọi bản nháp. Trả khối dữ liệu của bản vừa lưu."""
+    status, active = api("minh", "GET", "/roadmap")
+    assert status == 200, active
+    d = active["data"]
+    assert d["status"] == "active", d
+    phases = [
+        {
+            **{k: v for k, v in ph.items() if k != "steps"},
+            "steps": [{k: s[k] for k in DRAFT_STEP_KEYS if k in s} for s in ph["steps"]],
+        }
+        for ph in d["phases"]
+    ]
+    draft = {
+        "reason_code": "user_request",
+        "based_on_version": d["version"],
+        "feasibility": d["feasibility"],
+        "goals": d["goals"],
+        "alternatives": d.get("alternatives", []),
+        "phases": phases,
+    }
+    reply = gw("minh").call("planner___save_roadmap", draft)
+    # dự báo của lần đặt lại được tính trong nền (batch sau `/demo/reset`): chưa có thì save_roadmap trả FORECAST_UNAVAILABLE
+    t0 = time.monotonic()
+    while reply.status == "ERROR" and reply.data["code"] == "FORECAST_UNAVAILABLE" and time.monotonic() - t0 < 90:
+        time.sleep(5)
+        reply = gw("minh").call("planner___save_roadmap", draft)
+    assert reply.status == "OK", reply.text
+    schema_validator(f"{TOOLS}/planner.results.schema.json#/$defs/SaveRoadmapResult", reply.data)
+    saved = reply.data["data"]
+    assert saved["status"] == "proposed" and saved["based_on_version"] == d["version"], saved
+    return saved
+
+
+def test_12_dung_ban_moi_roi_sua_mot_buoc_ra_ban_active_moi(api, gw, schema_validator):
+    from conftest import reset_account
+
+    reset_account(api, "minh")
+    new = propose_from_active(api, gw, schema_validator)["version"]
+    status, adopted = api("minh", "POST", f"/roadmap/versions/{new}/decision", {"decision": "adopt"})
     assert status == 200, adopted
-    assert adopted["data"]["version"] == 3 and adopted["data"]["status"] == "active"
+    assert adopted["data"]["version"] == new and adopted["data"]["status"] == "active"
     status, versions = api("minh", "GET", "/roadmap/versions")
     by_version = {v["version"]: v for v in versions["versions"]}
-    assert by_version[3]["status"] == "active" and by_version[2]["status"] == "superseded"
-    assert versions["active_version"] == 3 and "proposed_version" not in versions
+    assert by_version[new]["status"] == "active" and by_version[new - 1]["status"] == "superseded"
+    assert versions["active_version"] == new and "proposed_version" not in versions
 
-    status, v3 = api("minh", "GET", "/roadmap")
+    status, current = api("minh", "GET", "/roadmap")
     editable = [
         (s["step_id"], s["amount_vnd"])
-        for p in v3["data"]["phases"]
+        for p in current["data"]["phases"]
         for s in p["steps"]
         if s.get("amount_vnd")
     ]
@@ -350,12 +397,12 @@ def test_12_dung_ban_moi_roi_sua_mot_buoc_ra_ban_active_moi(api, schema_validato
     new_amount = amount - 10_000 if amount > 10_000 else amount + 10_000
     before = balances(api)
     status, edited = api(
-        "minh", "POST", f"/roadmap/steps/{step_id}/edit", {"version": 3, "amount_vnd": new_amount}
+        "minh", "POST", f"/roadmap/steps/{step_id}/edit", {"version": new, "amount_vnd": new_amount}
     )
     assert status == 200, edited
     schema_validator(f"{BLOCKS}/roadmap.schema.json", edited)
     d = edited["data"]
-    assert d["version"] == 4 and d["status"] == "active" and d["based_on_version"] == 3
+    assert d["version"] == new + 1 and d["status"] == "active" and d["based_on_version"] == new
     assert d["reason"]["code"] == "step_edited"
     assert [s["amount_vnd"] for p in d["phases"] for s in p["steps"] if s["step_id"] == step_id] == [
         new_amount
@@ -363,29 +410,31 @@ def test_12_dung_ban_moi_roi_sua_mot_buoc_ra_ban_active_moi(api, schema_validato
     assert balances(api) == before  # sửa bước chỉ lưu phiên bản, không đổi số dư
     status, versions = api("minh", "GET", "/roadmap/versions")
     by_version = {v["version"]: v for v in versions["versions"]}
-    assert by_version[4]["status"] == "active" and by_version[3]["status"] == "superseded"
+    assert by_version[new + 1]["status"] == "active" and by_version[new]["status"] == "superseded"
     # sửa lên bản không còn active bị từ chối (đọc lại lộ trình rồi mới sửa)
     status, body = api(
-        "minh", "POST", f"/roadmap/steps/{step_id}/edit", {"version": 3, "amount_vnd": amount}
+        "minh", "POST", f"/roadmap/steps/{step_id}/edit", {"version": new, "amount_vnd": amount}
     )
     assert (status, code(body)) == (409, "ROADMAP_VERSION_CONFLICT")
     assert "�" not in body["error"]["message"]  # thông điệp tiếng Việt không bị hỏng mã hóa
 
 
-def test_13_giu_ban_cu_thi_ban_cho_chon_bi_bo(api, schema_validator):
+def test_13_giu_ban_cu_thi_ban_cho_chon_bi_bo(api, gw, schema_validator):
     from conftest import reset_account
 
     reset_account(api, "minh")
-    status, kept = api("minh", "POST", "/roadmap/versions/3/decision", {"decision": "keep_previous"})
+    new = propose_from_active(api, gw, schema_validator)["version"]
+    status, kept = api("minh", "POST", f"/roadmap/versions/{new}/decision", {"decision": "keep_previous"})
     assert status == 200, kept
-    assert kept["data"]["version"] == 3 and kept["data"]["status"] == "discarded"  # trả bản đã bỏ để giao diện hiện trạng thái
+    assert kept["data"]["version"] == new and kept["data"]["status"] == "discarded"  # trả bản đã bỏ để giao diện hiện trạng thái
     status, versions = api("minh", "GET", "/roadmap/versions")
     by_version = {v["version"]: v for v in versions["versions"]}
-    assert by_version[3]["status"] == "discarded" and by_version[2]["status"] == "active"
-    status, body = api("minh", "POST", "/roadmap/versions/3/decision", {"decision": "adopt"})
+    assert by_version[new]["status"] == "discarded" and by_version[new - 1]["status"] == "active"
+    assert "proposed_version" not in versions
+    status, body = api("minh", "POST", f"/roadmap/versions/{new}/decision", {"decision": "adopt"})
     assert (status, code(body)) == (409, "ROADMAP_VERSION_CONFLICT")
     assert "�" not in body["error"]["message"]
-    reset_account(api, "minh")  # trả minh về v1, v2, v3 ban đầu cho các test sau
+    reset_account(api, "minh")  # trả minh về v1, v2 ban đầu cho các test sau
 
 
 # --- 3. tool qua Gateway ------------------------------------------------------------------------------------------------------
@@ -446,13 +495,23 @@ def test_16_get_resilience_score_va_stress_test_qua_gateway_khop_rest(gw, api, s
     schema_validator(f"{TOOLS}/forecast.results.schema.json#/$defs/StressTestResult", bad.data)
 
 
-def test_17_get_roadmap_qua_gateway_va_loi_khong_co_lo_trinh(gw, subs, schema_validator):
+def test_17_get_roadmap_qua_gateway_va_loi_khong_co_lo_trinh(gw, api, subs, schema_validator):
+    from conftest import reset_account
+
+    reset_account(api, "minh")
     reply = gw("minh").call("planner___get_roadmap", {})
     assert reply.status == "OK", reply.text
     schema_validator(f"{TOOLS}/planner.results.schema.json#/$defs/GetRoadmapResult", reply.data)
-    assert reply.data["data"]["version"] == 2 and reply.data["data"]["status"] == "active"
-    proposed = gw("minh").call("planner___get_roadmap", {"version": 3})
+    active = reply.data["data"]["version"]
+    assert active == 2 and reply.data["data"]["status"] == "active"
+    new = propose_from_active(api, gw, schema_validator)["version"]  # bản chờ chọn tạo qua đúng tool save_roadmap
+    proposed = gw("minh").call("planner___get_roadmap", {"version": new})
     assert proposed.status == "OK" and proposed.data["data"]["status"] == "proposed"
+    schema_validator(f"{TOOLS}/planner.results.schema.json#/$defs/GetRoadmapResult", proposed.data)
+    latest = gw("minh").call("planner___get_roadmap", {"which": "latest"})
+    assert latest.status == "OK" and latest.data["data"]["version"] == new
+    still = gw("minh").call("planner___get_roadmap", {})
+    assert still.status == "OK" and still.data["data"]["version"] == active  # mặc định vẫn là bản đang dùng
     missing = gw("minh").call("planner___get_roadmap", {"version": 99})
     assert missing.status == "ERROR" and missing.data["code"] == "ROADMAP_NOT_FOUND"
     # Lan gửi user_id của Minh: interceptor ghi đè bằng danh tính của Lan, nên Lan không thấy lộ trình của Minh
