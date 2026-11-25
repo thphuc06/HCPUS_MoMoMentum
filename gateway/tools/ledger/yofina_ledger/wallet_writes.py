@@ -30,7 +30,7 @@ from yofina_core.confirm import ParamsError
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd
 from yofina_core.params import NormContext, compute_dedupe_key, normalize_params
-from yofina_core.schedule import advance_due, bnpl_due_date
+from yofina_core.schedule import advance_due, bnpl_due_date, bnpl_pay_jar
 from yofina_core.wallet import (
     ASSIGN_JAR,
     BNPL_PRODUCT_CODE,
@@ -996,10 +996,13 @@ class WalletWrites:
                 "id": fee_row.id if fee_row else None,
                 "name": extra["credit_label"],
             }
-            first_obligation_jar = (
-                next(
-                    (j["code"] for j in prep.state.user_jars() if j.get("kind") == "obligation"),
-                    None,
+            # cùng quy tắc với what-if và kiểm tra trước khi chi: không có hũ Nghĩa vụ thì hũ của món mua (#15)
+            existing = extra.get("existing_bnpl")
+            pay_jar = (
+                bnpl_pay_jar(
+                    prep.state.user_jars(),
+                    existing_pay_jar=existing.get("pay_jar_code") if existing else None,
+                    chosen_jar=norm["jar"],
                 )
                 if prep.state
                 else None
@@ -1020,7 +1023,7 @@ class WalletWrites:
                 user_id,
                 tx=tx,
                 fee=fee,
-                pay_jar=first_obligation_jar,
+                pay_jar=pay_jar,
                 audit=audit,
                 claim=claim,
                 tool=tool,

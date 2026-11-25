@@ -8,7 +8,8 @@ thế nào cho đúng") và `contracts/README.md` ("Mốc trên biểu đồ"):
   người dùng, không lùi quá cửa sổ cấu hình.
 - Lương: `split_amount(lương đã khai, tỷ lệ các hũ)` vào đúng ngày lương trong horizon (cùng quy tắc `confirm_salary`).
 - Nghĩa vụ: mở rộng chu kỳ trong horizon bằng `yofina_core.schedule.expand_due_dates`; quá hạn tính vào ngày đầu; nghĩa vụ chưa có hũ
-  trả gán cho hũ `obligation` đầu tiên (theo `sort_order`), không có hũ đó thì bỏ và ghi `unassigned_obligations`.
+  trả gán cho hũ `obligation` đầu tiên (theo `sort_order`), không có hũ đó thì bỏ và ghi `unassigned_obligations`. Riêng Trả sau
+  lấy hũ trả theo `yofina_core.schedule.bnpl_pay_jar` (không có hũ `obligation` thì hũ chi tiêu đầu tiên), như what-if.
 - Hạt ngẫu nhiên tất định theo người dùng (băm `user_id`), nên cùng dữ liệu cho cùng dự báo qua nhiều lần chạy.
 """
 
@@ -24,7 +25,7 @@ from typing import Any
 from yofina_core.clock import next_payday as next_payday_of
 from yofina_core.clock import payday_dates
 from yofina_core.errors import ErrorCode, YofinaError
-from yofina_core.schedule import expand_due_dates
+from yofina_core.schedule import bnpl_pay_jar, expand_due_dates
 from yofina_core.wallet import split_amount
 from yofina_forecast.settings import ForecastSettings
 from yofina_ml.calibration import calibrated_config
@@ -129,8 +130,14 @@ def expand_obligations(
     default_pay_jar: str | None,
     app_date: date,
     horizon_days: int,
+    *,
+    forecast_jars: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[dict[str, list[ScheduledFlow]], list[str]]:
-    """Nghĩa vụ đang hoạt động -> các khoản tiền ra theo từng hũ trong horizon; trả thêm tên các khoản không gán được hũ."""
+    """Nghĩa vụ đang hoạt động -> các khoản tiền ra theo từng hũ trong horizon; trả thêm tên các khoản không gán được hũ.
+
+    Có `forecast_jars` (hũ được dự báo kèm `kind`, theo `sort_order`) thì khoản Trả sau lấy hũ trả theo
+    `bnpl_pay_jar`, cùng quy tắc với lúc mua, what-if và kiểm tra trước khi chi (#15).
+    """
     first = app_date + timedelta(days=1)
     through = app_date + timedelta(days=horizon_days)
     known = set(forecast_jar_codes)
@@ -140,6 +147,8 @@ def expand_obligations(
         if ob.get("status", "active") != "active":
             continue
         jar = ob.get("pay_jar_code") or default_pay_jar
+        if ob.get("kind") == "bnpl" and forecast_jars:
+            jar = bnpl_pay_jar(forecast_jars, existing_pay_jar=ob.get("pay_jar_code"))
         if jar not in known:
             unassigned.append(str(ob.get("name", ""))[:60])
             continue
@@ -199,7 +208,7 @@ def build_inputs(ctx: Context, settings: ForecastSettings, user_id: str, *, n_pa
         notes["salary_split_invalid"] = True  # tỷ lệ chia không đủ 100: không mô phỏng lương
 
     outflows, unassigned = expand_obligations(
-        ctx.obligations, codes, default_pay, app_date, horizon
+        ctx.obligations, codes, default_pay, app_date, horizon, forecast_jars=forecast_jars
     )
     if unassigned:
         notes["unassigned_obligations"] = unassigned
