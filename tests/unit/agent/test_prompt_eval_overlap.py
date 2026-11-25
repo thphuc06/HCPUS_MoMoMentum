@@ -69,6 +69,7 @@ def agent_prompts() -> dict[str, str]:
         "router": router.build_router_system(),
         "writer.WRITER_SYSTEM": writer.WRITER_SYSTEM,
         "writer.MEMORY_GUIDE": writer.MEMORY_GUIDE,
+        "writer.UNTRUSTED_GUIDE": writer.UNTRUSTED_GUIDE,
         "whatif.ORCHESTRATOR_SYSTEM": whatif.ORCHESTRATOR_SYSTEM,
         "whatif.ANALYST_SYSTEM": whatif.ANALYST_SYSTEM,
         "roadmap.ROADMAP_SYSTEM": roadmap_agent.ROADMAP_SYSTEM,

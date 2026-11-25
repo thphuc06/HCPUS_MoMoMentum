@@ -217,8 +217,10 @@ def compact_forecast_overview(
 
 
 def allowed_amounts(compact: Mapping[str, Any]) -> set[int]:
-    """Mọi số tiền (VND) xuất hiện trong bản gọn: căn cứ để kiểm số model viết ra."""
+    """Mọi số tiền (VND) xuất hiện trong bản gọn: căn cứ để kiểm số model viết ra. Chữ không tin cậy của các dòng (ghi chú, đối tác...,
+    `without_untrusted_text`) không tính: số viết trong nội dung chuyển khoản của tệp nạp không thành "có căn cứ"."""
     found: set[int] = set()
+    compact = without_untrusted_text(compact)
 
     def walk(node: Any) -> None:
         if isinstance(node, Mapping):
