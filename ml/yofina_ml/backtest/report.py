@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import pprint
 from pathlib import Path
 from typing import Any
@@ -169,5 +170,7 @@ def write_default_calibration(path: Path, payload: dict[str, Any]) -> None:
         "Số đo và phương pháp ở docs/research/backtest-phase-2.md và docs/research/backtest-final.md.\n"
         '"""\n\n'
     )
+    # qua JSON để số kiểu numpy (np.float64 in ra `np.float64(...)` với numpy 2) thành số Python thuần trong tệp sinh ra
+    payload = json.loads(json.dumps(payload))
     body = pprint.pformat(payload, sort_dicts=False, width=100)
     path.write_text(head + f"CALIBRATION = {body}\n", encoding="utf-8")

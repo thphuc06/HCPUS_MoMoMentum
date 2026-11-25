@@ -27,6 +27,8 @@ def forecast_user(inputs: ForecastInputs) -> ForecastResult:
     khi `show_probability` sai; `run.is_initial_estimate` đúng khi `run.history_days < config.cold_start_min_days`, khi đó
     `confidence_label` là low và `show_probability` sai ở mọi hũ. `show_probability` cũng sai khi hũ có ít ngày lịch sử hơn
     `probability_min_history_days` của loại chuỗi (hiệu chỉnh, BR-31); khi đó vẫn có `status` và `confidence_band`.
+    Khi hiệu chỉnh bật `recalibrate` (#25): dải số dư hũ dày qua CQR, `p_shortfall` qua PAV, và `run.params` có thêm
+    `show_runout_date` ({mã hũ: bool}, đọc bằng `runout_date_shown`); tắt thì đầu ra như trước #25.
     """
     return _impl.forecast_user(inputs)
 

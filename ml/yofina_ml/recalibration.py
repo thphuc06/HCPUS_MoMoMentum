@@ -71,8 +71,8 @@ def fit_isotonic(
     xs: list[float] = []
     ys: list[float] = []
     for bw, by, lo, hi in blocks:
-        v = round(by / bw, 6)
-        for xv in dict.fromkeys((round(lo, 6), round(hi, 6))):
+        v = round(float(by / bw), 6)
+        for xv in dict.fromkeys((round(float(lo), 6), round(float(hi), 6))):
             xs.append(xv)
             ys.append(v)
     return Isotonic(tuple(xs), tuple(ys))

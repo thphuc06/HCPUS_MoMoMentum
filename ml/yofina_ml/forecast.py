@@ -8,6 +8,9 @@ Luồng cho MỖI hũ (`forecast_user`):
    phân vị của biên tại các mức (alpha_t / 2, 0,5, 1 - alpha_t / 2).
 4. Monte Carlo số dư (`montecarlo`) với tham số hiệu chỉnh của loại chuỗi (`calibration`): phân vị số dư P10/P50/P90 theo ngày,
    ngày cạn, xác suất hụt trước kỳ lương và sai số chuẩn.
+   Khi hiệu chỉnh bật `recalibrate` (#25, `recalibration`): dải P10/P90 số dư của hũ dày dời theo bảng CQR bất đối xứng (P50 và
+   ngày cạn không đổi), `p_shortfall` qua bảng PAV (`p_shortfall_se` vẫn là sai số chuẩn Monte Carlo của p thô), và
+   `run.params["show_runout_date"]` báo hũ thưa không nêu ngày cạn cụ thể.
 5. Cổng chất lượng: nhãn tin cậy, trạng thái đủ/sát/hụt, có phát xác suất hay không.
 
 `update_forecast` chạy lại riêng bước 4-5 cho vài hũ, trên biên đã ghi ở `previous.run.params["jar_state"]` (fit và ACI giữ
