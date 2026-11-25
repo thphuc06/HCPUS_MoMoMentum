@@ -1105,7 +1105,8 @@ class Turn:
 
     async def on_forecast_all(self) -> None:
         """Dự báo của MỌI hũ ("hũ nào sắp cạn?"): `get_forecast` song song cho từng hũ, câu trả lời dựng bằng mã từ số của tool
-        (hũ cạn trước kỳ lương theo ngày cạn sớm nhất, hũ sát, hũ đủ), biểu đồ của hũ cạn sớm nhất (hoặc hũ sát đầu tiên). Không hỏi lại."""
+        (hũ cạn trước kỳ lương theo ngày cạn sớm nhất, hũ có thể cạn trước ngày lương, hũ sát, hũ đủ), biểu đồ của hũ cạn sớm nhất (hoặc
+        hũ đầu tiên của nhóm kế tiếp). Không hỏi lại."""
         rows = self._jar_rows[: max(self.s.max_tool_calls_per_turn - self.tool_calls, 0)]
         if not rows:
             self.emit_jars_block()
@@ -1128,14 +1129,15 @@ class Turn:
             self.tool_failure(results[0].outcome, empty_codes=_EMPTY_STATE_CODES)
             return
         missing = [str(j["name"]) for j, res in zip(rows, results, strict=True) if not (res.outcome.ok and res.compact)]
-        overview = compact_forecast_overview([res.compact for _, res in done if res.compact], missing)
+        compacts = [res.compact for _, res in done if res.compact]
+        overview = _with_may_run_out(compact_forecast_overview(compacts, missing), compacts)
         self.compacts["get_forecast"] = overview
         by_name = {res.compact["jar"]: res for _, res in done if res.compact}
-        shown_name = (
-            overview["runout_before_payday"][0]["jar"]
-            if overview["runout_before_payday"]
-            else (overview["tight"][0] if overview["tight"] else None)
-        )
+        if overview["runout_before_payday"]:
+            shown_name = overview["runout_before_payday"][0]["jar"]
+        else:  # hũ có thể cạn trước ngày lương (hũ thưa hụt) đứng trước hũ sát
+            rest = overview["may_run_out_before_payday"] or overview["tight"]
+            shown_name = rest[0] if rest else None
         shown = by_name.get(shown_name) if shown_name else None
         for _, res in done:
             basis = _forecast_basis(res.outcome.payload)
@@ -1689,10 +1691,23 @@ class Turn:
         await self.write("clarify", question, facts)
 
 
+def _with_may_run_out(overview: Mapping[str, Any], compacts: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Tách hũ thưa hụt (#25: bản gọn có `runout.may_run_out_before_payday`, không có ngày cạn) khỏi nhóm sát của
+    `compact_forecast_overview` thành nhóm riêng `may_run_out_before_payday` (tên hũ, theo thứ tự hiển thị): hũ có thể cạn trước
+    ngày lương không phải hũ chỉ sát số dư."""
+    may = [str(c["jar"]) for c in compacts if (c.get("runout") or {}).get("may_run_out_before_payday")]
+    return {**overview, "tight": [n for n in overview.get("tight") or [] if n not in may], "may_run_out_before_payday": may}
+
+
 def forecast_overview_text(overview: Mapping[str, Any], *, chart_jar: str | None = None) -> str:
-    """Câu trả lời "hũ nào sắp cạn?" dựng bằng mã từ `compact_forecast_overview` (chỉ chép tên hũ, ngày và số ngày của tool)."""
+    """Câu trả lời "hũ nào sắp cạn?" dựng bằng mã từ `compact_forecast_overview` đã qua `_with_may_run_out` (chỉ chép tên hũ, ngày
+    và số ngày của tool).
+
+    Hũ có thể cạn trước ngày lương (`may_run_out_before_payday`, hũ thưa hụt) thì không mở đầu "Chưa hũ nào…" dù không hũ nào có ngày
+    cạn trước kỳ lương."""
     payday = (overview.get("payday") or {}).get("date_text")
     runout = list(overview.get("runout_before_payday") or [])
+    may = list(overview.get("may_run_out_before_payday") or [])
     tight = list(overview.get("tight") or [])
     parts: list[str] = []
     if len(runout) == 1:
@@ -1705,17 +1720,19 @@ def forecast_overview_text(overview: Mapping[str, Any], *, chart_jar: str | None
     elif runout:
         items = ", ".join(notices.FORECAST_OVERVIEW_ITEM.format(jar=r["jar"], date=r["date_text"]) for r in runout)
         parts.append(notices.FORECAST_OVERVIEW_MANY.format(payday=payday, count=len(runout), items=items))
-    else:
+    elif not may:
         parts.append(
             notices.FORECAST_OVERVIEW_NONE.format(payday=payday) if payday else notices.FORECAST_OVERVIEW_NONE_NO_PAYDAY
         )
+    if may:
+        parts.append(notices.FORECAST_OVERVIEW_MAY_RUN_OUT.format(names=", ".join(may)))
     if tight:
         parts.append(notices.FORECAST_OVERVIEW_TIGHT.format(names=", ".join(tight)))
-    if overview.get("enough") and (runout or tight):
+    if overview.get("enough") and (runout or may or tight):
         parts.append(notices.FORECAST_OVERVIEW_REST_OK)
     if overview.get("unavailable"):
         parts.append(notices.FORECAST_OVERVIEW_UNAVAILABLE.format(names=", ".join(overview["unavailable"])))
-    if chart_jar and (len(runout) > 1 or (not runout and tight)):
+    if chart_jar and (len(runout) > 1 or (not runout and (may or tight))):
         parts.append(notices.FORECAST_OVERVIEW_CHART.format(jar=chart_jar))
     return " ".join(parts)
 

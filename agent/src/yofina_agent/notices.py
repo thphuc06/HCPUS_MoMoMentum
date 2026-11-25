@@ -168,6 +168,8 @@ FORECAST_OVERVIEW_ITEM = "{jar} ngày {date}"
 FORECAST_OVERVIEW_NONE = "Chưa hũ nào dự kiến cạn trước kỳ lương {payday}."
 FORECAST_OVERVIEW_NONE_NO_PAYDAY = "Chưa hũ nào dự kiến cạn trong khoảng dự báo."
 FORECAST_OVERVIEW_TIGHT = "Hũ {names} đang sát số dư trước kỳ lương."
+#: Hũ thưa hụt (#25, `runout_date_shown` sai): không nêu ngày cạn, chỉ nói có thể cạn trước ngày lương (cùng chữ với thẻ và giao diện).
+FORECAST_OVERVIEW_MAY_RUN_OUT = "Hũ {names} có thể cạn trước ngày lương."
 FORECAST_OVERVIEW_REST_OK = "Các hũ còn lại đủ tới kỳ lương."
 FORECAST_OVERVIEW_UNAVAILABLE = "Chưa có dự báo cho hũ {names}."
 FORECAST_OVERVIEW_CHART = "Biểu đồ bên dưới là của hũ {jar}."
