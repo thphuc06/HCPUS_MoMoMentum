@@ -23,7 +23,7 @@ Số thật rồi ghi vào "Kết quả thực hiện" của phase 4; chưa đ�
 | `dataset.jsonl` | 334 giao dịch có nhãn (minh 118, lan 108, khoa 108), theo thời gian trong mỗi persona. Sinh bằng `build_dataset.py` (tất định; `--check` kiểm lệch) |
 | `build_dataset.py` | bộ sinh và bất biến (đủ 300 dòng, mọi nhãn thuộc hũ của persona, có chuyển khoản tên riêng không lời nhắn) |
 | `sim.py` | mô phỏng trực tuyến: kho nhãn k-NN trong bộ nhớ (cosine như `app_knn_labeled`), sổ cái, luật, người dùng mô phỏng hợp tác; chỉ số, ma trận nhầm |
-| `run_eval.py` | `warm`, `calibrate`, `run`; chế độ `live` (Bedrock thật, có đệm) và `dry` |
+| `run_eval.py` | `warm`, `calibrate`, `run`; chế độ `live` (Bedrock thật, có đệm), `dry` và `cache` (chỉ đọc đệm đã commit, không tạo client AWS; thiếu đệm thì dừng và báo số lời gọi cần). `--add-jar ma:tên:loại[:số dư]` thêm hũ cho mọi persona (đo hũ "Khác", xem [2026-11-26-hu-khac.md](../../docs/research/2026-11-26-hu-khac.md)); `--out` ghi báo cáo ra tệp khác |
 | `fakes.py` | embedding băm và model từ khóa GIẢ, chỉ cho chế độ khô (kiểm đường ống) |
 | `build_seed_labels.py` | sinh nhãn seed của persona vào `data/personas/classify_labels/` bằng Bedrock thật |
 | `results/` | báo cáo `classification-<chế độ>-<ngày>.json`, `calibration-*.json`, đệm `embedding_cache.json` và `llm_cache.json` (chỉ chế độ live ghi) |
@@ -44,4 +44,4 @@ Hư cấu, do dự án soạn; nhãn do cấu trúc sinh quyết định: một 
 
 - Bộ dữ liệu hư cấu và sinh theo mẫu: độ đúng đo được là ước lượng lạc quan so với giao dịch thật; nó kiểm cơ chế (chuẩn hóa, k-NN, trộn bằng chứng, ba mức, học từ sửa), không thay thế đo trên dữ liệu người dùng.
 - Người dùng mô phỏng hợp tác hoàn hảo (luôn trả lời đúng).
-- Hũ "Khác" không có trong persona nên nhánh "khoản nhỏ một lần vào Khác" chỉ được kiểm bằng unit test, không có trong bộ này.
+- Hũ "Khác" không có trong persona nên nhánh "khoản nhỏ một lần vào Khác" chỉ được kiểm bằng unit test, không có trong bộ này. `--add-jar khac:Khác:spending` đo được nhánh đó, nhưng thông điệp model nhỏ chứa danh sách hũ nên cần `warm` lại (294 lời gọi model nhỏ); số trước, phần còn thiếu và lệnh chạy ở [2026-11-26-hu-khac.md](../../docs/research/2026-11-26-hu-khac.md).

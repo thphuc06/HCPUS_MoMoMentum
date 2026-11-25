@@ -17,6 +17,7 @@ import json
 import re
 import sys
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -87,9 +88,15 @@ def load_type_map() -> dict[str, TypeInfo]:
     return out
 
 
-def persona_jars(persona: str) -> dict[str, JarInfo]:
+def persona_jars(persona: str, extra: Sequence[JarInfo] = ()) -> dict[str, JarInfo]:
+    """Hũ của persona theo spec; `extra` là hũ thêm (ví dụ hũ 'Khác' 0%) xếp sau cùng như `sort_order` lớn nhất của bảng `jars`.
+
+    Hũ thêm trùng mã với hũ có sẵn của persona thì giữ bản của persona."""
     spec = json.loads((SPECS / f"{persona}.json").read_text(encoding="utf-8"))
-    return {j["code"]: JarInfo(j["code"], j["name"], j["kind"], BIG_BALANCE) for j in spec["jars"]}
+    jars = {j["code"]: JarInfo(j["code"], j["name"], j["kind"], BIG_BALANCE) for j in spec["jars"]}
+    for j in extra:
+        jars.setdefault(j.code, j)
+    return jars
 
 
 def seed_texts(persona: str) -> list[tuple[str, str]]:
@@ -339,12 +346,13 @@ def run_sim(
     caches: Caches,
     embedder: CachedEmbedder,
     judge: CachedJudge,
+    extra_jars: Sequence[JarInfo] = (),
 ) -> list[Result]:
     types = load_type_map()
     splits = split_of(rows)
     results: list[Result] = []
     for persona in sorted({r["persona"] for r in rows}):
-        jars = persona_jars(persona)
+        jars = persona_jars(persona, extra_jars)
         state = PersonaState(persona, th)
         seed_state(state, caches, embedder)
         clf = Classifier(th, state.labels, embedder, judge)
@@ -357,13 +365,16 @@ def run_sim(
 
 
 def warm_prompts(
-    rows: list[dict[str, Any]], th: ClassifyThresholds, embedder: CachedEmbedder
+    rows: list[dict[str, Any]],
+    th: ClassifyThresholds,
+    embedder: CachedEmbedder,
+    extra_jars: Sequence[JarInfo] = (),
 ) -> list[str]:
     """Thông điệp model nhỏ của MỌI giao dịch (lịch sử chỉ theo đáp án nên không phụ thuộc quyết định): để gọi một lượt, lưu đệm."""
     types = load_type_map()
     prompts: list[str] = []
     for persona in sorted({r["persona"] for r in rows}):
-        jars = persona_jars(persona)
+        jars = persona_jars(persona, extra_jars)
         state = PersonaState(persona, th)
         clf = Classifier(th, state.labels, embedder, lambda p, j: Verdict(None, 0.0))
         for row in sorted((r for r in rows if r["persona"] == persona), key=lambda r: r["seq"]):
@@ -374,6 +385,23 @@ def warm_prompts(
             if key:
                 state.history[key][row["truth_jar"]] += 1
     return prompts
+
+
+def small_one_off_eligible(rows: list[dict[str, Any]], th: ClassifyThresholds) -> set[str]:
+    """id của giao dịch thỏa điều kiện KHÔNG phụ thuộc model của luật 'khoản nhỏ một lần' (`Classifier._is_small_one_off`): chi, số tiền
+    không quá `small_one_off_max_vnd`, chưa có giao dịch trước cùng người nhận hoặc đối tác. Lịch sử chỉ theo đáp án (như `run_sim`) nên tập này
+    cố định: luật chỉ có thể đổi mục hỏi gộp NẰM TRONG tập này, bất kể model trả gì."""
+    out: set[str] = set()
+    for persona in sorted({r["persona"] for r in rows}):
+        state = PersonaState(persona, th)
+        for row in sorted((r for r in rows if r["persona"] == persona), key=lambda r: r["seq"]):
+            key = state.key_of(row)
+            seen = sum(state.history[key].values()) if key else 0
+            if int(row["amount_vnd"]) <= th.small_one_off_max_vnd and seen == 0:
+                out.add(row["id"])
+            if key:
+                state.history[key][row["truth_jar"]] += 1
+    return out
 
 
 # --- chỉ số ---------------------------------------------------------------------------------------------------------------
