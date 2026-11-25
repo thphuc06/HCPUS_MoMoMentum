@@ -88,6 +88,8 @@ class AgentSettings:
     low_coverage_threshold: float
     turn_record_tool: str
     turn_record_timeout_seconds: float
+    # Luồng K: khối `reasoning` còn ít hơn số bước này sau khi bỏ bước mâu thuẫn với kết quả đã lưu thì bỏ cả khối (#7)
+    reasoning_min_steps: int
 
     @classmethod
     def load(cls, env: Mapping[str, str] | None = None) -> AgentSettings:
@@ -150,6 +152,7 @@ class AgentSettings:
             low_coverage_threshold=get("low_coverage_threshold", float),
             turn_record_tool=get("turn_record_tool"),
             turn_record_timeout_seconds=get("turn_record_timeout_seconds", float),
+            reasoning_min_steps=get("reasoning_min_steps", int),
         )
 
     def tool(self, short_name: str, *, target: str = "ledger") -> str:

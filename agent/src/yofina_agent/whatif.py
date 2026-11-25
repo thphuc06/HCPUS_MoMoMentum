@@ -23,7 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -34,6 +34,7 @@ from yofina_agent import advisor, notices
 from yofina_agent.behavior_chat import compact_profile
 from yofina_agent.compact import compact_forecast, compact_jars, compact_obligations, compact_scenario
 from yofina_agent.jars import resolve_jar
+from yofina_agent.memory import jars_mentioned
 from yofina_agent.schemas import (
     Analysis,
     AnalysisOption,
@@ -678,7 +679,15 @@ async def _analyze_and_compose(turn: Turn, question: str, scenario_res: Any, st:
         rounds.append(checked)
         turn.record_verdict(verdict, checked)
         if verdict.action == "pass":
-            await _compose(turn, analysis, checked, st, allowed)
+            await _compose(
+                turn,
+                analysis,
+                checked,
+                st,
+                allowed,
+                rounds=rounds,
+                scenario=scenario_res.outcome.payload,
+            )
             return
         can_retry = verdict.action == "retry" and turn.model_calls_left() >= 1
         if not can_retry:
@@ -1033,12 +1042,18 @@ async def _compose(
     checked: list[tuple[Any, SuitabilityVerdict]],
     st: WhatIfState,
     allowed: Allowed | None = None,
+    *,
+    rounds: list[list[tuple[Any, SuitabilityVerdict]]] | None = None,
+    scenario: Mapping[str, Any] | None = None,
 ) -> None:
     """L5: lập luận đã kiểm -> (guardrail ra) -> khối `reasoning` -> tool ghi lấy khối xác nhận -> khối `options` -> khối xác nhận
-    -> văn bản stream."""
+    -> văn bản stream. `rounds` (phương án đã kiểm của mọi vòng Verifier) và `scenario` (kết quả `run_scenario`) là kết quả lập luận
+    phải khớp (`whatif_advice`)."""
     checked = mark_emergency_options(checked, turn.jar_rows)
     with turn.step("composer"):
-        advice = await whatif_advice(turn, analysis, checked, allowed or Allowed(), st)
+        advice = await whatif_advice(
+            turn, analysis, checked, allowed or Allowed(), st, rounds=rounds, scenario=scenario
+        )
         texts = [analysis.narrative, *(f"{o.label}. {o.summary}" for o, _ in checked), *advice.texts()]
         if not await _output_allowed(turn, texts, st):
             return
@@ -1122,21 +1137,39 @@ def recommended_option_id(checked: list[tuple[Any, SuitabilityVerdict]], jar_row
 
 
 async def whatif_advice(
-    turn: Turn, analysis: Analysis, checked: list[tuple[Any, SuitabilityVerdict]], allowed: Allowed, st: WhatIfState
+    turn: Turn,
+    analysis: Analysis,
+    checked: list[tuple[Any, SuitabilityVerdict]],
+    allowed: Allowed,
+    st: WhatIfState,
+    *,
+    rounds: list[list[tuple[Any, SuitabilityVerdict]]] | None = None,
+    scenario: Mapping[str, Any] | None = None,
 ) -> advisor.Advice:
     """Lập luận và kết luận của Analyst sau khi mã kiểm (xem `advisor`): số qua `NumericGrounding` với đúng tập số của lượt, căn
-    cứ là tool đã trả OK hoặc luật đã kiểm cho các phương án sắp phát, kết luận trỏ đúng phương án mang nhãn "Gợi ý"."""
+    cứ là tool đã trả OK hoặc luật đã kiểm cho các phương án sắp phát, kết luận trỏ đúng phương án mang nhãn "Gợi ý"; rồi kiểm nhất
+    quán với kết quả sắp phát (`_what_if_saved`, #7): bước hay kết luận mâu thuẫn bị bỏ, có khi bỏ cả khối (`advisor.settle`)."""
     def grounded(text: str) -> bool:
         return NumericGrounding.check({"t": text}, allowed).ok
 
+    c = analysis.conclusion
+    recommended = recommended_option_id(checked, turn.jar_rows)
+    saved = await _what_if_saved(
+        turn,
+        checked,
+        recommended,
+        rounds if rounds is not None else [checked],
+        scenario,
+        c.personal if c else (),
+        st.behavior,
+    )
     steps, dropped = advisor.verify_steps(
         analysis.reasoning,
         grounded=grounded,
         tools=advisor.tools_ok(turn.tool_log),
         rules=advisor.checked_rules(v for _, v in checked),
+        saved=saved,
     )
-    c = analysis.conclusion
-    recommended = recommended_option_id(checked, turn.jar_rows)
     conclusion, why = advisor.verify_conclusion(
         c.text if c else None,
         c.personal if c else (),
@@ -1145,10 +1178,85 @@ async def whatif_advice(
         has_memory=bool(await turn.memory_block()) if c and "memory" in c.personal else False,
         has_behavior=st.behavior is not None,
         option_id=c.option_id if c else None,
+        saved=saved,
+    )
+    advice, block = advisor.settle(
+        "what_if", steps, conclusion, dropped, why, min_steps=turn.s.reasoning_min_steps
     )
     if analysis.reasoning or c is not None:
-        advisor.log_advice("what_if", len(analysis.reasoning), len(steps), dropped, why)
-    return advisor.Advice(context="what_if", steps=tuple(steps), conclusion=conclusion)
+        advisor.log_advice("what_if", len(analysis.reasoning), len(steps), dropped, why, block)
+    return advice
+
+
+#: trường mang mã hũ dạng chuỗi trong kết quả tool và phương án
+_JAR_KEYS = frozenset({"jar_code", "from_jar", "to_jar"})
+
+
+def _jar_codes(node: Any) -> set[str]:
+    """Mọi mã hũ trong một kết quả có cấu trúc (đệ quy): `jar.code` và các trường `jar_code`, `from_jar`, `to_jar`."""
+    out: set[str] = set()
+    if isinstance(node, Mapping):
+        jar = node.get("jar")
+        if isinstance(jar, Mapping) and isinstance(jar.get("code"), str):
+            out.add(jar["code"])
+        for key, value in node.items():
+            if key in _JAR_KEYS and isinstance(value, str) and value:
+                out.add(value)
+            else:
+                out |= _jar_codes(value)
+    elif isinstance(node, list):
+        for item in node:
+            out |= _jar_codes(item)
+    return out
+
+
+async def _what_if_saved(
+    turn: Turn,
+    checked: list[tuple[Any, SuitabilityVerdict]],
+    recommended: str | None,
+    rounds: list[list[tuple[Any, SuitabilityVerdict]]],
+    scenario: Mapping[str, Any] | None,
+    personal: Iterable[str],
+    behavior: Mapping[str, Any] | None,
+) -> advisor.SavedResult:
+    """Kết quả what-if sắp phát mà lập luận phải khớp, dựng từ dữ liệu có cấu trúc (không đọc chữ của model).
+
+    - Bước được nhắc hũ của kịch bản (kết quả `run_scenario`: hũ bị ảnh hưởng, hũ trả nghĩa vụ đến hạn, hũ của spec) và hũ của các
+      phương án sắp phát (hũ của phương án, hũ của đề xuất đã kiểm luật, hũ trong tham số hành động).
+    - Kết luận được nhắc hũ của kịch bản và hũ của phương án mang nhãn "Gợi ý", cộng hũ mà nguồn cá nhân hóa nó khai có nói tới: sở thích
+      trong bộ nhớ (`memory.jars_mentioned`, như nhãn `hu` Analyst thấy) và câu thói quen của hồ sơ hành vi.
+    - Luật đã loại hũ nào: phán quyết của mọi vòng Verifier, theo hũ nguồn của đề xuất (`proposal.jar_code`)."""
+    names = {
+        str(j["code"]): str(j["name"]) for j in turn.jar_rows if j.get("code") and j.get("name")
+    }
+    scenario_jars = _jar_codes((scenario or {}).get("data"))
+    option_jars = {o.option_id: _jar_codes(o.model_dump(mode="json")) for o, _ in checked}
+    sources = set(personal)
+    personal_jars: set[str] = set()
+    if "memory" in sources:
+        ctx = await turn.memory.context()
+        by_name = {name: code for code, name in names.items()}
+        personal_jars |= {
+            by_name[n]
+            for item in ctx.of("preference")
+            for n in jars_mentioned(item.text, by_name)
+            if n in by_name
+        }
+    if "behavior" in sources and behavior:
+        personal_jars |= {
+            code
+            for habit in behavior.get("habits") or []
+            for code in advisor.mentioned_jars(str(habit.get("text") or ""), names)
+        }
+    judged = [(o.proposal.jar_code, v) for pairs in rounds for o, v in pairs]
+    return advisor.SavedResult(
+        jar_names=names,
+        step_jars=frozenset(scenario_jars.union(*option_jars.values())),
+        conclusion_jars=frozenset(
+            scenario_jars | option_jars.get(recommended or "", set()) | personal_jars
+        ),
+        rejected=advisor.rule_rejections(judged),
+    )
 
 
 #: Phương án dựng bằng mã cho đường suy giảm của khoản chi (không chi tiền ngay, không số liệu trong chữ; chữ ở
