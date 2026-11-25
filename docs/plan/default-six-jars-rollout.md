@@ -51,7 +51,7 @@ Reset data chỉ dùng được với tài khoản thuộc nhóm demo ([`rest_ap
 
 | Chỗ | Commit WIP đang làm | Cần đổi |
 | --- | --- | --- |
-| [Migration 0055](../../db/migrations/0055_default_six_jars.sql) và [seed](../../db/seed/jar_templates.sql) | Bật bộ sáu ngay khi chạy | Tách phần schema và phần bật bộ hũ (bước 1) |
+| [Migration 0057](../../db/migrations/0057_default_six_jars.sql) (trước khi gộp vào `main` là 0055) và [seed](../../db/seed/jar_templates.sql) | Bật bộ sáu ngay khi chạy | Tách phần schema và phần bật bộ hũ (bước 1) |
 | [`six_jars.py`](../../data/personas/six_jars.py) | Lấy hũ demo từ `is_default`, báo lỗi nếu không đúng sáu hũ | Đọc cấu hình demo riêng (bước 1, bước 5) |
 | [`service.py` `reset_demo`](../../gateway/tools/ledger/yofina_ledger/service.py) | Lấy `purpose` từ danh mục mặc định | Lấy từ cấu hình demo |
 | [`settings.py`](../../pipelines/forecast/yofina_forecast/settings.py) `DEFAULT_ESSENTIAL_JAR_CODES` | Coi cả Chi hằng ngày là thiết yếu, kể cả giải trí | Tính sàn theo phần chi thiết yếu (bước 2) |
@@ -62,7 +62,7 @@ Reset data chỉ dùng được với tài khoản thuộc nhóm demo ([`rest_ap
 ### Bước 1. Tách cấu hình bộ hũ và migration
 
 - [x] Thêm cấu hình bộ hũ riêng cho onboarding và cho demo (ví dụ `jar_layout`). Onboarding đọc bộ ba; Reset data đọc bộ demo. Bỏ điều kiện "đúng sáu hũ" trong `use_default_jars`.
-- [x] Tách [migration 0055](../../db/migrations/0055_default_six_jars.sql) thành phần mở rộng schema và phần bật bộ hũ. Thêm `purpose` cho `jars` và `jar_templates`, chấp nhận `NULL` trên dữ liệu cũ. Giữ hợp đồng đọc cũ trong giai đoạn chạy xen kẽ, kể cả quyền truy cập và RLS.
+- [x] Tách [migration 0057](../../db/migrations/0057_default_six_jars.sql) thành phần mở rộng schema và phần bật bộ hũ. Thêm `purpose` cho `jars` và `jar_templates`, chấp nhận `NULL` trên dữ liệu cũ. Giữ hợp đồng đọc cũ trong giai đoạn chạy xen kẽ, kể cả quyền truy cập và RLS.
 - [x] Phần bật bộ hũ đặt `is_default = true` cho đúng ba hũ, `false` cho Quỹ dồn, Mục tiêu, Tích lũy dài hạn và bảy hũ cũ. Đồng bộ cả migration và seed để chạy seed sớm cũng chưa bật bộ mới.
 - [x] Đối chiếu snapshot trước và sau migration và seed trên PostgreSQL cục bộ. Hũ, số dư, tỷ lệ, giao dịch và nghĩa vụ của ví cũ phải khớp. Ledger cũ còn phải khởi tạo được bộ bảy sau khi schema mở rộng.
 

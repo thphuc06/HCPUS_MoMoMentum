@@ -51,7 +51,7 @@ một lượt review cuối. Opus tốn 2,00x credits, nên Kiro chỉ chạy W3
 
 | Đợt | Việc | Worker | Mode | Phạm vi (theo lộ trình) | Phụ thuộc |
 | --- | --- | --- | --- | --- | --- |
-| W1 | `jar-layout` | codex deep | write | Bước 1 trọn, cộng phần dữ liệu của Bước 5: cấu hình `jar_layout` cho onboarding (3 hũ) và demo (4 hũ); tách migration 0055; seed; `six_jars.py`; `reset_demo` đọc cấu hình demo; `minh_six_jars.json`; bốn persona sau reset | — |
+| W1 | `jar-layout` | codex deep | write | Bước 1 trọn, cộng phần dữ liệu của Bước 5: cấu hình `jar_layout` cho onboarding (3 hũ) và demo (4 hũ); tách migration 0055 (khi gộp vào `main` đổi thành 0057, 0058, 0059 vì `main` đã có 0055, 0056); seed; `six_jars.py`; `reset_demo` đọc cấu hình demo; `minh_six_jars.json`; bốn persona sau reset | — |
 | W2 | `purpose-domain` | codex deep | write | Bước 2 trọn: `purpose` qua contracts/, libs/yofina_core, Ledger, Agent, Planner, forecast, frontend/src/api; hũ Nghĩa vụ chung làm nguồn trả; dự báo hũ Nghĩa vụ theo ngày; phí Trả Sau; sàn thiết yếu theo loại giao dịch (làm không kịp thì giữ cách cũ, ghi giới hạn) | Đã merge W1 |
 | W3 | `onboarding-declare` | kiro deep | write | Bước 3 và Bước 4: tính tỷ lệ đề xuất ở server, khoản biết trước và Quỹ dồn, kiểm tra theo ngày, bỏ qua bước 3, ca vượt 100%; bản xem trước `save_jars` có số tiền mỗi kỳ và kỳ áp dụng; UI trong frontend/src/features/jars và trang onboarding; test vitest và local_pg cho phần này | Đã merge W2 |
 | W4 | `fix-<tên>` | worker đã làm phần lỗi | write | Chỉ khi test ở mục 3 lỗi mà không tự sửa được dưới khoảng 30 dòng. Brief chỉ gồm test lỗi, đoạn lỗi và file liên quan | Sau mục 3 |

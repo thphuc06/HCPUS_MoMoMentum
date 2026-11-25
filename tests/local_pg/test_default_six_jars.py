@@ -77,9 +77,9 @@ def test_migration_and_seed_preserve_legacy_wallet_and_read_contract(tmp_path):
     import pgserver
 
     splitter = _load("sqlsplit", REPO / "infra-cdk/lambdas/migrator/sqlsplit.py")
-    migration = REPO / "db/migrations/0055_default_six_jars.sql"
-    commitments = migration.with_name("0056_sinking_commitments.sql")
-    activation = migration.with_name("0057_activate_onboarding_jar_layout.sql")
+    migration = REPO / "db/migrations/0057_default_six_jars.sql"
+    commitments = migration.with_name("0058_sinking_commitments.sql")
+    activation = migration.with_name("0059_activate_onboarding_jar_layout.sql")
     seed = REPO / "db/seed/jar_templates.sql"
     server = pgserver.get_server(str(tmp_path / "pg"), cleanup_mode="stop")
     try:

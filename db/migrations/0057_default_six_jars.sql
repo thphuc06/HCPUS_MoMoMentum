@@ -1,16 +1,30 @@
--- Expand the schema without changing existing readers or the active jar catalogue.
+-- 0057_default_six_jars: mở rộng schema cho bộ hũ mặc định, chưa đổi bộ hũ đang dùng (lộ trình docs/plan/default-six-jars-rollout.md,
+-- Bước 1). Không sửa 0001 tới 0056 (migrator kiểm checksum).
+--
+-- * jars.purpose, jar_templates.purpose (text, tùy chọn): mục đích của hũ tiết kiệm (buffer, sinking, goal, long_term); NULL với dữ
+--   liệu cũ và với hũ không phải saving. jars_goal_check cho phép hũ sinking, long_term có hạn mà chưa có số tiền.
+-- * Hàm đọc mới app_get_jar_state_with_purpose, app_get_overview_with_purpose, app_get_jar_detail_with_purpose bọc hàm đọc cũ và
+--   thêm purpose; hàm cũ giữ nguyên để Ledger cũ chạy được trong lúc chạy xen kẽ.
+-- * Bật bộ ba hũ của onboarding là việc của 0059 (migration cuối), không phải file này.
+--
+-- Quy ước như 0005 tới 0056 (db/README.md): chạy bằng secret MASTER, một transaction, tách bằng dòng "-- @@", hàm đọc
+-- SECURITY INVOKER tự đặt app.user_id. Không viết dấu hai chấm dính liền chữ cái hoặc gạch dưới (kể cả trong chú thích).
+
 ALTER TABLE jars ADD COLUMN purpose text CHECK (
   purpose IS NULL OR (kind = 'saving' AND purpose IN ('buffer', 'sinking', 'goal', 'long_term'))
 );
+-- @@
 ALTER TABLE jar_templates ADD COLUMN purpose text CHECK (
   purpose IS NULL OR (kind = 'saving' AND purpose IN ('buffer', 'sinking', 'goal', 'long_term'))
 );
+-- @@
 ALTER TABLE jars DROP CONSTRAINT jars_goal_check;
+-- @@
 ALTER TABLE jars ADD CONSTRAINT jars_goal_check CHECK (
   (goal_vnd IS NULL OR goal_vnd > 0)
   AND (goal_date IS NULL OR goal_vnd IS NOT NULL OR coalesce(purpose IN ('sinking', 'long_term'), false))
 );
-
+-- @@
 -- Ledger opts into purpose-aware reads through new invoker functions.
 CREATE FUNCTION app_get_jar_state_with_purpose(p_user_id text)
 RETURNS TABLE (
@@ -30,7 +44,7 @@ BEGIN
     ORDER BY s.sort_order, s.code;
 END
 $$;
-
+-- @@
 CREATE FUNCTION app_get_overview_with_purpose(p_user_id text, p_now timestamptz, p_tz text)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER
@@ -50,7 +64,7 @@ BEGIN
   RETURN jsonb_set(v_data, '{jars}', v_jars);
 END
 $$;
-
+-- @@
 CREATE FUNCTION app_get_jar_detail_with_purpose(
   p_user_id text, p_jar_code text, p_now timestamptz, p_tz text
 )
@@ -69,10 +83,15 @@ BEGIN
   RETURN v_data;
 END
 $$;
-
+-- @@
 REVOKE ALL ON FUNCTION app_get_jar_state_with_purpose(text) FROM PUBLIC;
+-- @@
 REVOKE ALL ON FUNCTION app_get_overview_with_purpose(text, timestamptz, text) FROM PUBLIC;
+-- @@
 REVOKE ALL ON FUNCTION app_get_jar_detail_with_purpose(text, text, timestamptz, text) FROM PUBLIC;
+-- @@
 GRANT EXECUTE ON FUNCTION app_get_jar_state_with_purpose(text) TO yofina_app;
+-- @@
 GRANT EXECUTE ON FUNCTION app_get_overview_with_purpose(text, timestamptz, text) TO yofina_app;
+-- @@
 GRANT EXECUTE ON FUNCTION app_get_jar_detail_with_purpose(text, text, timestamptz, text) TO yofina_app;

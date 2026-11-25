@@ -251,8 +251,8 @@ def test_confirm_resolutions_chap_nhan_bien_nhan_khong_co_transfer_id():
 
 # --- seed -------------------------------------------------------------------------------------
 SEED_FILES = sorted(SEEDS.glob("*.sql"))
-TEMPLATES = MIGRATIONS / "0057_activate_onboarding_jar_layout.sql"
-EXPANSION = MIGRATIONS / "0055_default_six_jars.sql"
+TEMPLATES = MIGRATIONS / "0059_activate_onboarding_jar_layout.sql"
+EXPANSION = MIGRATIONS / "0057_default_six_jars.sql"
 
 
 def test_co_ba_file_seed_cho_ba_bang_tra():

@@ -1,4 +1,4 @@
--- Bootstrap the legacy onboarding layout. Activation is owned by migration 0056.
+-- Bootstrap the legacy onboarding layout. Activation is owned by migration 0059.
 -- Existing catalogue rows take precedence so reseeding cannot switch the active layout.
 INSERT INTO jar_templates (code, name, color_key, icon_key, kind, default_split_percent, is_default, sort_order) VALUES
   ('an_uong',  'Ăn uống',  'violet', 'utensils', 'spending',   25, true, 10),

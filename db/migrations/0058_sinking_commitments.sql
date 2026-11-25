@@ -1,10 +1,22 @@
+-- 0058_sinking_commitments: khoản cần của hũ Quỹ dồn (lộ trình docs/plan/default-six-jars-rollout.md, Bước 2 và 3). Không sửa 0001
+-- tới 0057 (migrator kiểm checksum). Chạy sau 0057 (cần cột purpose và các hàm *_with_purpose).
+--
+-- * jars.sinking_items (jsonb, mặc định mảng rỗng): các khoản cần của một hũ sinking (tên, số tiền, ngày cần). Ví cũ nhận mảng rỗng;
+--   chỉ hũ purpose sinking được có phần tử.
+-- * Hàm đọc mới app_get_jar_state_with_commitments (bọc app_get_jar_state_with_purpose, thêm sinking_items).
+-- * Thay app_get_overview_with_purpose, app_get_jar_detail_with_purpose của 0057 (cùng chữ ký, cùng kiểu trả về): thêm khóa
+--   sinking_items khi mảng không rỗng.
+--
+-- Quy ước như 0005 tới 0057 (db/README.md): chạy bằng secret MASTER, một transaction, tách bằng dòng "-- @@", hàm đọc
+-- SECURITY INVOKER tự đặt app.user_id. Không viết dấu hai chấm dính liền chữ cái hoặc gạch dưới (kể cả trong chú thích).
+
 -- One sinking jar can hold multiple dated commitments. Existing wallets default to an empty list.
 ALTER TABLE jars ADD COLUMN sinking_items jsonb NOT NULL DEFAULT '[]'::jsonb
   CHECK (
     jsonb_typeof(sinking_items) = 'array'
     AND (sinking_items = '[]'::jsonb OR purpose IS NOT DISTINCT FROM 'sinking')
   );
-
+-- @@
 CREATE FUNCTION app_get_jar_state_with_commitments(p_user_id text)
 RETURNS TABLE (
   clock_offset_days integer,
@@ -23,7 +35,7 @@ BEGIN
     ORDER BY s.sort_order, s.code;
 END
 $$;
-
+-- @@
 CREATE OR REPLACE FUNCTION app_get_overview_with_purpose(p_user_id text, p_now timestamptz, p_tz text)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER
@@ -45,7 +57,7 @@ BEGIN
   RETURN jsonb_set(v_data, '{jars}', v_jars);
 END
 $$;
-
+-- @@
 CREATE OR REPLACE FUNCTION app_get_jar_detail_with_purpose(
   p_user_id text, p_jar_code text, p_now timestamptz, p_tz text
 )
@@ -66,6 +78,7 @@ BEGIN
   RETURN v_data;
 END
 $$;
-
+-- @@
 REVOKE ALL ON FUNCTION app_get_jar_state_with_commitments(text) FROM PUBLIC;
+-- @@
 GRANT EXECUTE ON FUNCTION app_get_jar_state_with_commitments(text) TO yofina_app;
