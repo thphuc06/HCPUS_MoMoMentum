@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from typing import Any
@@ -302,8 +303,10 @@ def test_chuoi_du_phong_bat_throttling_va_access_denied(code):
     assert res.model_id == "m-plan-b" and res.text == "từ b"
     assert res.attempts == [("m-plan-a", code)]
     assert [c["modelId"] for c in client.calls] == ["m-plan-a", "m-plan-b"]
-    assert [c["model"] for c in usage.calls] == ["m-plan-a", "m-plan-b"]  # mỗi lời gọi đều được đếm
-    assert scope.calls == 2
+    # trần ngày đếm cả lần bị từ chối; trần lượt chỉ đếm lời gọi tới model (AG-03)
+    assert [c["model"] for c in usage.calls] == ["m-plan-a", "m-plan-b"]
+    assert scope.calls == 1
+    assert [r.outcome for r in scope.records] == [code, "ok"]
     assert "temperature" in client.calls[0]["inferenceConfig"]
     assert "temperature" not in client.calls[1]["inferenceConfig"]  # model b không nhận temperature
 
@@ -363,6 +366,95 @@ def test_tran_moi_luot_hoi_thoai():
     with pytest.raises(ModelBudgetExceeded) as e:
         gw.converse("small", messages=[user_message("hi")], scope=scope)
     assert e.value.reason == "turn_limit"
+
+
+# --- trần lượt và throttle (AG-03, issue #10) -----------------------------------------------
+def test_sonnet_throttle_analyst_van_chay_tren_model_du_phong_trong_tran_luot():
+    """Kịch bản audit §3.2: router, Orchestrator và Analyst trong trần 4; Sonnet (m-plan-a) throttle cả hai lần."""
+    scope = TurnScope(max_calls=4)
+    client = FakeClient(
+        [
+            tool_response("report", {"intent": "what_if"}),  # router (vai small)
+            client_error("ThrottlingException"),  # Orchestrator trên Sonnet
+            tool_response("report", {"intent": "spec"}),  # Orchestrator trên Kimi
+            client_error("ThrottlingException"),  # Analyst trên Sonnet
+            tool_response("report", {"intent": "giai_thich"}),  # Analyst trên Kimi
+        ]
+    )
+    gw = gateway(client)
+    msgs = [user_message("mua xe 30 triệu được không")]
+    gw.structured_json("small", output_model=Out, messages=msgs, scope=scope)
+    gw.structured_json("planner", output_model=Out, messages=msgs, scope=scope)
+    analyst = asyncio.run(
+        gw.astructured_json("planner", output_model=Out, messages=msgs, max_attempts=1, scope=scope)
+    )
+    assert analyst.model_id == "m-plan-b" and analyst.value.intent == "giai_thich"
+    assert scope.calls == 3  # hai lần bị throttle không tính vào trần lượt
+    assert [r.outcome for r in scope.records].count("ThrottlingException") == 2  # vẫn ghi lại
+
+
+def test_bo_gioi_han_toc_do_bo_qua_model_khong_tinh_vao_tran_luot():
+    limiter = RateLimiter(clock=lambda: 0.0)
+    limiter.try_acquire("m-plan-a", 1)  # hết chỗ, phải chờ 60 s > 5 s
+    s = settings(
+        roles={
+            "planner": (
+                ModelSpec("m-plan-a", rpm=1, daily_cap=9),
+                ModelSpec("m-plan-b", rpm=0, daily_cap=9),
+            )
+        },
+        rate_limit_max_wait_seconds=5,
+    )
+    scope, usage = TurnScope(max_calls=1), FakeUsage()
+    gw = gateway(FakeClient([ok_response("từ b")]), usage, settings=s, limiter=limiter)
+    res = gw.converse("planner", messages=[user_message("hi")], scope=scope)
+    assert res.model_id == "m-plan-b" and res.attempts == [("m-plan-a", "RateLimitWaitTooLong")]
+    assert scope.calls == 1
+    assert [c["model"] for c in usage.calls] == ["m-plan-b"]  # trần ngày cũng không bị đếm
+
+
+def test_loi_goi_thanh_cong_thu_5_van_cham_tran_4_du_co_throttle():
+    scope = TurnScope(max_calls=4)
+    client = FakeClient(
+        [
+            ok_response(),
+            client_error("ThrottlingException"),
+            ok_response(),
+            ok_response(),
+            ok_response(),
+        ]
+    )
+    gw = gateway(client)
+    for _ in range(4):
+        gw.converse("small", messages=[user_message("hi")], scope=scope)
+    assert scope.calls == 4 and len(client.calls) == 5
+    with pytest.raises(ModelBudgetExceeded) as e:
+        gw.converse("small", messages=[user_message("hi")], scope=scope)
+    assert e.value.reason == "turn_limit" and len(client.calls) == 5  # không gửi lời gọi thứ 5
+
+
+def test_strands_throttle_qua_reserve_va_record_tra_lai_cho_trong_luot():
+    """Đường của `MeteredModel`: `reserve_async` rồi `record` với tên lỗi của Strands."""
+    scope = TurnScope(max_calls=1)
+    gw = gateway(FakeClient([]))
+    a, b = gw.chain("planner")
+    asyncio.run(gw.reserve_async("planner", a, scope))
+    gw.record(
+        "planner",
+        a.id,
+        input_tokens=0,
+        output_tokens=0,
+        latency_ms=3,
+        outcome="ModelThrottledException",
+        scope=scope,
+    )
+    asyncio.run(gw.reserve_async("planner", b, scope))  # còn chỗ cho model dự phòng
+    gw.record(
+        "planner", b.id, input_tokens=5, output_tokens=2, latency_ms=9, outcome="ok", scope=scope
+    )
+    assert scope.calls == 1
+    with pytest.raises(ModelBudgetExceeded):
+        asyncio.run(gw.reserve_async("planner", b, scope))
 
 
 def test_vai_la_khong_co_thi_bao_loi_cau_hinh():
