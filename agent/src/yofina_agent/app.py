@@ -32,6 +32,7 @@ from yofina_agent.settings import AgentSettings
 from yofina_agent.store import TurnBlockStore, TurnRecordStore, make_record_store, make_store
 from yofina_agent.tools import GatewayTools
 from yofina_agent.turn import Turn, TurnDeps, background_busy, stream_turn
+from yofina_core import quota as daily_quota
 from yofina_core.blocks import new_trace_id, trace_id_from_traceparent
 from yofina_core.config import Config, ConfigError
 from yofina_core.errors import ErrorCode
@@ -40,6 +41,11 @@ from yofina_core.llm import LlmGateway, get_gateway
 log = logging.getLogger("yofina.agent.app")
 
 SESSION_HEADER = "x-amzn-bedrock-agentcore-runtime-session-id"
+
+
+def _chat_quota() -> daily_quota.AccountQuota:
+    """Bộ đếm lượt chat dùng chung của tiến trình: chính bộ đếm `Turn.within_quota` dùng khi `TurnDeps.quota` vắng."""
+    return daily_quota.shared(daily_quota.CHAT)
 
 
 class AgentRuntime:
@@ -54,10 +60,11 @@ class AgentRuntime:
         tools_factory: Callable[[Identity], GatewayTools] | None = None,
         guardrail: Guardrail | None = None,
         records: TurnRecordStore | None = None,
+        quota: Callable[[], daily_quota.AccountQuota] = _chat_quota,
     ) -> None:
         self._settings = settings
         self._llm, self._store, self._tools_factory = llm, store, tools_factory
-        self._guardrail, self._records = guardrail, records
+        self._guardrail, self._records, self._quota = guardrail, records, quota
 
     @property
     def settings(self) -> AgentSettings:
@@ -95,7 +102,8 @@ class AgentRuntime:
         )
 
     def warm(self) -> dict[str, Any]:
-        """Nạp cấu hình, tạo client Bedrock/DynamoDB, import Strands. Không gọi model hay tool."""
+        """Nạp cấu hình, tạo client Bedrock/DynamoDB, import Strands, dựng sẵn bộ đếm lượt chat và đọc trần (#13: lượt đầu ở microVM
+        lạnh không phải tạo client DynamoDB/SSM trước router). Không gọi model hay tool."""
         started = time.perf_counter()
         gateway = self._llm()
         _ = gateway.client, gateway.usage
@@ -105,7 +113,21 @@ class AgentRuntime:
         deps = self.deps()
         if deps.guardrail is not None and deps.guardrail.enabled:
             _ = deps.guardrail.client  # tạo client bedrock-runtime trước (không gọi ApplyGuardrail)
-        return {"warm": True, "guardrail": bool(deps.guardrail and deps.guardrail.enabled), "ms": int((time.perf_counter() - started) * 1000)}
+        return {
+            "warm": True,
+            "guardrail": bool(deps.guardrail and deps.guardrail.enabled),
+            "quota": self._warm_quota(),
+            "ms": int((time.perf_counter() - started) * 1000),
+        }
+
+    def _warm_quota(self) -> bool:
+        """Làm nóng bộ đếm lượt chat; True nếu bộ đếm bật và đã đọc trần. Lỗi chỉ ghi log, không ném ra: lượt đầu tự làm lại việc
+        này trong `Turn.within_quota`, và bộ đếm vốn cho qua khi trục trặc."""
+        try:
+            return self._quota().warm() is not None
+        except Exception as exc:
+            log.warning(json.dumps({"event": "quota_warm_failed", "error": repr(exc)[:200]}))
+            return False
 
 
 def _error(status: int, code: ErrorCode, message: str) -> JSONResponse:

@@ -112,6 +112,21 @@ def test_doi_tran_tren_ssm_co_hieu_luc_sau_thoi_gian_nho_khong_can_deploy():
     assert q.take("sub-minh") == 3
 
 
+def test_lam_nong_doc_tran_truoc_nen_luot_dau_khong_doc_ssm():
+    ssm = FakeSsm({"/yofina/quota/chat_turns_per_day": "7"})
+    store = CountingUsage()
+    q = quota(store=store, cap=CapSource(CHAT, {"YOFINA_SSM_PREFIX": "/yofina"}, ssm))
+    assert q.warm() == 7 and ssm.calls == 1
+    assert store.counts == {}  # làm nóng không tính lượt nào
+    assert q.take("sub-minh") == 1 and ssm.calls == 1
+
+
+def test_lam_nong_bo_dem_tat_thi_khong_doc_tran():
+    ssm = FakeSsm({"/yofina/quota/chat_turns_per_day": "7"})
+    q = quota(store=None, cap=CapSource(CHAT, {"YOFINA_SSM_PREFIX": "/yofina"}, ssm))
+    assert q.warm() is None and ssm.calls == 0
+
+
 def test_ssm_loi_hoac_sai_dinh_dang_thi_dung_mac_dinh_va_ghi_log(caplog):
     class Denied(FakeSsm):
         def get_parameter(self, **kw: Any) -> dict[str, Any]:
