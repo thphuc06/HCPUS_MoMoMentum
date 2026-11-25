@@ -12,6 +12,7 @@ regex ép ý định (`route_runout_overview`) đã bỏ; khi model lỗi, luậ
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any
 
 import pytest
@@ -188,3 +189,23 @@ def test_ban_gon_va_cau_tra_loi_chi_chep_so_cua_tool():
         forecast_overview_text(one)
         == "Hũ Ăn uống dự kiến cạn ngày 23/11, sớm 12 ngày so với kỳ lương 05/12. Các hũ còn lại đủ tới kỳ lương."
     )
+
+
+@pytest.mark.parametrize("with_date", [True, False], ids=["con_ngay_cu", "producer_da_bo_ngay"])
+def test_hu_thua_khong_dua_ngay_can_cho_model(with_date):
+    """#25: `runout_date_shown` sai (hũ thưa) thì bản gọn gửi model không có ngày cạn của hũ đó (kể cả khi tool cũ vẫn trả ngày),
+    chỉ biết hũ có thể cạn trước kỳ lương; "hũ nào sắp cạn?" xếp hũ đó vào nhóm cần chú ý không nêu ngày."""
+    p = _forecast_payload("giai_tri")
+    p["data"]["runout_date_shown"] = False
+    if not with_date:
+        del p["data"]["runout_date"]
+    c = compact_forecast(p)
+    assert c["runout"] == {"may_run_out_before_payday": True}
+    assert "29/11" not in json.dumps(c, ensure_ascii=False)
+    ov = compact_forecast_overview([compact_forecast(_forecast_payload("an_uong")), c], [])
+    assert [r["jar"] for r in ov["runout_before_payday"]] == ["Ăn uống"] and ov["tight"] == ["Giải trí"]
+    assert "29/11" not in json.dumps(ov, ensure_ascii=False)
+    # cờ đúng: như cũ
+    shown = _forecast_payload("giai_tri")
+    shown["data"]["runout_date_shown"] = True
+    assert compact_forecast(shown)["runout"]["date_text"] == "29/11"

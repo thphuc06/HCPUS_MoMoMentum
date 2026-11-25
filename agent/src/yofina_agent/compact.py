@@ -149,13 +149,16 @@ def compact_forecast(payload: Mapping[str, Any]) -> dict[str, Any]:
         "is_initial_estimate": bool(d["is_initial_estimate"]),
         "stale": bool(d["stale"]),
     }
-    if d.get("runout_date"):
+    if d.get("runout_date") and d.get("runout_date_shown") is not False:
         runout = date.fromisoformat(d["runout_date"])
         out["runout"] = {
             "date_text": _dm(d["runout_date"]),
             "days_from_today": (runout - origin).days,
             "days_before_payday": (date.fromisoformat(payday["date"]) - runout).days,
         }
+    elif d.get("runout_date_shown") is False and d["status"] == "short":
+        # hũ thưa (#25): ngày cạn sai trung bình hơn 6 ngày nên không đưa ngày (kể cả số ngày suy ra) để model không tự nói ngày
+        out["runout"] = {"may_run_out_before_payday": True}
     else:
         out["runout"] = None  # không cạn trong kỳ dự báo
     if d.get("p_shortfall") is not None:
@@ -183,14 +186,15 @@ def compact_forecast_overview(
     """Dự báo của MỌI hũ ("hũ nào sắp cạn?") từ các bản gọn `compact_forecast` của từng hũ.
 
     Hũ cạn TRƯỚC kỳ lương (runout.days_before_payday > 0) xếp theo ngày cạn sớm nhất; hũ không cạn trước kỳ lương nhưng trạng thái
-    sát đứng riêng; còn lại là đủ. `unavailable`: tên hũ không lấy được dự báo. Chỉ chép số và ngày của tool, không tính thêm.
+    sát đứng riêng, cùng nhóm với hũ hụt không nêu được ngày cạn (hũ thưa, #25: `runout.may_run_out_before_payday`); còn lại là đủ.
+    `unavailable`: tên hũ không lấy được dự báo. Chỉ chép số và ngày của tool, không tính thêm.
     """
     runout: list[dict[str, Any]] = []
     tight: list[str] = []
     ok: list[str] = []
     for f in forecasts:
         r = f.get("runout")
-        if r and int(r["days_before_payday"]) > 0:
+        if r and int(r.get("days_before_payday") or 0) > 0:
             runout.append(
                 {
                     "jar": f["jar"],

@@ -59,6 +59,33 @@ def test_mua_mot_lan_chenh_lech_chinh_xac_nho_cung_day_so_ngau_nhien(saved):
     assert len(saved) == 1 and saved[0]["kind"] == "one_time_purchase" and saved[0]["n_paths"] == 600
 
 
+def test_hu_thua_khong_neu_ngay_can_trong_what_if(saved):
+    """#25: Giải trí là hũ thưa trong dữ liệu này (hiệu chỉnh mặc định ghi `show_runout_date` sai cho nó). Mua gần hết hũ thì hũ
+    hụt nhưng kết quả không nêu ngày cạn cụ thể ở đâu cả; câu thay thế của khối nói "có thể cạn trước ngày lương"."""
+    from datetime import UTC, datetime
+
+    from yofina_core.blocks import build_forecast_timeline_from_data
+
+    eng, _ = engine()
+    d = run(eng, {"kind": "one_time_purchase", "amount_vnd": 740_000, "funding_source": "jar", "jar_code": "giai_tri"}, saved)
+    tl = d["timelines"][0]
+    assert tl["jar"]["code"] == "giai_tri" and tl["compare"]["after"]["status"] == "short"
+    assert tl["runout_date_shown"] is False and "runout_date" not in tl
+    assert "runout_date" not in tl["compare"]["after"] and "runout_shift_days" not in tl["compare"]["delta"]
+    eff = {e["jar"]["code"]: e for e in d["effects"]}
+    assert not {"runout_date_before", "runout_date_after"} & set(eff["giai_tri"])
+    assert eff["giai_tri"]["status_after"] == "short"
+    block = build_forecast_timeline_from_data(
+        data=tl, trace_id="t1", source_tool="forecast___run_scenario", as_of=datetime(2026, 12, 10, tzinfo=UTC),
+        app_date=APP_DATE,
+    )  # fmt: skip
+    assert "Hũ Giải trí có thể cạn trước ngày lương" in block.fallback_text
+    # hũ dày vẫn nêu ngày như cũ
+    d2 = run(eng, {"kind": "one_time_purchase", "amount_vnd": 50_000, "funding_source": "jar", "jar_code": "an_uong"}, saved)
+    assert "runout_date" in d2["timelines"][0] and "runout_date_shown" not in d2["timelines"][0]
+    assert "runout_date_before" in d2["effects"][0]
+
+
 def test_mua_tra_sau_chi_phi_cua_mon_tach_khoi_tong_phai_tra_ngay_den_han(saved):
     eng, _ = engine()
     d = run(eng, {"kind": "bnpl_purchase", "amount_vnd": 1_200_000, "funding_source": "credit", "label": "tai nghe"}, saved)

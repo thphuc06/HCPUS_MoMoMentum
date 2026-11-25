@@ -58,7 +58,7 @@ from yofina_forecast.credit import compute_credit_cost, jar_at_due, obligation_i
 from yofina_forecast.inputs import build_inputs
 from yofina_forecast.runner import Pipeline
 from yofina_forecast.settings import ForecastSettings
-from yofina_ml.api import update_forecast
+from yofina_ml.api import runout_date_shown, update_forecast
 from yofina_ml.contract import check_inputs, check_result
 from yofina_ml.types import (
     ForecastInputs,
@@ -985,16 +985,22 @@ class ScenarioEngine:
         for b, a in pairs:
             meta = metas[b.summary.jar_code]
             sb, sa = b.summary, a.summary
+            # hũ thưa (#25): ngày cạn sai trung bình hơn 6 ngày nên không nêu ngày trước, sau, hay độ dời ngày cạn
+            date_shown = runout_date_shown(before, sb.jar_code) and runout_date_shown(
+                after, sb.jar_code
+            )
+            runout_b = sb.runout_date if date_shown else None
+            runout_a = sa.runout_date if date_shown else None
             effect: dict[str, Any] = {
                 "jar": meta.ref(),
                 "status_before": _status(b),
                 "status_after": _status(a),
                 "min_balance_delta_vnd": _min_p50(a) - _min_p50(b),
             }
-            if sb.runout_date:
-                effect["runout_date_before"] = sb.runout_date.isoformat()
-            if sa.runout_date:
-                effect["runout_date_after"] = sa.runout_date.isoformat()
+            if runout_b:
+                effect["runout_date_before"] = runout_b.isoformat()
+            if runout_a:
+                effect["runout_date_after"] = runout_a.isoformat()
             if _p(b) is not None:
                 effect["p_shortfall_before"] = _p(b)
             if _p(a) is not None:
@@ -1010,8 +1016,8 @@ class ScenarioEngine:
                 "min_balance_p50_vnd": _min_p50(a),
                 "days": _days_payload(a),
             }
-            if sa.runout_date:
-                path["runout_date"] = sa.runout_date.isoformat()
+            if runout_a:
+                path["runout_date"] = runout_a.isoformat()
             if p_a is not None:
                 path["p_shortfall"] = p_a
                 if _p_se(a) is not None:
@@ -1020,7 +1026,7 @@ class ScenarioEngine:
             if extra:
                 path["events"] = extra[:60]
             delta: dict[str, Any] = {"min_balance_delta_vnd": _min_p50(a) - _min_p50(b)}
-            shift = _runout_shift(sb.runout_date, sa.runout_date, today, horizon)
+            shift = _runout_shift(runout_b, runout_a, today, horizon) if date_shown else None
             if shift is not None:
                 delta["runout_shift_days"] = shift
             if p_a is not None and p_b is not None:
@@ -1050,8 +1056,10 @@ class ScenarioEngine:
                     "common_random_numbers": True,
                 },
             }
-            if sb.runout_date:
-                tl["runout_date"] = sb.runout_date.isoformat()
+            if runout_b:
+                tl["runout_date"] = runout_b.isoformat()
+            if not date_shown:
+                tl["runout_date_shown"] = False
             if p_b is not None:
                 tl["p_shortfall"] = p_b
                 if _p_se(b) is not None:

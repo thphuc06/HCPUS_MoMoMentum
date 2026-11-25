@@ -292,6 +292,7 @@ export const ForecastTimelineData = z.object({
   horizon_days: z.int().min(1).max(90),
   payday: ForecastPayday,
   runout_date: IsoDate.optional(),
+  runout_date_shown: z.boolean().optional(),
   p_shortfall: Ratio.optional(),
   p_shortfall_se: Ratio.optional(),
   confidence_band: ConfidenceBand,

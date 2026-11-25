@@ -66,6 +66,7 @@ Khối `forecast_timeline` được dựng từ chính các hàng này bằng `y
 - `p_shortfall`: xác suất số dư hũ xuống dưới 0 ít nhất một ngày từ `app_date + 1` tới trước `next_payday` (hoặc hết horizon nếu ngày lương xa hơn). `p_shortfall_se`: sai số chuẩn Monte Carlo.
 - `status` luôn được tính (kể cả khi `show_probability` sai, từ xác suất nội bộ) để màn hình vẫn có đủ/sát/hụt; chỉ con số phần trăm bị giấu.
 - `runout_date`: ngày đầu tiên số dư P50 chạm 0 hoặc thấp hơn trong horizon; None nếu không cạn.
+- `run.params["show_runout_date"]` (#25, đọc bằng `yofina_ml.api.runout_date_shown`): {mã hũ: có nêu ngày cạn không}, sai ở hũ thưa; DB trả cột `runout_date_shown` (migration 0055), bên dùng bỏ ngày cạn và nói "Có thể cạn trước ngày lương" kèm `p_shortfall` khi được hiện.
 - `data_coverage` mặc định `clamp((spend + balance_end - balance_start) / income, 0, 1)` (xem `CoverageInputs`); luồng ML có thể tinh chỉnh, nhưng phải ghi công thức vào `RunMeta.params`.
 - Nhóm tin cậy `confidence_band` / `confidence_label`: do ML quyết từ số ngày lịch sử, độ phủ dữ liệu và độ phủ khoảng đo trên backtest (ngưỡng ở `ForecastConfig`); `low` bắt buộc với ước lượng ban đầu.
 - `RunMeta.params`: JSON thuần ghi chẩn đoán (ρ đã chọn, hệ số nới khoảng, γ của ACI, tên bộ sinh backtest...).

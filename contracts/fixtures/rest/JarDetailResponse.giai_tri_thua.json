@@ -1,0 +1,30 @@
+{
+  "app_date": "2026-11-21",
+  "as_of": "2026-12-10T03:00:00Z",
+  "jar": {
+    "code": "giai_tri",
+    "name": "Giải trí",
+    "color_key": "orchid",
+    "icon_key": "gamepad",
+    "kind": "spending",
+    "balance_vnd": 420000,
+    "split_percent": 10,
+    "status": "short",
+    "runout_date_shown": false,
+    "p_shortfall": 0.62,
+    "confidence_band": "medium",
+    "forecast_floor_vnd": -35000
+  },
+  "forecast": {
+    "computed_at": "2026-11-21T19:00:03Z",
+    "run_app_date": "2026-11-21",
+    "stale": false,
+    "is_initial_estimate": false,
+    "confidence_band": "medium",
+    "coverage": 0.62,
+    "history_days": 120,
+    "model": "hurdle_calendar"
+  },
+  "recent_transactions": [],
+  "obligations": []
+}

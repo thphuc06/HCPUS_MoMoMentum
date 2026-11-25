@@ -74,6 +74,17 @@ describe('buildChartModel: không cạn, ngày lương ngoài khung', () => {
     expect(m.shortfallRange).toBeNull()
   })
 
+  it('cờ runout_date_shown sai (hũ thưa, #25): không có điểm cạn và vùng hụt dù dữ liệu còn ngày, cả đường Sau', () => {
+    const d = data('forecast_timeline.short')
+    const m = buildChartModel({ ...d, runout_date_shown: false })
+    expect(m.runout).toBeNull()
+    expect(m.shortfallRange).toBeNull()
+    const w = data('forecast_timeline.what_if')
+    const after = { ...w.compare!.after, runout_date: w.days[5]!.date }
+    expect(buildChartModel({ ...w, compare: { ...w.compare!, after } }).afterRunout).not.toBeNull()
+    expect(buildChartModel({ ...w, runout_date_shown: false, compare: { ...w.compare!, after } }).afterRunout).toBeNull()
+  })
+
   it('ngày lương sau khung thì không vẽ đường lương', () => {
     const d = data('forecast_timeline.short')
     const m = buildChartModel({ ...d, payday: { date: '2027-03-01', days_until: 100 } })

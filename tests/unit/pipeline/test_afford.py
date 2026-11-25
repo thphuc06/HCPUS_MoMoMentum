@@ -27,7 +27,7 @@ def series(p50: list[int], spread: int = 0):
     ]
 
 
-def check(p50, amount, *, spread=0, balance=1_000_000, pay_date=APP_DATE, short=0, tight=0, runout=None):
+def check(p50, amount, *, spread=0, balance=1_000_000, pay_date=APP_DATE, short=0, tight=0, runout=None, date_shown=True):
     return jar_check(
         jar=JAR,
         balance_now_vnd=balance,
@@ -40,6 +40,7 @@ def check(p50, amount, *, spread=0, balance=1_000_000, pay_date=APP_DATE, short=
         short_floor_vnd=short,
         tight_floor_vnd=tight,
         runout_threshold_vnd=0,
+        runout_date_shown=date_shown,
     )
 
 
@@ -80,6 +81,16 @@ def test_ngay_can_som_hon_so_voi_du_bao_hien_tai():
     assert c["runout_date_before"] == base_runout.isoformat()
     assert date.fromisoformat(c["runout_date_after"]) < base_runout
     assert c["days_earlier"] == (base_runout - date.fromisoformat(c["runout_date_after"])).days > 0
+
+
+def test_hu_thua_khong_neu_ngay_can_truoc_sau_va_so_ngay_som_hon():
+    """#25: hũ thưa (`runout_date_shown` sai) vẫn tính trạng thái và phần thiếu như cũ, nhưng không nêu ngày cạn cụ thể."""
+    p50 = [400_000 - 30_000 * i for i in range(30)]
+    base_runout = APP_DATE + timedelta(days=14)
+    c = check(p50, 120_000, runout=base_runout, balance=400_000, date_shown=False)
+    shown = check(p50, 120_000, runout=base_runout, balance=400_000)
+    assert not {"runout_date_before", "runout_date_after", "days_earlier"} & set(c)
+    assert {k: v for k, v in shown.items() if k not in ("runout_date_before", "runout_date_after", "days_earlier")} == c
 
 
 def test_nguong_la_cau_hinh_doi_nguong_doi_trang_thai():
@@ -153,6 +164,21 @@ def test_chon_hu_cu_the_thi_ket_luan_la_cua_hu_do():
     assert d["options"] == []  # đủ thì không cần phương án
     d = ok(eng, amount_vnd=250_000, jar="an_uong")
     assert d["verdict"] == "short" and d["headline"].startswith("Hụt")
+
+
+def test_hu_thua_khong_neu_ngay_can_trong_ket_qua_kiem_tra():
+    """#25: Giải trí là hũ thưa trong dữ liệu này (engine ML thật, hiệu chỉnh mặc định ghi `show_runout_date` sai cho nó); chi gần
+    hết hũ thì hũ hụt nhưng kết quả không có ngày cạn, kể cả câu của phương án."""
+    eng, mem, _ = engine()
+    d = ok(eng, amount_vnd=740_000, jar="giai_tri")
+    assert mem.summaries(USER, "giai_tri")[0]["runout_date_shown"] is False
+    by = {c["jar"]["code"]: c for c in d["jar_checks"]}
+    assert by["giai_tri"]["status"] == "short"
+    assert not {"runout_date_before", "runout_date_after", "days_earlier"} & set(by["giai_tri"])
+    assert all("cạn ngày" not in o["summary"] for o in d["options"])
+    # hũ dày (Ăn uống) vẫn nêu ngày như cũ
+    assert mem.summaries(USER, "an_uong")[0]["runout_date_shown"] is True
+    assert "runout_date_before" in by["an_uong"]
 
 
 def test_phuong_an_tat_dinh_khi_hut_doi_hu_tra_sau_hoan_chia_nho():

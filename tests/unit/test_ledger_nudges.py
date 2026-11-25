@@ -108,6 +108,18 @@ def test_ung_vien_hu_thiet_yeu_can_truoc_ky_luong():
     assert tight.score < 1.0  # sát thì chưa vượt ngưỡng
 
 
+def test_ung_vien_hu_thua_khong_neu_ngay_can():
+    """#25: hũ thưa (`runout_date_shown` sai) vẫn là ứng viên cạn trước kỳ lương nhưng chữ không có ngày cạn hay số ngày suy ra."""
+    f = {"status": "short", "runout_date": "2026-11-28", "payday_date": "2026-12-05", "runout_date_shown": False,
+         "show_probability": True, "p_shortfall": 0.62}  # fmt: skip
+    (c,) = gather(forecasts={"an_uong": f})
+    assert c.kind == "runout_warning" and c.status == "short" and c.value_vnd == 95_000 * 7
+    assert c.title == "Hũ Ăn uống có thể cạn trước ngày lương"
+    assert c.body == "Còn 80.000 ₫, còn 14 ngày tới kỳ lương 05/12. Khả năng hụt: 60%."
+    (shown,) = gather(forecasts={"an_uong": {**f, "runout_date_shown": True}})
+    assert shown.title == "Hũ Ăn uống dự kiến cạn ngày 28/11"
+
+
 def test_ung_vien_tai_khoan_0_dong_khong_co_ban_tin_can_va_hu_het_tien_noi_da_het():
     """Lỗi P12-08 ở cổng bản tin: tài khoản chưa có tiền không nhận "dự kiến cạn … Còn 0 ₫"."""
     f = {"status": "short", "runout_date": TODAY.isoformat(), "payday_date": "2026-12-05"}

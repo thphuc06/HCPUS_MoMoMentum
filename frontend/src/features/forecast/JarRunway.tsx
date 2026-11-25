@@ -9,7 +9,7 @@ import type { ForecastMeta, JarFull, NextPayday, Obligation } from '@/api/schema
 import { cn } from '@/lib/cn'
 import { diffDays, formatDayMonth } from '@/lib/dates'
 import { formatRatioPercent, formatShortfallChance, formatSimMoment, formatVnd, formatVndNumber } from '@/lib/format'
-import { CONFIDENCE_LABEL } from '@/lib/jar'
+import { CONFIDENCE_LABEL, mayRunOutBeforePayday, mayRunOutText, shownRunoutDate } from '@/lib/jar'
 import { useAnimateOnce } from '@/lib/motion'
 
 // B2 "Hũ nào sắp cạn" (spending-visualization.md §3), nay là khối dự báo duy nhất của tab Nhìn trước (ui-design-review.md §10
@@ -38,32 +38,40 @@ export function markShort(o: Obligation): string {
 
 const chance = (j: JarFull) => (j.p_shortfall !== undefined ? `Khả năng hụt ${formatShortfallChance(j.p_shortfall).toLowerCase()}` : null)
 
+/** Dòng nhỏ dưới đường băng: hũ thưa hụt (#25) nói "Có thể cạn trước ngày lương" kèm %, hũ khác chỉ khả năng hụt. */
+const note = (j: JarFull) => (mayRunOutBeforePayday(j) ? mayRunOutText(j.p_shortfall) : chance(j))
+
 type Tick = { o: Obligation; pos: number; atRunout: boolean }
-type Row = { jar: JarFull; runoutPos: number | null; ticks: Tick[]; sentence: string; mine: Obligation[] }
+type Row = { jar: JarFull; runoutPos: number | null; dot: boolean; ticks: Tick[]; sentence: string; mine: Obligation[] }
 
 function rowFor(jar: JarFull, today: string, payday: string, span: number, obligations: Obligation[]): Row {
   const at = (iso: string) => Math.min(1, Math.max(0, diffDays(today, iso) / span))
   const mine = obligations.filter((o) => o.pay_jar === jar.code && diffDays(today, o.due_date) >= 0 && diffDays(o.due_date, payday) >= 0)
-  const runoutPos = jar.status === 'short' ? (jar.runout_date && diffDays(jar.runout_date, payday) > 0 ? at(jar.runout_date) : 0) : null
+  const runout = shownRunoutDate(jar)
+  const hidden = mayRunOutBeforePayday(jar)
+  const runoutPos = jar.status === 'short' ? (runout && diffDays(runout, payday) > 0 ? at(runout) : 0) : null
+  // Hũ thưa (#25): vẫn tô đoạn hụt nhưng không có chấm ở một ngày cạn cụ thể.
+  const dot = runoutPos !== null && !hidden
   // Mốc trùng (hoặc sát) ngày cạn: vạch vẽ dài hơn chấm và nằm trên chấm, để chấm không che mất mốc (hũ Hóa đơn cạn đúng ngày tiền điện).
   const ticks = mine.map((o) => {
     const pos = at(o.due_date)
-    return { o, pos, atRunout: runoutPos !== null && Math.abs(pos - runoutPos) < 0.04 }
+    return { o, pos, atRunout: dot && Math.abs(pos - runoutPos!) < 0.04 }
   })
   const marks = mine.map((o) => `${o.name} ${formatDayMonth(o.due_date)} ${amountText(o)}`)
   let state: string
   if (!jar.status) state = 'chưa có dự báo'
+  else if (hidden) state = 'có thể cạn trước ngày lương'
   else if (jar.status === 'short') {
-    const empty = jar.runout_date ? diffDays(diffDays(today, jar.runout_date) < 0 ? today : jar.runout_date, payday) : 0
-    state = jar.runout_date ? `hụt, dự kiến cạn ${formatDayMonth(jar.runout_date)}${empty > 0 ? `, ${empty} ngày trước kỳ lương` : ''}` : 'hụt trước kỳ lương'
+    const empty = runout ? diffDays(diffDays(today, runout) < 0 ? today : runout, payday) : 0
+    state = runout ? `hụt, dự kiến cạn ${formatDayMonth(runout)}${empty > 0 ? `, ${empty} ngày trước kỳ lương` : ''}` : 'hụt trước kỳ lương'
   } else state = jar.status === 'tight' ? 'sát' : 'đủ tới kỳ lương'
   const p = chance(jar)
   const sentence = `${jar.name}: ${state}, số dư ${formatVnd(jar.balance_vnd)}${p ? `, ${p.toLowerCase()}` : ''}${marks.length ? `. Sắp đến hạn: ${marks.join('; ')}` : ''}.`
-  return { jar, runoutPos, ticks, sentence, mine }
+  return { jar, runoutPos, dot, ticks, sentence, mine }
 }
 
 function Track({ row }: { row: Row }) {
-  const { jar, runoutPos, ticks } = row
+  const { jar, runoutPos, dot, ticks } = row
   const base = !jar.status ? 'bg-surface-2' : jar.status === 'tight' ? 'bg-warn-line' : 'bg-ok-line'
   return (
     <div className={cn('relative mt-1.5 h-3 rounded-md shadow-[inset_0_0_0_1px_var(--border-default)]', base)} aria-hidden data-track={jar.status ?? 'none'}>
@@ -74,7 +82,7 @@ function Track({ row }: { row: Row }) {
             className="absolute inset-y-0 right-0 rounded-r-md shadow-[inset_0_0_0_1px_var(--status-bad-line)]"
             style={{ ...BAD_HATCH, left: `${runoutPos * 100}%`, ...(runoutPos === 0 ? { borderRadius: 6 } : null) }}
           />
-          <span data-part="runout" className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] border-surface bg-bad-line" style={{ left: `${runoutPos * 100}%` }} />
+          {dot && <span data-part="runout" className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] border-surface bg-bad-line" style={{ left: `${runoutPos * 100}%` }} />}
         </>
       )}
       {ticks.map(({ o, pos, atRunout }) => (
@@ -96,7 +104,7 @@ function RowHead({ jar }: { jar: JarFull }) {
     <span className="flex items-center gap-2" aria-hidden>
       <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: jarColor(jar.color_key) }} />
       <span className="min-w-0 flex-1 truncate text-small font-semibold text-ink">{jar.name}</span>
-      <JarStatusChip jar={jar} className="h-6 text-note" />
+      <JarStatusChip jar={{ ...jar, runout_date: shownRunoutDate(jar) }} className="h-6 text-note" />
       <span className="num shrink-0 text-small font-bold text-ink">{formatVnd(jar.balance_vnd)}</span>
     </span>
   )
@@ -151,7 +159,11 @@ export function JarRunway({ jars, appDate, nextPayday, obligations, forecast, no
     : attention.length === 0
       ? `Các hũ chi tiêu đủ${payday ? ` tới kỳ lương ${formatDayMonth(payday)}` : ''}.`
       : `${attention.length} hũ cần chú ý${until}: ${attention
-          .map((j) => (j.status === 'short' ? `${j.name} ${j.runout_date ? `dự kiến cạn ${formatDayMonth(j.runout_date)}` : 'hụt'}` : `${j.name} sát`))
+          .map((j) => {
+            if (mayRunOutBeforePayday(j)) return `${j.name} có thể cạn trước ngày lương`
+            const runout = shownRunoutDate(j)
+            return j.status === 'short' ? `${j.name} ${runout ? `dự kiến cạn ${formatDayMonth(runout)}` : 'hụt'}` : `${j.name} sát`
+          })
           .join(', ')}.`
   const marks = rows.flatMap((r) => r.mine.map((o) => ({ jar: r.jar.name, o })))
   const rowAnim = (i: number) =>
@@ -182,7 +194,7 @@ export function JarRunway({ jars, appDate, nextPayday, obligations, forecast, no
           </div>
           <ul className="mt-1 space-y-1" aria-label="Hũ theo mức cần chú ý">
             {rows.map((r, i) => {
-              const p = r.jar.status === 'short' || r.jar.status === 'tight' ? chance(r.jar) : null
+              const p = r.jar.status === 'short' || r.jar.status === 'tight' ? note(r.jar) : null
               return (
                 <li key={r.jar.code} data-runway={r.jar.code} {...rowAnim(i)}>
                   <Link to={`/jars/${r.jar.code}`} aria-label={r.sentence} className="block min-h-11 rounded-xl py-1.5">

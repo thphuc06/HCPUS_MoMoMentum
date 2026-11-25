@@ -241,6 +241,13 @@ def test_forecast_timeline_nhat_quan(path):
     if "runout_date" in d:
         assert d["origin_date"] < d["runout_date"] <= days[-1]["date"]
         assert d["status"] in ("short", "tight")
+    if d.get("runout_date_shown") is False:  # hũ thưa (#25): không nêu ngày cạn ở đâu trong khối
+        assert "runout_date" not in d
+        if d["status"] == "short" and "compare" not in d:
+            assert "có thể cạn trước ngày lương" in obj["fallback_text"]
+        if "compare" in d:
+            assert "runout_date" not in d["compare"]["after"]
+            assert "runout_shift_days" not in d["compare"]["delta"]
     if "p_shortfall" in d:  # xác suất không đi cùng ước lượng ban đầu
         assert not d["is_initial_estimate"]
     else:
@@ -340,6 +347,51 @@ def test_builder_forecast_khong_phat_xac_suat_khi_show_probability_sai():
     wire = b.block_to_wire(block)["data"]
     assert "p_shortfall" not in wire and "runout_date" not in wire and "coverage" not in wire
     assert "ước lượng ban đầu" in block.fallback_text and "đã cũ" in block.fallback_text
+
+
+def test_builder_forecast_hu_thua_khong_neu_ngay_can(registry):
+    """#25: cờ `runout_date_shown` sai (hũ thưa) thì khối không có ngày cạn, câu thay thế nói "có thể cạn trước ngày lương"."""
+    days = [{"day": "2026-11-22", "balance_p10_vnd": -9, "balance_p50_vnd": 2, "balance_p90_vnd": 3}]
+    block = b.build_forecast_timeline(
+        summary=_forecast_summary(runout_date_shown=False), days=days, stale=False,
+        **_forecast_kwargs(),
+    )  # fmt: skip
+    wire = b.block_to_wire(block)
+    assert "runout_date" not in wire["data"] and wire["data"]["runout_date_shown"] is False
+    assert wire["data"]["p_shortfall"] == 0.71  # xác suất vẫn hiện khi được phép
+    assert block.fallback_text == "Hũ Ăn uống có thể cạn trước ngày lương 05/12."
+    assert "29/11" not in block.fallback_text
+    assert errors(registry, "forecast_timeline.schema.json", wire) == []
+
+
+@pytest.mark.parametrize("flag", [True, "vắng"])
+def test_builder_forecast_co_ngay_khi_co_dung_hoac_vang(flag):
+    days = [{"day": "2026-11-22", "balance_p10_vnd": -9, "balance_p50_vnd": 2, "balance_p90_vnd": 3}]
+    summary = _forecast_summary() if flag == "vắng" else _forecast_summary(runout_date_shown=flag)
+    block = b.build_forecast_timeline(summary=summary, days=days, stale=False, **_forecast_kwargs())
+    wire = b.block_to_wire(block)["data"]
+    assert wire["runout_date"] == "2026-11-29" and "runout_date_shown" not in wire
+    assert (
+        block.fallback_text == "Hũ Ăn uống dự kiến cạn ngày 29/11, còn 6 ngày tới kỳ lương 05/12."
+    )
+
+
+def test_khoi_what_if_hu_thua_cau_thay_the_khong_neu_ngay():
+    data = load_json(CONTRACTS / "fixtures/blocks/valid/forecast_timeline.sparse_no_date.json")["data"]
+    cmp = {
+        "label": "mua vé xem phim 300 nghìn",
+        "kind": "one_time_purchase",
+        "after": {"status": "short", "min_balance_p50_vnd": -1000, "days": data["days"]},
+        "delta": {"min_balance_delta_vnd": -1000 - min(x["p50_vnd"] for x in data["days"])},
+        "n_paths": 2000,
+        "common_random_numbers": True,
+    }
+    block = b.build_forecast_timeline_from_data(
+        data={**data, "compare": cmp}, trace_id="t1", source_tool="forecast___run_scenario",
+        as_of=datetime(2026, 12, 10, tzinfo=UTC), app_date=date(2026, 11, 21),
+    )  # fmt: skip
+    assert block.fallback_text.startswith("Nếu mua vé xem phim 300 nghìn: Hũ Giải trí có thể cạn")
+    assert "trước ngày lương 05/12" in block.fallback_text
 
 
 def test_builders_confirm_action_va_receipt_action_chi_nhan_tool_khac_chuyen_hu():

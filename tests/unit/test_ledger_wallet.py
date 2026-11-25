@@ -165,6 +165,37 @@ def test_hu_sat_va_nghia_vu_den_han_va_xem_lai_va_du_lieu_it_theo_thu_tu():
     assert low.data.kind == "low_data" and "18 ngày" in low.data.reason
 
 
+def test_hu_thua_khong_neu_ngay_can_the_noi_co_the_can_truoc_ngay_luong():
+    """#25: dòng dự báo có `runout_date_shown` sai (hũ thưa) thì tiêu đề và lý do không có ngày cạn, kể cả số ngày suy ra từ nó."""
+    jars = [jar("giai_tri", "Giải trí", 760_000)]
+    f = {"giai_tri": {**fc("short", date(2026, 11, 29), 0.62, True), "runout_date_shown": False}}
+    c = card(jars=jars, forecasts=f)
+    assert c.data.kind == "runout_warning" and c.data.status == "short"
+    assert c.data.title == "Hũ Giải trí có thể cạn trước ngày lương"
+    assert c.data.reason == "Còn 760.000 ₫, còn 14 ngày tới kỳ lương 05/12. Khả năng hụt: 60%."
+    assert "29/11" not in c.fallback_text and "6 ngày" not in c.data.reason
+    f["giai_tri"]["show_probability"] = False
+    assert card(jars=jars, forecasts=f).data.reason == "Còn 760.000 ₫, còn 14 ngày tới kỳ lương 05/12."
+    # cờ đúng hoặc vắng: như cũ
+    for row in ({**f["giai_tri"], "runout_date_shown": True}, fc("short", date(2026, 11, 29))):
+        assert card(jars=jars, forecasts={"giai_tri": row}).data.title == "Hũ Giải trí dự kiến cạn ngày 29/11"
+
+
+def test_jar_full_bo_ngay_can_khi_co_sai_va_giu_khi_co_dung_hoac_vang(registry):
+    row = {"code": "giai_tri", "name": "Giải trí", "color_key": "orchid", "icon_key": "gamepad", "kind": "spending",
+           "balance_vnd": Decimal(420_000), "split_percent": Decimal("10.00")}  # fmt: skip
+    f = {"status": "short", "confidence_band": "medium", "runout_date": date(2026, 12, 3),
+         "show_probability": True, "p_shortfall": Decimal("0.6200")}  # fmt: skip
+    hidden = convert.jar_full_json(row, {**f, "runout_date_shown": False})
+    assert "runout_date" not in hidden and hidden["runout_date_shown"] is False
+    assert hidden["p_shortfall"] == 0.62 and hidden["status"] == "short"
+    for flag in (True, None):
+        shown = convert.jar_full_json(row, {**f, "runout_date_shown": flag})
+        assert shown["runout_date"] == "2026-12-03" and "runout_date_shown" not in shown
+    v = Draft202012Validator({"$ref": f"{BASE}/rest/openapi.yaml#/components/schemas/JarFull"}, registry=registry)
+    assert list(v.iter_errors(hidden)) == []
+
+
 # --- chuyển đổi dòng DB sang JSON hợp đồng ---------------------------------------------------------------
 @pytest.fixture(scope="module")
 def results_validator(registry):

@@ -102,8 +102,12 @@
         "horizon_days": { "type": "integer", "minimum": 1, "maximum": 90 },
         "payday": { "$ref": "#/$defs/ForecastPayday" },
         "runout_date": {
-          "description": "Ngày cạn dự kiến (số dư P50 chạm 0 hoặc thấp hơn lần đầu, hoặc trung vị ngày cạn của các đường mô phỏng, theo engine). Vắng nếu không cạn trong horizon.",
+          "description": "Ngày cạn dự kiến (số dư P50 chạm 0 hoặc thấp hơn lần đầu, hoặc trung vị ngày cạn của các đường mô phỏng, theo engine). Vắng nếu không cạn trong horizon, hoặc khi `runout_date_shown` sai.",
           "$ref": "envelope.schema.json#/$defs/IsoDate"
+        },
+        "runout_date_shown": {
+          "description": "Có nêu ngày cạn cụ thể không (#25). Vắng nghĩa là đúng (như trước #25). Sai ở hũ thưa (ít ngày có chi, trừ hũ nghĩa vụ): ngày cạn sai trung bình hơn 6 ngày trên backtest, nên producer bỏ `runout_date` (và `compare.after.runout_date`, `compare.delta.runout_shift_days`) và giao diện hiện 'Có thể cạn trước ngày lương' kèm `p_shortfall` (khi có) cho hũ hụt.",
+          "type": "boolean"
         },
         "p_shortfall": {
           "description": "Xác suất hụt trước kỳ lương (0..1). CHỈ có khi độ phủ khoảng dự báo đã đạt mục tiêu đo trên backtest và không phải ước lượng ban đầu; vắng thì chỉ hiện confidence_band.",

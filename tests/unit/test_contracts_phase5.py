@@ -832,8 +832,10 @@ def test_0053_tach_duoc_viet_lai_duoc_va_khong_tham_so():
             name = re.search(r"ADD CONSTRAINT (\w+)", s).group(1)
             assert any(x.endswith(f"DROP CONSTRAINT IF EXISTS {name}") for x in STATEMENTS), name
     names = sorted(p.name for p in (REPO / "db/migrations").glob("*.sql"))
-    # 0053 là migration cuối của phase 5 lúc đóng hợp đồng; 0054 (ngoại tệ khi nạp) có test riêng ở test_migration_0054.py
-    assert "0053_phase5.sql" in names and names[-1] in ("0053_phase5.sql", "0054_ingest_fx.sql")
+    # 0053 là migration cuối của phase 5 lúc đóng hợp đồng; mỗi migration sau nó (0054 ngoại tệ khi nạp, 0055 ngày cạn của hũ
+    # thưa...) có test tĩnh riêng test_migration_<số>.py
+    later = names[names.index("0053_phase5.sql") + 1 :]
+    assert all((REPO / "tests/unit" / f"test_migration_{n[:4]}.py").exists() for n in later), later
 
 
 def test_0053_ham_quyen_va_security():
