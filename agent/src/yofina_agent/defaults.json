@@ -34,6 +34,7 @@
   "guardrail_fail_open": true,
   "tool_retry_attempts": 1,
   "orchestrator_max_tokens": 700,
+  "whatif_spec_source": "model",
   "analyst_max_tokens": 2600,
   "verifier_max_rounds": 2,
   "plan_max_tokens": 4000,
