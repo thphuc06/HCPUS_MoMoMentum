@@ -1,10 +1,15 @@
 """Phase 4 (chống chịu, lộ trình, phân hũ tự động) trên môi trường THẬT: REST (JWT Cognito) -> Lambda ledger / forecast -> Aurora,
 tool qua AgentCore Gateway thật, Lambda `yofina-classify` nghe sự kiện thật trên `yofina-bus`.
 
-Tiêu chí phase 4 phần backend: 1 (điểm chống chịu của `minh`, ba cú sốc: số lấy từ engine, KHÔNG ép số Figma 58 -> 34), 2 (sau đặt lại
-lộ trình là phiên bản `proposed` lý do `behavior_changed`, so được với bản trước, quyết định/sửa bước/chọn phiên bản), 7 (chuyển cho
+Tiêu chí phase 4 phần backend: 1 (điểm chống chịu của `minh`, ba cú sốc: số lấy từ engine, KHÔNG ép số Figma 58 -> 34), 2 (bản
+`proposed` lý do `behavior_changed`, so được với bản trước, quyết định/sửa bước/chọn phiên bản), 7 (chuyển cho
 đối tác mới: trong 60 giây có hũ hoặc vào hỏi gộp; sửa hũ "luôn luôn cho người này" thì giao dịch kế tiếp tự đúng), 8 phần thời gian
 giải LP (`solver.elapsed_ms`). Số đo ghi vào `build/reports/phase4-live-measures.json`.
+
+Seed của `minh` không còn cài sẵn bản v3 `behavior_changed` (issue #22: sau đặt lại chỉ có v1 đã thay, v2 đang dùng). Bản đó được tạo
+bằng đường thật của cảnh 4 (fixture `behavior_proposal`, dùng cho test 06 tới 10): nạp tệp sao kê hai tuần qua REST `/ingest/*`, chốt
+dòng, bước PELT của lần tính lại dự báo xác nhận đổi hành vi, Lambda `yofina-roadmap-regen` lưu bản chờ chọn. Bước này gọi model planner
+(Sonnet, một lượt sinh lộ trình) và chờ tới 4 phút cho mỗi lần chạy module.
 
 Không có model hay số dựng sẵn: mọi số đọc từ phản hồi thật; điểm tổng được tính lại từ bốn thành phần bằng trọng số của
 `resilience_defaults.json` (cùng file engine đọc). Test chạy tuần tự (thứ tự tên) vì cùng dùng tài khoản `minh`.
@@ -29,6 +34,12 @@ MEASURES: dict[str, object] = {}
 UNCLASSIFIED = "chua_phan_loai"
 CLASSIFY_WAIT_SECONDS = 60.0
 NO_USER = "00000000-0000-4000-8000-000000000000"
+#: tệp sao kê cảnh 4 (gắn ngày neo 21/11 của ví demo: đặt lại rồi nạp trong cùng ngày), như tests/local_pg/test_change_flow.py
+SCENE4_CSV = REPO / "data" / "personas" / "samples" / "minh_sao_ke_2_tuan.csv"
+#: S3 -> SQS -> worker nạp (Aurora có thể đang thức), rồi tính lại dự báo, PELT, `behavior.changed`, Lambda sinh lại lộ trình (model)
+SCENE4_WAIT_SECONDS = 240.0
+INGEST_TERMINAL = ("review", "done", "failed", "rejected")
+INGEST_OPEN = ("auto_added", "pending")
 
 NEW_TOOLS = {
     "planner___optimize_allocation",
@@ -186,32 +197,103 @@ def test_05_diem_cua_lan_khac_minh_va_khong_co_token_la_401(api):
 
 
 # --- 2. lộ trình ------------------------------------------------------------------------------------------------------------
-def test_06_sau_dat_lai_co_v1_superseded_v2_active_v3_proposed_behavior_changed(
-    api, schema_validator
+def _poll(api, path: str, done, *, timeout: float, what: str) -> dict:
+    """GET `path` của minh (backoff 2 -> 8 giây) tới khi `done(body)`; lỗi tạm thời của Aurora đang thức (502/503/504) thì thử lại."""
+    end = time.monotonic() + timeout
+    delay, last = 2.0, None
+    while time.monotonic() < end:
+        status, body = api("minh", "GET", path, timeout=60)
+        last = (status, body)
+        if status not in (502, 503, 504):
+            assert status == 200, (path, status, body)
+            if done(body):
+                return body
+        time.sleep(delay)
+        delay = min(delay * 1.4, 8.0)
+    pytest.fail(f"{what} chưa xong sau {timeout:.0f} giây; lần đọc cuối: {last}")
+
+
+@pytest.fixture(scope="module")
+def behavior_proposal(api, fresh) -> dict:
+    """Bản chờ chọn lý do `behavior_changed` tạo bằng ĐƯỜNG THẬT của cảnh 4, như tests/local_pg/test_change_flow.py nhưng trên AWS: nạp
+    `minh_sao_ke_2_tuan.csv` qua REST `/ingest/*` (S3 presigned POST, worker), chốt mọi dòng đã tự chọn hũ bằng token; ingest kích hoạt
+    tính lại dự báo (`manual`), bước PELT xác nhận đổi hành vi hũ Ăn uống và phát `behavior.changed`, Lambda `yofina-roadmap-regen` lưu bản
+    `proposed`. Không cài dấu hiệu hay phiên bản bằng tay. Trả số phiên bản trước khi nạp (`active`, `latest`) và bản chờ (`proposed`)."""
+    from test_ingest_live import put_to_s3  # tải lên S3 đúng thứ tự trường của presigned POST
+
+    before = _poll(api, "/roadmap/versions", lambda b: True, timeout=60, what="đọc phiên bản lộ trình")
+    assert "proposed_version" not in before, before  # seed không còn bản chờ (issue #22)
+    latest = max(v["version"] for v in before["versions"])
+
+    t0 = time.monotonic()
+    data = SCENE4_CSV.read_bytes()
+    status, up = api(
+        "minh", "POST", "/ingest/uploads",
+        {"source_kind": "csv", "mime": "text/csv", "size_bytes": len(data), "consent": True},
+    )  # fmt: skip
+    assert status == 200, up
+    put_to_s3(up, data, "text/csv")
+    job = _poll(
+        api, f"/ingest/jobs/{up['job_id']}", lambda b: b["status"] in INGEST_TERMINAL,
+        timeout=SCENE4_WAIT_SECONDS, what="job nạp sao kê cảnh 4",
+    )  # fmt: skip
+    assert job["status"] == "review", job
+    rows = [r for r in job["review"]["data"]["rows"] if r["review_status"] in INGEST_OPEN]
+    # cảnh 4 trên app: mọi dòng chi tự vào Ăn uống, không phải chọn hũ
+    assert rows and {r.get("suggested_jar", {}).get("code") for r in rows if r["kind"] == "expense"} == {"an_uong"}, rows
+    params = {"job_id": up["job_id"], "rows": [{"row_id": r["row_id"]} for r in rows]}
+    status, conf = api("minh", "POST", "/ingest/confirmations", {"tool": "confirm_rows", "params": params})
+    assert status == 200, conf
+    status, receipt = api(
+        "minh", "POST", "/ingest/actions",
+        {"tool": "confirm_rows", "params": conf["params"], "confirm_token": conf["confirm_token"]},
+    )  # fmt: skip
+    assert status == 200, receipt
+
+    def proposed_ready(body: dict) -> bool:
+        job_ = body.get("current_job") or {}
+        assert job_.get("status") != "failed", job_  # job sinh lại lỗi: dừng ngay, không chờ hết giờ
+        n = body.get("proposed_version")
+        return n is not None and {v["version"]: v for v in body["versions"]}[n]["reason_code"] == "behavior_changed"
+
+    after = _poll(
+        api, "/roadmap/versions", proposed_ready, timeout=SCENE4_WAIT_SECONDS,
+        what="bản lộ trình behavior_changed sau khi nạp sao kê cảnh 4",
+    )  # fmt: skip
+    MEASURES["scene4_proposal_seconds"] = round(time.monotonic() - t0, 1)
+    return {"active": before["active_version"], "latest": latest, "proposed": after["proposed_version"]}
+
+
+def test_06_sau_nap_sao_ke_canh_4_co_v1_superseded_v2_active_v3_proposed_behavior_changed(
+    api, schema_validator, behavior_proposal
 ):
+    active, proposed = behavior_proposal["active"], behavior_proposal["proposed"]
     status, body = api("minh", "GET", "/roadmap/versions")
     assert status == 200, body
     schema_validator.openapi("RoadmapVersionsResponse", body)
     by_version = {v["version"]: v for v in body["versions"]}
-    assert [by_version[n]["status"] for n in (1, 2, 3)] == ["superseded", "active", "proposed"]
+    # seed: v1 đã thay, v2 đang dùng; bản mới là bản lớn nhất cộng một, xuất phát từ bản đang dùng
+    assert (active, proposed) == (2, behavior_proposal["latest"] + 1)
+    assert [by_version[n]["status"] for n in (1, active, proposed)] == ["superseded", "active", "proposed"]
     assert by_version[1]["reason_code"] == "initial"
-    assert by_version[3]["reason_code"] == "behavior_changed"
-    assert by_version[3]["based_on_version"] == 2
-    assert body["active_version"] == 2 and body["proposed_version"] == 3
+    assert by_version[proposed]["reason_code"] == "behavior_changed"
+    assert by_version[proposed]["based_on_version"] == active
+    assert body["active_version"] == active and body["proposed_version"] == proposed
     assert [v["version"] for v in body["versions"]] == sorted(by_version, reverse=True)
 
 
-def test_07_doc_lo_trinh_dang_dung_va_ban_cho_chon(api, schema_validator):
-    status, active = api("minh", "GET", "/roadmap", timeout=60)
-    assert status == 200, active
-    schema_validator(f"{BLOCKS}/roadmap.schema.json", active)
-    schema_validator.openapi("RoadmapResponse", active)
-    assert active["data"]["version"] == 2 and active["data"]["status"] == "active"
-    status, proposed = api("minh", "GET", "/roadmap?version=3")
+def test_07_doc_lo_trinh_dang_dung_va_ban_cho_chon(api, schema_validator, behavior_proposal):
+    active, proposed_v = behavior_proposal["active"], behavior_proposal["proposed"]
+    status, active_block = api("minh", "GET", "/roadmap", timeout=60)
+    assert status == 200, active_block
+    schema_validator(f"{BLOCKS}/roadmap.schema.json", active_block)
+    schema_validator.openapi("RoadmapResponse", active_block)
+    assert active_block["data"]["version"] == active and active_block["data"]["status"] == "active"
+    status, proposed = api("minh", "GET", f"/roadmap?version={proposed_v}")
     assert status == 200, proposed
     schema_validator(f"{BLOCKS}/roadmap.schema.json", proposed)
     d = proposed["data"]
-    assert d["version"] == 3 and d["status"] == "proposed"
+    assert d["version"] == proposed_v and d["status"] == "proposed"
     assert d["reason"]["code"] == "behavior_changed" and d["reason"]["behavior_flag_id"]
     assert sum(d["counts"].values()) == len(all_step_ids(proposed))
     for phase in d["phases"]:
@@ -219,45 +301,48 @@ def test_07_doc_lo_trinh_dang_dung_va_ban_cho_chon(api, schema_validator):
             assert step["reason"] and step["status"] in {"pending", "accepted", "rejected"}
 
 
-def test_08_so_phien_ban_moi_voi_ban_cu(api, schema_validator):
+def test_08_so_phien_ban_moi_voi_ban_cu(api, schema_validator, behavior_proposal):
+    active, proposed = behavior_proposal["active"], behavior_proposal["proposed"]
     status, diff = api("minh", "GET", "/roadmap/diff", timeout=60)
     assert status == 200, diff
     schema_validator(f"{BLOCKS}/roadmap_diff.schema.json", diff)
     schema_validator.openapi("RoadmapDiffResponse", diff)
     d = diff["data"]
-    assert (d["from_version"], d["to_version"], d["to_status"]) == (2, 3, "proposed")
+    assert (d["from_version"], d["to_version"], d["to_status"]) == (active, proposed, "proposed")
     assert d["reason"]["code"] == "behavior_changed" and d["can_adopt"] is True
     counts = d["counts"]
     assert counts["added"] + counts["removed"] + counts["changed"] >= 1
     assert len(d["changes"]) == counts["added"] + counts["removed"] + counts["changed"]
-    status, explicit = api("minh", "GET", "/roadmap/diff?from_version=1&to_version=2")
+    status, explicit = api("minh", "GET", f"/roadmap/diff?from_version=1&to_version={active}")
     assert status == 200, explicit
-    assert (explicit["data"]["from_version"], explicit["data"]["to_version"]) == (1, 2)
-    assert explicit["data"]["can_adopt"] is False  # bản 2 không phải bản chờ chọn
-    status, body = api("minh", "GET", "/roadmap/diff?from_version=2&to_version=2")
+    assert (explicit["data"]["from_version"], explicit["data"]["to_version"]) == (1, active)
+    assert explicit["data"]["can_adopt"] is False  # bản đang dùng không phải bản chờ chọn
+    status, body = api("minh", "GET", f"/roadmap/diff?from_version={active}&to_version={active}")
     assert status == 400  # hai phiên bản trùng nhau
-    status, body = api("minh", "GET", "/roadmap/diff?from_version=2&to_version=99")
+    status, body = api("minh", "GET", f"/roadmap/diff?from_version={active}&to_version=99")
     assert (status, code(body)) == (404, "ROADMAP_NOT_FOUND")
 
 
-def test_09_quyet_dinh_mot_buoc_khong_dung_den_so_du(api, schema_validator):
-    status, proposed = api("minh", "GET", "/roadmap?version=3")
+def test_09_quyet_dinh_mot_buoc_khong_dung_den_so_du(api, schema_validator, behavior_proposal):
+    version = behavior_proposal["proposed"]
+    status, proposed = api("minh", "GET", f"/roadmap?version={version}")
+    assert status == 200, proposed
     steps = all_step_ids(proposed)
     assert len(steps) >= 2
     before = balances(api)
     status, accepted = api(
-        "minh", "POST", f"/roadmap/steps/{steps[0]}/decision", {"version": 3, "decision": "accepted"}
+        "minh", "POST", f"/roadmap/steps/{steps[0]}/decision", {"version": version, "decision": "accepted"}
     )
     assert status == 200, accepted
     schema_validator(f"{BLOCKS}/roadmap.schema.json", accepted)
     assert step_status(accepted, steps[0]) == "accepted"
-    assert accepted["data"]["version"] == 3 and accepted["data"]["status"] == "proposed"
+    assert accepted["data"]["version"] == version and accepted["data"]["status"] == "proposed"
     assert accepted["data"]["counts"]["accepted"] == 1
     status, rejected = api(
         "minh",
         "POST",
         f"/roadmap/steps/{steps[1]}/decision",
-        {"version": 3, "decision": "rejected", "reason": "Tháng này em chưa làm được"},
+        {"version": version, "decision": "rejected", "reason": "Tháng này em chưa làm được"},
     )
     assert status == 200, rejected
     assert step_status(rejected, steps[1]) == "rejected"
@@ -265,29 +350,33 @@ def test_09_quyet_dinh_mot_buoc_khong_dung_den_so_du(api, schema_validator):
     assert rejected["data"]["counts"]["rejected"] == 1
     assert balances(api) == before  # chấp nhận bước không tự chuyển tiền (ADR-0002)
     status, undone = api(
-        "minh", "POST", f"/roadmap/steps/{steps[1]}/decision", {"version": 3, "decision": "pending"}
+        "minh", "POST", f"/roadmap/steps/{steps[1]}/decision", {"version": version, "decision": "pending"}
     )
     assert status == 200 and step_status(undone, steps[1]) == "pending"
 
 
-def test_10_loi_khi_quyet_dinh_buoc_la_hoac_tham_so_sai(api):
+def test_10_loi_khi_quyet_dinh_buoc_la_hoac_tham_so_sai(api, behavior_proposal):
+    version = behavior_proposal["proposed"]
+    status, proposed = api("minh", "GET", f"/roadmap?version={version}")
+    assert status == 200, proposed
+    step = all_step_ids(proposed)[0]  # bước có thật của bản do model lập: lỗi dưới đây là do tham số, không do thiếu bước
     status, body = api(
-        "minh", "POST", "/roadmap/steps/khong_co_buoc/decision", {"version": 3, "decision": "accepted"}
+        "minh", "POST", "/roadmap/steps/khong_co_buoc/decision", {"version": version, "decision": "accepted"}
     )
     assert (status, code(body)) == (404, "ROADMAP_NOT_FOUND")
     status, body = api(
-        "minh", "POST", "/roadmap/steps/bu_an_uong/decision", {"version": 99, "decision": "accepted"}
+        "minh", "POST", f"/roadmap/steps/{step}/decision", {"version": 99, "decision": "accepted"}
     )
     assert (status, code(body)) == (404, "ROADMAP_NOT_FOUND")
     status, body = api(
-        "minh", "POST", "/roadmap/steps/bu_an_uong/decision", {"version": 3, "decision": "maybe"}
+        "minh", "POST", f"/roadmap/steps/{step}/decision", {"version": version, "decision": "maybe"}
     )
     assert status == 400
-    status, body = api("minh", "POST", "/roadmap/steps/bu_an_uong/edit", {"version": 3})
+    status, body = api("minh", "POST", f"/roadmap/steps/{step}/edit", {"version": version})
     assert status == 400  # phải có amount_vnd hoặc due_date
     status, body = api("lan", "GET", "/roadmap")
     assert (status, code(body)) == (404, "ROADMAP_NOT_FOUND")  # Lan chưa có lộ trình, không thấy của Minh
-    status, body = api("lan", "GET", "/roadmap?version=3")
+    status, body = api("lan", "GET", f"/roadmap?version={version}")
     assert (status, code(body)) == (404, "ROADMAP_NOT_FOUND")
 
 

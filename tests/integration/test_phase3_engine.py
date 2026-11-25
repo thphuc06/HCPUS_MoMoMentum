@@ -20,7 +20,7 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
-from conftest import REPO, demo_balances, demo_wallet, flow, master_data_api
+from conftest import REPO, demo_balances, demo_jars, demo_wallet, flow, master_data_api
 
 pytestmark = pytest.mark.usefixtures("fresh")
 
@@ -118,14 +118,12 @@ def test_chuyen_250k_cho_nguoi_nhan_demo_the_theo_hu_va_tong_tra_sau_1_250_000(
     )
     d = card["data"]
     jars = {c["jar"]["code"]: c for c in d["jar_checks"]}
+    # Không nêu hũ thì thẻ kiểm đúng các hũ chi tiêu (hợp đồng POST /affordability, `forecast.json`: "Vắng thì kiểm mọi hũ chi tiêu");
+    # tập hũ suy từ ví demo của bộ sinh theo `kind`. Hũ Nghĩa vụ (kind obligation, gộp Hóa đơn ở ví demo của issue #39) không thuộc tập này.
+    spending = {code for code, j in demo_jars("minh").items() if j.kind == "spending"}
+    assert set(jars) == spending and "nghia_vu" not in jars, sorted(jars)
     assert jars["di_lai"]["status"] == "ok" and jars["giai_tri"]["status"] == "ok"
     assert jars["an_uong"]["status"] == "short" and jars["an_uong"]["balance_after_vnd"] == 130_000
-    # Ví demo (issue #39) không có Hóa đơn: hóa đơn trả từ Nghĩa vụ (gộp Hóa đơn). Trừ 250.000 ₫ thì Nghĩa vụ không còn đủ cho tiền điện
-    # 26/11 và Trả sau 03/12 trước lương (rollout Bước 5), nên sát hoặc hụt; số dư sau suy từ ví demo của bộ sinh.
-    assert (
-        jars["nghia_vu"]["status"] in ("tight", "short")
-        and jars["nghia_vu"]["balance_after_vnd"] == demo_balances("minh")["nghia_vu"] - 250_000
-    )
     cost = d["credit"]["cost"]
     assert (cost["principal_vnd"], cost["fee_added_vnd"], cost["item_cost_vnd"]) == (
         250_000,
@@ -138,6 +136,22 @@ def test_chuyen_250k_cho_nguoi_nhan_demo_the_theo_hu_va_tong_tra_sau_1_250_000(
     assert (
         d["credit"]["cautions"] and d["credit"]["cautions"][0]["rule_id"] == "obligation_to_income"
     )  # vượt ngưỡng: kèm luật
+
+    # Ý của bản gốc (hũ trả hóa đơn không đủ nếu chuyển từ đó) giữ bằng cách NÊU hũ, đúng hợp đồng: hũ được chọn đứng đầu thẻ. Trừ
+    # 250.000 ₫ thì Nghĩa vụ không còn đủ cho tiền điện 26/11 và Trả sau 03/12 trước lương (rollout Bước 5), nên sát hoặc hụt; số dư
+    # sau suy từ ví demo của bộ sinh.
+    status, named = api(
+        "minh",
+        "POST",
+        "/affordability",
+        {"amount_vnd": 250_000, "label": "Người nhận demo", "funding_source": "jar", "jar": "nghia_vu"},
+        timeout=60,
+    )
+    assert status == 200, named
+    schema_validator(f"{BLOCKS}/affordability_card.schema.json", named)
+    first = named["data"]["jar_checks"][0]
+    assert first["jar"]["code"] == "nghia_vu" and first["status"] in ("tight", "short")
+    assert first["balance_after_vnd"] == demo_balances("minh")["nghia_vu"] - 250_000
 
 
 def test_the_do_du_sat_hut_theo_so_tien_va_hu_da_chon(api):
