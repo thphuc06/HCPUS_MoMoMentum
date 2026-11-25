@@ -12,6 +12,7 @@ import sys
 from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pytest
 from botocore.exceptions import ClientError
 from ingest_helpers import REPO, FakeBedrock, FakeLabelStore, make_gateway
@@ -67,7 +68,9 @@ def throttled_gateway():
     return make_gateway(client), client
 
 
-def test_sao_ke_canh_4_tu_vao_an_uong_khong_can_model_va_pelt_xac_nhan():
+@pytest.fixture(scope="module")
+def extracted():
+    """Tệp cảnh 4 qua `extract_rows` với kho nhãn seed của `minh` và Bedrock giả luôn nghẽn: (kết quả, client giả)."""
     store = seed_label_store({j.code for j in generate("minh", anchor=ANCHOR).jars})
     gw, client = throttled_gateway()
     res = ex.extract_rows(
@@ -77,6 +80,11 @@ def test_sao_ke_canh_4_tu_vao_an_uong_khong_can_model_va_pelt_xac_nhan():
         ctx=minh_context(store),
         gateway=gw,
     )
+    return res, client
+
+
+def test_sao_ke_canh_4_tu_vao_an_uong_khong_can_model_khong_trung_so_cai(extracted):
+    res, client = extracted
     rows = res.candidates
     # bộ đọc CSV nhận đủ cột bằng bảng tên cột; mọi dòng là khoản chi đọc được
     assert rows and res.dropped == []
@@ -107,19 +115,28 @@ def test_sao_ke_canh_4_tu_vao_an_uong_khong_can_model_va_pelt_xac_nhan():
     ]
     assert clashes == []
 
-    # ghép vào lịch sử 120 ngày của minh: PELT với tham số hiện tại xác nhận mức mới của hai tuần cuối
+
+@pytest.mark.parametrize("drift_days", [0, 1])
+def test_pelt_xac_nhan_khi_tai_trong_ngay_dat_lai_hoac_tre_mot_ngay(extracted, drift_days):
+    """Ghép các dòng vào lịch sử 120 ngày của minh: PELT với tham số hiện tại xác nhận mức chi tăng. Ngày mô phỏng đi theo ngày thật kể
+    từ lần đặt lại, nên giám khảo đặt lại rồi để qua ngày mới tải thì chuỗi có thêm ngày neo (không có chi seed nào) và tuần mới nhất
+    lệch một ngày so với tệp; tệp phải đủ bền cho cả lệch 1 ngày."""
+    rows = extracted[0].candidates
     params = ch.load_params()
     daily = persona_daily_spend("minh", ANCHOR)["an_uong"]
     assert (
         ch.detect_confirmed(ch.prepare_weekly(daily, params), params) is None
     )  # lịch sử không có điểm gãy cài sẵn
-    shifted = daily.copy()
+    today = ANCHOR + timedelta(days=drift_days)
+    shifted = np.concatenate([daily, np.zeros(drift_days)])  # thêm các ngày từ ngày neo tới hôm qua
     for c in rows:
-        shifted[len(shifted) - (ANCHOR - c.app_date).days] += c.amount_vnd
+        shifted[len(shifted) - (today - c.app_date).days] += c.amount_vnd
     series = ch.prepare_weekly(shifted, params)
     hit = ch.detect_confirmed(series, params)
     assert hit is not None and hit.direction == "up"
-    assert hit.weeks_held == 2 and hit.change_index == series.n_weeks - 2
+    assert hit.weeks_held >= 2
+    if drift_days == 0:  # hai tuần của tệp trùng đúng hai tuần cuối
+        assert hit.weeks_held == 2 and hit.change_index == series.n_weeks - 2
 
 
 @pytest.fixture(scope="module")
@@ -147,4 +164,5 @@ def test_tep_da_commit_dung_la_dau_ra_cua_bo_sinh_va_ban_cong_khai_cung_noi_dung
     assert DATA_CSV.read_bytes() == out.data
     # bản công khai có thể bị git đổi xuống dòng khi checkout (không có luật -text cho thư mục frontend): so nội dung
     assert PUBLIC_CSV.read_bytes().replace(b"\r\n", b"\n") == out.data.replace(b"\r\n", b"\n")
-    assert out.factor <= 2.5  # mục tiêu của issue #22
+    # chủ dự án chốt 3,0 lần cho bền khi tải trễ một ngày; 3,0 chưa đủ bền thì bộ sinh lấy hệ số nhỏ nhất đủ bền, không quá 4,0
+    assert 3.0 <= out.factor <= 4.0

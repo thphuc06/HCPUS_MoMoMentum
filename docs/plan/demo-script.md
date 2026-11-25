@@ -23,10 +23,10 @@ Không dùng lộ trình hay dấu hiệu đổi hành vi seed. Sau khi đặt l
 
 Tệp `minh_sao_ke_2_tuan.csv`: tải ở `/samples/minh_sao_ke_2_tuan.csv` trên app; bản trong repo là `data/personas/samples/minh_sao_ke_2_tuan.csv`, sinh bằng `data/personas/samples/make_scene4_csv.py`. Một tệp dùng cho cả bốn tài khoản persona `minh`.
 
-1. Hồ sơ → **Đặt lại dữ liệu**. Làm cảnh 4 trong cùng ngày với lần đặt lại và trước cảnh 5: tệp gắn với ngày mô phỏng 21/11/2026, và nạp tệp khác vào hũ Ăn uống trước đó làm đổi chuỗi chi.
+1. Hồ sơ → **Đặt lại dữ liệu**. Làm cảnh 4 trong ngày đặt lại hoặc chậm nhất ngày hôm sau, và trước cảnh 5: tệp gắn với ngày mô phỏng 21/11/2026, ngày mô phỏng đi theo ngày thật kể từ lần đặt lại; tải trễ hai ngày trở lên thì PELT không xác nhận và không có lộ trình mới (không báo lỗi gì), phải đặt lại rồi tải lại. Nạp tệp khác vào hũ Ăn uống trước đó cũng làm đổi chuỗi chi.
 2. Tải tệp về máy, mở **Nạp dữ liệu** → **Tải sao kê CSV** → chọn tệp → **Đồng ý và tải lên** (lần đầu sau khi đặt lại).
-3. Chờ đọc xong: 32 dòng chi từ 07/11 tới 20/11, mọi dòng đã chọn sẵn vào hũ Ăn uống (không phải chọn hũ từng dòng) → **Xác nhận thêm 32 dòng**.
-4. Dự báo chạy lại ngay sau khi xác nhận. PELT xác nhận chi Ăn uống tăng từ khoảng 843.000 ₫ lên 1.669.000 ₫ mỗi tuần, giữ 2 tuần, rồi lộ trình được sinh lại. Mục tiêu: thấy bản đề xuất mới trong 30 giây kể từ lúc xác nhận (chưa đo trên tài khoản giám khảo).
+3. Chờ đọc xong: 32 dòng chi từ 07/11 tới 20/11 (16 dòng mỗi tuần, 1.501.000 ₫ tuần 07/11–13/11 và 1.597.000 ₫ tuần 14/11–20/11, tổng 3.098.000 ₫), mọi dòng đã chọn sẵn vào hũ Ăn uống (không phải chọn hũ từng dòng) → **Xác nhận thêm 32 dòng**.
+4. Dự báo chạy lại ngay sau khi xác nhận. PELT xác nhận chi Ăn uống tăng từ khoảng 843.000 ₫ lên 2.582.000 ₫ mỗi tuần, giữ 2 tuần (tải ngày hôm sau: khoảng 863.000 ₫ lên 2.316.000 ₫), rồi lộ trình được sinh lại. Mục tiêu: thấy bản đề xuất mới trong 30 giây kể từ lúc xác nhận (chưa đo trên tài khoản giám khảo).
 5. Mở **Lộ trình**: chip **Có phiên bản mới** → **So với bản cũ** (bản mới so với v2, lý do hành vi thay đổi) → mở "Vì sao"; chọn **Dùng bản mới** hoặc **Giữ bản cũ**.
 6. Hỏi "nên mua cổ phiếu nào": trợ lý từ chối đúng phạm vi.
 

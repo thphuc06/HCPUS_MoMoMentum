@@ -21,7 +21,7 @@ Tab **Nhìn trước** → mục **Điểm chống chịu** → **Thử cú số
 
 **Cảnh 4 · Chi tiêu đổi, lộ trình đổi**
 Tải tệp https://main.dcrwn4u7vqklo.amplifyapp.com/samples/minh_sao_ke_2_tuan.csv → Tổng quan → **Tiền vào** → **Nạp ảnh / sao kê ngoài ví** → **Tải sao kê CSV** → tích đồng ý → **Đồng ý và tải lên** → **Xác nhận thêm 32 dòng**. Tab **Nhìn trước** → thẻ Lộ trình **Có phiên bản mới** → **So với bản cũ**.
-**Lưu ý: Đặt lại dữ liệu rồi tải tệp cảnh 4 trong cùng ngày**, và làm cảnh 4 trước cảnh 5. Tải lại cùng tệp sẽ bị từ chối là trùng.
+**Lưu ý: Tải tệp cảnh 4 trong ngày đặt lại dữ liệu hoặc chậm nhất ngày hôm sau**, và làm cảnh 4 trước cảnh 5. Tải lại cùng tệp sẽ bị từ chối là trùng.
 
 **Cảnh 5 · Nạp ảnh chứng từ**
 Tải ảnh https://main.dcrwn4u7vqklo.amplifyapp.com/samples/minh_bien_lai_1.png → cùng màn nạp → **Chọn ảnh có sẵn**. Họ tên, số tài khoản, số điện thoại trên ảnh bị che; chọn hũ Ăn uống nếu chưa có → xác nhận.
