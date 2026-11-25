@@ -5,7 +5,7 @@
   "monthly_salary_vnd": 9000000,
   "payday_day": 5,
   "risk_tolerance": "medium",
-  "history_days": 47,
+  "history_days": 120,
   "seed": 20261121,
   "rhythm_defaults": {
     "weekend_multiplier": 1.6,
@@ -17,8 +17,8 @@
   "jars": [
     {
       "code": "an_uong", "name": "Ăn uống", "color_key": "violet", "icon_key": "utensils", "kind": "spending",
-      "split_percent": 30, "opening_vnd": 0, "target_vnd": 380000,
-      "expense_count": 110, "recent_share": 0.58,
+      "split_percent": 30, "opening_vnd": 1800000, "target_vnd": 380000,
+      "expense_count": 281, "recent_share": 0.1586,
       "rhythm": {"weekend_multiplier": 2.6, "max_per_day": 5, "amount_sigma": 0.45},
       "merchants": [
         {"name": "Cơm tấm Cô Ba", "tx_type": "food_drink", "weight": 2},
@@ -35,8 +35,8 @@
     },
     {
       "code": "di_lai", "name": "Đi lại", "color_key": "sky", "icon_key": "bus", "kind": "spending",
-      "split_percent": 7, "opening_vnd": 0, "target_vnd": 640000,
-      "expense_count": 14, "recent_share": 0.5,
+      "split_percent": 7, "opening_vnd": 300000, "target_vnd": 640000,
+      "expense_count": 36, "recent_share": 0.14,
       "merchants": [
         {"name": "Grab", "tx_type": "ride_hailing", "weight": 2},
         {"name": "Be", "tx_type": "ride_hailing"},
@@ -46,8 +46,8 @@
     },
     {
       "code": "hoa_don", "name": "Hóa đơn", "color_key": "brown", "icon_key": "receipt", "kind": "spending",
-      "split_percent": 31, "opening_vnd": 0, "target_vnd": 450000,
-      "expense_count": 3, "recent_share": 0.9,
+      "split_percent": 31, "opening_vnd": 600000, "target_vnd": 450000,
+      "expense_count": 8, "recent_share": 0.2,
       "merchants": [
         {"name": "Nạp điện thoại Viettel", "tx_type": "phone_topup"},
         {"name": "Cửa hàng điện nước", "tx_type": "bill_water"}
@@ -55,8 +55,8 @@
     },
     {
       "code": "giai_tri", "name": "Giải trí", "color_key": "orchid", "icon_key": "gamepad", "kind": "spending",
-      "split_percent": 7, "opening_vnd": 0, "target_vnd": 760000,
-      "expense_count": 3, "recent_share": 0.7,
+      "split_percent": 7, "opening_vnd": 200000, "target_vnd": 760000,
+      "expense_count": 8, "recent_share": 0.15,
       "merchants": [
         {"name": "CGV Cinemas", "tx_type": "entertainment"},
         {"name": "Steam", "tx_type": "entertainment"}
@@ -70,12 +70,12 @@
     },
     {
       "code": "du_phong", "name": "Dự phòng", "color_key": "blue", "icon_key": "shield", "kind": "saving",
-      "split_percent": 10, "opening_vnd": 900000, "target_vnd": 2700000,
+      "split_percent": 10, "opening_vnd": 0, "target_vnd": 2700000,
       "expense_count": 0, "recent_share": 0.5, "merchants": []
     },
     {
       "code": "nghia_vu", "name": "Nghĩa vụ", "color_key": "slate", "icon_key": "wallet", "kind": "obligation",
-      "split_percent": 5, "opening_vnd": 100000, "target_vnd": 1000000,
+      "split_percent": 5, "opening_vnd": 0, "target_vnd": 1000000,
       "expense_count": 0, "recent_share": 0.5, "merchants": []
     }
   ],
@@ -111,6 +111,14 @@
       {"days_ago": 5, "amount_vnd": 447000, "jar": "giai_tri", "tx_type": "entertainment", "merchant": "Tiki - Sách và văn phòng phẩm"}
     ]
   },
+  "jar_transfers": [
+    {"days_ago": 92, "from": "du_lich", "to": "an_uong", "amount_vnd": 900000, "note": "Bù tiền ăn cuối tháng"},
+    {"days_ago": 92, "from": "nghia_vu", "to": "an_uong", "amount_vnd": 300000, "note": "Bù tiền ăn cuối tháng"},
+    {"days_ago": 61, "from": "du_phong", "to": "an_uong", "amount_vnd": 900000, "note": "Bù tiền ăn cuối tháng"},
+    {"days_ago": 61, "from": "nghia_vu", "to": "an_uong", "amount_vnd": 300000, "note": "Bù tiền ăn cuối tháng"},
+    {"days_ago": 31, "from": "du_lich", "to": "an_uong", "amount_vnd": 900000, "note": "Bù tiền ăn cuối tháng"},
+    {"days_ago": 31, "from": "nghia_vu", "to": "an_uong", "amount_vnd": 200000, "note": "Bù tiền ăn cuối tháng"}
+  ],
   "system_jars": {
     "other_income": [
       {"days_ago": 6, "amount_vnd": 350000, "tx_type": "friend_repay", "payee": "Trần Quang Huy", "note": "Huy trả lại tiền ăn"}

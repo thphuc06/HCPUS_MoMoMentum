@@ -41,8 +41,9 @@ SAMPLES = REPO / "data" / "personas" / "samples"
 
 #: băm đầu ra bộ sinh của ba persona cũ ĐO TRƯỚC khi thêm thu nhập ngoài ví (`uv run python tests/unit/persona_digest.py` ở bản
 #: bộ sinh chưa có tính năng). Đổi spec của chúng một cách có chủ đích thì tính lại băm và sửa ở đây.
+#: minh: tính lại 25/11 sau khi đổi spec sang 120 ngày lịch sử có chuyển hũ (issue #8); lan và khoa giữ băm gốc.
 OLD_DIGESTS = {
-    "minh": "69b43593fde86faed5d7956e6c9b58b2b82dba2dfbe1dcf963005eb0c40eb826",
+    "minh": "e2faa3669909f1927ac1550fe5a3b34a61cecae81ecd04ec7485acd9567301f2",
     "lan": "63f427e0ce42acdfa95c80ec3dff9d0cf656faf6ebc0ed89f62a4716fde0f6c2",
     "khoa": "3454c1e28c115e852f7889aaf4e97a7ccc532014a7b85d6797c0cea001c2a8d5",
 }
@@ -88,8 +89,13 @@ def test_thu_nhap_ngoai_vi_moi_thang_mot_dong_khong_hu_va_khong_doi_so_du():
     )  # cùng tên persona: cùng hạt ngẫu nhiên
     ext = [t for t in d.transactions if t.funding_source == "external"]
     assert d.external_income_monthly_vnd == 3_000_000
-    # ngày 31: 31/10 nằm trong lịch sử (5/10 đến 20/11); ngày 31 của tháng 11 lấy ngày cuối tháng là 30/11, sau ngày neo
-    assert [(ANCHOR - timedelta(days=t.days_ago)) for t in ext] == [date(2026, 10, 31)]
+    # ngày 31 trong lịch sử 24/7 đến 20/11: tháng 9 có 30 ngày nên lấy 30/9; ngày 31 của tháng 11 là 30/11, sau ngày neo
+    assert [(ANCHOR - timedelta(days=t.days_ago)) for t in ext] == [
+        date(2026, 7, 31),
+        date(2026, 8, 31),
+        date(2026, 9, 30),
+        date(2026, 10, 31),
+    ]
     assert all(
         t.kind == "income"
         and t.jar_code is None
@@ -111,6 +117,8 @@ def test_thu_nhap_ngoai_vi_ngay_mac_dinh_va_tx_type_mac_dinh():
     )
     ext = [t for t in d.transactions if t.funding_source == "external"]
     assert sorted(ANCHOR - timedelta(days=t.days_ago) for t in ext) == [
+        date(2026, 8, 15),
+        date(2026, 9, 15),
         date(2026, 10, 15),
         date(2026, 11, 15),
     ]

@@ -314,16 +314,14 @@ def persona_weekly(name):
     return {jar: ch.prepare_weekly(d, P) for jar, d in persona_daily_spend(name).items()}
 
 
-def test_minh_an_uong_co_diem_gay_xac_nhan_duoc_o_ngay_neo():
-    """Điểm gãy của `minh` (N4): chi tuần của Ăn uống tăng và giữ 2 tuần; các hũ khác thưa nên không được phân tích."""
+def test_minh_an_uong_du_17_tuan_va_khong_co_diem_gay_cai_san():
+    """`minh` có 120 ngày lịch sử (issue #8): Ăn uống đủ 17 tuần để phân tích nhưng KHÔNG có điểm gãy cài sẵn (cảnh 4 tự tạo
+    thay đổi lúc chạy); các hũ khác thưa nên không được phân tích."""
     series = persona_weekly("minh")
     an = series["an_uong"]
-    assert an.skipped is None and an.n_weeks == 6
-    hit = ch.detect_confirmed(an, P)
-    assert hit is not None and (hit.direction, hit.change_index, hit.weeks_held) == ("up", 4, 2)
-    assert 450_000 < hit.old_weekly_vnd < 600_000 and 1_100_000 < hit.new_weekly_vnd < 1_300_000
-    assert ch.week_start_date(date(2026, 11, 20), an.n_weeks, hit.change_index) == date(2026, 11, 7)
-    assert ch.detect_suspect(an, P) is not None
+    assert an.skipped is None and an.n_weeks == 17
+    assert ch.detect_confirmed(an, P) is None
+    assert ch.detect_suspect(an, P) is None
     for jar, s in series.items():
         if jar != "an_uong":
             assert s.skipped in (ch.SKIP_SPARSE, ch.SKIP_INSUFFICIENT), jar

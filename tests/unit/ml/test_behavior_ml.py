@@ -42,7 +42,9 @@ def persona(name: str):
             amount_vnd=-int(r["amount"]),
             jar_code=r["jar_code"],
             funding=r["funding_source"],
-            local_hour=r["occurred_at"].astimezone(TZ).hour if r["funding_source"] != "external" else None,
+            local_hour=r["occurred_at"].astimezone(TZ).hour
+            if r["funding_source"] != "external"
+            else None,
             is_obligation=r["obligation_id"] is not None,
         )
         for r in rows
@@ -77,14 +79,20 @@ def test_minh_co_it_nhat_hai_nhan_xet_va_hop_dong_hop_le(minh):
 
 def _spend_rows(rows, *, window_from: date, window_to: date):
     """Dòng chi mà một người đếm tay sẽ tính: không phải khoản trả nghĩa vụ, trong [window_from, window_to]."""
-    return [r for r in rows if r["obligation_id"] is None and window_from <= r["app_date"] <= window_to]
+    return [
+        r for r in rows if r["obligation_id"] is None and window_from <= r["app_date"] <= window_to
+    ]
 
 
 def test_bang_chung_khop_so_cai_khi_dem_lai_doc_lap(minh):
     """Mỗi con số làm bằng chứng được đếm lại trực tiếp từ các dòng sổ cái (không qua mã của yofina_ml)."""
     data, _, rows, prof = minh
     by_kind = {i.kind: i for i in prof.insights}
-    first = min(r["app_date"] for r in rows if r["obligation_id"] is None)
+    # cửa sổ của hồ sơ hành vi: `window_days` ngày gần nhất (minh có 120 ngày lịch sử, dài hơn cửa sổ)
+    first = max(
+        min(r["app_date"] for r in rows if r["obligation_id"] is None),
+        ANCHOR - timedelta(days=DEFAULT_CONFIG.window_days),
+    )
     spend = _spend_rows(rows, window_from=first, window_to=ANCHOR - timedelta(days=1))
     total = sum(-int(r["amount"]) for r in spend)
     days = [first + timedelta(days=i) for i in range((ANCHOR - first).days)]
@@ -99,14 +107,24 @@ def test_bang_chung_khop_so_cai_khi_dem_lai_doc_lap(minh):
     week = by_kind["weekday_pattern"]
     weekend = sum(-int(r["amount"]) for r in spend if r["app_date"].isoweekday() >= 6)
     assert ev(week, "weekend_share") == round(weekend / total * 100)
-    assert ev(week, "weekend_day_share") == round(sum(d.isoweekday() >= 6 for d in days) / len(days) * 100)
+    assert ev(week, "weekend_day_share") == round(
+        sum(d.isoweekday() >= 6 for d in days) / len(days) * 100
+    )
 
     pay = by_kind["payday_cycle"]
+
     def in_first_week(d: date) -> bool:
-        p = date(d.year, d.month, data.payday_day) if d.day >= data.payday_day else (
-            date(d.year, d.month - 1, data.payday_day) if d.month > 1 else date(d.year - 1, 12, data.payday_day)
+        p = (
+            date(d.year, d.month, data.payday_day)
+            if d.day >= data.payday_day
+            else (
+                date(d.year, d.month - 1, data.payday_day)
+                if d.month > 1
+                else date(d.year - 1, 12, data.payday_day)
+            )
         )
         return (d - p).days < 7
+
     fw = sum(-int(r["amount"]) for r in spend if in_first_week(r["app_date"]))
     assert ev(pay, "first_week_share") == round(fw / total * 100)
     last = next(e for e in pay.evidence if e.key == "last_first_week_vnd")
@@ -119,7 +137,10 @@ def test_bang_chung_khop_so_cai_khi_dem_lai_doc_lap(minh):
 def test_khoan_tra_nghia_vu_khong_tinh_la_thoi_quen(minh):
     data, m, rows, prof = minh
     assert any(r["obligation_id"] for r in rows)
-    facts = [SpendFact(r["app_date"], -int(r["amount"]), r["jar_code"], r["funding_source"], 12, False) for r in rows]
+    facts = [
+        SpendFact(r["app_date"], -int(r["amount"]), r["jar_code"], r["funding_source"], 12, False)
+        for r in rows
+    ]
     names = {j["code"]: j["name"] for j in m.jars}
     as_habit = compute_profile(facts, today=ANCHOR, payday_day=data.payday_day, jar_names=names)
     assert as_habit.features["avg_daily_spend_vnd"] > prof.features["avg_daily_spend_vnd"]
@@ -144,7 +165,9 @@ def test_moi_cau_mau_qua_kiem_can_cu_va_qua_numeric_grounding_cua_agent(minh):
 
 def test_nhan_xet_khong_mang_ten_doi_tac_hay_loi_nhan(minh):
     _, _, rows, prof = minh
-    secrets = {str(r["merchant"]) for r in rows if r.get("merchant")} | {str(r["note"]) for r in rows if r.get("note")}
+    secrets = {str(r["merchant"]) for r in rows if r.get("merchant")} | {
+        str(r["note"]) for r in rows if r.get("note")
+    }
     text = " ".join(f"{i.headline} {i.detail or ''}" for i in prof.insights) + str(prof.next_step)
     assert secrets and not any(s in text for s in secrets)
 
@@ -152,7 +175,9 @@ def test_nhan_xet_khong_mang_ten_doi_tac_hay_loi_nhan(minh):
 def test_viec_can_lam_chuan_hoa_duoc_va_ngay_sau_hom_nay(minh):
     _, _, _, prof = minh
     step = prof.next_step
-    assert step is not None and not re.search(r"\d", step["label"] + step["reason"])  # câu không có số nào
+    assert step is not None and not re.search(
+        r"\d", step["label"] + step["reason"]
+    )  # câu không có số nào
     for p in ("lan", "vy"):
         data, _, _, facts, names = persona(p)
         other = compute_profile(facts, today=ANCHOR, payday_day=data.payday_day, jar_names=names)
@@ -190,9 +215,13 @@ def test_chi_buoi_toi_va_ngay_chi_dam():
         if i % 7 == 2:
             facts.append(SpendFact(d, 600_000, "giai_tri", "jar", 21))
     facts.append(SpendFact(start, 80_000, "an_uong", "external", None))
-    prof = compute_profile(facts, today=ANCHOR, payday_day=5, jar_names={"an_uong": "Ăn uống", "giai_tri": "Giải trí"})
+    prof = compute_profile(
+        facts, today=ANCHOR, payday_day=5, jar_names={"an_uong": "Ăn uống", "giai_tri": "Giải trí"}
+    )
     kinds = {i.kind: i for i in prof.insights}
-    assert ev(kinds["time_of_day"], "evening_share") == 100  # dòng ngoài ví không có giờ nên không tính
+    assert (
+        ev(kinds["time_of_day"], "evening_share") == 100
+    )  # dòng ngoài ví không có giờ nên không tính
     heavy = kinds["spending_cluster"]
     assert ev(heavy, "heavy_days") == 6 and ev(heavy, "heavy_avg_vnd") == 650_000
     assert all(insight_grounded(i) for i in prof.insights)
