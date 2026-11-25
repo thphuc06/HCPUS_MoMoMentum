@@ -2,7 +2,34 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: **2026-11-25 khuya** (Kiro CLI điều phối worker `kiro-cli` `claude-opus-5.5`). Đợt 1 và đợt 2 phase 6 **đã deploy** (Runtime v28, Amplify job 24, migration tới 0056) và đã kiểm trên app: xem mục "Cập nhật khuya 25/11" ngay dưới. Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B).
+Cập nhật lần cuối: **2026-11-26 rạng sáng** (Claude Code điều phối worker `kiro-cli` `claude-opus-5.5`). Nhánh `feat/default-six-jars` của Học **đã gộp vào `main` và đã deploy** (Runtime **v29**, Amplify **job 25**, migration tới **0059**), đã kiểm trên app, không chạy eval: xem mục "Cập nhật rạng sáng 26/11" ngay dưới. Đợt 1 và đợt 2 phase 6 đã deploy từ khuya 25/11. Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B).
+
+## Cập nhật rạng sáng 26/11: gộp bộ hũ mặc định theo mục đích (#39), đã deploy, kiểm trên app
+
+Chủ dự án (đêm 25/11) duyệt: gộp nhánh của Học, push, migration, deploy, kiểm vài ca mới trên app, **không chạy eval**; migration của nhánh đổi số thành 0057–0059; tài khoản mới nhận 3 hũ mặc định; tài khoản demo có thêm hũ tự thêm để vẫn tách được hành vi theo ăn uống, đi lại. Việc theo dõi ở issue [#39](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/39). `main` = `4cf2bdb` lúc deploy.
+
+**Bộ hũ hiện hành**
+- **Tài khoản mới (onboarding)**: Chi hằng ngày 42 / Nghĩa vụ 33 / Dự phòng 25 (`jar_templates.is_default`, migration 0059). Hũ khác (Quỹ dồn, Mục tiêu, Tích lũy dài hạn, bảy hũ cũ) là hũ tự thêm. Bước 3 onboarding có kê khai và đề xuất tỷ lệ (`POST /jars/split-proposal`). Quay lui về bộ bảy cho tài khoản tạo sau đó: `uv run scripts/cdk.py deploy YofinaTools --require-approval never -c onboardingJarLayout=legacy`.
+- **Tài khoản demo (sau "Đặt lại dữ liệu")**: Nghĩa vụ (gộp Hóa đơn cũ), Dự phòng (`buffer`), cộng hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch (mã `muc_tieu`, `goal`, chỉ persona có hũ Du lịch mang mục tiêu), Đầu tư (`dau_tu`, `long_term`, 0 ₫). **Không có hũ Chi hằng ngày** (câu chuyện: người dùng đã tách hũ này thành ba hũ chi). `minh`, `vy` 7 hũ; `lan`, `khoa` 6 hũ. Tỷ lệ suy từ spec persona qua ánh xạ mã hũ (`yofina_core.wallet.LEGACY_JAR_ALIASES`, `data/personas/six_jars.py` `apply_demo_layout`). Lý do không dùng bộ demo 4 hũ của nhánh: PELT, hồ sơ hành vi, cờ đổi hành vi tính theo mã hũ; cảnh 1 và cảnh 4 dựa vào hũ `an_uong`. Phân tích theo loại chi (`tx_type`) bên trong một hũ gộp là việc để sau.
+- Ví cũ 7 hũ trên Aurora (chưa đặt lại) vẫn đọc ghi được (`purpose` NULL).
+
+**Quy tắc đổi theo nhánh**: hũ trả nghĩa vụ và Trả sau dùng chung `resolve_obligation_pay_jar` (hũ đã lưu, hũ chọn, `nghia_vu`, hũ obligation đầu tiên); ví không có hũ obligation mà mua bằng Trả sau thì phải chọn hũ trả (agent và màn chuyển tiền hỏi; lỗi tool mang `field: pay_jar`). Khoản Trả sau ghi từ trước chưa có hũ trả vẫn lùi về `bnpl_pay_jar` trong dự báo (giữ sửa lỗi #15). Ngày đến hạn Trả sau của `minh` trên ví demo là ngày 3 (điều khoản mô phỏng; BR-22 ghi ngày 5).
+
+**Số đo trên app sau deploy** (`giamkhao1`, `minh`; ảnh ở `C:\moMo-wt\logs\ui-F\`, máy của Phúc, ngoài repo): cảnh 1 Ăn uống 380.000 ₫ cạn 23/11, nhãn Cao; cảnh 2 trọn câu 34 s, hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12 (2.200.000 ₫), thiếu 1.161.791 ₫; cảnh 3 điểm 29 → 12, trụ 25 ngày; cảnh 4: 32 dòng vào Ăn uống, bản v3 sau khoảng 30 s, không còn chữ "Subscription", giai đoạn đầu 21/11–05/12, bước lớn nhất vào Ăn uống 2.657.800 ₫; cảnh 5 màn duyệt sau 8,5 s, chip "Đã che: tên". Tài khoản mới (tạo tạm bằng admin rồi xóa): 3 hũ 42/33/25, kê khai trọ + điện ra đề xuất 36/39/25. Log khoảng giờ kiểm: 0 `ContractMismatch`, 0 `Traceback`, 0 lỗi 5xx, 1 `turn_persist_timeout`. Tiền model khoảng 0,3–0,5 USD.
+
+**Test** (`4cf2bdb`): unit 4390 passed, 2 skipped; `tests/local_pg` 264 passed (10 ca đỏ sẵn trên `main` cũ đã viết lại theo #8, #22, #19); `db_local_check.py` 57/57; vitest 1056; CDK 98; tích hợp sau deploy 93 đạt, 1 đỏ (`test_phase3_engine.py::test_chuyen_250k…`, test cũ).
+
+**Sửa kèm trong đợt này**: bản lộ trình sinh lại ở cảnh 4 (#19): nhãn loại nghĩa vụ tiếng Việt đưa vào ngữ cảnh model, giai đoạn đầu từ hôm nay tới ngày lương, kiểm số tiền bước bằng mã; khử trùng dòng nạp so tên đối tác theo từ (`same_party`); hũ không có gì rút tiền không có ngày cạn; sàn thiết yếu của hóa đơn tính theo loại giao dịch trên hũ obligation; đề xuất tỷ lệ không cắt hũ thiết yếu trước; route `POST /jars/split-proposal` trên HTTP API; test tĩnh so `openapi.yaml` với route CDK.
+
+**Phát hành lần sau nhớ**: Runtime cũ kiểm chặt trường trả về (`extra=forbid`), nên khi Lambda thêm trường mới phải **deploy Runtime trước, Lambda sau** (`tests/unit/agent/test_runtime_lambda_compat.py`); không quay lui riêng Runtime. `migrate.py` chạy mọi file chờ: muốn dừng ở một số thì dùng `--dir` với thư mục tạm. Snapshot Aurora `yofina-db-pre-0057-20261126` còn giữ (xóa khi không cần lùi nữa).
+
+**Còn mở sau đợt này**
+- Chi tiết hũ Đầu tư 0 ₫ ghi "Đang hết tiền…" dù chip "Đủ"; ledger ghi ERROR cho lỗi nghiệp vụ `ROADMAP_VERSION_CONFLICT`; `test_chuyen_250k…` và `test_phase4_live.py` 06–10 còn theo seed cũ: worker đang sửa lúc viết bản này, xem ai-log.
+- Trên ví demo, đề xuất tỷ lệ khi kê khai và bản v3 cảnh 4 đưa Giải trí về 0% (đúng quy tắc "cắt hũ không thiết yếu trước", nhưng nên có sàn cho hũ không thiết yếu): chờ chủ dự án quyết.
+- Câu "lập giúp mình lộ trình xây quỹ dự phòng…" không lập bản mới: router không trích hũ nên `turn.py` mất ý định tạo (dòng `create = action == "create" or goal is not None`), và hũ Dự phòng (`buffer`) không đặt mục tiêu được. Chưa sửa vì đổi hành vi agent mà không có eval.
+- Hiếm gặp, chưa sửa: what-if Trả sau có thể tính trùng khoản cũ chưa lưu hũ trả trên ví không có hũ obligation; hũ đã lưu thắng hũ người dùng chọn cho khoản Trả sau cùng ngày đến hạn.
+- Tài liệu BA: B2a và C-12 đã ghi quyết định 26/11; BR-63..78 và BR-79..84 (trang Notion "Feedback hũ") chưa đồng bộ vào `docs/ba/` (việc của BA). Eval, độ chính xác phân loại 92% và hiệu chỉnh dự báo đo trên bộ 7 hũ: tài khoản demo giữ các hũ chi cũ nên số cũ còn dùng được cho demo; ví 3 hũ chưa có số đo riêng.
+- Lượt eval cuối (#34) sẽ chạy trên bộ hũ demo mới: ca golden nào hỏi hũ Hóa đơn hoặc "hũ Du lịch" theo mã cũ cần xem lại trước khi chạy.
 
 ## Cập nhật khuya 25/11: đã deploy gộp đợt 1 + đợt 2, kiểm trên app (không chạy eval)
 

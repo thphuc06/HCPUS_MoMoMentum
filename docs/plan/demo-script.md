@@ -1,6 +1,6 @@
 # Kịch bản demo (video 3 phút)
 
-Nguồn: proposal §15. Kể câu chuyện của persona **Minh** (22 tuổi, thu nhập 9 triệu/tháng, lương ngày 5, 7 hũ, một hạn mức Ví Trả Sau) qua 6 cảnh. Giám khảo làm lại được từng cảnh bằng tài khoản demo có sẵn dữ liệu (§13: có nút đặt lại, phương án dự phòng tất định, video quay sẵn). Số trong cảnh là minh họa trong proposal, sẽ chỉnh theo persona thật.
+Nguồn: proposal §15. Kể câu chuyện của persona **Minh** (22 tuổi, thu nhập 9 triệu/tháng, lương ngày 5, 7 hũ, một hạn mức Ví Trả Sau) qua 6 cảnh. Từ 26/11 (issue #39) 7 hũ của tài khoản demo là: Nghĩa vụ (gộp Hóa đơn cũ) và Dự phòng (hũ mặc định), cộng hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch (hũ mục tiêu 6.000.000 ₫, hạn 01/04/2027), Đầu tư (0 ₫); tài khoản mới ngoài demo nhận 3 hũ Chi hằng ngày, Nghĩa vụ, Dự phòng. Số đo trên app 26/11: cảnh 2 hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12 (2.200.000 ₫, gồm phí 33.000 ₫; ngày 3 là điều khoản mô phỏng), thiếu khoảng 1.160.000 ₫; cảnh 3 điểm 29 → 12, trụ 25 ngày. Giám khảo làm lại được từng cảnh bằng tài khoản demo có sẵn dữ liệu (§13: có nút đặt lại, phương án dự phòng tất định, video quay sẵn). Số trong cảnh là minh họa trong proposal, sẽ chỉnh theo persona thật.
 
 | Cảnh | Thời lượng | Trên màn hình | Tính năng |
 |---|---|---|---|
