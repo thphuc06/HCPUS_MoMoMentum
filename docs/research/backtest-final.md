@@ -117,12 +117,13 @@ Dữ liệu tổng hợp, chạy offline trên CPU, chỉ numpy và scipy, khôn
 
 - **Dải số dư hũ dày** ở 120 ngày lịch sử (như `minh`), ngày 30: thật dưới P10 **0,143 → 0,098**, thật trên P90 **0,047 → 0,104**, độ
   phủ 0,810 → 0,798 (theo họ 0,796 / 0,800), dải rộng thêm 1%. Đạt mục tiêu của issue: độ phủ trong [0,75; 0,85] và mỗi đuôi gần 10%.
-- **`p_shortfall` qua PAV** gần như không đổi Brier (hũ dày 0,1609 → 0,1607; hũ thưa 0,1711 → 0,1701). Hũ thưa sát tần suất thật hơn
-  (sai lệch lớn nhất của bảng độ tin cậy 0,049 → 0,025). Hũ dày thì không: ở ô 0,3 đến 0,5, p sau PAV là 0,37 trong khi tần suất thật
-  0,47 (trước PAV 0,40 so với 0,46). Xem "Điều chưa xử lý".
+- **`p_shortfall` qua PAV chỉ còn ở hũ thưa.** Hũ thưa ở 120 ngày: Brier 0,1711 → 0,1701, sai lệch lớn nhất của bảng độ tin cậy
+  0,049 → 0,025. Hũ dày thì PAV làm tệ hơn: sai lệch ở 120 ngày 0,070 → 0,100 (ô 0,3 đến 0,5: p 0,40 so với tần suất thật 0,46 trước
+  PAV, 0,37 so với 0,47 sau), ở lịch sử đủ 0,090 → 0,092, Brier gần như không đổi (0,1609 → 0,1607). Cổng PAV xét từng loại hũ nên bảng
+  của hũ dày bị bỏ: `p_shortfall` hũ dày là p thô của Monte Carlo (mục "Cổng PAV theo loại hũ").
 - **Ngày cạn của hũ thưa** sai TB 6,45 ngày, chỉ 28% số ca trong ±3 ngày (hũ dày 3,48 ngày, 59%). Khi bật công tắc, hũ thưa không nêu
   ngày cụ thể: `run.params["show_runout_date"]` của kết quả dự báo ghi `false` cho hũ đó, `runout_date` vẫn giữ để tương thích ngược.
-- Công tắc `recalibrate` **bật** trong `ml/yofina_ml/calibration/default.py`, vì tập kiểm qua cả năm điều kiện của cổng (mục "Cổng").
+- Công tắc `recalibrate` **bật** trong `ml/yofina_ml/calibration/default.py`, vì tập kiểm qua cả bốn điều kiện của cổng dải (mục "Cổng").
 
 ### Phương pháp
 
@@ -143,8 +144,8 @@ Dữ liệu tổng hợp, chạy offline trên CPU, chỉ numpy và scipy, khôn
 - **PAV cho `p_shortfall`** (Kuleshov và cộng sự 2018; Dimitriadis, Gneiting, Jordan 2021): số dư kịch bản b = α × chi TB 28 ngày × w
   (w là số ngày tới lương, cần w ≥ 3; α thuộc 0,6 / 0,8 / 1,0 / 1,25 / 1,6, lưới của `evaluate_shortfall` phase 2), p thô tính trên đúng
   các đường Monte Carlo mà `forecast_user` dùng cho hũ đó, kết cục là chi thật trong w ngày vượt b. Không dùng số dư thật vì nó hiếm khi
-  âm trước kỳ lương (mục trên). Một bảng cho hũ dày, một cho hũ thưa, chỉ học trên các ca mà sản phẩm có hiện % (hũ dày từ 47, hũ thưa từ
-  120 ngày lịch sử), không gồm hũ nghĩa vụ.
+  âm trước kỳ lương (mục trên). Học một bảng cho hũ dày, một cho hũ thưa, chỉ trên các ca mà sản phẩm có hiện % (hũ dày từ 47, hũ thưa từ
+  120 ngày lịch sử), không gồm hũ nghĩa vụ. Bảng nào được ghi vào hiệu chỉnh do cổng PAV theo loại hũ quyết định.
 - **Ngày cạn**: trên cùng số dư kịch bản, ngày dự báo là ngày đầu số dư P50 ≤ 0 trong 30 ngày (như `runout_date`), ngày thật là ngày đầu
   số dư thật ≤ 0. "Trong ±3 ngày" tính trên mọi ca có ngày dự báo (thật không cạn trong 30 ngày là trượt); "sai TB" tính trên ca có cả hai
   ngày. Số hơi khác kiểm toán §3.2 (hũ thưa 5,63 ngày) vì kiểm toán chỉ chấm ca có p ≥ 0,2 và origin từ ngày 90.
@@ -159,10 +160,32 @@ Dữ liệu tổng hợp, chạy offline trên CPU, chỉ numpy và scipy, khôn
 | 120 ngày: thật dưới P10 trong [0,075; 0,125] | 0,098 | có |
 | 120 ngày: thật trên P90 trong [0,075; 0,125] | 0,104 | có |
 | 47 ngày và lịch sử đủ: độ phủ gộp vẫn trong [0,75; 0,85] | 0,812; 0,788 | có |
-| 120 ngày: Brier sau PAV không cao hơn trước, cả hũ dày và hũ thưa | 0,16086 → 0,16065; 0,17107 → 0,17011 | có |
 
-Cổng ban đầu đòi Brier giảm hẳn. Lúc chia đôi tập học, Brier trước và sau PAV bằng nhau tới bốn chữ số ở vài ô, nên cổng đổi thành "không
-cao hơn" trước khi chạy tập kiểm.
+Bản đầu của #25 có thêm điều kiện thứ năm: Brier sau PAV không cao hơn trước, ở 120 ngày, cả hũ dày và hũ thưa. Điều kiện đó qua, nhưng
+PAV hũ dày vẫn làm bảng độ tin cậy tệ hơn (mục dưới), nên nó được thay bằng cổng PAV theo loại hũ. Công tắc nay chỉ xét dải.
+
+### Cổng PAV theo loại hũ
+
+Luật (`pav_gate` trong `recalibrate.py`), viết và commit trước khi chạy lại tập kiểm: bảng PAV của một loại hũ chỉ vào hiệu chỉnh khi, ở
+MỌI độ dài lịch sử của tập kiểm có ca hiện % của loại đó, PAV không làm tăng sai lệch lớn nhất của bảng độ tin cậy (ô từ 30 ca) VÀ không
+làm tăng Brier. So ở độ chính xác của bảng: sai lệch 3 chữ số, Brier 6 chữ số. Thiếu số để so thì không giữ. Loại không qua thì không có
+`p_isotonic`; công tắc, CQR và việc ẩn ngày cạn hũ thưa không đổi. Lưu ý: số của lần chạy đầu đã biết khi viết luật. Đọc riêng ở 120
+ngày hay ở mọi độ dài đều cho cùng kết luận, và luật chọn cách chặt hơn.
+
+| Loại hũ | Lịch sử | Sai lệch lớn nhất trước → sau | Brier trước → sau | Đạt |
+|---|---|---|---|---|
+| hũ dày | 47 | 0,070 → 0,053 | 0,1643 → 0,1638 | có |
+| hũ dày | 120 | 0,070 → **0,100** | 0,1609 → 0,1607 | **không** |
+| hũ dày | đủ | 0,090 → **0,092** | 0,1653 → 0,1651 | **không** |
+| hũ thưa | 120 | 0,049 → 0,025 | 0,1711 → 0,1701 | có |
+| hũ thưa | đủ | 0,044 → 0,022 | 0,1666 → 0,1660 | có |
+
+Kết luận: **giữ PAV cho hũ thưa, bỏ PAV hũ dày**. Hũ thưa ở 47 ngày không hiện % (ngưỡng 120 ngày) nên không có ô để xét. Lý do bỏ ở
+hũ dày: bảng học trên seed 101–104 không chuyển được sang seed 201–206. Trên tập học, ô 0,3 đến 0,5 dự báo cao hơn tần suất thật (0,40 so
+với 0,37); trên tập kiểm thì thấp hơn (0,40 so với 0,46). PAV học theo tập học nên kéo p xuống, trong khi tập kiểm cần kéo lên. Bảng cũ còn một đoạn
+phẳng rộng: p thô từ 0,311 tới 0,405 đều thành 0,306, nên what-if làm p thô đổi trong đoạn đó báo % không đổi. Bỏ bảng thì hai p thô khác
+nhau cho hai % khác nhau (test `test_hieu_chinh_mac_dinh_hai_p_tho_khac_nhau_cua_hu_day_ra_hai_phan_tram_khac_nhau`). Bảng PAV hũ thưa
+cũng có đoạn phẳng, rộng nhất 0,078 (p thô 0,8725 đến 0,951 đều thành 0,903).
 
 ### Số đo trên tập kiểm (seed 201–206)
 
@@ -184,7 +207,8 @@ Dải P10–P90 số dư hũ dày. Độ rộng tương đối là (P90 − P10)
 Ở lịch sử dài, dải chỉ dời xuống: hạ P10 và hạ P90 gần bằng nhau nên độ rộng gần như không đổi. Ở 47 ngày, P10 hạ nhiều hơn nên dải rộng thêm 18%.
 
 `p_shortfall` trên số dư kịch bản, các ca có hiện %. Bảng độ tin cậy: p dự báo TB → tần suất thật trong các ô 0–0,1 / 0,1–0,3 / 0,3–0,5 /
-0,5–0,7 / 0,7–0,9 / 0,9–1. Sai lệch lớn nhất tính trên ô có từ 30 ca.
+0,5–0,7 / 0,7–0,9 / 0,9–1. Sai lệch lớn nhất tính trên ô có từ 30 ca. Cột "sau" của hũ dày là số NẾU áp PAV; sản phẩm dùng cột "trước"
+vì PAV hũ dày không qua cổng.
 
 | Lịch sử | Nhóm | n | Brier trước → sau | Brier tần suất chung | Sai lệch lớn nhất trước → sau | Độ tin cậy trước | Độ tin cậy sau |
 |---|---|---|---|---|---|---|---|
@@ -207,10 +231,11 @@ Ngày cạn trên số dư kịch bản (trước khi đổi; sau khi bật, hũ
 
 ### Công tắc, tham số và đầu ra
 
-- `CALIBRATION["recalibrate"]` bật cả ba việc. Bảng nằm ở `dense.cqr` (danh sách hai bảng, mỗi bảng có `min_history_days`), `dense.p_isotonic`,
-  `sparse.p_isotonic`; số đo của cổng ở `meta.recalibration`. Mọi số do lệnh dưới đây sinh, không gõ tay. Tệp hiệu chỉnh cũ không có các khóa
-  này thì hành vi như trước #25; ghi đè từng phần được qua `ForecastConfig.extra["calibration"]` (ví dụ `{"recalibrate": false}`, hoặc
-  `{"dense": {"p_isotonic": null}}` để bỏ riêng PAV hũ dày).
+- `CALIBRATION["recalibrate"]` bật cả ba việc. Bảng nằm ở `dense.cqr` (danh sách hai bảng, mỗi bảng có `min_history_days`) và
+  `sparse.p_isotonic`; hũ dày không có `p_isotonic` vì không qua cổng PAV. Số đo của cổng ở `meta.recalibration` (`gate.pav` cho từng loại
+  hũ, `pav_kinds` là các loại giữ PAV). Mọi số do lệnh dưới đây sinh, không gõ tay. Tệp hiệu chỉnh cũ không có các khóa này thì hành vi như
+  trước #25; ghi đè từng phần được qua `ForecastConfig.extra["calibration"]` (ví dụ `{"recalibrate": false}`, hoặc
+  `{"sparse": {"p_isotonic": null}}` để bỏ PAV hũ thưa).
 - Tắt công tắc thì `forecast_user` cho kết quả từng hũ giống hệt bản trước #25 (test hồi quy
   `tests/unit/ml/test_ml_recalibration.py::test_tat_cong_tac_thi_dau_ra_giong_het_tep_hieu_chinh_cu`).
 - Bật thì `run.params["show_runout_date"]` là {mã hũ: có nêu ngày cạn không}: `false` cho hũ thưa, trừ hũ nghĩa vụ (ngày cạn của nó đi theo
@@ -218,8 +243,8 @@ Ngày cạn trên số dư kịch bản (trước khi đổi; sau khi bật, hũ
   `JarSummary` không đổi (cột của bảng `forecast_jar_summaries` giữ nguyên), nên bên dùng chưa đọc cờ thì vẫn hiện ngày như cũ.
 - PAV không áp khi p là tất định (số dư đã âm, hay không còn ngày nào trước kỳ lương) và không áp cho hũ nghĩa vụ. `p_shortfall_se` vẫn là
   sai số chuẩn Monte Carlo của p thô.
-- `params.calibration` của mỗi lần chạy nay mang theo các bảng: khoảng 12,5 KB mỗi lần chạy bảy hũ (trước 8 KB), dưới giới hạn 64 KB mỗi dòng
-  của Data API.
+- `params.calibration` của mỗi lần chạy mang theo các bảng, dưới giới hạn 64 KB mỗi dòng của Data API. Bỏ bảng PAV hũ dày làm `params`
+  nhỏ đi khoảng 1,9 KB: 14,3 KB → 12,4 KB (`json.dumps` của `run.params`, một lần chạy bảy hũ của persona tổng hợp).
 
 ### Chạy lại
 
@@ -227,22 +252,119 @@ Ngày cạn trên số dư kịch bản (trước khi đổi; sau khi bật, hũ
 uv run scripts/ml_backtest.py --write-recalibration --out recalibration.json --tables recalibration.md
 ```
 
-Lệnh học bảng, đo trước/sau, in ba bảng trên, rồi ghi bảng và công tắc vào `ml/yofina_ml/calibration/default.py` (giữ nguyên mọi khóa khác).
-Sau đó chạy `uv run ruff format ml/yofina_ml/calibration/default.py`. `--recalibrate` thay cho `--write-recalibration` để chỉ đo; `--quick` để kiểm
-khói (1 seed học, 2 seed kiểm, origin bước 28, khoảng 1 phút). Bản đầy đủ mất khoảng 24 phút trên máy dev (1.429 giây). Chạy lại
+Lệnh học bảng, đo trước/sau, in ba bảng trên và kết quả hai cổng, rồi ghi bảng (PAV chỉ của loại qua cổng) và công tắc vào
+`ml/yofina_ml/calibration/default.py` (giữ nguyên mọi khóa khác). Sau đó chạy `uv run ruff format ml/yofina_ml/calibration/default.py`.
+`--recalibrate` thay cho `--write-recalibration` để chỉ đo; `--quick` để kiểm khói (1 seed học, 2 seed kiểm, origin bước 28, khoảng 2 phút).
+Bản đầy đủ mất khoảng 21 phút trên máy dev (1.264 giây ở lần sinh lại theo cổng PAV mới; lần đầu 1.429 giây). Kết quả tất định: lần sinh lại
+cho đúng các số của lần đầu, chỉ khác phần cổng. Chạy lại
 `--write-calibration` của phase 2 (đổi `rho`/`level_sigma`) thì bảng hiệu chỉnh lại không còn đúng: lệnh đó bỏ bảng và tắt công tắc, cần chạy
 lại `--write-recalibration` sau.
 
 ### Điều chưa xử lý
 
-- **PAV hũ dày không chuyển được giữa hai tập seed.** Trên tập học, ô 0,3 đến 0,5 của hũ dày dự báo cao hơn tần suất thật (0,40 → 0,37);
-  trên tập kiểm thì thấp hơn (0,40 → 0,46). PAV học theo tập học nên kéo p xuống, và sai lệch của ô này ở 120 ngày tăng từ 0,06 lên 0,10.
-  Brier gần như không đổi. Bảng còn có một đoạn phẳng rộng: p thô từ 0,311 tới 0,405 đều thành 0,306, nên một what-if làm p thô đổi trong
-  đoạn đó sẽ báo % không đổi. Nếu chủ dự án muốn, bỏ riêng PAV hũ dày bằng `{"dense": {"p_isotonic": null}}`; cách bền hơn là học trên
-  nhiều persona hơn.
+- **`p_shortfall` hũ dày vẫn thấp hơn tần suất thật ở giữa thang.** Sau khi bỏ PAV, ở 120 ngày ô 0,3 đến 0,5 là 0,40 so với 0,46 và ô 0,5
+  đến 0,7 là 0,60 so với 0,67 (sai lệch lớn nhất 0,070). PAV học trên seed 101–104 kéo p theo chiều ngược lại (mục "Cổng PAV theo loại
+  hũ"). Cách bền hơn là học trên nhiều persona hơn, hay gộp cả hai tập seed rồi kiểm trên một tập thứ ba.
 - Ở 47 ngày, dải hũ dày rộng thêm 18%; thật dưới P10 0,073 và thật trên P90 0,115, cả hai nằm sát mép [0,075; 0,125].
 - Hũ có 48 đến 119 ngày lịch sử dùng bảng học ở 47 ngày. Bảng này hạ P10 nhiều hơn, tức thận trọng ở đuôi tốn kém.
 - Hũ nghĩa vụ không qua PAV và vẫn nêu ngày cạn. Độ phủ 0,728 của hũ này (mục trên) chưa sửa.
-- Persona demo không có tương lai thật, nên chưa đo được ảnh hưởng trên chính `minh`. Bật công tắc làm đổi dải của hũ Ăn uống và % ở cảnh 1;
-  ngày cạn 23/11 (theo P50) không đổi. Cần đi lại cảnh 1 sau khi deploy Lambda dự báo.
+- Persona demo không có tương lai thật, nên chưa đo được ảnh hưởng trên chính `minh`. Bật công tắc làm đổi dải của hũ Ăn uống ở cảnh 1 và %
+  của các hũ thưa có hiện % (qua PAV); % của hũ Ăn uống là p thô như trước #25 vì PAV hũ dày đã bỏ. Ngày cạn 23/11 (theo P50) không đổi. Cần
+  đi lại cảnh 1 sau khi deploy Lambda dự báo.
+- Dữ liệu tổng hợp hai họ bộ sinh; chưa có dữ liệu thật để kiểm.
+
+## K5: cảnh báo hũ cạn (#26)
+
+Ngày đo: 2026-11-25. Issue #26 (AU-10; ML-01, ML-02 trong [kiểm toán ML](2026-11-25-audit-ml-forecasting.md) §3). Dữ liệu tổng hợp, chạy
+offline trên CPU, không gọi AWS. Đo SAU hiệu chỉnh hiện hành: CQR cho dải hũ dày, PAV chỉ cho hũ thưa (mục "Hiệu chỉnh CQR và PAV").
+K5 của [ba/08 §3.5](../ba/08-kpi-kinh-doanh.md): cảnh báo trước ít nhất 7 ngày, đúng từ 70%.
+
+### Kết luận ngắn
+
+- **Hũ dày, 120 ngày lịch sử** (như `minh`): cảnh báo đúng trong ±3 ngày **0,572**, chưa đạt mục tiêu 0,70. Sai TB 3,47 ngày. Trung vị
+  số ngày báo trước của cảnh báo đúng là **13 ngày**, đạt mức 7 ngày. Seasonal naive 0,441, burn-rate 0,490.
+- **Định nghĩa 2**, cảnh báo đúng vì hũ cạn thật trước ngày lương: hũ dày **0,816**, seasonal naive 0,663, burn-rate 0,686.
+- **Hũ thưa** (nay không hiện ngày cạn): ±3 ngày 0,287, sai TB 6,24 ngày; định nghĩa 2 là 0,654. Một ngày cụ thể ở hũ thưa chỉ đúng khoảng
+  một phần tư đến ba phần mười số lần (0,244 đến 0,301 theo độ dài lịch sử), nên việc chỉ báo "có thể cạn trước ngày lương" (#25) có cơ sở.
+- Sản phẩm hơn cả hai baseline ở cả hai định nghĩa, ở mọi độ dài lịch sử và cả hai loại hũ. Đổi lại nó báo ít hơn (hũ dày 120 ngày: 2.445
+  cảnh báo so với 3.441 và 3.525), nên bắt được ít ca cạn trước lương hơn (0,696 so với 0,796 và 0,843).
+
+### Phương pháp
+
+Luật đo viết trong docstring của `ml/yofina_ml/backtest/k5.py` trước khi chạy tập kiểm. Đây là phép B của kiểm toán §3.2, đưa vào repo.
+
+- **Vì sao không đo trên persona demo**: `minh`, `lan`, `vy` dựng ngược từ ngày neo nên không có tương lai thật; số dư thật của bộ sinh tổng
+  hợp hiếm khi âm trước kỳ lương (kiểm toán §3.1). Vì vậy dùng số dư kịch bản, như phép đo PAV ở mục trên.
+- **Mẫu**: 36 persona giữ ra ngoài (seed 201–206, hai họ bộ sinh, mọi cấu hình). Origin từ ngày 120 bước 7, chân trời 30 ngày, lịch sử
+  cắt còn 47 ngày, 120 ngày và lịch sử đủ. Lấy mọi hũ chi tiêu và tiết kiệm có chi TB 28 ngày dương và còn ít nhất 8 ngày trước kỳ lương
+  (để báo trước 7 ngày là làm được); bỏ hũ nghĩa vụ và hũ khởi đầu lạnh.
+- **Số dư kịch bản**: b = α × chi TB 28 ngày × w, α thuộc 0,6 / 0,8 / 1,0 / 1,25 / 1,6, w là số ngày trước kỳ lương; không tiền vào, không
+  nghĩa vụ. Ngày cạn thật là ngày đầu tiên b trừ chi thật cộng dồn ≤ 0 trong 30 ngày.
+- **Ba phương pháp**, cùng kịch bản. Sản phẩm: biên của `fit_jar`, Monte Carlo với đúng hạt và `rho`/`level_sigma` của `forecast_user`,
+  p qua PAV như `forecast_user`, ngày cạn dự báo là ngày đầu số dư P50 ≤ 0. Seasonal naive: như trên với `extra.model = "seasonal_naive"`,
+  p thô. Burn-rate: số dư b − chi TB 28 ngày × t, ngày cạn là ngày đầu số đó ≤ 0, không có xác suất.
+- **Cảnh báo**: sản phẩm và seasonal naive báo khi p ≥ 0,2 (trạng thái Sát hoặc Hụt) VÀ ngày cạn dự báo trước ngày lương; burn-rate báo
+  khi ngày cạn dự báo trước ngày lương. Hũ thưa tính cùng luật để đối chiếu, dù giao diện không hiện ngày của nó.
+- **Định nghĩa 1**: cảnh báo có ngày cạn thật cách ngày dự báo không quá ±3 ngày, tính trên mọi cảnh báo (thật không cạn trong 30 ngày là
+  sai). Sai TB tính trên cảnh báo có ngày cạn thật. **Định nghĩa 2**: cảnh báo mà hũ cạn thật trước ngày lương.
+- **Báo trước**: số ngày từ lúc báo (origin) tới ngày cạn thật; trung vị trên các cảnh báo đúng của từng định nghĩa. Mỗi origin tính riêng,
+  nên đây là khoảng báo trước tại một lần báo, không phải từ lần báo đầu tiên của một chuỗi ngày.
+- **Bắt được**: trong các ca hũ cạn thật trước ngày lương, tỷ lệ có cảnh báo.
+
+### Số đo
+
+| Lịch sử | Nhóm | Phương pháp | Kịch bản | Cảnh báo | Đ1: đúng ±3 ngày | Sai TB (ngày) | Báo trước trung vị, Đ1 (ngày) | Đ2: cạn trước lương | Báo trước trung vị, Đ2 (ngày) | Bắt được |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 47 | hũ dày | sản phẩm | 5835 | 2475 | 0,549 | 3,65 | 13 | 0,789 | 12 | 0,700 |
+| 47 | hũ dày | seasonal naive | 5835 | 3346 | 0,409 | 4,99 | 12 | 0,641 | 13 | 0,769 |
+| 47 | hũ dày | burn-rate | 5835 | 3501 | 0,488 | 3,98 | 13 | 0,675 | 13 | 0,847 |
+| 47 | hũ thưa | sản phẩm | 10625 | 3779 | 0,244 | 6,64 | 12 | 0,565 | 9 | 0,564 |
+| 47 | hũ thưa | seasonal naive | 10625 | 5864 | 0,181 | 8,08 | 9 | 0,424 | 10 | 0,657 |
+| 47 | hũ thưa | burn-rate | 10625 | 6375 | 0,202 | 7,18 | 12 | 0,431 | 9 | 0,726 |
+| **120** | **hũ dày** | **sản phẩm** | 5875 | 2445 | **0,572** | 3,47 | 13 | **0,816** | 12 | 0,696 |
+| 120 | hũ dày | seasonal naive | 5875 | 3441 | 0,441 | 4,67 | 12 | 0,663 | 13 | 0,796 |
+| 120 | hũ dày | burn-rate | 5875 | 3525 | 0,490 | 3,99 | 13 | 0,686 | 13 | 0,843 |
+| **120** | **hũ thưa** | **sản phẩm** | 10585 | 3102 | **0,287** | 6,24 | 12 | **0,654** | 9 | 0,547 |
+| 120 | hũ thưa | seasonal naive | 10585 | 6286 | 0,189 | 7,89 | 9 | 0,440 | 9 | 0,746 |
+| 120 | hũ thưa | burn-rate | 10585 | 6351 | 0,200 | 7,20 | 12 | 0,424 | 9 | 0,726 |
+| đủ | hũ dày | sản phẩm | 5825 | 2387 | 0,570 | 3,57 | 13 | 0,819 | 12 | 0,688 |
+| đủ | hũ dày | seasonal naive | 5825 | 3393 | 0,445 | 4,62 | 12 | 0,667 | 13 | 0,796 |
+| đủ | hũ dày | burn-rate | 5825 | 3495 | 0,491 | 3,98 | 13 | 0,686 | 12 | 0,842 |
+| đủ | hũ thưa | sản phẩm | 10635 | 3078 | 0,301 | 6,13 | 12 | 0,671 | 9 | 0,553 |
+| đủ | hũ thưa | seasonal naive | 10635 | 6427 | 0,194 | 7,77 | 9 | 0,446 | 9 | 0,768 |
+| đủ | hũ thưa | burn-rate | 10635 | 6381 | 0,201 | 7,18 | 12 | 0,425 | 9 | 0,727 |
+
+"Kịch bản" là số (persona, origin, hũ, α); "Cảnh báo" là số kịch bản phương pháp đó báo. Tỷ lệ Đ1, Đ2 chia cho số cảnh báo; "Bắt được"
+chia cho số kịch bản hũ cạn thật trước ngày lương.
+
+Đọc bảng:
+
+- Định nghĩa 2 cao hơn định nghĩa 1 vì nó không đòi đúng ngày: cảnh báo đúng khi hũ cạn bất kỳ ngày nào trước lương. Ngược lại, một cảnh
+  báo đúng ngày (±3) mà hũ cạn ngay sau ngày lương thì đúng theo định nghĩa 1 nhưng sai theo định nghĩa 2.
+- Hũ dày ở 47 ngày kém 120 ngày một chút (0,549 so với 0,572); từ 120 ngày trở lên gần như không đổi (0,570 ở lịch sử đủ).
+- Burn-rate bắt được nhiều nhất vì với số dư kịch bản này nó luôn báo khi α ≤ 1 (chi TB × w ≥ b), nhưng 31% cảnh báo của nó là hũ
+  không cạn trước lương (hũ dày, 120 ngày), so với 18% của sản phẩm.
+- So với số của kiểm toán §3.2 (lịch sử đủ, origin từ ngày 90): sản phẩm hũ dày 0,565 → 0,570, seasonal naive 0,458 → 0,445, burn-rate
+  0,469 → 0,491, định nghĩa 2 (một trừ "báo mà không cạn trước lương") 0,841 → 0,819. Chênh lệch do tập origin (từ ngày 120 ở đây) và mã
+  đo viết lại; script tạm của kiểm toán không còn nên không so được từng dòng. Kết luận không đổi: chưa đạt 0,70 ở định nghĩa 1, hơn hai
+  baseline, báo trước đủ 7 ngày.
+
+### Chạy lại
+
+```powershell
+uv run scripts/ml_backtest.py --k5 --out k5.json --tables k5.md
+```
+
+Lệnh in bảng trên và ghi JSON (`summary` theo độ dài, loại hũ, phương pháp). Đo với hiệu chỉnh hiện hành trong `calibration/default.py`,
+nên nếu sinh lại bảng thì chạy sau `--write-recalibration` (đặt cả hai cờ trong một lệnh cũng được, K5 chạy sau khi ghi). `--quick` để kiểm
+khói (2 seed, origin bước 28, khoảng 25 giây). Bản đầy đủ mất khoảng 5,5 phút trên máy dev (328 giây, 148.140 dòng). Kết quả tất định theo
+hạt `seed × 1000 + origin`.
+
+### Điều chưa xử lý
+
+- Số tuyệt đối phụ thuộc lưới α của số dư kịch bản và luật "cảnh báo" (p ≥ 0,2 và có ngày cạn trước lương). Phép so với baseline thì công
+  bằng vì cùng kịch bản.
+- Định nghĩa "đúng" của ba/08 §3.5 còn vế "hoặc người dùng đã hành động để tránh", không đo offline được, và định nghĩa vẫn chờ chủ dự án
+  duyệt (E-02).
+- Chưa đo hũ nghĩa vụ (ngày cạn đi theo lịch nghĩa vụ đã biết).
 - Dữ liệu tổng hợp hai họ bộ sinh; chưa có dữ liệu thật để kiểm.

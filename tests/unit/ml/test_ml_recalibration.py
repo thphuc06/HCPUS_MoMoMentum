@@ -10,6 +10,7 @@ from ml_helpers import inputs, jar, with_config
 
 from yofina_ml import contract
 from yofina_ml.api import forecast_user, runout_date_shown, update_forecast
+from yofina_ml.backtest import recalibrate as recal
 from yofina_ml.calibration import KINDS, calibration_from_dict
 from yofina_ml.calibration import default as _default
 from yofina_ml.recalibration import CQRBand, apply_cqr, fit_cqr, fit_isotonic
@@ -51,6 +52,20 @@ def test_pav_khong_cham_so_du_am_da_hut_chac_chan():
     inp = inputs((jar("an_uong", n=60, seed=1, balance=-50_000),))
     s = _run(inp, True, dense={"p_isotonic": {"x": [0.0, 1.0], "y": [0.3, 0.3]}}).jars[0].summary
     assert s.p_shortfall == 1.0 and s.status == "short"
+
+
+def test_hieu_chinh_mac_dinh_hai_p_tho_khac_nhau_cua_hu_day_ra_hai_phan_tram_khac_nhau():
+    # Bảng PAV hũ dày của lần sinh đầu (#25) có đoạn phẳng: p thô 0,311 đến 0,405 đều thành 0,306, nên what-if đổi số dư
+    # trong đoạn đó báo % không đổi. Hiệu chỉnh mặc định (tệp sinh lại) không được làm mất khác biệt này.
+    raw, pub = [], []
+    for balance in (560_000, 580_000):
+        inp = inputs((jar("an_uong", n=150, seed=1, balance=balance),))
+        raw.append(_run(inp, False).jars[0].summary.p_shortfall)
+        on = _run(inp, True).jars[0].summary
+        assert on.series_kind == "dense"
+        pub.append(on.p_shortfall)
+    assert 0.311 <= raw[1] < raw[0] <= 0.405
+    assert pub[1] < pub[0]
 
 
 # --- CQR bất đối xứng ----------------------------------------------------------------------------------------
@@ -219,3 +234,86 @@ def test_hieu_chinh_khu_hoi_khoa_moi_va_tep_cu_thieu_khoa_thi_nhu_truoc():
     over = calibration_from_dict({"dense": {"cqr": None}}, base=cal)
     assert over.recalibrate is True and over.dense.cqr is None
     assert over.dense.p_isotonic == cal.dense.p_isotonic and over.sparse == cal.sparse
+
+
+# --- cổng PAV theo từng loại hũ (backtest) --------------------------------------------------------------------
+#: dải hũ dày sau CQR qua mọi điều kiện của công tắc, để test chỉ xét phần PAV
+_BANDS_OK = {
+    "47": {"cov30": 0.81},
+    "120": {
+        "cov30": 0.80,
+        "cov30_by_family": {"hurdle_lognormal": 0.79, "shopping_sessions": 0.81},
+        "below_p10_30": 0.10,
+        "above_p90_30": 0.10,
+    },
+    "full": {"cov30": 0.79},
+}
+
+
+def _sf(cells: dict[str, dict[str, tuple[float | None, float]]]) -> dict:
+    """{độ dài: {loại hũ: (sai lệch lớn nhất, Brier)}} theo dạng của `shortfall_summary`."""
+    return {
+        length: {k: {"max_gap": g, "brier": b} for k, (g, b) in kinds.items()}
+        for length, kinds in cells.items()
+    }
+
+
+def test_cong_pav_bo_loai_hu_lam_tang_sai_lech_va_giu_loai_tot_hon():
+    # số của tập kiểm #25: hũ dày ở 120 ngày sai lệch 0,070 -> 0,100 dù Brier giảm nhẹ; hũ thưa 0,049 -> 0,025
+    before = _sf({
+        "47": {"dense": (0.070, 0.1643)},
+        "120": {"dense": (0.070, 0.1609), "sparse": (0.049, 0.1711)},
+        "full": {"dense": (0.090, 0.1653), "sparse": (0.044, 0.1666)},
+    })  # fmt: skip
+    after = _sf({
+        "47": {"dense": (0.053, 0.1638)},
+        "120": {"dense": (0.100, 0.1607), "sparse": (0.025, 0.1701)},
+        "full": {"dense": (0.092, 0.1651), "sparse": (0.022, 0.1660)},
+    })  # fmt: skip
+    g = recal.gate(_BANDS_OK, before, after)
+    assert g["ok"] is True  # công tắc (CQR) vẫn bật
+    assert g["pav"]["dense"]["ok"] is False
+    assert g["pav"]["sparse"]["ok"] is True
+
+
+def test_cong_pav_bo_loai_hu_lam_tang_brier_hoac_thieu_so_sai_lech():
+    # hũ dày: sai lệch giảm nhưng Brier tăng; hũ thưa: không ô nào đủ 30 ca nên không có sai lệch để so
+    before = _sf({"120": {"dense": (0.070, 0.1600), "sparse": (None, 0.1700)}})
+    after = _sf({"120": {"dense": (0.030, 0.1601), "sparse": (None, 0.1600)}})
+    g = recal.gate(_BANDS_OK | {"47": {"cov30": 0.80}}, before, after)
+    assert g["pav"]["dense"]["ok"] is False
+    assert g["pav"]["sparse"]["ok"] is False
+
+
+def test_tep_hieu_chinh_sinh_lai_bo_bang_pav_cua_loai_khong_qua_cong_va_giu_cqr():
+    iso = {"x": [0.0, 1.0], "y": [0.1, 0.9]}
+    cqr = [
+        {"h": [1, 30], "lo": [0.1, 0.2], "hi": [0.0, -0.1], "scale_days": 28, "min_history_days": 0}
+    ]
+    sf = _sf({"120": {"dense": (0.07, 0.16), "sparse": (0.05, 0.17)}})
+    band = {k: 0.1 for k in ("cov30", "below_p10_30", "above_p90_30", "width30")}
+    result = {
+        "method": "thử",
+        "calibration_seeds": [101],
+        "heldout_seeds": [201],
+        "tables": {"dense": {"cqr": cqr, "p_isotonic": iso}, "sparse": {"p_isotonic": iso}},
+        "gate": {
+            "checks": {},
+            "ok": True,
+            "pav": {"dense": {"checks": {}, "ok": False}, "sparse": {"checks": {}, "ok": True}},
+        },
+        "bands": {"before": {"120": band}, "after": {"120": band}},
+        "shortfall": {"before": sf, "after": sf},
+    }
+    # tệp hiện hành còn bảng PAV hũ dày của lần sinh trước: phải bị bỏ, không giữ lại bảng cũ
+    current = {
+        "version": "v",
+        "dense": {"rho": 0.0, "p_isotonic": {"x": [0.0, 1.0], "y": [0.3, 0.3]}},
+        "sparse": {"rho": 0.0},
+        "cold_start": {"rho": 0.8},
+    }
+    payload = recal.calibration_payload(current, result)
+    assert payload["recalibrate"] is True
+    assert payload["dense"]["cqr"] == cqr and "p_isotonic" not in payload["dense"]
+    assert payload["sparse"]["p_isotonic"] == iso
+    assert calibration_from_dict(payload).dense.p_isotonic is None

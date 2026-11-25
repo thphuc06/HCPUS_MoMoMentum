@@ -17,8 +17,8 @@ import numpy as np
 
 from yofina_ml.backtest import calibrate as cal_mod
 from yofina_ml.backtest import evaluate as ev
+from yofina_ml.backtest import k5, report, studies
 from yofina_ml.backtest import recalibrate as recal
-from yofina_ml.backtest import report, studies
 from yofina_ml.backtest.common import CAL_SEEDS, EVAL_SEEDS, HORIZON, personas
 from yofina_ml.calibration import default as calibration_default
 from yofina_ml.calibration import default_calibration
@@ -240,6 +240,12 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="như --recalibrate rồi ghi bảng và công tắc recalibrate vào calibration/default.py",
     )
+    ap.add_argument(
+        "--k5",
+        action="store_true",
+        help="K5 (#26): cảnh báo hũ cạn đúng +-3 ngày và đúng vì cạn trước lương, so seasonal naive và burn-rate, "
+        "trên seed giữ ra ngoài với hiệu chỉnh hiện hành (chạy sau --write-recalibration nếu có cả hai)",
+    )
     ap.add_argument("--all", action="store_true", help="mọi khảo sát trừ StatsForecast")
     ap.add_argument("--paths", type=int, default=2000, help="số đường Monte Carlo khi đo")
     ap.add_argument("--cal-paths", type=int, default=1500)
@@ -253,7 +259,7 @@ def main(argv: list[str] | None = None) -> None:
     chosen = [
         args.calibrate, args.write_calibration, args.evaluate, args.shortfall,
         args.short_history, args.ablation, args.statsforecast, args.timing, args.transfer,
-        args.recalibrate, args.write_recalibration,
+        args.recalibrate, args.write_recalibration, args.k5,
     ]  # fmt: skip
     if not any(chosen):
         ap.error("chọn ít nhất một việc (--all, --evaluate, ...)")
@@ -279,6 +285,10 @@ def main(argv: list[str] | None = None) -> None:
             report.write_default_calibration(CALIBRATION_PATH, payload)
             importlib.reload(calibration_default)  # các bước đo sau dùng bản vừa ghi
             print(f"[hiệu chỉnh lại] đã ghi {CALIBRATION_PATH}", flush=True)
+    if args.k5:
+        k = k5.run(quick=args.quick, n_paths=args.paths)
+        results["k5"] = k
+        md += ["### K5: cảnh báo hũ cạn (#26)", k5.render(k), ""]
     if args.evaluate:
         data, _rows = run_evaluation(args)
         results["evaluate"] = data

@@ -25,7 +25,12 @@ dài kia chỉ phải không trượt khỏi dải [0,75; 0,85]. Origin chung t�
 
 Cổng bật `recalibrate` (`gate`), đọc trên tập kiểm, hũ dày, ngày 30: ở 120 ngày độ phủ P10-P90 trong [0,75; 0,85] ở số gộp và từng
 họ, thật dưới P10 và thật trên P90 mỗi phía trong [0,075; 0,125] (10% +- 2,5 điểm, tức nửa dải của độ phủ); ở 47 ngày và lịch sử
-đủ độ phủ gộp vẫn trong [0,75; 0,85]; Brier của p sau PAV không cao hơn trước ở cả hũ dày và hũ thưa (120 ngày).
+đủ độ phủ gộp vẫn trong [0,75; 0,85].
+
+Cổng PAV xét TỪNG loại hũ (`pav_gate`, viết trước khi chạy lại tập kiểm): bảng PAV của loại k chỉ vào hiệu chỉnh khi ở MỌI độ dài
+lịch sử của tập kiểm có ca hiện % của k, PAV không làm tăng sai lệch lớn nhất của bảng độ tin cậy và không làm tăng Brier. Loại
+không qua thì không có `p_isotonic` (p thô đi thẳng ra), công tắc và CQR không đổi. Lý do: PAV hũ dày học trên seed 101-104 không
+chuyển được sang seed 201-206 (ô 0,3-0,5 lệch ngược chiều giữa hai tập; backtest-final.md mục "Hiệu chỉnh CQR và PAV").
 """
 
 from __future__ import annotations
@@ -320,10 +325,33 @@ def _in(v: float | None, band: tuple[float, float]) -> bool:
     return v is not None and band[0] <= v <= band[1]
 
 
+def pav_gate(sf_before: dict[str, Any], sf_after: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Luật giữ bảng PAV của từng loại hũ (docstring module), viết trước khi chạy tập kiểm: loại k giữ PAV khi ở MỌI độ dài
+    lịch sử của tập kiểm có ca hiện % của k, sai lệch lớn nhất của bảng độ tin cậy sau PAV không cao hơn trước VÀ Brier sau
+    không cao hơn trước (so ở độ chính xác của `shortfall_summary`: sai lệch 3 chữ số, Brier 6 chữ số). Thiếu số để so (không
+    ô nào đủ 30 ca, hay không độ dài nào có ca hiện %) thì không giữ. {loại: {"checks": {...}, "ok": bool}}."""
+    out: dict[str, dict[str, Any]] = {}
+    for kind in SHORT_KINDS:
+        checks: dict[str, bool] = {}
+        for length, cells in sf_after.items():
+            if kind not in cells:
+                continue
+            b, a = sf_before[length][kind], cells[kind]
+            checks[f"sai_lech_khong_tang_{length}"] = (
+                a["max_gap"] is not None
+                and b["max_gap"] is not None
+                and a["max_gap"] <= b["max_gap"]
+            )
+            checks[f"brier_khong_tang_{length}"] = a["brier"] <= b["brier"]
+        out[kind] = {"checks": checks, "ok": bool(checks) and all(checks.values())}
+    return out
+
+
 def gate(
     after: dict[str, Any], sf_before: dict[str, Any], sf_after: dict[str, Any]
 ) -> dict[str, Any]:
-    """Luật bật công tắc (docstring module). Trả từng điều kiện và kết luận `ok`."""
+    """Luật bật công tắc và luật PAV theo loại hũ (docstring module). Công tắc (`ok`) chỉ xét dải hũ dày sau CQR; PAV xét
+    riêng từng loại (`pav`, xem `pav_gate`), loại không qua thì bỏ bảng PAV, công tắc vẫn theo `ok`."""
     g = str(GATE_LENGTH)
     a = after[g]
     checks = {
@@ -332,11 +360,8 @@ def gate(
         "duoi_p10_120": _in(a["below_p10_30"], TAIL_BAND),
         "tren_p90_120": _in(a["above_p90_30"], TAIL_BAND),
         "cov30_do_dai_khac": all(_in(c["cov30"], PROB_BAND) for k, c in after.items() if k != g),
-        "brier_khong_tang_120": all(
-            sf_after[g][k]["brier"] <= sf_before[g][k]["brier"] for k in SHORT_KINDS
-        ),
     }
-    return {"checks": checks, "ok": all(checks.values())}
+    return {"checks": checks, "ok": all(checks.values()), "pav": pav_gate(sf_before, sf_after)}
 
 
 def run(*, quick: bool = False, n_paths: int = 2000, progress: bool = True) -> dict[str, Any]:
@@ -375,13 +400,18 @@ def run(*, quick: bool = False, n_paths: int = 2000, progress: bool = True) -> d
 
 
 def calibration_payload(current: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-    """Bản `CALIBRATION` mới: giữ nguyên mọi thứ, thêm bảng CQR/PAV vừa học, đặt `recalibrate` theo cổng, ghi số đo vào meta."""
+    """Bản `CALIBRATION` mới: giữ nguyên mọi thứ, thêm bảng CQR vừa học và bảng PAV của các loại hũ qua `pav_gate` (loại không
+    qua thì không có `p_isotonic`, kể cả bảng của lần sinh trước), đặt `recalibrate` theo cổng, ghi số đo vào meta."""
     payload = copy.deepcopy(current)
     payload["recalibrate"] = bool(result["gate"]["ok"])
+    pav = result["gate"].get("pav", {})
     for kind in (*SHORT_KINDS, "cold_start"):
         payload[kind].pop("p_isotonic", None)
         payload[kind].pop("cqr", None)
-        payload[kind].update(copy.deepcopy(result["tables"].get(kind, {})))
+        tables = copy.deepcopy(result["tables"].get(kind, {}))
+        if not pav.get(kind, {}).get("ok", False):
+            tables.pop("p_isotonic", None)
+        payload[kind].update(tables)
     g = str(GATE_LENGTH)
     payload.setdefault("meta", {})["recalibration"] = {
         k: result[k] for k in ("method", "calibration_seeds", "heldout_seeds")
@@ -401,6 +431,11 @@ def calibration_payload(current: dict[str, Any], result: dict[str, Any]) -> dict
             side: {k: result["shortfall"][side][g][k]["brier"] for k in SHORT_KINDS}
             for side in ("before", "after")
         },
+        "max_gap": {
+            side: {k: result["shortfall"][side][g][k]["max_gap"] for k in SHORT_KINDS}
+            for side in ("before", "after")
+        },
+        "pav_kinds": [k for k in SHORT_KINDS if pav.get(k, {}).get("ok", False)],
     }
     return payload
 
@@ -460,7 +495,14 @@ def render(result: dict[str, Any]) -> str:
             lines.append(
                 f"| {length} | {kind} | {c['n_pred']} | {_f(c['within3'])} | {_f(c['mae_days'], 2)} |"
             )
-    lines += ["", f"Cổng: {result['gate']}"]
+    pav = result["gate"].get("pav", {})
+    kept = [k for k in SHORT_KINDS if pav.get(k, {}).get("ok", False)]
+    lines += [
+        "",
+        f"Cổng công tắc: {result['gate']['checks']} -> ok = {result['gate']['ok']}",
+        f"Cổng PAV theo loại hũ: {pav}",
+        f"Giữ PAV cho: {', '.join(kept) if kept else 'không loại nào'} (cột 'sau' của loại bị bỏ là số nếu áp PAV)",
+    ]
     return "\n".join(lines)
 
 
@@ -470,6 +512,7 @@ __all__ = [
     "collect",
     "fit_tables",
     "gate",
+    "pav_gate",
     "render",
     "run",
 ]
