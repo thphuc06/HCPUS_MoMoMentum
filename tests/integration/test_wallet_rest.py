@@ -11,15 +11,18 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import demo_balances, demo_jars, flow
+from conftest import demo_balances, demo_jars, demo_wallet, flow
 
 from yofina_core.blocks import block_to_wire, build_confirm_action, parse_block
 
 pytestmark = pytest.mark.usefixtures("fresh")
 
-# ví demo của minh sau đặt lại (bộ hũ demo, issue #39: Hóa đơn gộp vào Nghĩa vụ, Du lịch là hũ goal `muc_tieu`, thêm Đầu tư 0 ₫),
-# suy từ bộ sinh persona qua cùng ánh xạ mã hũ của đặt lại; tổng vẫn 7.730.000 ₫
+# ví demo của minh sau đặt lại (bộ hũ demo, issue #39: Chi hằng ngày cạnh các hũ tự thêm, Hóa đơn gộp vào Nghĩa vụ, Du lịch là hũ goal
+# `muc_tieu`, thêm Đầu tư 0 ₫), suy từ bộ sinh persona qua cùng ánh xạ mã hũ của đặt lại; tổng là 7.730.000 ₫ của ví persona cộng số dư
+# hũ Chi hằng ngày trong khối `demo_jars` của spec, đọc từ bộ sinh, không chép số
 MINH_BALANCES = demo_balances("minh")
+MINH_JARS_TOTAL = sum(MINH_BALANCES.values())
+MINH_TOTAL = MINH_JARS_TOTAL + sum(demo_wallet("minh").system_balances.values())  # cộng Tiền vào khác, Chưa phân loại
 
 
 def jars(api, who):
@@ -60,8 +63,8 @@ def test_moi_endpoint_doc_dung_schema_cua_openapi(api, schema_validator):
 def test_tong_quan_minh_dung_so_va_thu_chua_co_du_bao(api):
     ov = get(api, "minh", "/overview")
     assert ov["balance"] == {
-        "total_vnd": 7_900_000,
-        "jars_total_vnd": 7_730_000,
+        "total_vnd": MINH_TOTAL,
+        "jars_total_vnd": MINH_JARS_TOTAL,
         "other_income_vnd": 350_000,
         "unclassified_vnd": -180_000,
     }
@@ -85,7 +88,7 @@ def test_tong_quan_minh_dung_so_va_thu_chua_co_du_bao(api):
         assert all("status" not in j for j in ov["jars"])
     # GET /jars giữ hình dạng phase 1: các hũ của ví demo, không có hũ hệ thống
     status, body = api("minh", "GET", "/jars")
-    assert status == 200 and len(body["jars"]) == len(MINH_BALANCES) and body["jars_total_vnd"] == 7_730_000
+    assert status == 200 and len(body["jars"]) == len(MINH_BALANCES) and body["jars_total_vnd"] == MINH_JARS_TOTAL
 
 
 def test_du_bao_chua_co_thi_tra_503_forecast_unavailable_dung_hinh_dang(api):
@@ -145,7 +148,7 @@ def test_chi_200k_tu_an_uong_doi_so_du_ngay(api, schema_validator):
         ov["recent_transactions"][0]["amount_vnd"] == -200_000
         and ov["recent_transactions"][0]["merchant"] == "Cơm tấm Cô Ba"
     )
-    assert ov["balance"]["total_vnd"] == 7_700_000
+    assert ov["balance"]["total_vnd"] == MINH_TOTAL - 200_000
     schema_validator.openapi("OverviewResponse", ov)
 
 
@@ -424,7 +427,10 @@ def test_save_jars_sua_ty_le_va_bao_ve_hu_con_tien(api):
         }
         for j in cur
     ]
-    body[0]["split_percent"] = body[0]["split_percent"] - 5
+    # hũ Ăn uống (không phải hũ đầu tiên: ví demo từ 26/11 mở đầu bằng Chi hằng ngày 3%)
+    food = next(j for j in body if j["code"] == "an_uong")
+    food_before = food["split_percent"]
+    food["split_percent"] = food_before - 5
     body.append(
         {
             "name": "Học tiếng Anh",
@@ -439,7 +445,8 @@ def test_save_jars_sua_ty_le_va_bao_ve_hu_con_tien(api):
     assert flow(api, "khoa", "save_jars", {"jars": body})[0] == 200
     after = {j["code"]: j for j in get(api, "khoa", "/overview")["jars"]}
     assert (
-        after["hoc_tieng_anh"]["goal_vnd"] == 3_000_000 and after["an_uong"]["split_percent"] == 25
+        after["hoc_tieng_anh"]["goal_vnd"] == 3_000_000
+        and after["an_uong"]["split_percent"] == food_before - 5
     )
     _status, err = flow(
         api,
@@ -447,13 +454,13 @@ def test_save_jars_sua_ty_le_va_bao_ve_hu_con_tien(api):
         "save_jars",
         {
             "jars": [
-                *[j for j in body if j.get("code") != "du_phong"][:-1],
-                {**body[0], "split_percent": 30},
+                *[j for j in body if j.get("code") not in ("du_phong", "an_uong")][:-1],
+                {**food, "split_percent": food_before},
             ]
         },
     )
     assert code(err) in ("JAR_PROTECTED", "PARAMS_INVALID"), err
-    body[0]["split_percent"] = 90
+    food["split_percent"] = 90
     assert code(flow(api, "khoa", "save_jars", {"jars": body})[1]) == "PARAMS_INVALID"
 
 

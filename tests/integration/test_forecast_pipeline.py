@@ -19,8 +19,9 @@ from measure_wallet import lambda_side
 
 pytestmark = pytest.mark.usefixtures("fresh")
 
-# số dư ví demo của minh sau đặt lại (issue #39: Hóa đơn gộp vào Nghĩa vụ, Du lịch là hũ goal `muc_tieu`, thêm Đầu tư 0 ₫), suy từ
-# bộ sinh persona qua cùng ánh xạ mã hũ của đặt lại; tổng 7.730.000 ₫ như bảng số Figma
+# số dư ví demo của minh sau đặt lại (issue #39: Chi hằng ngày cạnh các hũ tự thêm, Hóa đơn gộp vào Nghĩa vụ, Du lịch là hũ goal
+# `muc_tieu`, thêm Đầu tư 0 ₫), suy từ bộ sinh persona qua cùng ánh xạ mã hũ của đặt lại; tổng là 7.730.000 ₫ của bảng số Figma cộng
+# số dư hũ Chi hằng ngày
 DEMO_BALANCES = demo_balances("minh")
 # Trả sau của minh trên ví demo đến hạn ngày 3 (`DEMO_CREDIT_DUE_DAY`, trước lương 05/12) thay vì ngày 5 của spec
 MINH_BNPL_DUE = f"2026-12-{demo_wallet('minh').credit_due_day:02d}"
@@ -94,14 +95,16 @@ def test_sau_dat_lai_minh_hu_an_uong_can_23_11_con_12_ngay_toi_ky_luong(api):
     assert an["forecast_floor_vnd"] < 0  # vạch "mực dự báo" của thẻ hũ
     card = ov["proactive_card"]
     assert card["data"]["kind"] == "runout_warning" and "23/11" in card["fallback_text"]
+    assert card["data"].get("jar_code") in (None, "an_uong")  # thẻ của Tổng quan vẫn là Ăn uống, không phải Chi hằng ngày
     # các hũ khác: không hũ nào báo hụt; Nghĩa vụ (gộp Hóa đơn) sát vì tiền điện 26/11 và Trả sau 03/12 (rollout Bước 5: khả năng hụt
-    # 0,26); hũ goal Du lịch và Đầu tư 0 ₫ (không gì rút tiền) đủ
+    # 0,26); hũ goal Du lịch và Đầu tư 0 ₫ (không gì rút tiền) đủ; Chi hằng ngày (chi lặt vặt, khối `demo_jars`) đủ tới lương
     status = {j["code"]: j["status"] for j in ov["jars"]}
     assert (
         status["nghia_vu"] in ("tight", "ok")
         and status["muc_tieu"] == "ok"
         and status["dau_tu"] == "ok"
         and status["di_lai"] == "ok"
+        and status["chi_hang_ngay"] == "ok"
     )
 
 

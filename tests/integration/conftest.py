@@ -194,8 +194,9 @@ def demo_wallet(persona: str):
 
 
 def demo_jars(persona: str) -> dict:
-    """Hũ của ví demo sau đặt lại, theo mã. Không có Hóa đơn (gộp vào Nghĩa vụ), Du lịch thành hũ goal `muc_tieu` (tên vẫn là
-    "Du lịch"), thêm Đầu tư 0 ₫; `minh` 7 hũ, `lan` và `khoa` 6 hũ."""
+    """Hũ của ví demo sau đặt lại, theo mã, theo thứ tự hiển thị: ba hũ mặc định (Chi hằng ngày với chi lặt vặt của khối `demo_jars`
+    trong spec, Nghĩa vụ gộp Hóa đơn, Dự phòng) rồi hũ tự thêm (Ăn uống, Đi lại, Giải trí, Du lịch là hũ goal `muc_tieu`, Đầu tư 0 ₫);
+    `minh`, `vy` 8 hũ, `lan` và `khoa` 7 hũ (không có hũ goal)."""
     return {j.code: j for j in demo_wallet(persona).jars}
 
 
