@@ -299,6 +299,8 @@ def test_reset_preserves_legacy_until_allowed_and_is_repeatable(env):
     assert first["statusCode"] == 200, first
     jars = _read_jars(env, user)
     assert _layout(jars) == DEMO
+    # hũ goal là hũ người dùng tự thêm cho mục tiêu Du lịch: tên theo hũ nguồn (lộ trình seed nói "hũ Du lịch")
+    assert {j["code"]: j["name"] for j in jars}["muc_tieu"] == "Du lịch"
     # Ăn uống, Đi lại, Giải trí giữ số dư của ví persona; Nghĩa vụ = Nghĩa vụ + Hóa đơn; Mục tiêu = Du lịch; Đầu tư mới
     assert {j["code"]: j["balance_vnd"] for j in jars} == {
         "an_uong": 380_000,
@@ -325,6 +327,20 @@ def test_reset_preserves_legacy_until_allowed_and_is_repeatable(env):
     assert roadmaps["statusCode"] == 200
     versions = json.loads(roadmaps["body"])["versions"]
     assert sorted(v["version"] for v in versions) == [1, 2]  # v1 đã thay, v2 đang dùng, như ví persona (#22)
+    # khối lộ trình (tên hũ của mục tiêu) và So với bản cũ (tên hũ đọc từ bảng jars) dùng đúng tên hũ của ví demo, không mã thô
+    names = {j["code"]: j["name"] for j in jars}
+    block = json.loads(handle_http(http_event("GET", "/roadmap", sub=user), env.svc)["body"])
+    data = block["data"]
+    assert [(g["jar"]["code"], g["jar"]["name"]) for g in data["goals"]] == [("muc_tieu", names["muc_tieu"])]
+    diff = handle_http(
+        http_event("GET", "/roadmap/diff", sub=user, query={"from_version": "1", "to_version": "2"}), env.svc
+    )
+    assert diff["statusCode"] == 200, diff
+    text = diff["body"]
+    assert not any(f'"{code}"' in text for code in ("du_lich", "hoa_don"))
+    for field in (f for c in json.loads(text)["data"]["changes"] for f in c.get("fields", [])):
+        if field["label"] in ("Hũ nguồn", "Hũ nhận"):
+            assert {field["before"], field["after"]} <= {*names.values(), "(chưa có)", "(bỏ)"}
 
 
 @pytest.mark.parametrize("persona", ["minh", "khoa", "lan", "vy"])
@@ -369,11 +385,12 @@ def test_demo_and_three_jar_wallets_route_new_transactions_by_type(env):
             "food_drink": "an_uong", "grocery": "an_uong", "ride_hailing": "di_lai", "fuel": "di_lai",
             "entertainment": "giai_tri", "bill_electricity": "nghia_vu", "bill_water": "nghia_vu",
             "phone_topup": "nghia_vu", "rent": "nghia_vu",
+            "travel": "muc_tieu",  # hũ goal dựng từ hũ Du lịch, cùng ánh xạ mã hũ với đặt lại
         },
         fresh: {
             "food_drink": "chi_hang_ngay", "grocery": "chi_hang_ngay", "ride_hailing": "chi_hang_ngay",
             "fuel": "chi_hang_ngay", "entertainment": "chi_hang_ngay", "bill_electricity": "nghia_vu",
-            "bill_water": "nghia_vu", "phone_topup": "nghia_vu", "rent": "nghia_vu",
+            "bill_water": "nghia_vu", "phone_topup": "nghia_vu", "rent": "nghia_vu", "travel": "chi_hang_ngay",
         },
     }  # fmt: skip
     for user, routes in expected.items():

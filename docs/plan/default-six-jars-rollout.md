@@ -43,7 +43,7 @@ Tỷ lệ 42/33/25 lấy theo các nhóm của bộ "Mới đi làm" ở [B2a](.
 | Đi lại (tự thêm) | `di_lai` | `spending` | — | `di_lai`, giữ nguyên | 7% | 640.000 ₫ |
 | Nghĩa vụ (mặc định) | `nghia_vu` | `obligation` | — | `nghia_vu` + `hoa_don` | 31 + 5 = 36% | 1.450.000 ₫ |
 | Giải trí (tự thêm) | `giai_tri` | `spending` | — | `giai_tri`, giữ nguyên | 7% | 760.000 ₫ |
-| Mục tiêu (tự thêm) | `muc_tieu` | `saving` | `goal` | `du_lich`, mục tiêu và hạn lấy từ hũ nguồn (6.000.000 ₫, 01/04/2027) | 10% | 1.800.000 ₫ |
+| Hũ mục tiêu (tự thêm), tên theo hũ nguồn: "Du lịch" | `muc_tieu` | `saving` | `goal` | `du_lich`, tên, mục tiêu và hạn lấy từ hũ nguồn (6.000.000 ₫, 01/04/2027) | 10% | 1.800.000 ₫ |
 | Dự phòng (mặc định) | `du_phong` | `saving` | `buffer` | `du_phong` | 10% | 2.700.000 ₫ |
 | Đầu tư (tự thêm) | `dau_tu` | `saving` | `long_term` | không có (hũ mới, không lịch sử) | 0% | 0 ₫ |
 | **Tổng** | | | | | **100%** | **7.730.000 ₫** (như ví persona) |

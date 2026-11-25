@@ -110,10 +110,32 @@ def test_hu_cua_giao_dich_moi_tren_vi_demo_va_vi_ba_hu():
     assert route[_DEMO_WALLET] == {
         "food_drink": "an_uong", "grocery": "an_uong", "ride_hailing": "di_lai", "fuel": "di_lai",
         "entertainment": "giai_tri", "subscription": "giai_tri", **dict.fromkeys(bills, "nghia_vu"),
-        "travel": None,  # ví demo không có hũ Du lịch hay Chi hằng ngày: hỏi hũ
+        # hũ goal của ví demo dựng từ hũ Du lịch của persona: cùng ánh xạ mã hũ với đặt lại demo
+        "travel": "muc_tieu",
     }  # fmt: skip
     assert route[_THREE_JAR_WALLET] == {
         "food_drink": "chi_hang_ngay", "grocery": "chi_hang_ngay", "ride_hailing": "chi_hang_ngay",
         "fuel": "chi_hang_ngay", "entertainment": "chi_hang_ngay", "subscription": "nghia_vu",
         **dict.fromkeys(bills, "nghia_vu"), "travel": "chi_hang_ngay",
     }  # fmt: skip
+
+
+def test_moi_loai_giao_dich_mac_dinh_hu_du_lich_vao_hu_goal_cua_vi_demo_qua_anh_xa():
+    """Mọi loại giao dịch có hũ mặc định `du_lich` (đọc từ db/seed/tx_type_map.sql, không chép tay) đi vào hũ mà ánh xạ của
+    bộ hũ demo gộp Du lịch vào, trên ví demo; ví ba hũ giữ Chi hằng ngày, kể cả khi người dùng thêm hũ Mục tiêu."""
+    import re
+    from pathlib import Path
+
+    seed = (Path(__file__).resolve().parents[3] / "db" / "seed" / "tx_type_map.sql").read_text("utf-8")
+    travel_types = re.findall(r"\('([a-z_]+)',\s*'[^']*',\s*'out',\s*'du_lich'", seed)
+    assert travel_types  # hiện có `travel`
+    goal_jar = wallet.LEGACY_JAR_ALIASES["du_lich"]
+    with_goal = (*_THREE_JAR_WALLET, goal_jar)
+    for tx_type in travel_types:
+        assert wallet.transaction_jar("du_lich", _DEMO_WALLET, tx_type=tx_type) == goal_jar
+        assert wallet.transaction_jar("du_lich", _THREE_JAR_WALLET, tx_type=tx_type) == "chi_hang_ngay"
+        assert wallet.transaction_jar("du_lich", with_goal, tx_type=tx_type) == "chi_hang_ngay"
+        # ví bảy hũ cũ còn hũ Du lịch: giữ hũ đó
+        assert wallet.transaction_jar("du_lich", (*_DEMO_WALLET, "du_lich"), tx_type=tx_type) == "du_lich"
+    # không có hũ nào nhận: hỏi hũ
+    assert wallet.transaction_jar("du_lich", ("an_uong", "du_phong"), tx_type="travel") is None

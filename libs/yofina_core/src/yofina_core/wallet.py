@@ -26,6 +26,13 @@ JAR_PURPOSES = ("buffer", "sinking", "goal", "long_term")
 DEFAULT_SPENDING_JAR = "chi_hang_ngay"
 DEFAULT_OBLIGATION_JAR = "nghia_vu"
 DEFAULT_GOAL_JAR = "muc_tieu"
+#: Legacy seven-jar code -> the jar a newer layout folds it into (the demo layout of issue #39: Hóa đơn joins the shared
+#: Nghĩa vụ, the Du lịch goal becomes the user-added goal jar). One mapping for the demo reset (`personas.six_jars`), its
+#: roadmap seed and seed labels, and the type-to-jar step of classification (`transaction_jar`).
+LEGACY_JAR_ALIASES = {
+    "hoa_don": DEFAULT_OBLIGATION_JAR,
+    "du_lich": DEFAULT_GOAL_JAR,
+}
 
 
 def is_buffer_jar(kind: str, purpose: str | None, goal_vnd: object) -> bool:
@@ -67,19 +74,26 @@ def pay_jar_or_default(
 
 
 def transaction_jar(default_code: str | None, jar_codes: Iterable[str], *, tx_type: str) -> str | None:
-    """Keep the legacy category when present and route known types on the six-jar layout."""
+    """Keep the legacy category when present and route known types on the newer layouts.
+
+    Order: the legacy jar itself; the shared default of the onboarding layout (Nghĩa vụ for bills and subscriptions, Chi
+    hằng ngày for everyday categories), so a wallet that has those keeps its behaviour even after the user adds a goal jar;
+    then the jar `LEGACY_JAR_ALIASES` folds the legacy code into (the demo wallet has no Chi hằng ngày, its goal jar is the
+    persona's Du lịch jar)."""
     if default_code is None:
         return None
     codes = set(jar_codes)
     if default_code in codes:
         return default_code
     if default_code == "hoa_don" or tx_type == "subscription":
-        fallback = DEFAULT_OBLIGATION_JAR
+        candidates = [DEFAULT_OBLIGATION_JAR]
     elif default_code in ("an_uong", "di_lai", "giai_tri", "du_lich"):
-        fallback = DEFAULT_SPENDING_JAR
+        candidates = [DEFAULT_SPENDING_JAR]
     else:
-        return None
-    return fallback if fallback in codes else None
+        candidates = []
+    if alias := LEGACY_JAR_ALIASES.get(default_code):
+        candidates.append(alias)
+    return next((code for code in candidates if code in codes), None)
 
 
 # --- giao dịch ---------------------------------------------------------------------------------

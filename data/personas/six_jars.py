@@ -15,21 +15,14 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from personas.generator import JarSeed, PersonaData, PersonaError, TxSeed
-from yofina_core.wallet import (
-    DEFAULT_GOAL_JAR,
-    DEFAULT_OBLIGATION_JAR,
-    TX_TYPE_JAR_TRANSFER,
-    TX_TYPE_SALARY_SPLIT,
-)
+from yofina_core.wallet import LEGACY_JAR_ALIASES, TX_TYPE_JAR_TRANSFER, TX_TYPE_SALARY_SPLIT
 
 if TYPE_CHECKING:
     from yofina_ledger.jar_layout import DemoJar
 
-#: persona jar -> demo jar, for codes the demo layout does not keep
-JAR_ALIASES = {
-    "hoa_don": DEFAULT_OBLIGATION_JAR,
-    "du_lich": DEFAULT_GOAL_JAR,
-}
+#: persona jar -> demo jar, for codes the demo layout does not keep. The same mapping routes a new transaction whose type
+#: defaults to a legacy jar (`yofina_core.wallet.transaction_jar`): travel goes to the goal jar built from Du lịch.
+JAR_ALIASES = LEGACY_JAR_ALIASES
 
 #: simulated BNPL due day per persona on the demo wallet. Minh's spec uses the payday (5); the demo moves the December
 #: installment two days earlier so it falls inside the "due before payday" window of the Nghĩa vụ forecast (scene 2).
@@ -63,7 +56,9 @@ def apply_demo_layout(data: PersonaData, layout: Sequence[DemoJar]) -> PersonaDa
         jars.append(
             JarSeed(
                 code=j.code,
-                name=j.name,
+                # a goal jar is one the user added for a specific goal: it shows the name of the persona jar it comes from
+                # (Du lịch), the name the roadmap seed and the persona story use; the layout name is for a goal without source
+                name=goal.name if j.purpose == "goal" and goal is not None else j.name,
                 color_key=j.color_key,
                 icon_key=j.icon_key,
                 kind=j.kind,

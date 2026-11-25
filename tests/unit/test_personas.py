@@ -104,6 +104,7 @@ def test_bo_hu_demo_gop_theo_anh_xa_va_bao_toan_tong_vi(persona):
     if "du_lich" in old:
         goal = next(j for j in demo.jars if j.code == "muc_tieu")
         assert (goal.goal_vnd, goal.goal_date) == (old["du_lich"].goal_vnd, old["du_lich"].goal_date)
+        assert goal.name == old["du_lich"].name  # tên theo hũ nguồn, như lộ trình seed và lời của persona
     dau_tu = next(j for j in demo.jars if j.code == "dau_tu")
     assert (dau_tu.balance_vnd, dau_tu.split_percent) == (0, 0)
     assert not any(t.jar_code == "dau_tu" for t in demo.transactions)
@@ -122,8 +123,9 @@ def test_bo_hu_demo_cua_minh_theo_ty_le_spec():
     }
     goal = next(j for j in demo.jars if j.code == "muc_tieu")
     assert (goal.goal_vnd, goal.goal_date) == (6_000_000, date(2027, 4, 1))
+    # hũ goal là hũ người dùng tự thêm cho một mục tiêu: tên lấy theo hũ nguồn của persona (lộ trình seed nói "hũ Du lịch")
     assert [j.name for j in demo.jars] == [
-        "Ăn uống", "Đi lại", "Nghĩa vụ", "Giải trí", "Mục tiêu", "Dự phòng", "Đầu tư",
+        "Ăn uống", "Đi lại", "Nghĩa vụ", "Giải trí", "Du lịch", "Dự phòng", "Đầu tư",
     ]  # fmt: skip
     # không còn khoản chuyển "Để riêng tiền trả nghĩa vụ" từ hũ Chi hằng ngày (ví demo không có hũ đó)
     assert not any(t.jar_code == "chi_hang_ngay" for t in demo.transactions)

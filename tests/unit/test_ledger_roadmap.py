@@ -1756,6 +1756,13 @@ def test_seed_lo_trinh_bo_hu_demo_dung_file_cua_minh_qua_cung_anh_xa_ma_hu():
     assert n == 2 and [p["reason_code"] for p in tx.saved] == ["initial", "step_edited"]
     assert all(p["flag"] is None for p in tx.saved)
     assert [g["jar"]["code"] for g in tx.saved[0]["plan"]["goals"]] == ["muc_tieu"]
+    # tên hũ goal (khối lộ trình, màn So với bản cũ đọc tên từ bảng jars) trùng chữ của bước seed: "hũ Du lịch"
+    names = {j["code"]: j["name"] for j in tx.jars}
+    assert [g["jar"]["name"] for g in tx.saved[0]["plan"]["goals"]] == [names["muc_tieu"]] == ["Du lịch"]
+    goal_steps = [
+        s for p in tx.saved for ph in p["plan"]["phases"] for s in ph["steps"] if s.get("jar_code") == "muc_tieu"
+    ]
+    assert goal_steps and all(names["muc_tieu"] in f"{s['title']} {s['reason']}" for s in goal_steps)
     assert not any("behavior_flags" in s for s in tx.sql)
 
 

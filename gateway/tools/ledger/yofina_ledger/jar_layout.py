@@ -36,7 +36,8 @@ def onboarding_override() -> list[dict[str, str | int]] | None:
 class DemoJar:
     """One jar of the demo layout. Its balance, split share, history and goal come from the persona jars that
     `personas.six_jars.JAR_ALIASES` folds into it (none for a new jar); the layout only fixes code, label, kind and
-    purpose. A goal jar needs an amount and a date, so it is left out for a persona without a source jar that has a goal."""
+    purpose. A goal jar needs an amount and a date, so it is left out for a persona without a source jar that has a goal;
+    it is a jar the user added for that goal, so it shows the name of the source jar (Du lịch), not the layout label."""
 
     code: str
     name: str

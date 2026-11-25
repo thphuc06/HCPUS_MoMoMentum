@@ -30,12 +30,12 @@ Spec ở `specs/` vẫn là ví bảy hũ cũ (bảng trên, băm đầu ra bộ
 |---|---|
 | `an_uong`, `di_lai`, `giai_tri`, `du_phong`, `nghia_vu` | giữ mã (mọi dòng giữ nguyên số tiền và ngày) |
 | `hoa_don` | `nghia_vu` |
-| `du_lich` | `muc_tieu` (`purpose` `goal`, mục tiêu và hạn của hũ Du lịch) |
+| `du_lich` | `muc_tieu` (`purpose` `goal`; tên, mục tiêu và hạn của hũ Du lịch: hũ tự thêm cho một mục tiêu mang tên hũ nguồn, như lộ trình seed) |
 | (không có) | `dau_tu` (`purpose` `long_term`, 0 ₫, 0%, không lịch sử) |
 
-- Số dư, tỷ lệ chia (tổng tỷ lệ của hũ nguồn), dòng chia lương các kỳ trước (một dòng mỗi hũ mỗi kỳ), sự kiện lương, hũ trả của nghĩa vụ, nhãn phân loại seed (`classify_seed.apply_seed_labels`) và lộ trình seed (`roadmaps/README.md`) đi theo cùng ánh xạ. Chuyển giữa hai hũ gộp vào cùng một hũ thì bỏ cả hai chân. Tổng tiền ví bằng ví persona.
+- Số dư, tỷ lệ chia (tổng tỷ lệ của hũ nguồn), dòng chia lương các kỳ trước (một dòng mỗi hũ mỗi kỳ), sự kiện lương, hũ trả của nghĩa vụ, nhãn phân loại seed (`classify_seed.apply_seed_labels`) và lộ trình seed (`roadmaps/README.md`) đi theo cùng ánh xạ. Giao dịch mới có loại mặc định vào hũ cũ không còn trên ví (ví dụ `travel` mặc định `du_lich`) cũng theo ánh xạ này (`yofina_core.wallet.LEGACY_JAR_ALIASES`, `transaction_jar`): trên ví demo `travel` vào hũ goal, trên ví có Chi hằng ngày vẫn vào Chi hằng ngày. Chuyển giữa hai hũ gộp vào cùng một hũ thì bỏ cả hai chân. Tổng tiền ví bằng ví persona.
 - Hũ Mục tiêu chỉ có khi persona có hũ nguồn mang mục tiêu: `minh`, `vy` có 7 hũ, `lan`, `khoa` có 6 hũ (không có Mục tiêu). Hũ persona không có trong ánh xạ thì đặt lại báo lỗi.
-- `minh` sau đặt lại: Ăn uống 380.000 ₫ (30%), Đi lại 640.000 ₫ (7%), Nghĩa vụ 1.450.000 ₫ (36%), Giải trí 760.000 ₫ (7%), Mục tiêu 1.800.000 ₫ (10%, 6.000.000 ₫ đến 01/04/2027), Dự phòng 2.700.000 ₫ (10%), Đầu tư 0 ₫ (0%). Tiền cơm văn phòng vẫn trả từ Ăn uống nên mốc cạn 23/11 của cảnh 1 giữ nguyên; Netflix trả từ Giải trí; tiền nhà, hóa đơn và Trả sau trả từ Nghĩa vụ. Trả sau đến hạn ngày 3 thay vì ngày 5 (`DEMO_CREDIT_DUE_DAY`) để khoản đến hạn nằm trong danh sách "trước kỳ lương" của hũ Nghĩa vụ ở cảnh 2.
+- `minh` sau đặt lại: Ăn uống 380.000 ₫ (30%), Đi lại 640.000 ₫ (7%), Nghĩa vụ 1.450.000 ₫ (36%), Giải trí 760.000 ₫ (7%), Du lịch (hũ goal `muc_tieu`) 1.800.000 ₫ (10%, 6.000.000 ₫ đến 01/04/2027), Dự phòng 2.700.000 ₫ (10%), Đầu tư 0 ₫ (0%). Tiền cơm văn phòng vẫn trả từ Ăn uống nên mốc cạn 23/11 của cảnh 1 giữ nguyên; Netflix trả từ Giải trí; tiền nhà, hóa đơn và Trả sau trả từ Nghĩa vụ. Trả sau đến hạn ngày 3 thay vì ngày 5 (`DEMO_CREDIT_DUE_DAY`) để khoản đến hạn nằm trong danh sách "trước kỳ lương" của hũ Nghĩa vụ ở cảnh 2.
 - Số đo cảnh 1 đến 4 trên ví demo: `docs/plan/default-six-jars-rollout.md`, Bước 5; đo lại bằng `tests/local_pg/test_demo_scenes.py -s`.
 
 ## Hiệu chỉnh cảnh 1 (phase 2, luồng C)
