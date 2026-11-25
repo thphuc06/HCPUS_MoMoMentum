@@ -54,6 +54,20 @@ def test_pav_khong_cham_so_du_am_da_hut_chac_chan():
     assert s.p_shortfall == 1.0 and s.status == "short"
 
 
+def test_hieu_chinh_mac_dinh_hai_p_tho_khac_nhau_cua_hu_day_ra_hai_phan_tram_khac_nhau():
+    # Bảng PAV hũ dày của lần sinh đầu (#25) có đoạn phẳng: p thô 0,311 đến 0,405 đều thành 0,306, nên what-if đổi số dư
+    # trong đoạn đó báo % không đổi. Hiệu chỉnh mặc định (tệp sinh lại) không được làm mất khác biệt này.
+    raw, pub = [], []
+    for balance in (560_000, 580_000):
+        inp = inputs((jar("an_uong", n=150, seed=1, balance=balance),))
+        raw.append(_run(inp, False).jars[0].summary.p_shortfall)
+        on = _run(inp, True).jars[0].summary
+        assert on.series_kind == "dense"
+        pub.append(on.p_shortfall)
+    assert 0.311 <= raw[1] < raw[0] <= 0.405
+    assert pub[1] < pub[0]
+
+
 # --- CQR bất đối xứng ----------------------------------------------------------------------------------------
 def test_cqr_hoc_rieng_do_lech_duoi_va_tren_bang_bac_thu_tu_hieu_chinh():
     # Ngày 1, chi TB 1 (điểm không bị chuẩn hóa), dải [0; 10], mỗi đuôi 0,2: hạng ceil((9 + 1) x 0,8) = 8 trong 9 điểm.
