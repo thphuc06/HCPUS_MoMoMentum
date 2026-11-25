@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from ingest_helpers import REPO
 from yofina_ingest.extract import Candidate
-from yofina_ingest.worker import is_duplicate_match, pick_matches, text_tokens, texts_similar
+from yofina_ingest.worker import is_duplicate_match, pick_matches, same_party, text_tokens, texts_similar
 
 from personas import generate
 from yofina_core.ingest import IngestSettings
@@ -232,3 +232,71 @@ def test_tu_chung_cua_noi_dung_ngan_hang_khong_tinh_la_gan_giong():
         text_tokens(C01_ROW15_READ_COUNTERPARTY, "MBVCB.3765569.CK tien phong T11"),
         text_tokens("N***", "MINH CK tien phong thang 11"),
     )
+
+
+# --- tên đối tác: sao kê ngân hàng và ví ghi cùng một bên theo hai cách (#39) ------------------------------------------------------
+VY_CSV = REPO / "data" / "personas" / "samples" / "vy_sao_ke_vcb.csv"
+
+
+def vy_statement_incomes() -> dict[int, Candidate]:
+    """Hai dòng tiền vào của tệp mẫu cảnh 5 đúng như bộ đọc CSV trả (đối tác là cả cột nội dung, viết hoa không dấu)."""
+    from yofina_ingest.csvparse import map_header, parse_rows, read_table
+
+    table = read_table(VY_CSV.read_bytes(), max_rows=500)
+    rows = parse_rows(table, map_header(table.header), today=ANCHOR)
+    out = {}
+    for r in rows:
+        if r.direction == "in":
+            out[r.source_row] = Candidate(seq=r.source_row, kind="income", app_date=r.date, amount_vnd=r.amount_vnd,
+                                 counterparty=r.counterparty, description=r.description, extract_confidence=0.99)  # fmt: skip
+    return out
+
+
+def test_tien_vao_sao_ke_vy_trung_thu_nhap_ngoai_vi_da_seed():
+    """`data/personas/README.md`: hai dòng 4.800.000 ₫ "STUDIO NANG TT THIET KE BRANDING" là thu nhập freelance đã seed ("Studio Nắng
+    (freelance thiết kế)", ngoài ví, cùng ngày): phải bị đánh trùng, không thì chốt cả hai là cộng đôi thu nhập. Hàm DB không thấy hai
+    tên chứa nhau nên trước đây cả hai dòng vào hàng duyệt như khoản mới."""
+    ledger, cands = vy_ledger(), vy_statement_incomes()
+    assert len(cands) == 2 and {c.amount_vnd for c in cands.values()} == {4_800_000}
+    assert not any(m["counterparty_match"] for m in fake_find_matches(ledger, cands, WINDOW))
+    best = dedupe(ledger, cands)
+    assert set(best) == set(cands)
+    for seq, m in best.items():
+        tx = next(t for t in ledger if t["id"] == m["transaction_id"])
+        assert (tx["kind"], tx["funding_source"], tx["app_date"]) == ("income", "external", cands[seq].app_date)
+
+
+@pytest.mark.parametrize(
+    ("bank", "wallet"),
+    [
+        ("STUDIO NANG TT THIET KE BRANDING", "Studio Nắng (freelance thiết kế)"),
+        ("studio nang", "STUDIO NANG TT THIET KE"),
+        ("STUDIO NANG SAN", "Studio Nắng Sáng (freelance)"),  # ngân hàng cắt ngắn giữa từ cuối
+        ("CONG TY TNHH THIET KE HOA SEN", "Công ty TNHH Thiết kế Hoa Sen [lương]"),
+    ],
+)
+def test_cung_mot_doi_tac_hai_cach_ghi_la_trung(bank, wallet):
+    assert same_party(bank, wallet) and same_party(wallet, bank)
+    c = Candidate(seq=1, kind="income", app_date=date(2026, 11, 18), amount_vnd=4_800_000, counterparty=bank,
+                  description=bank, extract_confidence=0.99)  # fmt: skip
+    assert is_duplicate_match(match(0), c, {"merchant": wallet, "note": None}, WINDOW)
+
+
+@pytest.mark.parametrize(
+    ("bank", "wallet"),
+    [
+        ("STUDIO MAY TT THIET KE BRANDING", "Studio Nắng (freelance thiết kế)"),
+        ("NGUYEN VAN BINH CK TIEN NHA", "Nguyễn Văn An (anh họ)"),
+        ("NGUYEN VAN AN", "Nguyễn Văn Anh"),  # từ cuối "AN" quá ngắn để coi là tên bị cắt
+        ("Studio (Mây)", "Studio (Nắng)"),  # còn một từ sau khi bỏ chú thích: quá chung
+        ("CONG TY HOA SEN", "Công ty Hoa Mai (lương)"),
+        ("THE COFFEE HOUSE", "Highlands Coffee"),
+    ],
+)
+def test_khac_nguoi_cung_so_tien_cung_ngay_khong_gop(bank, wallet):
+    assert not same_party(bank, wallet) and not same_party(wallet, bank)
+    c = Candidate(seq=1, kind="income", app_date=date(2026, 11, 18), amount_vnd=4_800_000, counterparty=bank,
+                  description=bank, extract_confidence=0.99)  # fmt: skip
+    ledger = [{"id": "t", "kind": "income", "app_date": date(2026, 11, 18), "amount_vnd": 4_800_000, "merchant": wallet,
+               "note": None, "funding_source": "external"}]  # fmt: skip
+    assert dedupe(ledger, {1: c}) == {}

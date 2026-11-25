@@ -417,6 +417,51 @@ def texts_similar(a: frozenset[str], b: frozenset[str]) -> bool:
     return bool(common) and len(common) / min(len(a), len(b)) >= TEXT_MIN_OVERLAP
 
 
+#: Từ cuối của tên ngắn hơn được là phần đầu của từ tương ứng bên kia (ngân hàng cắt ngắn tên ở giữa một từ) khi dài ít nhất chừng này
+#: ký tự: "SAN" của "Sáng" thì được, "A" hay "AN" của "Anh" thì không (hai người khác nhau).
+PARTY_TRUNCATED_MIN_CHARS = 3
+
+
+_ANNOTATION_RE = re.compile(r"\(([^)]*)\)|\[([^\]]*)\]")
+
+
+def party_tokens(name: str | None) -> tuple[str, ...]:
+    """Các từ của tên đối tác sau khi chuẩn hóa như cách hai nguồn cùng ghi một bên: bỏ dấu và chữ hoa (`fold_text`), bỏ phần chú thích
+    trong ngoặc mà ví hay người dùng thêm vào tên ("Studio Nắng (freelance thiết kế)"), tách theo mọi ký tự không phải chữ hay số."""
+    folded = _ANNOTATION_RE.sub(" ", fold_text(name or ""))
+    return tuple(tok for tok in re.split(r"[\W_]+", folded) if tok)
+
+
+def _annotation(name: str | None) -> str:
+    return " ".join("".join(m.groups(default="")).strip() for m in _ANNOTATION_RE.finditer(fold_text(name or "")))
+
+
+def same_party(a: str | None, b: str | None) -> bool:
+    """Hai tên đối tác (đều đã biết) là cùng một bên. Sao kê ngân hàng ghi tên viết hoa không dấu rồi nối nội dung thanh toán ("STUDIO
+    NANG TT THIET KE BRANDING"), hoặc cắt ngắn ở giữa từ cuối; ví ghi tên có dấu kèm chú thích ("Studio Nắng (freelance thiết kế)").
+    So theo TỪ sau `party_tokens`, không theo chuỗi con (chuỗi con gộp "Nguyễn Văn An" với "Nguyễn Văn Anh"):
+
+    - hai tên bằng nhau (từ 3 ký tự) là cùng bên;
+    - tên ngắn hơn có từ hai từ trở lên và là phần đầu của tên dài hơn; từ cuối của nó được là phần đầu của từ tương ứng khi dài từ
+      `PARTY_TRUNCATED_MIN_CHARS` ký tự (tên bị cắt);
+    - tên chỉ một từ mà khác tên kia ("Grab" và "GrabFood", "Studio" và "Studio Mây") là quá chung để coi là cùng bên."""
+    ta, tb = party_tokens(a), party_tokens(b)
+    if ta == tb:
+        if len(ta) == 1 and _annotation(a) and _annotation(b) and _annotation(a) != _annotation(b):
+            return False  # "Studio (Mây)" và "Studio (Nắng)": chỉ phần chú thích phân biệt hai bên
+        return len("".join(ta)) >= 3
+    for short, long_ in ((ta, tb), (tb, ta)):
+        if len(short) < 2 or len(short) > len(long_):
+            continue
+        *head, last = short
+        if list(long_[: len(head)]) != head:
+            continue
+        nxt = long_[len(head)]
+        if nxt == last or (len(last) >= PARTY_TRUNCATED_MIN_CHARS and nxt.startswith(last)):
+            return True
+    return False
+
+
 def is_duplicate_match(
     m: Mapping[str, Any],
     candidate: Candidate | None,
@@ -427,9 +472,10 @@ def is_duplicate_match(
     với dòng nạp `candidate` không. `existing`: đối tác (`merchant`) và ghi chú (`note`) của giao dịch đó (`IngestRepo.matched_transactions`).
 
     1. Lệch ngày: giao dịch trong ví (`WALLET_FUNDING`) tối đa `WALLET_MAX_DAY_DIFF`, giao dịch ngoài ví tối đa cửa sổ khử trùng.
-    2. Hai bên đều BIẾT đối tác: trùng khi và chỉ khi đối tác khớp (`counterparty_match` của hàm DB). Cùng số tiền ở cửa hàng khác là
-       khoản khác: sao kê `c01` có 5 dòng bị đánh trùng giả theo cách cũ (Circle K 56.000 ₫ với GrabFood 56.000 ₫ hôm sau, Be 26.000 ₫
-       với GrabFood cùng ngày...). Đối tác ngắn hơn 3 ký tự ("Be") hàm DB không so được nên không bao giờ khớp: dòng đó vào hàng chờ.
+    2. Hai bên đều BIẾT đối tác: trùng khi và chỉ khi hai tên là cùng một bên theo `same_party` (so theo từ sau khi bỏ dấu, chữ hoa,
+       chú thích trong ngoặc; tên bị ngân hàng nối thêm nội dung hay cắt ngắn vẫn khớp), không theo chuỗi con của hàm DB. Cùng số tiền
+       ở cửa hàng khác là khoản khác: sao kê `c01` có 5 dòng bị đánh trùng giả theo cách cũ (Circle K 56.000 ₫ với GrabFood 56.000 ₫
+       hôm sau, Be 26.000 ₫ với GrabFood cùng ngày...). Tên một từ khác tên kia ("Grab", "GrabFood") không khớp: dòng đó vào hàng chờ.
     3. Một bên KHÔNG BIẾT đối tác (`known_party`): đối tác đã che hay rỗng không phải là "khác". Trùng khi nội dung và đối tác gần giống
        (`texts_similar`), hoặc khi cả hai ở ngoài ví, số tiền từ `UNKNOWN_PARTY_LARGE_VND` và lệch ngày không quá
        `UNKNOWN_PARTY_MAX_DAY_DIFF`. Ca thật: ảnh `s02` (tiền phòng 1.500.000 ₫, đối tác "N***", "MINH CK tien phong thang 11") đã
@@ -446,7 +492,7 @@ def is_duplicate_match(
     cand_cp = candidate.counterparty if candidate else None
     cand_desc = candidate.description if candidate else None
     if known_party(cand_cp) and known_party(existing.get("merchant")):
-        return bool(m["counterparty_match"])
+        return same_party(cand_cp, existing.get("merchant"))
     if texts_similar(
         text_tokens(cand_cp, cand_desc), text_tokens(existing.get("merchant"), existing.get("note"))
     ):
