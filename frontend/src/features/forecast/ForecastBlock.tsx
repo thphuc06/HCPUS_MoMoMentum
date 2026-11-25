@@ -4,7 +4,7 @@ import { JarIcon } from '@/components/JarIcon'
 import { StatusChip } from '@/components/StatusChip'
 import { Disclosure } from '@/components/ui/Disclosure'
 import { Skeleton } from '@/components/ui/skeleton'
-import { CONFIDENCE_LABEL, jarStatusChip, statusShortChip } from '@/lib/jar'
+import { CONFIDENCE_LABEL, jarStatusChip, MAY_RUN_OUT, mayRunOutBeforePayday, mayRunOutText, shownRunoutDate, statusShortChip } from '@/lib/jar'
 import { formatSimMoment, formatRatioPercent, formatShortfallChance, formatVnd, formatVndShort } from '@/lib/format'
 import { diffDays, formatDayMonth } from '@/lib/dates'
 import { useEntranceMotion } from '@/lib/motion'
@@ -18,17 +18,20 @@ const ForecastChart = lazy(() => import('./ForecastChart'))
 export function forecastSummary(d: ForecastTimelineData): string {
   const name = d.jar.name
   const payday = formatDayMonth(d.payday.date)
+  const runout = shownRunoutDate(d)
   // Hũ đã hết tiền (0 ₫): không nói "dự kiến cạn" như thể còn tiền để cạn.
   if (d.start_balance_vnd <= 0) {
     return `Hũ ${name} đang hết tiền (${formatVnd(d.start_balance_vnd)}). Kỳ lương kế tiếp ngày ${payday}, còn ${d.payday.days_until} ngày nữa.`
   }
-  if (d.runout_date) {
-    if (d.runout_date < d.payday.date) {
+  // Hũ thưa (#25): server không nêu ngày cạn cụ thể.
+  if (mayRunOutBeforePayday(d)) return `Hũ ${name} có thể cạn trước ngày lương ${payday} (còn ${d.payday.days_until} ngày).`
+  if (runout) {
+    if (runout < d.payday.date) {
       // Hai con số khác nhau, nói rõ để khỏi lẫn: khoảng trống từ ngày cạn tới lương (hiệu hai ngày server trả) và số ngày từ hôm nay.
-      const gap = diffDays(d.runout_date, d.payday.date)
-      return `Hũ ${name} dự kiến cạn ngày ${formatDayMonth(d.runout_date)}, ${gap} ngày trước kỳ lương ${payday} (hôm nay còn ${d.payday.days_until} ngày tới lương).`
+      const gap = diffDays(runout, d.payday.date)
+      return `Hũ ${name} dự kiến cạn ngày ${formatDayMonth(runout)}, ${gap} ngày trước kỳ lương ${payday} (hôm nay còn ${d.payday.days_until} ngày tới lương).`
     }
-    return `Hũ ${name} dự kiến cạn ngày ${formatDayMonth(d.runout_date)}, sau kỳ lương ${payday}.`
+    return `Hũ ${name} dự kiến cạn ngày ${formatDayMonth(runout)}, sau kỳ lương ${payday}.`
   }
   if (d.status === 'short') return `Hũ ${name} có khả năng hụt trước kỳ lương ${payday} (còn ${d.payday.days_until} ngày).`
   if (d.status === 'tight')
@@ -42,10 +45,12 @@ export function forecastSummary(d: ForecastTimelineData): string {
  */
 export function forecastHeadline(d: ForecastTimelineData): string {
   const payday = formatDayMonth(d.payday.date)
+  const runout = shownRunoutDate(d)
   if (d.start_balance_vnd <= 0) return `Đang hết tiền, ${d.payday.days_until} ngày nữa tới lương ${payday}.`
-  if (d.runout_date) {
-    if (d.runout_date < d.payday.date) return `Cạn ${formatDayMonth(d.runout_date)}, ${diffDays(d.runout_date, d.payday.date)} ngày trước lương ${payday}.`
-    return `Cạn ${formatDayMonth(d.runout_date)}, sau lương ${payday}.`
+  if (mayRunOutBeforePayday(d)) return `${mayRunOutText(d.p_shortfall)}.`
+  if (runout) {
+    if (runout < d.payday.date) return `Cạn ${formatDayMonth(runout)}, ${diffDays(runout, d.payday.date)} ngày trước lương ${payday}.`
+    return `Cạn ${formatDayMonth(runout)}, sau lương ${payday}.`
   }
   if (d.status === 'short') return `Có khả năng hụt trước lương ${payday}.`
   if (d.status === 'tight') return `Còn rất ít tiền trước lương ${payday}.`
@@ -58,15 +63,20 @@ export function forecastHeadline(d: ForecastTimelineData): string {
  */
 export function chartLabel(d: ForecastTimelineData): string {
   const base = `Biểu đồ dự báo số dư hũ ${d.jar.name} ${d.horizon_days} ngày`
-  const runout = (p: { runout_date?: string }) => (p.runout_date ? `cạn ngày ${formatDayMonth(p.runout_date)}` : 'không cạn trong kỳ dự báo')
+  const hidden = d.runout_date_shown === false
+  const runout = (p: { status: ForecastTimelineData['status']; runout_date?: string }) =>
+    hidden
+      ? p.status === 'short' ? MAY_RUN_OUT.toLowerCase() : p.status === 'tight' ? 'sát trước kỳ lương' : 'đủ tới kỳ lương'
+      : p.runout_date ? `cạn ngày ${formatDayMonth(p.runout_date)}` : 'không cạn trong kỳ dự báo'
   if (d.compare) return `${base}: đường Trước nét đứt ${runout(d)}, đường Sau ${runout(d.compare.after)}.`
   return `${base}: ${runout(d)}, kỳ lương ${formatDayMonth(d.payday.date)}.`
 }
 
 type AfterPath = ForecastCompare['after']
 
-function pathLine(path: { status: ForecastTimelineData['status']; runout_date?: string }): string {
-  if (path.runout_date) return `Dự kiến cạn ngày ${formatDayMonth(path.runout_date)}`
+function pathLine(path: { status: ForecastTimelineData['status']; runout_date?: string }, hidden: boolean): string {
+  if (hidden && path.status === 'short') return MAY_RUN_OUT
+  if (path.runout_date && !hidden) return `Dự kiến cạn ngày ${formatDayMonth(path.runout_date)}`
   return path.status === 'ok' ? 'Đủ tới kỳ lương' : path.status === 'tight' ? 'Sát, còn rất ít tiền' : 'Có khả năng hụt'
 }
 
@@ -76,6 +86,8 @@ function pathLine(path: { status: ForecastTimelineData['status']; runout_date?: 
  */
 export function CompareSummary({ data, compare }: { data: ForecastTimelineData; compare: ForecastCompare }) {
   const after: AfterPath = compare.after
+  // Hũ thưa (#25): không nêu ngày cạn ở cột nào, không nói ngày cạn sớm hay muộn hơn bao nhiêu ngày.
+  const hidden = data.runout_date_shown === false
   const cols = [
     { key: 'before', title: 'Trước', path: data },
     { key: 'after', title: 'Sau', path: after },
@@ -95,7 +107,7 @@ export function CompareSummary({ data, compare }: { data: ForecastTimelineData; 
               <StatusChip kind={chip.kind} className="mt-1">
                 {chip.label}
               </StatusChip>
-              <p className="mt-1.5 text-small text-ink">{pathLine(path)}</p>
+              <p className="mt-1.5 text-small text-ink">{pathLine(path, hidden)}</p>
               {path.p_shortfall !== undefined && <p className="num text-small text-ink-2">Khả năng hụt: {formatShortfallChance(path.p_shortfall).toLowerCase()}</p>}
             </div>
           )
@@ -111,7 +123,7 @@ export function CompareSummary({ data, compare }: { data: ForecastTimelineData; 
             </span>
           )}
         </li>
-        {d.runout_shift_days !== undefined && d.runout_shift_days !== 0 && (
+        {!hidden && d.runout_shift_days !== undefined && d.runout_shift_days !== 0 && (
           <li>
             Ngày cạn {d.runout_shift_days < 0 ? 'sớm hơn' : 'muộn hơn'} <span className="num font-semibold">{Math.abs(d.runout_shift_days)} ngày</span>
           </li>
@@ -151,7 +163,7 @@ export function ForecastBlock({
   const model = useMemo(() => buildChartModel(data), [data])
   const [activeX, setActiveX] = useState<number | null>(null)
   const row = rowAt(model, activeX)
-  const chip = jarStatusChip(data.status, data.runout_date, data.start_balance_vnd <= 0)
+  const chip = jarStatusChip(data.status, shownRunoutDate(data), data.start_balance_vnd <= 0)
   const events = model.events
   const compare = data.compare
   const extraEvents = compare?.after.events ?? []

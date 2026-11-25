@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ForecastTimelineData } from '@/contracts/blocks'
 import { validBlock } from '@/test/fixtures'
-import { chartLabel, ForecastBlock, forecastSummary } from './ForecastBlock'
+import { chartLabel, ForecastBlock, forecastHeadline, forecastSummary } from './ForecastBlock'
 import { buildChartModel } from './model'
 import { formatVnd } from '@/lib/format'
 
@@ -169,6 +169,58 @@ describe('ForecastBlock: trước-sau (what-if)', { timeout: 20_000 }, () => {
     const { container } = await mount(data('forecast_timeline.short'))
     expect(container.querySelectorAll('.recharts-line')).toHaveLength(1)
     expect(screen.queryByTestId('forecast-compare')).toBeNull()
+  })
+})
+
+// "Cạn 29/11", "cạn ngày 29/11", "Hụt · cạn 29/11": mọi cách nêu một ngày cạn cụ thể
+const RUNOUT_DATE = /cạn (ngày )?\d{2}\/\d{2}/i
+
+describe('ForecastBlock: hũ thưa không nêu ngày cạn (#25)', { timeout: 20_000 }, () => {
+  it('cờ runout_date_shown sai: một dòng "Có thể cạn trước ngày lương" kèm %, không ngày cạn, không điểm và vùng hụt', async () => {
+    const d = data('forecast_timeline.sparse_no_date')
+    const { container } = await mount(d)
+    expect(screen.getByTestId('forecast-headline')).toHaveTextContent(/^Có thể cạn trước ngày lương, khả năng 60%\.$/)
+    expect(container.querySelector('header')).toHaveTextContent(/Hụt$/) // chip không kèm ngày
+    expect(container.querySelectorAll('.recharts-reference-dot')).toHaveLength(0)
+    expect(container.querySelectorAll('.recharts-reference-area')).toHaveLength(0)
+    expect(screen.getByTestId('forecast-summary')).toHaveTextContent('Hũ Giải trí có thể cạn trước ngày lương 05/12 (còn 14 ngày).')
+    expect(screen.getByTestId('forecast-chart')).toHaveAttribute('aria-label', expect.stringContaining('có thể cạn trước ngày lương'))
+    expect(container.textContent).not.toMatch(RUNOUT_DATE)
+    expect(screen.getByTestId('p-shortfall')).toHaveTextContent('60%')
+  })
+
+  it('không được hiện % thì chỉ còn câu ngắn', () => {
+    const d = data('forecast_timeline.sparse_no_date')
+    delete d.p_shortfall
+    delete d.p_shortfall_se
+    expect(forecastHeadline(d)).toBe('Có thể cạn trước ngày lương.')
+  })
+
+  it('cờ sai mà dữ liệu vẫn còn ngày cạn (bản cũ): vẫn không hiện ngày', async () => {
+    const d = { ...data('forecast_timeline.sparse_no_date'), runout_date: '2026-12-03' }
+    const { container } = await mount(d)
+    expect(container.textContent).not.toMatch(RUNOUT_DATE)
+    expect(container.textContent).not.toContain('Cạn 03/12')
+    expect(container.querySelectorAll('.recharts-reference-dot')).toHaveLength(0)
+  })
+
+  it('cờ đúng hoặc vắng: như cũ', () => {
+    const d = data('forecast_timeline.short')
+    expect(forecastHeadline({ ...d, runout_date_shown: true })).toBe('Cạn 29/11, 6 ngày trước lương 05/12.')
+    expect(forecastHeadline(d)).toBe('Cạn 29/11, 6 ngày trước lương 05/12.')
+  })
+
+  it('what-if của hũ thưa: cột hụt nói "Có thể cạn trước ngày lương", không có "Ngày cạn sớm hơn"', async () => {
+    const d = data('forecast_timeline.what_if')
+    d.runout_date_shown = false
+    d.compare!.after.status = 'short'
+    d.compare!.after.runout_date = '2026-11-28' // bản cũ còn ngày: vẫn không hiện
+    d.compare!.delta.runout_shift_days = -3
+    const { container } = await mount(d)
+    const after = screen.getByTestId('forecast-compare').querySelector('[data-col="after"]') as HTMLElement
+    expect(after).toHaveTextContent('Có thể cạn trước ngày lương')
+    expect(screen.getByLabelText('Chênh lệch trước và sau')).not.toHaveTextContent('Ngày cạn')
+    expect(container.textContent).not.toMatch(RUNOUT_DATE)
   })
 })
 

@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import { cn } from '@/lib/cn'
 import { diffDays } from '@/lib/dates'
+import { mayRunOutText } from '@/lib/jar'
 
 /**
  * Số ngày hũ trống trước kỳ lương của thẻ cảnh báo cạn: hiệu hai ngày server trả (`runout_date` của hũ và `next_payday.date`),
@@ -13,15 +14,25 @@ export function emptyDaysBeforePayday(runoutDate: string | undefined, paydayDate
   return n > 0 ? n : null
 }
 
-/** Dòng số lớn "12 ngày · hũ trống trước kỳ lương" (cảnh 1). Hiện sau dải ngày khi được phép chuyển động. */
-export function RunoutHero({ days, animate = false }: { days: number; animate?: boolean }) {
+/**
+ * Số lớn của thẻ cảnh báo cạn (cảnh 1): "12 ngày · hũ trống trước kỳ lương", hiện sau dải ngày khi được phép chuyển động. Hũ thưa
+ * (#25, server không nêu ngày cạn) không có số ngày: một dòng "Có thể cạn trước ngày lương, khả năng 60%" (cùng chữ với Nhìn trước
+ * và khối dự báo).
+ */
+export function RunoutHero(props: ({ days: number; chance?: undefined } | { chance: number; days?: undefined }) & { animate?: boolean }) {
+  const { animate = false } = props
+  const motion = animate ? 'motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 fill-mode-both duration-300 ease-out' : undefined
+  const style = animate ? ({ '--tw-animation-delay': '560ms' } as CSSProperties) : undefined
+  if (props.days === undefined) {
+    return (
+      <p data-testid="runout-hero" className={cn('mt-2 text-body font-semibold text-bad-fg', motion)} style={style}>
+        {mayRunOutText(props.chance)}
+      </p>
+    )
+  }
   return (
-    <p
-      data-testid="runout-hero"
-      className={cn('mt-2 flex items-baseline gap-2.5', animate && 'motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 fill-mode-both duration-300 ease-out')}
-      style={animate ? ({ '--tw-animation-delay': '560ms' } as CSSProperties) : undefined}
-    >
-      <span className="num shrink-0 whitespace-nowrap text-[40px] leading-[44px] font-extrabold tracking-[-0.02em] text-bad-fg">{days} ngày</span>{' '}
+    <p data-testid="runout-hero" className={cn('mt-2 flex items-baseline gap-2.5', motion)} style={style}>
+      <span className="num shrink-0 whitespace-nowrap text-[40px] leading-[44px] font-extrabold tracking-[-0.02em] text-bad-fg">{props.days} ngày</span>{' '}
       <span className="min-w-0 text-body font-semibold text-ink">hũ trống trước kỳ lương</span>
     </p>
   )

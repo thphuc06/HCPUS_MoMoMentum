@@ -24,6 +24,7 @@ import { DailyAskCard } from '@/features/review/DailyAskCard'
 import { useReview } from '@/features/review/useReview'
 import { formatDayMonth } from '@/lib/dates'
 import { formatRatioPercent, formatVnd, greetingNow } from '@/lib/format'
+import { mayRunOutBeforePayday, shownRunoutDate } from '@/lib/jar'
 import { useAnimateOnce } from '@/lib/motion'
 import { isCardHidden, nudgeKey } from '@/lib/nudgePrefs'
 import { displayName } from '@/lib/user'
@@ -91,11 +92,16 @@ function ProactiveCardFor({ card, data, onAction, footer }: {
   const jar = d.jar_code ? data.jars.find((j) => j.code === d.jar_code) : undefined
   // Cảnh 1: thẻ cảnh báo cạn có số lớn "N ngày" hũ trống trước kỳ lương và dải ô ngày tới kỳ lương; chạy một lần mỗi phiên.
   const animate = useAnimateOnce('runout-strip')
-  const runout = d.kind === 'runout_warning' && data.next_payday && jar?.runout_date ? { payday: data.next_payday.date, date: jar.runout_date } : null
+  const warn = d.kind === 'runout_warning' && jar !== undefined
+  const runoutDate = warn ? shownRunoutDate(jar) : undefined
+  const runout = data.next_payday && runoutDate ? { payday: data.next_payday.date, date: runoutDate } : null
   const emptyDays = runout ? emptyDaysBeforePayday(runout.date, runout.payday, data.app_date) : null
+  // Hũ thưa (#25): không có ngày cạn nên không có số ngày hay dải ngày; còn khả năng hụt thì một dòng ngắn kèm %.
+  const chance = warn && mayRunOutBeforePayday(jar) ? jar.p_shortfall : undefined
+  const hero = emptyDays !== null ? <RunoutHero days={emptyDays} animate={animate} /> : chance !== undefined ? <RunoutHero chance={chance} animate={animate} /> : undefined
   return (
     <div className="mx-4 mt-4">
-      <ProactiveCard data={d} onAction={onAction} hero={emptyDays !== null ? <RunoutHero days={emptyDays} animate={animate} /> : undefined}>
+      <ProactiveCard data={d} onAction={onAction} hero={hero}>
         {runout && <MiniTimeline today={data.app_date} paydayDate={runout.payday} runoutDate={runout.date} animate={animate} />}
       </ProactiveCard>
       {footer}

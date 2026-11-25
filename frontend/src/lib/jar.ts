@@ -1,6 +1,27 @@
 import type { ChipKind } from '@/components/StatusChip'
 import type { JarStatus } from '@/contracts/blocks'
 import { formatDayMonth } from './dates'
+import { formatShortfallChance } from './format'
+
+/**
+ * Ngày cạn được phép nêu (#25): server đặt `runout_date_shown: false` ở hũ thưa (ngày cạn sai trung bình hơn 6 ngày) và bỏ
+ * `runout_date`; dữ liệu cũ còn ngày thì cũng không nêu.
+ */
+export function shownRunoutDate(d: { runout_date?: string; runout_date_shown?: boolean }): string | undefined {
+  return d.runout_date_shown === false ? undefined : d.runout_date
+}
+
+/** Hũ hụt mà server không nêu ngày cạn (#25): giao diện nói "Có thể cạn trước ngày lương" thay cho ngày. */
+export function mayRunOutBeforePayday(d: { status?: string; runout_date_shown?: boolean }): boolean {
+  return d.status === 'short' && d.runout_date_shown === false
+}
+
+export const MAY_RUN_OUT = 'Có thể cạn trước ngày lương'
+
+/** Một dòng ngắn cho hũ hụt không nêu ngày cạn, kèm khả năng hụt khi server cho hiện ("…, khả năng 60%"). */
+export function mayRunOutText(p?: number): string {
+  return p === undefined ? MAY_RUN_OUT : `${MAY_RUN_OUT}, khả năng ${formatShortfallChance(p).toLowerCase()}`
+}
 
 /**
  * Mực nước hũ 0..1 chỉ để vẽ: số dư so với mục tiêu của hũ (nếu có), không thì so với hũ đầy nhất đang hiển thị

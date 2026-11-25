@@ -142,8 +142,10 @@ export function buildChartModel(d: ForecastTimelineData): ChartModel {
     .filter((e) => e.x >= 0 && e.x <= lastX)
     .sort((a, b) => a.x - b.x)
 
-  const runout = runoutPoint({ origin: d.origin_date, runout: d.runout_date }, rows, (r) => r.p50, lastX)
-  const afterRunout = after ? runoutPoint({ origin: d.origin_date, runout: after.runout_date }, rows, (r) => r.after, lastX) : null
+  // Hũ thưa (#25, `runout_date_shown: false`): không có điểm cạn, vùng hụt hay "Sau: cạn …" (không nêu ngày cạn cụ thể).
+  const hidden = d.runout_date_shown === false
+  const runout = hidden ? null : runoutPoint({ origin: d.origin_date, runout: d.runout_date }, rows, (r) => r.p50, lastX)
+  const afterRunout = after && !hidden ? runoutPoint({ origin: d.origin_date, runout: after.runout_date }, rows, (r) => r.after, lastX) : null
 
   const px = diffDays(d.origin_date, d.payday.date)
   const paydayX = px >= 0 && px <= lastX ? px : null

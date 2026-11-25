@@ -287,6 +287,36 @@ describe('Tổng quan: cảnh 1 (thẻ cạn có số lớn và dải ngày), B2
     expect(reason.closest('[data-disclosure-panel]')).toHaveAttribute('data-disclosure-panel', 'open')
   })
 
+  it('hũ thưa (#25, server không nêu ngày cạn): thẻ cạn có một dòng "Có thể cạn trước ngày lương" kèm %, không dải ngày, không ngày cạn', async () => {
+    const sparse = overview((o) => {
+      const an = o.jars.find((j: Json) => j.code === 'an_uong')
+      delete an.runout_date
+      an.runout_date_shown = false
+      o.proactive_card.data.title = 'Hũ Ăn uống có thể cạn trước ngày lương'
+      o.proactive_card.data.reason = 'Còn 380.000 ₫, còn 14 ngày tới kỳ lương 05/12. Khả năng hụt: 70%.'
+    })
+    mountApp(backend({ 'GET /overview': sparse }))
+    const card = await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
+    expect(within(card).getByTestId('runout-hero')).toHaveTextContent(/^Có thể cạn trước ngày lương, khả năng 70%$/)
+    expect(within(card).queryByTestId('mini-timeline')).toBeNull()
+    const chip = (await screen.findByRole('list', { name: 'Danh sách hũ' })).querySelector('[data-jar="an_uong"] [data-chip]')
+    expect(chip).toHaveTextContent(/^Hụt$/)
+    expect(document.body.textContent).not.toMatch(/cạn (ngày )?\d{2}\/\d{2}/i)
+  })
+
+  it('hũ thưa không được hiện %: không có dòng thêm (tiêu đề của server đã nói "có thể cạn trước ngày lương"), không dải ngày', async () => {
+    const sparse = overview((o) => {
+      const an = o.jars.find((j: Json) => j.code === 'an_uong')
+      delete an.runout_date
+      delete an.p_shortfall
+      an.runout_date_shown = false
+    })
+    mountApp(backend({ 'GET /overview': sparse }))
+    const card = await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
+    expect(within(card).queryByTestId('runout-hero')).toBeNull()
+    expect(within(card).queryByTestId('mini-timeline')).toBeNull()
+  })
+
   it('thẻ chủ động không có số lớn (không phải cảnh báo cạn): lý do hiện ngay, không thu gọn', async () => {
     mountApp(backend({ 'GET /overview': overview((o) => { o.proactive_card.data.kind = 'low_data'; o.proactive_card.data.status = 'ok' }) }))
     const card = await screen.findByRole('region', { name: 'Việc cần làm hôm nay' })
