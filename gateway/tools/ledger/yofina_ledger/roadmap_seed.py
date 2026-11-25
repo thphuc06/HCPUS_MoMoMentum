@@ -29,6 +29,7 @@ from typing import Any
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.roadmap import status_for_new_version
 from yofina_ledger import roadmap_logic as rl
+from yofina_ledger.repo import SQL_JAR_VIEW
 from yofina_ledger.roadmap_repo import SQL_GET_ROADMAP, save_in_tx, set_step_in_tx
 from yofina_ledger.settings import LedgerSettings
 from yofina_planner.facts import facts_from_rows
@@ -170,7 +171,9 @@ def seed_roadmaps(
         user=tx.execute("SELECT * FROM app_get_user(:uid)", {"uid": user_id})[0],
         jars=[
             r
-            for r in tx.execute("SELECT * FROM app_get_jar_state(:uid)", {"uid": user_id})
+            # hũ kèm `purpose` (cùng hàm với `LedgerRepo.jar_view`): chỉ hũ `buffer` (hoặc hũ cũ `purpose` NULL theo quy tắc tương
+            # thích) là quỹ dự phòng, hũ Đầu tư `long_term` thì không
+            for r in tx.execute(SQL_JAR_VIEW, {"uid": user_id})
             if r["code"] is not None
         ],
         obligations=tx.execute(

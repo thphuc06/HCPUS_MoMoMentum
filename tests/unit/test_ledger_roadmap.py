@@ -1653,9 +1653,15 @@ class SeedTx:
             return [{"code": c, "balance_vnd": b} for c, b in self.balances.items()]
         if "app_get_user(" in sql:
             return [self.user]
-        if "app_get_jar_state(" in sql:
+        if "app_get_jar_state(" in sql:  # hàm cũ của 0007: không có `purpose`, `sinking_items` (như DB thật)
             return [
-                {**j, "balance_vnd": self.balances[j["code"]]}
+                {k: v for k, v in {**j, "balance_vnd": self.balances[j["code"]]}.items() if k not in ("purpose", "sinking_items")}
+                for j in self.jars
+                if j["kind"] != "system"
+            ]
+        if "app_get_jar_state_with_commitments(" in sql:  # 0058: có `purpose`
+            return [
+                {**j, "balance_vnd": self.balances[j["code"]], "clock_offset_days": 0}
                 for j in self.jars
                 if j["kind"] != "system"
             ]
@@ -1764,6 +1770,32 @@ def test_seed_lo_trinh_bo_hu_demo_dung_file_cua_minh_qua_cung_anh_xa_ma_hu():
     ]
     assert goal_steps and all(names["muc_tieu"] in f"{s['title']} {s['reason']}" for s in goal_steps)
     assert not any("behavior_flags" in s for s in tx.sql)
+
+
+def test_seed_lo_trinh_vi_demo_chi_tinh_hu_buffer_la_quy_du_phong(monkeypatch):
+    """Dữ kiện của luật suitability khi nạp lộ trình seed đọc hũ CÓ `purpose`: trên ví demo, hũ Đầu tư (`long_term`, không mục tiêu)
+    không bị tính là quỹ dự phòng dù có số dư; chỉ hũ `buffer` là quỹ dự phòng. Ví bảy hũ cũ (`purpose` NULL) giữ quy tắc tương
+    thích: hũ tiết kiệm không mục tiêu là quỹ dự phòng."""
+    from yofina_ledger import roadmap_seed as rs
+    from personas.six_jars import JAR_ALIASES
+
+    seen = []
+    real = rs.facts_from_rows
+    monkeypatch.setattr(rs, "facts_from_rows", lambda **kw: seen.append(real(**kw)) or seen[-1])
+
+    tx = SeedTx("minh", demo_layout=True)
+    tx.balances["dau_tu"] = 500_000  # hũ Đầu tư có tiền: trước đây bị cộng vào quỹ dự phòng
+    rs.seed_roadmaps(tx, U, persona="minh", app_date=TODAY, jars=tx.jars, jar_aliases=JAR_ALIASES)
+    (facts,) = seen
+    assert facts.jar("dau_tu").purpose == "long_term" and not facts.is_emergency_jar(facts.jar("dau_tu"))
+    assert facts.emergency_fund_vnd() == tx.balances["du_phong"]
+    assert not any("app_get_jar_state(" in s for s in tx.sql)
+
+    seen.clear()
+    legacy = SeedTx("minh")
+    rs.seed_roadmaps(legacy, U, persona="minh", app_date=TODAY, jars=legacy.jars)
+    (facts,) = seen
+    assert facts.emergency_fund_vnd() == legacy.balances["du_phong"]  # du_lich có mục tiêu nên không phải quỹ dự phòng
 
 
 def test_project_goal_chieu_muc_tieu_theo_muc_danh_moi_thang():

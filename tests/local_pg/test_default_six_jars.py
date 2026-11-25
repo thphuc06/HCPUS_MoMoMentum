@@ -683,3 +683,27 @@ def test_legacy_seven_jar_allocation_unchanged_by_obligation_bill_floor(env):
         now = _build(engine, gathered, shock).problem
         before = _build(engine, replace(gathered, ctx=before_ctx), shock).problem
         assert now == before
+
+
+def test_long_term_jar_with_money_is_not_emergency_fund_anywhere(env):
+    """Hũ Đầu tư (`long_term`) của ví demo có tiền: dữ kiện suitability, điểm chống chịu, cú sốc và LP phân bổ chỉ coi hũ `buffer`
+    là quỹ dự phòng (đọc hũ kèm `purpose`), không cộng Đầu tư vào."""
+    user = "long-term-funded"
+    assert _reset(env, user, "persona-minh")["statusCode"] == 200
+    env.act(user, "move_between_jars", {"from_jar": "giai_tri", "to_jar": "dau_tu", "amount_vnd": 300_000})
+    jars = {j["code"]: j for j in _read_jars(env, user)}
+    assert jars["dau_tu"]["balance_vnd"] == 300_000
+    settings = make_settings(n_paths_full=500, scenario_n_paths=500)
+    pipeline = Pipeline(ForecastRepo(env.db), settings, None, clock=env.clock)
+    assert pipeline.run_user(user, trigger="reset").status == "ok"
+    gathered = ResilienceEngine(pipeline).gather(user, env.clock())
+    assert gathered.emergency_jar_code == "du_phong"
+    view = env.repo.jar_view(user)
+    facts = facts_from_rows(
+        today=gathered.app_date, user=env.repo.user_row(user), jars=view.jars,
+        obligations=gathered.obligations, window_days=30,
+    )  # fmt: skip
+    assert facts.emergency_fund_vnd() == jars["du_phong"]["balance_vnd"]
+    assert StressEngine(pipeline).run(user, "om_mot_tuan")["data"]["emergency_jar"]["code"] == "du_phong"
+    roles = {j.code: j.role for j in _build(AllocationEngine(pipeline), gathered).problem.jars}
+    assert (roles["du_phong"], roles["dau_tu"]) == ("emergency", "saving")
