@@ -12,6 +12,36 @@ Cập nhật lần cuối: **2026-11-25 rạng sáng** (Claude Code điều ph�
 - Đã làm trên AWS: đăng ký một email vào SNS `yofina-alerts` (đã xác nhận; trước đó topic có 0 người nhận). Yêu cầu tăng quota Bedrock qua API bị từ chối vì quota của tài khoản thấp hơn mặc định: phải mở case AWS Support (#3).
 - Máy của Phúc đã có `uv` và `.venv`; unit 3920 passed, 3 skipped.
 
+## Cập nhật chiều 25/11: đợt 1 đã code và merge vào `main`, CHƯA deploy
+
+11 nhánh `p6/*` (worktree `C:\moMo-wt\p6-*`) đã merge vào `main` qua `p6/wave1`. Unit sau khi gộp: **4007 passed, 3 skipped**. CI GitHub Actions (#18) xanh trên nhánh `p6/ci`.
+
+| Issue | Đã làm (code + test) | Deploy cần |
+|---|---|---|
+| #5, #6 | Bộ chấm eval không tự xác nhận số của model, chấm `reasoning`, `kind`; 8 ca đối kháng `evals/adversarial/phase6.jsonl`; writer coi chữ từ tệp nạp là dữ liệu không tin cậy | Runtime (writer, compact) |
+| #8 | `minh` 120 ngày lịch sử, `giamkhao1–3` đều là `minh` | YofinaTools (gói ledger có `data/personas`) rồi seed lại 4 tài khoản |
+| #9 | Cổng % theo độ dài lịch sử (hũ dày 47, hũ thưa 120 ngày); `docs/research/backtest-final.md` | Lambda dự báo |
+| #10 | Lời gọi bị throttle không tính vào trần 4 lời gọi/lượt | Runtime, roadmap-regen |
+| #11 | Ghi lượt sau RUN_FINISHED (thử lại 1 lần, `/ping` HealthyBusy), khóa `_ensure`, what-if chạy song song, cờ `covers_amount` | Runtime |
+| #12 | Thẻ tiến độ hiện "Đang cân các phương án…" khi Analyst còn chạy | Amplify |
+| #14 | Job đêm: `DatabaseUnavailable` + Retry cho `ListUsers` | YofinaTools + zip forecast-batch |
+| #15 | Trả sau trên tài khoản không có hũ Nghĩa vụ: hàm chung `bnpl_pay_jar` | Ledger + Lambda dự báo |
+| #18 | CI 5 job offline (pytest, frontend, CDK, contracts, gitleaks), `.gitattributes` cho CSV mẫu | xong (đóng) |
+| #19 | Khả năng hụt bước 5%, không nói 100%/0%; tài khoản 0 ₫; kỳ lộ trình từ ngày lương; nhãn tiếng Việt ở So với bản cũ | Amplify, ledger, forecast tool, forecast-batch |
+| #20 | CSP + `frame-ancestors 'none'` trên Amplify; che tên sau "chị/anh…" trong bộ nhớ | YofinaFrontend + deploy lại zip; Runtime |
+
+**Deploy đợt 1 (chờ chủ dự án duyệt, dự kiến 28/11)**, theo thứ tự:
+1. `uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --keep-boto --extra data/personas:personas`, rồi `uv run scripts/cdk.py deploy YofinaTools --require-approval never`.
+2. `uv run scripts/agent_deploy.py` (Runtime).
+3. `uv run scripts/cdk.py deploy YofinaFrontend --require-approval never`; `uv run scripts/print_env.py frontend --write`; `npm.cmd run build` trong `frontend/`; `uv run scripts/deploy_frontend.py frontend/dist`.
+4. `uv run scripts/seed_demo.py minh giamkhao1 giamkhao2 giamkhao3` (chuyển `giamkhao3` sang nhóm Cognito `persona-minh`).
+
+**Kiểm sau deploy**: `curl -I` URL Amplify thấy CSP, đăng nhập, chat, nạp ảnh không bị "Refused to connect" (rollback: `git revert` commit CSP rồi deploy lại YofinaFrontend và zip); 3 lượt what-if ấm (đo thời gian tới RUN_FINISHED, trước khoảng 21 s); 0 `turn_persist_timeout`; số `audit_events` bằng số lượt; gửi tin thứ hai ngay sau tin đầu không bị 409 `SESSION_BUSY`; bấm xác nhận ngay sau khi có thẻ vẫn chạy; đo lại số cảnh 1 và cảnh 3 của `minh` rồi sửa `docs/plan/demo-script.md`; chạy 8 ca đối kháng mới `--only`; xem lịch sử `yofina-nightly` vài đêm.
+
+**Rủi ro còn mở từ đợt 1**: hũ Nghĩa vụ phủ 0,728 ở mọi độ dài lịch sử nhưng vẫn hiện %; client Data API chưa coi `57P01` là lỗi tạm thời (C2); lộ trình mới bắt đầu ở ngày lương kế (không còn chặng bắt đầu hôm nay); thẻ tiến độ chưa thử trên trình duyệt; vitest có test chập chờn khi máy tải nặng.
+
+**Issue chưa làm**: #3 (chờ AWS duyệt quota), #4 (đi 6 cảnh), #7 (lập luận nhất quán + công tắc SSM), #13 (trần lượt gọi), #16 (cảnh 5), #17 (bỏ `ops` khỏi tài khoản giám khảo), #21 (đo sau đợt 1), #22–#29 (đợt 2), #30 (chờ BA chốt C-02), #31 (20 câu giữ riêng), #32 (tài liệu, ADR-0004), #33 (số kinh doanh), #34–#38 (RC và nộp). Lô kế tiếp đề xuất: #7, #13, #17, #16, rồi deploy đợt 1.
+
 ## Cập nhật rạng sáng 25/11 (sau khi viết bản trên)
 
 - **Bộ nhớ đã sửa gốc** (nhánh p5/mem-extract, ac2a4fe): bước hợp nhất mặc định của AWS bỏ sở thích có thời hạn ("temporary states") và Nova Lite không theo chỉ dẫn; nay override cả hợp nhất, đổi sang Haiku 4.5. `memory-state-preference` và `memory-knowledge-update` đạt (mỗi ca một lần). Mục A.2 bên dưới coi như xong; chi tiết ở file phase 5 và agentcore-memory-design.md mục 2.2a.
