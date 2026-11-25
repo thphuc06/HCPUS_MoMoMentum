@@ -86,3 +86,34 @@ def test_obligation_source_uses_saved_jar_or_shared_jar_and_requires_legacy_choi
     assert resolve(legacy, selected="daily") == "daily"
     assert resolve(modern, saved="daily", selected="hoa_don") == "daily"
     assert resolve(modern, saved="removed") == "nghia_vu"
+
+
+# hũ mặc định của từng loại giao dịch trong db/seed/tx_type_map.sql (hũ cũ của bộ bảy)
+_TYPE_DEFAULTS = {
+    "food_drink": "an_uong", "grocery": "an_uong", "ride_hailing": "di_lai", "fuel": "di_lai",
+    "entertainment": "giai_tri", "subscription": "giai_tri", "bill_electricity": "hoa_don",
+    "bill_water": "hoa_don", "bill_internet": "hoa_don", "bill_phone": "hoa_don", "phone_topup": "hoa_don",
+    "rent": "hoa_don", "travel": "du_lich",
+}  # fmt: skip
+_DEMO_WALLET = ("an_uong", "di_lai", "nghia_vu", "giai_tri", "muc_tieu", "du_phong", "dau_tu")
+_THREE_JAR_WALLET = ("chi_hang_ngay", "nghia_vu", "du_phong")
+
+
+def test_hu_cua_giao_dich_moi_tren_vi_demo_va_vi_ba_hu():
+    """Ví demo (issue #39, không có Chi hằng ngày): ăn uống, đi lại, giải trí vào đúng hũ; hóa đơn, nạp điện thoại, tiền nhà vào Nghĩa
+    vụ. Ví ba hũ mới: mọi khoản chi vào Chi hằng ngày, hóa đơn vào Nghĩa vụ."""
+    route = {
+        wallet_codes: {t: wallet.transaction_jar(d, wallet_codes, tx_type=t) for t, d in _TYPE_DEFAULTS.items()}
+        for wallet_codes in (_DEMO_WALLET, _THREE_JAR_WALLET)
+    }
+    bills = ("bill_electricity", "bill_water", "bill_internet", "bill_phone", "phone_topup", "rent")
+    assert route[_DEMO_WALLET] == {
+        "food_drink": "an_uong", "grocery": "an_uong", "ride_hailing": "di_lai", "fuel": "di_lai",
+        "entertainment": "giai_tri", "subscription": "giai_tri", **dict.fromkeys(bills, "nghia_vu"),
+        "travel": None,  # ví demo không có hũ Du lịch hay Chi hằng ngày: hỏi hũ
+    }  # fmt: skip
+    assert route[_THREE_JAR_WALLET] == {
+        "food_drink": "chi_hang_ngay", "grocery": "chi_hang_ngay", "ride_hailing": "chi_hang_ngay",
+        "fuel": "chi_hang_ngay", "entertainment": "chi_hang_ngay", "subscription": "nghia_vu",
+        **dict.fromkeys(bills, "nghia_vu"), "travel": "chi_hang_ngay",
+    }  # fmt: skip

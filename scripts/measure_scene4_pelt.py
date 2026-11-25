@@ -4,11 +4,13 @@
     uv run python scripts/measure_scene4_pelt.py                  # bảng hệ số -> phát hiện, hệ số tối thiểu, độ bền
     uv run python scripts/measure_scene4_pelt.py --json           # thêm bản JSON của các bảng
     uv run python scripts/measure_scene4_pelt.py --factor 3.0     # thêm độ bền lệch ngày của hệ số 3,0 trên đủ 20 hạt chia khoản
+    uv run python scripts/measure_scene4_pelt.py --layout persona # ví persona cũ (mặc định: ví demo mà POST /demo/reset nạp)
 
 Cách dựng (đúng như `scripts/inject_behavior_shift.py`, dùng lại chính hàm `plan_shift` của nó, không chép mã):
 
-- Lịch sử: persona `minh` sinh lại tất định ở ngày neo (`personas.generate`), chi tiêu từng NGÀY của hũ Ăn uống giống nguồn của bộ phát
-  hiện (`app_get_daily_spend`: chi trừ tiền hũ, không gắn nghĩa vụ), ngày cuối là hôm qua. Không cài điểm gãy nào vào lịch sử.
+- Lịch sử: persona `minh` sinh lại tất định ở ngày neo (`personas.generate`), mặc định qua bộ hũ demo như `POST /demo/reset`
+  (`personas.six_jars.apply_demo_layout`, issue #39; hũ Ăn uống giữ nguyên mọi dòng), chi tiêu từng NGÀY của hũ Ăn uống giống nguồn
+  của bộ phát hiện (`app_get_daily_spend`: chi trừ tiền hũ, không gắn nghĩa vụ), ngày cuối là hôm qua. Không cài điểm gãy nào.
 - Mức chi tuần cũ là trung vị các tuần đầy đủ có chi trước hai tuần cuối (`baseline_weekly`). Với hệ số `f`, mỗi tuần trong hai tuần
   cuối được thêm khoản chi cho tới `f` lần mức cũ, chia thành số khoản điển hình mỗi tuần của hũ, rơi vào ngày ngẫu nhiên trong tuần
   đó, nơi chi lấy từ lịch sử của hũ (`plan_shift`). Khoản thêm là dòng nạp ngoài ví, cũng vào chuỗi chi của hũ (`external`).
@@ -34,7 +36,7 @@ from typing import Any
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
-for _extra in ("data", "libs/yofina_core/src"):
+for _extra in ("data", "libs/yofina_core/src", "gateway/tools/ledger"):
     if str(REPO / _extra) not in sys.path:
         sys.path.insert(0, str(REPO / _extra))
 
@@ -91,8 +93,10 @@ def persona_history(
     *,
     jar: str = JAR,
     seed: int | None = None,
+    layout: str = "persona",
 ) -> History:
-    """Lịch sử của `persona` (seed của spec, hoặc `seed`) ở ngày neo `anchor`, cho hũ `jar`."""
+    """Lịch sử của `persona` (seed của spec, hoặc `seed`) ở ngày neo `anchor`, cho hũ `jar`; `layout` `demo` là ví sau
+    `POST /demo/reset` (bộ hũ demo), `persona` là ví persona."""
     from collections import Counter
 
     from personas import generate
@@ -103,6 +107,11 @@ def persona_history(
         if seed is None
         else generate(persona, anchor=anchor, seed=seed)
     )
+    if layout == "demo":
+        from personas.six_jars import apply_demo_layout
+        from yofina_ledger.jar_layout import DEMO_LAYOUT
+
+        d = apply_demo_layout(d, DEMO_LAYOUT)
     own = [
         t
         for t in d.transactions
@@ -290,17 +299,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=[],
         help=f"hệ số cần đo độ bền lệch ngày trên đủ {SPLIT_SEEDS} hạt chia khoản (lặp lại được)",
     )
+    ap.add_argument(
+        "--layout",
+        choices=("demo", "persona"),
+        default="demo",
+        help="ví demo sau POST /demo/reset (mặc định) hoặc ví persona",
+    )
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
     params = ch.load_params()
     sc = load_shift_module()
-    h = persona_history(anchor=args.anchor)
+    h = persona_history(anchor=args.anchor, layout=args.layout)
     base = sc.baseline_weekly(list(h.spends), h.anchor, SHIFT_WEEKS)
     weeks = ch.prepare_weekly(h.daily, params)
     print(
-        f"persona {h.persona}, hũ {JAR}, ngày neo {h.anchor}, {h.history_days} ngày lịch sử, {weeks.n_weeks} tuần đầy đủ; "
+        f"persona {h.persona} (ví {args.layout}), hũ {JAR}, ngày neo {h.anchor}, {h.history_days} ngày lịch sử, {weeks.n_weeks} tuần đầy đủ; "
         f"tham số {params.version} (c={params.pelt_penalty_c}, min_relative_change={params.min_relative_change})"
     )
     print(f"chi theo tuần (cũ tới mới): {[round(float(x)) for x in weeks.raw]}")
@@ -336,7 +351,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     seeds = {}
     for s in range(1, args.persona_seeds + 1):
-        hs = persona_history(anchor=args.anchor, seed=s)
+        hs = persona_history(anchor=args.anchor, seed=s, layout=args.layout)
         pre = ch.detect_confirmed(ch.prepare_weekly(hs.daily, params), params) is not None
         seeds[s] = {"minimal_factor": minimal_factor(hs, params, split_seeds=5), "preexisting": pre}
     print("\nĐộ nhạy theo seed persona (lưới 0,1, 5 hạt chia khoản):")
@@ -350,6 +365,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             json.dumps(
                 {
                     "anchor": h.anchor.isoformat(),
+                    "layout": args.layout,
                     "params_version": params.version,
                     "baseline_weekly_vnd": base,
                     "table": table,

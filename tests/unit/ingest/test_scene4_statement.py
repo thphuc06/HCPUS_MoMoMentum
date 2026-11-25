@@ -21,9 +21,11 @@ from yofina_ingest import extract as ex
 from yofina_ingest.context import eval_context
 
 from personas import generate
+from personas.six_jars import JAR_ALIASES, apply_demo_layout
 from yofina_core.ingest import IngestSettings
 from yofina_core.pii import PiiPolicy
 from yofina_ledger.classify_seed import load_seed_set
+from yofina_ledger.jar_layout import DEMO_LAYOUT
 from yofina_ml import change as ch
 from yofina_ml.backtest.change_calibration import persona_daily_spend
 
@@ -34,10 +36,16 @@ PUBLIC_CSV = REPO / "frontend" / "public" / "samples" / NAME
 USER = "sub-giamkhao1"
 
 
-def minh_context(store: FakeLabelStore):
-    """Ngữ cảnh nạp như worker dựng cho một tài khoản persona `minh` vừa đặt lại: hũ của persona, bảng loại giao dịch của seed, chính
-    sách che PII theo người nhận và tên hiển thị, kho nhãn của người dùng."""
+def minh_data(layout: str):
+    """Persona `minh` ở ngày neo: ví persona (`persona`) hoặc ví demo mà `POST /demo/reset` nạp (`demo`, issue #39)."""
     d = generate("minh", anchor=ANCHOR)
+    return apply_demo_layout(d, DEMO_LAYOUT) if layout == "demo" else d
+
+
+def minh_context(store: FakeLabelStore, layout: str = "persona"):
+    """Ngữ cảnh nạp như worker dựng cho một tài khoản persona `minh` vừa đặt lại: hũ của ví, bảng loại giao dịch của seed, chính
+    sách che PII theo người nhận và tên hiển thị, kho nhãn của người dùng."""
+    d = minh_data(layout)
     c = eval_context(ANCHOR)
     c.jars = [
         {"code": j.code, "name": j.name, "color_key": j.color_key, "icon_key": j.icon_key, "kind": j.kind}
@@ -49,13 +57,15 @@ def minh_context(store: FakeLabelStore):
     return c
 
 
-def seed_label_store(jar_codes: set[str]) -> FakeLabelStore:
-    """Nhãn seed của `minh` (chỉ hũ người dùng có, như `apply_seed_labels`), tra theo chuỗi đã chuẩn hóa."""
+def seed_label_store(jar_codes: set[str], aliases: dict[str, str] | None = None) -> FakeLabelStore:
+    """Nhãn seed của `minh` (đổi mã hũ theo `aliases` rồi chỉ giữ hũ người dùng có, như `apply_seed_labels`), tra theo chuỗi đã
+    chuẩn hóa."""
     store = FakeLabelStore()
     seed = load_seed_set("minh")
     assert seed is not None
-    for i, lab in enumerate(x for x in seed.labels if x.jar_code in jar_codes):
-        store.exact.setdefault(lab.text_norm, []).append(ExactLabel(lab.jar_code, "seed", i))
+    labels = [((aliases or {}).get(x.jar_code, x.jar_code), x.text_norm) for x in seed.labels]
+    for i, (code, text) in enumerate(x for x in labels if x[0] in jar_codes):
+        store.exact.setdefault(text, []).append(ExactLabel(code, "seed", i))
     return store
 
 
@@ -68,16 +78,23 @@ def throttled_gateway():
     return make_gateway(client), client
 
 
+@pytest.fixture(scope="module", params=["persona", "demo"])
+def layout(request):
+    """Ví persona (như `main`) và ví demo có hũ tự thêm (issue #39): cảnh 4 phải chạy như nhau trên cả hai."""
+    return request.param
+
+
 @pytest.fixture(scope="module")
-def extracted():
+def extracted(layout):
     """Tệp cảnh 4 qua `extract_rows` với kho nhãn seed của `minh` và Bedrock giả luôn nghẽn: (kết quả, client giả)."""
-    store = seed_label_store({j.code for j in generate("minh", anchor=ANCHOR).jars})
+    aliases = JAR_ALIASES if layout == "demo" else None
+    store = seed_label_store({j.code for j in minh_data(layout).jars}, aliases)
     gw, client = throttled_gateway()
     res = ex.extract_rows(
         DATA_CSV.read_bytes(),
         filename=NAME,
         content_type="text/csv",
-        ctx=minh_context(store),
+        ctx=minh_context(store, layout),
         gateway=gw,
     )
     return res, client
@@ -124,6 +141,15 @@ def test_pelt_xac_nhan_khi_tai_trong_ngay_dat_lai_hoac_tre_mot_ngay(extracted, d
     rows = extracted[0].candidates
     params = ch.load_params()
     daily = persona_daily_spend("minh", ANCHOR)["an_uong"]
+    # ví demo giữ nguyên mọi dòng của hũ Ăn uống: chuỗi chi mà bộ phát hiện đọc (chi trừ tiền hũ, không gắn nghĩa vụ) y hệt
+    demo_daily = np.zeros(len(daily))
+    for tx in minh_data("demo").transactions:
+        if (
+            tx.kind == "expense" and tx.jar_code == "an_uong" and tx.funding_source == "jar"
+            and tx.obligation_key is None and 1 <= tx.days_ago <= len(daily)
+        ):  # fmt: skip
+            demo_daily[len(daily) - tx.days_ago] += -tx.amount_vnd
+    assert np.array_equal(demo_daily, daily)
     assert (
         ch.detect_confirmed(ch.prepare_weekly(daily, params), params) is None
     )  # lịch sử không có điểm gãy cài sẵn
