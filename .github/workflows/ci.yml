@@ -1,0 +1,116 @@
+# CI tối thiểu (issue #18): unit test Python, frontend, CDK, hợp đồng, quét bí mật.
+# Chạy hoàn toàn offline với AWS: không credential, không secret, không synth/deploy.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Lần chạy mới trên cùng nhánh (hoặc cùng PR) hủy lần chạy cũ còn dở.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Không có credential AWS; chặn botocore dò IMDS nếu có client nào lỡ tạo mà không truyền khóa giả.
+  AWS_EC2_METADATA_DISABLED: 'true'
+
+jobs:
+  python:
+    name: Python (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      # setup-uv không có tag major (v10), nên ghim theo SHA của bản phát hành.
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          enable-cache: true
+      # uv đọc phiên bản Python từ .python-version; --locked báo lỗi nếu uv.lock lệch pyproject.
+      - run: uv sync --locked
+      - run: uv run --no-sync pytest tests/unit libs/yofina_core/tests -q
+
+  frontend:
+    name: Frontend (typecheck, vitest, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+  cdk:
+    name: CDK (typecheck, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: infra-cdk
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra-cdk/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      # Test dựng stack bằng account giả trong code test; không synth, không gọi AWS.
+      - run: npm test
+
+  contracts:
+    name: Contracts (Zod sinh ra khớp schema, fixture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run contracts:check
+      - run: npm run contracts:test
+
+  secrets:
+    name: Secrets (gitleaks, toàn bộ lịch sử)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      # SHA-256 của gitleaks_8.30.1_linux_x64.tar.gz (checksums.txt của bản phát hành); đổi phiên bản thì đổi cả dòng này.
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Cài gitleaks CLI (kiểm SHA-256)
+        working-directory: ${{ runner.temp }}
+        run: |
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$tarball" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" gitleaks
+          ./gitleaks version
+      # Quét mọi commit tổ tiên của HEAD (cả lịch sử nhánh/PR đang chạy). Mặc định của gitleaks là --all, tức cả nhánh
+      # khác mà fetch-depth 0 kéo về; giới hạn ở HEAD để kết quả của một nhánh chỉ phụ thuộc chính nó (nhánh khác có lần chạy riêng).
+      # --redact: log công khai chỉ hiện file, dòng, luật; không in giá trị bí mật.
+      # Dương tính giả đã kiểm tay nằm trong .gitleaks.toml (allowlist theo đúng giá trị giả).
+      - name: Quét bí mật
+        run: '"$RUNNER_TEMP/gitleaks" git . --log-opts="--full-history HEAD" --config .gitleaks.toml --redact --no-banner --verbose --exit-code 1'

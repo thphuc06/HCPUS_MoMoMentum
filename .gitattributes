@@ -1,0 +1,6 @@
+# CSV mẫu do bộ sinh ghi với CRLF (csv.writer lineterminator="\r\n"); test so từng byte với bộ sinh
+# (tests/unit/test_persona_external.py) và evals/ingest/manifest.json ghi sha256 theo byte
+# (tests/unit/test_eval_ingest_scoring.py). Giữ nguyên byte khi commit/checkout trên mọi hệ điều hành,
+# nếu không thì clone trên Linux (CI) nhận LF và hai test trên đỏ.
+data/personas/samples/*.csv -text
+evals/ingest/synthetic/csv/*.csv -text
