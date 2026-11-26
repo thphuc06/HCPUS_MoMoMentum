@@ -451,16 +451,27 @@ def _date_text(value: Any) -> str | None:
     return f"{when.day:02d}/{when.month:02d}/{when.year}"
 
 
+def _is_buffer(jar: dict[str, Any]) -> bool:
+    """Hũ Dự phòng có mục đích `buffer` (ví demo, ví ba hũ). Hũ tiết kiệm cũ `purpose` NULL đi đường hũ mục tiêu như trước."""
+    return jar.get("kind") == "saving" and jar.get("purpose") == "buffer"
+
+
 def _user_goal_entry(goal: UserGoal, jars: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Mục tiêu người dùng nói, dạng một phần tử `goals` của optimize_allocation. Chỉ hũ tiết kiệm; chỉ có hạn thì hũ phải có sẵn
-    goal_vnd. Không hợp lệ thì None (không gửi, bộ tối ưu dùng mục tiêu đã khai ở hũ)."""
+    """Mục tiêu người dùng nói, dạng một phần tử `goals` của optimize_allocation. Hũ mục tiêu (cả hũ tiết kiệm cũ `purpose` NULL): chỉ
+    có hạn thì hũ phải có sẵn goal_vnd. Hũ Dự phòng (`buffer`, BR-64): đích số dư của lượt này, bắt buộc có số tiền (bộ tối ưu không
+    đọc goal_vnd của hũ đệm). Không hợp lệ thì None (không gửi, bộ tối ưu dùng mục tiêu đã khai ở hũ)."""
     jar = next(
-        (j for j in jars if j.get("code") == goal.jar and is_goal_jar(j.get("kind"), j.get("purpose"))),
+        (
+            j for j in jars
+            if j.get("code") == goal.jar
+            and (is_goal_jar(j.get("kind"), j.get("purpose")) or _is_buffer(j))
+        ),
         None,
-    )
-    if jar is None or not (
-        goal.target_vnd is not None or (goal.target_date and "goal_vnd" in jar)
-    ):
+    )  # fmt: skip
+    if jar is None:
+        return None
+    has_target = goal.target_vnd is not None
+    if not (has_target or (goal.target_date and "goal_vnd" in jar and not _is_buffer(jar))):
         return None
     entry: dict[str, Any] = {"jar": goal.jar}
     if goal.target_vnd is not None:

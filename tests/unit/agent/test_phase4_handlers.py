@@ -29,7 +29,6 @@ from yofina_agent.tools import classify_result
 from yofina_agent.turn import (
     _GOAL_ADD_GOAL_JAR,
     _GOAL_BAD_DATE,
-    _GOAL_BUFFER_NOT_PLANNED,
     _GOAL_NOT_SAVING,
     _GOAL_UNKNOWN_JAR,
     _GOAL_USE_GOAL_JAR,
@@ -420,9 +419,6 @@ GOAL_JAR = {"code": "muc_tieu", "name": "Du lịch", "kind": "saving", "purpose"
 @pytest.mark.parametrize(
     ("rows", "jar_text", "note"),
     [
-        # hũ Dự phòng (`buffer`, BR-64) có mức mục tiêu riêng: không nói "không đặt mục tiêu được", không đẩy sang hũ khác (#39)
-        (THREE_JARS, "hũ Dự phòng", _GOAL_BUFFER_NOT_PLANNED.format(name="Dự phòng")),
-        ([*THREE_JARS, GOAL_JAR], "hũ Dự phòng", _GOAL_BUFFER_NOT_PLANNED.format(name="Dự phòng")),
         # hũ tiết kiệm dài hạn: chưa có hũ mục tiêu thì chỉ chỗ thêm, có rồi thì chỉ ra hũ đó
         ([*THREE_JARS, LONG_TERM_JAR], "hũ Tích lũy dài hạn", _GOAL_ADD_GOAL_JAR.format(name="Tích lũy dài hạn")),
         (
@@ -432,8 +428,8 @@ GOAL_JAR = {"code": "muc_tieu", "name": "Du lịch", "kind": "saving", "purpose"
     ],
 )  # fmt: skip
 def test_lo_trinh_muc_tieu_o_hu_tiet_kiem_khong_phai_hu_muc_tieu_noi_dung_tinh_huong(monkeypatch, rows, jar_text, note):
-    """Hũ Dự phòng và hũ dài hạn LÀ hũ tiết kiệm, chỉ không phải hũ mục tiêu: câu báo nói đúng tình huống của từng loại, không nói
-    "không phải hũ tiết kiệm"; mục tiêu không gửi cho bộ tối ưu và lộ trình vẫn lập."""
+    """Hũ dài hạn LÀ hũ tiết kiệm, chỉ không phải hũ mục tiêu: câu báo nói đúng tình huống, không nói "không phải hũ tiết kiệm"; mục
+    tiêu không gửi cho bộ tối ưu và lộ trình vẫn lập."""
     tools = roadmap_tools()
     tools.results["get_jar_balances"] = lambda _a: classify_result("get_jar_balances", mcp_ok(_jars_payload(rows)))
     events, _, _ = goal_turn(
@@ -443,6 +439,22 @@ def test_lo_trinh_muc_tieu_o_hu_tiet_kiem_khong_phai_hu_muc_tieu_noi_dung_tinh_h
     assert texts_of(events)[0] == note
     assert "không phải hũ tiết kiệm" not in note
     assert calls_of(tools, "optimize_allocation") == [{}]
+
+
+@pytest.mark.parametrize("rows", [THREE_JARS, [*THREE_JARS, GOAL_JAR]])
+def test_lo_trinh_muc_tieu_o_hu_du_phong_gui_dich_so_du_cho_bo_toi_uu(monkeypatch, rows):
+    """Hũ Dự phòng (`buffer`, BR-64): đích số dư của lượt này đi vào bộ tối ưu như mục tiêu của hũ mục tiêu (#39 26/11), không câu báo
+    trước thẻ, không đẩy sang hũ Du lịch."""
+    tools = roadmap_tools()
+    tools.results["get_jar_balances"] = lambda _a: classify_result("get_jar_balances", mcp_ok(_jars_payload(rows)))
+    events, _, _ = goal_turn(
+        monkeypatch, tools=tools, roadmap_action="create", amount_vnd=3_000_000, jar_text="hũ Dự phòng", date_text="3 tháng nữa"
+    )
+    check_agui_order(events)
+    assert calls_of(tools, "optimize_allocation") == [
+        {"goals": [{"jar": "du_phong", "target_vnd": 3_000_000, "target_date": "2027-02-21"}]}
+    ]
+    assert "TEXT_MESSAGE_CONTENT" not in types(events)[: types(events).index("ACTIVITY_SNAPSHOT")]
 
 def test_lo_trinh_han_khong_doc_duoc_van_giu_so_tien(monkeypatch):
     tools = roadmap_tools()

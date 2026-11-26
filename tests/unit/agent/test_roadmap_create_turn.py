@@ -1,7 +1,7 @@
 """Câu xin LẬP lộ trình có mục tiêu (số tiền hoặc hạn) mà router chưa trích được hũ (issue #39).
 
 Tái lập ca đã thấy trên app 25/11: "lập giúp mình lộ trình xây quỹ dự phòng 3 triệu trong 3 tháng". Router (model) trả số tiền và hạn
-nhưng không có `jar_text` và `roadmap_action` trống, hoặc có `jar_text` trỏ hũ Dự phòng (`buffer`). Router giả trả đúng các dạng đầu ra đó;
+nhưng không có `jar_text` và `roadmap_action` trống, hoặc có `jar_text` trỏ hũ Dự phòng (`buffer`, lập theo đích số dư của hũ). Router giả trả đúng các dạng đầu ra đó;
 không có model thật. Ba ví: ví demo (Dự phòng `buffer`, Du lịch là hũ mục tiêu), ví ba hũ mới, ví bảy hũ cũ (`purpose` NULL).
 """
 
@@ -24,7 +24,7 @@ from yofina_agent.router import merge_pending, pending_params
 from yofina_agent.schemas import IntentParams, IntentResult
 from yofina_agent.textutil import normalize
 from yofina_agent.tools import classify_result
-from yofina_agent.turn import _GOAL_BUFFER_NOT_PLANNED, _GOAL_NO_JAR
+from yofina_agent.turn import _GOAL_NO_AMOUNT, _GOAL_NO_JAR
 
 QUESTION = "lập giúp mình lộ trình xây quỹ dự phòng 3 triệu trong 3 tháng"
 TARGET = 3_000_000
@@ -301,10 +301,10 @@ def test_vi_bay_hu_cu_tra_loi_hu_du_phong_lap_theo_muc_tieu(monkeypatch):
     assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
 
 
-# --- hũ Dự phòng (`buffer`): lập bản mới, không biến hũ thành hũ mục tiêu, nói thật phần chưa tính ----------------------
+# --- hũ Dự phòng (`buffer`): lập bản mới theo đích số dư của hũ Dự phòng, không biến hũ thành hũ mục tiêu ----------------
 @pytest.mark.parametrize("wallet", ["demo", "three"])
 @pytest.mark.parametrize("via", ["router_jar", "answer"])
-def test_muc_tieu_o_hu_du_phong_lap_ban_moi_khong_hien_ban_cu(monkeypatch, wallet, via):
+def test_muc_tieu_o_hu_du_phong_lap_ban_moi_theo_dich_so_du(monkeypatch, wallet, via):
     rows = WALLETS[wallet]
     if via == "router_jar":  # router trích được "quỹ dự phòng"
         llm = make_llm(
@@ -320,17 +320,34 @@ def test_muc_tieu_o_hu_du_phong_lap_ban_moi_khong_hien_ban_cu(monkeypatch, walle
             latest="ok", draft_jar="du_phong",
         )  # fmt: skip
     check_agui_order(events)
-    note = _GOAL_BUFFER_NOT_PLANNED.format(name="Dự phòng")
-    assert texts_of(events)[0] == note
-    # không gửi mục tiêu của hũ đệm như mục tiêu của hũ goal (bộ tối ưu từ chối), không ghi goal_vnd lên hũ
-    assert calls_of(tools, "optimize_allocation") == [{}]
+    # đích số dư của hũ Dự phòng chỉ gửi cho bộ tối ưu của lượt này (bộ tối ưu giữ vai đệm), không ghi goal_vnd lên hũ
+    assert calls_of(tools, "optimize_allocation") == [
+        {"goals": [{"jar": "du_phong", "target_vnd": TARGET, "target_date": DUE}]}
+    ]
     assert not {tool for tool, _ in tools.calls} & {"update_jar", "save_jars", "update_jars", "create_jar"}
     (stored,) = calls_of(tools, "save_roadmap")
     assert stored["reason_code"] == "user_request"
     assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
     assert not writer.calls  # không đọc lại bản cũ bằng writer
-    # câu báo không bảo hũ Dự phòng "không đặt mục tiêu được" và không đẩy mục tiêu dự phòng sang hũ Du lịch
-    assert "không đặt mục tiêu được" not in note and "Du lịch" not in note
+    # một lời kết dựng bằng mã nêu đích người dùng xin; không còn câu "chưa tính được mục tiêu", không đẩy sang hũ Du lịch
+    (text,) = texts_of(events)
+    assert "3.000.000 ₫ cho hũ Dự phòng trước 21/02/2027" in text
+    assert "chưa tính được" not in text and "Du lịch" not in text
+
+
+@pytest.mark.parametrize("goal_vnd", [None, 5_000_000])
+def test_hu_du_phong_chi_co_han_hoi_so_tien_khong_doc_goal_vnd(monkeypatch, goal_vnd):
+    """Câu chỉ có hạn cho hũ Dự phòng: đích số dư cần số tiền người dùng nói, kể cả khi hàng hũ có goal_vnd (không đọc nó)."""
+    rows = [{**r, "goal_vnd": goal_vnd} if r["code"] == "du_phong" and goal_vnd else r for r in DEMO_JARS]
+    llm = make_llm(
+        [route_response(intent="roadmap", date_text="trong 3 tháng", jar_text="quỹ dự phòng"),
+         tool_response("draft_roadmap", outline("du_phong"))]
+    )  # fmt: skip
+    events, tools, _ = run_turn(QUESTION, llm=llm, tools=roadmap_tools(rows), monkeypatch=monkeypatch)
+    check_agui_order(events)
+    assert texts_of(events)[0] == _GOAL_NO_AMOUNT.format(name="Dự phòng")
+    assert calls_of(tools, "optimize_allocation") == [{}]
+    assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
 
 
 # --- ghép câu cụt với câu lộ trình đang chờ, bằng mã ------------------------------------------------------------------

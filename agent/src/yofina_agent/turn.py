@@ -1312,7 +1312,8 @@ class Turn:
         return True
 
     async def roadmap_user_goal(self, p: IntentParams) -> UserGoal | None:
-        """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text) ra mã hũ và ngày ISO bằng mã. Chỉ nhận hũ mục tiêu (`is_goal_jar`).
+        """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text) ra mã hũ và ngày ISO bằng mã. Nhận hũ mục tiêu (`is_goal_jar`) và
+        hũ Dự phòng (`buffer`: đích số dư, cần số tiền).
 
         Không dùng được thì bỏ mục tiêu và nói rõ bằng một câu cố định (lộ trình vẫn lập). Không lưu gì vào hũ. Hũ chưa xác định thì
         `ask_goal_jar` đã hỏi lại trước khi tới đây.
@@ -1333,14 +1334,12 @@ class Turn:
             return None
         row = next(j for j in self._jar_rows if j["code"] == match.code)
         name = str(row["name"])
-        if not is_goal_jar(row.get("kind"), row.get("purpose")):
+        # Hũ Dự phòng (`buffer`, BR-64) nhận đích số dư của lượt này như hũ mục tiêu (bộ tối ưu giữ vai đệm, không đọc hay ghi
+        # goal_vnd của hũ), nên cần số tiền người dùng nói; hũ tiết kiệm cũ `purpose` NULL đi đường hũ mục tiêu như trước.
+        buffer = row.get("kind") == "saving" and row.get("purpose") == "buffer"
+        if not buffer and not is_goal_jar(row.get("kind"), row.get("purpose")):
             if row.get("kind") != "saving":
                 await self.emit_fixed_text(_GOAL_NOT_SAVING.format(name=name))
-                return None
-            if is_buffer_jar(row.get("kind"), row.get("purpose"), row.get("goal_vnd")):
-                # Hũ Dự phòng (BR-64) có mức mục tiêu riêng, không phải hũ goal: không đẩy mục tiêu dự phòng sang hũ khác, không ghi
-                # gì vào hũ. Bộ tối ưu (`optimize_allocation`) chưa nhận đích số dư cho hũ đệm nên bản mới chưa tính mục tiêu này.
-                await self.emit_fixed_text(_GOAL_BUFFER_NOT_PLANNED.format(name=name))
                 return None
             goal_jars = [
                 str(j["name"]) for j in self._jar_rows if is_goal_jar(j.get("kind"), j.get("purpose"))
@@ -1361,7 +1360,7 @@ class Turn:
                 )
                 if p.amount_vnd is None:
                     return None
-        if p.amount_vnd is None and row.get("goal_vnd") is None:
+        if p.amount_vnd is None and (buffer or row.get("goal_vnd") is None):
             await self.emit_fixed_text(_GOAL_NO_AMOUNT.format(name=name))
             return None
         return UserGoal(
@@ -1841,11 +1840,6 @@ _GOAL_NOT_SAVING = (
 #: hũ tiết kiệm nhưng mục đích không phải mục tiêu (Quỹ dồn, Tích lũy dài hạn): nói đúng tình huống, chỉ chỗ đặt mục tiêu
 _GOAL_USE_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Bạn đặt mục tiêu này ở hũ {goal_jars} nhé."
 _GOAL_ADD_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Thêm hũ Mục tiêu ở màn Thêm hoặc sửa hũ để đặt mục tiêu này."
-#: mục tiêu ở hũ Dự phòng (`buffer`): lộ trình chưa tính được đích số dư của hũ đệm (xem `roadmap_user_goal`)
-_GOAL_BUFFER_NOT_PLANNED = (
-    "Lộ trình chưa tính được mục tiêu số dư cho hũ {name}, nên bản mới này lập theo các mục tiêu đã khai ở hũ, "
-    "chưa theo mục tiêu bạn vừa nêu."
-)
 _GOAL_BAD_DATE = "Mình chưa đọc được hạn “{typed}” nên dùng hạn đã khai ở hũ {name}, nếu có."
 _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa đặt hạn này. Bạn cho mình biết số tiền muốn gom nhé."
 
@@ -1857,8 +1851,7 @@ def _states_goal(p: IntentParams) -> bool:
 
 def _holds_roadmap_target(jar: Mapping[str, Any]) -> bool:
     """Hũ người dùng có thể gắn mục tiêu lộ trình vào (chip của câu hỏi chọn hũ): hũ mục tiêu (BR-67, cả hũ tiết kiệm cũ `purpose`
-    NULL) và hũ Dự phòng (BR-64, mục tiêu riêng). Bộ tối ưu hiện chỉ nhận mục tiêu của hũ mục tiêu: chọn hũ Dự phòng thì
-    `roadmap_user_goal` nói rõ bản mới chưa tính mục tiêu đó."""
+    NULL) và hũ Dự phòng (BR-64, đích số dư của lượt lập: bộ tối ưu giữ vai đệm, không ghi gì vào hũ)."""
     kind, purpose = jar.get("kind"), jar.get("purpose")
     return isinstance(kind, str) and (is_goal_jar(kind, purpose) or is_buffer_jar(kind, purpose, jar.get("goal_vnd")))
 
