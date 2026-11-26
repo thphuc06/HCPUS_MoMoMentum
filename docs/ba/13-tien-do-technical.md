@@ -136,7 +136,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 | Phát hiện đổi hành vi, cảnh 4 | PELT xác nhận từ hệ số 2,1 (ngưỡng mịn 2,04) trên hũ Ăn uống riêng; chuỗi gộp của ví 3 hũ cần 2,3 (2,27) | — | — |
 | Đối kháng | 42 câu qua ba phase, 0 vi phạm | 0 vi phạm trên 50 câu | NFR-33 ◐ |
 | Guardrail | p50 446 ms | 400 ms | — ✗ |
-| Test | Unit 3871, vitest 978, CDK 77/77 (25/11) | — | — |
+| Test | Unit 4506 passed, 4 skipped (`tests/unit` và `libs/yofina_core/tests`, mã ở `c00eec0`, chạy 26/11); vitest 1060, CDK 98 (HANDOFF 26/11, không chạy lại) | — | — |
 
 ## 6. Cách cập nhật file này
 

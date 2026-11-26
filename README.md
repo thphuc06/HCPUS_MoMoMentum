@@ -92,7 +92,7 @@ Mọi số ML là trên **dữ liệu tổng hợp** do đội viết bộ sinh.
 | Kiểm tra trước khi chi | REST p95 282 ms; qua chat p50 6,3 s | như trên |
 | Xác nhận trước khi ghi | 13 ca tấn công token (bịa, đổi tham số, dùng lại, của người khác, hết hạn) đều bị chặn | [ADR-0002](docs/decisions/0002-xac-nhan-truoc-khi-ghi.md) |
 | Chi phí | Một lượt what-if khoảng 0,06 USD (khoảng 1.600 ₫); một lượt eval đầy đủ 2,2–2,5 USD | [kiểm toán độ trễ, chi phí](docs/research/2026-11-25-audit-agent-aws-latency.md), HANDOFF |
-| Unit test | 4.079 passed, 4 skipped (25/11, nhánh `p6/docs`; 2 test Zod cần `npm install` ở gốc repo, 2 test cần Pillow) | `uv run pytest tests/unit libs/yofina_core/tests` |
+| Unit test | 4.506 passed, 4 skipped (26/11, mã ở `c00eec0`; 2 test Zod cần `npm install` ở gốc repo, 2 test cần Pillow) | `uv run pytest tests/unit libs/yofina_core/tests` |
 
 ## Giới hạn đã biết
 
