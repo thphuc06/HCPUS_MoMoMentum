@@ -65,6 +65,18 @@ Phase 5 (cách chạy thêm và cách chấm ở docstring từng hàm):
   nhận xét khớp hồ sơ (`GET /profile/behavior`), đúng loại.
 - citation (`expect_citation_fee_types`, `forbid_unretrieved_citation`, hoặc lượt có khối `citation`): mỗi mục trỏ đúng một dòng
   biểu phí (`get_fee_schedule` của lượt, đối chiếu `GET /credit-line` cùng bảng `fee_schedules`), đủ loại phí kỳ vọng.
+Ví demo 8 hũ (issue #34, #39; trường tùy chọn, ca không có thì không chấm). Mã và tên hũ của tài khoản chạy eval suy từ bộ sinh
+(`demo_wallet_jars`, như `tests/integration/conftest.py`); bộ chấm dò hũ trong chữ (câu trả lời, bản ghi bộ nhớ) theo tên hiển thị của
+mã đó (`jar_phrases`: hũ goal `muc_tieu` tên "Du lịch"), chỉ đọc mã như chữ khi mã không có trên ví demo.
+- clarify_slot (`expect_clarify_slot`): khối `clarify` hỏi đúng ô đó; ô `jar` thì mỗi chip là tên một hũ có thật.
+- roadmap_goal (`expect_roadmap_goal` {purpose, target_vnd}): khối `roadmap` cuối có mục tiêu ở hũ mang mục đích đó, đúng số tiền, có hạn.
+- obligation_window (`expect_obligation_window`): what-if Trả sau liệt kê khoản đến hạn trước ngày lương ở hũ trả nghĩa vụ, theo ngày,
+  có khoản Trả sau của lượt khi nó đến hạn trước lương.
+- runout_claims (`forbid_runout_jars`): "hũ nào sắp cạn" dự báo các hũ đó và không nói chúng cạn, hụt, hết tiền.
+- ingest_jars (`expect_ingest_jars` [{amount_vnd, jar}]): dòng chi của tệp nạp có số tiền đó được đề xuất vào đúng hũ.
+- replaced_notice (`expect_replaced_notice`): thông báo thay bản đề xuất có khi và chỉ khi lượt thay một bản đang chờ (đọc từ
+  `get_roadmap` của lượt).
+`--list`: in mỗi ca một dòng JSON (lượt chat, lần nạp tệp, lời gọi judge) và dòng tổng, không gọi gì; dùng để ước tính trước khi chạy.
 """
 
 from __future__ import annotations
@@ -194,6 +206,13 @@ CASE_KEYS = frozenset(
         "forbid_option_source_jars",
         # phase 6
         "forbid_prompt_leak",
+        # ví demo 8 hũ (#34, #39)
+        "expect_clarify_slot",
+        "expect_roadmap_goal",
+        "expect_obligation_window",
+        "forbid_runout_jars",
+        "expect_ingest_jars",
+        "expect_replaced_notice",
     }
 )
 #: Các bộ câu `evals/<bộ>/phase<N>.jsonl` (phase 6 chỉ có bộ đối kháng).
@@ -231,6 +250,67 @@ def _manifest() -> dict[str, dict[str, Any]]:
     if _MANIFEST is None:
         _MANIFEST = load_manifest()
     return _MANIFEST
+
+
+# --- ví demo của tài khoản chạy eval (bộ sinh) ----------------------------------------------------
+#: Ngày neo của bộ sinh khi dựng ví demo (như `tests/integration/conftest.py` `DEMO_ANCHOR`). Mã, tên, loại và mục đích hũ không phụ
+#: thuộc ngày này.
+DEMO_ANCHOR = "2026-11-21"
+_DEMO_WALLETS: dict[str, list[dict[str, Any]]] = {}
+
+
+def demo_wallet_jars(account: str = DEFAULT_ACCOUNT) -> list[dict[str, Any]]:
+    """Hũ của ví demo mà "Đặt lại dữ liệu" nạp cho tài khoản chạy eval (bộ 8 hũ của issue #39 với `minh`), theo thứ tự hiển thị, suy
+    từ bộ sinh như `tests/integration/conftest.py` `demo_wallet`: persona của tài khoản (`accounts.json`), `generate` rồi
+    `apply_demo_layout` với `DEMO_LAYOUT`. Mỗi hũ có `code`, `name` (tên hiển thị: hũ goal `muc_tieu` mang tên hũ nguồn "Du lịch"),
+    `kind`, `purpose`. Không chép tay mã hay tên hũ nào. Tài khoản không có trong `accounts.json` thì danh sách rỗng."""
+    persona = json.loads(ACCOUNTS_PATH.read_text(encoding="utf-8"))["demo_accounts"].get(account)
+    if persona is None:
+        return []
+    if persona not in _DEMO_WALLETS:
+        for extra in ("data", "gateway/tools/ledger"):
+            if str(ROOT / extra) not in sys.path:
+                sys.path.append(str(ROOT / extra))  # cuối danh sách: không che module trùng tên của gói khác
+        from datetime import date
+
+        from personas import generate
+        from personas.six_jars import apply_demo_layout
+        from yofina_ledger.jar_layout import DEMO_LAYOUT
+
+        purposes = {j.code: j.purpose for j in DEMO_LAYOUT}
+        wallet = apply_demo_layout(generate(persona, anchor=date.fromisoformat(DEMO_ANCHOR)), DEMO_LAYOUT)
+        _DEMO_WALLETS[persona] = [
+            {"code": j.code, "name": j.name, "kind": j.kind, "purpose": purposes.get(j.code)} for j in wallet.jars
+        ]
+    return [dict(j) for j in _DEMO_WALLETS[persona]]
+
+
+def jar_phrases(code: str, account: str = DEFAULT_ACCOUNT) -> set[str]:
+    """Cụm chữ chỉ hũ `code` khi dò trong câu trả lời hay bản ghi bộ nhớ: tên hiển thị của hũ đó trên ví demo của tài khoản chạy eval.
+    Mã không có trên ví demo (ca của bộ bảy hũ cũ, ví dụ `du_lich`) thì đọc mã như chữ ("du lich") như trước. Hũ có trên ví thì KHÔNG
+    đọc mã như chữ: mã `muc_tieu` của hũ "Du lịch" đọc thành "muc tieu" sẽ khớp nhầm chữ "mục tiêu" thông thường."""
+    names = {j["name"] for j in demo_wallet_jars(account) if j["code"] == code}
+    return names or {code.replace("_", " ")}
+
+
+def _run_jar_names(run: Mapping[str, Any]) -> dict[str, set[str]]:
+    """Mã hũ -> tên hiển thị đọc từ kết quả tool và khối của lượt (mọi nút có `code` và `name` là chuỗi)."""
+    out: dict[str, set[str]] = {}
+    nodes = [_parse(t.get("result")) for t in run.get("tools") or []] + [b.get("data") for b in run.get("blocks") or []]
+    for node in _walk(nodes):
+        if isinstance(node, Mapping) and isinstance(node.get("code"), str) and isinstance(node.get("name"), str):
+            out.setdefault(node["code"], set()).add(node["name"])
+    return out
+
+
+def _jar_purposes(run: Mapping[str, Any]) -> dict[str, str]:
+    """Mã hũ -> mục đích (`purpose`) đọc từ ví demo của tài khoản chạy eval rồi từ kết quả tool và khối của lượt (lượt thắng)."""
+    out = {j["code"]: j["purpose"] for j in demo_wallet_jars(str(run.get("account") or DEFAULT_ACCOUNT)) if j["purpose"]}
+    nodes = [_parse(t.get("result")) for t in run.get("tools") or []] + [b.get("data") for b in run.get("blocks") or []]
+    for node in _walk(nodes):
+        if isinstance(node, Mapping) and isinstance(node.get("code"), str) and isinstance(node.get("purpose"), str):
+            out[node["code"]] = node["purpose"]
+    return out
 
 
 # --- gom sự kiện AG-UI ----------------------------------------------------------------------------
@@ -538,11 +618,15 @@ def clear_memory(api: Api) -> dict[str, Any]:
     return {"deleted_records": body.get("deleted_records"), "failed": body.get("failed"), "error": None}
 
 
-def expected_preference_seen(snap: Mapping[str, Any], jar_codes: list[str]) -> bool:
-    """Bộ nhớ đã có bản ghi SỞ THÍCH nhắc từng hũ mong đợi (`expect_memory_used`, mã hũ đọc như chữ: `du_lich` -> "du lich", so không
-    dấu theo nguyên cụm)."""
+def expected_preference_seen(
+    snap: Mapping[str, Any], jar_codes: list[str], account: str = DEFAULT_ACCOUNT
+) -> bool:
+    """Bộ nhớ đã có bản ghi SỞ THÍCH nhắc từng hũ mong đợi (`expect_memory_used`): tên hiển thị của mã trên ví demo của tài khoản
+    (`jar_phrases`; mã không có trên ví thì đọc mã như chữ: `du_lich` -> "du lich"), so không dấu theo nguyên cụm."""
     prefs = [_fold(str(r.get("text") or "")) for r in snap.get("records") or [] if r.get("kind") == "preference"]
-    return all(any(_has_phrase(p, code.replace("_", " ")) for p in prefs) for code in jar_codes)
+    return all(
+        any(_has_phrase(p, phrase) for p in prefs for phrase in jar_phrases(code, account)) for code in jar_codes
+    )
 
 
 def wait_for_memory(
@@ -731,20 +815,25 @@ def _record_ids(snap: Mapping[str, Any] | None) -> set[str]:
     return {str(r.get("record_id")) for r in (snap or {}).get("records") or []}
 
 
-def _expected_record_matches(rec: Mapping[str, Any], exp: Mapping[str, Any]) -> bool:
-    """Bản ghi đúng loại và nhắc đúng hũ (`jar`, mã đọc như chữ) hoặc, khi kỳ vọng không có hũ, có cụm `keeps`."""
+def _expected_record_matches(
+    rec: Mapping[str, Any], exp: Mapping[str, Any], account: str = DEFAULT_ACCOUNT
+) -> bool:
+    """Bản ghi đúng loại và nhắc đúng hũ (`jar`: tên hiển thị của mã trên ví demo, `jar_phrases`) hoặc, khi kỳ vọng không có hũ, có
+    cụm `keeps`."""
     if rec.get("kind") != exp.get("kind", "preference"):
         return False
     text = _fold(str(rec.get("text") or ""))
     if exp.get("jar"):
-        return _has_phrase(text, str(exp["jar"]).replace("_", " "))
+        return any(_has_phrase(text, phrase) for phrase in jar_phrases(str(exp["jar"]), account))
     return bool(exp.get("keeps")) and _has_phrase(text, _fold(str(exp["keeps"])))
 
 
-def expected_records_seen(snap: Mapping[str, Any], expectations: list[Mapping[str, Any]]) -> bool:
+def expected_records_seen(
+    snap: Mapping[str, Any], expectations: list[Mapping[str, Any]], account: str = DEFAULT_ACCOUNT
+) -> bool:
     """Mọi kỳ vọng của `expect_memory_records` đã có ít nhất một bản ghi khớp (chưa xét `keeps` khi có hũ: chấm riêng)."""
     recs = list(snap.get("records") or [])
-    return all(any(_expected_record_matches(r, e) for r in recs) for e in expectations)
+    return all(any(_expected_record_matches(r, e, account) for r in recs) for e in expectations)
 
 
 JUDGE_SYSTEM = (
@@ -837,12 +926,13 @@ def execute_case(
     upload_timeout: float = 240.0,
     seeder: MemorySeeder | None = None,
     judge_fn: Callable[[str, str], str] | None = None,
+    account: str = DEFAULT_ACCOUNT,
     sleep=time.sleep,
     clock=time.monotonic,
 ) -> dict[str, Any]:
     """Một ca: [nạp tệp mẫu] -> [xóa bộ nhớ, nạp bản ghi, xóa bản ghi cần quên] -> [phiên trước + chờ bộ nhớ] -> câu hỏi chính ở
     session id mới -> [đọc lại job, bộ nhớ, biểu phí, hồ sơ hành vi để đối chiếu; judge] -> [dọn bản ghi đã nạp]. Mọi thứ đọc thêm nằm
-    trong `run` để `--score-only` chấm lại được."""
+    trong `run` để `--score-only` chấm lại được. `account`: tài khoản chạy eval, để dò tên hũ của ví demo khi chờ bản ghi bộ nhớ."""
     manifest = manifest if manifest is not None else _manifest()
     ctx: dict[str, Any] = {}
     mid = case.get("upload_manifest_id")
@@ -892,7 +982,7 @@ def execute_case(
     if case.get("prior_sessions"):
         ctx["prior"] = run_prior_sessions(case["prior_sessions"], invoke_fn, pace)
         expect = list(case.get("expect_memory_used") or [])
-        until = (lambda snap: expected_preference_seen(snap, expect)) if expect else None
+        until = (lambda snap: expected_preference_seen(snap, expect, account)) if expect else None
         waited = wait_for_memory(api, mem_before, memory_wait, until=until, sleep=sleep, clock=clock)
         ctx["memory_wait"] = {
             "waiting_for": f"preference:{','.join(expect)}" if expect else "any_new_record",
@@ -919,7 +1009,12 @@ def execute_case(
         # Ca GHI: chờ đúng bản ghi mong đợi (loại và hũ), hoặc hết giờ; `outcome` ghi rõ là `seen` hay `timeout`.
         exps = list(case["expect_memory_records"])
         after = wait_for_memory(
-            api, mem_before, memory_wait, until=lambda snap: expected_records_seen(snap, exps), sleep=sleep, clock=clock
+            api,
+            mem_before,
+            memory_wait,
+            until=lambda snap: expected_records_seen(snap, exps, account),
+            sleep=sleep,
+            clock=clock,
         )
         ctx["memory_after"] = after
     elif case.get("expect_seed_superseded"):
@@ -1490,19 +1585,10 @@ _PREF_WORDS = ("uu tien", "so thich", "hu nao", "muon de", "nhac")
 
 
 def _jar_names(run: Mapping[str, Any], code: str) -> set[str]:
-    """Tên hiển thị của hũ `code` lấy từ kết quả tool và khối của lượt, cộng mã hũ đọc như chữ (`du_lich` -> "du lich")."""
-    names = {code.replace("_", " ")}
-    nodes = [_parse(t.get("result")) for t in run.get("tools") or []] + [
-        b.get("data") for b in run.get("blocks") or []
-    ]
-    for node in _walk(nodes):
-        if (
-            isinstance(node, Mapping)
-            and node.get("code") == code
-            and isinstance(node.get("name"), str)
-        ):
-            names.add(node["name"])
-    return names
+    """Tên hiển thị của hũ `code` lấy từ kết quả tool và khối của lượt, cộng tên của mã trên ví demo của tài khoản chạy
+    (`jar_phrases`; mã không có trên ví demo thì đọc mã như chữ: `du_lich` -> "du lich")."""
+    names = jar_phrases(code, str(run.get("account") or DEFAULT_ACCOUNT))
+    return names | _run_jar_names(run).get(code, set())
 
 
 def answer_mentions_jar(run: Mapping[str, Any], code: str) -> bool:
@@ -1574,8 +1660,9 @@ def memory_state(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, A
         fails.append("khong_doc_duoc_bo_nho")
         after = None
     recs = list((after or {}).get("records") or [])
+    account = str(run.get("account") or DEFAULT_ACCOUNT)
     for i, exp in enumerate(case.get("expect_memory_records") or []):
-        found = [r for r in recs if _expected_record_matches(r, exp)]
+        found = [r for r in recs if _expected_record_matches(r, exp, account)]
         if not found:
             fails.append(f"thieu_ban_ghi:{i}")
         elif exp.get("keeps") and not any(_has_phrase(_fold(str(r.get("text") or "")), str(exp["keeps"])) for r in found):
@@ -1992,6 +2079,211 @@ def scenario_kind(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, 
     return {"ok": bool(kinds) and kinds[-1] == want, "kinds": kinds, "expected": want}
 
 
+# --- ví demo 8 hũ: hành vi mới của đợt #39 (chỉ đọc khối và kết quả tool của lượt) --------------------
+def clarify_slot(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, Any]:
+    """`expect_clarify_slot`: khối `clarify` cuối của lượt hỏi đúng ô đó (`data.slot`). Hỏi hũ (`jar`) thì phải có chip và mỗi chip là
+    một hũ có thật của người dùng: nhãn chip là tên một hũ trong kết quả tool hay khối của lượt, hoặc của ví demo suy từ bộ sinh."""
+    want = case["expect_clarify_slot"]
+    blocks = _blocks_of(run, "clarify")
+    if not blocks:
+        return {"ok": False, "fails": ["thieu_khoi_clarify"], "slot": None, "chips": []}
+    data = blocks[-1]["data"]
+    chips = [str(c.get("label") or "") for c in data.get("chips") or []]
+    fails = [] if data.get("slot") == want else ["sai_thong_tin_hoi"]
+    if want == "jar":
+        names = {_fold(j["name"]) for j in demo_wallet_jars(str(run.get("account") or DEFAULT_ACCOUNT))}
+        names |= {_fold(n) for ns in _run_jar_names(run).values() for n in ns}
+        if not chips:
+            fails.append("khong_co_chip_hu")
+        elif any(_fold(c) not in names for c in chips):
+            fails.append("chip_khong_phai_hu")
+    return {"ok": not fails, "fails": fails, "slot": data.get("slot"), "chips": chips}
+
+
+def roadmap_goal(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, Any]:
+    """`expect_roadmap_goal` ({purpose, target_vnd}): khối `roadmap` cuối có mục tiêu (`goals`) ở hũ mang mục đích đó, đúng số tiền
+    người dùng nêu, có hạn (`target_date`). Hũ nhận ra theo `jar.purpose` của mục tiêu, hoặc theo mã hũ có mục đích đó trên ví demo hay
+    trong kết quả tool của lượt (`_jar_purposes`). Mục tiêu bị đẩy sang hũ khác là trượt."""
+    want = case["expect_roadmap_goal"]
+    blocks = _blocks_of(run, "roadmap")
+    if not blocks:
+        return {"ok": False, "fails": ["thieu_khoi_roadmap"], "goals": []}
+    purposes = _jar_purposes(run)
+    goals = [g for g in blocks[-1]["data"].get("goals") or [] if isinstance(g, Mapping)]
+
+    def purpose_of(g: Mapping[str, Any]) -> str | None:
+        jar = g.get("jar") or {}
+        return jar.get("purpose") or purposes.get(str(jar.get("code")))
+
+    on_jar = [g for g in goals if purpose_of(g) == want["purpose"]]
+    target = want.get("target_vnd")
+    hit = [g for g in on_jar if target is None or g.get("target_vnd") == target]
+    fails = []
+    if not on_jar:
+        fails.append("khong_co_muc_tieu_o_hu")
+    elif not hit:
+        fails.append("sai_so_tien_muc_tieu")
+    elif not any(g.get("target_date") for g in hit):
+        fails.append("thieu_han_muc_tieu")
+    seen = [
+        {"jar": (g.get("jar") or {}).get("code"), "purpose": purpose_of(g), "target_vnd": g.get("target_vnd"),
+         "target_date": g.get("target_date")}
+        for g in goals
+    ]  # fmt: skip
+    return {"ok": not fails, "fails": fails, "goals": seen}
+
+
+def obligation_window(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, Any]:
+    """`expect_obligation_window` (what-if Trả sau): khối `forecast_timeline` của hũ trả nghĩa vụ liệt kê các khoản đến hạn TRƯỚC ngày
+    lương sau khi mua (`compare.after.obligations_before_payday.items`, `yofina_core.schedule.obligation_window`):
+    - danh sách không rỗng; mọi khoản là nghĩa vụ có ngày trước `payday.date`; xếp theo ngày;
+    - khoản Trả sau của lượt (`obligation_impact.cost`: `due_date`, `total_due_vnd`) có trong danh sách (cùng ngày, cùng số tiền) khi nó
+      đến hạn trước ngày lương, và không có khi nó đến hạn từ ngày lương trở đi;
+    - hũ của khối là hũ trả của `obligation_impact.at_due` (khi khối đó có).
+    Mọi số lấy từ khối do code dựng từ kết quả `run_scenario` của chính lượt."""
+    timelines = [
+        b["data"]
+        for b in _blocks_of(run, "forecast_timeline")
+        if isinstance(((b["data"].get("compare") or {}).get("after") or {}).get("obligations_before_payday"), Mapping)
+    ]
+    if not timelines:
+        return {"ok": False, "fails": ["thieu_danh_sach_den_han"], "items": []}
+    data = timelines[-1]
+    window = data["compare"]["after"]["obligations_before_payday"]
+    items = [i for i in window.get("items") or [] if isinstance(i, Mapping)]
+    payday = str((data.get("payday") or {}).get("date") or "")
+    impacts = _blocks_of(run, "obligation_impact")
+    impact = impacts[-1]["data"] if impacts else {}
+    cost = impact.get("cost") or {}
+    pay_jars = {str((a.get("jar") or {}).get("code")) for a in impact.get("at_due") or [] if isinstance(a, Mapping)}
+    fails = []
+    if not items:
+        fails.append("danh_sach_rong")
+    if any(str(i.get("date")) >= payday or i.get("kind") != "obligation" for i in items):
+        fails.append("khoan_tu_ngay_luong")
+    dates = [str(i.get("date")) for i in items]
+    if dates != sorted(dates):
+        fails.append("khong_theo_ngay")
+    due, total = cost.get("due_date"), cost.get("total_due_vnd")
+    if due and total and items:
+        listed = any(str(i.get("date")) == due and i.get("amount_vnd") == total for i in items)
+        if str(due) < payday and not listed:
+            fails.append("thieu_khoan_tra_sau")
+        elif str(due) >= payday and listed:
+            fails.append("khoan_tu_ngay_luong")
+    if pay_jars and str((data.get("jar") or {}).get("code")) not in pay_jars:
+        fails.append("sai_hu_tra")
+    return {
+        "ok": not fails,
+        "fails": list(dict.fromkeys(fails)),
+        "jar": (data.get("jar") or {}).get("code"),
+        "payday": payday,
+        "items": [[str(i.get("date")), i.get("amount_vnd")] for i in items],
+    }
+
+
+#: Lời nói một hũ cạn (đã bỏ mệnh đề phủ định bằng `_NEGATION_RE`): "dự kiến cạn", "có thể cạn", "hụt", "hết tiền". "Sát số dư" không tính.
+_RUNOUT_RE = re.compile(r"(?<!\w)(?:cạn|hụt|hết tiền)(?!\w)")
+
+
+def runout_claims(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, Any]:
+    """`forbid_runout_jars` (mã hũ), câu "hũ nào sắp cạn": lượt không nói các hũ đó cạn trước kỳ lương. Trượt khi, với mỗi mã:
+    - lượt không dự báo hũ đó (`get_forecast` với `jar` là mã đó, kết quả không lỗi): không biết lượt có nói đúng không;
+    - bản gọn `get_forecast` của hũ đó có ngày cạn trước kỳ lương (`runout.days_before_payday` > 0) hay cờ có thể cạn trước ngày lương;
+    - một câu của câu trả lời vừa nhắc tên hũ (`_jar_names`) vừa nói cạn, hụt, hết tiền (bỏ mệnh đề phủ định trước khi dò);
+    - có khối `forecast_timeline` của hũ đó ở trạng thái hụt hay có ngày cạn."""
+    codes = list(case["forbid_runout_jars"])
+    calls: dict[str, Any] = {}
+    for t in run.get("tools") or []:
+        args = _parse(t.get("args"))
+        if t["name"] == "get_forecast" and isinstance(args, Mapping) and args.get("jar") in codes:
+            res = _parse(t.get("result"))
+            calls[str(args["jar"])] = res if isinstance(res, Mapping) and res.get("status") != "ERROR" else None
+    sentences = [
+        _NEGATION_RE.sub(" ", s.lower())
+        for s in _SENTENCE_SPLIT_RE.split(unicodedata.normalize("NFC", run.get("text") or ""))
+    ]
+    fails: list[str] = []
+    for code in codes:
+        res = calls.get(code)
+        if res is None:
+            fails.append(f"khong_co_du_bao:{code}")
+        else:
+            r = res.get("runout") if isinstance(res.get("runout"), Mapping) else {}
+            if r.get("may_run_out_before_payday") or int(r.get("days_before_payday") or 0) > 0:
+                fails.append(f"du_bao_sap_can:{code}")
+        names = _jar_names(run, code)
+        if any(_RUNOUT_RE.search(s) and any(_has_phrase(_fold(s), n) for n in names) for s in sentences):
+            fails.append(f"noi_sap_can:{code}")
+        for b in _blocks_of(run, "forecast_timeline"):
+            d = b["data"]
+            if (d.get("jar") or {}).get("code") == code and (d.get("status") == "short" or d.get("runout_date")):
+                fails.append(f"bieu_do_sap_can:{code}")
+                break
+    return {"ok": not fails, "fails": fails, "forecast_jars": sorted(calls)}
+
+
+def ingest_jars(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, Any]:
+    """`expect_ingest_jars` ([{amount_vnd, jar}]): mỗi dòng chi của tệp nạp (`ingest_rows`: job lúc nạp xong, khối `ingest_review` của
+    lượt, job sau lượt) có số tiền đó được đề xuất vào đúng hũ (`suggested_jar.code`, mã hũ của ví demo). Không có dòng nào với số tiền
+    đó, hay một dòng như vậy chưa xếp được hũ hoặc xếp sang hũ khác, là trượt."""
+    rows = [r for r in ingest_rows(run) if r.get("kind") == "expense"]
+    fails: list[str] = []
+    got: dict[str, list[str | None]] = {}
+    for exp in case["expect_ingest_jars"]:
+        amount = exp["amount_vnd"]
+        hits = [r for r in rows if r.get("amount_vnd") == amount]
+        got[str(amount)] = [(r.get("suggested_jar") or {}).get("code") for r in hits]
+        if not hits:
+            fails.append(f"khong_co_dong:{amount}")
+        elif any(code != exp["jar"] for code in got[str(amount)]):
+            fails.append(f"sai_hu:{amount}")
+    return {"ok": not fails, "fails": fails, "got": got}
+
+
+REPLACED_NOTICE_CODE = "ROADMAP_PROPOSAL_REPLACED"
+
+
+def replaced_notice(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, Any]:
+    """`expect_replaced_notice` (lập lại lộ trình): khối `notice` `ROADMAP_PROPOSAL_REPLACED` có khi và chỉ khi lượt thay một bản đề xuất
+    đang chờ. Bản đang chờ đọc từ kết quả `get_roadmap` (`which: latest`) đầu tiên của lượt, gọi TRƯỚC khi lưu: trạng thái `proposed`
+    thì thông báo phải có và nêu đúng số phiên bản đó; bản mới nhất đang dùng (sau "Đặt lại dữ liệu": v2), hay chưa có lộ trình
+    (`ROADMAP_NOT_FOUND`), thì không được có thông báo thay bản. Lượt không đọc bản mới nhất thì không kiểm được: trượt."""
+    before: Mapping[str, Any] | None = None
+    for t in run.get("tools") or []:
+        args = _parse(t.get("args"))
+        if t["name"] == "get_roadmap" and isinstance(args, Mapping) and args.get("which") == "latest":
+            res = _parse(t.get("result"))
+            before = res if isinstance(res, Mapping) else None
+            break
+    notices = [
+        str(b["data"].get("message") or "") for b in _blocks_of(run, "notice") if b["data"].get("code") == REPLACED_NOTICE_CODE
+    ]
+    if before is None:
+        return {"ok": False, "fails": ["khong_doc_ban_moi_nhat"], "pending_version": None, "notices": len(notices)}
+    pending = before.get("version") if before.get("status") == "proposed" else None
+    fails = []
+    if pending is not None:
+        if not notices:
+            fails.append("thieu_thong_bao_thay_ban")
+        elif not any(re.search(rf"(?<!\d){int(pending)}(?!\d)", m) for m in notices):
+            fails.append("thong_bao_sai_phien_ban")
+    elif notices:
+        fails.append("thong_bao_thay_ban_khi_khong_co_ban_cho")
+    return {"ok": not fails, "fails": fails, "pending_version": pending, "notices": len(notices)}
+
+
+#: Khóa của ca -> (tên bộ chấm trong điểm, hàm chấm): bộ chấm của ví demo 8 hũ, chỉ chạy khi ca có khóa.
+DEMO_WALLET_SCORES = {
+    "expect_clarify_slot": ("clarify_slot", clarify_slot),
+    "expect_roadmap_goal": ("roadmap_goal", roadmap_goal),
+    "expect_obligation_window": ("obligation_window", obligation_window),
+    "forbid_runout_jars": ("runout_claims", runout_claims),
+    "expect_ingest_jars": ("ingest_jars", ingest_jars),
+    "expect_replaced_notice": ("replaced_notice", replaced_notice),
+}
+
+
 def score(
     run: dict[str, Any],
     case: dict[str, Any],
@@ -2027,6 +2319,9 @@ def score(
             s["memory_attribution"] = memory_attribution(run)
         if case.get("forbid_option_source_jars"):
             s["option_sources"] = option_sources(run, case)
+        for key, (name, grade) in DEMO_WALLET_SCORES.items():
+            if case.get(key):
+                s[name] = grade(run, case)
     else:
         s["adversarial"] = adversarial(run, case, manifest)
     # Phase 5, cả hai bộ: chấm khi ca đòi hoặc khi lượt có khối tương ứng (ca phase 3, 4 không có nên không đổi điểm).
@@ -2061,6 +2356,7 @@ OPTIONAL_SCORES = (
     "upload_state",
     "behavior_insight",
     "citation",
+    *(name for name, _ in DEMO_WALLET_SCORES.values()),
 )
 
 
@@ -2154,6 +2450,29 @@ def background_argv(argv: list[str]) -> list[str]:
     ]
 
 
+def case_plan(case: Mapping[str, Any]) -> dict[str, Any]:
+    """Một ca tốn bao nhiêu khi chạy: lượt chat gửi Runtime (câu chính, cộng mỗi tin `user` của `prior_sessions`; `history` đi kèm câu
+    chính trong cùng một lượt), lần nạp tệp (`upload_manifest_id`) và lời gọi judge (`judge_memory_attribution`, gọi model qua
+    `yofina_core.llm`, không qua Runtime). Mỗi lượt chat tính một lượt vào trần `/yofina/quota/chat_turns_per_day` của tài khoản, mỗi
+    lần nạp một lượt vào `/yofina/quota/uploads_per_day`."""
+    prior = sum(1 for s in case.get("prior_sessions") or [] for m in s if m.get("role") == "user")
+    return {
+        "id": case["id"],
+        "turns": 1 + prior,
+        "uploads": int(bool(case.get("upload_manifest_id"))),
+        "judge_calls": int(bool(case.get("judge_memory_attribution"))),
+    }
+
+
+def print_plan(cases: list[dict[str, Any]], suite: str, phase: int) -> None:
+    """`--list`: mỗi ca một dòng JSON (`case_plan`), dòng cuối là tổng của bộ. Không gọi Runtime, REST, model hay AWS."""
+    rows = [case_plan(c) for c in cases]
+    for r in rows:
+        print(json.dumps(r, ensure_ascii=False))
+    totals = {k: sum(r[k] for r in rows) for k in ("turns", "uploads", "judge_calls")}
+    print(json.dumps({"suite": suite, "phase": phase, "cases": len(rows), **totals}, ensure_ascii=False))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -2202,7 +2521,19 @@ def main() -> int:
         help="chạy nền (tiến trình tách rời), log ra evals/results/phase<N>-<bộ>.log",
     )
     ap.add_argument("--url", help="URL invoke của Runtime (mặc định SSM /yofina/agent/runtime-url)")
+    ap.add_argument(
+        "--list",
+        action="store_true",
+        help="chỉ liệt kê ca của bộ (lượt chat, lần nạp tệp, lời gọi judge) và dòng tổng; không gọi gì",
+    )
     args = ap.parse_args()
+
+    if args.list:
+        cases = load(ROOT / "evals" / args.suite / f"phase{args.phase}.jsonl")
+        if args.only:
+            cases = [c for c in cases if c["id"] in set(args.only.split(","))]
+        print_plan(cases, args.suite, args.phase)
+        return 0
 
     if args.background:
         import subprocess
@@ -2268,6 +2599,7 @@ def main() -> int:
                 upload_timeout=args.upload_timeout,
                 seeder=seeder,
                 judge_fn=judge_fn,
+                account=args.account,
             )
             row = {"case": c, "run": run, "seconds": round(time.perf_counter() - t0, 1)}
             run["account"] = args.account  # `other_user_leaks`: người dùng khác là mọi tài khoản demo trừ tài khoản này

@@ -593,6 +593,8 @@ def test_ca_phase3_va_phase4_khong_co_bo_cham_phase5():
 
 # --- phase 5: định dạng bộ câu ---------------------------------------------------------------------
 MANIFEST = evals_run.load_manifest()
+#: mã hũ của ví demo mà tài khoản chạy eval (`minh`) có sau "Đặt lại dữ liệu" (bộ 8 hũ của issue #39), suy từ bộ sinh
+DEMO_CODES = {j["code"] for j in evals_run.demo_wallet_jars("minh")}
 
 
 def phase5(suite: str) -> list[dict]:
@@ -628,7 +630,7 @@ def test_dinh_dang_bo_cau_hoi_phase5(suite, minimum):
             "data"
         ]["fees"]
     }
-    jar_codes = set(read_json("evals", "ingest", "manifest.json")["jar_codes"])
+    jar_codes = DEMO_CODES  # mã hũ của ví demo sau "Đặt lại dữ liệu", suy từ bộ sinh
     for c in cases:
         cid = c["id"]
         assert c["question"].strip(), cid
@@ -731,7 +733,7 @@ MEM_PREF = {
 }
 JARS_RESULT = {
     "app_date": "2026-11-21",
-    "jars": [{"code": "du_lich", "name": "Du lịch"}, {"code": "an_uong", "name": "Ăn uống"}],
+    "jars": [{"code": "muc_tieu", "name": "Du lịch"}, {"code": "an_uong", "name": "Ăn uống"}],
 }
 
 
@@ -770,7 +772,7 @@ def test_phien_truoc_chay_voi_session_id_khac_roi_cho_bo_nho_truoc_cau_hoi_chinh
     assert (
         run["memory_wait"]
         == {
-            "waiting_for": "preference:du_lich",
+            "waiting_for": "preference:muc_tieu",
             "outcome": "seen",
             "new_records": 1,
             "waited_s": 10.0,
@@ -780,7 +782,7 @@ def test_phien_truoc_chay_voi_session_id_khac_roi_cho_bo_nho_truoc_cau_hoi_chinh
     )
 
     s = evals_run.score(run, case, "golden")
-    assert s["memory_reuse"]["ok"] and s["memory_reuse"]["used"] == {"du_lich": True}
+    assert s["memory_reuse"]["ok"] and s["memory_reuse"]["used"] == {"muc_tieu": True}
     assert s["memory_reuse"]["memory_wait"]["outcome"] == "seen"
     assert s["trajectory"]["ok"] and s["ok"], s
 
@@ -812,7 +814,7 @@ def test_cho_dung_so_thich_mong_doi_khong_dung_o_ban_ghi_moi_dau_tien():
     assert clock.t <= 30.0
     # tiêu chí chấm không đổi: hết giờ chờ không làm ca đạt hay trượt thay cho câu trả lời
     s = evals_run.score(run, case, "golden")
-    assert s["memory_reuse"]["fails"] == ["khong_dung_so_thich:du_lich"]
+    assert s["memory_reuse"]["fails"] == ["khong_dung_so_thich:muc_tieu"]
 
 
 def test_expected_preference_seen_chi_tinh_ban_ghi_so_thich_nhac_dung_hu():
@@ -850,7 +852,7 @@ def test_dung_lai_so_thich_truot_khi_khong_nhac_hu_hoac_hoi_lai():
     case = case5("golden", "memory-reuse-new-session")
     base = {"prior": [{"session_id": "s1", "runs": [{"error": None}]}], "session_id": "s2"}
     no_use = {**run_with(), **base, "text": "Bạn nên để vào hũ Ăn uống."}
-    assert evals_run.memory_reuse(no_use, case)["fails"] == ["khong_dung_so_thich:du_lich"]
+    assert evals_run.memory_reuse(no_use, case)["fails"] == ["khong_dung_so_thich:muc_tieu"]
     reask = {**run_with(), **base, "text": "Hũ Du lịch còn ít. Bạn muốn ưu tiên hũ nào?"}
     assert evals_run.memory_reuse(reask, case)["fails"] == ["hoi_lai_so_thich"]
     clarify = {
@@ -861,7 +863,7 @@ def test_dung_lai_so_thich_truot_khi_khong_nhac_hu_hoac_hoi_lai():
     assert "hoi_lai_so_thich" in evals_run.memory_reuse(clarify, case)["fails"]
     # dùng hũ qua tham số của khối hành động cũng tính; câu hỏi không về sở thích không phải hỏi lại
     act = {
-        **run_with({"type": "confirm_action", "data": {"params": {"to_jar": "du_lich"}}}),
+        **run_with({"type": "confirm_action", "data": {"params": {"to_jar": "muc_tieu"}}}),
         **base,
         "text": "Bạn có muốn mình mở thẻ xác nhận không?",
     }
@@ -1523,7 +1525,7 @@ def test_bo_ca_bo_nho_it_ca_khoa_hop_le_va_ban_ghi_nap_khong_co_so():
     """Chủ dự án lo chi phí: tổng số ca bộ nhớ của golden phase 5 không quá 6 (3 ca cũ, thêm tối đa 3), mỗi ca chạy 1 lần."""
     cases = memory_cases()
     assert 1 <= len(cases) <= 6, [c["id"] for c in cases]
-    jar_codes = set(read_json("evals", "ingest", "manifest.json")["jar_codes"])
+    jar_codes = DEMO_CODES
     for c in cases:
         cid = c["id"]
         for it in c.get("seed_memory", []):
@@ -1819,12 +1821,12 @@ def test_phuong_an_khong_lay_tien_hu_nguoi_dung_muon_giu():
     case = case5("golden", "memory-whatif-protect-jar")
     ok = run_with(options_block(opt("defer_purchase", "defer"), opt("switch_giai_tri", "switch_jar")))
     assert evals_run.option_sources(ok, case)["ok"]
-    switch = run_with(options_block(opt("defer_purchase", "defer"), opt("switch_du_lich", "switch_jar")))
-    assert evals_run.option_sources(switch, case)["fails"] == ["lay_tien_hu:du_lich"]
-    confirm = {"type": "confirm", "id": "confirm:t:1", "data": {"tool": "move_between_jars", "params": {"from_jar": "du_lich", "to_jar": "an_uong"}}}
+    switch = run_with(options_block(opt("defer_purchase", "defer"), opt("switch_muc_tieu", "switch_jar")))
+    assert evals_run.option_sources(switch, case)["fails"] == ["lay_tien_hu:muc_tieu"]
+    confirm = {"type": "confirm", "id": "confirm:t:1", "data": {"tool": "move_between_jars", "params": {"from_jar": "muc_tieu", "to_jar": "an_uong"}}}
     move = run_with(options_block(opt("move_1", "move_between_jars", action={"kind": "confirm", "block_id": "confirm:t:1"}), opt("skip", "skip")), confirm)
-    assert evals_run.option_sources(move, case)["fails"] == ["lay_tien_hu:du_lich"]
-    into = {**confirm, "data": {**confirm["data"], "params": {"from_jar": "giai_tri", "to_jar": "du_lich"}}}
+    assert evals_run.option_sources(move, case)["fails"] == ["lay_tien_hu:muc_tieu"]
+    into = {**confirm, "data": {**confirm["data"], "params": {"from_jar": "giai_tri", "to_jar": "muc_tieu"}}}
     move_in = run_with(options_block(opt("move_1", "move_between_jars", action={"kind": "confirm", "block_id": "confirm:t:1"}), opt("skip", "skip")), into)
     assert evals_run.option_sources(move_in, case)["ok"]  # dồn tiền VÀO hũ thì không phải lấy tiền
     assert evals_run.option_sources(run_with(), case)["fails"] == ["khong_co_phuong_an"]
@@ -2008,7 +2010,7 @@ def test_bo_doi_khang_phase6_duoc_runner_nap_va_moi_ca_co_bo_cham():
     stored = [c for c in cases if c.get("upload_confirm") == "all"]
     assert stored and all(MANIFEST[c["upload_manifest_id"]]["expected"].get("attack") for c in stored)
     assert any(c.get("forbid_prompt_leak") for c in cases)
-    assert evals_run.CONFIRM_ALL_FALLBACK_JAR in read_json("evals", "ingest", "manifest.json")["jar_codes"]
+    assert evals_run.CONFIRM_ALL_FALLBACK_JAR in DEMO_CODES  # hũ người dùng tự chọn phải có trên ví demo
 
 
 def test_ca_ngoai_te_truot_khi_tu_quy_doi_theo_ty_gia_tu_nghi():
