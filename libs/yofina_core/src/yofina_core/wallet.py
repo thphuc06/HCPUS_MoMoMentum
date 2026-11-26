@@ -79,6 +79,25 @@ def pay_jar_or_default(
     return saved if saved in eligible_codes else default
 
 
+def transaction_jar_chain(default_code: str | None, *, tx_type: str | None = None) -> tuple[str, ...]:
+    """Các hũ nhận một loại giao dịch có hũ mặc định `default_code`, theo thứ tự ưu tiên của `transaction_jar`: hũ riêng của loại (chính
+    hũ đó, rồi hũ mà `LEGACY_JAR_ALIASES` gộp nó vào) trước, hũ chung của bộ hũ mặc định sau (Nghĩa vụ cho hóa đơn và thuê bao, Chi hằng
+    ngày cho các loại chi hằng ngày). Rỗng khi loại không có hũ mặc định. Ví nhận loại đó vào hũ ĐẦU TIÊN của chuỗi mà ví có; mọi hũ
+    trong chuỗi đều là hũ "của" loại đó (dùng khi so một đề xuất hũ với loại giao dịch, `yofina_ingest.classify`)."""
+    if default_code is None:
+        return ()
+    own = [default_code]
+    if alias := LEGACY_JAR_ALIASES.get(default_code):
+        own.append(alias)
+    if default_code == "hoa_don" or tx_type == "subscription":
+        shared = [DEFAULT_OBLIGATION_JAR]
+    elif default_code in ("an_uong", "di_lai", "giai_tri", "du_lich"):
+        shared = [DEFAULT_SPENDING_JAR]
+    else:
+        shared = []
+    return tuple(dict.fromkeys((*own, *shared)))
+
+
 def transaction_jar(
     default_code: str | None, jar_codes: Iterable[str], *, tx_type: str | None = None
 ) -> str | None:
@@ -89,20 +108,9 @@ def transaction_jar(
     Nghĩa vụ, the Du lịch goal into the goal jar). Only a wallet without such a jar uses the shared default of the onboarding
     layout: Nghĩa vụ for bills and subscriptions, Chi hằng ngày for everyday categories. No match at all: None (the caller falls
     back to the system jar of the type or asks). `tx_type` is optional for callers that only know a category, like a seed label
-    of the k-NN classifier (`yofina_ledger.classify_seed`)."""
-    if default_code is None:
-        return None
+    of the k-NN classifier (`yofina_ledger.classify_seed`). The order is `transaction_jar_chain`."""
     codes = set(jar_codes)
-    own = [default_code]
-    if alias := LEGACY_JAR_ALIASES.get(default_code):
-        own.append(alias)
-    if default_code == "hoa_don" or tx_type == "subscription":
-        shared = [DEFAULT_OBLIGATION_JAR]
-    elif default_code in ("an_uong", "di_lai", "giai_tri", "du_lich"):
-        shared = [DEFAULT_SPENDING_JAR]
-    else:
-        shared = []
-    return next((code for code in (*own, *shared) if code in codes), None)
+    return next((code for code in transaction_jar_chain(default_code, tx_type=tx_type) if code in codes), None)
 
 
 #: Loại CHI của bảng tra loại giao dịch (các dòng chiều `out` của db/seed/tx_type_map.sql, theo `sort_order`): (mã loại, nhãn, hũ mặc
