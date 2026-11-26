@@ -12,6 +12,7 @@ import { useWriteFlow } from '@/api/useWrite'
 import { useChatLauncher } from '@/chat/launcher'
 import { JarSplitEditor } from '@/features/jars/JarSplitEditor'
 import { KnownItemsEditor } from '@/features/jars/KnownItemsEditor'
+import { SplitHelp } from '@/features/jars/SplitHelp'
 import { SplitProposalCard } from '@/features/jars/SplitProposalCard'
 import { ObligationFormView } from '@/features/obligations/ObligationForm'
 import { CYCLE_LABEL, KIND_LABEL } from '@/features/obligations/params'
@@ -162,7 +163,10 @@ function JarsStep({ onNext, onBack, onSkip }: { onNext: () => void; onBack: () =
   const loading = ov.status === 'loading' || templates.status === 'loading'
   return (
     <StepShell step={2} onBack={onBack}>
-      <h1 className="text-title font-bold text-ink">Chia lương vào các hũ</h1>
+      <div className="flex items-start gap-2">
+        <h1 className="min-w-0 flex-1 text-title font-bold text-ink">Chia lương vào các hũ</h1>
+        <SplitHelp place="onboarding" templates={templates.data?.templates} className="-mt-1.5 -mr-2" />
+      </div>
       <p className="mt-1 mb-4 text-small text-ink-2">Hệ thống đã gợi ý sẵn các hũ. Bạn sửa tỷ lệ được; tổng phải đúng 100%.</p>
       {loading && <Skeleton className="h-[320px] w-full rounded-card" role="status" aria-label="Đang tải các hũ" />}
       {ov.status === 'error' && !ov.data && <ErrorState error={ov.error} title="Chưa tải được các hũ" onRetry={() => void ov.reload()} />}
