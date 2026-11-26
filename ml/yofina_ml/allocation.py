@@ -17,15 +17,15 @@ Bài toán theo tháng (đơn vị nội bộ là `rounding_step_vnd` VND để 
   nếu thu nhập không đủ thì phần thiếu rơi vào hũ ưu tiên thấp trước (spike `s8_lp.py` ca 2b và 2c).
 - Cắt xuống dưới mức hiện tại tốn `k_j` theo loại hũ (không thiết yếu < mục tiêu < thiết yếu < dự phòng), nên tiền để trả sàn và mục
   tiêu lấy từ hũ không thiết yếu trước.
-- **Thứ tự ưu tiên khi không đủ chỗ** (#39, chốt 26/11), từ cứng tới mềm, theo mức phạt: sàn nghĩa vụ (`penalty_obligation_floor`) và
+- **Thứ tự ưu tiên khi không đủ chỗ** (#39, #44), từ cứng tới mềm, theo mức phạt: sàn nghĩa vụ (`penalty_obligation_floor`) và
   sàn thiết yếu (`penalty_essential_floor`) > giữ hũ đệm chưa tới đích (`penalty_spending_floor x weight_emergency / weight_goal`) >
-  sàn chi (`penalty_spending_floor`) > mức cần của mục tiêu (`penalty_goal_need`, hũ đệm nhân `weight_emergency / weight_goal`) >
-  phần còn lại (trọng số cắt `k_j`). Cấu hình phải giữ đúng thứ tự này.
-- **Sàn chi** (`JarSpec.spend_floor_vnd`, người gọi tính: tỷ lệ giữ x mức nền bền của hũ, không vượt mức hiện tại): mục tiêu
-  không lấy được tiền dưới sàn chi (mục tiêu lùi hạn hoặc chưa khả thi), nghĩa vụ và chi thiết yếu thì lấy được. Phần sàn chi chưa đạt
-  không làm bài toán vô nghiệm: nó là điều đã nới (`discretionary_reduced`). Sàn chi chỉ nhường để ví ĐỦ sàn: nhường hết mà vẫn thiếu
-  sàn cứng (vô nghiệm dù sao) thì giải lại với sàn chi là cận dưới cứng, miễn nghĩa vụ cứng vẫn nhận đủ như khi nhường
-  (`_keep_spend_floors`).
+  giữ Quỹ dồn có khoản sắp cần chưa đủ tiền (trung bình mức phạt giữ hũ đệm và sàn chi) > sàn chi (`penalty_spending_floor`) >
+  mức cần của mục tiêu có hạn (`penalty_goal_need`, hũ đệm nhân `weight_emergency / weight_goal`) > phần còn lại gồm tích lũy dài hạn
+  (trọng số cắt `k_j`). Cấu hình phải giữ đúng thứ tự này.
+- **Sàn chi** (`JarSpec.spend_floor_vnd`, người gọi tính: tỷ lệ giữ x mức nền bền của hũ, không vượt mức hiện tại): mục tiêu lùi hạn hoặc
+  chưa khả thi nếu phải lấy tiền dưới sàn chi. Sàn chi nhường cho sàn nghĩa vụ, sàn thiết yếu và mức giữ của hũ đệm, Quỹ dồn. Phần hụt
+  sàn chi được ghi là điều đã nới (`discretionary_reduced`). Khi ví vẫn thiếu sàn cứng dù sàn chi đã nhường hết, giải lại với sàn chi là
+  cận dưới cứng, miễn nghĩa vụ cứng vẫn nhận đủ như khi nhường (`_keep_spend_floors`).
 - Hũ đệm (`emergency`) có thể mang mục tiêu (đích số dư của lượt lập lộ trình): phần thiếu của mức cần trên hũ đó phạt nặng hơn mục tiêu
   khác theo tỷ lệ `weight_emergency / weight_goal`, nên khi không đủ cho mọi mục tiêu thì hũ đệm được trước (BR-65).
 - Mục tiêu **chưa có hạn** (`GoalSpec.days_left` None, V2 của báo cáo rà soát #39): không có mức cần cứng hay ưa thích, nên không ép hũ
@@ -33,13 +33,17 @@ Bài toán theo tháng (đơn vị nội bộ là `rounding_step_vnd` VND để 
 - Hũ đệm **chưa tới đích** (`hold_current`, người gọi quyết từ số dư và đích của hũ) giữ mức hiện tại ở CẢ HAI vòng: cắt xuống dưới mức
   hiện tại chịu mức phạt giữ hũ đệm ở trên, nên mục tiêu khác (kể cả khi vì thế mà chưa khả thi) và sàn chi không lấy được tiền từ hũ
   đệm (BR-65: hũ đệm chưa đủ thì không tăng hũ mục tiêu trước), còn sàn nghĩa vụ và sàn thiết yếu (phạt nặng hơn) vẫn lấy được.
+- Quỹ dồn (`role="saving"`, `hold_current=True`) giữ mức hiện tại ở cả hai vòng khi thiếu tiền cho khoản có ngày cần trong kỳ
+  (`today < needed_date <= end`, kỳ do người gọi tính). Số dư đủ cho tổng các khoản trong kỳ thì dùng trọng số cắt thông thường.
 - **Vòng 0** (chặt): hũ không thiết yếu chỉ được cắt tới `(1 - cắt tối đa) x mức hiện tại`; mục tiêu cần đủ mức cần để kịp hạn.
-  Đạt (mọi `e_j`, `g_j`, `f_j` bằng 0 và không cắt hũ đệm đang giữ) thì trạng thái `optimal`.
-- **Nới ĐÚNG MỘT vòng** nếu vòng 0 không đạt: hũ không thiết yếu được cắt tới 0 (nhưng sàn chi vẫn giữ trước mục tiêu), mục tiêu chỉ
+  Đạt (mọi `e_j`, `g_j`, `f_j` bằng 0 và giữ mức hiện tại của các hũ có `hold_current`) thì trạng thái `optimal`.
+- **Nới ĐÚNG MỘT vòng** nếu vòng 0 không đạt: hũ không thiết yếu được cắt tới 0 (sàn chi vẫn giữ trước mục tiêu), mục tiêu chỉ
   cần đủ mức cần của hạn đã lùi `relax_delay_months` tháng (cứng) và mức cần của hạn gốc (mềm, phạt `h_j`). Đạt (mọi `e_j`, `g_j`
   bằng 0) thì `relaxed` kèm điều đã nới (hũ không thiết yếu bị cắt sâu hơn vòng 0, hũ bị cắt dưới sàn chi, mục tiêu phải lùi hạn).
-  Vẫn không đạt thì `infeasible` (không nới thêm): người gọi nêu đúng hai lựa chọn.
-- Không cho nới (`allow_relaxation=False`): nghiệm vòng 0; sàn chi và hũ đệm nhường cho nghĩa vụ, thiết yếu không làm nó vô nghiệm.
+  Nếu đạt mà không có điều đã nới để ghi (ví dụ chỉ cắt Quỹ dồn để đủ sàn cứng), kết quả là `optimal`. Vẫn không đạt thì `infeasible`
+  (không nới thêm): người gọi nêu đúng hai lựa chọn.
+- Không cho nới (`allow_relaxation=False`): nghiệm vòng 0; phần hụt sàn chi hoặc mức giữ hũ đệm và Quỹ dồn được chấp nhận nếu đạt sàn
+  cứng và mức cần cứng.
 - Tiền bảo toàn: tổng `x_j` đã làm tròn cộng `unallocated` đúng bằng thu nhập (phần dư làm tròn dồn vào hũ lớn nhất; phần thiếu lấy từ
   hũ còn dư nhiều nhất trên mức phải giữ: sàn, sàn chi, mức cần đã đạt, mức hiện tại của hũ LP không cắt).
 
@@ -123,7 +127,7 @@ class JarSpec:
     floor_tier: FloorTier = "essential"
     goal: GoalSpec | None = None
     weight: float = 1.0
-    #: hũ đệm chưa tới đích: giữ mức hiện tại ở cả hai vòng, trên sàn chi, dưới sàn nghĩa vụ và thiết yếu (xem docstring module)
+    #: giữ mức hiện tại ở cả hai vòng cho hũ đệm chưa tới đích (`emergency`) hoặc Quỹ dồn có khoản sắp cần (`saving`)
     hold_current: bool = False
     #: sàn chi (VND/tháng): mục tiêu không lấy tiền dưới mức này, nghĩa vụ và thiết yếu thì lấy được (xem docstring module)
     spend_floor_vnd: int = 0
@@ -206,11 +210,9 @@ class _Raw:
     d: np.ndarray
 
 
-def _rank(p: AllocationParams, j: JarSpec) -> float:
+def _rank(p: AllocationParams, role: Role) -> float:
     """Hũ đệm xếp trên hũ khác cùng bậc theo tỷ lệ trọng số cắt của vai đệm so với vai mục tiêu (BR-65); hũ khác 1."""
-    return (
-        p.weight_emergency / p.weight_goal if j.role == "emergency" and p.weight_goal > 0 else 1.0
-    )
+    return p.weight_emergency / p.weight_goal if role == "emergency" and p.weight_goal > 0 else 1.0
 
 
 def _solve(
@@ -266,7 +268,7 @@ def _solve(
         )
         # mức cần của mục tiêu trên hũ đệm (đích số dư của Dự phòng) xếp trước mục tiêu khác (BR-65): phần thiếu chịu phạt nhân tỷ lệ
         # trọng số cắt của vai đệm so với vai mục tiêu. Hũ không có mục tiêu thì g_j, h_j không có ràng buộc nào nên không đổi gì.
-        rank = _rank(prm, j)
+        rank = _rank(prm, j.role)
         c[2 * n + k] = prm.penalty_goal_need * rank
         c[3 * n + k] = prm.weight_goal * j.weight * rank
         cut = {
@@ -278,9 +280,10 @@ def _solve(
             "emergency": prm.weight_emergency,
         }[j.role]
         if j.hold_current:
-            # hũ đệm chưa tới đích (BR-65): cắt dưới mức hiện tại xếp trên sàn chi và mức cần của mọi mục tiêu, dưới sàn nghĩa vụ và
-            # sàn thiết yếu (thứ tự ở docstring module), ở cả hai vòng
             cut = prm.penalty_spending_floor * rank
+            # BR-65: mức giữ Quỹ dồn nằm giữa mức giữ hũ đệm và sàn chi ở cả hai vòng.
+            if j.role == "saving":
+                cut = prm.penalty_spending_floor * (1.0 + _rank(prm, "emergency")) / 2.0
         c[4 * n + k] = cut
         c[5 * n + k] = prm.penalty_spending_floor
         c[k] = prm.stay_epsilon
@@ -438,8 +441,8 @@ def _relaxations(
 
 
 def _ok(raw: _Raw, p: AllocationProblem | None = None) -> bool:
-    """Đạt sàn cứng và mức cần cứng. Có `p` (vòng chặt khi được nới): còn phải giữ đủ sàn chi và không cắt hũ đệm đang giữ, vì hai điều
-    đó chỉ được nhường ở vòng nới (thành điều đã nới) chứ không làm vòng chặt "optimal"."""
+    """Đạt sàn cứng và mức cần cứng. Vòng chặt khi được nới (`p`): còn phải giữ đủ sàn chi và mức hiện tại của hũ đệm, Quỹ dồn có
+    `hold_current`."""
     hard = bool(
         raw.e.max(initial=0.0) < GAP_TOLERANCE_VND and raw.g.max(initial=0.0) < GAP_TOLERANCE_VND
     )

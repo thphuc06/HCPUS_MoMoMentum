@@ -22,11 +22,15 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
   Hũ Dự phòng (`purpose` `buffer`, BR-64) nhận một mục `goals` làm đích số dư của lượt này (bắt buộc `target_vnd`, hạn tùy chọn;
   không đọc, không ghi `goal_vnd` của hũ), giữ vai đệm và được chiếu ra `goals` của kết quả như hũ mục tiêu; mức cần của nó xếp trước
   mục tiêu khác (BR-65). Hũ tiết kiệm cũ `purpose` NULL nhận mục tiêu như trước (vai mục tiêu).
-- **Hũ đệm chưa tới đích giữ phần chia hiện tại ở vòng chặt** (BR-65, #39 26/11 trưa): hũ đệm đầu tiên theo thứ tự (`emergency_jar`:
+- **Hũ đệm chưa tới đích giữ phần chia hiện tại** (BR-65, #39 26/11 trưa): hũ đệm đầu tiên theo thứ tự (`emergency_jar`:
   `purpose` buffer, hoặc hũ tiết kiệm cũ không mục tiêu theo quy tắc tương thích), khi đang giữ vai đệm. Đích = đích lượt này nêu trong
   `goals`; không nêu thì `buffer_target_months` tháng chi thiết yếu (BR-64; nghĩa vụ cứng quy về tháng cộng mức nền bền chi thiết yếu,
   cùng các số dựng sàn, chưa nhân `essential_floor_percent`). Số dư dưới đích thì `JarSpec.hold_current`: mục tiêu khác và sàn chi không
   lấy tiền từ hũ đệm (ở cả hai vòng), sàn nghĩa vụ và thiết yếu vẫn lấy được (`yofina_ml.allocation`). Số dư đã tới đích thì cắt được như cũ.
+- **Quỹ dồn giữ phần chia hiện tại khi còn thiếu tiền cho khoản sắp cần** (BR-65, #44): cộng các khoản trong `sinking_items` có ngày cần
+  sau ngày của ví và tới hết ngày cuối kỳ (`horizon_months × month_days` ngày sau ngày của ví, cùng cách tính kỳ của nghĩa vụ một lần).
+  Chỉ giữ nếu có khoản trong kỳ và số dư hũ thấp hơn tổng đó. Danh sách rỗng, không có khoản trong kỳ hoặc số dư đã đủ thì hũ dùng trọng
+  số cắt thông thường. Mức giữ ở cả hai vòng xếp sau nghĩa vụ, thiết yếu và giữ hũ đệm, trước sàn chi, mức cần của mục tiêu và dài hạn.
 - Hũ chi tiêu thiết yếu theo cấu hình (`essential_jar_codes`), hũ tiết kiệm không mục tiêu là hũ Dự phòng (giữ mức hiện tại, cắt thì
   phạt nặng nhất), còn lại không thiết yếu.
 - **Sàn chi theo mức chi thật** (#39, chủ dự án chốt 26/11): mọi hũ `spending` (không theo mã, không theo persona) có sàn chi =
@@ -34,7 +38,7 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
   vượt mức hiện tại (giữ không cắt, không nâng). Cổng dữ liệu: tài khoản có từ `cold_start_min_days` ngày
   lịch sử (cổng "ước lượng ban đầu" của dự báo); chưa đủ thì không áp. Hũ chi thiết yếu đã có sàn thiết yếu cao hơn nên không đổi; Chi
   hằng ngày của ví ba hũ có cả sàn thiết yếu (phần loại thiết yếu) lẫn sàn chi (cả hũ), sàn là số lớn hơn. Thứ tự ưu tiên ở
-  `yofina_ml.allocation`: mục tiêu không lấy tiền dưới sàn chi, nghĩa vụ và chi thiết yếu thì lấy được. Sàn chi là sàn MỀM với người lập
+  `yofina_ml.allocation`: sàn chi đứng trên mục tiêu và nhường cho nghĩa vụ, chi thiết yếu và mức giữ hũ đệm, Quỹ dồn. Sàn chi là sàn MỀM với người lập
   lộ trình (C3 của báo cáo rà soát, 26/11 tối): `floor_vnd` của dòng phân bổ chỉ là sàn cứng (nghĩa vụ, thiết yếu), còn mức chi thật gần
   đây và sàn chi gợi ý đi riêng ở `recent_spend` (`AllocationSpend`) làm dữ kiện; kiểm bước lộ trình (`amount_below_floor`) chỉ chặn
   theo sàn cứng.
@@ -127,6 +131,16 @@ JAR_KIND_TO_LINE = {"spending": "spending", "saving": "saving", "obligation": "o
 
 def _date_vn(d: date) -> str:
     return f"{d.day:02d}/{d.month:02d}/{d.year}"
+
+
+def _hold_sinking(jar: Mapping[str, Any], today: date, end: date) -> bool:
+    """Giữ Quỹ dồn nếu số dư chưa đủ cho các khoản có ngày cần trong khoảng (today, end]."""
+    needed_vnd = sum(
+        int_of(item["amount_vnd"])
+        for item in (jar.get("sinking_items") or ())
+        if (needed := to_date(item["needed_date"])) is not None and today < needed <= end
+    )
+    return needed_vnd > 0 and int_of(jar["balance_vnd"]) < needed_vnd
 
 
 @dataclass(frozen=True)
@@ -317,6 +331,8 @@ class AllocationEngine:
         prm = s.allocation
         month_days = prm.month_days
         today = g.app_date
+        # Cùng kỳ theo số ngày quy ước của `monthly_equivalent` cho nghĩa vụ một lần.
+        horizon_end = today + timedelta(days=horizon_months * month_days)
         # mức nền bền (#39, chốt 26/11 tối): cùng hàm, cùng tham số với đề xuất tỷ lệ của ledger; lùi về chi trung bình 30 ngày như trước
         baseline = BaselineSettings(
             weeks=prm.spend_baseline_weeks,
@@ -513,6 +529,11 @@ class AllocationEngine:
                     floor_tier=tier,  # type: ignore[arg-type]
                     goal=goal_spec,
                     weight=goal.weight if goal else 1.0,
+                    hold_current=(
+                        kind == "saving"
+                        and j.get("purpose") == "sinking"
+                        and _hold_sinking(j, today, horizon_end)
+                    ),
                     spend_floor_vnd=spend_floor,
                 )
             )
