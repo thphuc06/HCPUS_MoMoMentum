@@ -62,7 +62,7 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
     if intent == "stress":
         args = params = {"shock_id": data["shock"]["shock_id"]}
     elif intent == "roadmap":
-        args = {"which": "latest"}
+        args = {"which": "active"}  # lượt xem luôn đọc bản đang dùng (#39)
         params = {"roadmap_action": "view"}
 
     if llm_down:
@@ -129,7 +129,15 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
         }
 
     if llm_down:
-        assert not writer.calls and "TEXT_MESSAGE_START" not in types(events)
+        assert not writer.calls
+        if intent == "roadmap":
+            # lượt xem lộ trình không có lời của writer vẫn có lời kết dựng bằng mã từ khối (#39), không cần lượt gọi model
+            texts = [e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"]
+            steps = sum(len(phase["steps"]) for phase in data["phases"])
+            head = notices.ROADMAP_CLOSING_ACTIVE.format(version=data["version"], phases=len(data["phases"]), steps=steps)
+            assert len(texts) == 1 and texts[0].startswith(head)
+        else:
+            assert "TEXT_MESSAGE_START" not in types(events)
     else:
         assert [(call["task"], call["compact"]) for call in writer.calls] == [(intent, compact)]
         assert types(events).index("TOOL_CALL_RESULT") < types(events).index("TEXT_MESSAGE_START")

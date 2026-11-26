@@ -751,7 +751,7 @@ def test_turn_missing_roadmap_generates_emits_and_records(monkeypatch):
     (block,) = blocks_of(events)
     assert block["type"] == "roadmap"
     assert block["data"] == fixture("save_roadmap.ok.json")["data"]
-    assert args_for(tools, "get_roadmap") == [{"which": "latest"}]
+    assert args_for(tools, "get_roadmap") == [{"which": "active"}]  # câu xem khi chưa có bản nào: đọc bản đang dùng, không có thì lập bản đầu
     assert args_for(tools, "save_roadmap")[0]["reason_code"] == "initial"
     # lời kết dựng bằng mã từ khối (không tốn lượt gọi model), phát sau khối
     assert not writer.calls
@@ -789,7 +789,6 @@ def test_turn_create_roadmap_uses_latest_as_base_or_creates_initial(monkeypatch,
         "Lập lộ trình tiết kiệm mới",
         llm=llm,
         tools=tools,
-        settings=agent_settings(roadmap_default_which="active"),
         monkeypatch=monkeypatch,
     )
     check_agui_order(events)

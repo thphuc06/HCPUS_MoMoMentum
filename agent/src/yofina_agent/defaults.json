@@ -20,7 +20,6 @@
   "turn_blocks_timeout_seconds": 3,
   "log_level": "INFO",
   "planner_tool_prefix": "planner___",
-  "roadmap_default_which": "latest",
   "roadmap_fix_max_rounds": 2,
   "roadmap_max_steps": 6,
   "roadmap_max_tool_calls_per_turn": 40,

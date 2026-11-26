@@ -1392,7 +1392,9 @@ class Turn:
             goal = await self.roadmap_user_goal(r)
             if self._goal_asked:
                 return
-        which = "latest" if create else self.s.roadmap_default_which
+        # Lập: đọc bản mới nhất (biết bản đề xuất đang chờ sẽ bị thay). Xem: luôn là bản ĐANG DÙNG (#39): bản mới nhất có thể là bản đề
+        # xuất vừa bị bỏ ("Giữ bản cũ") hay đang chờ chọn, không phải "lộ trình hiện tại" người dùng hỏi; trang Lộ trình mở cùng bản này.
+        which = "latest" if create else "active"
         res = await self.call_tool_retry(
             "get_roadmap",
             {"which": which},
@@ -1402,8 +1404,9 @@ class Turn:
             emit=not create,
         )
         if res.outcome.code == ErrorCode.ROADMAP_NOT_FOUND.value:
-            latest = res.outcome if which == "latest" else None
-            await self.on_roadmap_missing(r, question, latest_outcome=latest, user_goal=goal)
+            # chưa có phiên bản nào: `which: active` cũng lấy bản mới nhất khi chưa có bản đang dùng (`app_get_roadmap`), nên kết quả này
+            # cũng là kết quả đọc bản mới nhất; lập bản đầu không đọc lại
+            await self.on_roadmap_missing(r, question, latest_outcome=res.outcome, user_goal=goal)
             return
         if not res.outcome.ok:
             self.tool_failure(res.outcome)
@@ -1416,6 +1419,7 @@ class Turn:
             return
         assert res.compact is not None
         compact = res.compact
+        resolved: ResolvedDate | None = None
         if states_goal:
             # câu XEM có nêu số tiền hoặc hạn ("bản đang dùng có kịp ... không"): dữ kiện cho writer, không lập, không lưu gì
             facts = _asked_goal_facts(r.params)
@@ -1424,24 +1428,50 @@ class Turn:
                 if resolved is not None:
                     facts["han"] = resolved_date_facts(resolved)  # hạn đã tính kèm mốc đã dùng: nói được theo cách người dùng nói
             compact = {**compact, "muc_tieu_nguoi_dung_hoi": facts}
+        said = len(self.assistant_parts)
         await self.write("roadmap", question, compact)
+        if len(self.assistant_parts) == said:
+            # writer không viết được (số không có căn cứ, hết lượt gọi model, Guardrail chặn): câu dựng bằng mã từ bản vừa đọc
+            await self.roadmap_view_fallback(r, res.outcome, asked_goal=states_goal, resolved=resolved)
+
+    async def roadmap_view_fallback(
+        self, r: IntentResult, outcome: ToolOutcome, *, asked_goal: bool, resolved: ResolvedDate | None
+    ) -> None:
+        """Câu trả lời an toàn của lượt xem lộ trình khi lời của writer bị bỏ: lời kết dựng bằng mã từ dữ liệu khối như lượt lập
+        (`_roadmap_closing`). Câu xem có nêu mục tiêu ("bản đang dùng có kịp gom ... không") thì chỉ nói bản đang dùng là bản nào rồi hỏi
+        lại đúng một câu lập bản mới theo mục tiêu đó hay xem bản đang dùng (`emit_roadmap_choice`, `resolved`: hạn đã tính ở lượt này):
+        chưa có phép tính nào cho mục tiêu người dùng vừa hỏi, nên câu khả năng kịp của các mục tiêu trong bản (`roadmap_outlook`) không
+        được đọc như câu trả lời cho mục tiêu đó."""
+        data = _roadmap_of(outcome)
+        if data is None:
+            return
+        if not asked_goal:
+            await self.emit_fixed_text(_roadmap_closing(data, None, None))
+            return
+        await self.emit_fixed_text(_roadmap_version_sentence(data))
+        await self.emit_roadmap_choice(r, resolved)
+
+    async def emit_roadmap_choice(self, r: IntentResult, resolved: ResolvedDate | None) -> None:
+        """Khối `clarify` lập bản mới hay xem bản đang dùng (hai chip `ROADMAP_CHOICE_CHIPS`): câu hỏi nói lại chữ chỉ hạn của người
+        dùng kèm ngày đã tính từ đặc tả hạn (`resolved`, nếu tính được), nên bấm chip lập thì không phải hỏi hạn lần nữa."""
+        p = r.params
+        question = roadmap_choice_question(
+            p.amount_vnd, p.date_text, resolved.date if resolved else None, before=_before_anchor(resolved)
+        )
+        chips = [ClarifyChipIn(label=label, value=value) for label, value, _ in ROADMAP_CHOICE_CHIPS]
+        await self.emit_clarify(ClarifyRequest(slot="other", question=question[:200]), r, chips=chips)
 
     async def ask_roadmap_choice(self, r: IntentResult) -> bool:
         """Câu lộ trình nêu mục tiêu mà router không nói xem hay lập (C2): đã có bản đang dùng thì hỏi đúng một câu kèm hai chip (lập bản
-        mới, xem bản đang dùng) và kết thúc lượt; True nếu đã hỏi. Không có bản đang dùng (hoặc đọc lỗi) thì False: người gọi lập bản mới,
-        đường lập đọc lại và báo lỗi của tool đúng chỗ. Chỉ đọc (`get_roadmap` active, không hiện thẻ), không lưu gì. Câu hỏi nói lại chữ
-        chỉ hạn của người dùng kèm ngày đã tính từ đặc tả hạn (nếu tính được), nên bấm chip lập thì không phải hỏi hạn lần nữa."""
+        mới, xem bản đang dùng; `emit_roadmap_choice`) và kết thúc lượt; True nếu đã hỏi. Không có bản đang dùng (hoặc đọc lỗi) thì False:
+        người gọi lập bản mới, đường lập đọc lại và báo lỗi của tool đúng chỗ. Chỉ đọc (`get_roadmap` active, không hiện thẻ), không lưu
+        gì."""
         res = await self.call_tool_retry("get_roadmap", {"which": "active"}, target="planner", emit=False)
         active = _roadmap_of(res.outcome)
         if active is None or active.status != "active":
             return False
-        chips = [ClarifyChipIn(label=label, value=value) for label, value, _ in ROADMAP_CHOICE_CHIPS]
         p = r.params
-        resolved = (await self.resolve_date_spec(p.date_spec))[0] if p.date_spec is not None else None
-        question = roadmap_choice_question(
-            p.amount_vnd, p.date_text, resolved.date if resolved else None, before=_before_anchor(resolved)
-        )
-        await self.emit_clarify(ClarifyRequest(slot="other", question=question[:200]), r, chips=chips)
+        await self.emit_roadmap_choice(r, (await self.resolve_date_spec(p.date_spec))[0] if p.date_spec is not None else None)
         return True
 
     async def on_roadmap_step_edit(self, r: IntentResult, question: str) -> None:
@@ -2205,10 +2235,17 @@ def _states_goal(p: IntentParams) -> bool:
 
 
 def _asked_goal_facts(p: IntentParams) -> dict[str, Any]:
-    """Mục tiêu người dùng nêu trong câu XEM lộ trình, làm dữ kiện cho writer: số tiền (đã định dạng) và cụm chỉ hạn đúng chữ họ gõ."""
+    """Mục tiêu người dùng nêu trong câu XEM lộ trình, làm dữ kiện cho writer: số tiền (đã định dạng) và cụm chỉ hạn đúng chữ họ gõ.
+
+    Số tiền có thêm dạng ngắn ("20 triệu", `format_vnd_short`) khi dạng đó đúng bằng số người dùng nói (#39): người dùng gõ "20 triệu"
+    thì writer nói lại "20 triệu", và bộ kiểm số của việc lộ trình (`has_ungrounded_numbers`) so từng con số theo đúng dạng có trong dữ
+    kiện, nên thiếu dạng này thì lời bị bỏ. Dạng ngắn làm tròn khác số người dùng nói ("20,6 triệu" cho 20.550.000 ₫) thì không đưa."""
     out: dict[str, Any] = {}
     if p.amount_vnd is not None:
         out["so_tien_text"] = format_vnd(p.amount_vnd)
+        short = format_vnd_short(p.amount_vnd)
+        if parse_amount_vnd(short) == p.amount_vnd:
+            out["so_tien_short_text"] = short
     if p.date_text and p.date_text.strip():
         out["han_nguoi_dung_noi"] = p.date_text.strip()[:40]
     return out
@@ -2266,25 +2303,28 @@ def _user_goal_compact(goal: UserGoal, jar_rows: list[dict[str, Any]]) -> dict[s
     return out
 
 
-def _roadmap_closing(
-    data: B.RoadmapData, active_version: int | None, goal: Mapping[str, Any] | None
-) -> str:
-    """Lời kết ngắn của lượt lập lộ trình, chỉ từ dữ liệu khối vừa lưu và phiên bản đang dùng đã đọc trước khi lưu: bản này là gì,
-    bản nào đang dùng, khả năng kịp mục tiêu, bước tiếp theo của người dùng."""
+def _roadmap_version_sentence(data: B.RoadmapData) -> str:
+    """Câu đầu của lời kết lộ trình: bản này là gì (đề xuất, đang dùng, khác), phiên bản, số giai đoạn và số bước của khối."""
     counts = {
         "version": data.version,
         "phases": len(data.phases),
         "steps": sum(len(phase.steps) for phase in data.phases),
     }
-    parts: list[str] = []
     if data.status == "proposed":
-        parts.append(notices.ROADMAP_CLOSING_PROPOSED.format(**counts))
-        if active_version is not None:
-            parts.append(notices.ROADMAP_CLOSING_IN_USE.format(active=active_version))
-    elif data.status == "active":
-        parts.append(notices.ROADMAP_CLOSING_ACTIVE.format(**counts))
-    else:
-        parts.append(notices.ROADMAP_CLOSING_OTHER.format(**counts))
+        return notices.ROADMAP_CLOSING_PROPOSED.format(**counts)
+    if data.status == "active":
+        return notices.ROADMAP_CLOSING_ACTIVE.format(**counts)
+    return notices.ROADMAP_CLOSING_OTHER.format(**counts)
+
+
+def _roadmap_closing(
+    data: B.RoadmapData, active_version: int | None, goal: Mapping[str, Any] | None
+) -> str:
+    """Lời kết ngắn của lượt lập lộ trình, chỉ từ dữ liệu khối vừa lưu và phiên bản đang dùng đã đọc trước khi lưu: bản này là gì,
+    bản nào đang dùng, khả năng kịp mục tiêu, bước tiếp theo của người dùng."""
+    parts: list[str] = [_roadmap_version_sentence(data)]
+    if data.status == "proposed" and active_version is not None:
+        parts.append(notices.ROADMAP_CLOSING_IN_USE.format(active=active_version))
     goal_text = None
     if goal is not None and goal.get("target_text"):
         goal_text = f"{goal['target_text']} cho hũ {goal['jar']}"

@@ -68,7 +68,7 @@ def _chip(action: str) -> str:
 def test_router_noi_xem_thi_chi_xem_du_cau_co_so_tien_va_han(monkeypatch):
     events, tools, writer = _turn(monkeypatch, route_response(intent="roadmap", roadmap_action="view", **GOAL))
     assert [tool for tool, _ in tools.calls] == ["get_jar_balances", "get_roadmap"]
-    assert calls_of(tools, "get_roadmap") == [{"which": "latest"}]
+    assert calls_of(tools, "get_roadmap") == [{"which": "active"}]  # xem là xem bản đang dùng (#39)
     assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
     # không lưu bản mới, nên cũng không bỏ bản đề xuất đang chờ (lưu bản mới là việc bỏ bản đang chờ)
     assert not {tool for tool, _ in tools.calls} & WRITES
@@ -76,7 +76,7 @@ def test_router_noi_xem_thi_chi_xem_du_cau_co_so_tien_va_han(monkeypatch):
     # mục tiêu người dùng nêu là dữ kiện cho writer (số đã định dạng để kiểm căn cứ, hạn đã tính kèm mốc), không thành bản mới
     assert call["task"] == "roadmap"
     assert call["compact"]["muc_tieu_nguoi_dung_hoi"] == {
-        "so_tien_text": "20.000.000 ₫", "han_nguoi_dung_noi": "trước Tết", "han": TET_FACTS,
+        "so_tien_text": "20.000.000 ₫", "so_tien_short_text": "20 triệu", "han_nguoi_dung_noi": "trước Tết", "han": TET_FACTS,
     }  # fmt: skip
 
 
@@ -134,10 +134,10 @@ def test_bam_chip_lap_ban_moi_thi_lap_theo_muc_tieu_cua_cau_truoc(monkeypatch, r
 def test_bam_chip_xem_ban_dang_dung_thi_chi_xem(monkeypatch, routed):
     events, tools, writer = _turn(monkeypatch, routed, messages=_choice_messages(_chip("view")))
     assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
-    assert calls_of(tools, "get_roadmap") == [{"which": "latest"}]
+    assert calls_of(tools, "get_roadmap") == [{"which": "active"}]  # xem là xem bản đang dùng (#39)
     assert not {tool for tool, _ in tools.calls} & WRITES
     assert writer.calls[0]["compact"]["muc_tieu_nguoi_dung_hoi"] == {
-        "so_tien_text": "20.000.000 ₫", "han_nguoi_dung_noi": "trước Tết",
+        "so_tien_text": "20.000.000 ₫", "so_tien_short_text": "20 triệu", "han_nguoi_dung_noi": "trước Tết",
         # hạn đọc lại từ câu hỏi là đặc tả trước mốc đã dùng (mốc date): cùng hạn, cùng mốc; chữ của người dùng ở han_nguoi_dung_noi
         "han": {
             "date_text": "05/02/2027", "day_month_text": "05/02", "weekday_text": "thứ Sáu", "days_from_today": 76,
