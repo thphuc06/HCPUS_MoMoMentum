@@ -490,13 +490,15 @@ def compact_stress(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def compact_roadmap(payload: Mapping[str, Any]) -> dict[str, Any]:
-    """Lộ trình cho writer (lượt xem): phiên bản, lý do, khả năng kịp mục tiêu, và các mục tiêu có cấu trúc (V5 của báo cáo rà soát #39):
-    đích, hạn (hoặc `no_deadline` khi chưa có hạn), kịp hay không, phần thiếu, ngày dự kiến; `goals` rỗng là bản không có mục tiêu."""
+    """Lộ trình cho writer (lượt xem): phiên bản, lý do (chữ và mã lý do), khả năng kịp mục tiêu, và các mục tiêu có cấu trúc (V5 của báo cáo
+    rà soát #39): đích, hạn (hoặc `no_deadline` khi chưa có hạn), kịp hay không, phần thiếu, ngày dự kiến; `goals` rỗng là bản không có
+    mục tiêu. `reason_code` (#39, 26/11 tối) cho writer biết bản lập lại vì hệ thống xác nhận một hũ đổi mức chi (`behavior_changed`)."""
     data = payload["data"]
     return {
         "version": data["version"],
         "status": data["status"],
         "reason": data["reason"]["text"],
+        "reason_code": data["reason"]["code"],
         "feasibility": data["feasibility"],
         "goals": [_roadmap_goal(g) for g in data.get("goals") or []],
         "counts": data["counts"],

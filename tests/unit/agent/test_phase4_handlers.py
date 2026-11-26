@@ -115,6 +115,8 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
             "version": data["version"],
             "status": data["status"],
             "reason": data["reason"]["text"],
+            # mã lý do (26/11 tối, #39): writer biết bản lập lại vì hũ đổi mức chi
+            "reason_code": data["reason"]["code"],
             "feasibility": data["feasibility"],
             # mục tiêu có cấu trúc cho writer (V5 của báo cáo rà soát #39)
             "goals": goals,

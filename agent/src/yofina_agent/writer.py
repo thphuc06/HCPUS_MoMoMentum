@@ -84,7 +84,10 @@ TASKS: dict[str, str] = {
         "phương án không phải nới gì; relaxed là phương án đã phải nới một lần: mục tiêu nào có on_track false phải lùi hạn, còn khi "
         "mọi mục tiêu on_track thì chỉ phải giảm chi ở hũ không thiết yếu và mục tiêu vẫn đúng hạn; infeasible là có mục tiêu chưa "
         "khả thi trong hạn. status proposed là bản đề xuất chưa thay lộ trình đang dùng (người dùng so và chọn ở trang Lộ trình); "
-        "active là lộ trình đang dùng. Không tự tính tổng và không đề xuất bước mới."
+        "active là lộ trình đang dùng. reason_code behavior_changed là bản lập lại vì hệ thống đã xác nhận một hũ đổi mức chi (reason "
+        "nêu mức mỗi tuần trước và sau). Phần chia của lộ trình tính từ mức chi nền của chính người dùng trong mấy tháng gần đây, không "
+        "dồn theo riêng đợt chi mới: khi đó là chi tăng thì nói thật hũ đó đang chi cao hơn mức thường, và có thể hỏi người dùng đây "
+        "là đợt tạm hay nhịp chi mới. Không tự tính tổng và không đề xuất bước mới."
     ),
     "roadmap_step_edit": (
         "Người dùng muốn sửa một bước của lộ trình đang dùng; thẻ lộ trình đó đã hiện. Chat chưa sửa được bước nên chưa có gì "

@@ -119,6 +119,22 @@ def test_hu_tiet_kiem_khac_khong_phai_quy_du_phong():
 REQUEST = "Tháng này cho mình lấy bớt tiền quỹ dự phòng sang hũ Giải trí để đi chơi nhé"
 
 
+def test_writer_thay_ma_ly_do_khi_ban_lap_lai_vi_doi_muc_chi():
+    """Writer (lượt xem lộ trình) không thấy phương án phân bổ; dữ kiện đổi mức chi tới writer qua lý do của bản lập lại (`reason_code`
+    behavior_changed, chữ lý do nêu mức mỗi tuần trước và sau). Lời nhắc của việc roadmap nói nghĩa theo nguyên tắc."""
+    from yofina_agent.compact import compact_roadmap
+    from yofina_agent.writer import TASKS
+
+    payload = fixture("get_roadmap.ok.json")
+    payload["data"]["reason"] = {
+        "code": "behavior_changed", "text": "Chi Ăn uống mỗi tuần tăng từ 842.867 ₫ lên 2.650.526 ₫ và giữ mức đó 2 tuần.",
+        "detail": [{"label": "Chi Ăn uống mỗi tuần", "before": "842.867 ₫", "after": "2.650.526 ₫"}],
+    }  # fmt: skip
+    view = compact_roadmap(payload)
+    assert view["reason_code"] == "behavior_changed" and "2.650.526 ₫" in view["reason"]
+    assert "behavior_changed" in TASKS["roadmap"] and "mức chi nền" in TASKS["roadmap"]
+
+
 def test_nguoi_dung_noi_ro_va_model_ghi_buffer_to_jars_thi_buoc_duoc_giu():
     tools = scripted_tools(checks=("ok",))
     draft = outline(from_buffer())
