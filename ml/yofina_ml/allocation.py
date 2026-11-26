@@ -17,12 +17,18 @@ Bài toán theo tháng (đơn vị nội bộ là `rounding_step_vnd` VND để 
   tiêu lấy từ hũ không thiết yếu trước.
 - Hũ đệm (`emergency`) có thể mang mục tiêu (đích số dư của lượt lập lộ trình): phần thiếu của mức cần trên hũ đó phạt nặng hơn mục tiêu
   khác theo tỷ lệ `weight_emergency / weight_goal`, nên khi không đủ cho mọi mục tiêu thì hũ đệm được trước (BR-65).
+- Hũ đệm **chưa tới đích** (`hold_current`, người gọi quyết từ số dư và đích của hũ) giữ mức hiện tại ở vòng chặt: cắt xuống dưới mức
+  hiện tại chịu cùng mức phạt với phần thiếu mức cần của hũ đệm (`penalty_goal_need x weight_emergency / weight_goal`), nên mức cần
+  theo hạn của mục tiêu khác không lấy được tiền từ hũ đệm (BR-65: hũ đệm chưa đủ thì không tăng hũ mục tiêu trước), còn sàn nghĩa vụ
+  và sàn thiết yếu (phạt nặng hơn) vẫn lấy được. Vòng nới giữ nguyên như trước. Nếu giữ làm bài toán vô nghiệm mà không giữ thì có
+  nghiệm, trả nghiệm không giữ: giữ hũ đệm không bao giờ làm một ca khả thi thành vô nghiệm.
 - **Vòng 0** (chặt): hũ không thiết yếu chỉ được cắt tới `(1 - cắt tối đa) x mức hiện tại`; mục tiêu cần đủ mức cần để kịp hạn.
   Đạt (mọi `e_j` và `g_j` bằng 0) thì trạng thái `optimal`.
 - **Nới ĐÚNG MỘT vòng** nếu vòng 0 không đạt: hũ không thiết yếu được cắt tới 0, mục tiêu chỉ cần đủ mức cần của hạn đã lùi
   `relax_delay_months` tháng (cứng) và mức cần của hạn gốc (mềm, phạt `h_j`). Đạt thì `relaxed` kèm điều đã nới (hũ không thiết yếu
   bị cắt sâu hơn vòng 0, mục tiêu phải lùi hạn). Vẫn không đạt thì `infeasible` (không nới thêm): người gọi nêu đúng hai lựa chọn.
-- Tiền bảo toàn: tổng `x_j` đã làm tròn cộng `unallocated` đúng bằng thu nhập (phần dư làm tròn dồn vào hũ lớn nhất).
+- Tiền bảo toàn: tổng `x_j` đã làm tròn cộng `unallocated` đúng bằng thu nhập (phần dư làm tròn dồn vào hũ lớn nhất; phần thiếu lấy từ
+  hũ còn dư nhiều nhất trên mức phải giữ: sàn, mức cần đã đạt, mức hiện tại của hũ LP không cắt).
 
 Mọi số (mức phạt, trọng số, mức cắt tối đa, số tháng lùi hạn, bước làm tròn) nằm ở `AllocationParams` do người gọi truyền (cấu hình).
 """
@@ -30,7 +36,7 @@ Mọi số (mức phạt, trọng số, mức cắt tối đa, số tháng lùi 
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from typing import Literal
 
@@ -62,6 +68,9 @@ class AllocationParams:
     penalty_essential_floor: float
     penalty_goal_need: float
     stay_epsilon: float
+    #: đích tự tính của hũ đệm khi lượt gọi không nêu đích: từng này tháng chi thiết yếu (BR-64, C-13). Người gọi dùng để quyết
+    #: `JarSpec.hold_current`; bộ giải không đọc.
+    buffer_target_months: float
 
 
 @dataclass(frozen=True)
@@ -83,6 +92,8 @@ class JarSpec:
     floor_tier: FloorTier = "essential"
     goal: GoalSpec | None = None
     weight: float = 1.0
+    #: hũ đệm chưa tới đích: giữ mức hiện tại ở vòng chặt, xếp ngang mức cần của hũ đệm (xem docstring module)
+    hold_current: bool = False
 
 
 @dataclass(frozen=True)
@@ -152,6 +163,8 @@ class _Raw:
     status: int
     message: str
     fun: float
+    #: mức cần ưa thích (hạn gốc) của vòng nới, VND; vòng chặt toàn 0
+    need_pref: np.ndarray
 
 
 def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
@@ -214,6 +227,10 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
             "obligation": prm.weight_essential,
             "emergency": prm.weight_emergency,
         }[j.role]
+        if j.hold_current and not relaxed:
+            # hũ đệm chưa tới đích (BR-65): ở vòng chặt, cắt dưới mức hiện tại xếp ngang mức cần của hũ đệm, trên mức cần của mục tiêu
+            # khác, dưới sàn nghĩa vụ và sàn thiết yếu
+            cut = prm.penalty_goal_need * rank
         c[4 * n + k] = cut
         c[k] = prm.stay_epsilon
     a_eq = np.zeros((1, nv))
@@ -268,6 +285,7 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
         status=int(res.status),
         message=str(res.message),
         fun=float(res.fun),
+        need_pref=need_pref * s,
     )
     return raw, need_hard * s
 
@@ -277,7 +295,8 @@ def _round_step(v: float, step: int) -> int:
 
 
 def _integerize(p: AllocationProblem, raw: _Raw, need_hard: np.ndarray) -> tuple[list[int], int]:
-    """Số nguyên VND bội của bước làm tròn, bảo toàn tiền; không để mức làm tròn làm một sàn đã đạt thành hụt."""
+    """Số nguyên VND bội của bước làm tròn, bảo toàn tiền; không để mức làm tròn làm một sàn hay mức cần đã đạt thành hụt, hay cắt một
+    hũ mà LP giữ nguyên mức hiện tại."""
     step = p.params.rounding_step_vnd
     tol = GAP_TOLERANCE_VND
     n = len(p.jars)
@@ -289,6 +308,12 @@ def _integerize(p: AllocationProblem, raw: _Raw, need_hard: np.ndarray) -> tuple
             low = max(low, j.floor_vnd)
         if need_hard[k] > 0 and raw.g[k] < tol:
             low = max(low, int(np.ceil(need_hard[k] - 1e-6)))
+        if raw.need_pref[k] > 0 and raw.h[k] < tol:
+            # vòng nới đã đủ mức cần theo hạn gốc: làm tròn không biến nó thành "lùi hạn"
+            low = max(low, int(np.ceil(raw.need_pref[k] - 1e-6)))
+        if raw.x[k] >= j.current_vnd - tol:
+            # LP không cắt hũ này (hũ đệm đang giữ, hũ không phải nhường): làm tròn không lấy bớt của nó
+            low = max(low, j.current_vnd)
         lows.append(low)
         xs.append(max(_round_step(float(raw.x[k]), step), low))
     unalloc = max(round(raw.u), 0)
@@ -359,6 +384,19 @@ def optimize(problem: AllocationProblem) -> AllocationSolution:
     if not problem.jars:
         raise ValueError("cần ít nhất một hũ")
     started = time.perf_counter()
+    solution = _optimize(problem, started)
+    if solution.status == "infeasible" and any(j.hold_current for j in problem.jars):
+        # giữ hũ đệm chỉ là ưu tiên khi còn chỗ: bài toán có nghiệm nếu không giữ thì trả nghiệm đó (thứ tự ưu tiên cũ thắng)
+        plain = replace(problem, jars=tuple(replace(j, hold_current=False) for j in problem.jars))
+        fallback = _optimize(plain, started)
+        if fallback.status != "infeasible":
+            return replace(
+                fallback, notes=(*fallback.notes, "bỏ giữ hũ đệm chưa tới đích: giữ thì vô nghiệm")
+            )
+    return solution
+
+
+def _optimize(problem: AllocationProblem, started: float) -> AllocationSolution:
     first, need0 = _solve(problem, relaxed=False)
     if _ok(first):
         xs, unalloc = _integerize(problem, first, need0)

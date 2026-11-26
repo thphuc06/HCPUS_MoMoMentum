@@ -20,6 +20,11 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
   Hũ Dự phòng (`purpose` `buffer`, BR-64) nhận một mục `goals` làm đích số dư của lượt này (bắt buộc `target_vnd`, hạn tùy chọn;
   không đọc, không ghi `goal_vnd` của hũ), giữ vai đệm và được chiếu ra `goals` của kết quả như hũ mục tiêu; mức cần của nó xếp trước
   mục tiêu khác (BR-65). Hũ tiết kiệm cũ `purpose` NULL nhận mục tiêu như trước (vai mục tiêu).
+- **Hũ đệm chưa tới đích giữ phần chia hiện tại ở vòng chặt** (BR-65, #39 26/11 trưa): hũ đệm đầu tiên theo thứ tự (`emergency_jar`:
+  `purpose` buffer, hoặc hũ tiết kiệm cũ không mục tiêu theo quy tắc tương thích), khi đang giữ vai đệm. Đích = đích lượt này nêu trong
+  `goals`; không nêu thì `buffer_target_months` tháng chi thiết yếu (BR-64; nghĩa vụ cứng quy về tháng cộng mức chi thiết yếu hằng tháng,
+  cùng các số dựng sàn, chưa nhân `essential_floor_percent`). Số dư dưới đích thì `JarSpec.hold_current`: mức cần theo hạn của mục tiêu
+  khác không lấy tiền từ hũ đệm, sàn nghĩa vụ và thiết yếu vẫn lấy được (`yofina_ml.allocation`). Số dư đã tới đích thì cắt được như cũ.
 - Hũ chi tiêu thiết yếu theo cấu hình (`essential_jar_codes`), hũ tiết kiệm không mục tiêu là hũ Dự phòng (giữ mức hiện tại, cắt thì
   phạt nặng nhất), còn lại không thiết yếu.
 """
@@ -28,7 +33,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -59,6 +64,7 @@ from yofina_forecast.common import clip, int_of, to_date
 from yofina_forecast.resilience import (
     Gathered,
     ResilienceEngine,
+    emergency_jar,
     monthly_equivalent,
     variable_monthly_spend,
 )
@@ -109,6 +115,8 @@ class Built:
     goals: dict[str, _Goal]
     jars: dict[str, Mapping[str, Any]]
     split_percent: dict[str, float]
+    #: đích của hũ đệm dùng để quyết giữ phần chia (đích lượt này nêu, hoặc số tháng chi thiết yếu); None nếu không có hũ giữ vai đệm
+    buffer_target_vnd: int | None = None
 
 
 class AllocationEngine:
@@ -279,6 +287,7 @@ class AllocationEngine:
 
         specs: list[JarSpec] = []
         split: dict[str, float] = {}
+        essential_monthly = 0
         for code in codes:
             j = jars[code]
             kind = j["kind"]
@@ -341,6 +350,24 @@ class AllocationEngine:
                     weight=goal.weight if goal else 1.0,
                 )
             )
+            if role in ("essential", "obligation"):
+                essential_monthly += monthly_spend
+        # hũ đệm chưa tới đích giữ phần chia hiện tại ở vòng chặt (BR-65): hũ đệm đầu tiên theo thứ tự (`purpose` buffer, hoặc hũ tiết kiệm
+        # cũ không mục tiêu theo quy tắc tương thích), khi đang giữ vai đệm. Đích là đích lượt này nêu, không có thì `buffer_target_months`
+        # tháng chi thiết yếu (BR-64): nghĩa vụ cứng quy về tháng cộng mức chi thiết yếu hằng tháng, cùng số LP dùng cho sàn.
+        essential_monthly += sum(oblig_floor.values())
+        buffer_target: int | None = None
+        buffer_row = emergency_jar(g.jar_rows)
+        at = next(
+            (k for k, sp in enumerate(specs) if buffer_row and sp.code == buffer_row["code"]), None
+        )
+        if buffer_row is not None and at is not None and specs[at].role == "emergency":
+            own = goals.get(specs[at].code)
+            buffer_target = (
+                own.target_vnd if own else round(prm.buffer_target_months * essential_monthly)
+            )
+            if int_of(buffer_row["balance_vnd"]) < buffer_target:
+                specs[at] = replace(specs[at], hold_current=True)
         problem = AllocationProblem(
             income_vnd=income, jars=tuple(specs), params=prm, allow_relaxation=allow_relaxation
         )
@@ -353,6 +380,7 @@ class AllocationEngine:
             goals=goals,
             jars=jars,
             split_percent=split,
+            buffer_target_vnd=buffer_target,
         )
 
     # --- kết quả ----------------------------------------------------------------------------------

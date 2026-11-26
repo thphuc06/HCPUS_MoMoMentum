@@ -141,3 +141,11 @@ def test_phan_bo_lp_cua_vi_demo_khong_cat_hu_nao_duoi_khoan_dinh_ky_tra_tu_no(en
         assert lines[code]["floor_vnd"] >= amount, code
         assert lines[code]["proposed_monthly_vnd"] >= amount, code
     assert not lines["giai_tri"]["is_essential"]
+    # Dự phòng 2.700.000 ₫ còn dưới đích tự tính (3 tháng chi thiết yếu, BR-64) nên LP không cắt phần chia của nó để tăng hũ mục tiêu
+    # (BR-65, #39 26/11 trưa); trước đó Dự phòng 900.000 → 831.400 ₫ trong khi Du lịch 900.000 → 962.000 ₫
+    buffer = lines["du_phong"]
+    assert buffer["jar"].get("purpose") == "buffer"
+    assert buffer["proposed_monthly_vnd"] >= buffer["current_monthly_vnd"]
+    raised = [c for c, x in lines.items() if x["kind"] == "saving" and c != "du_phong"
+              and x["proposed_monthly_vnd"] > x["current_monthly_vnd"]]  # fmt: skip
+    print(f"  hũ để dành khác được tăng: {raised}")

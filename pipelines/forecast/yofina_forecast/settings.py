@@ -31,6 +31,10 @@ DEFAULT_ALLOCATION_PARAMS = AllocationParams(
     penalty_essential_floor=1e5,
     penalty_goal_need=1e3,
     stay_epsilon=1e-6,  # giữ phần tiền chưa ai cần ở trạng thái chưa phân bổ thay vì dồn bừa vào một hũ
+    # đích tự tính của hũ Dự phòng (BR-64) khi lượt gọi không nêu đích: hũ còn dưới từng này tháng chi thiết yếu thì LP không cắt phần
+    # chia hiện tại của nó để dồn cho mục tiêu khác (BR-65). 3 tháng theo C-13 (docs/ba/02, mốc thấp của khoảng 3–6 tháng của CFPB),
+    # cùng mức `min_emergency_months` của luật suitability `emergency_before_investing`
+    buffer_target_months=3.0,
 )
 #: hũ chi tiêu thiết yếu theo mẫu hũ mặc định (`db/seed/jar_templates.sql`: ăn uống, đi lại, hóa đơn); hũ người dùng tự thêm thì không
 #: thiết yếu. Cũng là nhóm LOẠI giao dịch thiết yếu: loại có `tx_type_map.default_jar_code` thuộc tập này là chi thiết yếu khi nằm ở

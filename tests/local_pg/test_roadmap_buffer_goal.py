@@ -99,11 +99,17 @@ def test_lo_trinh_xay_quy_du_phong_3_trieu_trong_3_thang_tinh_dich_so_du(env):
     line = next(x for x in plan["lines"] if x["jar"]["code"] == "du_phong")
     assert line["is_essential"]  # vẫn là hũ đệm với model
     assert goal["on_track"] and line["proposed_monthly_vnd"] >= goal["monthly_needed_vnd"]
-    assert plan["status"] == "optimal"
+    # số dư 2.700.000 ₫ chưa tới đích 3.000.000 ₫: Dự phòng giữ phần chia hiện tại (BR-65, 26/11 trưa). Trước đó LP "optimal" cắt Dự phòng
+    # 900.000 → 831.400 ₫ để Du lịch kịp hạn; nay Du lịch vẫn kịp hạn nhờ cắt sâu hũ không thiết yếu (vòng nới), nên bản lưu là "kịp
+    # hạn sau khi điều chỉnh"
+    assert line["proposed_monthly_vnd"] >= line["current_monthly_vnd"]
+    assert plan["status"] == "relaxed"
+    assert {r["kind"] for r in plan["relaxations"]} == {"discretionary_reduced"}
+    assert all(g["on_track"] for g in plan["goals"])
     # bản đã lưu mang đúng mục tiêu đó; model thấy mục tiêu người dùng nói trong ngữ cảnh
     saved = next(g for g in rm["goals"] if g["jar"]["code"] == "du_phong")
     assert saved["target_vnd"] == 3_000_000 and saved["on_track"]
-    assert rm["feasibility"] == "on_track" and rm["reason"]["code"] == "user_request"
+    assert rm["feasibility"] == "relaxed" and rm["reason"]["code"] == "user_request"
     assert got["planner"].contexts[0]["context"]["user_goal"]["jar_code"] == "du_phong"
     # không ghi gì vào hũ: mục đích, mục tiêu, tỷ lệ như trước
     keys = ("purpose", "goal_vnd", "goal_date", "split_percent", "balance_vnd")
