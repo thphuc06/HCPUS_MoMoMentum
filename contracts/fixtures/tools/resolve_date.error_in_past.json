@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "DATE_IN_PAST",
+  "message": "Ngày tính ra là 16/02/2026, đã qua so với hôm nay (26/11/2026)."
+}

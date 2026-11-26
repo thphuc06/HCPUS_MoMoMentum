@@ -261,6 +261,96 @@ def test_get_exchange_rate_nguon_loi_la_loi_tam_thoi_khong_doan_so(svc, registry
     assert res["status"] == "ERROR" and res["code"] == "INTERNAL_ERROR" and "tỷ giá" in res["message"]
 
 
+# --- knowledge: tính ngày từ đặc tả (#39) ------------------------------------------------------------------
+DATE_TOOL = "knowledge___resolve_date"
+
+
+def test_resolve_date_qua_gateway_dung_ngay_mo_phong_cua_nguoi_goi_khong_nhan_today_tu_model(svc, registry):
+    service, _, _ = svc
+    # model có điền `today`/`app_date` thì Lambda cũng bỏ qua (không thuộc tham số của tool)
+    ev = {"user_id": U, "anchor": "lunar_new_year", "before": True, "today": "2030-01-01", "app_date": "2030-01-01"}
+    res = handle_gateway(ev, gateway_context(DATE_TOOL), service)
+    validate(registry, "knowledge", "ResolveDateResult", res)
+    assert res["status"] == "OK" and res["app_date"] == TODAY.isoformat() == res["data"]["today"]
+    d = res["data"]
+    assert (d["date"], d["anchor_date"], d["before"]) == ("2027-02-05", "2027-02-06", True)
+    assert d["lunar_new_year"] == {"year": 2027, "date": "2027-02-06", "name": "Đinh Mùi"}
+
+
+def test_resolve_date_moi_nguoi_goi_ngay_mo_phong_va_ngay_luong_rieng(svc, registry, monkeypatch):
+    service, repo, _ = svc
+    repo.users[V]["offset"] = -4  # ngày mô phỏng của người thứ hai: 06/12/2026
+    base = repo.user_row
+    monkeypatch.setattr(repo, "user_row", lambda uid: {**base(uid), "payday_day": 20} if uid == V else base(uid))
+    mine = handle_gateway({"user_id": U, "anchor": "next_payday"}, gateway_context(DATE_TOOL), service)
+    theirs = handle_gateway({"user_id": V, "anchor": "next_payday"}, gateway_context(DATE_TOOL), service)
+    for res in (mine, theirs):
+        validate(registry, "knowledge", "ResolveDateResult", res)
+    assert (mine["app_date"], mine["data"]["date"], mine["data"]["payday_day"]) == ("2026-11-21", "2026-12-05", 5)
+    assert (theirs["app_date"], theirs["data"]["date"], theirs["data"]["payday_day"]) == ("2026-12-06", "2026-12-20", 20)
+    quarter = service.resolve_date_result(V, anchor="end_of", period="quarter", period_offset=1, offset={"years": 1.5})
+    assert quarter["data"]["date"] == "2028-09-30" and quarter["data"]["offset"] == {"months": 18, "days": 0}
+
+
+def test_resolve_date_chua_khai_ngay_luong_thi_profile_incomplete(svc, registry, monkeypatch):
+    service, repo, _ = svc
+    base = repo.user_row
+    monkeypatch.setattr(repo, "user_row", lambda uid: {**base(uid), "payday_day": None})
+    res = handle_gateway({"user_id": U, "anchor": "next_payday"}, gateway_context(DATE_TOOL), service)
+    validate(registry, "knowledge", "ResolveDateResult", res)
+    assert res["status"] == "ERROR" and res["code"] == "PROFILE_INCOMPLETE"
+    ok = handle_gateway({"user_id": U, "anchor": "today", "offset": {"days": 3}}, gateway_context(DATE_TOOL), service)
+    assert ok["data"]["date"] == "2026-11-24"  # mốc khác không cần ngày lương
+
+
+def test_resolve_date_nguoi_chua_co_ho_so_dung_ngay_that(svc):
+    service, _, _ = svc
+    res = handle_gateway({"user_id": "sub-moi", "anchor": "today"}, gateway_context(DATE_TOOL), service)
+    real = service.now().astimezone(SETTINGS.tz).date()
+    assert res["status"] == "OK" and res["app_date"] == res["data"]["date"] == real.isoformat()
+
+
+@pytest.mark.parametrize(
+    ("ev", "code", "field"),
+    [
+        ({"anchor": "today", "offset": {"days": -1}}, "DATE_IN_PAST", None),
+        ({"anchor": "lunar_new_year", "lunar_year": 2026}, "DATE_IN_PAST", None),
+        ({"anchor": "lunar_new_year", "lunar_year": 2036}, "LUNAR_YEAR_UNSUPPORTED", "lunar_year"),
+        ({"anchor": "tomorrow"}, "PARAMS_INVALID", "anchor"),
+        ({"anchor": "start_of"}, "PARAMS_INVALID", "period"),
+        ({"anchor": "date", "day": 31, "month": 4}, "PARAMS_INVALID", "day"),
+        ({"anchor": "today", "offset": {"hours": 2}}, "PARAMS_INVALID", "offset"),
+        ({}, "PARAMS_INVALID", "anchor"),
+    ],
+)
+def test_resolve_date_loi_co_ma_qua_gateway(svc, registry, ev, code, field):
+    service, _, _ = svc
+    res = handle_gateway({"user_id": U, **ev}, gateway_context(DATE_TOOL), service)
+    validate(registry, "knowledge", "ResolveDateResult", res)
+    assert res["status"] == "ERROR" and res["code"] == code and res.get("field") == field
+    if code == "DATE_IN_PAST":
+        assert "21/11/2026" in res["message"]  # nêu hôm nay (ngày mô phỏng) để agent hỏi lại
+
+
+def test_resolve_date_dac_ta_sai_bao_loi_truoc_khi_doc_db(svc, monkeypatch):
+    service, repo, _ = svc
+
+    def boom(uid):
+        raise AssertionError("không được đọc DB khi đặc tả sai")
+
+    monkeypatch.setattr(repo, "user_row", boom)
+    res = handle_gateway({"user_id": U, "anchor": "date"}, gateway_context(DATE_TOOL), service)
+    assert res["code"] == "PARAMS_INVALID" and res["field"] == "day"
+
+
+def test_resolve_date_chi_doc_khong_ghi(svc):
+    service, repo, _ = svc
+    before = json.dumps(repo.users, default=str, sort_keys=True)
+    handle_gateway({"user_id": U, "anchor": "end_of", "period": "month"}, gateway_context(DATE_TOOL), service)
+    assert json.dumps(repo.users, default=str, sort_keys=True) == before
+    assert repo.traces == {} and repo.nudges == {} and repo.feedback == {}
+
+
 # --- planner: check_suitability ---------------------------------------------------------------------
 def test_check_suitability_dau_tu_khi_chua_du_quy_du_phong_bi_chan(svc, registry):
     service, repo, _ = svc

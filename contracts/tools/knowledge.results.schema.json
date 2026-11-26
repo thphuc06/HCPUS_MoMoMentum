@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.yofina.invalid/tools/knowledge.results.schema.json",
   "title": "KnowledgeToolResults",
-  "description": "Kết quả JSON mà Lambda `knowledge` trả cho Gateway. `get_fee_schedule` đọc bảng có cấu trúc `fee_schedules`, KHÔNG đi qua RAG: số để tính không lấy từ văn bản tự do. Các trường nguồn của `FeeLine` (`fee_type`, `source_name`, `source_url`, `effective_from`) là đầu vào DUY NHẤT của khối `citation` (`yofina_core.blocks.build_citation`); phase 5 không có tìm kiếm tài liệu. `get_exchange_rate` đọc tỷ giá bán theo ngày từ cùng hàm và cùng nguồn với pipeline nạp chứng từ (`yofina_core.fx`), không ghi gì. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
+  "description": "Kết quả JSON mà Lambda `knowledge` trả cho Gateway. `get_fee_schedule` đọc bảng có cấu trúc `fee_schedules`, KHÔNG đi qua RAG: số để tính không lấy từ văn bản tự do. Các trường nguồn của `FeeLine` (`fee_type`, `source_name`, `source_url`, `effective_from`) là đầu vào DUY NHẤT của khối `citation` (`yofina_core.blocks.build_citation`); phase 5 không có tìm kiếm tài liệu. `get_exchange_rate` đọc tỷ giá bán theo ngày từ cùng hàm và cùng nguồn với pipeline nạp chứng từ (`yofina_core.fx`), không ghi gì. `resolve_date` tính một ngày từ đặc tả có cấu trúc bằng hàm thuần `yofina_core.dates.resolve_date` (hôm nay và ngày lương lấy phía server theo người gọi), không ghi gì. Dùng các $defs bên dưới; schema gốc không ràng buộc gì.",
   "$defs": {
     "FeeLine": {
       "description": "Một dòng biểu phí có cấu trúc (bảng fee_schedules), đang hiệu lực tại ngày mô phỏng. Cùng hình dạng `FeeLine` của OpenAPI (`GET /credit-line`); test kiểm hai nơi khớp nhau.",
@@ -106,6 +106,67 @@
       "description": "Mã lỗi có thể gặp: PARAMS_INVALID (mã ngoại tệ, ngày hay số tiền sai dạng; ngoại tệ không có trong bảng của nguồn), INTERNAL_ERROR (nguồn tỷ giá không trả lời được; lỗi tạm thời, thử lại sau).",
       "oneOf": [
         { "$ref": "#/$defs/GetExchangeRateOk" },
+        { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
+      ]
+    },
+    "LunarNewYear": {
+      "description": "Mùng 1 Tết đã tra trong bảng dữ liệu của yofina_core (`lunar_new_year.json`, âm lịch Việt Nam, giờ UTC+7; không tính lịch âm bằng mã).",
+      "type": "object",
+      "required": ["year", "date", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "year": { "description": "Năm dương lịch chứa Mùng 1 Tết.", "type": "integer", "minimum": 1900, "maximum": 2200 },
+        "date": { "description": "Ngày Mùng 1 Tết.", "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "name": { "description": "Tên can chi của năm âm lịch bắt đầu từ ngày đó, ví dụ Đinh Mùi.", "type": "string", "minLength": 1, "maxLength": 20 }
+      }
+    },
+    "NormalizedDateOffset": {
+      "description": "Độ lệch đã quy đổi và đã cộng (có dấu): months cộng trước (giữ ngày trong tháng, vượt cuối tháng thì lấy ngày cuối tháng), days cộng sau. Năm là 12 tháng, phần lẻ của tổng số tháng tính 30 ngày mỗi tháng, tuần là 7 ngày, số ngày làm tròn tới ngày.",
+      "type": "object",
+      "required": ["months", "days"],
+      "additionalProperties": false,
+      "properties": {
+        "months": { "type": "integer", "minimum": -2400, "maximum": 2400 },
+        "days": { "type": "integer", "minimum": -80000, "maximum": 80000 }
+      }
+    },
+    "ResolvedDateData": {
+      "description": "Ngày tính từ đặc tả có cấu trúc (`yofina_core.dates.resolve_date`, cùng hàm mà mã của agent dùng trong tiến trình), kèm trường giải thích để lời trả lời nêu được mốc và cách tính. Mọi ngày là ngày mô phỏng (ADR-0003). Trường tùy chọn chỉ có khi áp dụng: period, period_offset với mốc theo kỳ (và date, lunar_new_year khi đặc tả chọn kỳ); payday_day với next_payday; lunar_new_year với mốc Tết; next_occurrence khi mốc là lần gần nhất sau hôm nay vì đặc tả không nêu năm (hoặc tháng); offset khi độ lệch khác 0; month_end_clamped khi một ngày trong tháng đã về ngày cuối tháng.",
+      "type": "object",
+      "required": ["date", "today", "weekday", "days_from_today", "anchor", "anchor_date", "before"],
+      "additionalProperties": false,
+      "properties": {
+        "date": { "description": "Ngày tính được, không trước today.", "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "today": { "description": "Hôm nay theo ngày mô phỏng của người gọi (bằng app_date), ngày dùng để tính.", "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "weekday": { "description": "Thứ của date theo ISO 8601: 1 thứ Hai, ..., 7 Chủ nhật.", "type": "integer", "minimum": 1, "maximum": 7 },
+        "days_from_today": { "description": "Số ngày từ today tới date (0 là hôm nay).", "type": "integer", "minimum": 0, "maximum": 80000 },
+        "anchor": { "type": "string", "enum": ["today", "next_payday", "start_of", "end_of", "lunar_new_year", "date"] },
+        "anchor_date": { "description": "Ngày của mốc, trước khi cộng độ lệch và trước before.", "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "period": { "type": "string", "enum": ["week", "month", "quarter", "year"] },
+        "period_offset": { "description": "Số kỳ tính từ kỳ chứa hôm nay (0 kỳ này).", "type": "integer", "minimum": -1200, "maximum": 1200 },
+        "payday_day": { "description": "Ngày nhận lương đã khai trong hồ sơ.", "type": "integer", "minimum": 1, "maximum": 31 },
+        "lunar_new_year": { "$ref": "#/$defs/LunarNewYear" },
+        "next_occurrence": { "const": true },
+        "offset": { "$ref": "#/$defs/NormalizedDateOffset" },
+        "month_end_clamped": { "const": true },
+        "before": { "description": "true khi date là ngày liền trước ngày tính được.", "type": "boolean" }
+      }
+    },
+    "ResolveDateOk": {
+      "type": "object",
+      "required": ["status", "as_of", "app_date", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "const": "OK" },
+        "as_of": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime" },
+        "app_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "data": { "$ref": "#/$defs/ResolvedDateData" }
+      }
+    },
+    "ResolveDateResult": {
+      "description": "Mã lỗi có thể gặp: PARAMS_INVALID (đặc tả sai dạng hoặc trường không hợp với mốc; field là trường sai), PROFILE_INCOMPLETE (mốc next_payday khi chưa khai ngày lương), LUNAR_YEAR_UNSUPPORTED (năm Tết ngoài bảng; field lunar_year), DATE_IN_PAST (ngày tính ra trước hôm nay; thông điệp nêu ngày đã tính, không tự dời).",
+      "oneOf": [
+        { "$ref": "#/$defs/ResolveDateOk" },
         { "$ref": "ledger.results.schema.json#/$defs/ToolError" }
       ]
     }

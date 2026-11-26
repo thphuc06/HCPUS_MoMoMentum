@@ -222,7 +222,7 @@ export class AgentStack extends Stack {
     const extraTargets: Array<{ name: string; arn: string; description: string }> = [
       { name: 'forecast', arn: forecastArn, description: 'Lambda yofina-forecast: du bao, kich ban what-if, kiem tra truoc khi quet' },
       { name: 'planner', arn: ledgerArn, description: 'Lambda yofina-ledger: kiem tra suitability va dat/huy loi nhac (ghi co xac nhan)' },
-      { name: 'knowledge', arn: ledgerArn, description: 'Lambda yofina-ledger: bieu phi co cau truc (khong qua RAG) va ty gia ngoai te' },
+      { name: 'knowledge', arn: ledgerArn, description: 'Lambda yofina-ledger: bieu phi co cau truc (khong qua RAG), ty gia ngoai te va tinh ngay tu dac ta' },
       { name: 'audit', arn: ledgerArn, description: 'Lambda yofina-ledger: ban ghi luot tra loi cho bang Vi sao' },
     ];
     let previousTarget: agentcore.CfnGatewayTarget = target;

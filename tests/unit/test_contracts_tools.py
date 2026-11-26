@@ -8,7 +8,7 @@ from jsonschema import Draft202012Validator
 from pydantic import TypeAdapter
 
 from yofina_core import blocks as b
-from yofina_core import roadmap, scenario, suitability, wallet
+from yofina_core import dates, roadmap, scenario, suitability, wallet
 from yofina_core.errors import ErrorCode
 
 LEDGER = load_json(CONTRACTS / "tools" / "ledger.json")
@@ -64,7 +64,9 @@ def test_cac_target_phase_3_khop_hang_so():
         "get_forecast", "run_scenario", "list_scenarios", "affordability_check",
         "get_resilience_score", "stress_test", "get_behavior_profile",
     ]  # fmt: skip
-    assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == ["get_fee_schedule", "get_exchange_rate"]
+    assert [t["name"] for t in KNOWLEDGE] == list(wallet.KNOWLEDGE_TOOLS) == [
+        "get_fee_schedule", "get_exchange_rate", "resolve_date",
+    ]  # fmt: skip
     assert [t["name"] for t in PLANNER] == list(wallet.PLANNER_TOOLS)
     assert [t["name"] for t in AUDIT] == list(wallet.AUDIT_TOOLS) == ["get_trace", "record_turn"]
 
@@ -235,7 +237,7 @@ RESULT_FILE = {name: "ledger" for name in wallet.LEDGER_TOOLS}
 RESULT_FILE["get_forecast"] = "forecast"
 RESULT_FILE.update(
     run_scenario="forecast", list_scenarios="forecast", affordability_check="forecast", get_fee_schedule="knowledge",
-    get_exchange_rate="knowledge",
+    get_exchange_rate="knowledge", resolve_date="knowledge",
     check_suitability="planner", schedule_nudge="planner", get_trace="audit", record_turn="audit",
     get_resilience_score="forecast", stress_test="forecast",
     optimize_allocation="planner", save_roadmap="planner", get_roadmap="planner",
@@ -258,6 +260,7 @@ RESULT_DEF = {
     "affordability_check": "AffordabilityCheckResult",
     "get_fee_schedule": "GetFeeScheduleResult",
     "get_exchange_rate": "GetExchangeRateResult",
+    "resolve_date": "ResolveDateResult",
     "check_suitability": "CheckSuitabilityResult",
     "schedule_nudge": "ScheduleNudgeResult",
     "get_trace": "GetTraceResult",
@@ -334,6 +337,8 @@ def test_ket_qua_tool_fixture_hop_le(registry, path):
         b.RoadmapData.model_validate(data)
     elif tool == "get_fee_schedule":
         b.FeeScheduleData.model_validate(data)  # đầu vào của build_citation (khối citation)
+    elif tool == "resolve_date":
+        dates.ResolvedDate.model_validate(data)
     elif tool == "get_behavior_profile":
         b.BehaviorProfileData.model_validate(data)
     elif tool in ("update_profile", "record_transaction", "assign_jar", "schedule_nudge"):

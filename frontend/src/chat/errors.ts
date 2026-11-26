@@ -97,6 +97,7 @@ const TOOL_LABELS: Record<string, { running: string; done: string }> = {
   // knowledge
   get_fee_schedule: { running: 'Đang tra biểu phí…', done: 'Đã tra biểu phí' },
   get_exchange_rate: { running: 'Đang tra tỷ giá…', done: 'Đã tra tỷ giá' },
+  resolve_date: { running: 'Đang tính ngày…', done: 'Đã tính ngày' },
   // ingest
   start_job: { running: 'Đang tạo lượt nạp dữ liệu…', done: 'Đã tạo lượt nạp dữ liệu' },
   get_job_status: { running: 'Đang xem tiến độ nạp dữ liệu…', done: 'Đã xem tiến độ nạp dữ liệu' },

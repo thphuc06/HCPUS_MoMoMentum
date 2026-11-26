@@ -1,0 +1,16 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-15T03:00:00Z",
+  "app_date": "2026-11-26",
+  "data": {
+    "date": "2027-02-05",
+    "today": "2026-11-26",
+    "weekday": 5,
+    "days_from_today": 71,
+    "anchor": "next_payday",
+    "anchor_date": "2026-12-05",
+    "payday_day": 5,
+    "offset": { "months": 2, "days": 0 },
+    "before": false
+  }
+}

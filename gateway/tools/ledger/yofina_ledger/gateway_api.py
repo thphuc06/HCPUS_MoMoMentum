@@ -8,7 +8,7 @@
 - Mười tool (đúng thứ tự `yofina_core.wallet.LEDGER_TOOLS`): năm tool đọc, bốn tool ghi, `save_turn`. Tool ghi KHÔNG có
   `confirm_token` thì không ghi, trả `NEEDS_CONFIRMATION` kèm bản xem trước. `save_jars` và `confirm_salary` chỉ có ở REST.
 - Phase 3: Lambda này CŨNG phục vụ ba target Gateway `planner` (`check_suitability`, `schedule_nudge`), `knowledge`
-  (`get_fee_schedule`, `get_exchange_rate`) và `audit` (`get_trace`, `record_turn`) theo quyết định của người điều phối (không có Lambda riêng). Tên tool của các
+  (`get_fee_schedule`, `get_exchange_rate`, `resolve_date`) và `audit` (`get_trace`, `record_turn`) theo quyết định của người điều phối (không có Lambda riêng). Tên tool của các
   target đó là duy nhất trong Gateway nên phân biệt theo tên (phần sau `___`). `schedule_nudge` là tool GHI qua token như các
   tool ghi khác.
 - Phase 4: target `planner` thêm `optimize_allocation` (proxy sang Lambda forecast), `save_roadmap` (ghi, KHÔNG qua token, chạy lại
@@ -27,6 +27,7 @@ from yofina_core.blocks import block_to_wire, new_trace_id
 from yofina_core.confirm import MOVE_BETWEEN_JARS
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
 from yofina_core.wallet import AGENT_WRITE_TOOLS, PLANNER_WRITE_TOOLS
+from yofina_knowledge.dates import TOOL_ARGS as RESOLVE_DATE_ARGS
 from yofina_ledger.roadmap_service import roadmap_ops
 from yofina_ledger.service import PLANNER_PREFIX, TOOL_PREFIX, LedgerService
 
@@ -81,6 +82,7 @@ _ARG_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "get_fee_schedule": ("fee_type", "product"),
     "get_exchange_rate": ("currency", "date", "amount"),
+    "resolve_date": RESOLVE_DATE_ARGS,
     # --- phase 4: target planner (lộ trình; chạy chung Lambda này) ---
     "optimize_allocation": ("horizon_months", "goals", "shock_id", "allow_relaxation"),
     "save_roadmap": (
@@ -194,6 +196,8 @@ def _run(
         )
     if tool == "get_exchange_rate":
         return service.exchange_rate_result(user_id, **args)
+    if tool == "resolve_date":
+        return service.resolve_date_result(user_id, **args)
     if tool == "get_trace":
         return service.trace_result(user_id, args.get("trace_id"))
     if tool in ROADMAP_TOOLS:
