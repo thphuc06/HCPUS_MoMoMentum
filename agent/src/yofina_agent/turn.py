@@ -2290,6 +2290,10 @@ def _roadmap_closing(
     goal_said = data.feasibility == "infeasible" and goal_text is not None
     if goal_said:
         parts.append(notices.ROADMAP_CLOSING_GOAL_INFEASIBLE.format(goal=goal_text))
+    elif hasattr(notices, "roadmap_outlook"):
+        # nhánh GG (V5): câu khả năng kịp chọn theo dữ kiện của bản đã lưu (mục tiêu có hạn, phải lùi hạn, chưa có hạn). Kiểm bằng
+        # `hasattr` để hai nhánh gộp theo thứ tự nào cũng chạy; chưa có hàm thì giữ câu theo `feasibility`.
+        parts.extend(notices.roadmap_outlook(data))
     else:
         parts.append(notices.ROADMAP_CLOSING_FEASIBILITY[data.feasibility])
     if data.alternatives:
