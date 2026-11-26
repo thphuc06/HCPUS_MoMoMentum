@@ -10,9 +10,9 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
-from yofina_agent.textutil import extract_amounts
+from yofina_agent.textutil import extract_amounts, parse_amount_vnd
 from yofina_core.blocks import no_outflow_expected
-from yofina_core.money import format_vnd, to_vnd
+from yofina_core.money import format_vnd, format_vnd_short, to_vnd
 from yofina_core.wallet import OBLIGATION_KIND_LABELS, resolve_obligation_pay_jar
 
 #: Trường chữ chép nguyên từ giao dịch hoặc từ tệp người dùng nạp (đối tác, nội dung chuyển khoản, ghi chú), đã che PII nhưng không bỏ
@@ -137,7 +137,8 @@ def _dm(value: str) -> str:
 
 
 def compact_forecast(payload: Mapping[str, Any]) -> dict[str, Any]:
-    """`forecast___get_forecast` -> bản gọn cho model viết 1 đến 2 câu: trạng thái, ngày cạn, kỳ lương, độ tin cậy.
+    """`forecast___get_forecast` -> bản gọn cho model viết 1 đến 2 câu: trạng thái, ngày cạn, kỳ lương, độ tin cậy, số dư giữa ngày cuối
+    kỳ dự báo.
 
     Ngày dạng `dd/mm` và số tiền kèm chuỗi `*_text` để model chép nguyên văn; không có đường P10/P90 theo ngày (đã nằm trong khối UI).
     """
@@ -178,6 +179,12 @@ def compact_forecast(payload: Mapping[str, Any]) -> dict[str, Any]:
         low = to_vnd(min(before_payday))
         out["lowest_balance_before_payday_vnd"] = low
         out["lowest_balance_before_payday_text"] = format_vnd(low)
+    if d["days"]:
+        # số dư giữa của ngày cuối kỳ dự báo (số của engine): câu hỏi "tới cuối kỳ còn bao nhiêu" có số để chép, không phải tự cộng số dư
+        # hôm nay với khoản lương về (#39, câu e sau Runtime v33)
+        last = d["days"][-1]
+        end = to_vnd(last["p50_vnd"])
+        out["end_of_forecast"] = {"date_text": _dm(last["date"]), "balance_vnd": end, "balance_text": format_vnd(end)}
     if (window := d.get("obligations_before_payday")) is not None:
         out["obligations_before_payday"] = window
         if first := window.get("first_shortfall"):
@@ -233,6 +240,24 @@ def compact_forecast_overview(
         "enough": ok,
         "unavailable": list(unavailable or []),
     }
+
+
+#: số tiền người dùng nói tối đa đưa vào dữ kiện của writer (`said_amounts`)
+SAID_AMOUNTS_MAX = 5
+
+
+def said_amounts(question: str) -> list[dict[str, str]]:
+    """Số tiền người dùng tự nói trong câu hỏi (mã đọc lại, `textutil.extract_amounts`), làm dữ kiện cho writer: dạng đầy đủ và dạng
+    ngắn khi dạng ngắn đúng bằng số đó ("3 triệu"), để lời nhắc lại đúng số người dùng nói có căn cứ trong bản gọn (#39, câu e sau
+    Runtime v33: "20 triệu" của người dùng bị bộ kiểm bắt). Không phải số liệu của ví; nghĩa của trường nằm ở `writer.SAID_AMOUNTS_GUIDE`."""
+    out: list[dict[str, str]] = []
+    for value in dict.fromkeys(v for v, _ in extract_amounts(question) if v > 0):
+        row = {"amount_text": format_vnd(value)}
+        short = format_vnd_short(value)
+        if short != row["amount_text"] and parse_amount_vnd(short) == value:
+            row["short_text"] = short
+        out.append(row)
+    return out[:SAID_AMOUNTS_MAX]
 
 
 def allowed_amounts(compact: Mapping[str, Any]) -> set[int]:
@@ -402,6 +427,9 @@ def compact_affordability(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
     if d.get("label"):
         out["label"] = d["label"]
+    if d.get("pay_date") and d["pay_date"] != payload.get("app_date"):
+        # ngày chi engine đã tính (người dùng nói thời điểm chi, #39): vắng là chi hôm nay
+        out["pay_date_text"] = _dmy(d["pay_date"])
     if d.get("credit"):
         out["credit"] = compact_impact(d["credit"])
     return out

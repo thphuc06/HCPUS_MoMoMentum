@@ -163,13 +163,19 @@ def infer_pay_jar(r: IntentResult, jar_rows: Sequence[Mapping[str, Any]]) -> Jar
     Đã rõ: ra đúng một hũ người dùng có trong ví, và tên hũ đó đọc lại (`jars.resolve_jar`) ra đúng hũ ấy. Khi đó ý định được điền tên
     hũ ở `jar_text` như thể người dùng đã nói, nên mọi bước sau (dựng kịch bản, kiểm tra, hỏi hũ lạ) chạy như cũ. Không cần suy khi
     `lacks_pay_jar` sai, kể cả khi người dùng đã nêu hũ (tên hũ người dùng nêu thắng hũ router chọn) hay trả bằng Trả sau (hũ trả nợ theo
-    quy tắc hũ trả riêng, không dùng hũ suy ra). Tên hũ trùng hũ khác thì chưa rõ, hai hũ trùng làm ứng viên."""
+    quy tắc hũ trả riêng, không dùng hũ suy ra). Tên hũ trùng hũ khác thì chưa rõ, hai hũ trùng làm ứng viên. Router nói người dùng tự
+    nêu hũ của `spend_jar_code` (`spend_jar_named` true) thì hũ đó không phải hũ suy: điền tên như người dùng đã nói, `inferred` None."""
     p = r.params
     if (p.spend_jar_code is None and p.tx_type is None) or not lacks_pay_jar(r):
         return JarInference(r)
     rows = [j for j in jar_rows if j.get("code") and j.get("name") and not is_system_jar(str(j["code"]), j.get("kind"))]
     if p.spend_jar_code is not None and any(j["code"] == p.spend_jar_code for j in rows):
-        return _with_jar(r, p.spend_jar_code, rows, None)
+        found = _with_jar(r, p.spend_jar_code, rows, None)
+        if p.spend_jar_named is True and found.inferred is not None:
+            # người dùng tự nêu hũ này (câu mới, hoặc câu trả lời câu hỏi hũ; #39, i2 sau Runtime v33): router chỉ trả mã, không chép tên
+            # vào jar_text. Hũ là hũ người dùng chọn, không phải hũ mã suy, nên không có dòng "Tính theo hũ X" nói người dùng chưa nêu hũ.
+            return JarInference(found.result)
+        return found
     if p.tx_type is None:
         return JarInference(r)
     code = spending_tx_type_jar(p.tx_type, [str(j["code"]) for j in rows])

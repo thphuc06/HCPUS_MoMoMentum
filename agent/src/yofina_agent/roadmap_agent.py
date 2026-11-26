@@ -235,11 +235,13 @@ _FEASIBILITY: dict[str, B.RoadmapFeasibility] = {
 
 
 class _StepInvalid(ValueError):
-    """Bước không dựng được. `code` ổn định để ghi log (không kèm chữ hay số tiền)."""
+    """Bước không dựng được. `code` ổn định để ghi log (không kèm chữ hay số tiền); `log_fields`: mã thêm cho log của lần từ chối (tên
+    trường của schema, không giá trị)."""
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str, **log_fields: Any) -> None:
         super().__init__(message)
         self.code = code
+        self.log_fields = log_fields
 
 
 def _log_event(event: str, *, level: int = logging.WARNING, **fields: Any) -> None:
@@ -596,7 +598,14 @@ async def _nudge_date(
     try:
         args = date_spec_args(spec)
     except DateResolveError as exc:
-        return _StepInvalid("nudge_date_spec", f"nudge_on_spec chưa hợp lệ ({exc.message}). Sửa đặc tả hoặc để null.")
+        # tên trường sai và tên các trường có giá trị (không giá trị) vào log của lần từ chối: d3 sau Runtime v33 (#39) bị từ chối ba
+        # vòng liền mà log chỉ có mã lỗi, không chẩn đoán được
+        return _StepInvalid(
+            "nudge_date_spec",
+            f"nudge_on_spec chưa hợp lệ ({exc.message}). Sửa đặc tả hoặc để null.",
+            field=exc.field,
+            spec_fields=sorted(str(k) for k in spec)[:12],
+        )
     key = json.dumps(args, sort_keys=True, ensure_ascii=False)
     task = cache.get(key)
     if task is None:
@@ -1589,7 +1598,7 @@ async def _verify(
                 found = await _nudge_date(tools, item.nudge_on_spec, date_cache if date_cache is not None else {})
                 if isinstance(found, _StepInvalid):
                     issues.append(RepairIssue(step_id=item.step_id, rule_id="step_invalid", message=str(found)))
-                    rejected(phase.phase_id, item, "step_invalid", "step_invalid", detail=found.code)
+                    rejected(phase.phase_id, item, "step_invalid", "step_invalid", detail=found.code, **found.log_fields)
                     continue
                 nudge_on = found
             try:

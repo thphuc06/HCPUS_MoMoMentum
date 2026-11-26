@@ -71,6 +71,7 @@ from yofina_agent.compact import (
     compact_roadmap_steps,
     compact_stress,
     compact_transactions,
+    said_amounts,
 )
 from yofina_agent.fallback import classify_by_rules
 from yofina_agent.fee_citation import on_knowledge
@@ -127,6 +128,8 @@ from yofina_agent.whatif import WhatIfState, run_what_if
 from yofina_agent.writer import (
     MEMORY_TASKS,
     PHASE4_TASKS,
+    SAID_AMOUNT_TASKS,
+    SAID_AMOUNTS_KEY,
     check_grounding,
     has_ungrounded_numbers,
     write_stream,
@@ -236,6 +239,8 @@ class Turn:
         self.blocks: dict[str, dict[str, Any]] = {}  # id khối -> dạng dây (giữ thứ tự phát)
         self.user_text = ""
         self.history = ""
+        # lời người dùng và dòng "Ứng dụng:" trong cùng cửa sổ lịch sử (không có lời của Yofina): căn cứ cho số trong chữ router tự viết
+        self.history_basis: list[str] = []
         self.assistant_parts: list[str] = []  # các tin nhắn chữ đã phát, để lưu cùng lượt
         self.intent: str | None = None
         self.tool_calls = 0
@@ -724,6 +729,9 @@ class Turn:
     async def write(self, task: str, question: str, compact: Mapping[str, Any]) -> None:
         if self.llm_down:
             return
+        if task in SAID_AMOUNT_TASKS and (said := said_amounts(question)):
+            # số tiền người dùng nói trong câu tra cứu là dữ kiện của writer (#39): lời nhắc lại đúng số đó có căn cứ, bộ kiểm không nới
+            compact = {**compact, SAID_AMOUNTS_KEY: said}
         if task in PHASE4_TASKS:
             await self.write_buffered(
                 task, question, compact, timeout=None, max_tokens=self.s.writer_max_tokens
@@ -967,14 +975,15 @@ class Turn:
         # L0: che PII trước khi vào LLM, vào log và vào bản lưu
         question = mask_pii(raw_question).text
         self.user_text = question
-        self.history = mask_pii(
-            ev.format_history(
-                self.run_input,
-                before_index=index,
-                max_messages=self.s.history_messages,
-                max_chars=self.s.history_chars_per_message,
-            )
-        ).text
+        window = {
+            "before_index": index,
+            "max_messages": self.s.history_messages,
+            "max_chars": self.s.history_chars_per_message,
+        }
+        self.history = mask_pii(ev.format_history(self.run_input, **window)).text
+        self.history_basis = [
+            mask_pii(text).text for label, text in ev.history_entries(self.run_input, **window) if label != ev.ASSISTANT_LABEL
+        ]
         # trần lượt chat theo tài khoản (#13): trước mọi lời gọi model, bộ nhớ và tool
         if not await self.within_quota():
             return
@@ -1143,6 +1152,7 @@ class Turn:
                         scope=self.scope,
                         jars=jars,
                         today=self.router_today(),
+                        said=self.history_basis,
                     )
                 value = checked_spend_jar(res.value, jars)
                 # Đầu ra router (mã và tên trường có giá trị, không chữ người dùng): chẩn đoán được lượt trên app mà không gọi lại model.
@@ -1427,6 +1437,8 @@ class Turn:
                 resolved, _ = await self.resolve_date_spec(r.params.date_spec)
                 if resolved is not None:
                     facts["han"] = resolved_date_facts(resolved)  # hạn đã tính kèm mốc đã dùng: nói được theo cách người dùng nói
+            # bản đang xem có đúng mục tiêu này không (#39): không có thì chưa có phép tính kịp hay không cho nó, và đó là lý do thật
+            facts["co_trong_ban_nay"] = _goal_in_version(r.params, resolved, res.outcome.payload)
             compact = {**compact, "muc_tieu_nguoi_dung_hoi": facts}
         said = len(self.assistant_parts)
         await self.write("roadmap", question, compact)
@@ -1804,14 +1816,20 @@ class Turn:
             return r  # đọc hũ lỗi: để đường hỏi lại hoặc tool báo lỗi đúng chỗ của nó
         found = infer_pay_jar(r, self._jar_rows)
         self.inferred_jar, self._jar_candidates = found.inferred, found.candidates
+        if found.inferred is not None:
+            event = "pay_jar_inferred"
+        elif found.result.params.jar_text and not lacks_pay_jar(found.result):
+            event = "pay_jar_named"  # hũ router chọn là hũ người dùng tự nêu (`spend_jar_named`): đã rõ, không phải hũ suy
+        else:
+            event = "pay_jar_unclear"
         log.info(
             json.dumps(
                 {
-                    "event": "pay_jar_inferred" if found.inferred else "pay_jar_unclear",
+                    "event": event,
                     "source": found.inferred.source if found.inferred else None,
                     "spend_jar_code": r.params.spend_jar_code,
                     "tx_type": r.params.tx_type,
-                    "jar": found.inferred.code if found.inferred else None,
+                    "jar": found.inferred.code if found.inferred else (r.params.spend_jar_code if event == "pay_jar_named" else None),
                     "candidates": list(found.candidates),
                 }
             )
@@ -1874,6 +1892,27 @@ class Turn:
         t, m = notices.SCENARIO_UNBUILDABLE
         self.emit_notice(kind="error", code=ErrorCode.SCENARIO_INVALID.value, title=t, message=m)
 
+    async def spend_date(self, p: IntentParams) -> date | None:
+        """Ngày chi của khoản người dùng hỏi (#39, câu b sau Runtime v33): router viết thời điểm chi thành đặc tả (`date_spec`), mã tính
+        ngày bằng `resolve_date_spec` như hạn của mục tiêu lộ trình. Chỉ ngày SAU hôm nay mô phỏng mới là ngày chi (engine nhận `date`
+        và từ chối ngày đã qua); không có đặc tả, đặc tả không tính được hoặc rơi vào hôm nay thì None: kiểm tra như chi hôm nay."""
+        if p.date_spec is None:
+            return None
+        resolved, error = await self.resolve_date_spec(p.date_spec)
+        when = resolved.date if resolved is not None and resolved.days_from_today > 0 else None
+        log.info(
+            json.dumps(
+                {
+                    "event": "spend_date",
+                    "anchor": p.date_spec.get("anchor"),
+                    "date": when.isoformat() if when else None,
+                    "error": error.code.value if error is not None else None,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return when
+
     async def on_affordability(self, r: IntentResult, question: str) -> None:
         """F3 trong chat: `affordability_check` -> khối `affordability_card` NGAY -> model nhỏ viết 2 câu trong thời hạn (lỗi/quá hạn: bỏ lời)."""
         p = r.params
@@ -1886,6 +1925,8 @@ class Turn:
             jars = await self.ensure_jars()
             if jars.outcome.ok and (m := resolve_jar(p.jar_text, self._jar_rows)).status == "ok":
                 args["jar"] = m.code
+        if (spend_on := await self.spend_date(p)) is not None:
+            args["date"] = spend_on.isoformat()
 
         def card(outcome: ToolOutcome, trace_id: str) -> list[Any]:
             # "Tính theo hũ X" (hũ mã đã suy) đứng trước thẻ; chip Trả sau chỉ khi ví có hạn mức (thẻ có phần Trả sau)
@@ -2094,10 +2135,11 @@ class Turn:
         )
 
     async def on_chitchat(self, r: IntentResult, question: str) -> None:
-        """Lời của router chỉ được phát khi mọi số trong đó có căn cứ (câu hỏi, lịch sử có dòng "Ứng dụng") và qua Guardrail."""
+        """Lời của router chỉ được phát khi mọi số trong đó có căn cứ (câu hỏi, lời người dùng và dòng "Ứng dụng" của lịch sử; lời của
+        Yofina các lượt trước không phải căn cứ, `router._without_ungrounded_text`) và qua Guardrail; không thì writer viết từ dữ kiện."""
         if r.reply:
             ok = NumericGrounding.check(
-                {"reply": r.reply}, Allowed.from_payloads([], [question, self.history])
+                {"reply": r.reply}, Allowed.from_payloads([], [question, *self.history_basis])
             ).ok
             gr = await self.check_output(r.reply) if ok else None
             if ok and not (gr is not None and gr.blocked):
@@ -2278,6 +2320,25 @@ def _asked_goal_facts(p: IntentParams) -> dict[str, Any]:
     if p.date_text and p.date_text.strip():
         out["han_nguoi_dung_noi"] = p.date_text.strip()[:40]
     return out
+
+
+def _goal_in_version(p: IntentParams, resolved: ResolvedDate | None, payload: Mapping[str, Any] | None) -> bool:
+    """Mục tiêu người dùng hỏi trong câu xem lộ trình có trong bản vừa đọc không: một mục tiêu của bản (`goals`) cùng số tiền đích (khi
+    người dùng nêu số tiền) và cùng hạn (khi hạn đã tính được). So dữ kiện có cấu trúc, không đọc chữ. False thì bản chưa có phép tính kịp
+    hay không cho mục tiêu đó (#39, câu e ở hội thoại mới sau Runtime v33: writer đã tự đặt lý do "chưa có hạn cụ thể")."""
+    goals = ((payload or {}).get("data") or {}).get("goals") or []
+    want_date = resolved.date.isoformat() if resolved is not None else None
+    if p.amount_vnd is None and want_date is None:
+        return False
+    for g in goals:
+        if not isinstance(g, Mapping):
+            continue
+        if p.amount_vnd is not None and g.get("target_vnd") != p.amount_vnd:
+            continue
+        if want_date is not None and g.get("target_date") != want_date:
+            continue
+        return True
+    return False
 
 
 def _holds_roadmap_target(jar: Mapping[str, Any]) -> bool:
