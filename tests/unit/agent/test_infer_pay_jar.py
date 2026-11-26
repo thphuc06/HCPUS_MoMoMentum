@@ -27,7 +27,7 @@ from agent_helpers import (
 )
 from test_whatif import analysis
 from yofina_agent import notices
-from yofina_agent.clarify import infer_pay_jar
+from yofina_agent.clarify import PAY_QUESTION, infer_pay_jar
 from yofina_agent.router import build_router_system
 from yofina_agent.schemas import ROUTER_TX_TYPES, IntentParams, IntentResult
 from yofina_agent.tools import ToolOutcome, classify_result
@@ -223,8 +223,9 @@ def test_chua_ro_hu_thi_hoi_nhu_cu_chip_hu_that(monkeypatch, tx_type):
     check_agui_order(events)
     assert _types(events) == ["clarify"] and not _calls(tools, "affordability_check")
     data = blocks_of(events)[0]["data"]
-    assert data["slot"] == "jar" and data["question"] == notices.CLARIFY["pay_jar"]["question"]
-    assert [c["label"] for c in data["chips"]] == [j["name"] for j in DEMO_8]  # mọi hũ của ví, theo thứ tự trong ví
+    assert data["slot"] == "jar" and data["question"] == PAY_QUESTION
+    # mọi hũ của ví, theo thứ tự trong ví, cộng Trả sau (V4)
+    assert [c["label"] for c in data["chips"]] == [*(j["name"] for j in DEMO_8), "Trả sau (mô phỏng)"]
 
 
 def test_hai_hu_ngang_nhau_thi_hoi_chip_ung_vien_dung_dau(monkeypatch):
@@ -295,11 +296,16 @@ def test_what_if_orchestrator_nhan_ten_hu_da_suy_trong_tham_so_router(monkeypatc
     assert len(llm[1].calls) == 3  # router, Orchestrator, Analyst: không thêm lời gọi nào
 
 
-def test_what_if_chua_ro_hu_van_hoi_cach_tra_nhu_cu(monkeypatch):
+def test_what_if_chua_ro_hu_hoi_cung_mot_cau_nhu_kiem_tra(monkeypatch):
+    """V4 (#39): what-if mua hàng chưa rõ hũ không còn câu riêng "trả bằng hũ hay Trả sau": cùng câu với kiểm tra trước khi chi, chip là
+    mọi hũ cộng Trả sau."""
     route = {k: v for k, v in ROUTE_TRIP.items() if k != "tx_type"}
     llm = make_llm([route_response(**route)])
     events, tools, _ = run_turn(TRAVEL_Q, llm=llm, tools=_tools(DEMO_8), monkeypatch=monkeypatch)
-    assert _types(events) == ["clarify"] and blocks_of(events)[0]["data"]["slot"] == "funding_source"
+    assert _types(events) == ["clarify"]
+    data = blocks_of(events)[0]["data"]
+    assert data["slot"] == "jar" and data["question"] == PAY_QUESTION
+    assert [c["label"] for c in data["chips"]] == [*(j["name"] for j in DEMO_8), "Trả sau (mô phỏng)"]
     assert [n for n, _ in tools.calls] == ["get_jar_balances"]  # chỉ lần đọc ví đầu lượt, không đọc lại khi hỏi
 
 

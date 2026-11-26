@@ -37,7 +37,7 @@ from test_infer_pay_jar import (
 )
 from test_live_pay_jar_chips import _events_of
 from test_whatif import analysis
-from yofina_agent import notices
+from yofina_agent.clarify import PAY_QUESTION
 from yofina_agent.router import (
     ROUTER_SYSTEM,
     build_router_prompt,
@@ -199,8 +199,8 @@ def test_khong_hu_khong_loai_thi_hoi_voi_du_chip(monkeypatch):
     check_agui_order(events)
     assert _types(events) == ["clarify"] and [n for n, _ in tools.calls] == ["get_jar_balances"]  # một lần đọc ví, không đọc lại
     data = blocks_of(events)[0]["data"]
-    assert data["slot"] == "jar" and data["question"] == notices.CLARIFY["pay_jar"]["question"]
-    assert [c["label"] for c in data["chips"]] == [j["name"] for j in DEMO_8]
+    assert data["slot"] == "jar" and data["question"] == PAY_QUESTION
+    assert [c["label"] for c in data["chips"]] == [*(j["name"] for j in DEMO_8), "Trả sau (mô phỏng)"]
 
 
 @pytest.mark.parametrize(
@@ -258,7 +258,7 @@ def test_hai_hu_trung_ten_router_chon_mot_thi_van_hoi_ung_vien_dung_dau(monkeypa
     events, tools, _ = run_turn(TRIP_Q, llm=llm, tools=_tools(twins), monkeypatch=monkeypatch)
     assert _types(events) == ["clarify"] and not _calls(tools, "affordability_check")
     labels = [c["label"] for c in blocks_of(events)[0]["data"]["chips"]]
-    assert labels[:2] == ["Du lịch", "Du lịch"] and len(labels) == len(twins)
+    assert labels[:2] == ["Du lịch", "Du lịch"] and len(labels) == len(twins) + 1 and labels[-1] == "Trả sau (mô phỏng)"
 
 
 def test_tra_sau_khong_dung_hu_router_chon_lam_hu_tra(monkeypatch):

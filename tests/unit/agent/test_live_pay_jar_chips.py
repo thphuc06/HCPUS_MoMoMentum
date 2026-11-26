@@ -19,6 +19,7 @@ import pytest
 from agent_helpers import blocks_of, check_agui_order, make_llm, route_response, run_turn
 from test_infer_pay_jar import DEMO_8, _calls, _jar, _tools, _types
 from yofina_agent import notices
+from yofina_agent.clarify import PAY_QUESTION
 from yofina_agent.router import merge_pending, pending_params, routed_summary
 from yofina_agent.schemas import IntentParams, IntentResult
 
@@ -52,9 +53,9 @@ def test_tai_lap_cau_chuyen_di_khong_co_loai_chi_thi_hoi_hu_voi_du_moi_hu_cua_vi
     assert not _events_of(caplog, "pay_jar_inferred") and not _events_of(caplog, "pay_jar_unclear")
     block = blocks_of(events)[0]
     data = block["data"]
-    assert data["slot"] == "jar" and data["question"] == notices.CLARIFY["pay_jar"]["question"]
-    # đủ 8 hũ của ví (trước đây cắt còn 6: không chọn được Du lịch, Đầu tư), theo thứ tự trong ví
-    assert [c["label"] for c in data["chips"]] == [j["name"] for j in DEMO_8]
+    assert data["slot"] == "jar" and data["question"] == PAY_QUESTION
+    # đủ 8 hũ của ví (trước đây cắt còn 6: không chọn được Du lịch, Đầu tư), theo thứ tự trong ví, rồi Trả sau (V4)
+    assert [c["label"] for c in data["chips"]] == [*(j["name"] for j in DEMO_8), "Trả sau (mô phỏng)"]
     assert parse_block(block).type == "clarify"  # khối 8 chip đúng hợp đồng
     # đầu ra router có trong log: ý định, tên các trường có giá trị, và KHÔNG có loại chi
     (routed,) = _events_of(caplog, "routed")
@@ -87,8 +88,8 @@ def test_chip_ung_vien_dung_dau_roi_du_cac_hu_con_lai(monkeypatch):
     llm = make_llm([route_response(**ROUTE_NO_TYPE, tx_type="travel")])
     events, _, _ = run_turn(TRIP_Q, llm=llm, tools=_tools(twins), monkeypatch=monkeypatch)
     labels = [c["label"] for c in blocks_of(events)[0]["data"]["chips"]]
-    assert labels[:2] == ["Du lịch", "Du lịch"] and len(labels) == len(twins)
-    assert labels[2:] == [j["name"] for j in DEMO_8 if j["code"] != "muc_tieu"]
+    assert labels[:2] == ["Du lịch", "Du lịch"] and len(labels) == len(twins) + 1
+    assert labels[2:] == [*(j["name"] for j in DEMO_8 if j["code"] != "muc_tieu"), "Trả sau (mô phỏng)"]
 
 
 def test_ten_hu_la_thi_hoi_lai_voi_du_moi_hu(monkeypatch):

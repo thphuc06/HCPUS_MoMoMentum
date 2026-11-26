@@ -210,9 +210,11 @@ def test_chuyen_tien_khong_noi_hu_nguon_thi_hoi_dung_mot_cau_kem_chip_hu_that(mo
     assert data["slot"] == "jar" and data["question"].count("?") == 1
     real = {"Ăn uống", "Giải trí"}  # hũ của persona minh trong fixture get_jar_balances
     names = [c["label"] for c in data["chips"]]
-    # mọi hũ của ví làm chip, đúng thứ tự trong ví (#39: không cắt còn 6)
-    assert names == [j["name"] for j in fixture("get_jar_balances.ok.json")["data"]["jars"]] and real <= set(names)
-    assert all(c["value"].startswith("Hũ ") for c in data["chips"])
+    # mọi hũ của ví làm chip, đúng thứ tự trong ví (#39: không cắt còn 6), rồi chip Trả sau (V4: một chính sách cho mọi khoản chi)
+    assert names == [*(j["name"] for j in fixture("get_jar_balances.ok.json")["data"]["jars"]), "Trả sau (mô phỏng)"]
+    assert real <= set(names)
+    assert all(c["value"].startswith("Hũ ") for c in data["chips"][:-1])
+    assert data["chips"][-1]["value"] == "Trả bằng Trả sau (mô phỏng)"
     assert [e for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"] == []
 
 

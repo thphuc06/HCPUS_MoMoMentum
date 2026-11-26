@@ -43,7 +43,11 @@ from yofina_agent import advisor, behavior_chat, notices, trace
 from yofina_agent import events as ev
 from yofina_agent import memory as agent_memory
 from yofina_agent.clarify import (
+    CREDIT_CHIP,
     GOAL_DATE_QUESTION,
+    NOTICE_CHIP_LABELS,
+    NOTICE_CHIP_PROMPTS,
+    PAY_QUESTION,
     ROADMAP_CHOICE_CHIPS,
     InferredJar,
     goal_date_chips,
@@ -1674,25 +1678,49 @@ class Turn:
         )
         return found.result
 
-    def note_inferred_jar(self, code: str | None) -> None:
+    def note_inferred_jar(self, code: str | None, *, credit: bool | None = None) -> None:
         """Khối `notice` thông tin "Tính theo hũ X" khi lượt tính theo đúng hũ mã đã chọn (một lần mỗi lượt): người dùng thấy hũ nào
-        được dùng và biết nhắn tên hũ khác để đổi ở lượt sau. Hũ được dùng khác hũ đã chọn (Orchestrator chọn hũ khác) thì không nói,
-        để thông báo không sai với số liệu."""
+        được dùng; chip chọn hũ khác và (ví có hạn mức Trả sau) chip tính bằng Trả sau (V4). Hũ được dùng khác hũ đã chọn
+        (Orchestrator chọn hũ khác) thì không nói, để thông báo không sai với số liệu. `credit`: ví có hạn mức (None: theo các tool đã
+        đọc ở lượt, `has_credit_line`)."""
+        block = self.inferred_jar_notice(code, credit=self.has_credit_line() if credit is None else credit)
+        if block is not None:
+            self.emit_block(block)
+
+    def inferred_jar_notice(self, code: str | None, *, credit: bool) -> B.NoticeBlock | None:
+        """Khối của `note_inferred_jar` (chưa phát), hoặc None khi không cần nói. Đánh dấu đã nói."""
         inferred = self.inferred_jar
         if inferred is None or code != inferred.code or self._inferred_noticed:
-            return
+            return None
         self._inferred_noticed = True
         if inferred.tx_type is None:
             message = notices.INFERRED_JAR_MESSAGE_INTENT.format(name=inferred.name)
         else:
             label = ROUTER_TX_TYPES.get(inferred.tx_type, inferred.tx_type)
             message = notices.INFERRED_JAR_MESSAGE.format(name=inferred.name, label=label)
-        self.emit_notice(
+        prompts = NOTICE_CHIP_PROMPTS["what_if" if self.intent == "what_if" else "affordability"]
+        kinds = ("choose", "credit") if credit else ("choose",)
+        suggestions = [{"id": f"pay_{k}", "label": NOTICE_CHIP_LABELS[k], "prompt": prompts[k]} for k in kinds]
+        return B.build_notice(
             kind="info",
-            code=notices.INFERRED_JAR_CODE,
             title=notices.INFERRED_JAR_TITLE.format(name=inferred.name)[:80],
             message=message[:280],
+            trace_id=self.trace_id,
+            source_tool="agent",
+            as_of=self.d.now(),
+            app_date=self.block_app_date(),
+            code=notices.INFERRED_JAR_CODE,
+            suggestions=suggestions,
         )
+
+    def has_credit_line(self) -> bool:
+        """Ví có hạn mức Trả sau, theo các tool đã đọc ở lượt (`get_obligations` có `credit_line`, kiểm tra trước khi chi có `credit`).
+        Không đọc thêm tool nào: chưa đọc thì False (không có chip Trả sau)."""
+        for o in self.tool_log:
+            data = (o.payload or {}).get("data") if o.ok else None
+            if isinstance(data, Mapping) and (data.get("credit_line") or data.get("credit")):
+                return True
+        return False
 
     async def on_what_if(self, r: IntentResult, question: str) -> None:
         self.whatif = await run_what_if(self, r, question, self.history)
@@ -1718,13 +1746,19 @@ class Turn:
             jars = await self.ensure_jars()
             if jars.outcome.ok and (m := resolve_jar(p.jar_text, self._jar_rows)).status == "ok":
                 args["jar"] = m.code
-        self.note_inferred_jar(args.get("jar"))
+
+        def card(outcome: ToolOutcome, trace_id: str) -> list[Any]:
+            # "Tính theo hũ X" (hũ mã đã suy) đứng trước thẻ; chip Trả sau chỉ khi ví có hạn mức (thẻ có phần Trả sau)
+            data = (outcome.payload or {}).get("data") or {}
+            notice = self.inferred_jar_notice(args.get("jar"), credit=bool(data.get("credit")))
+            return [*([notice] if notice is not None else []), affordability_block(outcome, trace_id)]
+
         res = await self.call_tool_retry(
             "affordability_check",
             args,
             target="forecast",
             compact=lambda o: compact_affordability(o.payload or {}),
-            block=affordability_block,
+            block=card,
         )
         if "pay_jar" not in args and asks_pay_jar(res.outcome):
             # Trả sau trên ví không có hũ loại nghĩa vụ: hỏi hũ trả rồi kiểm lại với pay_jar (như khai nghĩa vụ)
@@ -1944,6 +1978,8 @@ class Turn:
         chips = [_readable_amount_chip(c) for c in (req.chips if chips is None else chips)]
         if req.slot == "jar" and not chips:
             chips = await self.jar_chips()  # hỏi hũ nào thì chip là các hũ thật
+            if req.question == PAY_QUESTION and len(chips) < B.CLARIFY_MAX_CHIPS:
+                chips.append(CREDIT_CHIP)  # hũ trả của khoản chi ở lượt chỉ đọc: mọi hũ cộng Trả sau (V4)
         self.emit_block(
             B.build_clarify(
                 question=req.question,

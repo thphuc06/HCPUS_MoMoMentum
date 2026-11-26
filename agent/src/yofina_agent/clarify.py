@@ -5,7 +5,11 @@ hoặc model không dùng được (suy giảm), mã dựng câu hỏi từ chu�
 câu demo: chỉ là nhãn của ô còn thiếu). Chỉ hỏi một ô mỗi lượt; lượt sau người dùng trả lời thì router ghép với câu trước và chạy tiếp.
 
 Lượt chỉ đọc (what-if mua hàng, kiểm tra trước khi chi) thiếu hũ trả thì mã dùng hũ router chọn theo ý định trong danh sách hũ của ví,
-không có thì hũ suy từ loại chi bằng quy tắc phân loại của ví (`infer_pay_jar`), trước khi quyết định hỏi; chỉ hỏi khi chưa rõ.
+không có thì hũ suy từ loại chi bằng quy tắc phân loại của ví (`infer_pay_jar`), trước khi quyết định hỏi; chỉ hỏi khi chưa rõ, và hỏi
+cùng một câu cho mọi khoản mua (`PAY_QUESTION`: chip là mọi hũ cộng Trả sau; V4, #39).
+
+Câu hỏi mã đặt được nhận ra lại từ chữ của nó trong lịch sử (`recognize_prompt`): lượt sau biết câu trả lời điền ô nào và câu nào là bấm
+chip (V3, #39).
 """
 
 from __future__ import annotations
@@ -93,6 +97,11 @@ def resolve_clarify(r: IntentResult) -> ClarifyRequest | None:
     slot = missing_slot(r)
     if slot is None:
         return r.clarify if (r.clarify and r.clarify.slot == "other") else None
+    if lacks_pay_jar(r):
+        # Một chính sách cho mọi khoản mua ở lượt chỉ đọc (V4, #39): mã chưa suy được hũ trả (`infer_pay_jar`) thì hỏi đúng một câu,
+        # chip là mọi hũ của ví cộng Trả sau (người gọi điền chip), cho cả what-if lẫn kiểm tra trước khi chi; không còn câu hỏi riêng
+        # "trả bằng hũ hay Trả sau" cho what-if.
+        return ClarifyRequest(slot="jar", question=PAY_QUESTION)
     wire_slot = "jar" if slot == "pay_jar" else slot
     if r.clarify and r.clarify.slot == wire_slot:
         return r.clarify
