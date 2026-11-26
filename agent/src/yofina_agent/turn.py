@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 import json
 import logging
 import time
@@ -267,6 +268,7 @@ class Turn:
         self.memory_action: str | None = None  # ý định `memory`: router nói người dùng HỎI hay NÓI (chính sách ghi bộ nhớ dùng)
         self._goal_asked = False  # lộ trình: đã hỏi lại hạn hoặc hũ của mục tiêu ở lượt này
         self._date_from_history = False  # cụm chỉ hạn của mục tiêu chỉ có từ mã đọc lại câu cũ (`goal_deadline`)
+        self.request_text: str | None = None  # câu yêu cầu gốc khi lượt này trả lời câu hỏi lại (đã che PII)
         self.memory = agent_memory.TurnMemory.for_deps(deps)
 
     # --- dấu vết ----------------------------------------------------------------------------
@@ -971,6 +973,10 @@ class Turn:
             and merged.params.target_date is None
             and merged.params.date_text == (pending or {}).get("date_text")
         )
+        if merged is not routed and (pending or {}).get("_text"):
+            # câu này trả lời câu hỏi lại: bước cần nguyên câu người dùng (lập lộ trình theo ràng buộc họ nêu, C4) nhận câu yêu cầu gốc
+            # cùng câu trả lời
+            self.request_text = f"{pending['_text']}\n{question}"  # type: ignore[index]
         routed = merged
         # Số tiền bằng ngoại tệ là tham số của câu hỏi, không phải ý định: đổi sang VND bằng tool tỷ giá TRƯỚC khi hỏi lại ô thiếu,
         # để mọi đường dùng amount_vnd chạy như câu hỏi bằng VND (fx_chat). Tool lỗi thì đã có `notice`, kết thúc lượt.
@@ -1626,6 +1632,8 @@ class Turn:
                 tool_calls_left=self.s.max_tool_calls_per_turn - self.tool_calls + int(cached_jars is not None),
                 latest_outcome=latest_outcome, user_goal=user_goal,
                 advise=True,  # người tư vấn (luồng K): lập luận và kết luận trong chính lời gọi planner
+                # C4: câu của người dùng (đã che PII; lượt trả lời câu hỏi lại thì kèm câu yêu cầu gốc) cho planner, khi hàm nhận
+                **_roadmap_request_kwargs(self.request_text or question),
             )
         self.suitability.extend(result.suitability)
         if result.model_error is not None:
@@ -2130,6 +2138,21 @@ _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa
 #: Ngày hạn router tính (`target_date`) và cách đọc cụm chỉ hạn bằng mã lệch quá số ngày này là "lệch rõ": hỏi lại hạn (V1). Bất biến
 #: của phép đối chiếu (không phải tham số nghiệp vụ): vài ngày lệch là cách hiểu "cuối tháng", "tháng sau" khác nhau, không đổi kế hoạch.
 _GOAL_DATE_TOLERANCE_DAYS = 7
+#: Tên tham số tùy chọn của `roadmap_agent.build_roadmap` nhận câu của người dùng (C4: ràng buộc như "đừng đụng hũ X"; nhánh khác thêm
+#: tham số đó). Truyền theo tên khi chữ ký hàm có một trong các tên này, nên hai nhánh gộp theo thứ tự nào cũng chạy; tên cuối cùng khác
+#: thì chỉ cần thêm vào đây.
+_ROADMAP_REQUEST_PARAMS = ("user_request", "user_text", "request_text", "user_question", "question")
+
+
+def _roadmap_request_kwargs(text: str) -> dict[str, str]:
+    """`{tên: câu}` nếu `build_roadmap` nhận câu của người dùng qua một trong `_ROADMAP_REQUEST_PARAMS` (keyword), ngược lại `{}`."""
+    try:
+        params = inspect.signature(build_roadmap).parameters
+    except (TypeError, ValueError):
+        return {}
+    keyword = (inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    name = next((n for n in _ROADMAP_REQUEST_PARAMS if n in params and params[n].kind in keyword), None)
+    return {name: text} if name else {}
 
 
 def _states_goal(p: IntentParams) -> bool:

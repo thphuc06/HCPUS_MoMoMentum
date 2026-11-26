@@ -397,7 +397,7 @@ def pending_params(
     điền ô đã hỏi (`_answer_params`). `jar_names`: tên các hũ của ví (nhận ra chip "Hũ {tên}").
 
     Kết quả: tham số đọc được, `_intent` (ý định của câu đang chờ nếu biết), `_prompt` (câu hỏi mã đặt ở tin gần nhất, hoặc
-    `UNKNOWN_PROMPT`), `_jar_names`. None nếu không có câu đang chờ."""
+    `UNKNOWN_PROMPT`), `_jar_names`, `_text` (câu yêu cầu gốc của chuỗi hỏi lại). None nếu không có câu đang chờ."""
 
     def asking(i: int) -> bool:
         role, text = messages[i]
@@ -429,6 +429,7 @@ def pending_params(
     for text, answered in reversed(chain):  # cũ trước, mới sau
         if answered is None:
             merged.update(_code_params(text))
+            merged["_text"] = text  # câu yêu cầu gốc (đã che PII ở người gọi), cho bước cần nguyên câu người dùng
             continue
         merged.update(answered.given)  # điều câu hỏi nói lại (mã đã hiểu) thắng cách đọc lại câu bằng mã
         got, decided = _answer_params(text, answered, merged, jar_names)
