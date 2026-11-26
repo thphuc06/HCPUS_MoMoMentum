@@ -255,6 +255,7 @@ LEDGER_TOOLS = (
     "get_cashflow_summary",
     "get_obligations",
     "get_unclassified",
+    "propose_jar_split",
     "update_profile",
     "record_transaction",
     "move_between_jars",

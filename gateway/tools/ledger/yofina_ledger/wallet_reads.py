@@ -509,6 +509,30 @@ class WalletReads:
             raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
         return {"app_date": today.isoformat(), "as_of": format_instant(now), **data}
 
+    def propose_jar_split_result(
+        self, user_id: str, *, trace_id: str, sinking_items: Any = None
+    ) -> dict[str, Any]:
+        """Gateway: dùng đề xuất REST, kèm dữ liệu xem trước save_jars khi có đề xuất."""
+        if not isinstance(sinking_items, list) or not 1 <= len(sinking_items) <= 5:
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "sinking_items phải có từ 1 đến 5 khoản.")
+        if any(
+            isinstance(item, Mapping) and type(item.get("amount_vnd")) is not int
+            for item in sinking_items
+        ):
+            raise YofinaError(ErrorCode.PARAMS_INVALID, "amount_vnd phải là số nguyên dương.")
+        data = self.split_proposal_response(user_id, {"sinking_items": sinking_items})
+        if data["status"] == "proposed":
+            preview = self.needs_confirmation_for(
+                user_id, "save_jars", data["params"], trace_id=trace_id
+            )
+            data = {**data, "confirm": preview["data"]}
+        return {
+            "status": "OK",
+            "as_of": data["as_of"],
+            "app_date": data["app_date"],
+            "data": data,
+        }
+
     def jar_templates_response(self) -> dict[str, Any]:
         return {
             "templates": [

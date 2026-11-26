@@ -10,6 +10,7 @@ Luật Cedar của AgentCore Policy tại Gateway `yofina-gateway` (proposal §9
 | `get_resilience_score.cedar`, `stress_test.cedar` (target `forecast`), `optimize_allocation.cedar`, `get_roadmap.cedar` (target `planner`; phase 4) | `context.input has user_id && context.input.user_id == principal.id` |
 | `save_roadmap.cedar` (target `planner`; phase 4) | như trên: tool GHI nhưng KHÔNG đổi số dư nên KHÔNG qua token, Cedar chỉ ép `user_id` (không `confirm_token`); Lambda chạy lại luật suitability cho từng bước |
 | `get_fee_schedule.cedar`, `get_exchange_rate.cedar` (target `knowledge`; tỷ giá ngoại tệ thêm 25/11), `resolve_date.cedar` (target `knowledge`; tính ngày từ đặc tả, thêm 26/11, #39) | `context.input has user_id && context.input.user_id == principal.id` |
+| `propose_jar_split.cedar` (action `ledger___propose_jar_split`, #41) | `context.input has user_id && context.input.user_id == principal.id` |
 | `update_profile.cedar`, `assign_jar.cedar` | khớp `user_id` và, nếu có `confirm_token`, dạng `"*.*"`; không có số tiền một lần nên không có hạn mức |
 
 `save_jars` và `confirm_salary` không có policy vì không lộ cho agent (chỉ REST). Test `tests/unit/test_ledger_wallet.py` khẳng định mỗi tool của hợp đồng có đúng một file, đúng dạng, và hạn mức luôn đi qua placeholder (không có số gắn cứng).
