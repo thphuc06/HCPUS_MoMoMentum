@@ -106,7 +106,7 @@ Bộ 7 hũ cũ (mặc định của onboarding tới 25/11; từ 26/11 thay bằ
 | Tích lũy dài hạn | dài hạn | — | — | 10% |
 | **Tổng** | | **100%** | **100%** | **100%** |
 
-**Căn cứ của bộ "Mới đi làm" (hiệu chỉnh 24/11).** Hai bộ còn lại vẫn là minh họa.
+**Căn cứ của bộ "Mới đi làm" (hiệu chỉnh 24/11).** Hai bộ còn lại vẫn là minh họa. **26/11:** bộ ba hũ mặc định đã code (42/33/25, đoạn "Chốt 26/11" cuối mục này) gộp từ chính bảng dưới: Chi hằng ngày 42% = ăn uống 30% + đi lại 7% + giải trí 5%; Nghĩa vụ 33% = nhà ở và hóa đơn 30% + trả sau 3%; Dự phòng 25% = đệm 15% + quỹ dồn 5% + mục tiêu 5%. Vì vậy nguồn của bảng dưới cũng là nguồn của bộ mặc định.
 
 | Hũ | Tỷ lệ | Căn cứ |
 |---|---|---|

@@ -368,7 +368,7 @@ Gói được chia theo **loại chi phí** của từng tính năng trong kiế
 |---|---|---|---|
 | Định vị | "Biết trước" | "Hỏi trước khi chi" | "Có người lập kế hoạch riêng" |
 | Hũ có số dư riêng, chia lương, nghĩa vụ trong một lịch | ✅ | ✅ | ✅ |
-| Cơ cấu hũ theo mục đích (đệm, quỹ dồn, mục tiêu, dài hạn), bộ hũ mẫu theo giai đoạn sống (BR-63 đến 70) | ✅ (**phần an toàn, không bán thêm**) | ✅ | ✅ |
+| Cơ cấu hũ theo mục đích (đệm, quỹ dồn, mục tiêu, dài hạn), bộ ba hũ mặc định và tỷ lệ theo số đã khai (BR-63 đến 69, 78; đã code 26/11). Bộ hũ theo giai đoạn sống (BR-70) hoãn sau hạn nộp | ✅ (**phần an toàn, không bán thêm**) | ✅ | ✅ |
 | Gợi ý chia tiền dư theo thứ tự ưu tiên (BR-65) | ✅ thẻ số liệu | ✅ có giải thích | ✅ |
 | Gợi ý chuyển giai đoạn sống (BR-71) | — | ✅ | ✅ gắn vào lộ trình |
 | Dự báo ngày cạn, thẻ chủ động, nhắc hạn | ✅ | ✅ | ✅ |

@@ -79,6 +79,7 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | **I-02** | **Duyệt các quy tắc đánh dấu đề xuất**: BC-13, BR-63 đến 78, NFR-44, K10, K11, L19, L20 | Duyệt theo khối: cơ cấu hũ (BR-63 đến 73, 78), chi phí trả sau (74 đến 76), hỗ trợ trước hạn (77). **26/11:** BR-67, 69 chốt và đã làm; BR-63 (chốt chưa bắt buộc trước hạn nộp), 64, 65, 66, 73, 78 một phần; BR-68, 70, 71 hoãn; còn duyệt BR-72, 74 đến 77. BR-79 đến 84 chỉ có ở Notion, chưa vào repo | Nhóm | [02](02-business-rules.md) |
 | E-01 | Duyệt mục tiêu K1–K11 | K4 10% nay có căn cứ AFM (đo được 21–24%); chú ý K3 (15%), K10 (25%), K11 (20%) | Nhóm | [08](08-kpi-kinh-doanh.md) |
 | E-03 | KPI nào lên slide | K2; **K5 với hai định nghĩa cạnh baseline**; K4 kèm thử nghiệm AFM; K9 dạng hòa vốn; phân hũ báo cả hai mặt | Nhóm | [08](08-kpi-kinh-doanh.md) |
+| **J-01** | Số phân loại trên slide; có đo ví 3 hũ có model trước 1/12 không | **Gắn 92%, 17,4% với ví demo nhiều hũ**; không dùng cho tài khoản mới 3 hũ. Đề xuất nhờ chủ dự án duyệt đo có model (khoảng 294 lời gọi model nhỏ). Chi tiết: [13 T-08](13-tien-do-technical.md) | Nhóm, chủ dự án | [13](13-tien-do-technical.md) |
 | D-01 | Hướng thương mại chính | B2B2C qua ví | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
 | D-02 | Chỉ số Bắc Đẩu | "Số người mỗi tuần tránh được hụt nhờ cảnh báo trước" | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
 | D-03 | Tên và ranh giới ba gói | Như 06 mục 5.2; chốt giá sau khi technical đo chi phí AI mỗi lượt | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |

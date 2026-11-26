@@ -67,6 +67,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 | T-05 ⏳ Phase 6 việc A4 (Q9: 9/10 ở lượt RC; dự kiến 10/11) | OCR ảnh thật 7/12 (lúc ghi) | BR-56, AC-FR9-04 | Cân nhắc hạ mục tiêu cho demo (chỉ dùng loại ảnh đọc tốt) hoặc ghi rõ giới hạn |
 | T-06 | Ngưỡng nghĩa vụ trên thu nhập: code dùng **một ngưỡng 36%** (quy tắc 28/36, `rules/obligation_to_income.yaml`); BA đề xuất hai mức vàng 30%, đỏ 40% | BR-37, C-03 | Nhóm chốt C-03: giữ 36% làm mức đỏ, hoặc tách hai mức |
 | T-07 | Cơ cấu hũ mới (BR-63 đến 73) và các quy tắc chi phí trả sau (BR-74 đến 77) **chưa có trong code**. **26/11:** bộ hũ theo mục đích đã làm một phần (#39; trạng thái từng BR ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)); BR-74 đến 77 vẫn chưa có | — | Chốt phạm vi demo: G1 (chi phí quy năm) có thể làm nhanh trong FR6; phần còn lại ghi là lộ trình. **25/11:** được thêm tính năng tới hết 30/11; đề xuất chỉ thêm G1 (chi phí quy năm, BR-75) |
+| T-08 (BA ghi 26/11) | **Số phân loại trên slide phải đúng phạm vi ví.** 92% đúng và 17,4% phải hỏi là của **ví nhiều hũ có model** (ví demo). Ví 3 hũ mặc định của tài khoản mới **chưa đo có model**; không model thì hỏi 39,52%, tự gán sai 4,19% ([đo ví ba hũ](../research/2026-11-26-do-vi-ba-hu.md)) | BR-17, NFR-13, NFR-14, E-03 | Slide gắn số với ví demo; chủ dự án quyết có đo ví 3 hũ có model trước 1/12 không (P1 trong ghi chú đo) |
 
 ### 4a. Chi tiết từng việc (gửi technical, ghi 25/11)
 
@@ -120,6 +121,22 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 - **26/11 (issue #39):** đã làm BR-67, BR-69 và một phần BR-63, 65, 66, 73, 78 (3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai, hũ Nghĩa vụ chung); hoãn BR-64, 68, 70, 71; phần còn lại của BR-63 (bắt buộc mục đích, chặn hũ đệm thứ hai) để sau hạn nộp. BR-72, 74 đến 77 và FR14 vẫn chưa có.
 - **Đề xuất:** không đưa vào demo, trừ **G1** (hiện chi phí trả sau quy ra năm trên thẻ kiểm tra trước khi chi, BR-75) vì làm nhanh được. Phần còn lại ghi là lộ trình sau cuộc thi.
 - **BA chốt trước:** G-01, C-12 (đã đưa vào [12 mục 2.1](12-tong-hop-va-viec-can-chot.md#21-gấp-technical-đang-chờ-chốt-trước-hạn-tính-năng-3011), hạn 30/11).
+
+**T-08 [Trung bình, trước khi khóa slide] Số phân loại của ví 3 hũ** — BA ghi 26/11 từ [ghi chú đo ví ba hũ](../research/2026-11-26-do-vi-ba-hu.md) của Phúc.
+- **Số đo (tập kiểm 167 dòng):**
+
+| Trường hợp | Model | Đúng trên mục đã gán | Phải hỏi | Tự gán sai |
+|---|---|---|---|---|
+| Ví 7 hũ (ví demo) | Có | 92,03% | **17,37%** | 1,80% |
+| Ví 7 hũ | Không | 94,29% | 58,08% | 1,20% |
+| **Ví 3 hũ** (tài khoản mới) | Không | 92,08% | **39,52%** | **4,19%** |
+| Ví 3 hũ | Có | **Chưa đo.** Ước tính giả định: 92,76% | 8,98% | 4,19% |
+
+- **Cách đọc đúng:** so cùng điều kiện (không model), ví 3 hũ **hỏi ít hơn** ví 7 hũ (39,52% so với 58,08%), nhưng **tự gán sai nhiều hơn** (4,19% so với 1,20%). Không được so 39,52% (không model) với 17,4% (có model).
+- **Nguồn tự gán sai:** luật "luôn luôn cho người này": người nhận quen bị gộp vào một hũ, rồi khoản trả hóa đơn qua chính người đó bị đưa vào Chi hằng ngày. Người dùng giữ luật như ví 7 hũ thì tự gán sai chỉ 0,60%.
+- **Việc cho slide và tài liệu nộp (P0 của ghi chú đo, BA làm):** gắn 92% và 17,4% với **ví demo nhiều hũ**; không nói đó là số của tài khoản mới. Nếu nói về tài khoản mới, dùng số đo không model và ghi "phần có model chưa đo". Báo cả hai mặt như AU-31.
+- **Việc cần chủ dự án quyết (P1):** đo ví 3 hũ có model trước đóng băng 1/12 (khoảng 294 lời gọi model nhỏ, khoảng 17 phút). Nếu đo được mức gần 9% thì có số tốt hơn để nói về tài khoản mới (dưới mục tiêu 10% của NFR-14).
+- **Sau hạn nộp (P1 của ghi chú đo):** luật người nhận không nên thắng lời nhắn có tín hiệu hóa đơn hoặc nợ.
 
 ### 4b. Issue GitHub liên quan tới BA (từ kiểm toán 25/11)
 
