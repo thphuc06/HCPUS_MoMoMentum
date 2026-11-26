@@ -5,24 +5,41 @@ Bài toán theo tháng (đơn vị nội bộ là `rounding_step_vnd` VND để 
     biến   x_j   tiền vào hũ j                      u   phần chưa phân bổ
            e_j   phần SÀN chưa đạt (elastic)        g_j phần mức cần của mục tiêu chưa đạt (cứng)
            h_j   phần mức cần ưa thích chưa đạt     d_j phần cắt xuống dưới mức hiện tại
+           f_j   phần SÀN CHI chưa đạt (elastic)
     ràng buộc  sum_j x_j + u = thu nhập
                x_j + e_j >= sàn_j                   (sàn cứng của nghĩa vụ và khoản thiết yếu, qua biến elastic)
+               x_j + f_j >= sàn chi_j               (sàn chi theo mức chi thật gần đây của hũ, #39 26/11)
                x_j + g_j >= mức cần_j               (mục tiêu có hạn: cần đóng góp đủ mỗi tháng để kịp hạn)
                x_j + d_j >= mức hiện tại_j          (chia theo tỷ lệ đã khai; cắt xuống thì chịu phạt `d_j`)
-    mục tiêu   min sum M_j e_j + M_goal sum g_j + sum w_j h_j + sum k_j d_j + eps sum x_j
+    mục tiêu   min sum M_j e_j + M_spend sum f_j + M_goal sum g_j + sum w_j h_j + sum k_j d_j + eps sum x_j
 
 - Sàn cứng KHÔNG đặt qua `bounds` mà qua `e_j` với mức phạt `M_j` theo ưu tiên (nghĩa vụ > thiết yếu), nên bài toán luôn có nghiệm và
   nếu thu nhập không đủ thì phần thiếu rơi vào hũ ưu tiên thấp trước (spike `s8_lp.py` ca 2b và 2c).
 - Cắt xuống dưới mức hiện tại tốn `k_j` theo loại hũ (không thiết yếu < mục tiêu < thiết yếu < dự phòng), nên tiền để trả sàn và mục
   tiêu lấy từ hũ không thiết yếu trước.
+- **Thứ tự ưu tiên khi không đủ chỗ** (#39, chốt 26/11), từ cứng tới mềm, theo mức phạt: sàn nghĩa vụ (`penalty_obligation_floor`) và
+  sàn thiết yếu (`penalty_essential_floor`) > giữ hũ đệm chưa tới đích (`penalty_spending_floor x weight_emergency / weight_goal`) >
+  sàn chi (`penalty_spending_floor`) > mức cần của mục tiêu (`penalty_goal_need`, hũ đệm nhân `weight_emergency / weight_goal`) >
+  phần còn lại (trọng số cắt `k_j`). Cấu hình phải giữ đúng thứ tự này.
+- **Sàn chi** (`JarSpec.spend_floor_vnd`, người gọi tính: tỷ lệ giữ x mức chi điển hình của hũ, không vượt mức hiện tại): mục tiêu
+  không lấy được tiền dưới sàn chi (mục tiêu lùi hạn hoặc chưa khả thi), nghĩa vụ và chi thiết yếu thì lấy được. Phần sàn chi chưa đạt
+  không làm bài toán vô nghiệm: nó là điều đã nới (`discretionary_reduced`). Sàn chi chỉ nhường để ví ĐỦ sàn: nhường hết mà vẫn thiếu
+  sàn cứng (vô nghiệm dù sao) thì giải lại với sàn chi là cận dưới cứng, miễn nghĩa vụ cứng vẫn nhận đủ như khi nhường
+  (`_keep_spend_floors`).
 - Hũ đệm (`emergency`) có thể mang mục tiêu (đích số dư của lượt lập lộ trình): phần thiếu của mức cần trên hũ đó phạt nặng hơn mục tiêu
   khác theo tỷ lệ `weight_emergency / weight_goal`, nên khi không đủ cho mọi mục tiêu thì hũ đệm được trước (BR-65).
+- Hũ đệm **chưa tới đích** (`hold_current`, người gọi quyết từ số dư và đích của hũ) giữ mức hiện tại ở CẢ HAI vòng: cắt xuống dưới mức
+  hiện tại chịu mức phạt giữ hũ đệm ở trên, nên mục tiêu khác (kể cả khi vì thế mà chưa khả thi) và sàn chi không lấy được tiền từ hũ
+  đệm (BR-65: hũ đệm chưa đủ thì không tăng hũ mục tiêu trước), còn sàn nghĩa vụ và sàn thiết yếu (phạt nặng hơn) vẫn lấy được.
 - **Vòng 0** (chặt): hũ không thiết yếu chỉ được cắt tới `(1 - cắt tối đa) x mức hiện tại`; mục tiêu cần đủ mức cần để kịp hạn.
-  Đạt (mọi `e_j` và `g_j` bằng 0) thì trạng thái `optimal`.
-- **Nới ĐÚNG MỘT vòng** nếu vòng 0 không đạt: hũ không thiết yếu được cắt tới 0, mục tiêu chỉ cần đủ mức cần của hạn đã lùi
-  `relax_delay_months` tháng (cứng) và mức cần của hạn gốc (mềm, phạt `h_j`). Đạt thì `relaxed` kèm điều đã nới (hũ không thiết yếu
-  bị cắt sâu hơn vòng 0, mục tiêu phải lùi hạn). Vẫn không đạt thì `infeasible` (không nới thêm): người gọi nêu đúng hai lựa chọn.
-- Tiền bảo toàn: tổng `x_j` đã làm tròn cộng `unallocated` đúng bằng thu nhập (phần dư làm tròn dồn vào hũ lớn nhất).
+  Đạt (mọi `e_j`, `g_j`, `f_j` bằng 0 và không cắt hũ đệm đang giữ) thì trạng thái `optimal`.
+- **Nới ĐÚNG MỘT vòng** nếu vòng 0 không đạt: hũ không thiết yếu được cắt tới 0 (nhưng sàn chi vẫn giữ trước mục tiêu), mục tiêu chỉ
+  cần đủ mức cần của hạn đã lùi `relax_delay_months` tháng (cứng) và mức cần của hạn gốc (mềm, phạt `h_j`). Đạt (mọi `e_j`, `g_j`
+  bằng 0) thì `relaxed` kèm điều đã nới (hũ không thiết yếu bị cắt sâu hơn vòng 0, hũ bị cắt dưới sàn chi, mục tiêu phải lùi hạn).
+  Vẫn không đạt thì `infeasible` (không nới thêm): người gọi nêu đúng hai lựa chọn.
+- Không cho nới (`allow_relaxation=False`): nghiệm vòng 0; sàn chi và hũ đệm nhường cho nghĩa vụ, thiết yếu không làm nó vô nghiệm.
+- Tiền bảo toàn: tổng `x_j` đã làm tròn cộng `unallocated` đúng bằng thu nhập (phần dư làm tròn dồn vào hũ lớn nhất; phần thiếu lấy từ
+  hũ còn dư nhiều nhất trên mức phải giữ: sàn, sàn chi, mức cần đã đạt, mức hiện tại của hũ LP không cắt).
 
 Mọi số (mức phạt, trọng số, mức cắt tối đa, số tháng lùi hạn, bước làm tròn) nằm ở `AllocationParams` do người gọi truyền (cấu hình).
 """
@@ -62,6 +79,15 @@ class AllocationParams:
     penalty_essential_floor: float
     penalty_goal_need: float
     stay_epsilon: float
+    #: đích tự tính của hũ đệm khi lượt gọi không nêu đích: từng này tháng chi thiết yếu (BR-64, C-13). Người gọi dùng để quyết
+    #: `JarSpec.hold_current`; bộ giải không đọc.
+    buffer_target_months: float
+    #: tỷ lệ giữ: sàn chi của hũ chi = tỷ lệ này x mức chi điển hình mỗi tháng của hũ (#39, 26/11). Người gọi tính `JarSpec.spend_floor_vnd`;
+    #: bộ giải không đọc.
+    spending_keep_ratio: float
+    #: mức phạt mỗi đồng sàn chi chưa đạt: trên mức cần của mục tiêu (kể cả hũ đệm), dưới sàn thiết yếu; giữ hũ đệm nhân thêm
+    #: `weight_emergency / weight_goal` (xem docstring module)
+    penalty_spending_floor: float
 
 
 @dataclass(frozen=True)
@@ -83,6 +109,10 @@ class JarSpec:
     floor_tier: FloorTier = "essential"
     goal: GoalSpec | None = None
     weight: float = 1.0
+    #: hũ đệm chưa tới đích: giữ mức hiện tại ở cả hai vòng, trên sàn chi, dưới sàn nghĩa vụ và thiết yếu (xem docstring module)
+    hold_current: bool = False
+    #: sàn chi (VND/tháng): mục tiêu không lấy tiền dưới mức này, nghĩa vụ và thiết yếu thì lấy được (xem docstring module)
+    spend_floor_vnd: int = 0
 
 
 @dataclass(frozen=True)
@@ -152,10 +182,26 @@ class _Raw:
     status: int
     message: str
     fun: float
+    #: mức cần ưa thích (hạn gốc) của vòng nới, VND; vòng chặt toàn 0
+    need_pref: np.ndarray
+    #: phần sàn chi chưa đạt, VND
+    f: np.ndarray
+    #: phần cắt dưới mức hiện tại, VND
+    d: np.ndarray
 
 
-def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
-    """Giải một vòng. Trả (nghiệm quy về VND, mức cần cứng của từng hũ trong vòng này, VND)."""
+def _rank(p: AllocationParams, j: JarSpec) -> float:
+    """Hũ đệm xếp trên hũ khác cùng bậc theo tỷ lệ trọng số cắt của vai đệm so với vai mục tiêu (BR-65); hũ khác 1."""
+    return (
+        p.weight_emergency / p.weight_goal if j.role == "emergency" and p.weight_goal > 0 else 1.0
+    )
+
+
+def _solve(
+    p: AllocationProblem, relaxed: bool, keep_vnd: np.ndarray | None = None
+) -> tuple[_Raw, np.ndarray]:
+    """Giải một vòng. Trả (nghiệm quy về VND, mức cần cứng của từng hũ trong vòng này, VND). `keep_vnd` (VND): cận dưới cứng của từng hũ
+    (giữ sàn chi khi ví vô nghiệm dù đã nhường, xem `_keep_spend_floors`)."""
     prm = p.params
     jars = p.jars
     n = len(jars)
@@ -163,6 +209,7 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
     income = p.income_vnd / s
     cur = np.array([j.current_vnd for j in jars], dtype=float) / s
     floor = np.array([j.floor_vnd for j in jars], dtype=float) / s
+    spend_floor = np.array([j.spend_floor_vnd for j in jars], dtype=float) / s
     need_hard = np.zeros(n)
     need_pref = np.zeros(n)
     for k, j in enumerate(jars):
@@ -186,10 +233,14 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
             lower.sum() > income
         ):  # thu nhập không đủ giữ cả mức tối thiểu: bỏ ràng buộc mềm này (vòng nới sẽ ghi nhận), tránh vô nghiệm
             lower[:] = 0.0
+    if keep_vnd is not None:
+        lower = np.maximum(lower, keep_vnd / s)
+        if lower.sum() > income:  # người gọi bảo đảm riêng `keep_vnd` vừa thu nhập
+            lower = keep_vnd / s
 
-    # biến: x(n) e(n) g(n) h(n) d(n) u(1)
-    nv = 5 * n + 1
-    iu = 5 * n
+    # biến: x(n) e(n) g(n) h(n) d(n) f(n) u(1)
+    nv = 6 * n + 1
+    iu = 6 * n
     c = np.zeros(nv)
     for k, j in enumerate(jars):
         c[n + k] = (
@@ -199,11 +250,7 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
         )
         # mức cần của mục tiêu trên hũ đệm (đích số dư của Dự phòng) xếp trước mục tiêu khác (BR-65): phần thiếu chịu phạt nhân tỷ lệ
         # trọng số cắt của vai đệm so với vai mục tiêu. Hũ không có mục tiêu thì g_j, h_j không có ràng buộc nào nên không đổi gì.
-        rank = (
-            prm.weight_emergency / prm.weight_goal
-            if j.role == "emergency" and prm.weight_goal > 0
-            else 1.0
-        )
+        rank = _rank(prm, j)
         c[2 * n + k] = prm.penalty_goal_need * rank
         c[3 * n + k] = prm.weight_goal * j.weight * rank
         cut = {
@@ -214,7 +261,12 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
             "obligation": prm.weight_essential,
             "emergency": prm.weight_emergency,
         }[j.role]
+        if j.hold_current:
+            # hũ đệm chưa tới đích (BR-65): cắt dưới mức hiện tại xếp trên sàn chi và mức cần của mọi mục tiêu, dưới sàn nghĩa vụ và
+            # sàn thiết yếu (thứ tự ở docstring module), ở cả hai vòng
+            cut = prm.penalty_spending_floor * rank
         c[4 * n + k] = cut
+        c[5 * n + k] = prm.penalty_spending_floor
         c[k] = prm.stay_epsilon
     a_eq = np.zeros((1, nv))
     a_eq[0, :n] = 1.0
@@ -228,6 +280,12 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
             r[n + k] = -1.0
             rows.append(r)
             rhs.append(-floor[k])
+        if spend_floor[k] > 0:
+            r = np.zeros(nv)
+            r[k] = -1.0
+            r[5 * n + k] = -1.0
+            rows.append(r)
+            rhs.append(-spend_floor[k])
         if need_hard[k] > 0:
             r = np.zeros(nv)
             r[k] = -1.0
@@ -246,7 +304,7 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
             r[4 * n + k] = -1.0
             rows.append(r)
             rhs.append(-cur[k])
-    bounds = [(lower[k], None) for k in range(n)] + [(0, None)] * (4 * n + 1)
+    bounds = [(lower[k], None) for k in range(n)] + [(0, None)] * (5 * n + 1)
     res = linprog(
         c,
         A_ub=np.array(rows) if rows else None,
@@ -268,6 +326,9 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
         status=int(res.status),
         message=str(res.message),
         fun=float(res.fun),
+        need_pref=need_pref * s,
+        f=v[5 * n : 6 * n],
+        d=v[4 * n : 5 * n],
     )
     return raw, need_hard * s
 
@@ -277,7 +338,8 @@ def _round_step(v: float, step: int) -> int:
 
 
 def _integerize(p: AllocationProblem, raw: _Raw, need_hard: np.ndarray) -> tuple[list[int], int]:
-    """Số nguyên VND bội của bước làm tròn, bảo toàn tiền; không để mức làm tròn làm một sàn đã đạt thành hụt."""
+    """Số nguyên VND bội của bước làm tròn, bảo toàn tiền; không để mức làm tròn làm một sàn hay mức cần đã đạt thành hụt, hay cắt một
+    hũ mà LP giữ nguyên mức hiện tại."""
     step = p.params.rounding_step_vnd
     tol = GAP_TOLERANCE_VND
     n = len(p.jars)
@@ -287,8 +349,16 @@ def _integerize(p: AllocationProblem, raw: _Raw, need_hard: np.ndarray) -> tuple
         low = 0
         if j.floor_vnd > 0 and raw.e[k] < tol:
             low = max(low, j.floor_vnd)
+        if j.spend_floor_vnd > 0 and raw.f[k] < tol:
+            low = max(low, j.spend_floor_vnd)
         if need_hard[k] > 0 and raw.g[k] < tol:
             low = max(low, int(np.ceil(need_hard[k] - 1e-6)))
+        if raw.need_pref[k] > 0 and raw.h[k] < tol:
+            # vòng nới đã đủ mức cần theo hạn gốc: làm tròn không biến nó thành "lùi hạn"
+            low = max(low, int(np.ceil(raw.need_pref[k] - 1e-6)))
+        if raw.x[k] >= j.current_vnd - tol:
+            # LP không cắt hũ này (hũ đệm đang giữ, hũ không phải nhường): làm tròn không lấy bớt của nó
+            low = max(low, j.current_vnd)
         lows.append(low)
         xs.append(max(_round_step(float(raw.x[k]), step), low))
     unalloc = max(round(raw.u), 0)
@@ -333,7 +403,10 @@ def _relaxations(
     keep = 1.0 - prm.discretionary_max_cut_percent / 100.0
     found: list[Relaxation] = []
     for k, j in enumerate(p.jars):
-        if j.role == "discretionary" and xs2[k] < keep * j.current_vnd - GAP_TOLERANCE_VND:
+        deeper = j.role == "discretionary" and xs2[k] < keep * j.current_vnd - GAP_TOLERANCE_VND
+        # sàn chi đã nhường cho nghĩa vụ hay chi thiết yếu: phần không thiết yếu của hũ bị giảm (cả hũ trộn như Chi hằng ngày của ví ba hũ)
+        below_spend = xs2[k] < min(j.spend_floor_vnd, j.current_vnd) - GAP_TOLERANCE_VND
+        if deeper or below_spend:
             found.append(Relaxation("discretionary_reduced", j.code, j.current_vnd, xs2[k]))
         if j.goal is not None and j.goal.remaining_vnd > 0:
             full = goal_need_vnd(j.goal, prm.month_days)
@@ -346,9 +419,18 @@ def _relaxations(
     return tuple(found)
 
 
-def _ok(raw: _Raw) -> bool:
-    return bool(
+def _ok(raw: _Raw, p: AllocationProblem | None = None) -> bool:
+    """Đạt sàn cứng và mức cần cứng. Có `p` (vòng chặt khi được nới): còn phải giữ đủ sàn chi và không cắt hũ đệm đang giữ, vì hai điều
+    đó chỉ được nhường ở vòng nới (thành điều đã nới) chứ không làm vòng chặt "optimal"."""
+    hard = bool(
         raw.e.max(initial=0.0) < GAP_TOLERANCE_VND and raw.g.max(initial=0.0) < GAP_TOLERANCE_VND
+    )
+    if p is None or not hard:
+        return hard
+    held = [k for k, j in enumerate(p.jars) if j.hold_current]
+    return bool(
+        raw.f.max(initial=0.0) < GAP_TOLERANCE_VND
+        and all(raw.d[k] < GAP_TOLERANCE_VND for k in held)
     )
 
 
@@ -358,9 +440,33 @@ def optimize(problem: AllocationProblem) -> AllocationSolution:
         raise ValueError("thu nhập không được âm")
     if not problem.jars:
         raise ValueError("cần ít nhất một hũ")
-    started = time.perf_counter()
+    return _optimize(problem, time.perf_counter())
+
+
+def _obligation_gap(p: AllocationProblem, raw: _Raw) -> float:
+    return float(sum(raw.e[k] for k, j in enumerate(p.jars) if j.floor_tier == "obligation"))
+
+
+def _keep_spend_floors(
+    p: AllocationProblem, raw: _Raw, relaxed: bool
+) -> tuple[_Raw, np.ndarray] | None:
+    """Ví vẫn thiếu sàn cứng dù sàn chi đã nhường hết (vô nghiệm dù sao, như cảnh 4 khi sàn thiết yếu của Ăn uống theo mức chi vừa tăng
+    vọt vượt chỗ): nhường sàn chi không làm ví đủ sàn mà chỉ đưa hũ chi về 0, nên giải lại vòng đó với sàn chi là cận dưới cứng. Chỉ giữ
+    khi nghĩa vụ cứng nhận đủ như khi nhường (nghĩa vụ trước, BR-42); không thì None (giữ nghiệm đã nhường)."""
+    if raw.e.max(initial=0.0) < GAP_TOLERANCE_VND:
+        return None  # vô nghiệm vì mục tiêu không kịp: sàn chi đã đứng trên mục tiêu
+    keep = np.array([min(j.spend_floor_vnd, j.current_vnd) for j in p.jars], dtype=float)
+    if not keep.any() or keep.sum() > p.income_vnd:
+        return None
+    again, need = _solve(p, relaxed, keep_vnd=keep)
+    if _obligation_gap(p, again) > _obligation_gap(p, raw) + GAP_TOLERANCE_VND:
+        return None
+    return again, need
+
+
+def _optimize(problem: AllocationProblem, started: float) -> AllocationSolution:
     first, need0 = _solve(problem, relaxed=False)
-    if _ok(first):
+    if _ok(first, problem if problem.allow_relaxation else None):
         xs, unalloc = _integerize(problem, first, need0)
         return AllocationSolution(
             status="optimal",
@@ -396,11 +502,17 @@ def optimize(problem: AllocationProblem) -> AllocationSolution:
             elapsed_ms=round((time.perf_counter() - started) * 1000),
         )
     if not problem.allow_relaxation:
-        xs, unalloc = _integerize(problem, first, need0)
-        relax = ()
+        last, last_need, relaxed_round = first, need0, False
         note = ("không nới theo yêu cầu: nghiệm là của vòng chặt",)
     else:
+        last, last_need, relaxed_round = second, need1, True
         note = ()
+    kept = _keep_spend_floors(problem, last, relaxed_round)
+    if kept is not None:
+        last, last_need = kept
+    if kept is not None or not problem.allow_relaxation:
+        xs, unalloc = _integerize(problem, last, last_need)
+        relax = _relaxations(problem, first, last, xs) if problem.allow_relaxation else ()
     outcomes = _outcomes(problem, xs)
     return AllocationSolution(
         status="infeasible",

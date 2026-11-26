@@ -40,7 +40,7 @@
   1. Onboarding: nhập lương thực nhận và ngày nhận (bắt buộc), nhận bộ hũ mặc định (từ 26/11: Chi hằng ngày 42%, Nghĩa vụ 33%, Dự phòng 25%) rồi sửa, thêm, bớt hũ, đặt tỷ lệ chia sao cho tổng bằng 100%. Bước 3 "Chi phí cố định" (tùy chọn) nhận nghĩa vụ và khoản biết trước đã khai, server đề xuất lại tỷ lệ qua thẻ (BR-78). *Đề xuất 24/11, **hoãn 26/11**:* thêm một câu **tùy chọn** "Bạn đang ở giai đoạn nào?" để chọn một trong 3 bộ hũ theo giai đoạn sống; bỏ qua thì dùng bộ "Mới đi làm" (BR-70).
   2. Tổng quan hiện tổng số dư, các hũ, thẻ chủ động và giao dịch gần đây.
   3. Tạo, sửa hũ: tên, loại, tỷ lệ chia, mục tiêu và hạn (tùy chọn). *Đề xuất 24/11 (trạng thái 26/11 ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)):*
-     - Hũ tích lũy chọn thêm **mục đích**: đệm an toàn, quỹ dồn, mục tiêu, dài hạn (BR-63; một phần: có cột `purpose`, chưa bắt buộc).
+     - Hũ tích lũy chọn thêm **mục đích**: đệm an toàn, quỹ dồn, mục tiêu, dài hạn (BR-63; một phần: có cột `purpose`. Chốt 26/11: chưa bắt buộc trước hạn nộp; hũ để dành cũ có thể chưa có mục đích, có nhiều hũ đệm thì lấy hũ đệm đầu tiên theo thứ tự; bắt buộc mục đích và chặn hũ đệm thứ hai để sau hạn nộp).
      - Hũ đệm có mục tiêu tự tính theo số tháng chi thiết yếu (BR-64; hoãn).
      - Hũ quỹ dồn có danh sách khoản cần (tên, số tiền, ngày cần) và số trích mỗi kỳ tự tính (BR-66; một phần: khoản cần lưu được, số trích tính một lần khi kê khai).
      - Hũ dài hạn chỉ nhận tiền khi hũ đệm đã đủ (BR-68; hoãn).
@@ -171,7 +171,7 @@
   - Mục tiêu không khả thi: nới ràng buộc mềm một lần; vẫn không được thì nói thẳng và đưa 2 lựa chọn.
   - Bước vi phạm suitability: bỏ bước đó.
   - Từ chối toàn bộ: hỏi một câu về lý do.
-- *Đề xuất 24/11:* lộ trình phân bổ tiền dư theo thứ tự cố định: nghĩa vụ → đệm an toàn → quỹ dồn → mục tiêu → dài hạn (BR-65, **một phần 26/11**: đề xuất tỷ lệ và LP không cắt Dự phòng trước hũ mục tiêu; chưa có bước "đệm tới mục tiêu trước"). Khi có tín hiệu (lương tăng ổn định, hũ đệm đủ, hết khoản vay), lộ trình gợi ý chuyển sang bộ hũ của giai đoạn sống kế tiếp, không tự đổi (BR-71, **hoãn 26/11**).
+- *Đề xuất 24/11:* lộ trình phân bổ tiền dư theo thứ tự cố định: nghĩa vụ → đệm an toàn → quỹ dồn → mục tiêu → dài hạn (BR-65, **một phần 26/11**: đề xuất tỷ lệ và LP không cắt Dự phòng trước hũ mục tiêu; LP không cắt phần chia của hũ đệm chưa tới đích để dồn cho mục tiêu khác; chưa có bước "đệm tới mục tiêu trước" cho tiền dư). Khi có tín hiệu (lương tăng ổn định, hũ đệm đủ, hết khoản vay), lộ trình gợi ý chuyển sang bộ hũ của giai đoạn sống kế tiếp, không tự đổi (BR-71, **hoãn 26/11**).
 - **BR**: BR-21, 42, 44, 53–55; đề xuất: 65–68, 71
 - **AC**: [AC-FR8](05-acceptance-criteria.md#fr8--lộ-trình-thích-ứng)
 

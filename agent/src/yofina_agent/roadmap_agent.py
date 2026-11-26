@@ -588,7 +588,7 @@ def _save_jars_params(
         jars.append(item)
     if all(lines[jar.code].split_percent_proposed == jar.split_percent for jar in balances):
         raise ValueError("Tỷ lệ đề xuất trùng tỷ lệ hiện tại. Bỏ action save_jars.")
-    # tỷ lệ mới không được cắt một hũ xuống dưới sàn của dòng phân bổ (khoản định kỳ trả từ hũ, chi thiết yếu; #39 26/11). Hũ đã dưới
+    # tỷ lệ mới không được cắt một hũ xuống dưới sàn của dòng phân bổ (khoản định kỳ trả từ hũ, chi thiết yếu, sàn chi; #39 26/11). Hũ đã dưới
     # sàn mà không bị cắt thêm thì không chặn ở đây.
     if cut := [
         jar for jar in balances
@@ -753,7 +753,8 @@ def _amount_issue(
     - bước đổi tỷ lệ chia tăng phần của một hũ không vượt phần hũ đó cần thêm (mức chia mới không phải số tiền của bước), bước giảm phần
       chia hay giảm chi không vượt khoản hũ đó đang nhận mỗi tháng;
     - bước làm giảm khoản một hũ nhận mỗi tháng (giảm chi, giảm phần chia, chuyển tiền sau kỳ lương từ hũ nguồn) không đưa hũ đó xuống
-      dưới sàn của dòng phân bổ (`floor_vnd`: gồm mọi khoản định kỳ đang hoạt động trả từ hũ, như Netflix ở Giải trí, #39 26/11).
+      dưới sàn của dòng phân bổ (`floor_vnd`: gồm mọi khoản định kỳ đang hoạt động trả từ hũ, như Netflix ở Giải trí, #39 26/11, và sàn
+      chi theo mức chi thật gần đây của hũ, #39 26/11 chiều; cùng sàn với LP).
       Bước chuyển tiền làm ngay lấy từ số dư hiện có, không từ phần chia mỗi tháng, nên chỉ chịu luật `source_jar_covers`.
 
     Trả (mã ổn định cho log, phản hồi cho vòng sửa), None khi hợp lệ."""
@@ -768,8 +769,8 @@ def _amount_issue(
             return None
         return "amount_below_floor", (
             f"Sau bước này hũ {name(line.jar.code)} chỉ còn nhận {format_vnd(max(after, 0))} mỗi tháng, dưới sàn"
-            f" {format_vnd(line.floor_vnd)} của hũ (khoản định kỳ trả từ hũ và chi thiết yếu). Chọn hũ nguồn khác hoặc tham"
-            " chiếu nhỏ hơn để hũ còn ít nhất bằng sàn."
+            f" {format_vnd(line.floor_vnd)} của hũ (khoản định kỳ trả từ hũ, chi thiết yếu và mức chi thật gần đây của hũ). Chọn hũ"
+            " nguồn khác hoặc tham chiếu nhỏ hơn để hũ còn ít nhất bằng sàn."
         )
 
     source, target = outline.jar_code, outline.to_jar_code

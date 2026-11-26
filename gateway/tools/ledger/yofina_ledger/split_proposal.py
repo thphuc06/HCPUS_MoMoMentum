@@ -19,6 +19,10 @@ Quy tắc:
 - Sàn của mọi hũ nguồn (không theo mã): tổng nghĩa vụ đã khai đang hoạt động trả từ hũ đó, quy về tháng như tỷ lệ cần của Nghĩa vụ
   (Netflix trả từ Giải trí giữ Giải trí ở 2% lương). Hũ đang thấp hơn sàn của nó thì không bị lấy thêm (không bị nâng); hũ không có
   khoản định kỳ nào thì sàn 0 như trước.
+- **Sàn chi** (#39, chốt 26/11 chiều) của hũ chi không thiết yếu (theo loại giao dịch): tỷ lệ giữ x mức chi điển hình mỗi tháng của cả
+  hũ, cùng nguồn số và tham số với LP phân bổ (`spending_floors_vnd`, `SpendFloorSettings`), quy ra điểm lương làm tròn LÊN như sàn khoản
+  định kỳ, không vượt tỷ lệ đang đặt. Hũ chi không thiết yếu chỉ nhường tới sàn chi; Dự phòng tới sàn, hũ để dành khác (mục tiêu) đi
+  trước; còn thiếu thì sàn chi mới nhường (nghĩa vụ trước, không làm đề xuất thành "chưa khả thi"), rồi tới hũ chi thiết yếu.
 - Nghĩa vụ + Quỹ dồn + sàn Dự phòng + sàn các hũ nguồn vượt 100%: không đề xuất tỷ lệ, không gợi ý cắt khoản thiết yếu (BR-21); trả
   danh sách nghĩa vụ theo thứ tự ưu tiên (nhà ở, điện nước, rồi nợ) để giao diện mở lộ trình.
 - Mẫu số chỉ là lương đã khai. Lần lương nhận gần nhất lệch số khai quá ngưỡng BR-12 thì hỏi cập nhật lương trước.
@@ -54,6 +58,13 @@ from yofina_ledger import convert
 #: Giả định của lộ trình ("Bước 3", chưa có nguồn): Dự phòng không xuống dưới 10% lương khi bù cho nghĩa vụ. Cấu hình
 #: `buffer_min_split_percent` (biến `YOFINA_BUFFER_MIN_SPLIT_PERCENT` hoặc SSM) ghi đè.
 ASSUMED_BUFFER_MIN_SPLIT_PERCENT = 10
+#: Sàn chi (#39, 26/11 chiều): CÙNG khóa cấu hình và mặc định với bộ tối ưu phân bổ ở Lambda forecast (zip ledger không có
+#: `yofina_forecast`, nên mặc định chép ở đây và test đối chiếu từng số: `DEFAULT_ALLOCATION_PARAMS.spending_keep_ratio`, `.month_days`,
+#: `ForecastSettings.resilience_window_days`, `forecastColdStartMinDays` của CDK).
+DEFAULT_SPENDING_KEEP_RATIO = 0.5
+DEFAULT_SPEND_WINDOW_DAYS = 30
+DEFAULT_MONTH_DAYS = 30
+DEFAULT_MIN_HISTORY_DAYS = 21
 #: "Khoản biết trước trong 12 tháng tới"
 KNOWN_ITEM_HORIZON_MONTHS = 12
 #: Thứ tự ưu tiên khi nghĩa vụ vượt số chia được: nhà ở, điện nước, rồi nợ, cuối cùng thuê bao (CFPB "prioritizing bills").
@@ -89,6 +100,67 @@ def essential_categories() -> tuple[str, ...]:
     """Nhóm loại giao dịch thiết yếu (cấu hình `essential_jar_codes`, cùng khóa và mặc định với dự báo), đọc một lần mỗi tiến trình."""
     raw = str(Config().get("essential_jar_codes", default=",".join(DEFAULT_ESSENTIAL_CATEGORIES)))
     return tuple(c.strip() for c in raw.split(",") if c.strip())
+
+
+@dataclass(frozen=True)
+class SpendFloorSettings:
+    """Tham số sàn chi, cùng khóa cấu hình với Lambda forecast: tỷ lệ giữ (`allocation_spending_keep_ratio`), cửa sổ mức chi điển hình
+    (`resilience_window_days`), số ngày một tháng (`allocation_month_days`) và cổng dữ liệu "ước lượng ban đầu" của dự báo
+    (`forecast_cold_start_min_days`)."""
+
+    keep_ratio: float
+    window_days: int
+    month_days: int
+    min_history_days: int
+
+    @classmethod
+    def from_config(cls, cfg: Config | None = None) -> SpendFloorSettings:
+        cfg = cfg or Config()
+        out = cls(
+            keep_ratio=float(cfg.get("allocation_spending_keep_ratio", default=DEFAULT_SPENDING_KEEP_RATIO, cast=float)),
+            window_days=cfg.get_int("resilience_window_days", default=DEFAULT_SPEND_WINDOW_DAYS),
+            month_days=cfg.get_int("allocation_month_days", default=DEFAULT_MONTH_DAYS),
+            min_history_days=cfg.get_int("forecast_cold_start_min_days", default=DEFAULT_MIN_HISTORY_DAYS),
+        )
+        if not 0 <= out.keep_ratio <= 1 or out.window_days < 1 or out.month_days < 1:
+            raise ValueError("tham số sàn chi không hợp lệ")
+        return out
+
+    @property
+    def context_window_days(self) -> int:
+        """Cửa sổ đọc ngữ cảnh: đủ để thấy cả cửa sổ mức chi lẫn cổng số ngày lịch sử."""
+        return max(self.window_days, self.min_history_days)
+
+
+@lru_cache(maxsize=1)
+def spend_floor_settings() -> SpendFloorSettings:
+    return SpendFloorSettings.from_config()
+
+
+def spending_floors_vnd(rows: Iterable[Mapping[str, Any]], settings: SpendFloorSettings) -> dict[str, int]:
+    """Sàn chi (VND/tháng) của từng hũ chi từ các dòng `app_get_forecast_context` (phần meta và hũ; chính nguồn số của LP phân bổ): tỷ lệ
+    giữ x mức chi điển hình = chi trung bình `window_days` ngày gần nhất (chuỗi `spend`, không gồm khoản gắn nghĩa vụ) x `month_days`,
+    cùng công thức `yofina_forecast.resilience.variable_monthly_spend`. Tài khoản dưới `min_history_days` ngày lịch sử thì rỗng."""
+    meta: Mapping[str, Any] | None = None
+    jars: list[Mapping[str, Any]] = []
+    for r in rows:
+        if r.get("section") == "meta":
+            meta = r["payload"]
+        elif r.get("section") == "jar":
+            jars.append(r["payload"])
+    if meta is None:
+        return {}
+    history = (date.fromisoformat(str(meta["app_date"])) - date.fromisoformat(str(meta["history_start"]))).days
+    if history < settings.min_history_days:
+        return {}
+    out: dict[str, int] = {}
+    for j in jars:
+        if j.get("kind") != "spending":
+            continue
+        tail = [max(int(v), 0) for v in (j.get("spend") or [])][-settings.window_days :]
+        typical = round(sum(tail) / len(tail) * settings.month_days) if tail else 0
+        out[str(j["code"])] = round(settings.keep_ratio * typical)
+    return out
 
 
 def essential_spending_jars(
@@ -523,9 +595,11 @@ def build_proposal(
     buffer_min_percent: int,
     sinking_template: Mapping[str, Any] | None,
     essential_jars: frozenset[str] | None = None,
+    spend_floor_vnd: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     """Đề xuất tỷ lệ chia lương (xem docstring của module). `jars` là hũ người dùng theo thứ tự hiển thị; `essential_jars` là hũ
-    chi thiết yếu theo loại giao dịch (`essential_spending_jars`), vắng thì mọi hũ chi coi như không thiết yếu."""
+    chi thiết yếu theo loại giao dịch (`essential_spending_jars`), vắng thì mọi hũ chi coi như không thiết yếu; `spend_floor_vnd` là
+    sàn chi (VND/tháng) của từng hũ chi (`spending_floors_vnd`), vắng thì không có sàn chi."""
     shares = {str(j["code"]): Decimal(str(j["split_percent"])) for j in jars}
     by_code = {str(j["code"]): j for j in jars}
 
@@ -647,20 +721,29 @@ def build_proposal(
         (j for j in jars if j["kind"] == "spending"), key=lambda j: j["code"] != DEFAULT_SPENDING_JAR
     )
     # BR-21, BR-54: không cắt khoản thiết yếu trước. Lấy từ hũ chi không thiết yếu (theo loại giao dịch, `essential_spending_jars`;
-    # Chi hằng ngày là hũ trộn nên đứng đầu như trước), rồi Dự phòng xuống tới sàn, rồi hũ để dành khác, hũ chi thiết yếu sau cùng.
+    # Chi hằng ngày là hũ trộn nên đứng đầu như trước) xuống tới sàn chi, rồi Dự phòng xuống tới sàn, rồi hũ để dành khác, rồi sàn chi
+    # nhường (nghĩa vụ trước, #39 26/11 chiều), hũ chi thiết yếu sau cùng.
     essential_codes = essential_jars or frozenset()
-    flexible = [
-        (str(j["code"]), committed.get(str(j["code"]), ZERO))
-        for j in spending
-        if str(j["code"]) not in essential_codes
+    flexible_codes = [
+        str(j["code"]) for j in spending if str(j["code"]) not in essential_codes and str(j["code"]) not in targets
     ]
-    sources = list(flexible)
+    # sàn chi quy ra điểm lương làm tròn lên như sàn khoản định kỳ, không vượt tỷ lệ đang đặt (giữ không cắt, không nâng)
+    keep: dict[str, Decimal] = {}
+    for code in flexible_codes:
+        spend_pct = Decimal(ceil_percent(Fraction(int((spend_floor_vnd or {}).get(code, 0))), int(salary_vnd)))
+        keep[code] = min(max(spend_pct, committed.get(code, ZERO)), shares[code])
+    sources = [(code, keep[code]) for code in flexible_codes]
     if buffer is not None:
         sources.append((str(buffer["code"]), floor))
     sources += [
         (str(j["code"]), committed.get(str(j["code"]), ZERO))
         for j in jars
         if j["kind"] == "saving" and j is not buffer and j.get("purpose") != "sinking"
+    ]
+    sources += [
+        (code, committed.get(code, ZERO))
+        for code in flexible_codes
+        if keep[code] > committed.get(code, ZERO)
     ]
     sources += [
         (str(j["code"]), committed.get(str(j["code"]), ZERO))

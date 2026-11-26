@@ -21,7 +21,8 @@ import { formatPercent } from '@/lib/format'
  *   "Ngày dự kiến", không tự tính tỷ lệ.
  * - Tách hũ để theo dõi: dự báo chạy theo từng hũ; hũ thưa không nêu ngày cạn (#25), nên lời nói "dự báo riêng" chứ không hứa
  *   ngày cạn. Bộ phát hiện đổi nhịp chi (PELT, batch đêm) chạy trên mọi hũ chi tiêu nhưng bỏ qua hũ thiếu tuần hoặc quá thưa
- *   (`yofina_ml.change`, `min_weeks_total`), nên lời nói "khi đã có vài tuần giao dịch". Xác nhận đổi nhịp thì sinh bản lộ trình mới.
+ *   (`yofina_ml.change`, `min_weeks_total`), nên lời nói "khi đã có vài tuần giao dịch". Xác nhận đổi nhịp thì sinh bản lộ trình
+ *   đề xuất mới (không có thông báo riêng), nên lời nói "đề xuất lại lộ trình", không hứa "báo".
  * - Tỷ lệ gợi ý là điểm bắt đầu: tỷ lệ mặc định là giả định thử nghiệm (rollout "Cấu hình hũ"); gợi ý chỉnh theo lịch sử (BR-80..82)
  *   chưa làm, nên lời chỉ khuyên người dùng tự xem lại. Đổi tỷ lệ chỉ có hiệu lực sau khi xác nhận (BR-45, `SaveJarsReview`).
  *
@@ -97,7 +98,7 @@ export function splitHelpContent({ place, templates }: { place: SplitHelpPlace; 
       {
         id: 'track',
         lead: 'Muốn theo dõi sát thì tách hũ riêng',
-        text: 'Ví dụ ăn uống, đi lại, giải trí. Hũ riêng có dự báo riêng; khi đã có vài tuần giao dịch, Yofina báo lúc nhịp chi của hũ đổi.',
+        text: 'Ví dụ ăn uống, đi lại, giải trí. Hũ riêng có dự báo riêng; khi đã có vài tuần giao dịch, Yofina đề xuất lại lộ trình khi nhịp chi của hũ đổi.',
       },
       {
         id: 'few',

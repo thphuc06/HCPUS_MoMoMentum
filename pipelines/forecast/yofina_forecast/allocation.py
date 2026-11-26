@@ -20,15 +20,29 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
   Hũ Dự phòng (`purpose` `buffer`, BR-64) nhận một mục `goals` làm đích số dư của lượt này (bắt buộc `target_vnd`, hạn tùy chọn;
   không đọc, không ghi `goal_vnd` của hũ), giữ vai đệm và được chiếu ra `goals` của kết quả như hũ mục tiêu; mức cần của nó xếp trước
   mục tiêu khác (BR-65). Hũ tiết kiệm cũ `purpose` NULL nhận mục tiêu như trước (vai mục tiêu).
+- **Hũ đệm chưa tới đích giữ phần chia hiện tại ở vòng chặt** (BR-65, #39 26/11 trưa): hũ đệm đầu tiên theo thứ tự (`emergency_jar`:
+  `purpose` buffer, hoặc hũ tiết kiệm cũ không mục tiêu theo quy tắc tương thích), khi đang giữ vai đệm. Đích = đích lượt này nêu trong
+  `goals`; không nêu thì `buffer_target_months` tháng chi thiết yếu (BR-64; nghĩa vụ cứng quy về tháng cộng mức chi thiết yếu hằng tháng,
+  cùng các số dựng sàn, chưa nhân `essential_floor_percent`). Số dư dưới đích thì `JarSpec.hold_current`: mục tiêu khác và sàn chi không
+  lấy tiền từ hũ đệm (ở cả hai vòng), sàn nghĩa vụ và thiết yếu vẫn lấy được (`yofina_ml.allocation`). Số dư đã tới đích thì cắt được như cũ.
 - Hũ chi tiêu thiết yếu theo cấu hình (`essential_jar_codes`), hũ tiết kiệm không mục tiêu là hũ Dự phòng (giữ mức hiện tại, cắt thì
   phạt nặng nhất), còn lại không thiết yếu.
+- **Sàn chi theo mức chi thật gần đây** (#39, chủ dự án chốt 26/11): mọi hũ `spending` (không theo mã, không theo persona) có sàn chi =
+  `spending_keep_ratio` (tỷ lệ giữ, `ForecastSettings.allocation`, mặc định 0,5) x mức chi điển hình mỗi tháng của CẢ hũ, đúng số LP
+  đã dùng (`variable_monthly_spend` của chuỗi `spend`: chi trung bình `resilience_window_days` ngày gần nhất quy về tháng, không gồm
+  khoản gắn nghĩa vụ), không vượt mức hiện tại (giữ không cắt, không nâng). Cổng dữ liệu: tài khoản có từ `cold_start_min_days` ngày
+  lịch sử (cổng "ước lượng ban đầu" của dự báo); chưa đủ thì không áp. Hũ chi thiết yếu đã có sàn thiết yếu cao hơn nên không đổi; Chi
+  hằng ngày của ví ba hũ có cả sàn thiết yếu (phần loại thiết yếu) lẫn sàn chi (cả hũ), sàn là số lớn hơn. Thứ tự ưu tiên ở
+  `yofina_ml.allocation`: mục tiêu không lấy tiền dưới sàn chi, nghĩa vụ và chi thiết yếu thì lấy được. `floor_vnd` của dòng phân bổ là
+  số lớn hơn của sàn cứng và sàn chi (sàn chi đã nhường thì bằng mức đề xuất), nên kiểm bước lộ trình (`amount_below_floor`) dùng cùng
+  sàn mà không thêm trường.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -59,6 +73,7 @@ from yofina_forecast.common import clip, int_of, to_date
 from yofina_forecast.resilience import (
     Gathered,
     ResilienceEngine,
+    emergency_jar,
     monthly_equivalent,
     variable_monthly_spend,
 )
@@ -109,6 +124,8 @@ class Built:
     goals: dict[str, _Goal]
     jars: dict[str, Mapping[str, Any]]
     split_percent: dict[str, float]
+    #: đích của hũ đệm dùng để quyết giữ phần chia (đích lượt này nêu, hoặc số tháng chi thiết yếu); None nếu không có hũ giữ vai đệm
+    buffer_target_vnd: int | None = None
 
 
 class AllocationEngine:
@@ -277,8 +294,15 @@ class AllocationEngine:
             income = round(salary * income_factor(shock, month_days))
             income = max(income - (shock.params.extra_cost_vnd or 0), 0)
 
+        # sàn chi theo mức chi thật gần đây (#39, 26/11): chỉ khi tài khoản đã qua cổng "ước lượng ban đầu" của dự báo
+        # (`cold_start_min_days` ngày lịch sử); chưa đủ thì chưa có mức chi điển hình nên không áp
+        start = to_date(g.ctx.meta.get("history_start"))
+        history_days = max((today - start).days, 0) if start is not None else 0
+        typical_known = history_days >= s.cold_start_min_days
+
         specs: list[JarSpec] = []
         split: dict[str, float] = {}
+        essential_monthly = 0
         for code in codes:
             j = jars[code]
             kind = j["kind"]
@@ -318,6 +342,16 @@ class AllocationEngine:
                 floor += round(monthly_spend * prm.essential_floor_percent / 100.0)
             # không dưới tổng nghĩa vụ trả từ hũ (gồm khoản không thiết yếu); hũ không có khoản nào giữ sàn như trước
             floor = max(floor, owed[code])
+            current = round(salary * pct / 100.0)
+            # sàn chi của MỌI hũ chi (không theo mã, không theo vai): tỷ lệ giữ x mức chi điển hình mỗi tháng của cả hũ, cùng số LP dùng ở
+            # trên (chi trung bình `resilience_window_days` ngày gần nhất, không gồm khoản đã gắn nghĩa vụ), không vượt mức hiện tại (giữ
+            # không cắt, không nâng). Hũ chi thiết yếu đã có sàn thiết yếu cao hơn; Chi hằng ngày của ví ba hũ có cả hai (lấy số lớn hơn)
+            spend_floor = 0
+            if kind == "spending" and typical_known:
+                typical = variable_monthly_spend(
+                    spend.get(code, []), s.resilience_window_days, month_days
+                )
+                spend_floor = min(round(prm.spending_keep_ratio * typical), current)
             goal_spec = None
             if goal is not None:
                 when = goal.target_date
@@ -334,13 +368,32 @@ class AllocationEngine:
                 JarSpec(
                     code=code,
                     role=role,  # type: ignore[arg-type]
-                    current_vnd=round(salary * pct / 100.0),
+                    current_vnd=current,
                     floor_vnd=floor,
                     floor_tier=tier,  # type: ignore[arg-type]
                     goal=goal_spec,
                     weight=goal.weight if goal else 1.0,
+                    spend_floor_vnd=spend_floor,
                 )
             )
+            if role in ("essential", "obligation"):
+                essential_monthly += monthly_spend
+        # hũ đệm chưa tới đích giữ phần chia hiện tại ở vòng chặt (BR-65): hũ đệm đầu tiên theo thứ tự (`purpose` buffer, hoặc hũ tiết kiệm
+        # cũ không mục tiêu theo quy tắc tương thích), khi đang giữ vai đệm. Đích là đích lượt này nêu, không có thì `buffer_target_months`
+        # tháng chi thiết yếu (BR-64): nghĩa vụ cứng quy về tháng cộng mức chi thiết yếu hằng tháng, cùng số LP dùng cho sàn.
+        essential_monthly += sum(oblig_floor.values())
+        buffer_target: int | None = None
+        buffer_row = emergency_jar(g.jar_rows)
+        at = next(
+            (k for k, sp in enumerate(specs) if buffer_row and sp.code == buffer_row["code"]), None
+        )
+        if buffer_row is not None and at is not None and specs[at].role == "emergency":
+            own = goals.get(specs[at].code)
+            buffer_target = (
+                own.target_vnd if own else round(prm.buffer_target_months * essential_monthly)
+            )
+            if int_of(buffer_row["balance_vnd"]) < buffer_target:
+                specs[at] = replace(specs[at], hold_current=True)
         problem = AllocationProblem(
             income_vnd=income, jars=tuple(specs), params=prm, allow_relaxation=allow_relaxation
         )
@@ -353,6 +406,7 @@ class AllocationEngine:
             goals=goals,
             jars=jars,
             split_percent=split,
+            buffer_target_vnd=buffer_target,
         )
 
     # --- kết quả ----------------------------------------------------------------------------------
@@ -382,7 +436,9 @@ class AllocationEngine:
                     # hũ thành thiết yếu với model (bước giảm chi vẫn chọn được, tới sàn)
                     is_essential=sp.role in ("obligation", "essential", "emergency")
                     or (sp.floor_vnd > 0 and sp.floor_tier == "obligation"),
-                    floor_vnd=sp.floor_vnd,
+                    # sàn của hũ: sàn cứng hoặc sàn chi (số lớn hơn). Sàn chi đã nhường cho nghĩa vụ, thiết yếu thì sàn là mức đề xuất: bước
+                    # lộ trình làm đúng phương án không bị kiểm sàn chặn, bước cắt sâu hơn thì bị (`amount_below_floor`)
+                    floor_vnd=max(sp.floor_vnd, min(sp.spend_floor_vnd, out.proposed_vnd)),
                     current_monthly_vnd=sp.current_vnd,
                     proposed_monthly_vnd=out.proposed_vnd,
                     split_percent_current=round(min(b.split_percent[out.code], 100.0), 2),

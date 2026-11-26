@@ -591,3 +591,152 @@ def test_committed_floor_keeps_a_jar_already_below_it_and_never_raises_it():
     shares = after(propose(jars=jars, obligations=obs, essential_jars=essential(jars)))
     # +3 điểm: Giải trí đang 1% (dưới sàn 2%) không bị lấy thêm và cũng không được nâng; trước: Giải trí về 0, Dự phòng 64
     assert shares == {"chi_hang_ngay": 0, "nghia_vu": 36, "du_phong": 63, "giai_tri": 1}
+
+
+# --- sàn chi theo mức chi thật gần đây (#39, quyết định 26/11 chiều): hũ chi không thiết yếu không bị lấy dưới tỷ lệ giữ x mức chi
+# điển hình của chính nó, trừ khi nghĩa vụ không còn chỗ nào khác; cùng nguồn số và tham số với LP phân bổ ---------------------------
+#: mức chi điển hình đo trên ví demo `minh` sau "Đặt lại" (chuỗi chi 30 ngày của ngữ cảnh dự báo, tests/local_pg/test_demo_scenes.py -s)
+MINH_TYPICAL = {"chi_hang_ngay": 210_000, "giai_tri": 409_000}
+
+
+def spend_floors(typical, ratio=0.5):
+    return {code: round(ratio * value) for code, value in typical.items()}
+
+
+def context(spend_by_jar, *, days=30, kinds=None):
+    """Dòng như `app_get_forecast_context` (phần meta và hũ) với `days` ngày lịch sử."""
+    from datetime import timedelta
+
+    rows = [{"section": "meta", "jar_code": None,
+             "payload": {"app_date": TODAY.isoformat(), "history_start": (TODAY - timedelta(days=days)).isoformat()}}]
+    for code, series in spend_by_jar.items():
+        kind = (kinds or {}).get(code, "spending")
+        rows.append({"section": "jar", "jar_code": code, "payload": {"code": code, "kind": kind, "spend": series}})
+    return rows  # fmt: skip
+
+
+SPEND = sp.SpendFloorSettings(keep_ratio=0.5, window_days=30, month_days=30, min_history_days=21)
+
+
+def test_san_chi_dung_cung_muc_chi_dien_hinh_cua_lp():
+    from yofina_forecast.resilience import variable_monthly_spend
+
+    series = [0, 0, 120_000] * 20  # 60 ngày, cửa sổ 30 ngày gần nhất
+    floors = sp.spending_floors_vnd(context({"giai_tri": series, "an_uong": [90_000] * 60}, days=60), SPEND)
+    assert floors["giai_tri"] == round(0.5 * variable_monthly_spend(series, 30, 30)) == 600_000
+    assert floors["an_uong"] == round(0.5 * variable_monthly_spend([90_000] * 60, 30, 30))
+
+
+def test_san_chi_chi_cho_hu_chi_va_khi_du_lich_su():
+    rows = context({"giai_tri": [10_000] * 30, "du_phong": [5_000] * 30, "nghia_vu": [7_000] * 30},
+                   kinds={"du_phong": "saving", "nghia_vu": "obligation"})  # fmt: skip
+    assert sp.spending_floors_vnd(rows, SPEND) == {"giai_tri": 150_000}
+    # cùng cổng "ước lượng ban đầu" của dự báo: dưới `min_history_days` ngày lịch sử thì chưa có mức chi điển hình
+    assert sp.spending_floors_vnd(context({"giai_tri": [10_000] * 20}, days=20), SPEND) == {}
+    assert sp.spending_floors_vnd(context({"giai_tri": [10_000] * 21}, days=21), SPEND) == {"giai_tri": 150_000}
+    assert sp.spending_floors_vnd([], SPEND) == {}
+
+
+def test_tham_so_san_chi_cung_mac_dinh_voi_bo_toi_uu_va_doc_tu_cau_hinh():
+    import re
+    from dataclasses import fields
+    from pathlib import Path
+
+    from yofina_core.config import Config
+    from yofina_forecast.settings import DEFAULT_ALLOCATION_PARAMS, ForecastSettings
+
+    window = next(f.default for f in fields(ForecastSettings) if f.name == "resilience_window_days")
+    cdk = (Path(__file__).resolve().parents[2] / "infra-cdk" / "lib" / "forecast-pipeline.ts").read_text(encoding="utf-8")
+    cold = int(re.search(r"'forecastColdStartMinDays',\s*(\d+)", cdk).group(1))
+    base = sp.SpendFloorSettings.from_config(Config(env={}))
+    assert base == sp.SpendFloorSettings(DEFAULT_ALLOCATION_PARAMS.spending_keep_ratio, window,
+                                         DEFAULT_ALLOCATION_PARAMS.month_days, cold)  # fmt: skip
+    over = sp.SpendFloorSettings.from_config(Config(env={
+        "YOFINA_ALLOCATION_SPENDING_KEEP_RATIO": "0.7", "YOFINA_RESILIENCE_WINDOW_DAYS": "14",
+        "YOFINA_ALLOCATION_MONTH_DAYS": "31", "YOFINA_FORECAST_COLD_START_MIN_DAYS": "10",
+    }))  # fmt: skip
+    assert over == sp.SpendFloorSettings(0.7, 14, 31, 10)
+
+
+@pytest.mark.parametrize(
+    ("loan", "expected"),
+    [
+        # +17 điểm: Chi hằng ngày xuống tới sàn chi 2% (105.000 ₫), Giải trí tới 3% (204.500 ₫, trên Netflix 2%), rồi hũ mục tiêu về 0;
+        # vẫn thiếu 2 điểm nên sàn chi của Chi hằng ngày nhường (nghĩa vụ trước). Trước: Giải trí 2, Mục tiêu 1
+        (1_800_000, {"chi_hang_ngay": 0, "giai_tri": 3, "an_uong": 30, "di_lai": 7, "muc_tieu": 0, "du_phong": 10,
+                     "nghia_vu": 50}),
+        # +7 điểm: Chi hằng ngày nhường 1 điểm tới sàn chi, Giải trí 4 điểm tới sàn chi 3%, rồi hũ mục tiêu 2 điểm (trước: Chi hằng ngày
+        # về 0, Giải trí 3, hũ mục tiêu giữ 10)
+        (900_000, {"chi_hang_ngay": 2, "giai_tri": 3, "an_uong": 30, "di_lai": 7, "muc_tieu": 8, "du_phong": 10,
+                   "nghia_vu": 40}),
+    ],
+)  # fmt: skip
+def test_minh_demo_wallet_keeps_spending_floor_before_goal_jar(loan, expected):
+    jars = demo_daily_jars()
+    obs = [*minh_obligations(), ob("Khoản vay", loan, kind="loan")]
+    result = propose(jars=jars, obligations=obs, essential_jars=essential(jars), spend_floor_vnd=spend_floors(MINH_TYPICAL))
+    assert result["status"] == "proposed"
+    shares = after(result)
+    assert {k: shares[k] for k in expected} == expected
+    assert shares["dau_tu"] == 0 and sum(shares.values()) == 100 and params_split(result) == shares
+
+
+def test_minh_demo_wallet_spending_floor_never_makes_proposal_infeasible():
+    # 89,94% -> 90: như khi chưa có sàn chi, "chưa khả thi" chỉ vì sàn Dự phòng và khoản định kỳ, không vì sàn chi
+    jars = demo_daily_jars()
+    obs = [*minh_obligations(), ob("Khoản vay", 5_400_000, kind="loan")]
+    with_floor = propose(jars=jars, obligations=obs, essential_jars=essential(jars), spend_floor_vnd=spend_floors(MINH_TYPICAL))
+    assert with_floor["status"] == "infeasible" and with_floor["required_percent"] == 106
+    # khoản vay 4.500.000 ₫ (80%): vẫn đề xuất được, sàn chi nhường hết cho nghĩa vụ trước khi lấy tới hũ chi thiết yếu
+    obs = [*minh_obligations(), ob("Khoản vay", 4_500_000, kind="loan")]
+    plain = after(propose(jars=jars, obligations=obs, essential_jars=essential(jars)))
+    floored = after(propose(jars=jars, obligations=obs, essential_jars=essential(jars), spend_floor_vnd=spend_floors(MINH_TYPICAL)))
+    assert floored == plain
+
+
+@pytest.mark.parametrize(
+    ("rent", "expected"),
+    [
+        # 70%, +37: Chi hằng ngày (cả hũ, chi điển hình 3.000.000 ₫ -> sàn chi 17%) nhường tới sàn chi, phần còn lại lấy từ Dự phòng
+        # (trước: Chi hằng ngày 5, Dự phòng 25)
+        (6_300_000, {"chi_hang_ngay": 17, "nghia_vu": 70, "du_phong": 13}),
+        # 84%, +51: Dự phòng xuống sàn 10 rồi sàn chi của Chi hằng ngày mới nhường (trước: 0 / 84 / 16)
+        (7_500_000, {"chi_hang_ngay": 6, "nghia_vu": 84, "du_phong": 10}),
+    ],
+)
+def test_three_jar_wallet_daily_jar_keeps_spending_floor_until_buffer_floor(rent, expected):
+    jars = three()
+    result = propose(jars=jars, obligations=[ob("Tiền trọ", rent)], essential_jars=essential(jars),
+                     spend_floor_vnd={"chi_hang_ngay": 1_500_000})  # fmt: skip
+    assert after(result) == expected
+
+
+def test_legacy_wallet_entertainment_keeps_larger_of_subscription_and_spending_floor():
+    jars = legacy_jars()
+    obs = [
+        ob("Tiền trọ", 2_500_000, pay="hoa_don"),
+        ob("Khoản vay", 900_000, kind="loan"),
+        ob("Netflix", 600_000, kind="subscription", essential=False, pay="giai_tri"),  # 6,67% -> 7
+    ]
+    # Giải trí chi điển hình 1.500.000 ₫/tháng: sàn chi 750.000 ₫ = 8,33% -> 9 (trên Netflix 7); Dự phòng nhường 4 điểm (trước: 7 / 13)
+    result = propose(jars=jars, obligations=obs, essential_jars=essential(jars), spend_floor_vnd={"giai_tri": 750_000})
+    shares = after(result)
+    assert (shares["nghia_vu"], shares["giai_tri"], shares["du_phong"], shares["an_uong"]) == (10, 9, 11, 25)
+    assert shares["hoa_don"] == 30 and shares["du_lich"] == 5
+
+
+def test_spending_floor_keeps_a_jar_already_below_it_and_never_raises_it():
+    jars = [jar("chi_hang_ngay", "spending", 1), jar("nghia_vu", "obligation", 33), jar("du_phong", "saving", 65, "buffer"),
+            jar("giai_tri", "spending", 1)]  # fmt: skip
+    shares = after(propose(jars=jars, obligations=[ob("Tiền trọ", 3_240_000)], essential_jars=essential(jars),
+                           spend_floor_vnd={"chi_hang_ngay": 450_000, "giai_tri": 450_000}))  # fmt: skip
+    # +3 điểm, sàn chi 5% của hai hũ đang 1%: không bị lấy thêm cũng không được nâng; Dự phòng nhường
+    assert shares == {"chi_hang_ngay": 1, "nghia_vu": 36, "du_phong": 62, "giai_tri": 1}
+
+
+def test_no_spending_history_keeps_previous_behaviour():
+    jars = demo_daily_jars()
+    obs = [*minh_obligations(), ob("Khoản vay", 1_800_000, kind="loan")]
+    base = propose(jars=jars, obligations=obs, essential_jars=essential(jars))
+    assert propose(jars=jars, obligations=obs, essential_jars=essential(jars), spend_floor_vnd={}) == base
+    assert (after(base)["chi_hang_ngay"], after(base)["giai_tri"], after(base)["muc_tieu"]) == (0, 2, 1)

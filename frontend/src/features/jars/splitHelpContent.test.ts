@@ -91,6 +91,10 @@ describe('splitHelpContent', () => {
     expect(byId.sinking).toMatch(/Tết, học phí, bảo hiểm/)
     expect(byId.sinking).toMatch(/Quỹ dồn/)
     expect(byId.track).toMatch(/ăn uống, đi lại, giải trí/)
+    // app không gửi thông báo riêng khi nhịp chi đổi: bộ phát hiện xác nhận đổi nhịp thì sinh bản lộ trình đề xuất mới
+    expect(byId.track).toMatch(/vài tuần giao dịch/)
+    expect(byId.track).toMatch(/đề xuất lại lộ trình khi nhịp chi của hũ đổi/)
+    expect(byId.track).not.toMatch(/Yofina báo|thông báo/)
     expect(byId.few).toMatch(/Không cần nhiều hũ/)
     expect(byId.review).toMatch(/điểm bắt đầu/)
     expect(byId.review).toMatch(/sau khi bạn xác nhận/)
