@@ -67,7 +67,7 @@ uv run python evals/run.py adversarial --phase 4 --only roadmap-other-user
 
 `memory-reuse-new-session` cũng đổi mã hũ (2 lượt chat) nhưng phụ thuộc thời gian trích bộ nhớ; chạy riêng khi cần.
 
-Ca chờ quyết định chưa có trong bản này: nhánh tự suy hũ chi từ ý định (`int/infer-jar`, issue #39) nếu được gộp trước lượt eval thì `multiturn-new-question` ("đi du lịch 5 triệu", đang chờ khối hỏi lại và cấm `run_scenario`) và có thể `clarify-funding` sẽ ra thẳng kết quả. Kỳ vọng của hai ca chưa đổi; chấm chúng theo quyết định của chủ dự án.
+Agent tự suy hũ chi (issue #39, đã gộp và deploy 26/11): `multiturn-new-question` ("đi du lịch 5 triệu") nay mong tính thẳng (`run_scenario`, `forecast_timeline`, `kind` `one_time_purchase`). `clarify-funding` (tai nghe, không nêu hũ) vẫn mong đúng một khối hỏi lại; từ Runtime v32 câu hỏi là chọn hũ (chip mọi hũ cộng Trả sau) và router chọn hũ theo ý định từ danh sách hũ của ví (`spend_jar_code`), nên ca này trượt nếu model gán tai nghe cho một hũ (ví dụ Giải trí). Ca có thể đổi kết quả sau đợt "agent thích ứng" (router, ngày bằng `knowledge___resolve_date`, lộ trình và sàn theo mức nền bền, Trả sau 05/12): danh sách ở entry 16:40 ngày 26/11 của [ai-log](../docs/ai-log/2026-11.md).
 
 Phase 4 thêm `roadmap_shape`: khối `roadmap` cuối đủ `expect_roadmap_min_phases` giai đoạn, `expect_roadmap_min_steps` bước, và với `expect_roadmap_step_concrete` thì mọi bước có số tiền kèm hũ nguồn → hũ đích (trường của bước hoặc tham số `move_between_jars`), hoặc có ngày (`due_date`, `fire_on` của nhắc).
 
