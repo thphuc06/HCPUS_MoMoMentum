@@ -90,7 +90,8 @@ DATE_SPEC_DESCRIPTION = (
     "kỳ period (week từ thứ Hai tới Chủ nhật, month, quarter là ba tháng bắt đầu từ tháng 1, 4, 7, 10, year); lunar_new_year là Mùng "
     "1 Tết âm lịch; date là một ngày trong tháng (day). period_offset đếm kỳ từ kỳ chứa hôm nay (0 kỳ này, 1 kỳ kế tiếp, -1 kỳ trước) "
     "và chỉ có nghĩa khi có period. Mỗi mốc chỉ nhận trường của nó: today và next_payday không nhận trường nào ngoài offset và before; "
-    "start_of và end_of cần period; lunar_new_year nhận lunar_year (năm dương lịch chứa Mùng 1 đó, khi người dùng nêu số năm) hoặc "
+    "start_of và end_of nhận period (bắt buộc) và period_offset, không nhận day, month, year; lunar_new_year nhận lunar_year (năm "
+    "dương lịch chứa Mùng 1 đó, khi người dùng nêu số năm) hoặc "
     "period year cùng period_offset (khi họ nói năm theo cách tương đối), không nhận cả hai, hoặc không nhận gì (lần Tết gần nhất); "
     "date cần day, còn tháng và năm của ngày đó nêu bằng month và year (khi người dùng nêu) hoặc bằng period cùng period_offset: period "
     "month thay cho cả month và year, period year thay cho year và vẫn cần month. Mốc không nêu năm (hoặc tháng) thì hệ thống lấy lần "
@@ -229,8 +230,9 @@ _ANSWERS_PENDING_DESCRIPTION = (
     "Yofina không hỏi gì."
 )
 _JAR_TEXT_DESCRIPTION = (
-    "Tên hũ người dùng TỰ NÊU, chép đúng chữ họ gõ: hũ để trả khoản chi (what_if mua hàng, affordability) hoặc hũ chứa mục tiêu lộ "
-    "trình. Họ không nêu tên hũ thì null; hũ bạn chọn theo mục đích khoản chi đặt ở spend_jar_code, không đặt ở đây."
+    "Tên hũ người dùng TỰ NÊU trong câu, chép đúng chữ họ gõ: hũ được hỏi (lookup), hũ để trả khoản chi (what_if mua hàng, "
+    "affordability) hoặc hũ chứa mục tiêu lộ trình. Họ không nêu tên hũ thì null; hũ bạn chọn theo mục đích khoản chi đặt ở "
+    "spend_jar_code, không đặt ở đây."
 )
 _SPEND_JAR_DESCRIPTION = (
     "Chỉ cho khoản chi của chính người dùng ở what_if và affordability: code của MỘT hũ trong <hu_cua_vi> mà khoản tiền thuộc về theo "

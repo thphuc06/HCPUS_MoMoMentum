@@ -49,10 +49,17 @@ def test_router_tra_co_answers_pending_dung_sai_hoac_null():
 
 
 def test_prompt_router_mo_ta_answers_pending_theo_nghia_khong_theo_do_dai():
+    """Nghĩa của cờ (true, false, null) ở mô tả của trường trong schema, một chỗ (#39); lời nhắc hệ thống nói cách GHÉP câu trả lời và
+    cách xử lý yêu cầu mới, không định nghĩa lại cờ."""
+    from yofina_core.llm import bedrock_json_schema
+
     rule = next(line for line in ROUTER_SYSTEM.splitlines() if "answers_pending" in line and "<cau_moi>" in line)
-    assert "answers_pending=true" in rule and "answers_pending=false" in rule and "null" in rule
+    assert "answers_pending=true" in rule and "answers_pending=false" in rule and "mô tả của trường" in rule
     assert "dù câu ngắn hay dài" in rule and "kể cả câu rất ngắn" in rule
     assert "KHÔNG lấy số tiền, cách trả (funding)" in rule
+    described = bedrock_json_schema(IntentResult)["properties"]["params"]["properties"]["answers_pending"]["description"]
+    assert "true nếu" in described and "false nếu" in described and "Null khi" in described
+    assert "Null khi" not in rule  # không định nghĩa cờ hai lần
 
 
 # --- nhận ra câu hỏi mã đã đặt ----------------------------------------------------------------------------

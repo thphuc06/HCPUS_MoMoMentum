@@ -138,14 +138,15 @@ def _names() -> set[str]:
 
 
 def test_quy_tac_chon_hu_chi_cua_router_khong_chep_ten_hu_nao():
-    """Nghĩa của spend_jar_code nằm ở mô tả của trường trong schema tool, cạnh trường (#39); lời nhắc hệ thống chỉ chỉ tới đó. Cả
-    hai không chép tên hũ nào."""
+    """Nghĩa của spend_jar_code nằm ở mô tả của trường trong schema tool, cạnh trường (#39); lời nhắc hệ thống chỉ chỉ tới đó, không
+    nhắc lại nghĩa. Cả hai không chép tên hũ nào."""
     rule = next(line for line in ROUTER_SYSTEM.splitlines() if line.startswith("- tx_type và spend_jar_code"))
     described = bedrock_json_schema(IntentResult)["properties"]["params"]["properties"]["spend_jar_code"]["description"]
     for text in (rule, described):
         words = f" {normalize(text)} "
         assert not [n for n in _names() if f" {n} " in words]
-        assert "<hu_cua_vi>" in text and "null" in text.lower()
+        assert "<hu_cua_vi>" in text
+    assert "mô tả của từng trường" in rule and "null" in described.lower()
     assert "người dùng không cần nêu tên hũ" in described
 
 
