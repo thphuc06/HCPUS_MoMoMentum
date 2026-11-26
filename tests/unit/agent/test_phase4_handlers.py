@@ -316,7 +316,7 @@ def texts_of(events):
 
 @pytest.mark.parametrize(
     "action, latest, reason",
-    [("create", "error_not_found", "initial"), (None, "ok", "user_request")],
+    [("create", "error_not_found", "initial"), ("create", "ok", "user_request")],
 )
 def test_lo_trinh_nhan_muc_tieu_trong_cau_va_khoi_infeasible(monkeypatch, action, latest, reason):
     tools = roadmap_tools(allocation="ok_infeasible", latest=latest)

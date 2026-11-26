@@ -42,7 +42,14 @@ from ag_ui.core import BaseEvent, RunAgentInput
 from yofina_agent import advisor, behavior_chat, notices, trace
 from yofina_agent import events as ev
 from yofina_agent import memory as agent_memory
-from yofina_agent.clarify import InferredJar, infer_pay_jar, lacks_pay_jar, resolve_clarify
+from yofina_agent.clarify import (
+    ROADMAP_CHOICE_CHIPS,
+    ROADMAP_CHOICE_QUESTION,
+    InferredJar,
+    infer_pay_jar,
+    lacks_pay_jar,
+    resolve_clarify,
+)
 from yofina_agent.compact import (
     compact_affordability,
     compact_confirm,
@@ -1262,18 +1269,25 @@ class Turn:
         await self.write("stress", question, res.compact)
 
     async def on_roadmap(self, r: IntentResult, question: str) -> None:
+        action = r.params.roadmap_action
         # Muốn sửa một bước (router: roadmap_action="edit_step"): chat chưa có tool sửa bước, nên chỉ ra bước và chỗ sửa.
-        if r.params.roadmap_action == "edit_step":
+        if action == "edit_step":
             await self.on_roadmap_step_edit(r, question)
             return
-        # Người dùng nêu mục tiêu (số tiền hoặc hạn) là xin LẬP bản mới, kể cả khi router để trống roadmap_action hay chưa trích được
-        # hũ (#39): không rơi về xem bản đang dùng. Chưa biết hũ của mục tiêu thì hỏi lại một câu chọn hũ; lượt trả lời ghép với câu
-        # này bằng mã (`router.merge_pending`) rồi lập theo mục tiêu đó.
+        # Tin `roadmap_action` của router (C2, #39): "view" thì chỉ xem, không bao giờ lưu bản mới hay bỏ bản đang chờ, kể cả khi câu
+        # nêu số tiền hoặc hạn ("lộ trình hiện tại có kịp ... không"). Router để trống mà câu nêu mục tiêu: đã có bản đang dùng thì hỏi
+        # đúng một câu (lập bản mới hay xem bản đang dùng); chưa có bản nào thì lập (không có gì để xem).
         states_goal = _states_goal(r.params)
-        if states_goal and await self.ask_goal_jar(r):
+        if action is None and states_goal:
+            if await self.ask_roadmap_choice(r):
+                return
+            action = "create"
+        create = action == "create"
+        # Lập theo mục tiêu mà chưa biết hũ của mục tiêu thì hỏi lại một câu chọn hũ; lượt trả lời ghép với câu này bằng mã
+        # (`router.merge_pending`) rồi lập theo mục tiêu đó.
+        if create and states_goal and await self.ask_goal_jar(r):
             return
-        goal = await self.roadmap_user_goal(r.params) if states_goal else None
-        create = r.params.roadmap_action == "create" or states_goal
+        goal = await self.roadmap_user_goal(r.params) if create and states_goal else None
         which = "latest" if create else self.s.roadmap_default_which
         res = await self.call_tool_retry(
             "get_roadmap",
@@ -1297,7 +1311,23 @@ class Turn:
             )
             return
         assert res.compact is not None
-        await self.write("roadmap", question, res.compact)
+        compact = res.compact
+        if states_goal:
+            # câu XEM có nêu số tiền hoặc hạn ("bản đang dùng có kịp ... không"): dữ kiện cho writer, không lập, không lưu gì
+            compact = {**compact, "muc_tieu_nguoi_dung_hoi": _asked_goal_facts(r.params)}
+        await self.write("roadmap", question, compact)
+
+    async def ask_roadmap_choice(self, r: IntentResult) -> bool:
+        """Câu lộ trình nêu mục tiêu mà router không nói xem hay lập (C2): đã có bản đang dùng thì hỏi đúng một câu kèm hai chip (lập bản
+        mới, xem bản đang dùng) và kết thúc lượt; True nếu đã hỏi. Không có bản đang dùng (hoặc đọc lỗi) thì False: người gọi lập bản mới,
+        đường lập đọc lại và báo lỗi của tool đúng chỗ. Chỉ đọc (`get_roadmap` active, không hiện thẻ), không lưu gì."""
+        res = await self.call_tool_retry("get_roadmap", {"which": "active"}, target="planner", emit=False)
+        active = _roadmap_of(res.outcome)
+        if active is None or active.status != "active":
+            return False
+        chips = [ClarifyChipIn(label=label, value=value) for label, value, _ in ROADMAP_CHOICE_CHIPS]
+        await self.emit_clarify(ClarifyRequest(slot="other", question=ROADMAP_CHOICE_QUESTION), r, chips=chips)
+        return True
 
     async def on_roadmap_step_edit(self, r: IntentResult, question: str) -> None:
         """Đọc lộ trình ĐANG DÙNG (trang Lộ trình mở đúng bản này và có nút Sửa từng bước) và phát thẻ của nó; writer chỉ ra bước người
@@ -1966,8 +1996,18 @@ _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa
 
 
 def _states_goal(p: IntentParams) -> bool:
-    """Câu lộ trình có nêu mục tiêu (số tiền hoặc hạn): là yêu cầu lập bản mới theo mục tiêu đó."""
+    """Câu lộ trình có nêu mục tiêu (số tiền hoặc hạn)."""
     return p.amount_vnd is not None or bool(p.date_text and p.date_text.strip())
+
+
+def _asked_goal_facts(p: IntentParams) -> dict[str, Any]:
+    """Mục tiêu người dùng nêu trong câu XEM lộ trình, làm dữ kiện cho writer: số tiền (đã định dạng) và cụm chỉ hạn đúng chữ họ gõ."""
+    out: dict[str, Any] = {}
+    if p.amount_vnd is not None:
+        out["so_tien_text"] = format_vnd(p.amount_vnd)
+    if p.date_text and p.date_text.strip():
+        out["han_nguoi_dung_noi"] = p.date_text.strip()[:40]
+    return out
 
 
 def _holds_roadmap_target(jar: Mapping[str, Any]) -> bool:

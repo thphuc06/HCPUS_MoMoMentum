@@ -166,8 +166,11 @@ def test_muc_tieu_chua_co_hu_hoi_lai_mot_cau_chon_hu_khong_hien_ban_cu(monkeypat
     # chip là hũ đặt được đích của lộ trình (hũ mục tiêu, hũ Dự phòng), theo thứ tự trong ví; giá trị gửi lại là tên hũ thật
     assert [c["label"] for c in data["chips"]] == chips
     assert all(c["value"] == f"Hũ {c['label']}" for c in data["chips"])
-    # không đọc hay hiện lộ trình cũ, không lập, không câu "chưa nói mục tiêu này thuộc hũ nào"
-    assert {tool for tool, _ in tools.calls} == {"get_jar_balances"}
+    # không hiện lộ trình cũ, không lập, không câu "chưa nói mục tiêu này thuộc hũ nào"; router để trống roadmap_action thì mã đọc
+    # (không hiện) bản đang dùng để biết có cần hỏi lập hay xem không (C2): ví này chưa có lộ trình nên đi đường lập
+    assert {tool for tool, _ in tools.calls} == (
+        {"get_jar_balances"} if router.get("roadmap_action") else {"get_jar_balances", "get_roadmap"}
+    )
     assert "TEXT_MESSAGE_CONTENT" not in types(events)
     assert not writer.calls
     assert len(llm[1].calls) == 1  # chỉ router: hỏi lại không tốn lời gọi model
@@ -185,7 +188,8 @@ def test_ten_hu_khop_nhieu_hu_hoi_lai_chon_trong_cac_hu_do(monkeypatch):
     (block,) = blocks_of(events)
     assert block["type"] == "clarify"
     assert [c["label"] for c in block["data"]["chips"]] == ["Du lịch Đà Lạt", "Du lịch Nhật"]
-    assert {tool for tool, _ in tools.calls} == {"get_jar_balances"}
+    assert {tool for tool, _ in tools.calls} == {"get_jar_balances", "get_roadmap"}  # chưa có bản đang dùng (C2)
+    assert not calls_of(tools, "save_roadmap")
 
 
 def test_chip_hu_muc_tieu_dua_moi_hu_gan_duoc_muc_tieu_khong_cat(monkeypatch):
@@ -267,10 +271,10 @@ def test_vi_khong_co_hu_dat_dich_lap_theo_muc_tieu_da_khai(monkeypatch):
 @pytest.mark.parametrize(
     "routed_for_answer",
     [
-        # router xếp câu cụt "Hũ Du lịch" thành tra số dư, hoặc thành lộ trình chỉ có hũ: mã ghép số tiền và hạn của câu trước
+        # router xếp câu "Hũ Du lịch" (chip của câu hỏi hũ) thành tra số dư, hoặc thành lộ trình chỉ có hũ: mã ghép số tiền và hạn của
+        # câu trước; trả lời câu hỏi hũ của mục tiêu nghĩa là đang ở đường lập
         lambda name: route_response(intent="lookup", lookup_kind="balance", jar_text=name),
         lambda name: route_response(intent="roadmap", jar_text=name),
-        lambda name: route_response(intent="roadmap", roadmap_action="view", jar_text=name),
     ],
 )
 @pytest.mark.parametrize("latest", ["error_not_found", "ok"])
@@ -322,7 +326,8 @@ def test_muc_tieu_o_hu_du_phong_lap_ban_moi_theo_dich_so_du(monkeypatch, wallet,
     rows = WALLETS[wallet]
     if via == "router_jar":  # router trích được "quỹ dự phòng"
         llm = make_llm(
-            [route_response(intent="roadmap", amount_vnd=TARGET, date_text="trong 3 tháng", jar_text="quỹ dự phòng"),
+            [route_response(intent="roadmap", roadmap_action="create", amount_vnd=TARGET, date_text="trong 3 tháng",
+                            jar_text="quỹ dự phòng"),
              tool_response("draft_roadmap", outline("du_phong"))]
         )  # fmt: skip
         events, tools, writer = run_turn(QUESTION, llm=llm, tools=roadmap_tools(rows, latest="ok"), monkeypatch=monkeypatch)
