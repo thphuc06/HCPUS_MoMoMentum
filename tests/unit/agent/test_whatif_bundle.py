@@ -123,10 +123,22 @@ def test_co_khoan_truoc_cung_hu_thi_hoi_giu_hay_bo_dung_mot_cau_va_chua_chay_mo_
     assert dict(tools.calls)["list_scenarios"] == {"conversation_id": "session-1"}
 
 
+def test_router_tu_dat_giu_khoan_truoc_khi_chua_duoc_hoi_thi_van_hoi_khong_gop_ngam(monkeypatch):
+    """Router đặt keep_previous ở câu hỏi đầu (Yofina chưa hỏi giữ hay bỏ, #39): mã bỏ cờ (`router.checked_route`), lượt hỏi đúng một
+    câu như khi router để trống, không gộp ngầm khoản cũ. Đường giữ/bỏ thật đi qua câu trả lời cho câu hỏi đó (các test ở dưới)."""
+    for keep in (True, False):
+        tools = FakeTools({"list_scenarios": listing(row(item(GIAY, "mua giày 800k")))})
+        events, tools, _ = run_turn(Q, llm=llm_for(keep_previous=keep), monkeypatch=monkeypatch, tools=tools)
+        assert [b["type"] for b in blocks_of(events)] == ["clarify"]
+        assert "run_scenario" not in [n for n, _ in tools.calls]
+
+
 def test_giu_khoan_truoc_thi_gui_with_scenarios_va_conversation_id(monkeypatch):
     tools = FakeTools({"list_scenarios": listing(row(item(GIAY, "mua giày 800k")))})
-    llm = llm_for(tool_response("analyze", analysis()), keep_previous=True)
-    events, tools, _ = run_turn(Q, llm=llm, monkeypatch=monkeypatch, tools=tools)
+    events, tools, _ = run_turn(
+        None, llm=keep_llm(route_response(intent="what_if", keep_previous=True)), monkeypatch=monkeypatch, tools=tools,
+        messages=conversation("ừ vẫn mua giày"),
+    )  # fmt: skip
     (args,) = run_calls(tools)
     assert args["conversation_id"] == "session-1"
     assert args["with_scenarios"] == [GIAY]
@@ -136,8 +148,10 @@ def test_giu_khoan_truoc_thi_gui_with_scenarios_va_conversation_id(monkeypatch):
 
 def test_bo_khoan_truoc_thi_chay_khoan_moi_mot_minh(monkeypatch):
     tools = FakeTools({"list_scenarios": listing(row(item(GIAY, "mua giày 800k")))})
-    llm = llm_for(tool_response("analyze", analysis()), keep_previous=False)
-    _, tools, _ = run_turn(Q, llm=llm, monkeypatch=monkeypatch, tools=tools)
+    _, tools, _ = run_turn(
+        None, llm=keep_llm(route_response(intent="what_if", keep_previous=False)), monkeypatch=monkeypatch, tools=tools,
+        messages=conversation("thôi chỉ tính đôi dép"),
+    )  # fmt: skip
     (args,) = run_calls(tools)
     assert "with_scenarios" not in args and args["conversation_id"] == "session-1"
 

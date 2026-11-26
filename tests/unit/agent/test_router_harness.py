@@ -152,6 +152,30 @@ def test_route_tra_ket_qua_da_kiem():
     assert (res.value.params.amount_vnd, res.value.params.jar_text, res.value.params.spend_jar_code) == (45_000, None, "an_uong")
 
 
+# --- giữ hay bỏ khoản trước: chỉ khi Yofina vừa hỏi đúng câu đó -------------------------------------------------------------
+KEEP_ASK = notices.KEEP_PREVIOUS_QUESTION.format(previous="mua giày 800 nghìn", jar="Giải trí", new="mua dép 300 nghìn")
+
+
+def test_keep_previous_khi_yofina_khong_hoi_giu_bo_thi_bo(caplog):
+    """Đo ở #39 (lượt RT, câu trả lời cho câu hỏi số tiền): Haiku đặt keep_previous true dù Yofina không hỏi giữ hay bỏ. What-if dùng cờ
+    này để gộp khoản cũ cùng hũ mà không hỏi; mã chỉ nhận cờ khi tin gần nhất của Yofina là câu hỏi giữ/bỏ do chính mã đặt."""
+    caplog.set_level(logging.INFO)
+    history = "Người dùng: nếu tôi đặt mua máy lọc không khí thì các hũ ra sao\nYofina: Khoản này khoảng bao nhiêu tiền?"
+    r = _ir("what_if", amount_vnd=2_500_000, scenario_kind="one_time_purchase", keep_previous=True, answers_pending=True)
+    assert checked_route(r, "tầm 2 triệu rưỡi", history, JARS).params.keep_previous is None
+    assert checked_route(_ir("what_if", amount_vnd=300_000, keep_previous=False), "mua dép 300k", "", JARS).params.keep_previous is None
+    assert len(_events_of(caplog, "router_keep_previous_dropped")) == 2
+
+
+@pytest.mark.parametrize("keep", [True, False])
+def test_keep_previous_tra_loi_dung_cau_hoi_giu_bo_thi_giu(keep):
+    history = f"Người dùng: Nếu mua dép 300 nghìn từ hũ Giải trí thì sao\nYofina: {KEEP_ASK}"
+    assert checked_route(_ir("what_if", keep_previous=keep), "ừ vẫn mua giày", history, JARS).params.keep_previous is keep
+    # câu hỏi giữ/bỏ ở lượt cũ hơn, tin gần nhất của Yofina là câu khác: không nhận
+    older = f"{history}\nNgười dùng: thôi\nYofina: Hũ Giải trí vẫn đủ."
+    assert checked_route(_ir("what_if", keep_previous=keep), "ừ vẫn mua giày", older, JARS).params.keep_previous is None
+
+
 # --- kết quả hỏng hay bị cắt: luật dự phòng, không lộ lỗi thô ------------------------------------------------------------------
 def test_router_bi_cat_ca_hai_lan_thi_dung_luat_va_khong_lo_loi_tho(monkeypatch):
     cut = route_response(intent="lookup", lookup_kind="balance")

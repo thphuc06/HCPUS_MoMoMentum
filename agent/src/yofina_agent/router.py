@@ -31,6 +31,7 @@ from yofina_agent.clarify import (
 )
 from yofina_agent.fallback import _CREDIT, _has, _jar_phrase, classify_by_rules
 from yofina_agent.jars import resolve_jar
+from yofina_agent.notices import KEEP_PREVIOUS_MARKER
 from yofina_agent.schemas import ROUTER_TX_TYPES, IntentResult
 from yofina_agent.textutil import extract_amounts, goal_date_phrase, normalize, parse_amount_vnd
 from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
@@ -286,11 +287,31 @@ def checked_route(
     - Số tiền VND (`amount_vnd`, `salary_vnd`) phải là số có trong hội thoại (câu mới hoặc lịch sử, đọc bằng
       `textutil.extract_amounts`, trong sai số làm tròn). Không có: dùng số tiền duy nhất của câu mới, câu mới có nhiều hơn một số thì
       bỏ (lượt hỏi lại số tiền đúng một câu). Hội thoại không có số nào mã đọc được (số viết bằng chữ) thì giữ số của model.
+    - `keep_previous` chỉ nhận khi tin gần nhất của Yofina là câu hỏi giữ hay bỏ khoản trước do mã đặt (`_without_unasked_keep_previous`).
 
-    Mỗi lần sửa ghi một dòng log (`router_jar_text_inferred`, `router_amount_ungrounded`), không ghi chữ hay số tiền của người dùng."""
+    Mỗi lần sửa ghi một dòng log (`router_jar_text_inferred`, `router_amount_ungrounded`, `router_keep_previous_dropped`), không ghi chữ
+    hay số tiền của người dùng."""
     r = checked_spend_jar(r, jars)
     r = _without_inferred_jar_text(r, jars)
+    r = _without_unasked_keep_previous(r, history)
     return _grounded_amounts(r, question, history)
+
+
+#: Nhãn dòng của Yofina trong lịch sử router đọc (`events.format_history`).
+_YOFINA_LINE = "Yofina: "
+
+
+def _without_unasked_keep_previous(r: IntentResult, history: str) -> IntentResult:
+    """`keep_previous` chỉ là câu trả lời cho câu hỏi giữ hay bỏ khoản trước mà MÃ đặt (`notices.KEEP_PREVIOUS_MARKER`) ở tin gần nhất
+    của Yofina; không có câu hỏi đó thì cờ là của model tự đặt (đo ở #39: câu trả lời số tiền), what-if sẽ gộp ngầm khoản cũ. Bỏ cờ
+    để what-if hỏi đúng một câu như khi router để trống."""
+    if r.params.keep_previous is None:
+        return r
+    last = history.rfind(_YOFINA_LINE)
+    if last >= 0 and KEEP_PREVIOUS_MARKER in history[last:]:
+        return r
+    log.warning(json.dumps({"event": "router_keep_previous_dropped"}))
+    return r.model_copy(update={"params": r.params.model_copy(update={"keep_previous": None})})
 
 
 def _without_inferred_jar_text(r: IntentResult, jars: Sequence[Mapping[str, str]] | None) -> IntentResult:
