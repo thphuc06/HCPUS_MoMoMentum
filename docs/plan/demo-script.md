@@ -5,7 +5,7 @@ Nguồn: proposal §15. Kể câu chuyện của persona **Minh** (22 tuổi, th
 | Cảnh | Thời lượng | Trên màn hình | Tính năng |
 |---|---|---|---|
 | 1 | 0:00–0:30 | Mở app: dòng thời gian báo hũ Ăn uống (hũ tự thêm) cạn ngày 23, còn 12 ngày nữa mới tới kỳ lương, độ tin cậy "Cao" | F1 |
-| 2 | 0:30–1:15 | Gõ "nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao". Biểu đồ dịch chuyển, hiện tổng chi phí thật và 2 phương án; hũ Nghĩa vụ báo thiếu trước hạn Trả sau 03/12 (ngày 3 là điều khoản mô phỏng của ví demo) | F2, F3 |
+| 2 | 0:30–1:15 | Gõ "nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao". Biểu đồ dịch chuyển, hiện tổng chi phí thật và 2 phương án; hũ Nghĩa vụ báo thiếu cho Trả sau đến hạn 05/12, đúng ngày lương (khoản đến hạn ngày lương trả bằng số dư trước khi lương về, BR-22 chốt 26/11) | F2, F3 |
 | 3 | 1:15–1:45 | Bấm "mất việc 2 tháng". Điểm chống chịu tụt (29 → 12), hiện số ngày trụ được | F4 |
 | 4 | 1:45–2:20 | Tải sao kê 2 tuần gần nhất (CSV): các dòng tự vào hũ Ăn uống, xác nhận một lần. Bộ phát hiện xác nhận chi Ăn uống tăng, lộ trình sinh lại thành bản đề xuất mới; mở So với bản cũ và bảng "Vì sao". Hỏi "nên mua cổ phiếu nào" và thấy trợ lý từ chối đúng phạm vi | F5, F6, suitability |
 | 5 | 2:20–2:50 | Trên `giamkhao1`, nạp ảnh chứng từ mẫu `minh_bien_lai_1.png` (họ tên, số điện thoại, số tài khoản nhìn rõ): PII bị che → dòng giao dịch → gợi ý hũ → duyệt. Các bước ở mục "Cảnh 5" bên dưới | F6 |
@@ -16,12 +16,12 @@ Nguồn: proposal §15. Kể câu chuyện của persona **Minh** (22 tuổi, th
 Hai nguồn, chưa có số nào đo trên app với ví 8 hũ:
 
 - **Trên app**, 26/11 rạng sáng sau deploy (`giamkhao1`, `minh`): ví demo lúc đó có **7 hũ** (chưa có Chi hằng ngày).
-- **Cục bộ**, 26/11 sáng (PostgreSQL cục bộ, ngày mô phỏng 21/11/2026, 10.000 đường, what-if 5.000 đường; [lộ trình bộ hũ](default-six-jars-rollout.md) Bước 5): ví **8 hũ**. Chờ đo lại trên app sau khi deploy bản có hũ Chi hằng ngày và đặt lại.
+- **Cục bộ**, 26/11 (PostgreSQL cục bộ, ngày mô phỏng 21/11/2026, 10.000 đường, what-if 5.000 đường; [lộ trình bộ hũ](default-six-jars-rollout.md) Bước 5): ví **8 hũ**, Trả sau đến hạn ngày 5 (phương án B, chốt 26/11; số cảnh 2 đo lại sau khi đổi). Chờ đo lại trên app sau khi deploy và đặt lại.
 
 | Cảnh | Trên app (ví 7 hũ) | Cục bộ (ví 8 hũ, chờ đo lại) |
 |---|---|---|
 | 1 | Ăn uống 380.000 ₫ cạn 23/11, nhãn Cao | Như trên app: Ăn uống cạn 23/11, nhóm `high` (Cao), thẻ Tổng quan vẫn là Ăn uống. Hũ Chi hằng ngày 300.000 ₫ "đủ", không nêu ngày cạn (hũ thưa), không có thẻ |
-| 2 | Trọn câu 34 giây. Hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12 (2.200.000 ₫: 1.000.000 ₫ có sẵn gồm phí 33.000 ₫, cộng 1.200.000 ₫), thiếu 1.161.791 ₫ | Cùng danh sách, thiếu 1.162.559 ₫. Lời dẫn dùng "thiếu khoảng 1.162.000 ₫" |
+| 2 | Trọn câu 34 giây. Hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12 (2.200.000 ₫: 1.000.000 ₫ có sẵn gồm phí 33.000 ₫, cộng 1.200.000 ₫), thiếu 1.161.791 ₫ | Số đo cục bộ (Trả sau ngày 5): Tiền điện 26/11 và Trả sau **05/12** (2.200.000 ₫), thiếu **1.168.392 ₫** (số dư trước khi lương về 1.031.608 ₫), hũ trả hụt cùng số, trạng thái Sau "hụt". Lời dẫn dùng "thiếu khoảng 1,17 triệu" |
 | 3 | Điểm 29 → 12, trụ 25 ngày | Điểm 29 → 12, trụ **26 ngày**. Lệch do hũ mới: số dư cộng 300.000 ₫, chi 30 ngày cộng khoảng 210.000 ₫ |
 | 4 | 32 dòng vào Ăn uống; bản v3 sau khoảng 30 giây, giai đoạn đầu 21/11–05/12, bước lớn nhất vào Ăn uống 2.657.800 ₫ | Phần không cần model như trên app: 32 dòng vào Ăn uống, PELT xác nhận từ hệ số 2,1 (ngưỡng mịn 2,04), tệp (hệ số 3,5) xác nhận khi tải trong ngày và trễ một ngày. Bản v3 cần model, chưa đo trên ví 8 hũ |
 | 5 | Màn duyệt sau 8,5 giây, chip "Đã che: tên" | Không đo |
