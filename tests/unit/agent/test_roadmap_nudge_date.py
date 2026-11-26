@@ -8,6 +8,9 @@ tool giả.
 
 from __future__ import annotations
 
+import json
+import logging
+
 from agent_helpers import FakeTools, fixture, mcp_ok
 from test_roadmap_agent import args_for, build, outline, prompt, review, scripted_tools, step
 from yofina_agent.roadmap_agent import StepOutline
@@ -112,6 +115,20 @@ def test_dac_ta_sai_dang_vao_vong_sua_khong_goi_tool():
     assert result.outcome.ok and not args_for(tools, "resolve_date")
     (issue,) = [f for f in prompt(client, 1)["feedback"] if f.get("step_id") == "nhac_truoc_tet"]
     assert "nudge_on_spec" in issue["message"]
+
+
+def test_dac_ta_sai_dang_thi_log_ghi_truong_sai_va_cac_truong_co_mat(caplog):
+    """#39 (d3 sau Runtime v33): planner ba vòng liền bị từ chối bước nhắc với `nudge_date_spec`, log không nói trường nào sai nên không
+    chẩn đoán được. Log ghi tên trường sai và tên các trường đặc tả có giá trị (chỉ tên trường của schema, không giá trị)."""
+    caplog.set_level(logging.INFO)
+    tools = _tools(resolve_date=_resolve("ok"))
+    bad = {"anchor": "lunar_new_year", "year": 2027, "offset": {"weeks": -2}}
+    build(tools, outline(step(), _nudge(nudge_on_spec=bad)), outline(step(), _nudge()))
+    rejected = [json.loads(r.getMessage()) for r in caplog.records if '"roadmap_step_rejected"' in r.getMessage()]
+    assert any(
+        e.get("detail") == "nudge_date_spec" and e.get("field") == "year" and e.get("spec_fields") == ["anchor", "offset", "year"]
+        for e in rejected
+    ), rejected
 
 
 def test_dac_ta_chi_dung_cho_buoc_co_schedule_nudge():
