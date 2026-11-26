@@ -54,6 +54,8 @@ from yofina_agent.clarify import (
     goal_date_chips,
     goal_jar_question,
     infer_pay_jar,
+    is_known_item_update,
+    known_item_question,
     lacks_pay_jar,
     resolve_clarify,
     roadmap_choice_question,
@@ -65,6 +67,7 @@ from yofina_agent.compact import (
     compact_forecast,
     compact_forecast_overview,
     compact_jars,
+    compact_known_item_split,
     compact_obligations,
     compact_resilience,
     compact_roadmap,
@@ -137,7 +140,7 @@ from yofina_agent.writer import (
 from yofina_core import blocks as B
 from yofina_core import quota as daily_quota
 from yofina_core.clock import app_timezone
-from yofina_core.dates import DateResolveError, ResolvedDate, resolve_date
+from yofina_core.dates import DateResolveError, ResolvedDate, add_months, resolve_date
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
 from yofina_core.money import format_vnd, format_vnd_short
@@ -1973,8 +1976,11 @@ class Turn:
 
     # --- khai báo hồ sơ ---------------------------------------------------------------------
     async def on_profile_update(self, r: IntentResult, question: str) -> None:
-        """`update_profile` KHÔNG token -> khối `confirm_action` (chưa lưu gì cho tới khi người dùng bấm Xác nhận)."""
+        """Xem trước thay đổi hồ sơ hoặc đề xuất cách chia lương cho khoản biết trước."""
         p = r.params
+        if is_known_item_update(p):
+            await self.on_known_item(r, question)
+            return
         args: dict[str, Any] = {}
         if p.salary_vnd:
             args["monthly_salary_vnd"] = p.salary_vnd
@@ -2021,6 +2027,47 @@ class Turn:
             )
         else:
             self.tool_failure(o)
+
+    async def on_known_item(self, r: IntentResult, question: str) -> None:
+        """Đọc đề xuất chia lương và chuyển bản xem trước save_jars tới frontend."""
+        p = r.params
+        assert p.known_item_name and p.amount_vnd is not None and p.date_spec is not None
+        self.scope.max_calls = min(self.s.max_model_calls_per_turn, 2)
+        ask_date = ClarifyRequest(slot="date", question=notices.KNOWN_ITEM_QUESTIONS["date"])
+        resolved, _ = await self.resolve_date_spec(p.date_spec)
+        if resolved is None or resolved.days_from_today <= 0:
+            await self.emit_clarify(ask_date, r)
+            return
+        day = resolved.date
+        item = {"name": p.known_item_name, "amount_vnd": p.amount_vnd, "needed_date": day.isoformat()}
+
+        def card(outcome: ToolOutcome, trace_id: str) -> list[B.ConfirmActionBlock]:
+            payload = outcome.payload or {}
+            data = payload["data"]
+            if data["status"] != "proposed":
+                return []
+            block = confirm_action_block(replace(outcome, payload={**payload, "data": data["confirm"]}), trace_id)
+            if block.data.tool != "save_jars":
+                raise ContractMismatch("Đề xuất Quỹ dồn phải xác nhận save_jars")
+            return [block]
+
+        res = await self.call_tool_retry(
+            "propose_jar_split",
+            {"sinking_items": [item]},
+            block=card,
+            compact=lambda o: compact_known_item_split(o.payload or {}, p.known_item_name),
+        )
+        o = res.outcome
+        if o.ok and res.compact is not None:
+            await self.write("known_item_split", question, res.compact)
+        elif o.kind is ToolKind.TOOL_ERROR and o.code == ErrorCode.PARAMS_INVALID.value and (
+            o.error_field == "needed_date"
+            or (o.error_field is None and day > add_months(resolved.today, 12)[0])
+        ):
+            # Ledger kiểm cửa sổ hạn. Kết quả cũ không có field, chỉ dùng hạn để phân biệt sau khi tool từ chối.
+            await self.emit_clarify(ask_date, r)
+        else:
+            self.tool_failure(o, empty_codes=_ROADMAP_EMPTY_CODES)
 
     async def pay_jar_or_ask(self, r: IntentResult) -> str | None:
         """Hũ trả khi tool báo thiếu hũ trả (`asks_pay_jar`): mã hũ người dùng nêu ở `jar_text` (lượt trả lời câu hỏi hũ trả), không
@@ -2186,6 +2233,15 @@ class Turn:
     ) -> None:
         """Khối `clarify` đúng một câu hỏi kèm chip; kết thúc lượt (lượt sau người dùng trả lời, router ghép với câu trước). `chips`: chip
         mã dựng sẵn (tới trần của khối), thay cho chip của `req`."""
+        question = req.question
+        p = r.params
+        if r.intent == "profile_update" and is_known_item_update(p) and req.slot in notices.KNOWN_ITEM_QUESTIONS:
+            deadline = None
+            if req.slot != "date" and p.date_spec is not None:
+                resolved, _ = await self.resolve_date_spec(p.date_spec)
+                if resolved is not None and resolved.days_from_today > 0:
+                    deadline = resolved.date
+            question = known_item_question(p, req.slot, deadline)
         chips = [_readable_amount_chip(c) for c in (req.chips if chips is None else chips)]
         if req.slot == "jar" and not chips:
             chips = await self.jar_chips()  # hỏi hũ nào thì chip là các hũ thật
@@ -2193,7 +2249,7 @@ class Turn:
                 chips.append(CREDIT_CHIP)  # hũ trả của khoản chi ở lượt chỉ đọc: mọi hũ cộng Trả sau (V4)
         self.emit_block(
             B.build_clarify(
-                question=req.question,
+                question=question,
                 slot=req.slot,
                 chips=[
                     {"id": f"c{i + 1}", "label": c.label, "value": c.value or c.label}

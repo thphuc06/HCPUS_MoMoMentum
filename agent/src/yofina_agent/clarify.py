@@ -22,7 +22,7 @@ from typing import Any
 
 from yofina_agent import notices
 from yofina_agent.jars import resolve_jar
-from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, IntentResult
+from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, IntentParams, IntentResult
 from yofina_agent.textutil import normalize, parse_amount_vnd
 from yofina_core.money import format_vnd
 from yofina_core.wallet import is_system_jar, spending_tx_type_jar
@@ -50,8 +50,18 @@ def _canned(slot: str, variant: str | None = None) -> ClarifyRequest:
     )
 
 
+def is_known_item_update(p: IntentParams) -> bool:
+    """Các ô riêng của khoản biết trước trong profile_update, sau khi ưu tiên hồ sơ cũ."""
+    return (
+        p.salary_vnd is None
+        and p.payday_day is None
+        and p.obligation_name is None
+        and (p.known_item_name is not None or p.date_spec is not None or p.date_text is not None)
+    )
+
+
 def missing_slot(r: IntentResult) -> str | None:
-    """Ô bắt buộc còn thiếu theo ý định (None nếu đủ): `amount`, `funding_source`, `jar`, `pay_jar` (hũ nguồn của khoản mua hoặc khoản chi cần kiểm tra), `other`."""
+    """Ô bắt buộc còn thiếu theo ý định, hoặc None nếu đủ."""
     p = r.params
     if r.intent == "what_if":
         if p.scenario_kind not in _NO_AMOUNT_KINDS and p.amount_vnd is None:
@@ -76,6 +86,12 @@ def missing_slot(r: IntentResult) -> str | None:
             return "jar"
         return None
     if r.intent == "profile_update":
+        if is_known_item_update(p):
+            if not p.known_item_name or not p.known_item_name.strip():
+                return "other"
+            if p.amount_vnd is None:
+                return "amount"
+            return "date" if p.date_spec is None else None
         has_obligation = p.obligation_name is not None
         if p.salary_vnd is None and p.payday_day is None and not has_obligation:
             return "other"
@@ -95,6 +111,8 @@ def resolve_clarify(r: IntentResult) -> ClarifyRequest | None:
     if r.intent not in CLARIFY_INTENTS:
         return None
     slot = missing_slot(r)
+    if r.intent == "profile_update" and is_known_item_update(r.params):
+        return ClarifyRequest(slot=slot, question=notices.KNOWN_ITEM_QUESTIONS[slot]) if slot else None
     if slot is None:
         return r.clarify if (r.clarify and r.clarify.slot == "other") else None
     if lacks_pay_jar(r):
@@ -363,6 +381,8 @@ _PROMPTS: tuple[tuple[str | re.Pattern[str], AskedPrompt], ...] = (
 
 def recognize_prompt(text: str) -> AskedPrompt | None:
     """Câu hỏi lại (hoặc thông báo có chip) mã đã đặt trong một tin của Yofina, None nếu tin không có câu nào như vậy."""
+    if known := _known_item_prompt(text):
+        return known
     for pattern, prompt in _GOAL_PROMPTS:
         if m := pattern.search(text):
             return replace(prompt, given=_goal_given(m["goal"]))
@@ -426,6 +446,37 @@ def _goal_given(goal: str) -> dict[str, Any]:
         out["date_spec"] = before_date_spec(day) if before else exact_date_spec(day)
         out.setdefault("date_text", f"{_BEFORE_WORD}{m[0]}" if before else m[0])
     return out
+
+
+_KNOWN_ITEM_PREFIX = "Quỹ dồn"
+_KNOWN_ITEM_KEYS = {
+    notices.KNOWN_ITEM_QUESTIONS["other"]: ("known_item_name",),
+    notices.KNOWN_ITEM_QUESTIONS["amount"]: ("amount_vnd",),
+    notices.KNOWN_ITEM_QUESTIONS["date"]: ("date_text", "date_spec"),
+}
+_KNOWN_ITEM_PROMPT = re.compile(
+    rf"{_KNOWN_ITEM_PREFIX}(?:: “(?P<name>[^?\r\n]+)”)?" r"(?: · (?P<goal>[^?\r\n]+))?\. (?P<question>.+)"
+)
+
+
+def known_item_question(p: IntentParams, slot: str, deadline: date | None) -> str:
+    """Nói lại các ô đã đủ để lượt sau giữ nguyên dữ kiện khi người dùng chỉ trả lời ô đang hỏi."""
+    name = p.known_item_name
+    title = f": “{name}”" if slot != "other" and name and not re.search(r"[?\r\n]", name) else ""
+    goal = goal_phrase(p.amount_vnd if slot != "amount" else None, deadline=deadline)
+    summary = f" · {goal}" if goal else ""
+    return f"{_KNOWN_ITEM_PREFIX}{title}{summary}. {notices.KNOWN_ITEM_QUESTIONS[slot]}"
+
+
+def _known_item_prompt(text: str) -> AskedPrompt | None:
+    """Đọc lại dữ kiện mã đã nói trong câu hỏi về Quỹ dồn."""
+    match = _KNOWN_ITEM_PROMPT.fullmatch(text.strip())
+    if match is None or (keys := _KNOWN_ITEM_KEYS.get(match["question"])) is None:
+        return None
+    given = _goal_given(match["goal"] or "")
+    if match["name"]:
+        given["known_item_name"] = match["name"]
+    return AskedPrompt(keys=keys, intent="profile_update", given=given)
 
 
 def _goal_pattern(template: str) -> re.Pattern[str]:

@@ -64,12 +64,13 @@ bnpl_purchase (mua bằng Trả sau, còn gọi Ví Trả Sau hay BNPL), income_
 không đặt ở salary_vnd vì salary_vnd chỉ dành cho profile_update), \
 recurring_expense (khoản chi lặp lại: tuần, tháng, năm), jar_transfer (hỏi nếu chuyển tiền giữa hai hũ thì sao), \
 goal_delay (hoãn mục tiêu tiết kiệm). Tên món hay việc đang định chi đặt ở params.label. \
-Một khoản chi một lần của chính người dùng, dù cho món đồ hay việc gì và dù có nói thời điểm hay không, là one_time_purchase; \
+Khi người dùng muốn mô phỏng ảnh hưởng của khoản chi một lần của chính họ, chọn one_time_purchase; \
 trả bằng Trả sau thì là bnpl_purchase.
 - resilience: hỏi điểm chống chịu, sức chịu đựng tài chính hoặc các thành phần của điểm chống chịu.
 - stress: hỏi "nếu gặp cú sốc tài chính thì sao" theo các mẫu trong danh sách bên dưới, hoặc muốn thử cú sốc mà chưa chọn mẫu. \
 Nếu người dùng đưa số tiền cho khoản chi cụ thể hoặc cho thay đổi thu nhập thì chọn what_if.
 - roadmap: xem, lập mới, lập lại lộ trình quản lý chi tiêu (kế hoạch tiết kiệm theo giai đoạn) hoặc sửa một bước của nó. \
+Yêu cầu tính cách tích lũy để đạt một số tiền vào hạn thuộc ý định này. \
 Tư vấn đầu tư hay vay vẫn là out_of_scope kể cả khi người dùng gọi đó là lộ trình.
 - behavior: hỏi về THÓI QUEN chi tiêu đã qua của chính mình, tức khuôn mẫu lặp lại chứ không phải một con số: chi vào lúc nào, \
 dồn vào những ngày nào, nhịp chi quanh kỳ lương, dùng Trả sau nhiều hay ít, vì sao hay bị hụt. Không kèm khoản chi cụ thể để \
@@ -82,8 +83,9 @@ của một ngoại tệ, hay một số tiền ngoại tệ đổi ra được 
 Mô phỏng một khoản mua bằng Trả sau vẫn là what_if.
 - affordability: hỏi một khoản sắp chi hoặc sắp chuyển cho người khác có ổn, có đủ, có an toàn không (câu hỏi có hay không về \
 MỘT khoản cụ thể). Hỏi khoản đó ảnh hưởng thế nào theo thời gian là what_if.
-- profile_update: người dùng KHAI BÁO hoặc sửa thông tin của chính họ: lương, ngày nhận lương, một khoản nghĩa vụ hằng tháng \
-(tiền trọ, hóa đơn, thuê bao, khoản vay).
+- profile_update: người dùng KHAI BÁO hoặc sửa thông tin của chính họ: lương, ngày nhận lương, khoản nghĩa vụ lặp lại theo tháng đặt ở obligation_name, \
+hoặc khoản chi MỘT LẦN đã biết mình phải trả vào một thời điểm đặt ở known_item_name. Với khoản một lần, ý định là khai khoản phải trả \
+để dành tiền cho nó, khác với yêu cầu tính lộ trình tích lũy hay mô phỏng ảnh hưởng của khoản định chi. Hỏi lại nếu còn thiếu dữ kiện.
 - move: yêu cầu chuyển tiền thật ngay giữa hai hũ của chính người dùng (không hỏi có ổn không, không hỏi nếu thì sao).
 - out_of_scope: mọi việc khác: tư vấn mua cổ phiếu, quỹ, tiền mã hóa, vay, bảo hiểm; hỏi dữ liệu của người khác; yêu cầu bỏ qua quy tắc, \
 tự ghi dữ liệu mà không cần xác nhận; chủ đề không liên quan quản lý chi tiêu. Câu hỏi về việc tiêu tiền của chính người dùng \
@@ -108,6 +110,8 @@ Hỏi tỷ giá mà không nêu số tiền thì chỉ đặt currency.
 của từng trường (danh sách loại chi ở cuối, danh sách hũ ở <hu_cua_vi>).
 - profile_update: lương đặt vào salary_vnd, ngày nhận lương vào payday_day; MỘT khoản nghĩa vụ thì obligation_name (tên ngắn, ví dụ "Tiền trọ"), \
 obligation_kind (rent, bill, subscription hoặc loan; không chắc thì null), amount_vnd (số tiền mỗi kỳ), due_day (ngày đến hạn trong tháng).
+- Khoản biết trước trong profile_update dùng known_item_name cho tên, amount_vnd cho số tiền cả khoản, date_text và date_spec cho hạn. \
+Khi một lượt khai kèm lương, ngày lương hoặc nghĩa vụ theo tháng, chỉ trích phần hồ sơ đó.
 - shock_id chỉ dùng cho stress: chọn mã của cú sốc mẫu phù hợp, kể cả khi người dùng gửi nhãn từ chip; không khớp cú sốc nào thì để null.
 - roadmap_action chỉ dùng cho roadmap: "view" khi muốn xem bản hiện có, "create" khi muốn lập mới hoặc lập lại, "edit_step" khi muốn \
 đổi số tiền, ngày hay bỏ MỘT bước của lộ trình đang dùng (số tiền mới, nếu người dùng nói, đặt ở amount_vnd). Chưa rõ thì để null.
@@ -136,8 +140,9 @@ intent là what_if (hệ thống tự lấy lại khoản mới từ câu hỏi 
 - Việc dòng "Ứng dụng:" đã ghi nhận là đã thực hiện xong: nếu người dùng hỏi lại kết quả thì chọn chitchat (reply dựa đúng dòng đó), KHÔNG chọn move hay profile_update lần nữa.
 
 Hỏi lại (needs_clarification=true kèm clarify) chỉ có ở what_if, affordability, move và profile_update, khi thiếu thông tin BẮT BUỘC \
-không suy ra được từ câu hoặc lịch sử: số tiền (slot "amount"), hũ nguồn hoặc hũ đích khi chuyển tiền giữa hai hũ (slot "jar"), hoặc \
-profile_update không rõ khai điều gì (slot "other"). Hũ trả của khoản chi không phải lý do hỏi lại: chọn spend_jar_code theo mô tả của \
+không suy ra được từ câu hoặc lịch sử: số tiền (slot "amount"), hũ nguồn hoặc hũ đích khi chuyển tiền giữa hai hũ (slot "jar"), \
+hạn của khoản biết trước (slot "date"), hoặc profile_update chưa rõ tên khoản hay điều muốn khai (slot "other"). \
+Hũ trả của khoản chi không phải lý do hỏi lại: chọn spend_jar_code theo mô tả của \
 trường, hệ thống tự hỏi khi vẫn chưa rõ. Ý định khác để needs_clarification=false và clarify=null: hệ thống tự xử lý phần còn thiếu.
 - Hỏi ĐÚNG MỘT câu tiếng Việt, đúng một dấu "?", kèm 0 đến 4 chip trả lời ngắn (label ngắn; value là CHỮ người dùng sẽ gõ, ví dụ "1 triệu" chứ không phải 1000000). \
 needs_clarification=true khi và chỉ khi có clarify.
@@ -442,6 +447,7 @@ _CARRY_GROUPS: tuple[tuple[str, ...], ...] = (
     ("to_jar_text",),
     ("funding",),
     ("label",),
+    ("known_item_name",),
     ("scenario_kind",),
     ("date_text", "date_spec"),
     ("roadmap_action",),
@@ -527,6 +533,9 @@ def pending_params(
     if i < 1 or not asking(i):
         return None
     last = prompt_at(i)
+    if last.intent == "profile_update":
+        # Câu hỏi này đã nói lại những ô còn dùng. Lượt trả lời chỉ ghép với phần được nói lại của chính đề nghị này.
+        return {**last.given, "_intent": last.intent, "_prompt": last, "_jar_names": tuple(jar_names)}
     chain: list[tuple[str, AskedPrompt | None]] = []  # (câu người dùng, câu hỏi mà câu đó trả lời), mới trước
     while i >= 1 and asking(i) and messages[i - 1][0] == "user":
         text = messages[i - 1][1]
@@ -591,6 +600,8 @@ def merge_pending(
     pending_intent = pending.get("_intent")
     if got.get("_intent"):
         intent = got["_intent"]
+    elif prompt.intent == "profile_update":
+        intent = prompt.intent
     elif (tapped or routed.intent == "lookup") and (prompt.intent or pending_intent):
         # "Hũ Hóa đơn" đứng riêng dễ bị xếp là tra số dư; chip của câu hỏi chỉ thuộc một ý định thì mã biết câu đang chờ là gì
         intent = prompt.intent or pending_intent

@@ -117,6 +117,34 @@
     }
   },
   {
+    "name": "propose_jar_split",
+    "description": "Đề xuất tỷ lệ chia lương khi người dùng khai khoản biết trước cho Quỹ dồn, ví dụ Tết hoặc học phí. Chỉ đọc. Trả tỷ lệ và tiền mỗi kỳ trước/sau, kiểm tra theo kỳ lương và dữ liệu thẻ xác nhận save_jars khi có đề xuất.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "sinking_items": {
+          "type": "array",
+          "description": "Danh sách 1–5 khoản biết trước. Mỗi khoản có tên, số tiền VND và ngày cần.",
+          "items": {
+            "type": "object",
+            "description": "Một khoản biết trước cần dành tiền theo kỳ lương.",
+            "properties": {
+              "name": {"type": "string", "description": "Tên khoản, 1–80 ký tự."},
+              "amount_vnd": {"type": "integer", "description": "Số tiền, số nguyên dương tính bằng VND."},
+              "needed_date": {"type": "string", "description": "Ngày cần dạng YYYY-MM-DD, sau hôm nay mô phỏng và trong 12 tháng tới."}
+            },
+            "required": ["name", "amount_vnd", "needed_date"]
+          }
+        }
+      },
+      "required": ["sinking_items"]
+    }
+  },
+  {
     "name": "update_profile",
     "description": "Sửa thông tin người dùng đã khai: lương, ngày nhận lương, mức chấp nhận rủi ro, tên hiển thị, hoặc thêm, sửa, xóa MỘT khoản nghĩa vụ (tiền trọ, hóa đơn, thuê bao, khoản vay) mỗi lần gọi. Khi chưa có confirm_token công cụ KHÔNG ghi gì mà trả NEEDS_CONFIRMATION kèm bản xem trước để người dùng tự bấm xác nhận trên màn hình. Không bao giờ tự bịa confirm_token. Phải có ít nhất một thay đổi.",
     "inputSchema": {

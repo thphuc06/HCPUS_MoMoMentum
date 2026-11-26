@@ -75,6 +75,7 @@ const TOOL_LABELS: Record<string, { running: string; done: string }> = {
   get_cashflow_summary: { running: 'Đang tổng hợp thu chi…', done: 'Đã tổng hợp thu chi' },
   get_obligations: { running: 'Đang đọc các khoản nghĩa vụ…', done: 'Đã đọc các khoản nghĩa vụ' },
   get_unclassified: { running: 'Đang đọc các khoản chưa phân loại…', done: 'Đã đọc các khoản chưa phân loại' },
+  propose_jar_split: { running: 'Đang đề xuất tỷ lệ chia lương…', done: 'Đã đề xuất tỷ lệ chia lương' },
   update_profile: { running: 'Đang chuẩn bị thay đổi hồ sơ…', done: 'Đã chuẩn bị thay đổi hồ sơ' },
   record_transaction: { running: 'Đang chuẩn bị ghi giao dịch…', done: 'Đã chuẩn bị ghi giao dịch' },
   move_between_jars: { running: 'Đang chuẩn bị chuyển tiền giữa hai hũ…', done: 'Đã chuẩn bị chuyển tiền giữa hai hũ' },

@@ -50,6 +50,7 @@ def test_cac_tool_cua_target_ledger_theo_danh_muc_overview():
         "get_cashflow_summary",
         "get_obligations",
         "get_unclassified",
+        "propose_jar_split",
         "update_profile",
         "record_transaction",
         "move_between_jars",
@@ -148,6 +149,20 @@ def test_move_between_jars_theo_dac_ta():
     }
     assert schema["properties"]["amount_vnd"]["type"] == "integer"
     assert set(schema["required"]) == {"from_jar", "to_jar", "amount_vnd"}
+
+
+def test_propose_jar_split_input_is_a_list_of_known_items():
+    schema = BY_NAME["propose_jar_split"]["inputSchema"]
+    assert set(schema["properties"]) == {"user_id", "sinking_items"}
+    assert schema["required"] == ["sinking_items"]
+    items = schema["properties"]["sinking_items"]
+    assert items["type"] == "array"
+    known_item = items["items"]
+    assert known_item["type"] == "object"
+    assert {name: prop["type"] for name, prop in known_item["properties"].items()} == {
+        "name": "string", "amount_vnd": "integer", "needed_date": "string",
+    }  # fmt: skip
+    assert set(known_item["required"]) == set(known_item["properties"])
 
 
 def test_record_transaction_theo_dac_ta():
@@ -249,6 +264,7 @@ RESULT_DEF = {
     "get_cashflow_summary": "GetCashflowSummaryResult",
     "get_obligations": "GetObligationsResult",
     "get_unclassified": "GetUnclassifiedResult",
+    "propose_jar_split": "ProposeJarSplitResult",
     "update_profile": "UpdateProfileResult",
     "record_transaction": "RecordTransactionResult",
     "move_between_jars": "MoveBetweenJarsResult",
@@ -339,6 +355,17 @@ def test_ket_qua_tool_fixture_hop_le(registry, path):
         b.FeeScheduleData.model_validate(data)  # đầu vào của build_citation (khối citation)
     elif tool == "resolve_date":
         dates.ResolvedDate.model_validate(data)
+    elif tool == "propose_jar_split":
+        rest = {k: v for k, v in data.items() if k != "confirm"}
+        Draft202012Validator(
+            {"$ref": f"{BASE}/rest/openapi.yaml#/components/schemas/SplitProposalResponse"},
+            registry=registry,
+        ).validate(rest)
+        if data["status"] == "proposed":
+            confirm = b.ConfirmActionData.model_validate(data["confirm"])
+            assert confirm.tool == "save_jars" and confirm.params == data["params"]
+        else:
+            assert "confirm" not in data
     elif tool == "get_behavior_profile":
         b.BehaviorProfileData.model_validate(data)
     elif tool in ("update_profile", "record_transaction", "assign_jar", "schedule_nudge"):
@@ -403,6 +430,19 @@ def test_tool_ghi_moi_khong_nhan_data_cua_khoi_confirm_chuyen_hu(registry):
     ok = load_json(CONTRACTS / "fixtures/tools/record_transaction.ok.json")
     assert v.is_valid(ok)
     assert not v.is_valid({**ok, "status": "NEEDS_CONFIRMATION"})  # receipt không phải confirm
+
+
+def test_propose_jar_split_confirmation_only_for_proposed_status(registry):
+    path = CONTRACTS / "fixtures/tools"
+    proposed = load_json(path / "propose_jar_split.proposed.json")
+    infeasible = load_json(path / "propose_jar_split.infeasible.json")
+    v = result_validator(registry, "propose_jar_split")
+    confirm = proposed["data"].pop("confirm")
+    assert not v.is_valid(proposed)
+    proposed["data"]["confirm"] = {**confirm, "tool": "assign_jar"}
+    assert not v.is_valid(proposed)
+    infeasible["data"]["confirm"] = confirm
+    assert not v.is_valid(infeasible)
 
 
 def test_cashflow_tach_luong_khoi_tien_vao_khac(registry):

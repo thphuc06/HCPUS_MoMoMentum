@@ -33,6 +33,125 @@
         }
       }
     },
+    "ProposeJarSplitData": {
+      "description": "Dữ liệu của POST /jars/split-proposal, kèm bản xem trước save_jars khi status là proposed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "app_date",
+        "as_of",
+        "status",
+        "jars"
+      ],
+      "properties": {
+        "app_date": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/app_date"
+        },
+        "as_of": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/as_of"
+        },
+        "status": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/status"
+        },
+        "salary_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/VndPositive"
+        },
+        "obligation_basis": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/obligation_basis"
+        },
+        "obligations_monthly_vnd": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/Vnd"
+        },
+        "required_percent": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/required_percent"
+        },
+        "reasons": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/reasons"
+        },
+        "jars": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/jars"
+        },
+        "sinking_items": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/sinking_items"
+        },
+        "checks": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/checks"
+        },
+        "params": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/params"
+        },
+        "priority_obligations": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/priority_obligations"
+        },
+        "salary_check": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/salary_check"
+        },
+        "pending_salary": {
+          "$ref": "../rest/openapi.yaml#/components/schemas/SplitProposalResponse/properties/pending_salary"
+        },
+        "confirm": {
+          "$ref": "../blocks/confirm_action.schema.json#/$defs/ConfirmActionData",
+          "properties": {
+            "tool": {
+              "const": "save_jars"
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "proposed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "params",
+          "confirm"
+        ]
+      },
+      "else": {
+        "properties": {
+          "params": false,
+          "confirm": false
+        }
+      }
+    },
+    "ProposeJarSplitOk": {
+      "type": "object",
+      "required": [
+        "status",
+        "app_date",
+        "as_of",
+        "data"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "OK"
+        },
+        "app_date": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate"
+        },
+        "as_of": {
+          "$ref": "../blocks/envelope.schema.json#/$defs/IsoDateTime"
+        },
+        "data": {
+          "$ref": "#/$defs/ProposeJarSplitData"
+        }
+      }
+    },
+    "ProposeJarSplitResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProposeJarSplitOk"
+        },
+        {
+          "$ref": "#/$defs/ToolError"
+        }
+      ]
+    },
     "GetJarBalancesOk": {
       "description": "`data` là đúng `JarSummaryData`. Phase 4 (tương thích ngược): mỗi hũ có thêm tùy chọn `kind`, `goal_vnd`, `goal_date` (mục tiêu GỐC từ bảng `jars`, vắng khi hũ không có mục tiêu), để Roadmap agent dựng `save_jars` không làm mất mục tiêu.",
       "type": "object",

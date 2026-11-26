@@ -215,9 +215,10 @@ ObligationKind = Literal["rent", "bill", "subscription", "loan"]
 #: nhãn theo thứ tự của bảng; trừ mua bằng Trả sau vì đó là cách trả (đã có `funding`), không phải việc được trả tiền.
 ROUTER_TX_TYPES: dict[str, str] = {code: label for code, label, _ in SPENDING_TX_TYPES if code != TX_TYPE_BNPL_PURCHASE}
 RouterTxType = Literal[tuple(ROUTER_TX_TYPES)]  # type: ignore[valid-type]
-#: Đặc tả hạn mục tiêu lộ trình router trả (`IntentParams.date_spec`).
+#: Đặc tả hạn router trả (`IntentParams.date_spec`).
 RouterDateSpec = date_spec_field(
-    "Hạn của mục tiêu lộ trình (chính hạn ở date_text) viết thành đặc tả: câu lộ trình có hạn thì điền, kỳ đếm từ <ngay_hom_nay>; "
+    "Hạn của mục tiêu lộ trình hoặc ngày cần có đủ tiền cho khoản biết trước (chính hạn ở date_text) viết thành đặc tả. "
+    "Điền khi người dùng nói hạn, kỳ đếm từ <ngay_hom_nay>; "
     "null khi câu không nói hạn hoặc không chắc hạn là gì."
 )
 
@@ -250,12 +251,14 @@ _TX_TYPE_DESCRIPTION = (
     "ĐÍCH của khoản tiền (nhiều thứ cho cùng một việc thì lấy loại của việc đó). Không phụ thuộc hũ: hũ trả do spend_jar_code và "
     "jar_text nói, cách trả do funding nói. Null khi câu không nói tiền dùng vào việc gì hoặc không loại nào hợp."
 )
-_DATE_TEXT_DESCRIPTION = "Cụm chữ chỉ thời gian người dùng nói (hạn của mục tiêu, thời điểm của khoản chi), chép nguyên văn."
+_DATE_TEXT_DESCRIPTION = (
+    "Cụm chữ chỉ thời gian người dùng nói (hạn của mục tiêu, ngày cần đủ tiền cho khoản biết trước, thời điểm của khoản chi), chép nguyên văn."
+)
 
 
 class IntentParams(_Model):
-    """Tham số của <cau_moi>. Trường chép chữ (jar_text, from_jar_text, to_jar_text, label, date_text, obligation_name) giữ đúng chữ
-    người dùng gõ và để null khi họ không nói; số tiền chỉ lấy số họ nói. Trường mã (spend_jar_code, spend_jar_named, tx_type,
+    """Tham số của <cau_moi>. Trường chép chữ (jar_text, from_jar_text, to_jar_text, label, date_text, obligation_name, known_item_name)
+    giữ đúng chữ người dùng gõ và để null khi họ không nói; số tiền chỉ lấy số họ nói. Trường mã (spend_jar_code, spend_jar_named, tx_type,
     date_spec, answers_pending và các trường kind, action, topic) là lựa chọn của bạn theo nghĩa của câu, theo mô tả của từng trường."""
 
     # Docstring trên là `description` của `params` trong schema tool router (model đọc), không phải ghi chú cho lập trình viên.
@@ -297,6 +300,9 @@ class IntentParams(_Model):
     salary_vnd: Annotated[int, Field(ge=1)] | None = None
     payday_day: Annotated[int, Field(ge=1, le=31)] | None = None
     obligation_name: Annotated[str, Field(max_length=80)] | None = None
+    known_item_name: Annotated[str, Field(max_length=80)] | None = Field(
+        default=None, description="Tên ngắn của khoản chi một lần biết trước trong profile_update, chép đúng chữ người dùng."
+    )
     obligation_kind: ObligationKind | None = None
     due_day: Annotated[int, Field(ge=1, le=31)] | None = None
     # what_if: người dùng vừa trả lời câu "vẫn giữ khoản trước để tính gộp không": true giữ, false bỏ, null khi không có câu hỏi đó

@@ -1,0 +1,5 @@
+{
+  "status": "ERROR",
+  "code": "PARAMS_INVALID",
+  "message": "Ngày cần của khoản biết trước phải trong 12 tháng tới."
+}

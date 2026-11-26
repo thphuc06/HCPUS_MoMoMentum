@@ -39,6 +39,7 @@ Từ 26/11 (#39): `split_proposal.py` (đề xuất tỷ lệ khi kê khai, `POS
 | `GET /forecasts/{jar_code}` | Khối `forecast_timeline`: đọc `forecasts`, `forecast_runs`, `forecast_jar_summaries` qua hàm `app_*`, ghép mốc nghĩa vụ và lương lúc đọc. Chưa có dự báo hoặc quá hạn độ tươi (`YOFINA_FORECAST_FRESHNESS_SECONDS`) thì **tính lại đồng bộ** bằng Lambda `yofina-forecast-batch` rồi mới trả; không tính được mà còn bản cũ thì trả bản cũ với `stale: true`, không có gì thì 503 `FORECAST_UNAVAILABLE` (`wallet_reads.forecast_response`). `GET /overview` thì chỉ kích hoạt tính lại ở nền để giữ p95 thấp | |
 | `POST /confirmations` rồi `POST /actions` | Mọi thao tác ghi, sáu `tool`: `move_between_jars`, `record_transaction`, `assign_jar`, `update_profile`, `save_jars`, `confirm_salary` | bốn tool ghi đầu (không token thì `NEEDS_CONFIRMATION`); `save_jars` và `confirm_salary` chỉ có ở REST |
 | `POST /confirmations/cancel` | Ghi việc người dùng bấm "Không" (`cancelled`) | |
+| `POST /jars/split-proposal` | Đề xuất tỷ lệ chia lương theo nghĩa vụ và khoản biết trước | `ledger___propose_jar_split` (#41) nhận 1–5 `sinking_items`, dùng cùng luồng đọc và thêm dữ liệu thẻ xem trước `save_jars` khi có đề xuất |
 | `GET /conversations`, `GET /conversations/{id}`, `POST /demo/reset` | Hội thoại đã lưu (kèm `resolutions`), đặt lại demo | `save_turn` |
 
 ## Lộ trình (phase 4, F5): `roadmap_*.py`

@@ -67,6 +67,16 @@ def test_moi_tool_co_nhan_tien_do_o_the_yofina_da_lam():
     assert contract_tools() - _keys(FRONT_TOOLS, "TOOL_LABELS") == set()
 
 
+def test_propose_jar_split_labels_use_the_same_vietnamese_wording():
+    text = FRONT_TOOLS.read_text(encoding="utf-8")
+    match = re.search(
+        r"^\s+propose_jar_split: \{ running: '([^']+)', done: '([^']+)' \}", text, re.M
+    )
+    assert match is not None
+    label = trace.TOOL_LABELS["propose_jar_split"].lower()
+    assert match.groups() == (f"Đang {label}…", f"Đã {label}")
+
+
 def test_moi_buoc_cua_agent_co_nhan():
     steps = agent_steps()
     assert {"router", "analyst", "verifier", "roadmap_draft", "roadmap_save"} <= steps

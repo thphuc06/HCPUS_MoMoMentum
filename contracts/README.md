@@ -140,7 +140,7 @@ Lý do tách thay vì nới `confirm`: nới `ConfirmData` thành hợp theo `to
 
 ### Tool `ledger` (phase 2) và `forecast`
 
-- `tools/ledger.json` có đúng mười tool theo thứ tự `yofina_core.wallet.LEDGER_TOOLS`: năm tool đọc (`get_jar_balances`, `query_transactions`, `get_cashflow_summary`, `get_obligations`, `get_unclassified`), bốn tool ghi (`update_profile`, `record_transaction`, `move_between_jars`, `assign_jar`) và `save_turn`. `save_jars` và `confirm_salary` **chỉ có ở REST**, không lộ cho agent qua Gateway (Cedar và schema không có chúng).
+- `tools/ledger.json` có mười một tool theo thứ tự `yofina_core.wallet.LEDGER_TOOLS`: sáu tool đọc, bốn tool ghi và `save_turn`. Tool đọc `ledger___propose_jar_split` (#41) nhận 1–5 `sinking_items` với `needed_date`, trả dữ liệu `POST /jars/split-proposal` và thêm `confirm` kiểu `ConfirmActionData` cho `save_jars` khi `data.status` là `proposed`. `save_jars` và `confirm_salary` chỉ thực thi qua REST.
 - Tool ghi không có `confirm_token` thì không ghi, trả `NEEDS_CONFIRMATION` với `data` = `ConfirmActionData` (`move_between_jars` giữ `ConfirmData`); có token hợp lệ thì ghi và trả `ReceiptActionData`. Agent dựng khối bằng `build_confirm_action` và `build_receipt_action`. Schema Gateway không có `enum`: mô tả của từng tham số liệt kê giá trị hợp lệ (test khớp với `yofina_core.wallet`).
 - `query_transactions` thêm `kind`, `tx_type`, `cursor` và trả `next_cursor` (con trỏ mờ, mã hóa `(occurred_at, id)` của dòng cuối trang); trường mới của `Transaction` đều tùy chọn nên fixture phase 1 vẫn hợp lệ.
 - `get_cashflow_summary` không có tham số thì lấy kỳ lương hiện tại (từ `latest_payday` tới hôm nay mô phỏng). Không tính dòng chuyển hũ và chia lương.
