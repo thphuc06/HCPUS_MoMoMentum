@@ -25,7 +25,8 @@ Việc module làm (docs/plan/master-plan.md, mục "Model và giới hạn"):
 5. **Ghi log** mỗi lời gọi: vai, model, token vào/ra (token vào là tổng, gồm cả phần đọc/ghi cache), token đọc/ghi cache,
    thời lượng, kết quả (JSON một dòng, logger `yofina.llm`).
 6. **JSON có cấu trúc bằng ép tool** (Nova không hỗ trợ `outputConfig`): `structured_json`, có
-   giới hạn số lần thử; mỗi lần thử là một lượt gọi model và được đếm.
+   giới hạn số lần thử; mỗi lần thử là một lượt gọi model và được đếm. Vai bật `reject_truncated` (router) không nhận kết quả
+   bị cắt ở trần token đầu ra.
 7. **Embedding** (`embed`, vai `embedding` = Cohere Embed v3, `InvokeModel`): gom lô tối đa 96 chuỗi, mỗi lô là một lời gọi được
    đếm và giới hạn như mọi lời gọi khác; mọi lô của một lần gọi dùng cùng một model.
 8. **Prompt caching** theo cờ `prompt_cache` của từng model trong `llm_defaults.json` (mặc định tắt): bật thì `Converse` có
@@ -115,6 +116,13 @@ REFUSED_OUTCOMES = frozenset(
 #:   với Kimi K3 (spike 21/11: `ValidationException`, docs/research/spike-bedrock-models.md §4).
 #: - https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html : `cacheReadInputTokens`, `cacheWriteInputTokens`.
 PROMPT_CACHE_POINT: Mapping[str, Any] = {"cachePoint": {"type": "default"}}
+
+#: Lời gửi lại model khi lần gọi bị cắt ở trần token đầu ra (`structured_json(reject_truncated=True)`): nói đúng chuyện đã xảy ra
+#: (vượt độ dài) và cách làm lại (chỉ trường cần, bỏ trường null), không nêu trường nào cụ thể.
+TRUNCATED_FEEDBACK = (
+    "Kết quả bị cắt vì vượt giới hạn độ dài trước khi xong. Gọi lại tool `{tool}`: chỉ điền các trường cần cho yêu cầu này, "
+    "bỏ trường null, chữ ngắn gọn."
+)
 
 
 # --- lỗi có kiểu ----------------------------------------------------------------------------
@@ -947,6 +955,7 @@ class LlmGateway:
         max_tokens: int = 512,
         scope: TurnScope | None = None,
         require_all_fields: bool = True,
+        reject_truncated: bool = False,
     ) -> StructuredResult[T]:
         """Ép model gọi một tool có schema của `output_model` và kiểm bằng Pydantic.
 
@@ -954,6 +963,9 @@ class LlmGateway:
         gửi lại lỗi cho model và thử lại, tối đa `max_attempts` lần gọi model (mỗi lần được đếm và
         giới hạn như mọi lời gọi khác). Lỗi `ModelBudgetExceeded`/`AllModelsFailed` đi thẳng ra ngoài.
         `require_all_fields`: như `require_all` của `bedrock_json_schema`.
+        `reject_truncated`: lần gọi dừng ở trần token đầu ra (`stopReason` max_tokens) không được nhận dù phần đầu vào tool đã sinh
+        vẫn khớp schema (trường cuối tùy chọn bị mất mà không lỗi; đo ở #39: lời đáp câu chào của router), mà tính là một lần thử
+        hỏng như JSON sai schema. Mặc định tắt: vai nạp và phân loại giữ hành vi cũ cho tới khi được đo riêng.
         """
         if max_attempts < 1:
             raise ValueError("max_attempts phải >= 1")
@@ -983,6 +995,27 @@ class LlmGateway:
                 scope=scope,
             )
             use = next((u for u in res.tool_uses if u.get("name") == tool_name), None)
+            if reject_truncated and res.response.get("stopReason") == "max_tokens":
+                last_error = "max_tokens: kết quả bị cắt ở trần token đầu ra"
+                feedback = TRUNCATED_FEEDBACK.format(tool=tool_name)
+                reply = (
+                    user_message(feedback)
+                    if use is None
+                    else {
+                        "role": "user",
+                        "content": [
+                            {
+                                "toolResult": {
+                                    "toolUseId": use["toolUseId"],
+                                    "status": "error",
+                                    "content": [{"text": feedback}],
+                                }
+                            }
+                        ],
+                    }
+                )
+                convo = [*convo, res.response["output"]["message"], reply]
+                continue
             if use is None:
                 last_error = "model không gọi tool"
                 convo = [

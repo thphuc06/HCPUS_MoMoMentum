@@ -527,6 +527,47 @@ def test_structured_json_tran_ngay_di_thang_ra_ngoai():
         gw.structured_json("small", output_model=Out, messages=[user_message("hi")])
 
 
+def truncated(payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Phản hồi dừng ở trần token đầu ra (`stopReason` max_tokens): Bedrock vẫn trả phần đầu vào tool đã sinh được (đo ở #39: lời đáp
+    của câu chào mất hẳn, đối tượng `params` dở dang bị bỏ), có thể vẫn khớp schema vì trường cuối là tùy chọn."""
+    resp = ok_response("đang viết dở") if payload is None else tool_response("report", payload)
+    resp["stopReason"] = "max_tokens"
+    return resp
+
+
+def test_structured_json_bi_cat_o_tran_token_thi_khong_nhan_va_thu_lai():
+    client = FakeClient([truncated({"intent": "a"}), tool_response("report", {"intent": "a", "amount": 5})])
+    r = gateway(client).structured_json(
+        "small", output_model=Out, messages=[user_message("hi")], max_attempts=2, reject_truncated=True
+    )
+    assert r.value == Out(intent="a", amount=5) and r.attempts == 2
+    feedback = client.calls[1]["messages"][-1]["content"][0]["toolResult"]
+    assert feedback["status"] == "error" and "bị cắt" in feedback["content"][0]["text"]
+
+
+def test_structured_json_bi_cat_khong_co_tool_thi_nhac_bang_chu():
+    client = FakeClient([truncated(None), tool_response("report", {"intent": "b"})])
+    r = gateway(client).structured_json("small", output_model=Out, messages=[user_message("hi")], reject_truncated=True)
+    assert r.value.intent == "b"
+    assert "bị cắt" in client.calls[1]["messages"][-1]["content"][0]["text"]
+
+
+def test_structured_json_lan_nao_cung_bi_cat_thi_loi_co_kieu():
+    client = FakeClient([truncated({"intent": "a"}), truncated({"intent": "a"})])
+    with pytest.raises(StructuredOutputError) as e:
+        gateway(client).structured_json(
+            "small", output_model=Out, messages=[user_message("hi")], max_attempts=2, reject_truncated=True
+        )
+    assert e.value.attempts == 2 and "max_tokens" in e.value.last_error
+
+
+def test_structured_json_mac_dinh_van_nhan_ket_qua_bi_cat_hop_le():
+    """Vai khác giữ hành vi cũ (chỉ router bật `reject_truncated`): đổi cho cả vai nạp hay phân loại cần đo riêng."""
+    client = FakeClient([truncated({"intent": "a"})])
+    r = gateway(client).structured_json("small", output_model=Out, messages=[user_message("hi")])
+    assert r.value == Out(intent="a") and r.attempts == 1
+
+
 # --- prompt caching (#24) ---------------------------------------------------------------------
 CACHE_POINT = {"cachePoint": {"type": "default"}}
 
