@@ -1,7 +1,6 @@
-"""Phần nối với nhánh GG (V5, #39): lời kết của lượt lập lộ trình dùng `notices.roadmap_outlook(data)` khi hàm đó có.
-
-Kiểm bằng `hasattr` nên hai nhánh gộp theo thứ tự nào cũng chạy: chưa có hàm thì giữ câu theo `feasibility` như cũ; có hàm thì các câu
-của hàm thay đúng chỗ câu đó. Mục tiêu có số tiền mà chưa khả thi vẫn nói câu riêng của mục tiêu (không qua hàm). Hàm giả, không model.
+"""Lời kết của lượt lập lộ trình dùng `notices.roadmap_outlook(data)` (V5, #39): các câu của hàm đứng đúng chỗ câu khả năng kịp. Mục tiêu
+có số tiền mà chưa khả thi vẫn nói câu riêng của mục tiêu (không qua hàm). Hạn là ngày liền trước một mốc (đặc tả có `before`) thì câu nói
+"trước {mốc}", không nói "trước" ngày liền trước mốc. Hàm giả, không model.
 """
 
 from __future__ import annotations
@@ -28,12 +27,6 @@ def _data(feasibility: str) -> B.RoadmapData:
     return B.RoadmapData.model_validate(data)
 
 
-def test_chua_co_roadmap_outlook_thi_giu_cau_theo_feasibility(monkeypatch):
-    monkeypatch.delattr(notices, "roadmap_outlook", raising=False)
-    text = _roadmap_closing(_data("on_track"), None, None)
-    assert notices.ROADMAP_CLOSING_FEASIBILITY["on_track"] in text
-
-
 def test_co_roadmap_outlook_thi_cac_cau_cua_ham_thay_cau_theo_feasibility(monkeypatch):
     seen: list[B.RoadmapData] = []
 
@@ -41,7 +34,7 @@ def test_co_roadmap_outlook_thi_cac_cau_cua_ham_thay_cau_theo_feasibility(monkey
         seen.append(data)
         return ["Câu khả năng kịp.", "Câu chưa có hạn."]
 
-    monkeypatch.setattr(notices, "roadmap_outlook", outlook, raising=False)
+    monkeypatch.setattr(notices, "roadmap_outlook", outlook)
     data = _data("relaxed")
     text = _roadmap_closing(data, None, None)
     assert seen == [data]
@@ -51,8 +44,19 @@ def test_co_roadmap_outlook_thi_cac_cau_cua_ham_thay_cau_theo_feasibility(monkey
 
 
 def test_muc_tieu_chua_kha_thi_van_noi_cau_rieng_cua_muc_tieu(monkeypatch):
-    monkeypatch.setattr(notices, "roadmap_outlook", lambda _d: ["Không dùng."], raising=False)
+    monkeypatch.setattr(notices, "roadmap_outlook", lambda _d: ["Không dùng."])
     goal = {"jar": "Du lịch", "target_text": "3.000.000 ₫", "target_date_text": "21/02/2027"}
     text = _roadmap_closing(_data("infeasible"), None, goal)
     assert "Không dùng." not in text
     assert notices.ROADMAP_CLOSING_GOAL_INFEASIBLE.format(goal="3.000.000 ₫ cho hũ Du lịch trước 21/02/2027") in text
+
+
+def test_han_truoc_moc_thi_loi_ket_noi_truoc_moc_khong_noi_ngay_lien_truoc():
+    """Hạn "trước Tết" (Tết Đinh Mùi 06/02/2027) là 05/02/2027: lời kết nói "trước 06/02/2027", không nói "trước 05/02/2027" (đọc ra sớm
+    thêm một ngày). Không có mốc thì vẫn nói theo hạn như cũ."""
+    goal = {"jar": "Du lịch", "target_text": "20.000.000 ₫", "target_date_text": "05/02/2027", "target_before_text": "06/02/2027"}
+    text = _roadmap_closing(_data("infeasible"), None, goal)
+    assert notices.ROADMAP_CLOSING_GOAL_INFEASIBLE.format(goal="20.000.000 ₫ cho hũ Du lịch trước 06/02/2027") in text
+    assert "05/02/2027" not in text
+    note = _roadmap_closing(_data("on_track"), None, goal)
+    assert notices.ROADMAP_CLOSING_GOAL_NOTE.format(goal="20.000.000 ₫ cho hũ Du lịch trước 06/02/2027") in note

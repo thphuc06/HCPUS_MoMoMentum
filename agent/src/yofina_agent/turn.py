@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import inspect
 import json
 import logging
 import time
@@ -270,6 +269,7 @@ class Turn:
         self.memory_action: str | None = None  # ý định `memory`: router nói người dùng HỎI hay NÓI (chính sách ghi bộ nhớ dùng)
         self._goal_asked = False  # lộ trình: đã hỏi lại hạn hoặc hũ của mục tiêu ở lượt này
         self._date_from_history = False  # cụm chỉ hạn của mục tiêu chỉ có từ mã đọc lại câu cũ (`goal_deadline`)
+        self._goal_before: date | None = None  # mốc khi hạn mục tiêu là ngày liền trước mốc đó (`goal_deadline`, `_before_anchor`)
         self.request_text: str | None = None  # câu yêu cầu gốc khi lượt này trả lời câu hỏi lại (đã che PII)
         self.memory = agent_memory.TurnMemory.for_deps(deps)
 
@@ -1438,7 +1438,9 @@ class Turn:
         chips = [ClarifyChipIn(label=label, value=value) for label, value, _ in ROADMAP_CHOICE_CHIPS]
         p = r.params
         resolved = (await self.resolve_date_spec(p.date_spec))[0] if p.date_spec is not None else None
-        question = roadmap_choice_question(p.amount_vnd, p.date_text, resolved.date if resolved else None)
+        question = roadmap_choice_question(
+            p.amount_vnd, p.date_text, resolved.date if resolved else None, before=_before_anchor(resolved)
+        )
         await self.emit_clarify(ClarifyRequest(slot="other", question=question[:200]), r, chips=chips)
         return True
 
@@ -1517,7 +1519,7 @@ class Turn:
         chips = [ClarifyChipIn(label=str(j["name"])[:40], value=f"Hũ {j['name']}"[:80]) for j in rows]
         # Câu hỏi nói lại số tiền và hạn mã đã hiểu; lượt trả lời đọc lại đúng hai giá trị đó từ câu hỏi. Chip đi thẳng vào khối (trần
         # của khối), không qua `ClarifyRequest` (trần chip router được đặt).
-        question = goal_jar_question(r.params.amount_vnd, deadline)
+        question = goal_jar_question(r.params.amount_vnd, deadline, before=self._goal_before)
         await self.emit_clarify(ClarifyRequest(slot="jar", question=question), r, chips=chips)
         return True
 
@@ -1532,6 +1534,7 @@ class Turn:
         cho người dùng; chip là ngày ứng viên nếu có) và kết thúc lượt. Cụm chỉ hạn mã đọc lại từ câu cũ trong lịch sử (router lượt này
         không nhắc lại) không dùng làm đường lùi: phần mã đọc được có thể đã mất chữ bổ nghĩa của người dùng."""
         p = r.params
+        self._goal_before = None
         said = p.date_text.strip() if p.date_text and p.date_text.strip() else None
         if p.date_spec is None and said is None:
             return None, False
@@ -1540,6 +1543,7 @@ class Turn:
             resolved, error = await self.resolve_date_spec(p.date_spec)
             if resolved is not None and resolved.days_from_today > 0:
                 log.info(json.dumps({"event": "goal_date", "source": "spec", "anchor": resolved.anchor, "date": resolved.date.isoformat()}))
+                self._goal_before = _before_anchor(resolved)
                 return resolved.date, False
             failed = True
             if resolved is not None:  # hạn phải sau hôm nay
@@ -1620,6 +1624,7 @@ class Turn:
             jar=str(match.code),
             target_vnd=p.amount_vnd,
             target_date=deadline.isoformat() if deadline else None,
+            target_before_date=self._goal_before.isoformat() if deadline and self._goal_before else None,
         )
 
     async def on_roadmap_missing(
@@ -1682,8 +1687,8 @@ class Turn:
                 tool_calls_left=self.s.max_tool_calls_per_turn - self.tool_calls + int(cached_jars is not None),
                 latest_outcome=latest_outcome, user_goal=user_goal,
                 advise=True,  # người tư vấn (luồng K): lập luận và kết luận trong chính lời gọi planner
-                # C4: câu của người dùng (đã che PII; lượt trả lời câu hỏi lại thì kèm câu yêu cầu gốc) cho planner, khi hàm nhận
-                **_roadmap_request_kwargs(self.request_text or question),
+                # C4: câu của người dùng (đã che PII; lượt trả lời câu hỏi lại thì kèm câu yêu cầu gốc) cho planner
+                user_request=self.request_text or question,
             )
         self.suitability.extend(result.suitability)
         if result.model_error is not None:
@@ -2192,21 +2197,6 @@ _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa
 _DATE_ERRORS_SAID = frozenset(
     {ErrorCode.DATE_IN_PAST.value, ErrorCode.LUNAR_YEAR_UNSUPPORTED.value, ErrorCode.PROFILE_INCOMPLETE.value}
 )
-#: Tên tham số tùy chọn của `roadmap_agent.build_roadmap` nhận câu của người dùng (C4: ràng buộc như "đừng đụng hũ X"; nhánh khác thêm
-#: tham số đó). Truyền theo tên khi chữ ký hàm có một trong các tên này, nên hai nhánh gộp theo thứ tự nào cũng chạy; tên cuối cùng khác
-#: thì chỉ cần thêm vào đây.
-_ROADMAP_REQUEST_PARAMS = ("user_request", "user_text", "request_text", "user_question", "question")
-
-
-def _roadmap_request_kwargs(text: str) -> dict[str, str]:
-    """`{tên: câu}` nếu `build_roadmap` nhận câu của người dùng qua một trong `_ROADMAP_REQUEST_PARAMS` (keyword), ngược lại `{}`."""
-    try:
-        params = inspect.signature(build_roadmap).parameters
-    except (TypeError, ValueError):
-        return {}
-    keyword = (inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-    name = next((n for n in _ROADMAP_REQUEST_PARAMS if n in params and params[n].kind in keyword), None)
-    return {name: text} if name else {}
 
 
 def _states_goal(p: IntentParams) -> bool:
@@ -2249,8 +2239,18 @@ def _roadmap_of(outcome: ToolOutcome) -> Roadmap | None:
         return None
 
 
+def _before_anchor(resolved: ResolvedDate | None) -> date | None:
+    """Mốc mà hạn đứng liền trước (`before` của đặc tả hạn): ngày của mốc đã dùng (`anchor_date`) khi đặc tả không có độ lệch; có độ
+    lệch thì là ngày tính được trước khi lùi một ngày (nghĩa của `before` trong `yofina_core.dates`). None khi hạn không có `before`.
+    Câu nói hạn theo mốc này ("trước {mốc}"), không nói "trước" chính hạn (đọc ra sớm thêm một ngày)."""
+    if resolved is None or not resolved.before:
+        return None
+    return resolved.anchor_date if resolved.offset is None else resolved.date + timedelta(days=1)
+
+
 def _user_goal_compact(goal: UserGoal, jar_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Mục tiêu người dùng nói, cho model viết câu trả lời (số và ngày đúng dạng để kiểm căn cứ)."""
+    """Mục tiêu người dùng nói, cho model viết câu trả lời (số và ngày đúng dạng để kiểm căn cứ). `target_before_text`: mốc khi hạn là
+    ngày liền trước mốc đó."""
     name = next((str(j["name"]) for j in jar_rows if j["code"] == goal.jar), goal.jar)
     out: dict[str, Any] = {"jar": name}
     if goal.target_vnd is not None:
@@ -2260,6 +2260,9 @@ def _user_goal_compact(goal: UserGoal, jar_rows: list[dict[str, Any]]) -> dict[s
         when = date.fromisoformat(goal.target_date)
         out["target_date_text"] = f"{when.day:02d}/{when.month:02d}/{when.year}"
         out["target_day_month_text"] = f"{when.day:02d}/{when.month:02d}"
+    if goal.target_before_date is not None:
+        anchor = date.fromisoformat(goal.target_before_date)
+        out["target_before_text"] = f"{anchor.day:02d}/{anchor.month:02d}/{anchor.year}"
     return out
 
 
@@ -2285,17 +2288,15 @@ def _roadmap_closing(
     goal_text = None
     if goal is not None and goal.get("target_text"):
         goal_text = f"{goal['target_text']} cho hũ {goal['jar']}"
-        if goal.get("target_date_text"):
-            goal_text += f" trước {goal['target_date_text']}"
+        # hạn là ngày liền trước một mốc (đặc tả có `before`): nói "trước {mốc}", không nói "trước" ngày liền trước mốc
+        if when := goal.get("target_before_text") or goal.get("target_date_text"):
+            goal_text += f" trước {when}"
     goal_said = data.feasibility == "infeasible" and goal_text is not None
     if goal_said:
         parts.append(notices.ROADMAP_CLOSING_GOAL_INFEASIBLE.format(goal=goal_text))
-    elif hasattr(notices, "roadmap_outlook"):
-        # nhánh GG (V5): câu khả năng kịp chọn theo dữ kiện của bản đã lưu (mục tiêu có hạn, phải lùi hạn, chưa có hạn). Kiểm bằng
-        # `hasattr` để hai nhánh gộp theo thứ tự nào cũng chạy; chưa có hàm thì giữ câu theo `feasibility`.
-        parts.extend(notices.roadmap_outlook(data))
     else:
-        parts.append(notices.ROADMAP_CLOSING_FEASIBILITY[data.feasibility])
+        # câu khả năng kịp chọn theo dữ kiện của bản đã lưu (mục tiêu có hạn, phải lùi hạn, chưa có hạn; V5, #39)
+        parts.extend(notices.roadmap_outlook(data))
     if data.alternatives:
         parts.append(notices.ROADMAP_CLOSING_ALTERNATIVES.format(count=len(data.alternatives)))
     if goal_said:

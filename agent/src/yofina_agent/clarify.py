@@ -201,15 +201,21 @@ GOAL_DATE_QUESTION = "Bạn muốn gom đủ mục tiêu này trước ngày nà
 GOAL_DATE_CHIP_LABEL = "Trước {date}"
 GOAL_DATE_CHIP_VALUE = "Hạn {date}"
 _GOAL_DATE_CHIP_RE = re.compile(r"^han (\d{2}) (\d{2}) (\d{4})$")
-#: Câu hỏi hũ của mục tiêu lộ trình khi mã đã hiểu số tiền và/hoặc hạn ({goal}: `goal_phrase`, ví dụ "5.000.000 ₫ trước 21/01/2027").
+#: Câu hỏi hũ của mục tiêu lộ trình khi mã đã hiểu số tiền và/hoặc hạn ({goal}: `goal_phrase`, ví dụ "5.000.000 ₫ hạn 21/01/2027").
 #: Câu nói lại điều mã đã hiểu, và lượt trả lời đọc lại đúng số tiền và ngày từ câu hỏi (không phụ thuộc router nhắc lại).
 GOAL_JAR_QUESTION = "Mục tiêu {goal} thuộc hũ nào để mình lập lộ trình?"
-GOAL_JAR_DATE = "trước {date}"
+#: hạn mã đã tính ({date}: dd/mm/yyyy, hạn là chính ngày đó); lượt trả lời đọc lại đúng ngày đó (`exact_date_spec`)
+GOAL_JAR_DATE = "hạn {date}"
+#: hạn là ngày liền trước một mốc (`before` của đặc tả hạn; {date}: ngày của mốc): nói "trước {mốc}", không nói "trước" ngày liền trước
+#: mốc (đọc ra sớm thêm một ngày); lượt trả lời đọc lại đúng đặc tả đó (`before_date_spec`)
+GOAL_JAR_BEFORE = "trước {date}"
 #: chữ chỉ hạn người dùng nói mà mã chưa đổi ra ngày ({text}: đúng chữ họ gõ)
 GOAL_TEXT_DATE = "hạn “{text}”"
-#: chữ chỉ hạn người dùng nói kèm ngày mã đã tính từ đặc tả hạn ({date}: dd/mm/yyyy)
+#: chữ chỉ hạn người dùng nói kèm ngày mã đã tính từ đặc tả hạn ({date}: dd/mm/yyyy); hạn là ngày liền trước mốc thì {date} là mốc
 GOAL_TEXT_DATE_ON = "hạn “{text}” ({date})"
+GOAL_TEXT_BEFORE_ON = "hạn “{text}” (trước {date})"
 _DMY_TEXT_RE = re.compile(r"(?<!\d)(\d{2})/(\d{2})/(\d{4})(?!\d)")
+_BEFORE_WORD = GOAL_JAR_BEFORE.split("{", 1)[0]
 _QUOTED_RE = re.compile(r"“([^”]+)”")
 #: Chip của thông báo "Tính theo hũ X" ở lượt chỉ đọc (V4): chọn hũ khác, và tính bằng Trả sau khi ví có hạn mức. Chữ gửi đi nói rõ
 #: việc (mô phỏng hay kiểm tra) để lượt sau biết ý định của câu đang chờ mà không cần đoán.
@@ -267,6 +273,12 @@ def exact_date_spec(day: date) -> dict[str, Any]:
     """Đặc tả của đúng một ngày dương lịch (mốc `date` đủ ngày, tháng, năm): ngày mã đã biết (chip ngày, ngày nói lại trong câu hỏi) đi
     qua cùng ô và cùng phép tính với hạn router trả, `dates.resolve_date` ra lại đúng ngày đó."""
     return {"anchor": "date", "day": day.day, "month": day.month, "year": day.year}
+
+
+def before_date_spec(anchor: date) -> dict[str, Any]:
+    """Đặc tả "trước mốc `anchor`" (ngày liền trước mốc, `before`): hạn mã nói lại trong câu hỏi dạng "trước {mốc}" đọc lại thành đúng
+    đặc tả đó, nên `dates.resolve_date` ra lại cùng ngày và cùng mốc đã dùng."""
+    return {**exact_date_spec(anchor), "before": True}
 
 
 def _chip_map(pairs: Iterable[tuple[str, Mapping[str, Any]]]) -> dict[str, Mapping[str, Any]]:
@@ -354,12 +366,18 @@ def recognize_prompt(text: str) -> AskedPrompt | None:
     return None
 
 
-def goal_phrase(amount_vnd: int | None, *, deadline: date | None = None, date_text: str | None = None) -> str:
+def goal_phrase(
+    amount_vnd: int | None, *, deadline: date | None = None, date_text: str | None = None, before: date | None = None
+) -> str:
     """Mục tiêu lộ trình mã đã hiểu, nói lại trong câu hỏi: số tiền đã định dạng, hạn dạng dd/mm/yyyy (`deadline`), đúng chữ chỉ hạn người
-    dùng nói (`date_text`), hoặc cả hai (chữ của họ kèm ngày đã tính). Rỗng khi không có gì."""
+    dùng nói (`date_text`), hoặc cả hai (chữ của họ kèm ngày đã tính). `before`: hạn là ngày liền trước mốc này (`before` của đặc tả hạn),
+    nên câu nói "trước {mốc}" thay cho ngày `deadline` (đọc ra sớm thêm một ngày). Rỗng khi không có gì."""
     parts = [format_vnd(amount_vnd)] if amount_vnd is not None else []
     cleaned = date_text.replace("“", "").replace("”", "").strip()[:40] if date_text else ""
-    if deadline is not None and cleaned:
+    if before is not None:
+        when = before.strftime("%d/%m/%Y")
+        parts.append(GOAL_TEXT_BEFORE_ON.format(text=cleaned, date=when) if cleaned else GOAL_JAR_BEFORE.format(date=when))
+    elif deadline is not None and cleaned:
         parts.append(GOAL_TEXT_DATE_ON.format(text=cleaned, date=deadline.strftime("%d/%m/%Y")))
     elif deadline is not None:
         parts.append(GOAL_JAR_DATE.format(date=deadline.strftime("%d/%m/%Y")))
@@ -368,22 +386,24 @@ def goal_phrase(amount_vnd: int | None, *, deadline: date | None = None, date_te
     return " ".join(parts)
 
 
-def goal_jar_question(amount_vnd: int | None, deadline: date | None) -> str:
+def goal_jar_question(amount_vnd: int | None, deadline: date | None, *, before: date | None = None) -> str:
     """Câu hỏi hũ của mục tiêu lộ trình, nói lại số tiền và hạn mã đã hiểu (`GOAL_JAR_QUESTION`); không có cả hai thì câu chung."""
-    goal = goal_phrase(amount_vnd, deadline=deadline)
+    goal = goal_phrase(amount_vnd, deadline=deadline, before=before)
     return GOAL_JAR_QUESTION.format(goal=goal) if goal else notices.ROADMAP_GOAL_JAR_QUESTION
 
 
-def roadmap_choice_question(amount_vnd: int | None, date_text: str | None, deadline: date | None = None) -> str:
+def roadmap_choice_question(
+    amount_vnd: int | None, date_text: str | None, deadline: date | None = None, *, before: date | None = None
+) -> str:
     """Câu hỏi lập bản mới hay xem bản đang dùng (C2), nói lại mục tiêu người dùng nêu: chữ chỉ hạn của họ, kèm ngày đã tính từ đặc tả
     hạn nếu có (lượt trả lời đọc lại được cả hai, không phải hỏi hạn lần nữa); không có thì câu chung."""
-    goal = goal_phrase(amount_vnd, deadline=deadline, date_text=date_text)
+    goal = goal_phrase(amount_vnd, deadline=deadline, date_text=date_text, before=before)
     return ROADMAP_CHOICE_QUESTION_FOR.format(goal=goal) if goal else ROADMAP_CHOICE_QUESTION
 
 
 def _goal_given(goal: str) -> dict[str, Any]:
     """Số tiền và hạn đọc lại từ phần {goal} của câu hỏi (`goal_phrase`, chuỗi do chính mã dựng): ngày dd/mm/yyyy thành đặc tả của đúng
-    ngày đó, chữ trong ngoặc kép là chữ chỉ hạn người dùng nói."""
+    ngày đó, "trước dd/mm/yyyy" thành đặc tả trước mốc đó (`before_date_spec`), chữ trong ngoặc kép là chữ chỉ hạn người dùng nói."""
     out: dict[str, Any] = {}
     head = re.split(r"\s(?:trước|hạn)\s", f"{goal} ", maxsplit=1)[0]
     if (amount := parse_amount_vnd(head)) is not None:
@@ -396,8 +416,9 @@ def _goal_given(goal: str) -> dict[str, Any]:
             day = date(int(m[3]), int(m[2]), int(m[1]))
         except ValueError:
             return out
-        out["date_spec"] = exact_date_spec(day)
-        out.setdefault("date_text", m[0])
+        before = goal[: m.start()].endswith(_BEFORE_WORD)
+        out["date_spec"] = before_date_spec(day) if before else exact_date_spec(day)
+        out.setdefault("date_text", f"{_BEFORE_WORD}{m[0]}" if before else m[0])
     return out
 
 

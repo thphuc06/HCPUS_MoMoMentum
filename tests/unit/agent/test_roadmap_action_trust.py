@@ -31,7 +31,8 @@ from yofina_agent.notices import ROADMAP_GOAL_JAR_QUESTION
 RR9 = "lo trinh hien tai co kip gom 20 trieu truoc Tet khong"  # câu số 9 của báo cáo RR
 GOAL = {"amount_vnd": 20_000_000, "date_text": "trước Tết", "date_spec": {"anchor": "lunar_new_year", "before": True}}  # đặc tả hạn (V1)
 TET_EVE = date(2027, 2, 5)  # ngày liền trước Tết Đinh Mùi (06/02/2027)
-CHOICE_Q = roadmap_choice_question(20_000_000, "trước Tết", TET_EVE)
+TET = date(2027, 2, 6)  # mốc đã dùng của hạn "trước Tết": câu hỏi nói "trước {mốc}", không nói "trước" ngày liền trước mốc
+CHOICE_Q = roadmap_choice_question(20_000_000, "trước Tết", TET_EVE, before=TET)
 #: hạn đã tính từ đặc tả, làm dữ kiện cho writer (mốc đã dùng, năm Tết): nói được "trước Tết" kèm ngày
 TET_FACTS = {
     "date_text": "05/02/2027", "day_month_text": "05/02", "weekday_text": "thứ Sáu", "days_from_today": 76,
@@ -84,24 +85,26 @@ def test_router_de_trong_ma_da_co_ban_dang_dung_thi_hoi_mot_cau_hai_chip(monkeyp
     (block,) = blocks_of(events)
     assert block["type"] == "clarify"
     data = block["data"]
-    # câu hỏi nói lại mục tiêu (số tiền, đúng chữ chỉ hạn người dùng nói kèm ngày đã tính)
+    # câu hỏi nói lại mục tiêu (số tiền, đúng chữ chỉ hạn người dùng nói kèm mốc đã dùng: hạn là ngày liền trước mốc đó)
     assert data["question"] == CHOICE_Q and data["question"].count("?") == 1
-    assert "20.000.000 ₫" in CHOICE_Q and "“trước Tết” (05/02/2027)" in CHOICE_Q
+    assert "20.000.000 ₫" in CHOICE_Q and "“trước Tết” (trước 06/02/2027)" in CHOICE_Q and "05/02/2027" not in CHOICE_Q
     assert [(c["label"], c["value"]) for c in data["chips"]] == [(label, value) for label, value, _ in ROADMAP_CHOICE_CHIPS]
     assert calls_of(tools, "get_roadmap") == [{"which": "active"}]
     assert not {tool for tool, _ in tools.calls} & WRITES and not writer.calls
+    # lượt trả lời đọc lại đúng đặc tả "trước mốc": cùng hạn 05/02/2027 và cùng mốc đã dùng
     given = recognize_prompt(CHOICE_Q)
     assert given is not None and dict(given.given) == {
-        "amount_vnd": 20_000_000, "date_text": "trước Tết", "date_spec": {"anchor": "date", "day": 5, "month": 2, "year": 2027},
+        "amount_vnd": 20_000_000, "date_text": "trước Tết",
+        "date_spec": {"anchor": "date", "day": 6, "month": 2, "year": 2027, "before": True},
     }  # fmt: skip
 
 
 def test_router_de_trong_chua_co_lo_trinh_thi_lap_hoi_hu_cua_muc_tieu(monkeypatch):
     events, tools, _ = _turn(monkeypatch, route_response(intent="roadmap", **GOAL), latest="error_not_found")
     (block,) = blocks_of(events)
-    # câu hỏi hũ nói lại số tiền và hạn mã đã hiểu (ngày tính từ đặc tả)
-    assert block["type"] == "clarify" and block["data"]["question"] == goal_jar_question(20_000_000, TET_EVE)
-    assert "20.000.000 ₫" in block["data"]["question"] and "05/02/2027" in block["data"]["question"]
+    # câu hỏi hũ nói lại số tiền và hạn mã đã hiểu (hạn trước mốc: nói "trước {mốc}")
+    assert block["type"] == "clarify" and block["data"]["question"] == goal_jar_question(20_000_000, TET_EVE, before=TET)
+    assert "20.000.000 ₫ trước 06/02/2027" in block["data"]["question"] and "05/02/2027" not in block["data"]["question"]
     assert not {tool for tool, _ in tools.calls} & WRITES
 
 
@@ -119,7 +122,7 @@ def test_bam_chip_lap_ban_moi_thi_lap_theo_muc_tieu_cua_cau_truoc(monkeypatch, r
     events, tools, _ = _turn(monkeypatch, routed, messages=_choice_messages(_chip("create")))
     # đi đường lập với mục tiêu của câu trước, không hỏi lại lập hay xem, không hỏi lại hạn; mục tiêu chưa có hũ nên hỏi hũ
     (block,) = blocks_of(events)
-    assert block["type"] == "clarify" and block["data"]["question"] == goal_jar_question(20_000_000, TET_EVE)
+    assert block["type"] == "clarify" and block["data"]["question"] == goal_jar_question(20_000_000, TET_EVE, before=TET)
     assert GOAL_DATE_QUESTION not in block["data"]["question"]
     assert not calls_of(tools, "get_roadmap") and not {tool for tool, _ in tools.calls} & WRITES
 
@@ -135,10 +138,10 @@ def test_bam_chip_xem_ban_dang_dung_thi_chi_xem(monkeypatch, routed):
     assert not {tool for tool, _ in tools.calls} & WRITES
     assert writer.calls[0]["compact"]["muc_tieu_nguoi_dung_hoi"] == {
         "so_tien_text": "20.000.000 ₫", "han_nguoi_dung_noi": "trước Tết",
-        # hạn đọc lại từ câu hỏi là đúng ngày đã tính (mốc date): chữ của người dùng vẫn ở han_nguoi_dung_noi
+        # hạn đọc lại từ câu hỏi là đặc tả trước mốc đã dùng (mốc date): cùng hạn, cùng mốc; chữ của người dùng ở han_nguoi_dung_noi
         "han": {
             "date_text": "05/02/2027", "day_month_text": "05/02", "weekday_text": "thứ Sáu", "days_from_today": 76,
-            "anchor": "date", "anchor_date_text": "05/02/2027", "before_anchor": False,
+            "anchor": "date", "anchor_date_text": "06/02/2027", "before_anchor": True,
         },
     }  # fmt: skip
 

@@ -112,6 +112,8 @@ Mỗi bước là MỘT hành động cụ thể người dùng tự làm đư�
 - context.allocation.goals là các mục tiêu của phương án: đích, hạn, có kịp hay không, mức cần mỗi tháng, ngày dự kiến tới
   đích. Mục tiêu có no_deadline là mục tiêu chưa có hạn: bộ tối ưu không đặt mức cần mỗi tháng cho nó (hũ chỉ nhận phần còn lại
   theo thứ tự ưu tiên), nên đừng viết là nó kịp hay trễ hạn; có thể đặt một bước nhắc người dùng chọn hạn.
+- user_goal (và context.user_goal) là mục tiêu người dùng nói trong câu. Khi có target_before_text, hạn target_date là ngày
+  liền trước mốc đó (người dùng nói "trước" mốc): nhắc hạn thì nói trước target_before_text, không nói trước target_date_text.
 - Phương án phân bổ trong dữ liệu đã tính theo mặc định (và theo mục tiêu người dùng nói, nếu có). Thường để trống
   horizon_months và goals; chỉ đặt khi thật sự cần một phương án khác (kỳ khác, hoặc ưu tiên một mục tiêu hơn mục tiêu
   khác bằng trọng số khác một). goals chỉ gồm hũ có kind saving và đã có goal_vnd. Khi sửa, trả lại danh sách giai
@@ -300,6 +302,9 @@ class UserGoal:
     jar: str
     target_vnd: int | None = None
     target_date: str | None = None
+    #: ngày ISO của mốc khi hạn là ngày liền trước mốc đó (`before` của đặc tả hạn, `yofina_core.dates.resolve_date`): câu nói hạn là
+    #: "trước {mốc}", không nói "trước {target_date}" (đọc ra sớm thêm một ngày). Không gửi cho tool; vắng thì hạn chính là target_date.
+    target_before_date: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1784,6 +1789,7 @@ async def build_roadmap(
                 else None,
                 "target_date": user_goal.target_date,
                 "target_date_text": _date_text(user_goal.target_date),
+                "target_before_text": _date_text(user_goal.target_before_date),
             }.items()
             if v is not None
         }
@@ -1852,6 +1858,7 @@ async def build_roadmap(
                 if user_goal.target_vnd is not None
                 else None,
                 "target_date": user_goal.target_date,
+                "target_before_text": _date_text(user_goal.target_before_date),
             }.items()
             if v is not None
         }

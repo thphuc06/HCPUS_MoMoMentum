@@ -87,7 +87,9 @@ TASKS: dict[str, str] = {
         "active là lộ trình đang dùng. reason_code behavior_changed là bản lập lại vì hệ thống đã xác nhận một hũ đổi mức chi (reason "
         "nêu mức mỗi tuần trước và sau). Phần chia của lộ trình tính từ mức chi nền của chính người dùng trong mấy tháng gần đây, không "
         "dồn theo riêng đợt chi mới: khi đó là chi tăng thì nói thật hũ đó đang chi cao hơn mức thường, và có thể hỏi người dùng đây "
-        "là đợt tạm hay nhịp chi mới. Không tự tính tổng và không đề xuất bước mới."
+        "là đợt tạm hay nhịp chi mới. muc_tieu_nguoi_dung_hoi (nếu có) là mục tiêu người dùng vừa hỏi, han là hạn hệ thống đã tính: "
+        "before_anchor true nghĩa là date_text là ngày liền trước mốc anchor_date_text, nên nói trước mốc đó (hoặc chậm nhất "
+        "date_text), không nói trước date_text. Không tự tính tổng và không đề xuất bước mới."
     ),
     "roadmap_step_edit": (
         "Người dùng muốn sửa một bước của lộ trình đang dùng; thẻ lộ trình đó đã hiện. Chat chưa sửa được bước nên chưa có gì "
