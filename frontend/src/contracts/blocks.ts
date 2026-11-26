@@ -266,7 +266,7 @@ export const ForecastEvent = z.object({
 })
 export type ForecastEvent = z.infer<typeof ForecastEvent>
 
-/** Các khoản đến hạn của hũ Nghĩa vụ trước kỳ lương, theo ngày rồi theo tên. Khoản thiếu đầu tiên tính từ số dư P50 của ngày đó. */
+/** Các khoản đến hạn của hũ Nghĩa vụ trước hoặc đúng ngày lương, theo ngày rồi theo tên. Khoản thiếu đầu tiên tính từ số dư P50 của ngày đó; khoản đến hạn đúng ngày lương trả bằng số dư trước khi lương về. */
 export const ForecastObligationWindow = z.object({
   items: z.array(ForecastEvent),
   first_shortfall: z.object({
