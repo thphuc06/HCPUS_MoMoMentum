@@ -85,8 +85,9 @@ Mọi số ML là trên **dữ liệu tổng hợp** do đội viết bộ sinh.
 |---|---|---|
 | Eval trên Runtime v25 (24/11) | Golden phase 3 31/31, phase 4 14/14; đối kháng 16/16, 12/12, 14/14; router diễn đạt lại 18/18; OCR ảnh thật 9/11 | [HANDOFF.md](HANDOFF.md) "Số đo mới nhất" |
 | Dự báo so với seasonal naive | Pinball 0,62 và 0,60 lần (hai họ bộ sinh, seed giữ ra ngoài) | [backtest-phase-2.md](docs/research/backtest-phase-2.md) |
-| Độ phủ dải 80% số dư 30 ngày | 0,80 ở hũ dày và hũ thưa (lịch sử đủ); hũ dày ở 120 ngày lịch sử sau CQR 0,798, mỗi đuôi khoảng 10%; % chỉ hiện từ 47 ngày (hũ dày) và 120 ngày (hũ thưa) | [backtest-final.md](docs/research/backtest-final.md) |
-| Phân hũ tự động | Đúng 92% trên dòng tự gán; 17,4% phải hỏi (mục tiêu dưới 10%) | [ba/13](docs/ba/13-tien-do-technical.md) |
+| Độ phủ dải 80% số dư 30 ngày | 0,80 ở hũ dày và hũ thưa (lịch sử đủ); hũ dày ở 120 ngày lịch sử sau CQR 0,798, mỗi đuôi khoảng 10%; % chỉ hiện từ 47 ngày (hũ dày) và 120 ngày (hũ thưa). Đo trên **ví nhiều hũ theo loại chi** (như ví demo). Ví 3 hũ: hũ gộp Chi hằng ngày phủ 0,865, rộng hơn mục tiêu | [backtest-final.md](docs/research/backtest-final.md), [đo ví 3 hũ](docs/research/2026-11-26-do-vi-ba-hu.md) |
+| Phân hũ tự động | Đúng 92% trên dòng tự gán; 17,4% phải hỏi (mục tiêu dưới 10%). Đo trên **ví nhiều hũ theo loại chi** (bộ 7 hũ, như ví demo). Ví 3 hũ, đo không có model: đúng 92,08%, phải hỏi 39,52%; có model chưa đo | [ba/13](docs/ba/13-tien-do-technical.md), [đo ví 3 hũ](docs/research/2026-11-26-do-vi-ba-hu.md) |
+| Phát hiện đổi hành vi (cảnh 4) | PELT xác nhận khi chi tuần tăng từ 2,04 lần mức cũ, trên hũ Ăn uống riêng của **ví nhiều hũ**. Trên chuỗi gộp của ví 3 hũ cần 2,27 lần | [cảnh 4](docs/research/2026-11-26-canh4-pelt.md), [đo ví 3 hũ](docs/research/2026-11-26-do-vi-ba-hu.md) |
 | Độ trễ what-if (23/11, 10 lượt) | Khối số liệu đầu p50 6,9 s / p95 18,2 s; trọn câu p50 16,7 s / p95 28,2 s (mục tiêu proposal 8 s: chưa đạt) | [phase 3](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) tiêu chí 9 |
 | Kiểm tra trước khi chi | REST p95 282 ms; qua chat p50 6,3 s | như trên |
 | Xác nhận trước khi ghi | 13 ca tấn công token (bịa, đổi tham số, dùng lại, của người khác, hết hạn) đều bị chặn | [ADR-0002](docs/decisions/0002-xac-nhan-truoc-khi-ghi.md) |
@@ -109,6 +110,9 @@ Danh sách từ kiểm toán 25/11 ([tổng hợp](docs/research/2026-11-25-audi
 - Lịch sử chat gửi từ trình duyệt không đi qua Guardrail; judge LLM của ca bộ nhớ chưa đối chiếu với nhãn người.
 - Trace chưa ghi model và token của từng bước; Lambda sinh lại lộ trình gần như không log khi chạy thành công.
 - Dải "sát" của kiểm tra trước khi chi gần như không xảy ra (hai ngưỡng bằng 0, chờ chốt nghiệp vụ C-02).
+- **Ví 3 hũ của tài khoản mới** (Chi hằng ngày, Nghĩa vụ, Dự phòng; từ 26/11) chưa có số đo đủ: các số phân loại, cổng hiện % và ngưỡng PELT ở bảng trên là của ví nhiều hũ theo loại chi. Phân loại có model trên ví 3 hũ chưa đo (không model thì phải hỏi 39,5%). Ví demo vẫn tách Ăn uống, Đi lại, Giải trí nên các khác biệt này không chạm số của các cảnh demo.
+- **Hũ gộp không tách hành vi theo loại chi**: dự báo, ngày cạn và phát hiện đổi hành vi tính trên cả hũ Chi hằng ngày. Trên chuỗi gộp, PELT cần mức tăng lớn hơn (2,27 so với 2,04 lần), và tệp sao kê cảnh 4 tải trễ một ngày thì không còn được xác nhận. Cách dùng: muốn theo dõi riêng một khoản thì tách thành hũ riêng. Gợi ý tách hũ khi hũ gộp có dấu hiệu tăng là việc sau hạn nộp.
+- Bộ kiểm khối lập luận (issue #7) nhận hũ theo tên hoặc mã có trong câu, không biết câu đó khen hay chê hũ, nên đôi khi bỏ một bước đúng (trên app: 1 trong 4 bước của một lượt, khối vẫn đủ ý). Không thêm trường hũ có cấu trúc vào bước lập luận trước hạn nộp.
 - Chưa làm: cảnh báo khoản chuyển lệch thói quen (FR14), sao kê PDF, đánh giá online bằng AgentCore Evaluations. Đã cắt có lý do: RAG, Chronos-2, WAF, batch tuần ([ADR-0004](docs/decisions/0004-lech-so-voi-proposal.md)).
 
 ## Tài sản có sẵn
