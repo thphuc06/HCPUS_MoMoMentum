@@ -8,7 +8,6 @@ from typing import get_args
 import pytest
 from agent_helpers import (
     JARS_READ,
-    JARS_READ_TOOL,
     REPO,
     FakeRecords,
     FakeTools,
@@ -88,9 +87,9 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
     )
     assert blocks_of(events)[0] == expected
     assert tools.calls == [JARS_READ, (tool, args)]
-    assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == [JARS_READ_TOOL, f"{target}___{tool}"]
+    # lần đọc ví trước router chỉ để dựng danh sách hũ cho router: im lặng, không thẻ tool trên UI (lượt này không dùng tới ví)
     t = types(events)
-    # khối đứng trước TOOL_CALL_RESULT của tool sinh ra nó (lần gọi cuối; lần đầu là đọc ví đầu lượt)
+    # khối đứng trước TOOL_CALL_RESULT của tool sinh ra nó
     assert t.index("ACTIVITY_SNAPSHOT") < max(i for i, x in enumerate(t) if x == "TOOL_CALL_RESULT")
 
     compact = json.loads([e.content for e in events if e.type.value == "TOOL_CALL_RESULT"][-1])

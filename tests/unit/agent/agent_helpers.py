@@ -211,7 +211,11 @@ def agent_settings(**over: Any) -> AgentSettings:
 
 
 def run_input(
-    text: str | None = "xin chào", *, messages: list[dict[str, Any]] | None = None, **extra: Any
+    text: str | None = "xin chào",
+    *,
+    messages: list[dict[str, Any]] | None = None,
+    context: list[dict[str, str]] | None = None,
+    **extra: Any,
 ) -> RunAgentInput:
     msgs = (
         messages
@@ -225,7 +229,7 @@ def run_input(
             "state": {},
             "messages": msgs,
             "tools": [],
-            "context": [],
+            "context": context or [],
             "forwardedProps": extra.get("forwarded_props", {}),
         }
     )
@@ -273,6 +277,7 @@ def run_turn(
     store: Any = None,
     guardrail: Any = None,
     records: Any = None,
+    context: list[dict[str, str]] | None = None,
 ) -> tuple[list[Any], FakeTools, FakeWriter]:
     tools = tools or FakeTools()
     writer = writer or FakeWriter()
@@ -289,7 +294,7 @@ def run_turn(
     )
     turn = Turn(
         deps,
-        run_input(text, messages=messages),
+        run_input(text, messages=messages, context=context),
         Identity("user-a", make_jwt("user-a")),
         trace_id="8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
         conversation_id="session-1",

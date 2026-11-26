@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { WALLET_CONTEXT } from '@/chat/walletContext'
 import type { Config } from '@/lib/config'
 import { bodyOf, config, isWarmup, json, mountApp, restDefault, runCalls } from '@/test/mountApp'
 import { restFixture, validBlock } from '@/test/fixtures'
@@ -203,6 +204,27 @@ describe('Chat trong ứng dụng', () => {
     await user.click(within(alert).getByRole('button', { name: 'Thử lại' }))
     expect(await within(sheet).findByText('Đây rồi.')).toBeInTheDocument()
     expect(within(sheet).queryByRole('alert')).toBeNull()
+  })
+
+  it('lượt chat gửi kèm danh sách hũ của Tổng quan trong context (agent không phải đọc ví trước router, #39)', async () => {
+    const { calls } = mountApp((url, init) => {
+      if (url === config.agentUrl && JSON.parse(String(init.body)).forwardedProps?.warmup) return sseResponse([runStarted(), runFinished()])
+      if (url === config.agentUrl) return sseResponse([runStarted(), ...textMessage('m1', 'Chào bạn.'), runFinished()])
+      return restDefault(url)
+    })
+    const user = userEvent.setup()
+    await screen.findByTestId('balance-total')
+    await user.click(screen.getByRole('button', { name: /Hỏi Yofina/ }))
+    const sheet = await screen.findByTestId('chat-sheet')
+    await user.type(within(sheet).getByLabelText('Tin nhắn'), 'xin chào')
+    await user.click(within(sheet).getByRole('button', { name: 'Gửi' }))
+    expect(await within(sheet).findByText('Chào bạn.')).toBeInTheDocument()
+    const context = bodyOf(runCalls(calls)[0]!).context as Array<{ description: string; value: string }>
+    const wallet = context.find((c) => c.description === WALLET_CONTEXT)
+    const overview = restFixture('OverviewResponse.minh') as { app_date: string; jars: Array<{ code: string }> }
+    const value = JSON.parse(wallet!.value) as { app_date: string; jars: Array<{ code: string }> }
+    expect(value.app_date).toBe(overview.app_date)
+    expect(value.jars.map((j) => j.code)).toEqual(overview.jars.map((j) => j.code))
   })
 })
 

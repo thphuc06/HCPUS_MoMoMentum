@@ -8,7 +8,6 @@ import json
 import pytest
 from agent_helpers import (
     JARS_READ,
-    JARS_READ_TOOL,
     REPO,
     FakeTools,
     blocks_of,
@@ -47,10 +46,7 @@ def test_hoi_chung_ra_khoi_nhan_xet_quan_trong_nhat(monkeypatch):
     )
     check_agui_order(events)
     assert tools.calls == [JARS_READ, ("get_behavior_profile", {})]
-    assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == [
-        JARS_READ_TOOL,
-        "forecast___get_behavior_profile",
-    ]
+    assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == ["forecast___get_behavior_profile"]
     (block,) = blocks_of(events)
     expected = json.loads(
         (REPO / "contracts/fixtures/blocks/valid/behavior_insight.chi_don_sau_luong.json").read_text(encoding="utf-8")

@@ -46,8 +46,8 @@ def tool_names(events):
 
 # --- đường nhanh số dư -----------------------------------------------------------------------
 def test_so_du_dung_lan_doc_vi_dau_luot_khoi_truoc_cau_tra_loi(monkeypatch):
-    """Tra số dư dùng lại lần đọc ví ở đầu lượt (danh sách hũ cho router, #39): một tool call; thẻ số dư dựng từ kết quả đó nên đi sau
-    TOOL_CALL_RESULT của lần đọc, và trước chữ."""
+    """Tra số dư dùng lại lần đọc ví ở đầu lượt (danh sách hũ cho router, #39): một tool call. Lần đọc đó im lặng tới khi lượt dùng kết
+    quả (task 7): khi đó mới phát thẻ tool, và thẻ số dư đứng trước TOOL_CALL_RESULT như mọi tool có khối, trước chữ."""
     llm = make_llm([route_response(intent="balance_lookup")])
     events, tools, writer = run_turn(
         "hỏi gì cũng được",
@@ -61,8 +61,8 @@ def test_so_du_dung_lan_doc_vi_dau_luot_khoi_truoc_cau_tra_loi(monkeypatch):
         "RUN_STARTED",
         "TOOL_CALL_START",
         "TOOL_CALL_END",  # tool không tham số: không có TOOL_CALL_ARGS
-        "TOOL_CALL_RESULT",
         "ACTIVITY_SNAPSHOT",
+        "TOOL_CALL_RESULT",
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_CONTENT",

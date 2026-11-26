@@ -8,7 +8,6 @@ import re
 
 from agent_helpers import (
     JARS_READ,
-    JARS_READ_TOOL,
     FakeTools,
     blocks_of,
     check_agui_order,
@@ -56,10 +55,7 @@ def test_phi_dich_vu_moi_thang_co_so_tu_bang_va_trich_dan_dung_nguon(monkeypatch
         "Phí dịch vụ Trả sau mỗi tháng là bao nhiêu, nguồn ở đâu?", payload, monkeypatch=monkeypatch, topic="monthly"
     )
     check_agui_order(events)
-    assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == [
-        JARS_READ_TOOL,
-        "knowledge___get_fee_schedule",
-    ]
+    assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == ["knowledge___get_fee_schedule"]
     assert tools.calls == [JARS_READ, ("get_fee_schedule", {})]
     (cit,) = citations(events)
     B.CitationBlock.model_validate(cit)

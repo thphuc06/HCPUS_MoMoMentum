@@ -12,7 +12,9 @@ Agent Strands chạy trên AgentCore Runtime (giao thức AG-UI qua SSE). Phase 
 ```
 POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id từ traceparent, conversation_id = session id
    RUN_STARTED (đi ngay, trước khi nạp cấu hình)
-   turn.py ──> router.py (vai `small`, JSON bằng ép tool, tối đa router_max_attempts lần)
+   turn.py ──> danh sách hũ cho router: mục `yofina.wallet` trong `context` của lượt (frontend gửi), hợp lệ thì không đọc ví;
+               không có thì get_jar_balances IM LẶNG (chưa phát TOOL_CALL_*), phát khi phần sau của lượt dùng kết quả
+       ──> router.py (vai `small`, JSON bằng ép tool, tối đa router_max_attempts lần)
         └ lỗi/chạm trần ──> fallback.py (luật tối thiểu; suy giảm có kiểm soát)
       balance_lookup      get_jar_balances ──ACTIVITY_SNAPSHOT(jar_summary)──> TOOL_CALL_RESULT(bản gọn) ──> writer.py (1 câu)
       transactions_lookup get_jar_balances (ánh xạ tên hũ) + query_transactions ──> writer.py
@@ -40,6 +42,16 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
 
 `yofina_core.llm` (libs): mọi lời gọi Bedrock đi qua `LlmGateway`: chuỗi dự phòng theo vai (bắt `ThrottlingException` và `AccessDeniedException`), giới hạn tốc độ mỗi model (cửa sổ 60 giây), trần ngày đếm nguyên tử ở DynamoDB `yofina-usage` (chạm trần: `ModelBudgetExceeded`, không rơi sang model dự phòng), trần mỗi lượt hội thoại, log token. Cấu hình ở `libs/yofina_core/src/yofina_core/llm_defaults.json`.
 
+## Danh sách hũ cho router (`context` của lượt, #39)
+
+Router chọn hũ chi theo danh sách hũ của ví (`<hu_cua_vi>`) và đổi hạn mục tiêu ra ngày theo ngày mô phỏng (`<ngay_hom_nay>`). Frontend gửi hai thứ đó trong `context` của `RunAgentInput` (trường sẵn có của AG-UI), một mục tùy chọn:
+
+```
+{"description": "yofina.wallet", "value": "{\"app_date\": \"2026-11-21\", \"jars\": [{\"code\": \"an_uong\", \"name\": \"Ăn uống\", \"kind\": \"spending\"}, ...]}"}
+```
+
+`jars`: hũ người dùng từ `GET /overview` (mã, tên, `kind`, `purpose` nếu có; không số dư, không hũ hệ thống), tối đa 20; frontend không gửi khi dữ liệu đang tải hay đang tải lại sau một lần ghi. Agent kiểm chặt (`router.wallet_context`), sai một chỗ là bỏ cả mục và đọc ví như cũ. Danh sách này chỉ vào prompt router, đánh dấu là dữ liệu; mọi tính toán sau đó (hũ trả, số dư, kịch bản, lộ trình) đọc ví bằng tool phía server, mã hũ router chọn phải có trong lần đọc đó. Thứ tự deploy: đổi được theo thứ tự nào cũng chạy (Runtime cũ bỏ qua `context`; frontend cũ không gửi thì Runtime mới đọc ví im lặng), nên deploy frontend và Runtime cùng đợt.
+
 ## Ý định `forecast_lookup` (phase 2)
 
 "Hũ ăn uống còn trụ được bao lâu", "khi nào hũ giải trí cạn": router (model nhỏ, JSON ép tool) trả `forecast_lookup` kèm `jar_text`; `turn.on_forecast` ánh xạ tên hũ bằng danh sách hũ của chính người dùng (`get_jar_balances`, không bảng gắn cứng), gọi `forecast___get_forecast {jar}` qua Gateway (target `forecast`, tên tool lấy tiền tố từ `forecast_tool_prefix`), bọc `data` của tool thành khối `forecast_timeline` bằng `yofina_core.blocks.build_forecast_timeline_from_data` (số của tool, không tính lại: cùng số với `GET /forecasts/{jar}`) rồi để model nhỏ viết 1 đến 2 câu từ bản gọn; số tiền trong câu phải có trong bản gọn (bộ kiểm số sẵn có `check_grounding`; ngày `dd/mm` và số ngày do bản gọn cho sẵn). Không nêu hũ nào thì hỏi lại (hiện thẻ số dư thật); hũ không có thì hỏi lại kèm danh sách hũ. Router lỗi hoặc chạm trần thì bộ phân loại dự phòng vẫn nhận ra ý định bằng từ khóa chung, tên hũ vẫn ánh xạ bằng dữ liệu tool, và người dùng vẫn nhận khối `forecast_timeline` thật kèm khối `notice` suy giảm. Lỗi của tool (`FORECAST_UNAVAILABLE`, `PROFILE_INCOMPLETE`...) thành khối `notice` với tiêu đề theo mã. Một lượt tốn tối đa 2 lượt gọi model (router và viết câu) và 2 tool call.
@@ -47,6 +59,7 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
 ## Hợp đồng đầu ra
 
 - Khối UI phát bằng `ACTIVITY_SNAPSHOT` (`activityType: "yofina.block"`, `messageId` = `block.id`, `replace: true`) **trước** `TOOL_CALL_RESULT` của tool sinh ra nó; `TOOL_CALL_RESULT` chỉ mang bản gọn.
+- Lần đọc ví chỉ để dựng danh sách hũ cho router (khi lượt không có mục `yofina.wallet`) là một tool call thật (đếm trần, bản ghi lượt) nhưng **im lặng**: `TOOL_CALL_START/ARGS/END/RESULT` của nó giữ lại, chỉ phát khi phần sau của lượt dùng kết quả (tra số dư, ánh xạ tên hũ, suy hũ trả, lập lộ trình...), và khối số dư khi đó vẫn đứng trước `TOOL_CALL_RESULT`. Lượt xã giao, ngoài phạm vi, phí, tỷ giá, thói quen, nạp, điểm không có thẻ tool "Số dư các hũ".
 - Agent không bao giờ điền cờ xác nhận hay token; khối `confirm` chứa đúng dữ liệu tool trả (đã kiểm `params_hash` bằng `build_confirm`). Đường ghi thật do frontend gọi REST.
 - Chạm giới hạn, model lỗi hay `ModelBudgetExceeded`: vẫn trả khối số liệu từ tool + khối `notice` (`kind: degraded`), kết thúc `RUN_FINISHED`; lỗi giữa lượt thành `notice` + `RUN_FINISHED`. `RUN_ERROR` chỉ xuất hiện khi lỗi xảy ra trước khi lượt dựng xong.
 - `RUN_FINISHED.result`: `trace_id`, `intent`, `degraded`, `model_calls`, `tool_calls`; `usage`: token theo model.

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useOptionalOverview } from '@/api/OverviewProvider'
 import { useAuth } from '@/auth/AuthProvider'
 import { newConversationId } from '@/lib/ids'
 import { ChatActionsContext, type ChatActions } from './actions'
@@ -9,6 +10,7 @@ import {
   type ConversationRepository,
 } from './repository'
 import { ChatSession, type ChatSnapshot } from './session'
+import { walletContext, type AgentContext } from './walletContext'
 
 export type ChatContextValue = {
   snapshot: ChatSnapshot
@@ -39,6 +41,14 @@ export type ChatProviderProps = {
 export function ChatProvider({ agentUrl, repository, fetchImpl, warmupEnabled = true, undoWindowMs = 30_000, children }: ChatProviderProps) {
   const { session: auth, getAccessToken } = useAuth()
   const userKey = auth?.email ?? 'anonymous'
+  // Danh sách hũ của ví từ GET /overview (đã tải cho các màn hình) gửi kèm mỗi lượt chat: đọc lúc gửi qua ref, phiên chat không tạo lại.
+  const overview = useOptionalOverview()
+  const overviewRef = useRef(overview)
+  overviewRef.current = overview
+  const getContext = useCallback((): AgentContext[] => {
+    const wallet = walletContext(overviewRef.current)
+    return wallet ? [wallet] : []
+  }, [])
 
   // Một ChatSession cho mỗi người dùng; id hội thoại (cũng là session id của Runtime) nhớ ở trình duyệt, khối thì không.
   const session = useMemo(() => {
@@ -47,8 +57,8 @@ export function ChatProvider({ agentUrl, repository, fetchImpl, warmupEnabled = 
       id = newConversationId()
       saveConversationId(userKey, id)
     }
-    return new ChatSession({ agentUrl, conversationId: id, getAccessToken, fetchImpl })
-  }, [agentUrl, userKey, getAccessToken, fetchImpl])
+    return new ChatSession({ agentUrl, conversationId: id, getAccessToken, fetchImpl, getContext })
+  }, [agentUrl, userKey, getAccessToken, fetchImpl, getContext])
 
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot)
   const [hydrating, setHydrating] = useState(true)

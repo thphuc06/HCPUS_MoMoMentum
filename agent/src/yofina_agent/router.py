@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date
 from functools import cache
 from typing import Any
@@ -174,6 +176,55 @@ def router_jar_list(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
                 item[key] = value
         out.append(item)
     return out
+
+
+#: `description` của mục `context` AG-UI frontend gửi kèm mỗi lượt chat: danh sách hũ của ví (từ REST) và ngày mô phỏng, để router chọn
+#: hũ chi mà không phải đọc ví trước router (task 7, #39). Trường tùy chọn: thiếu hoặc sai thì agent đọc ví như trước.
+WALLET_CONTEXT = "yofina.wallet"
+_WALLET_MAX_JARS = 20  # bằng `maxItems` của `jars` trong hợp đồng ví
+_WALLET_MAX_CHARS = 8000
+_JAR_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+_JAR_KINDS = frozenset({"spending", "saving", "obligation", "system"})
+_JAR_PURPOSES = frozenset({"buffer", "sinking", "goal", "long_term"})
+
+
+@dataclass(frozen=True)
+class WalletContext:
+    """Danh sách hũ (đã lọc như `router_jar_list`) và ngày mô phỏng frontend gửi. Chỉ để dựng prompt router: là dữ liệu, không phải chỉ
+    dẫn, và không có số tiền nào; mọi tính toán sau đó vẫn đọc ví bằng tool phía server."""
+
+    jars: tuple[dict[str, str], ...]
+    app_date: date
+
+
+def wallet_context(entries: Sequence[Any] | None) -> WalletContext | None:
+    """Mục `WALLET_CONTEXT` trong `context` của lượt, kiểm chặt: JSON `{"app_date": "YYYY-MM-DD", "jars": [{code, name, kind, purpose?}]}`,
+    tối đa 20 hũ, mã hũ, tên (1 đến 40 ký tự), kind và purpose theo hợp đồng ví. Một chỗ sai là bỏ cả mục (None: agent tự đọc ví), không
+    dùng một danh sách thiếu hũ."""
+    entry = next((e for e in entries or () if getattr(e, "description", None) == WALLET_CONTEXT), None)
+    value = getattr(entry, "value", None)
+    if not isinstance(value, str) or len(value) > _WALLET_MAX_CHARS:
+        return None
+    try:
+        data = json.loads(value)
+        day = date.fromisoformat(data["app_date"])
+        rows = data["jars"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(rows, list) or not 0 < len(rows) <= _WALLET_MAX_JARS:
+        return None
+    for row in rows:
+        if not isinstance(row, dict) or set(row) - {"code", "name", "kind", "purpose"}:
+            return None
+        code, name, kind, purpose = row.get("code"), row.get("name"), row.get("kind"), row.get("purpose")
+        if not (isinstance(code, str) and _JAR_CODE_RE.match(code)):
+            return None
+        if not (isinstance(name, str) and name.strip() and len(name) <= 40):
+            return None
+        if kind not in _JAR_KINDS or (purpose is not None and purpose not in _JAR_PURPOSES):
+            return None
+    jars = router_jar_list(rows)
+    return WalletContext(tuple(jars), day) if jars else None
 
 
 def _jar_line(jar: Mapping[str, str]) -> str:

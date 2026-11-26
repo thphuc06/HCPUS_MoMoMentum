@@ -14,7 +14,6 @@ from typing import Any
 import pytest
 from agent_helpers import (
     JARS_READ,
-    JARS_READ_TOOL,
     FakeRecords,
     FakeTools,
     FakeWriter,
@@ -123,7 +122,7 @@ def test_quy_doi_so_tien_ngoai_te_cau_tra_loi_tu_ket_qua_tool_va_qua_kiem_can_cu
         records=records,
     )
     check_agui_order(events)
-    assert started(events) == [JARS_READ_TOOL, "knowledge___get_exchange_rate"]
+    assert started(events) == ["knowledge___get_exchange_rate"]  # lần đọc ví cho router im lặng
     assert tools.calls == [JARS_READ, ("get_exchange_rate", {"currency": "USD", "amount": 111.11})]
     text = text_of(events)
     # 111,11 × 25.790 = 2.865.526,9 -> 2.865.527 ₫ (làm tròn tới đồng ở Lambda, không ở agent)

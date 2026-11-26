@@ -10,7 +10,6 @@ import json
 import pytest
 from agent_helpers import (
     JARS_READ,
-    JARS_READ_TOOL,
     FakeTools,
     blocks_of,
     check_agui_order,
@@ -60,7 +59,7 @@ def test_vua_nap_anh_tra_trang_thai_va_bang_duyet(monkeypatch):
         monkeypatch=monkeypatch,
     )
     check_agui_order(events)
-    assert tool_names(events) == [JARS_READ_TOOL, "ingest___get_job_status"]
+    assert tool_names(events) == ["ingest___get_job_status"]  # lần đọc ví cho router im lặng
     assert tools.calls == [JARS_READ, ("get_job_status", {})]  # lần nạp gần nhất, không truyền user_id
     (block,) = blocks_of(events)
     B.IngestReviewBlock.model_validate(block)
@@ -171,7 +170,7 @@ def test_hoi_cach_nap_goi_start_job_khong_tao_job(monkeypatch):
         action="how_to",
     )
     check_agui_order(events)
-    assert tools.calls == [JARS_READ, ("start_job", {})] and tool_names(events) == [JARS_READ_TOOL, "ingest___start_job"]
+    assert tools.calls == [JARS_READ, ("start_job", {})] and tool_names(events) == ["ingest___start_job"]
     text = text_of(events)
     assert "PNG, JPEG, WebP, tối đa 3,75 MB" in text and "CSV, tối đa 2 MB" in text
     assert (
@@ -205,9 +204,9 @@ def test_khong_con_giao_dich_noi_ly_do_con_ngan_khong_bao_la_khong_phai_bien_lai
     assert "không có giao dịch nào để thêm" in text and "chuyển giữa các tài khoản của chính bạn" in text
     assert "không giống biên lai" not in text and "không thành công" not in text
     assert writer.calls == []  # câu dựng bằng mã
-    # bản gọn của TOOL_CALL_RESULT mang mã và lý do con, không mang thông điệp tự do
-    jars_res, res = results(events)
-    assert "jars" in jars_res  # lần đọc ví đầu lượt
+    # bản gọn của TOOL_CALL_RESULT mang mã và lý do con, không mang thông điệp tự do (lần đọc ví cho router im lặng: không có kết quả nào
+    # của nó trên luồng)
+    (res,) = results(events)
     assert (res["error_code"], res["error_reason"]) == ("INGEST_NO_TRANSACTIONS", "own_account_transfer")
 
 

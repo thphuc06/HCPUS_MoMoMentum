@@ -5,6 +5,7 @@ import { blockSchemas } from '@/contracts/blocks'
 import { chatErrorForCode, chatErrorForHttp, CHAT_MESSAGES, type ChatNoticeSpec } from './errors'
 import { receiptNote } from './receiptNote'
 import type { Resolution, StoredTurnInput } from './repository'
+import type { AgentContext } from './walletContext'
 
 /** Khóa activityType của khối UI trong ACTIVITY_SNAPSHOT (hợp đồng với agent). */
 export const BLOCK_ACTIVITY_TYPE = 'yofina.block'
@@ -54,6 +55,11 @@ export type ChatDeps = {
   fetchImpl?: typeof fetch
   /** Gọi sau mỗi lượt kết thúc (tùy chọn). */
   onTurnEnd?: () => void
+  /**
+   * Các mục `context` AG-UI gửi kèm mỗi lượt chat (tùy chọn), đọc lúc gửi: danh sách hũ của ví từ REST (`walletContext`) để agent không
+   * phải đọc ví trước router. Không có thì gửi `context` rỗng như trước.
+   */
+  getContext?: () => readonly AgentContext[]
 }
 
 type AgentEvent = { type: string } & Record<string, unknown>
@@ -478,7 +484,8 @@ export class ChatSession {
     }
 
     try {
-      await agent.runAgent({}, subscriber)
+      const context = [...(this.deps.getContext?.() ?? [])]
+      await agent.runAgent(context.length > 0 ? { context } : {}, subscriber)
     } catch (err) {
       if (this.aborted) {
         this.finishOpenItems()

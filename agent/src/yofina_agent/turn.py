@@ -7,8 +7,9 @@ Strands vẫn được dùng cho `MCPClient` (tool), `Agent` viết câu trả l
 Luồng (mã điều khiển, không để LLM quyết định thứ tự):
 
     RUN_STARTED
-      -> L0: che PII (yofina_core.pii) -> đọc ví một lần (get_jar_balances, dùng lại cho cả lượt) -> router (model nhỏ, ép tool, nhận
-         danh sách hũ của ví để chọn hũ chi) song song với Guardrail đầu vào
+      -> L0: che PII (yofina_core.pii) -> danh sách hũ cho router: mục `yofina.wallet` frontend gửi trong `context` của lượt, không có
+         thì đọc ví một lần IM LẶNG (get_jar_balances, dùng lại cho cả lượt; thẻ tool phát khi lượt dùng kết quả) -> router (model nhỏ,
+         ép tool, nhận danh sách hũ của ví để chọn hũ chi và ngày mô phỏng để đổi hạn ra ngày) song song với Guardrail đầu vào
          (router lỗi: bộ phân loại dự phòng bằng luật; Guardrail chặn: coi như ngoài phạm vi)
       -> số tiền bằng ngoại tệ: knowledge___get_exchange_rate đổi sang VND (amount_vnd lấy từ kết quả tool; fx_chat.py)
       -> thiếu ô bắt buộc (số tiền, cách trả, hũ): khối `clarify` đúng một câu, kết thúc lượt (lượt sau router ghép với câu trước)
@@ -87,6 +88,7 @@ from yofina_agent.router import (
     route,
     routed_summary,
     router_jar_list,
+    wallet_context,
 )
 from yofina_agent.schemas import (
     ROUTER_TX_TYPES,
@@ -201,6 +203,8 @@ class CallResult:
     outcome: ToolOutcome
     compact: dict[str, Any] | None
     blocks: list[Any] = field(default_factory=list)
+    #: lần gọi im lặng (`call_tool(quiet=True)`): các event TOOL_CALL_* chưa phát, phát khi phần sau của lượt dùng kết quả
+    deferred: list[BaseEvent] | None = None
 
     @property
     def block(self) -> Any:
@@ -241,6 +245,7 @@ class Turn:
         self._jars: CallResult | None = None
         self._jar_rows: list[dict[str, Any]] = []
         self._router_jar_list: list[dict[str, str]] = []  # danh sách hũ đã đưa router ở lượt này (mã, tên, kind, purpose)
+        self._client_app_date: date | None = None  # ngày mô phỏng frontend gửi kèm danh sách hũ (chỉ để router đổi hạn ra ngày)
         # hũ trả mã suy từ loại chi khi người dùng không nêu hũ (lượt chỉ đọc), hũ ứng viên ngang nhau khi chưa rõ (chip đứng đầu)
         self.inferred_jar: InferredJar | None = None
         self._jar_candidates: tuple[str, ...] = ()
@@ -318,6 +323,7 @@ class Turn:
         rows = list(self._jar_rows)
         if compact is not None and isinstance(compact.get("jars"), list):
             rows += [j for j in compact["jars"] if isinstance(j, Mapping)]
+        rows += self._router_jar_list  # danh sách hũ frontend gửi (chỉ tên, để đánh dấu sở thích nói về hũ nào)
         names = [str(j["name"]) for j in rows if isinstance(j.get("name"), str) and j["name"]]
         return list(dict.fromkeys(names)) or None
 
@@ -505,18 +511,23 @@ class Turn:
         block: Callable[[ToolOutcome, str], Any] | None = None,
         target: str = "ledger",
         emit: bool = True,
+        quiet: bool = False,
     ) -> CallResult:
         """TOOL_CALL_START/ARGS/END -> gọi Gateway -> [ACTIVITY_SNAPSHOT khối] -> TOOL_CALL_RESULT bản gọn.
 
         Khối UI phát **trước** `TOOL_CALL_RESULT`; model chỉ thấy bản gọn. `block` trả một khối hoặc danh sách khối. `emit=False`: dựng khối
-        nhưng chưa phát (người gọi tự phát, ví dụ khối xác nhận đi sau khối `options`).
+        nhưng chưa phát (người gọi tự phát, ví dụ khối xác nhận đi sau khối `options`). `quiet=True`: lần gọi vẫn là một tool call thật
+        (đếm trần, bản ghi lượt) nhưng các event TOOL_CALL_* (thẻ tool trên UI) chưa phát mà giữ ở `CallResult.deferred`, phát khi phần
+        sau của lượt dùng kết quả (`announce`); khối không phát.
         """
         name = self.s.tool(short_name, target=target)
         tcid = ev.new_id("tc-")
-        self.emit(ev.tool_call_start(tcid, name))
+        deferred: list[BaseEvent] | None = [] if quiet else None
+        out = deferred.append if deferred is not None else self.emit
+        out(ev.tool_call_start(tcid, name))
         if args:
-            self.emit(ev.tool_call_args(tcid, args))
-        self.emit(ev.tool_call_end(tcid))
+            out(ev.tool_call_args(tcid, args))
+        out(ev.tool_call_end(tcid))
 
         self.tool_calls += 1
         # một bước của bản ghi lượt cho MỖI lần gọi (giữ chỗ lúc bắt đầu, nên lượt song song vẫn theo thứ tự gọi); chỉ tên, thời lượng,
@@ -546,7 +557,8 @@ class Turn:
                         "code": ErrorCode.INTERNAL_ERROR.value,
                         "message": notices.GENERIC_ERROR_MESSAGE,
                     }
-                    self.emit(ev.tool_call_result(tcid, interrupted))
+                    if deferred is None:  # lần gọi im lặng bị ngắt: chưa phát gì nên không có gì để đóng
+                        self.emit(ev.tool_call_result(tcid, interrupted))
 
         built: list[Any] = []
         compact_view: dict[str, Any] | None = None
@@ -574,7 +586,7 @@ class Turn:
         self.tool_log.append(outcome)
         if compact_view is not None:
             self.compacts[short_name] = compact_view
-        if emit:
+        if emit and deferred is None:
             for b in built:
                 self.emit_block(b)
         if outcome.ok:
@@ -583,8 +595,8 @@ class Turn:
             )
         else:
             result_view = {"status": "ERROR", "code": outcome.code, "message": outcome.message}
-        self.emit(ev.tool_call_result(tcid, result_view))
-        return CallResult(outcome, compact_view, built)
+        out(ev.tool_call_result(tcid, result_view))
+        return CallResult(outcome, compact_view, built, deferred)
 
     async def call_tool_retry(
         self, short_name: str, args: dict[str, Any], *, retry: bool = True, **kw: Any
@@ -604,26 +616,56 @@ class Turn:
             res = await self.call_tool(short_name, args, **kw)
         return res
 
-    async def ensure_jars(self) -> CallResult:
-        """Danh sách hũ của chính người dùng (để ánh xạ tên hũ và lấy ngày mô phỏng); gọi một lần mỗi lượt. Lượt có router đọc ở đầu
-        lượt (`router_jars`), mọi bước sau dùng lại kết quả này."""
+    async def ensure_jars(self, *, quiet: bool = False) -> CallResult:
+        """Danh sách hũ của chính người dùng (để ánh xạ tên hũ và lấy ngày mô phỏng); gọi một lần mỗi lượt, mọi bước sau dùng lại.
+
+        `quiet=True`: chưa đọc thì đọc im lặng (chưa có thẻ tool, `call_tool(quiet=True)`); đã đọc im lặng thì chưa phát. Mặc định là
+        phần của lượt DÙNG kết quả: lần đọc im lặng trước đó (lần đọc chỉ để dựng danh sách cho router) giờ mới phát thẻ tool."""
         if self._jars is None:
             self._jars = await self.call_tool_retry(
-                "get_jar_balances", {}, compact=lambda o: compact_jars(o.payload or {}), block=None
+                "get_jar_balances", {}, compact=lambda o: compact_jars(o.payload or {}), block=None, quiet=quiet
             )
             if self._jars.outcome.ok:
                 self._jar_rows = _jar_rows(self._jars.outcome.payload or {})
+        if not quiet:
+            self.announce_jars()
         return self._jars
 
+    def announce_jars(self, before_result: Sequence[Any] = ()) -> None:
+        """Phát thẻ tool của lần đọc ví im lặng (nếu còn giữ) và các khối `before_result` trước `TOOL_CALL_RESULT` của nó (quy tắc khối
+        UI trước kết quả); lần đọc đã phát rồi thì chỉ phát các khối. Một lần."""
+        held = self._jars.deferred if self._jars is not None else None
+        if not held:
+            for b in before_result:
+                self.emit_block(b)
+            return
+        assert self._jars is not None
+        self._jars.deferred = None
+        *calls, result = held
+        for e in calls:
+            self.emit(e)
+        for b in before_result:
+            self.emit_block(b)
+        self.emit(result)
+
     async def router_jars(self) -> list[dict[str, str]] | None:
-        """Danh sách hũ người dùng đưa router chọn hũ chi (`router.router_jar_list`): lần đọc ví của lượt, đặt NGAY trước router. Đây là
-        lần đọc mà phần sau của lượt dùng lại (`ensure_jars`), không đọc hai lần; phiên MCP đã mở song song từ trước (`prewarm`). Đọc lỗi
-        thì None: router chạy không có danh sách (để trống hũ chi), lỗi được báo ở bước cần hũ như trước."""
+        """Danh sách hũ người dùng đưa router chọn hũ chi (`router.router_jar_list`), đặt NGAY trước router.
+
+        Frontend gửi danh sách hũ (mã, tên, kind, purpose; từ REST) trong `context` của lượt (`router.wallet_context`) thì dùng luôn,
+        không đọc ví trước router (task 7, #39): danh sách đó chỉ để router chọn hũ chi, mọi tính toán sau vẫn dùng tool phía server. Không
+        có (frontend cũ, dữ liệu đang tải lại) thì đọc ví một lần im lặng (không thẻ tool lên UI) và phần sau của lượt dùng lại lần đọc đó
+        (`ensure_jars`; thẻ tool phát khi đó). Đọc lỗi thì None: router chạy không có danh sách (để trống hũ chi), lỗi được báo ở bước cần
+        hũ như trước."""
+        client = wallet_context(self.run_input.context)
+        if client is not None:
+            self._client_app_date = client.app_date
+            log.info(json.dumps({"event": "router_jars", "source": "client", "jars": len(client.jars)}))
+            return list(client.jars)
         try:
-            jars = await self.ensure_jars()
+            jars = await self.ensure_jars(quiet=True)
         except Exception as exc:
-            # Lỗi bất ngờ giữa lần gọi (không phải kết quả lỗi của tool, `call_tool` đã đóng tool call): router vẫn chạy, không danh sách;
-            # nhớ lỗi như một kết quả lỗi của tool để bước cần hũ báo lỗi đúng chỗ, không đọc lại.
+            # Lỗi bất ngờ giữa lần gọi (không phải kết quả lỗi của tool): router vẫn chạy, không danh sách; nhớ lỗi như một kết quả lỗi
+            # của tool để bước cần hũ báo lỗi đúng chỗ, không đọc lại.
             log.warning(json.dumps({"event": "router_jars_failed", "error": repr(exc)[:200]}))
             jars = self._jars = CallResult(
                 ToolOutcome(
@@ -635,12 +677,13 @@ class Turn:
                 ),
                 None,
             )
+        log.info(json.dumps({"event": "router_jars", "source": "server", "ok": jars.outcome.ok}))
         return router_jar_list(self._jar_rows) if jars.outcome.ok else None
 
     def router_today(self) -> date | None:
-        """Ngày mô phỏng hôm nay đưa router (đổi hạn mục tiêu ra ngày, V1): ngày của lần đọc ví ở lượt này; chưa có thì None (router để
-        `target_date` trống)."""
-        return self.app_date
+        """Ngày mô phỏng hôm nay đưa router (đổi hạn mục tiêu ra ngày, V1): ngày của lần đọc ví ở lượt này, không có thì ngày frontend gửi
+        kèm danh sách hũ; không có cả hai thì None (router để `target_date` trống). Mã kiểm hạn theo ngày của tool phía server."""
+        return self.app_date or self._client_app_date
 
     def emit_jars_block(self) -> None:
         """Hiện thẻ số dư từ lần đọc hũ đã có (dùng khi cần cho người dùng thấy số)."""
@@ -1099,9 +1142,10 @@ class Turn:
         }[kind](r, question)
 
     async def on_balance(self, r: IntentResult, question: str) -> None:
-        """Thẻ số dư từ lần đọc ví của lượt (đã đọc trước router, `ensure_jars`): không đọc lần hai. Kết quả sai hợp đồng khối thì báo lỗi
-        như khi dựng khối trong `call_tool`."""
-        jars = await self.ensure_jars()
+        """Thẻ số dư từ lần đọc ví của lượt (đọc trước router, hoặc đọc ở đây khi router đã có danh sách hũ của frontend): không đọc lần
+        hai. Khối số dư phát trước `TOOL_CALL_RESULT` của lần đọc như mọi tool có khối. Kết quả sai hợp đồng khối thì báo lỗi như khi dựng
+        khối trong `call_tool`."""
+        jars = await self.ensure_jars(quiet=True)
         outcome, block = jars.outcome, None
         if outcome.ok:
             try:
@@ -1116,9 +1160,10 @@ class Turn:
                     args=outcome.args,
                 )
         if block is None or jars.compact is None:
+            self.announce_jars()
             self.tool_failure(outcome)
             return
-        self.emit_block(block)
+        self.announce_jars(before_result=[block])
         await self.write("balance", question, jars.compact)
 
     async def on_obligations(self, r: IntentResult, question: str) -> None:
@@ -1551,6 +1596,8 @@ class Turn:
             self.s = replace(self.s, max_tool_calls_per_turn=self.s.roadmap_max_tool_calls_per_turn)
         # Lượt đã đọc hũ (đổi mục tiêu sang mã hũ): build_roadmap dùng lại lần đọc đó, không tốn thêm tool call.
         cached_jars = self._jars.outcome if self._jars is not None and self._jars.outcome.ok else None
+        if cached_jars is not None:
+            self.announce_jars()  # lần đọc ví im lặng trước router: lượt này dùng kết quả nên phát thẻ tool
 
         async def call(short_name: str, args: dict[str, Any], target: str) -> ToolOutcome:
             if short_name == "get_jar_balances" and cached_jars is not None:
