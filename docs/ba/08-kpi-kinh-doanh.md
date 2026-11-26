@@ -34,7 +34,7 @@ Ba nguyên tắc:
 | K3 | Giữ chân D30 | M1 | App tài chính: **7%** (UXCam), **11,6%** (Adjust); app tài chính Nhật Bản **8%** (Adjust, quý I/2026). Đông Nam Á: D30 của app tài chính trên Android **giảm 32%** so với năm trước (AppsFlyer 2026) | **≥ 15%** | Vừa |
 | K4 | Giảm phí trễ hạn trả sau (so với đối chứng) | M1 | SMS nhắc hạn trên **trả sau** (AFM, 34.365 khách, tuổi trung bình 29): **−21% đến −24%** số khách bị phí trễ; tin nhắn hành vi (Colombia 2026): **−4%** khả năng trễ | **≥ 10%** | Vừa |
 | K4-R | *Rào chắn:* tổng phí mỗi người (mọi loại) | M1 | Cùng RCT trên: phí thấu chi **+9%** ở nhóm hay thấu chi | **Không tăng** so với đối chứng | Vừa |
-| K5 | Số ngày cảnh báo trước khi hũ cạn | M0 | Mốc so sánh là dự báo seasonal naive (NFR-10) | **≥ 7 ngày** trung vị, cảnh báo đúng **≥ 70%** | Cao |
+| K5 | Số ngày cảnh báo trước khi hũ cạn | M0 | Mốc so sánh: seasonal naive **0,44**, burn-rate **0,49** theo ±3 ngày; 0,66 và 0,69 theo "cạn trước lương" (backtest-final, 25/11) | **≥ 7 ngày** trung vị, cảnh báo đúng **≥ 70%** theo ±3 ngày. **Đo 25/11: 13 ngày; 0,57** (hũ dày); 0,82 theo "cạn trước lương" | Vừa (hạ từ Cao) |
 | K6 | Biên lợi nhuận gộp | M2 | Sản phẩm AI: **45%** (2025) → **52–53%** (2026, ICONIQ). Phần mềm SaaS: trung vị **80%** | **≥ 65%** toàn bộ; **≥ 75%** gói Cơ bản | Vừa |
 | K7 | Chi phí AI trên doanh thu | M2 | Inference ở giai đoạn mở rộng: **khoảng 23%** giá vốn sản phẩm (ICONIQ) | **≤ 15%** doanh thu | Vừa |
 | K8 | Tỷ lệ chuyển sang gói trả phí | M2 | Freemium mọi ngành: **2,1%** sau 35 ngày; app tài chính **khoảng 4%**; dùng thử 17–32 ngày: **42,5%** chuyển sang trả phí | **3%** người dùng kích hoạt; **≥ 35%** người dùng thử | Thấp–vừa |
@@ -91,9 +91,19 @@ Ba nguyên tắc:
 
 ### 3.5 K5: cảnh báo trước ít nhất 7 ngày, đúng từ 70%
 
-- **Đo được ngay** bằng backtest trên 3 persona và trên bộ sinh dữ liệu khác họ ([backtest-phase-2.md](../research/backtest-phase-2.md)).
-- **Căn cứ:** tầm dự báo là 30 ngày, kèm lịch lương và lịch nghĩa vụ đã biết trước. Backtest trên persona tổng hợp giữ ra ngoài (hũ dày, 120 ngày lịch sử): cảnh báo đến trước ngày hũ cạn thật trung vị 13 ngày; đúng trong ±3 ngày 0,57, chưa đạt 70%; đúng vì hũ cạn trước ngày lương 0,82 ([backtest-final.md](../research/backtest-final.md), mục "K5"). Persona demo `minh` được báo cạn ngày 23/11: con số 12 ngày là khoảng từ ngày cạn tới kỳ lương, không phải số ngày báo trước.
-- **Định nghĩa "đúng":** hũ được dự báo trạng thái Hụt hoặc Sát thì thực tế cạn trong khoảng ±3 ngày quanh ngày dự báo, hoặc người dùng đã hành động để tránh. Định nghĩa này cần chủ dự án duyệt.
+- **Cách đo (25/11, [#26](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/26)):** không đo trên persona demo vì persona dựng lịch sử lùi từ ngày neo, không có tương lai thật. Đo trên 36 persona tổng hợp giữ ra ngoài (seed 201–206), số dư kịch bản, cùng luật với sản phẩm ([backtest-final.md](../research/backtest-final.md), mục "K5").
+- **Kết quả (hũ dày, 120 ngày lịch sử như `minh`):**
+
+| Định nghĩa "cảnh báo đúng" | Yofina | Seasonal naive | Burn-rate |
+|---|---|---|---|
+| Hũ thực tế cạn trong ±3 ngày quanh ngày dự báo | **0,57** (sai trung bình 3,5 ngày) | 0,44 | 0,49 |
+| Hũ thực tế cạn trước ngày lương như đã cảnh báo | **0,82** | 0,66 | 0,69 |
+
+  Trung vị số ngày báo trước của cảnh báo đúng: **13 ngày** (đạt mức 7 ngày). Hũ thưa: 0,29 và 0,65, nên giao diện chỉ báo "có thể cạn trước ngày lương", không báo ngày cụ thể. Đổi lại, Yofina báo ít hơn hai baseline nên bắt được ít ca cạn trước lương hơn (0,70 so với 0,80 và 0,84).
+- **Cách báo trên slide (chủ dự án chốt 25/11):** báo **cả hai định nghĩa cạnh baseline**. Câu đúng: "Yofina báo trước trung vị 13 ngày; 82% cảnh báo 'cạn trước ngày lương' là đúng; đoán đúng ngày cạn trong ±3 ngày ở 57% ca, so với 44–49% của cách đoán đơn giản."
+- **Câu cũ đã bỏ:** "`minh` được báo cạn ngày 23/11, trước kỳ lương 12 ngày" không phải số ngày báo trước mà là khoảng tới ngày lương.
+- **Vì sao vẫn giữ mục tiêu 70% theo ±3 ngày:** đây là mục tiêu cho pilot, không cho bản dự thi; có thể cải thiện bằng hiệu chỉnh dải dự báo ([#25](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/25)) và dữ liệu dài hơn.
+- **Định nghĩa "đúng"** đã chốt 25/11: báo cả hai định nghĩa trên (E-02).
 
 ### 3.6 K6, K7: biên lợi nhuận gộp ≥ 65%, chi phí AI ≤ 15% doanh thu
 
@@ -106,6 +116,8 @@ Ba nguyên tắc:
   - Có trần lượt gọi mỗi ngày (NFR-35). Hết trần thì rơi về thẻ số liệu, không phát sinh thêm chi phí.
 - **Vì sao không đặt 80%:** chi phí hạ tầng cố định (Aurora chạy liên tục) chiếm tỷ trọng lớn khi còn ít người dùng, và gói Chuyên sâu (đọc ảnh, lộ trình) tốn model lớn.
 - **Còn thiếu:** chi phí AI thật mỗi lượt chưa đo. Token đã được ghi log; cần tính ở phase 6 (NFR-37) rồi mới khẳng định được K7.
+
+- **Tính lại sơ bộ 25/11** ([06 mục 3b](06-mo-hinh-kinh-doanh.md#3b-tính-lại-kinh-tế-đơn-vị-bản-sơ-bộ-2511)): chi phí AI trên doanh thu là 17–26% với model hiện tại, **vượt K7**; đạt K7 (10–12%) khi Analyst chạy model rẻ hơn. Gói Cơ bản chỉ tốn khoảng 105 ₫ AI/tháng.
 
 ### 3.7 K8: 3% người dùng kích hoạt chuyển sang trả phí
 
@@ -175,7 +187,7 @@ Hệ quả cho việc định giá:
 | ID | Câu hỏi | Gợi ý |
 |---|---|---|
 | E-01 | Duyệt bộ mục tiêu K1–K9 | Đặc biệt là K4 (10%) và K3 (15%) |
-| E-02 | Định nghĩa "cảnh báo đúng" cho K5 | ±3 ngày quanh ngày dự báo, hoặc người dùng đã hành động |
+| E-02 | Định nghĩa "cảnh báo đúng" cho K5 | **Đã chốt 25/11 (chủ dự án):** báo cả hai định nghĩa (±3 ngày; cạn trước ngày lương) cạnh baseline |
 | E-03 | Đưa KPI nào lên slide | K2, K5, K4 kèm RCT, K9 dạng hòa vốn |
 | E-04 | Giao việc đo chi phí AI mỗi lượt vào phase 6 | Bắt buộc để chốt K6, K7 và giá gói |
 

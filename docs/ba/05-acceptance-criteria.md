@@ -163,7 +163,7 @@ Bằng chứng cho từng AC ghi vào mục "Kết quả thực hiện" của fi
 | ID | Cho trước | Khi | Thì | Trạng thái |
 |---|---|---|---|---|
 | AC-FR14-01 | Có mẫu chi cá nhân | Tạo khoản chuyển lệch nhiều so với thói quen | Cảnh báo trước khi xác nhận, kèm ảnh hưởng tới hũ đệm an toàn (BR-64) | Chưa làm (nằm trong thứ tự cắt của phase 5) |
-| AC-FR15-01 | Lượt what-if vừa chạy | Tài khoản `ops` mở trace từ "Vì sao" | Hiện đủ các bước | Đạt qua REST (18 bước); mở từ "Vì sao" chờ kiểm trên app |
+| AC-FR15-01 | Lượt what-if vừa chạy | Tài khoản `ops` mở trace từ "Vì sao" | Hiện đủ các bước | Đạt qua REST (18 bước). **25/11:** giám khảo không còn thuộc `ops`; mở bằng tài khoản vận hành riêng hoặc "Vì sao → Chi tiết kỹ thuật" ([#17](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/17)) |
 | AC-FR15-02 | Tài khoản không thuộc `ops` | Mở màn trace | Bị từ chối | Code; chờ kiểm trên app |
 
 ## Nghiệm thu toàn bộ (demo)

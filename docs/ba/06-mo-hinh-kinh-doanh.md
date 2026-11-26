@@ -36,6 +36,8 @@
 
 ## 3a. Nguồn thu cụ thể khi triển khai B2B2C (bổ sung 24/11)
 
+> **Cảnh báo 25/11 (kiểm toán, [#33](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/33)):** một lượt what-if tốn khoảng **1.578 ₫** tiền AI, trong khi phí nền R1 dưới đây là **1.500 ₫ mỗi người dùng hoạt động mỗi tháng**. Với số hiện tại, phần 30% của Yofina ở gói trả phí chỉ hòa vốn khi mỗi người dùng hỏi khoảng 4,75 what-if mỗi tháng. Bản tính lại sơ bộ ở [mục 3b](#3b-tính-lại-kinh-tế-đơn-vị-bản-sơ-bộ-2511); bản chốt dùng chi phí đo theo ý định trên bản đang chạy (đợt 1, 2 đã deploy đêm 25/11). Hạn: chủ dự án duyệt trước 1/12.
+
 ### Nguồn thu của Yofina
 
 | # | Nguồn thu | Ai trả | Đơn vị tính | Bắt đầu từ | Phụ thuộc KPI | Ràng buộc |
@@ -63,7 +65,9 @@
 
 **Một điểm trừ của bên cho vay phải nói thẳng:** phí chậm trả là nguồn thu của họ (MoMo công bố 5,25–21% dư nợ quá hạn; [09](09-phan-tich-doi-thu.md)). Giảm trễ hạn nghĩa là **giảm phần thu này**. Lập luận để thuyết phục: tổn thất nợ xấu, chi phí thu hồi và rủi ro uy tín lớn hơn phần phí đó; và xu hướng quản lý trong khu vực đang siết phí trả sau (Thái Lan rà soát trần phí, [01 mục 7](01-boi-canh-thi-truong.md#7-bối-cảnh-pháp-lý-đầu-vào-cho-ràng-buộc-nghiệp-vụ)). Đây là chỗ R4 (phí theo kết quả) quan trọng: Yofina chỉ được trả khi phần lợi ròng là thật. Phân tích đủ ở [10-tac-dong-stakeholder.md](10-tac-dong-stakeholder.md).
 
-### Ví dụ cơ cấu doanh thu năm đầu
+### Ví dụ cơ cấu doanh thu năm đầu (bản 24/11, **đã thay**)
+
+> **25/11:** ví dụ này dùng cách thu cũ (R3 chia 30% doanh thu gói) và **chưa trừ chi phí AI**. Tính lại có chi phí AI ở [mục 3b](#3b-tính-lại-kinh-tế-đơn-vị-bản-sơ-bộ-2511); so sánh 7 mô hình kinh doanh ở [mục 3c](#3c-bảy-mô-hình-kinh-doanh-để-chọn-2511). Giữ bảng dưới để đối chiếu.
 
 **Mọi số là giả định để thấy cách ghép các nguồn thu, không phải dự báo.**
 
@@ -71,7 +75,7 @@
 |---|---|
 | Người dùng trả sau của đối tác | 2.000.000 (quy mô Ví Trả Sau MoMo tự công bố) |
 | Độ phủ năm đầu (K1) | 15%, tức **300.000 MAU** |
-| Phí nền R1 | 1.500 ₫/MAU/tháng (dưới mức hòa vốn khoảng 2.000 ₫ ở file 08) |
+| Phí nền R1 | 1.500 ₫/MAU/tháng. Lý do chọn: **thấp hơn giá trị đối tác nhận được** (khoảng 2.000 ₫/người/tháng khi trễ hạn giảm 1 điểm %, file 08 mục 3.8), để đối tác có lời; và **cao hơn nhiều chi phí AI gói Cơ bản** (khoảng 105 ₫, mục 3b) |
 | Chuyển sang gói trả phí (K8) | 3%, tức 9.000 người × 25.000 ₫/tháng; Yofina nhận 30% |
 | Phí theo kết quả R4 | 20% phần tổn thất giảm được. Với trễ hạn giảm 1 điểm % thì giá trị khoảng 2.000 ₫/người/tháng (file 08), nên R4 khoảng 400 ₫/người/tháng |
 
@@ -87,6 +91,114 @@ Cách đọc ví dụ này:
 - **R1 là nền, nhưng phụ thuộc hoàn toàn vào việc đối tác thấy giá trị.** Vì vậy R4 dù nhỏ lại là bằng chứng quan trọng nhất khi gia hạn hợp đồng.
 - **R3 nhỏ**, đúng với thực tế người Việt ít trả phí cho app. Không nên xây kế hoạch tài chính dựa vào R3.
 - Chi phí đối ứng (AI, hạ tầng, tích hợp) phải trừ đi để ra biên lợi nhuận, xem K6, K7 ở [08](08-kpi-kinh-doanh.md).
+
+## 3b. Tính lại kinh tế đơn vị (bản sơ bộ 25/11)
+
+> Làm cho [#33](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/33). **Chi phí mỗi lượt** lấy từ số đo của kiểm toán ([độ trễ, chi phí, quota](../research/2026-11-25-audit-agent-aws-latency.md) mục 4). **Số lượt dùng mỗi tháng là giả định**, cần thay bằng số đo trên bản đang chạy (đợt 1, 2 đã deploy đêm 25/11). Tỷ giá 26.300 ₫/USD (tỷ giá trace đang dùng).
+
+### Chi phí AI mỗi lượt (đã đo)
+
+| Loại lượt | Chi phí | Ghi chú |
+|---|---|---|
+| What-if có lập luận, hiện tại | **0,060 USD ≈ 1.578 ₫** | Router Nova 2 Lite 0,0024; Orchestrator Sonnet 0,0097; **Analyst Sonnet 0,048** (riêng token ra 0,029) |
+| What-if sau ba tối ưu rẻ của kiểm toán (F1 rút token ra, F4 bỏ Orchestrator Sonnet, F6 cache prompt) | 0,039 USD ≈ 1.026 ₫ (ước −35%) | Chưa đo |
+| What-if nếu Analyst chạy model cỡ Nova 2 Lite (hoặc model của MoMo) | 0,012 USD ≈ 304 ₫ (tính từ cùng số token) | Chất lượng chưa kiểm |
+| Kiểm tra trước khi chi qua chat, tra số dư, giao dịch | 0,003 USD ≈ 79 ₫ | Chỉ Nova. Qua màn hình (REST) gần như 0 |
+| Lưu một lượt vào bộ nhớ dài hạn (Haiku 4.5) | 0,007–0,0125 USD | HANDOFF 25/11 |
+| Một phiên Runtime (0,7 GB × 15 phút) | 0,003 USD | Tiền bộ nhớ microVM |
+| Lập lộ trình, đọc một ảnh | khoảng 0,05 và 0,01 USD | **Giả định**, chưa đo |
+
+### Chi phí AI mỗi người dùng hoạt động mỗi tháng (theo gói ở mục 5.2)
+
+| Gói | Giả định dùng mỗi tháng | Hiện tại | Sau 3 tối ưu | Analyst model rẻ |
+|---|---|---|---|---|
+| **Cơ bản** | Không chat LLM (dự báo, thẻ, kiểm tra trước khi chi qua màn hình); 4 bản tóm tắt hành vi | **≈ 105 ₫** | ≈ 105 ₫ | ≈ 105 ₫ |
+| **Thông minh** | 8 what-if (hạn mức), 20 lượt tra cứu, 10 phiên, 2 ảnh | ≈ 15.600 ₫ | **≈ 11.200 ₫** | ≈ 5.400 ₫ |
+| **Chuyên sâu** | 20 what-if, 2 lộ trình, 40 lượt có bộ nhớ, 40 tra cứu, 20 phiên, 10 ảnh | ≈ 52.200 ₫ | ≈ 41.100 ₫ | ≈ 26.700 ₫ |
+
+### Kết luận
+
+1. **Gói Cơ bản ổn.** Chi phí AI khoảng 105 ₫, tức **7% phí nền R1 1.500 ₫**. Đây là nhờ thiết kế: dự báo, thẻ và kiểm tra trước khi chi chạy bằng engine, không gọi LLM.
+2. **Gói nâng cao đang lỗ với mô hình chia doanh thu cũ (R3).** Phần của Yofina là 30% × 25.000 ₫ = **7.500 ₫** mỗi người trả phí, trong khi chi phí AI gói Thông minh là **11.200–15.600 ₫**. Với 9.000 người trả phí (ví dụ ở mục 3a), gói này lỗ khoảng **33–73 triệu ₫/tháng**; tỷ lệ chi phí AI trên doanh thu toàn bộ là **20–26%**, vượt K7 (≤ 15%).
+3. **Lỗi không nằm ở R1 mà ở cách thu tiền gói nâng cao.** Chia phần trăm doanh thu không bám theo chi phí, mà chi phí AI tăng theo số lượt dùng.
+
+### Đề xuất sửa mô hình
+
+| # | Thay đổi | Số |
+|---|---|---|
+| U1 | **Giữ R1** = 1.500 ₫ mỗi người dùng hoạt động/tháng cho gói Cơ bản (biên AI khoảng 93%) | Không đổi |
+| U2 | **Bỏ R3 (chia 30% doanh thu).** Thay bằng **phí bán buôn theo chi phí cộng biên** ví trả cho mỗi người dùng gói nâng cao; ví tự định giá bán lẻ | Thông minh: **19.000 ₫/người/tháng** (chi phí sau tối ưu 11.200 ₫, biên 41%) |
+| U3 | **Giữ hạn mức lượt** mỗi gói; vượt thì tính R2 theo chi phí × (1 + biên), hoặc quay về thẻ số liệu tất định (đã có) | 8 what-if/tháng cho Thông minh |
+| U4 | **Hạ chi phí trước khi mở rộng:** làm ba tối ưu của kiểm toán (đã có issue [#23](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/23), [#24](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/24)); khi tích hợp, thay Analyst bằng model của MoMo hoặc model rẻ hơn nếu đạt bộ golden | Thông minh còn ≈ 5.400 ₫ |
+| U5 | **Gói Chuyên sâu** chỉ mở khi có U4; trước đó ghi là lộ trình | ≈ 26.700 ₫ chi phí, cần giá bán buôn từ khoảng 45.000 ₫ |
+
+**Ví dụ năm đầu tính lại** (300.000 người dùng hoạt động, 9.000 dùng gói Thông minh; R4 120 triệu, R2 và R6 25 triệu như mục 3a):
+
+| | Mô hình cũ (R3 30%) | Mô hình mới (U1, U2) |
+|---|---|---|
+| Doanh thu/tháng | 662,5 triệu ₫ | **766 triệu ₫** |
+| Chi phí AI, sau 3 tối ưu | 131,3 triệu ₫ | 131,3 triệu ₫ |
+| Chi phí AI / doanh thu | 19,8% (vượt K7) | **17,1%** (vẫn vượt K7) |
+| Chi phí AI / doanh thu, Analyst model rẻ | 12,0% | **10,4%** (đạt K7) |
+| Gói nâng cao | **Lỗ 33,2 triệu ₫** | Lãi, biên 41% (71% nếu model rẻ) |
+
+**Câu trả lời cho giám khảo:** "Phần cốt lõi (dự báo, kiểm tra trước khi chi, điểm chống chịu) chạy bằng mô hình xác suất và engine, nên chi phí AI cho mọi người dùng chỉ khoảng 100 ₫/tháng. LLM chỉ dùng ở phần hỏi đáp nâng cao, có hạn mức và tính giá theo chi phí; khi chạy trong MoMo có thể thay bằng model của MoMo."
+
+**Việc còn lại trước 1/12:** thay số lượt giả định bằng số đo theo ý định trên bản đang chạy (lấy từ `audit_events`); đo chi phí lộ trình và đọc ảnh; chốt I-01 (người trả) và giá U2.
+
+## 3c. Bảy mô hình kinh doanh để chọn (25/11)
+
+**Cùng một bộ giả định** để so được: 300.000 người dùng hoạt động/tháng, đều là người dùng trả sau (15% của 2 triệu, K1); 9.000 người dùng gói Thông minh; chi phí AI theo [mục 3b](#3b-tính-lại-kinh-tế-đơn-vị-bản-sơ-bộ-2511) sau 3 tối ưu (Cơ bản 105 ₫, Thông minh 11.200 ₫/người/tháng), tổng **khoảng 131 triệu ₫/tháng**. Giá trị bên cho vay nhận được: khoảng **2.000 ₫/người/tháng** nếu trễ hạn giảm 1 điểm % (file 08 mục 3.8), tức 600 triệu ₫/tháng. **Mọi giá là giả định để so sánh, không phải báo giá.**
+
+### Bảng so sánh
+
+| # | Mô hình | Ai trả, trả gì | Doanh thu/tháng | AI / doanh thu | Lãi gộp sau AI |
+|---|---|---|---|---|---|
+| M1 | **Phí nền + bán buôn gói** (mục 3b) | Ví: 1.500 ₫/người; ví: 19.000 ₫/người gói Thông minh; bên cho vay: R4 | 766 triệu | 17% | 635 triệu |
+| M2 | **Chia lợi ích thuần** | Bên cho vay: 30% phần tổn thất giảm được, đo so với nhóm đối chứng; không phí nền | 180 triệu | **73%** | 49 triệu |
+| M3 | **Bên cho vay trả theo tài khoản trả sau** | Bên cho vay: 1.000 ₫/tài khoản trả sau dùng Yofina; ví: bán buôn gói | 496 triệu | 26% | 365 triệu |
+| M4 | **Bản quyền năm (white-label)** | MoMo: phí cố định khoảng 6 tỷ ₫/năm, tự chạy trên hạ tầng và model của MoMo | 500 triệu | 0% (MoMo chịu) | 500 triệu |
+| M5 | **Trả theo lượt dùng (API)** | Ví: 300 ₫/người/tháng cho dự báo; 2.000 ₫/lượt "nếu thì"; 150 ₫/lượt tra cứu | 261 triệu | 50% | 130 triệu |
+| M6 | **Thu thẳng người dùng (B2C)** | Người dùng: 29.000 ₫/tháng, 3% trả phí; app riêng | 261 triệu | 50% | 130 triệu, **chưa trừ chi phí kéo người dùng** |
+| M7 | **Lai: ví + bên cho vay + gói** | Ví: 500 ₫/người; bên cho vay: 1.000 ₫/tài khoản trả sau; ví: bán buôn gói | 646 triệu | 20% (12% nếu model rẻ) | 515 triệu |
+
+### Ưu, nhược điểm
+
+| # | Ưu điểm | Nhược điểm | Hợp nhất với |
+|---|---|---|---|
+| M1 | Doanh thu cao nhất; dễ dự báo | **Ví trả phần lớn nhưng lợi ích đo được rõ nhất lại thuộc bên cho vay** (I-01); ví khó thấy giá trị 1.500 ₫ nếu giữ chân chưa đo được | Khi ví đã thấy giữ chân tăng (K3) |
+| M2 | Dễ bán nhất: đối tác chỉ trả khi có lời; đúng tinh thần "không kiếm tiền từ phí phạt" | Doanh thu thấp, **không đủ trả chi phí AI**; phải chờ đo pilot (2–3 tháng) mới có tiền; cần nhóm đối chứng | **Giai đoạn pilot** (3 tháng đầu) |
+| M3 | **Người trả là người hưởng lợi**: bên cho vay trả 1.000 ₫, nhận khoảng 2.000 ₫ (ROI khoảng 2 lần, file 11 mục 5) | Phụ thuộc một nhóm đối tác; cần chứng minh trễ hạn giảm | Bán cho bên cho vay (TPBank, MBV, VCBNeo) |
+| M4 | Doanh thu cố định; **chi phí AI do MoMo chịu** và MoMo dùng model của mình (đúng câu hỏi tích hợp của giám khảo, #33); dữ liệu không rời MoMo | Hợp đồng lớn, bán lâu; Yofina mất phần tăng trưởng theo người dùng; phải bàn giao, bảo trì | **Sau pilot**, khi MoMo muốn làm tính năng của mình |
+| M5 | Minh bạch, ví chỉ trả cho phần dùng; chi phí và giá đi cùng nhau | Doanh thu khó dự báo; ví có thể hạn chế người dùng hỏi để tiết kiệm, đi ngược mục tiêu | Ví muốn thử nhỏ trước |
+| M6 | Không phụ thuộc đối tác | **Không có dữ liệu ví**, người dùng phải tự nhập; tỷ lệ trả phí thấp (2–4%); tốn chi phí kéo người dùng; đã loại ở mục 2 | Không khuyến nghị |
+| M7 | Cân bằng: mỗi bên trả theo phần lợi của mình; ví trả ít nên dễ đồng ý; gỡ được I-01 | Hợp đồng ba bên, đàm phán phức tạp hơn | **Đề xuất cho slide và năm đầu** |
+
+**Đã loại, không đưa vào bảng:** bán dữ liệu hoặc "điểm" người dùng cho bên cho vay (trái BC-06, BC-07); hoa hồng khoản vay (trái BR-42); quảng cáo trong tư vấn. Lý do ở mục 3a.
+
+### Đề xuất lộ trình
+
+1. **Pilot 3 tháng: M2.** Đối tác không mất gì nếu không có kết quả; đồng thời đo được số thật cho K4, K9. Yofina chịu lỗ chi phí AI trong pilot (khoảng 131 triệu ₫/tháng ở quy mô 300.000 người; pilot thật nhỏ hơn nhiều).
+2. **Năm đầu: M7.** Ví trả phí nền thấp (500 ₫), bên cho vay trả theo tài khoản trả sau (1.000 ₫), gói nâng cao tính theo chi phí cộng biên. Đạt K7 khi Analyst dùng model rẻ hơn.
+3. **Khi MoMo muốn sở hữu: M4.** Chuyển sang bản quyền năm, MoMo tự chạy với model của MoMo.
+
+**Câu cho slide:** "Mỗi bên trả theo phần lợi mình nhận: bên cho vay trả vì giảm nợ quá hạn, ví trả vì người dùng ở lại, người dùng chỉ trả khi muốn hỏi đáp chuyên sâu. Pilot bắt đầu bằng chia lợi ích: không có kết quả thì không thu."
+
+### Đã chốt 26/11: lộ trình M2 → M7 → M4
+
+Nhóm chọn đi theo ba giai đoạn ở trên. Lý do: có nguồn thu từ gói Cơ bản trước, rồi bán thẳng cho MoMo, hợp với tinh thần MoMo Tech Contest (giải pháp để MoMo đưa vào sản phẩm của mình).
+
+| Giai đoạn | Mô hình | Nguồn thu dùng (mục 3a) | Mục tiêu của giai đoạn |
+|---|---|---|---|
+| Pilot, 3 tháng | **M2** chia lợi ích | R4 (phí theo kết quả), R5 (phí triển khai, chỉ thu đủ chi phí) | Đo số thật: K4 (trễ hạn), K9 (ROI đối tác), K3 (giữ chân), chi phí AI theo ý định |
+| Năm đầu | **M7** lai | R1 hạ còn khoảng 500 ₫/người (ví trả); **mới:** 1.000 ₫/tài khoản trả sau (bên cho vay trả); gói nâng cao bán buôn theo chi phí cộng biên (thay R3); R2 khi vượt hạn mức; R6 gói giám sát | Có lãi gộp sau chi phí AI; chứng minh mỗi bên có lời |
+| Khi MoMo muốn sở hữu | **M4** bản quyền năm | Phí bản quyền cố định, phí bảo trì; MoMo tự chạy trên hạ tầng và model của MoMo | Yofina trở thành tính năng của MoMo; chi phí AI và dữ liệu nằm trong MoMo |
+
+**Cách kể trên slide (đổi thứ tự cho hợp cuộc thi):** mở bằng **đích đến M4**: "Yofina được thiết kế để chạy bên trong MoMo, trên dữ liệu và model của MoMo." Sau đó mới nói M2 và M7 như bằng chứng rằng mô hình có lời ngay cả trước khi MoMo mua: pilot không thu nếu không có kết quả; năm đầu mỗi bên trả theo phần lợi của mình.
+
+**Hệ quả cho việc khác:**
+- Trang "Yofina trong MoMo" ([#33](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/33)) chính là mô tả giai đoạn M4: điểm vào trong app, dữ liệu MoMo cấp, chỗ thay model.
+- R7 (giới thiệu sản phẩm tích lũy) để sau M4, do MoMo quyết.
 
 ## 4. Chỉ số đo lường
 

@@ -1,6 +1,6 @@
 # 13. Tiến độ technical theo yêu cầu BA
 
-> **Cập nhật lần cuối: 26/11/2026 tối** (mục 2 và 3 theo HANDOFF "Trạng thái tối 26/11": bản đang chạy `84e21b5`, Runtime v33, kiểm trên app 18:53–19:07; lần trước cùng tối theo `1303eaf`, Runtime v32; trước nữa 26/11 sáng, phần bộ hũ đối chiếu mã ở `c00eec0`). Lần trước 25/11 sáng, đã đối chiếu thêm HANDOFF rạng sáng 25/11 và [kế hoạch phase 6](../plan/phases/phase-6-danh-gia-dong-goi.md) (Runtime v27). Chi tiết lỗi ở mục 4a., đối chiếu với [HANDOFF](../../HANDOFF.md) và mục "Kết quả thực hiện" của [phase 2](../plan/phases/phase-2-vi-va-du-bao.md), [phase 3](../plan/phases/phase-3-what-if-va-kiem-tra.md#kết-quả-thực-hiện), [phase 4](../plan/phases/phase-4-chong-chiu-lo-trinh.md#kết-quả-thực-hiện), [phase 5](../plan/phases/phase-5-nap-du-lieu-ho-so-trace.md#kết-quả-thực-hiện) (Runtime `yofina_agent` v23).
+> **Cập nhật lần cuối: 26/11/2026 tối** (mục 2 và 3 theo HANDOFF "Trạng thái tối 26/11": bản đang chạy `84e21b5`, Runtime v33, kiểm trên app 18:53–19:07; lần trước cùng tối theo `1303eaf`, Runtime v32; trước nữa 26/11 sáng, phần bộ hũ đối chiếu mã ở `c00eec0`). Lần trước 25/11 sáng, đã đối chiếu thêm HANDOFF rạng sáng 25/11 và [kế hoạch phase 6](../plan/phases/phase-6-danh-gia-dong-goi.md) (Runtime v27). Chi tiết lỗi ở mục 4a., đối chiếu với [HANDOFF](../../HANDOFF.md) và mục "Kết quả thực hiện" của [phase 2](../plan/phases/phase-2-vi-va-du-bao.md), [phase 3](../plan/phases/phase-3-what-if-va-kiem-tra.md#kết-quả-thực-hiện), [phase 4](../plan/phases/phase-4-chong-chiu-lo-trinh.md#kết-quả-thực-hiện), [phase 5](../plan/phases/phase-5-nap-du-lieu-ho-so-trace.md#kết-quả-thực-hiện) (Runtime `yofina_agent` v23). **Hạn nộp thật 03/12**; việc của team theo dõi trên GitHub Issues (issue tổng [#2](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/2)).
 > File này là **bảng điều khiển** cho BA: xem nhanh yêu cầu nào đã chạy, còn lỗi gì, và việc nào BA cần báo lại cho bên technical. Trạng thái chi tiết từng dòng vẫn nằm ở file gốc (02, 03, 04, 05, 07, 09).
 
 ## 1. Bức tranh chung
@@ -23,8 +23,8 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 | FR | Tên | | Bằng chứng chính | Còn lại |
 |---|---|---|---|---|
 | FR1 | Hồ sơ, hũ, sổ cái | ✅ | Đóng phase 2 | Bộ hũ mới **đã code và deploy 26/11** (#39): tài khoản mới 3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai; ví demo của `minh` 8 hũ. BR-64 một phần (đích tự tính chỉ dùng trong bộ tối ưu); hoãn: BR-68, 70, 71; BR-63 chưa bắt buộc trước hạn nộp (chốt 26/11: hũ để dành cũ có thể chưa có mục đích, nhiều hũ đệm thì lấy hũ đầu tiên theo thứ tự) ([02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)) |
-| FR2 | Phân hũ tự động | ◐ | Đủ 4 bước; **đúng 92%** trên phần tự gán (mục tiêu 90%), đo trên ví nhiều hũ theo loại chi | **Tỷ lệ phải hỏi 17,4%** (mục tiêu dưới 10%, NFR-14). Ví 3 hũ: phần có model chưa đo (không model: đúng 92,08%, hỏi 39,52%) |
-| FR3 | Dự báo theo hũ | ✅ | Backtest: pinball bằng 0,64 lần mốc so sánh; độ phủ khoảng 80% là 0,79–0,82 ([backtest](../research/backtest-phase-2.md)) | Số ngày cảnh báo trước (K5, NFR-12) chưa đo. Ví 3 hũ: dải của hũ gộp Chi hằng ngày phủ thừa (0,865 ở 120 ngày) |
+| FR2 | Phân hũ tự động | ◐ | Đủ 4 bước; **đúng 92%** trên phần tự gán (mục tiêu 90%), đo trên ví nhiều hũ theo loại chi | **Tỷ lệ phải hỏi 17,4%** (mục tiêu dưới 10%, NFR-14). Ví 3 hũ: phần có model chưa đo (không model: đúng 92,08%, hỏi 39,52%). Mặt còn lại: khoảng 60% giao dịch cần người dùng chạm (17,4% phải hỏi, 43,1% vào Xem lại; AU-31) |
+| FR3 | Dự báo theo hũ | ✅ | Backtest: pinball bằng 0,64 lần mốc so sánh; độ phủ khoảng 80% là 0,79–0,82 ([backtest](../research/backtest-phase-2.md)) | K5 (25/11, [#26](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/26)): báo trước trung vị 13 ngày; đúng ±3 ngày 0,57 (chưa đạt 0,70), đúng "cạn trước lương" 0,82; hơn hai baseline. Ví 3 hũ: dải của hũ gộp Chi hằng ngày phủ thừa (0,865 ở 120 ngày) |
 | FR4 | Nghĩa vụ | ✅ | Đóng phase 2 | C-07 chốt 26/11 (hũ trả theo một quy tắc chung) |
 | FR5 | What-if | ✅ | Golden 31/31, đủ 6 loại kịch bản; ép lỗi model 6/6; có khối lập luận (luồng K) | Trọn câu 30,3 giây (v33), 20,6 giây (v32) và 28,1 giây (v31) trên app 26/11, 37,9 giây lúc mới thêm lập luận 25/11 (NFR-03 mục tiêu 8 giây); lập luận có lúc nói khác bản đã lưu |
 | FR6 | Kiểm tra trước khi quẹt | ◐ | p95 282 ms (mục tiêu 2 giây) | **Dải "sát" (vàng) hẹp và định nghĩa khác BR-36**: hai ngưỡng đều = 0, nên ca hũ Hóa đơn của demo ra "hụt" thay vì "vàng" (C-02); từ 26/11 Hóa đơn gộp vào Nghĩa vụ, ca tương ứng ra "sát" hoặc "hụt" |
@@ -61,12 +61,12 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 | # | Vấn đề | Quy tắc liên quan | Đề xuất |
 |---|---|---|---|
 | T-01 ✅ **Đã sửa 24/11 khuya** (luật `emergency_not_for_discretionary`) | What-if gợi ý **mua món không thiết yếu bằng hũ Dự phòng**, không luật nào chặn (lỗi còn lại số 2 của phase 5). Gốc: luật `emergency_before_investing` chỉ áp cho khoản loại `investment` | BR-42 (quỹ dự phòng trước đầu tư), BR-64 (hũ đệm là khóa mềm) | Thêm luật suitability: không gợi ý lấy hũ Dự phòng cho khoản không thiết yếu; nếu người dùng tự chọn thì xem trước phải hiện ảnh hưởng tới Điểm chống chịu |
-| T-02 | Dải "sát" (vàng) hẹp: code xếp vàng khi số dư P10 < `affordability_tight_p10_floor_vnd` (= 0), còn BR-36 định nghĩa vàng là "cạn sớm hơn N ngày" | BR-36, C-02 | Chốt C-02 (chọn một định nghĩa) rồi đặt ngưỡng tương ứng |
+| T-02 → [#30](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/30), hạn trước 1/12 | Dải "sát" (vàng) hẹp: code xếp vàng khi số dư P10 < `affordability_tight_p10_floor_vnd` (= 0), còn BR-36 định nghĩa vàng là "cạn sớm hơn N ngày" | BR-36, C-02 | Chốt C-02 (chọn một định nghĩa) rồi đặt ngưỡng tương ứng |
 | T-03 ⏳ Phase 6 việc E7 | Tỷ lệ phải hỏi khi phân loại 17,4% | BR-17, BR-18, NFR-14 | Chốt C-05 (ngưỡng "đủ lớn để hỏi"); kỹ thuật đã có hai hướng giảm |
 | T-04 ✅ **Đã sửa 24/11 khuya** (bỏ câu mẫu khỏi `MEMORY_GUIDE`, Runtime v24) | Agent nói "theo điều bạn đã dặn" khi bộ nhớ không có lời dặn đó | BR-59, BR-48 (mọi điều nói ra phải có căn cứ) | Ưu tiên sửa trước buổi chấm: lỗi này làm mất lòng tin |
 | T-05 ⏳ Phase 6 việc A4 (Q9: 9/10 ở lượt RC; dự kiến 10/11) | OCR ảnh thật 7/12 (lúc ghi) | BR-56, AC-FR9-04 | Cân nhắc hạ mục tiêu cho demo (chỉ dùng loại ảnh đọc tốt) hoặc ghi rõ giới hạn |
 | T-06 | Ngưỡng nghĩa vụ trên thu nhập: code dùng **một ngưỡng 36%** (quy tắc 28/36, `rules/obligation_to_income.yaml`); BA đề xuất hai mức vàng 30%, đỏ 40% | BR-37, C-03 | Nhóm chốt C-03: giữ 36% làm mức đỏ, hoặc tách hai mức |
-| T-07 | Cơ cấu hũ mới (BR-63 đến 73) và các quy tắc chi phí trả sau (BR-74 đến 77) **chưa có trong code**. **26/11:** bộ hũ theo mục đích đã làm một phần (#39; trạng thái từng BR ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)); BR-74 đến 77 vẫn chưa có | — | Chốt phạm vi demo: G1 (chi phí quy năm) có thể làm nhanh trong FR6; phần còn lại ghi là lộ trình |
+| T-07 | Cơ cấu hũ mới (BR-63 đến 73) và các quy tắc chi phí trả sau (BR-74 đến 77) **chưa có trong code**. **26/11:** bộ hũ theo mục đích đã làm một phần (#39; trạng thái từng BR ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)); BR-74 đến 77 vẫn chưa có | — | Chốt phạm vi demo: G1 (chi phí quy năm) có thể làm nhanh trong FR6; phần còn lại ghi là lộ trình. **25/11:** được thêm tính năng tới hết 30/11; đề xuất chỉ thêm G1 (chi phí quy năm, BR-75) |
 
 ### 4a. Chi tiết từng việc (gửi technical, ghi 25/11)
 
@@ -116,10 +116,21 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 - **BA chốt trước:** **C-03**. Đề xuất 25/11: giữ 36% làm mức đỏ, không sửa code trước demo.
 
 **T-07 [Thông tin] Quy tắc nghiệp vụ mới chưa có trong code**
-- Chưa có: cơ cấu hũ theo mục đích và giai đoạn sống (BR-63 đến 73), chi phí trả sau minh bạch (BR-74 đến 76), hỗ trợ trước hạn (BR-77), FR14.
+- **26/11:** bộ hũ theo mục đích **đã làm một phần** (#39; trạng thái từng BR ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)). Vẫn chưa có: chi phí trả sau minh bạch (BR-74 đến 76), hỗ trợ trước hạn (BR-77), FR14 (không làm).
 - **26/11 (issue #39):** đã làm BR-67, BR-69 và một phần BR-63, 65, 66, 73, 78 (3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai, hũ Nghĩa vụ chung); hoãn BR-64, 68, 70, 71; phần còn lại của BR-63 (bắt buộc mục đích, chặn hũ đệm thứ hai) để sau hạn nộp. BR-72, 74 đến 77 và FR14 vẫn chưa có.
 - **Đề xuất:** không đưa vào demo, trừ **G1** (hiện chi phí trả sau quy ra năm trên thẻ kiểm tra trước khi chi, BR-75) vì làm nhanh được. Phần còn lại ghi là lộ trình sau cuộc thi.
 - **BA chốt trước:** G-01, C-12 (đã đưa vào [12 mục 2.1](12-tong-hop-va-viec-can-chot.md#21-gấp-technical-đang-chờ-chốt-trước-hạn-tính-năng-3011), hạn 30/11).
+
+### 4b. Issue GitHub liên quan tới BA (từ kiểm toán 25/11)
+
+| Issue | Việc | Ai | Hạn |
+|---|---|---|---|
+| [#30](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/30) | Dải vàng của kiểm tra trước khi chi, **chờ BA chốt C-02** | BA chốt, technical sửa | Trước 1/12 (càng sớm càng kịp đợt 2, 30/11) |
+| [#33](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/33) | **Số kinh doanh**: chi phí AI mỗi người dùng hoạt động mỗi tháng đặt cạnh giá; trang "Yofina trong MoMo"; câu kể "AI là phần cốt lõi … AI đề xuất, con người quyết định" | **BA** | Chủ dự án duyệt trước 1/12 |
+| [#26](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/26) | Đo K5 hai định nghĩa; sửa ba/08 mục 3.5 | Technical đo; **BA đã sửa 08 mục 3.5 (25/11)** | Đợt 2 |
+| [#37](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/37) | Slide tối đa 10 trang, mọi số trỏ được về repo | BA soạn nội dung, chủ dự án duyệt | Nháp 1/12, nộp 3/12 |
+| [#36](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/36) | Bộ nộp: README khai tài sản có sẵn, nguồn dữ liệu | Technical; **BA cung cấp danh sách nguồn dữ liệu** (biểu phí, số thị trường) | 3/12 |
+| [#32](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/32) | Đồng bộ tài liệu cũ, ADR-0004 "Lệch so với proposal" | Technical; BA đối chiếu FR, NFR | Trước 1/12 |
 
 ## 5. Số đo hiện có (cho slide và NFR)
 
@@ -131,6 +142,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 | Số khớp tool (NumericGrounding) | 100% golden phase 3; 91,7% golden phase 5 | 100% | NFR-07 ◐ |
 | Dự báo so với mốc so sánh | pinball 0,64 lần seasonal naive | < 1 | NFR-10 ✅ |
 | Độ phủ khoảng 80% | 0,79–0,82 (hũ riêng); hũ gộp Chi hằng ngày của ví 3 hũ 0,865, phủ thừa | 0,75–0,85 | NFR-11 ✅ (hũ riêng) |
+| K5 cảnh báo đúng | ±3 ngày 0,57 (baseline 0,44–0,49); cạn trước lương 0,82; báo trước trung vị 13 ngày | 0,70 | NFR-12 ◐ |
 | Phân hũ đúng | 92% (ví nhiều hũ theo loại chi); ví 3 hũ không model 92,08%, có model chưa đo | ≥ 90% | NFR-13 ✅ |
 | Tỷ lệ phải hỏi | 17,4% (ví nhiều hũ); ví 3 hũ không model 39,52%, có model chưa đo | < 10% | NFR-14 ✗ |
 | Phát hiện đổi hành vi, cảnh 4 | PELT xác nhận từ hệ số 2,1 (ngưỡng mịn 2,04) trên hũ Ăn uống riêng; chuỗi gộp của ví 3 hũ cần 2,3 (2,27) | — | — |
