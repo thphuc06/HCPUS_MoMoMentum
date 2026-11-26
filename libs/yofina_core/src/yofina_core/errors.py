@@ -64,6 +64,9 @@ class ErrorCode(StrEnum):
     INGEST_NO_TRANSACTIONS = "INGEST_NO_TRANSACTIONS"
     # Phase 6 (#13, B4): trần lượt chat/nạp tệp theo tài khoản mỗi ngày (yofina_core.quota). Thêm cuối danh sách.
     DAILY_QUOTA_EXCEEDED = "DAILY_QUOTA_EXCEEDED"
+    # Phase 6 (#39): tính ngày từ đặc tả có cấu trúc (yofina_core.dates, tool knowledge___resolve_date). Thêm cuối danh sách.
+    DATE_IN_PAST = "DATE_IN_PAST"
+    LUNAR_YEAR_UNSUPPORTED = "LUNAR_YEAR_UNSUPPORTED"
 
 
 HTTP_STATUS: dict[ErrorCode, int] = {
@@ -113,6 +116,8 @@ HTTP_STATUS: dict[ErrorCode, int] = {
     ErrorCode.MEMORY_UNAVAILABLE: 503,
     ErrorCode.INGEST_NO_TRANSACTIONS: 422,
     ErrorCode.DAILY_QUOTA_EXCEEDED: 429,
+    ErrorCode.DATE_IN_PAST: 422,
+    ErrorCode.LUNAR_YEAR_UNSUPPORTED: 422,
 }
 
 

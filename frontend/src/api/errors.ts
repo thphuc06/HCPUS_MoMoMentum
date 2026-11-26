@@ -54,6 +54,9 @@ export const ERROR_CODES = [
   'INGEST_NO_TRANSACTIONS',
   // phase 6 (#13): trần lượt chat/nạp tệp theo tài khoản mỗi ngày
   'DAILY_QUOTA_EXCEEDED',
+  // phase 6 (#39): tính ngày từ đặc tả (tool knowledge___resolve_date)
+  'DATE_IN_PAST',
+  'LUNAR_YEAR_UNSUPPORTED',
 ] as const
 
 export const ErrorCode = z.enum(ERROR_CODES)
@@ -114,6 +117,8 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   MEMORY_UNAVAILABLE: 503,
   INGEST_NO_TRANSACTIONS: 422,
   DAILY_QUOTA_EXCEEDED: 429,
+  DATE_IN_PAST: 422,
+  LUNAR_YEAR_UNSUPPORTED: 422,
 }
 
 /** Thông báo tiếng Việt cho từng mã lỗi (thay vì hiện mã thô hay chữ tiếng Anh của server). */
@@ -164,6 +169,8 @@ export const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   MEMORY_UNAVAILABLE: 'Bộ nhớ của trợ lý đang không trả lời. Thử lại sau ít phút; dữ liệu khác vẫn dùng được.',
   INGEST_NO_TRANSACTIONS: 'Tệp này không có giao dịch nào đã hoàn tất để thêm.',
   DAILY_QUOTA_EXCEEDED: 'Hôm nay tài khoản đã dùng hết lượt cho việc này. Ngày mai bạn thử lại nhé; các màn số liệu vẫn xem bình thường.',
+  DATE_IN_PAST: 'Ngày này đã qua. Bạn chọn một ngày từ hôm nay trở đi nhé.',
+  LUNAR_YEAR_UNSUPPORTED: 'Chưa có ngày Tết của năm này trong lịch của Yofina.',
   NETWORK: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
   TIMEOUT: 'Máy chủ phản hồi quá lâu. Nếu bạn vừa ghi một giao dịch, kiểm tra ở Hoạt động trước khi thử lại.',
   INVALID_RESPONSE: 'Máy chủ trả dữ liệu không đọc được. Thử lại sau ít phút.',
