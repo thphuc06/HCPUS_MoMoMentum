@@ -627,6 +627,42 @@ def test_non_essential_obligations_stay_the_cuttable_part_when_floors_exceed_inc
     assert "480.000" in cut.summary  # Netflix 180.000 + cơm văn phòng 300.000 mỗi tháng
 
 
+def three_jar_world(*obligations, salary=9_000_000, days=47):
+    """Ví ba hũ của tài khoản mới (Chi hằng ngày 42, Nghĩa vụ 33, Dự phòng `buffer` 25) với các nghĩa vụ đã khai."""
+    from pipeline_helpers import context_rows, jar_row
+    from test_resilience import World, _ledger_obligation
+
+    jars = [
+        ("chi_hang_ngay", "spending", 900_000, 42, 1, None, None),
+        ("nghia_vu", "obligation", 1_000_000, 33, 2, None, None),
+        ("du_phong", "saving", 500_000, 25, 3, None, None),
+    ]
+    spend = {"chi_hang_ngay": [80_000 + 20_000 * (i % 4) for i in range(days)]}
+    ctx_jars = [jar_row(c, k, b, s, o, spend.get(c, [0] * days)) for c, k, b, s, o, _g, _d in jars]
+    w = World(
+        context_rows(days=days, salary=salary, jars=ctx_jars, obligations=[dict(o) for o in obligations]),
+        jars,
+        [_ledger_obligation(dict(o)) for o in obligations],
+    )
+    rows = w.jar_state
+    w.jar_state = lambda user_id: [{**r, "purpose": "buffer"} if r["code"] == "du_phong" else r for r in rows(user_id)]
+    return w
+
+
+def test_three_jar_wallet_lp_keeps_daily_jar_above_subscription_it_pays():
+    rent = {**NETFLIX, "id": "00000000-0000-0000-0000-0000000000a5", "kind": "rent", "name": "Tiền trọ", "amount_vnd": 7_500_000,
+            "due_date": "2026-12-06", "due_day": 6, "pay_jar_code": "nghia_vu"}  # fmt: skip
+    spotify = {**NETFLIX, "name": "Spotify", "amount_vnd": 60_000, "pay_jar_code": "chi_hang_ngay"}
+    plain = AllocationPlanData.model_validate(AllocationEngine(pipe(three_jar_world(rent))).optimize(USER, {})["data"])
+    by = {line.jar.code: line for line in plain.lines}
+    # tiền trọ 7.500.000 ₫ vượt phần Nghĩa vụ: Chi hằng ngày (không thiết yếu, không khoản định kỳ nào) bị cắt về 0 như trước
+    assert by["chi_hang_ngay"].floor_vnd == 0 and by["chi_hang_ngay"].proposed_monthly_vnd == 0
+    out = AllocationEngine(pipe(three_jar_world(rent, spotify))).optimize(USER, {})
+    assert not errors_of(RESULT, out), errors_of(RESULT, out)
+    by = {line.jar.code: line for line in AllocationPlanData.model_validate(out["data"]).lines}
+    assert by["chi_hang_ngay"].floor_vnd == 60_000 and by["chi_hang_ngay"].proposed_monthly_vnd >= 60_000
+    assert not by["chi_hang_ngay"].is_essential
+
 # =====================================================================================
 # Đích số dư của hũ Dự phòng (`buffer`, BR-64) trong lộ trình (#39, 26/11): nhận qua `goals`, giữ vai đệm, không đọc goal_vnd
 # =====================================================================================
