@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import date
+from decimal import Decimal
 
 import numpy as np
 import pytest
@@ -624,3 +625,122 @@ def test_non_essential_obligations_stay_the_cuttable_part_when_floors_exceed_inc
     assert d.status == "infeasible" and "sàn bắt buộc vượt thu nhập" in d.headline
     cut = next(a for a in d.alternatives if a.option_id == "cat_khoan_dinh_ky")
     assert "480.000" in cut.summary  # Netflix 180.000 + cơm văn phòng 300.000 mỗi tháng
+
+
+# =====================================================================================
+# Đích số dư của hũ Dự phòng (`buffer`, BR-64) trong lộ trình (#39, 26/11): nhận qua `goals`, giữ vai đệm, không đọc goal_vnd
+# =====================================================================================
+def purposed(*, purposes=None, goal_vnd=None, **kw):
+    """Ví có mục đích hũ như ví demo và ví ba hũ (Dự phòng `buffer`, Du lịch `goal`). Kho thử không có cột `purpose` nên gắn vào hàng;
+    `goal_vnd` (nếu có) ghi lên hũ Dự phòng để kiểm bộ tối ưu không đọc nó."""
+    w = world(**kw)
+    rows = w.jar_state
+    purposes = {"du_phong": "buffer", "du_lich": "goal", **(purposes or {})}
+
+    def jar_state(user_id):
+        out = []
+        for r in rows(user_id):
+            r = {**r, "purpose": purposes.get(r["code"])}
+            if r["code"] == "du_phong" and goal_vnd is not None:
+                r["goal_vnd"] = Decimal(goal_vnd)
+            out.append(r)
+        return out
+
+    w.jar_state = jar_state  # type: ignore[method-assign]
+    return w
+
+
+def buffer_goal(target=3_000_000, when=date(2027, 2, 21), **kw):
+    return {"jar": "du_phong", "target_vnd": target, **({"target_date": when.isoformat()} if when else {}), **kw}
+
+
+def test_hu_du_phong_nhan_dich_so_du_giu_vai_dem_va_chieu_ra_goals():
+    w = purposed()
+    engine = AllocationEngine(pipe(w))
+    built = engine.build(
+        engine.resilience.gather(USER, NOW), horizon_months=3, goal_args=[buffer_goal()], shock_id=None,
+        allow_relaxation=True,
+    )  # fmt: skip
+    buf = next(j for j in built.problem.jars if j.code == "du_phong")
+    # vai đệm (cắt sau cùng), mức cần tính từ số dư hiện có 2.000.000 ₫ tới đích 3.000.000 ₫ trước 21/02/2027
+    assert buf.role == "emergency" and buf.goal is not None
+    assert (buf.goal.target_vnd, buf.goal.remaining_vnd, buf.goal.days_left) == (3_000_000, 1_000_000, 92)
+    res = engine.optimize(USER, {"goals": [buffer_goal()]})
+    assert not errors_of(RESULT, res), errors_of(RESULT, res)
+    d = AllocationPlanData.model_validate(res["data"])
+    goal = next(x for x in d.goals if x.jar.code == "du_phong")
+    assert goal.jar.purpose == "buffer" and goal.target_vnd == 3_000_000 and goal.target_date == "2027-02-21"
+    assert goal.on_track and goal.monthly_needed_vnd == goal_need_vnd(buf.goal, P.month_days) == 326_087
+    by = {line.jar.code: line for line in d.lines}
+    assert by["du_phong"].is_essential and by["du_phong"].proposed_monthly_vnd >= goal.monthly_needed_vnd
+    assert {x.jar.code for x in d.goals} == {"du_lich", "du_phong"}  # mục tiêu đã khai ở hũ goal vẫn có
+    assert d.status == "optimal" and w.score_saves == 0
+
+
+def test_dich_du_phong_khong_doc_goal_vnd_cua_hu():
+    # hũ Dự phòng có goal_vnd trên hàng (dữ liệu cũ hay tự đặt): không có mục tiêu nếu lượt này không gửi, và không dùng làm đích
+    w = purposed(goal_vnd=50_000_000)
+    plain = AllocationPlanData.model_validate(AllocationEngine(pipe(w)).optimize(USER, {})["data"])
+    assert [x.jar.code for x in plain.goals] == ["du_lich"]
+    asked = AllocationPlanData.model_validate(AllocationEngine(pipe(w)).optimize(USER, {"goals": [buffer_goal()]})["data"])
+    assert next(x for x in asked.goals if x.jar.code == "du_phong").target_vnd == 3_000_000
+    for bad in ({"jar": "du_phong"}, {"jar": "du_phong", "target_date": "2027-02-21"}):
+        with pytest.raises(YofinaError) as e:
+            AllocationEngine(pipe(w)).optimize(USER, {"goals": [bad]})
+        assert e.value.code == ErrorCode.PARAMS_INVALID and "target_vnd" in e.value.message
+
+
+def test_dich_du_phong_khong_kha_thi_ra_chua_kha_thi_kem_hai_lua_chon():
+    # 30 triệu trong một tháng với lương 9 triệu: không lỗi, "chưa khả thi" và đúng hai lựa chọn của hũ Dự phòng như hũ goal
+    res = AllocationEngine(pipe(purposed())).optimize(
+        USER, {"goals": [buffer_goal(30_000_000, date(2026, 12, 21))]}
+    )
+    assert not errors_of(RESULT, res), errors_of(RESULT, res)
+    d = AllocationPlanData.model_validate(res["data"])
+    assert d.status == "infeasible" and d.headline.startswith("Chưa khả thi") and "không kịp" in d.headline
+    assert {a.kind for a in d.alternatives} == {"delay_goal", "reduce_goal"}
+    assert all(a.jar_code == "du_phong" for a in d.alternatives)
+    goal = next(x for x in d.goals if x.jar.code == "du_phong")
+    assert not goal.on_track and goal.shortfall_vnd > 0
+    reduce = next(a for a in d.alternatives if a.kind == "reduce_goal")
+    assert reduce.metrics and reduce.metrics[0].before == "30.000.000 ₫" != reduce.metrics[0].after
+
+
+@pytest.mark.parametrize("purpose", ["sinking", "long_term"])
+def test_hu_tiet_kiem_khac_van_khong_nhan_muc_tieu(purpose):
+    with pytest.raises(YofinaError) as e:
+        AllocationEngine(pipe(purposed(purposes={"du_lich": purpose}))).optimize(
+            USER, {"goals": [{"jar": "du_lich", "target_vnd": 5_000_000}]}
+        )
+    assert e.value.code == ErrorCode.PARAMS_INVALID
+
+
+def test_vi_bay_hu_cu_du_phong_nhan_muc_tieu_nhu_hu_tiet_kiem_cu():
+    # `purpose` NULL: hũ Dự phòng nhận mục tiêu như mọi hũ tiết kiệm cũ, vai mục tiêu như trước
+    engine = AllocationEngine(pipe(world()))
+    built = engine.build(
+        engine.resilience.gather(USER, NOW), horizon_months=3, goal_args=[buffer_goal()], shock_id=None,
+        allow_relaxation=True,
+    )  # fmt: skip
+    assert next(j for j in built.problem.jars if j.code == "du_phong").role == "goal"
+
+
+@pytest.mark.parametrize("buffer_first", [True, False])
+def test_muc_can_cua_hu_du_phong_xep_truoc_muc_tieu_khac_br65(buffer_first):
+    """BR-65: hũ đệm (tới đích) trước mục tiêu. Thu nhập đủ mức cần của Dự phòng cộng mức cần theo hạn đã lùi của Du lịch, không đủ mức
+    cần của cả hai theo hạn gốc: Dự phòng nhận đủ, Du lịch lùi hạn. Trước đây hai mức cần cùng mức phạt nên phần dư rơi vào hũ nào tùy
+    thứ tự hũ trong bài toán (Du lịch đứng trước thì Dự phòng chỉ giữ 500.000 ₫)."""
+    buf = GoalSpec("du_phong", 3_000_000, 90, 3_000_000, None)
+    trip = GoalSpec("du_lich", 6_000_000, 90, 6_000_000, None)
+    need = goal_need_vnd(buf, P.month_days)
+    pair = [JarSpec("du_phong", "emergency", 500_000, goal=buf), JarSpec("du_lich", "goal", 500_000, goal=trip)]
+    problem = AllocationProblem(
+        2_000_000 + need + 700_000,
+        (JarSpec("nghia_vu", "obligation", 2_000_000, 2_000_000, "obligation"), *(pair if buffer_first else pair[::-1])),
+        P,
+    )
+    sol = optimize(problem)
+    assert sol.status == "relaxed" and total(sol) == problem.income_vnd
+    assert prop(sol, "du_phong") >= need and sol.outcome("du_phong").goal_on_track
+    assert not sol.outcome("du_lich").goal_on_track
+    assert {(r.kind, r.jar_code) for r in sol.relaxations} == {("goal_delayed", "du_lich")}

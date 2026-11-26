@@ -17,6 +17,9 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
   thiết yếu, sàn bậc thiết yếu.
 - **Mục tiêu** = hũ có `goal_vnd`; mức cần mỗi tháng = phần còn thiếu x ngày của tháng / số ngày còn lại tới hạn (không có hạn thì hết
   `horizon_months`). `goals` của tham số ghi đè trọng số, số tiền hoặc hạn của từng hũ (hũ không phải hũ tiết kiệm thì từ chối).
+  Hũ Dự phòng (`purpose` `buffer`, BR-64) nhận một mục `goals` làm đích số dư của lượt này (bắt buộc `target_vnd`, hạn tùy chọn;
+  không đọc, không ghi `goal_vnd` của hũ), giữ vai đệm và được chiếu ra `goals` của kết quả như hũ mục tiêu; mức cần của nó xếp trước
+  mục tiêu khác (BR-65). Hũ tiết kiệm cũ `purpose` NULL nhận mục tiêu như trước (vai mục tiêu).
 - Hũ chi tiêu thiết yếu theo cấu hình (`essential_jar_codes`), hũ tiết kiệm không mục tiêu là hũ Dự phòng (giữ mức hiện tại, cắt thì
   phạt nặng nhất), còn lại không thiết yếu.
 """
@@ -241,12 +244,15 @@ class AllocationEngine:
             j = jars.get(code)
             if j is None:
                 raise YofinaError(ErrorCode.JAR_NOT_FOUND, f"Không tìm thấy hũ {code}.")
-            if not is_goal_jar(j["kind"], j.get("purpose")):
+            # hũ Dự phòng (`buffer`, BR-64): đích số dư của lượt này (lộ trình "xây quỹ dự phòng X trong N tháng"), chỉ lấy từ tham
+            # số: không đọc, không ghi goal_vnd của hũ; hũ giữ vai đệm (xem vai bên dưới)
+            buffer = j["kind"] == "saving" and j.get("purpose") == "buffer"
+            if not buffer and not is_goal_jar(j["kind"], j.get("purpose")):
                 raise YofinaError(
                     ErrorCode.PARAMS_INVALID,
                     f"Hũ {j['name']} không dùng cho mục tiêu trong lộ trình.",
                 )
-            old = goals.get(code)
+            old = None if buffer else goals.get(code)
             target = ga.get("target_vnd") or (old.target_vnd if old else None)
             if target is None:
                 raise YofinaError(
@@ -290,11 +296,12 @@ class AllocationEngine:
             )
             if kind == "obligation":
                 role = "obligation"
+            elif kind == "saving" and j.get("purpose") == "buffer":
+                # hũ Dự phòng giữ vai đệm cả khi lượt này có đích số dư cho nó: cắt sau cùng, mức cần xếp trước mục tiêu khác (BR-65)
+                role = "emergency"
             elif goal is not None or j.get("purpose") == "goal":
                 role = "goal"
-            elif is_buffer_jar(kind, j.get("purpose"), j.get("goal_vnd")) and (
-                j.get("purpose") == "buffer" or not explicit_buffer
-            ):
+            elif is_buffer_jar(kind, j.get("purpose"), j.get("goal_vnd")) and not explicit_buffer:
                 role = "emergency"
             elif kind == "saving":
                 role = "saving"

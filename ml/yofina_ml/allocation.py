@@ -15,6 +15,8 @@ Bài toán theo tháng (đơn vị nội bộ là `rounding_step_vnd` VND để 
   nếu thu nhập không đủ thì phần thiếu rơi vào hũ ưu tiên thấp trước (spike `s8_lp.py` ca 2b và 2c).
 - Cắt xuống dưới mức hiện tại tốn `k_j` theo loại hũ (không thiết yếu < mục tiêu < thiết yếu < dự phòng), nên tiền để trả sàn và mục
   tiêu lấy từ hũ không thiết yếu trước.
+- Hũ đệm (`emergency`) có thể mang mục tiêu (đích số dư của lượt lập lộ trình): phần thiếu của mức cần trên hũ đó phạt nặng hơn mục tiêu
+  khác theo tỷ lệ `weight_emergency / weight_goal`, nên khi không đủ cho mọi mục tiêu thì hũ đệm được trước (BR-65).
 - **Vòng 0** (chặt): hũ không thiết yếu chỉ được cắt tới `(1 - cắt tối đa) x mức hiện tại`; mục tiêu cần đủ mức cần để kịp hạn.
   Đạt (mọi `e_j` và `g_j` bằng 0) thì trạng thái `optimal`.
 - **Nới ĐÚNG MỘT vòng** nếu vòng 0 không đạt: hũ không thiết yếu được cắt tới 0, mục tiêu chỉ cần đủ mức cần của hạn đã lùi
@@ -195,8 +197,15 @@ def _solve(p: AllocationProblem, relaxed: bool) -> tuple[_Raw, np.ndarray]:
             if j.floor_tier == "obligation"
             else prm.penalty_essential_floor
         )
-        c[2 * n + k] = prm.penalty_goal_need
-        c[3 * n + k] = prm.weight_goal * j.weight
+        # mức cần của mục tiêu trên hũ đệm (đích số dư của Dự phòng) xếp trước mục tiêu khác (BR-65): phần thiếu chịu phạt nhân tỷ lệ
+        # trọng số cắt của vai đệm so với vai mục tiêu. Hũ không có mục tiêu thì g_j, h_j không có ràng buộc nào nên không đổi gì.
+        rank = (
+            prm.weight_emergency / prm.weight_goal
+            if j.role == "emergency" and prm.weight_goal > 0
+            else 1.0
+        )
+        c[2 * n + k] = prm.penalty_goal_need * rank
+        c[3 * n + k] = prm.weight_goal * j.weight * rank
         cut = {
             "discretionary": prm.weight_discretionary,
             "goal": prm.weight_goal * j.weight,
