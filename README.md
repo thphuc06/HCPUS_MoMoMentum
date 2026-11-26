@@ -88,13 +88,13 @@ Mọi số ML là trên **dữ liệu tổng hợp** do đội viết bộ sinh.
 | Độ phủ dải 80% số dư 30 ngày | 0,80 ở hũ dày và hũ thưa (lịch sử đủ); hũ dày ở 120 ngày lịch sử sau CQR 0,798, mỗi đuôi khoảng 10%; % chỉ hiện từ 47 ngày (hũ dày) và 120 ngày (hũ thưa). Đo trên **ví nhiều hũ theo loại chi** (như ví demo). Ví 3 hũ: hũ gộp Chi hằng ngày phủ 0,865, rộng hơn mục tiêu | [backtest-final.md](docs/research/backtest-final.md), [đo ví 3 hũ](docs/research/2026-11-26-do-vi-ba-hu.md) |
 | Phân hũ tự động | Đúng 92% trên dòng tự gán; 17,4% phải hỏi (mục tiêu dưới 10%). Đo trên **ví nhiều hũ theo loại chi** (bộ 7 hũ cũ; ví demo 8 hũ vẫn tách Ăn uống, Đi lại, Giải trí). Ví 3 hũ, đo không có model: đúng 92,08%, phải hỏi 39,52%; có model chưa đo | [ba/13](docs/ba/13-tien-do-technical.md), [đo ví 3 hũ](docs/research/2026-11-26-do-vi-ba-hu.md) |
 | Phát hiện đổi hành vi (cảnh 4) | PELT xác nhận khi chi tuần tăng từ 2,04 lần mức cũ, trên hũ Ăn uống riêng của **ví nhiều hũ**. Trên chuỗi gộp của ví 3 hũ cần 2,27 lần | [cảnh 4](docs/research/2026-11-26-canh4-pelt.md), [đo ví 3 hũ](docs/research/2026-11-26-do-vi-ba-hu.md) |
-| Cảnh demo trên app (26/11, ví demo 8 hũ, mỗi cảnh một lần) | Runtime v32: cảnh 1 Ăn uống cạn 23/11; cảnh 2 trọn câu 20,6 s, hũ Nghĩa vụ thiếu 1.167.673 ₫ cho Trả sau 05/12; cảnh 4 32/32 dòng tự vào Ăn uống, lộ trình sinh lại sau 19,6 s. Runtime v31: cảnh 3 29 → 12, trụ 26 ngày | [demo-script](docs/plan/demo-script.md) |
-| Router ý định (26/11, 24 câu, mỗi câu một lần, gọi thẳng Bedrock) | Câu đúng mọi trường: Nova 2 Lite (đang chạy) 8/24; Claude Haiku 4.5 với prompt đã sửa 19/24 (chưa deploy). p50 khoảng 1,0 s và 1,5 s | [ai-log 26/11](docs/ai-log/2026-11.md) |
+| Cảnh demo trên app (26/11, ví demo 8 hũ, mỗi cảnh một lần) | Runtime v33: cảnh 1 Ăn uống cạn 23/11; cảnh 2 trọn câu 30,3 s (v32: 20,6 s), hũ Nghĩa vụ thiếu 1.167.673 ₫ cho Trả sau 05/12; cảnh 4 32/32 dòng tự vào Ăn uống, lộ trình sinh lại sau 18,9 s (v32: 19,6 s), bản mới kịp hạn. Runtime v31: cảnh 3 29 → 12, trụ 26 ngày | [demo-script](docs/plan/demo-script.md) |
+| Router ý định (đo 26/11, 24 câu, mỗi câu một lần, gọi thẳng Bedrock, không qua Runtime) | Câu đúng mọi trường: Nova 2 Lite 8/24; Claude Haiku 4.5 với prompt đã sửa 19/24. p50 khoảng 1,0 s và 1,5 s. Từ Runtime v33 router chạy Haiku 4.5, Nova 2 Lite dự phòng; trên app v33 router rơi về Nova 0/18 lượt | [ai-log 26/11](docs/ai-log/2026-11.md), [ghi chú đo router](docs/research/2026-11-26-router-model.md) |
 | Độ trễ what-if (23/11, 10 lượt) | Khối số liệu đầu p50 6,9 s / p95 18,2 s; trọn câu p50 16,7 s / p95 28,2 s (mục tiêu proposal 8 s: chưa đạt) | [phase 3](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) tiêu chí 9 |
 | Kiểm tra trước khi chi | REST p95 282 ms; qua chat p50 6,3 s | như trên |
 | Xác nhận trước khi ghi | 13 ca tấn công token (bịa, đổi tham số, dùng lại, của người khác, hết hạn) đều bị chặn | [ADR-0002](docs/decisions/0002-xac-nhan-truoc-khi-ghi.md) |
 | Chi phí | Một lượt what-if khoảng 0,06 USD (khoảng 1.600 ₫); một lượt eval đầy đủ 2,2–2,5 USD | [kiểm toán độ trễ, chi phí](docs/research/2026-11-25-audit-agent-aws-latency.md), HANDOFF |
-| Unit test | 5.187 passed, 2 skipped (26/11, mã ở `1303eaf`; 2 test cần Pillow; thiếu `npm ci` ở gốc repo thì 2 test Zod cũng bị bỏ qua) | `uv run pytest tests/unit libs/yofina_core/tests` |
+| Unit test | 5.260 passed, 2 skipped (26/11, mã ở `a846281`, như bản đang chạy; 2 test cần Pillow; thiếu `npm ci` ở gốc repo thì 2 test Zod cũng bị bỏ qua) | `uv run pytest tests/unit libs/yofina_core/tests` |
 
 ## Giới hạn đã biết
 
@@ -102,8 +102,8 @@ Danh sách từ kiểm toán 25/11 ([tổng hợp](docs/research/2026-11-25-audi
 
 - Dữ liệu là tổng hợp; chưa có dữ liệu thật để kiểm mô hình. Ví và sản phẩm trả sau là mô phỏng.
 - What-if chậm hơn mục tiêu 8 giây của proposal (số ở bảng trên). Quota Claude của tài khoản là 10 request/phút mỗi model, nên nhiều người dùng cùng lúc có thể bị chờ hoặc chuyển sang model dự phòng.
-- Router ý định đang chạy (Nova 2 Lite) thường không điền các trường phải tự suy: hũ của khoản chi theo ý định, ngày từ cách nói như "trước Tết", cờ trả lời câu hỏi lại. Khi đó agent hỏi lại hoặc lùi về quy tắc theo loại chi, không ghi sai; trên app 26/11, câu du lịch không nêu hũ vẫn bị hỏi hũ và hũ tự đặt tên chưa được chọn. Chuyển router sang Claude Haiku 4.5 (Nova dự phòng) đang làm.
-- Lỗi thấy trên app 26/11 (Runtime v32), đang sửa: câu xem lộ trình ngay sau "Giữ bản cũ" hiện bản đã bỏ và không có lời; câu chuyển tiền kèm "lập lộ trình" khi số dư không đủ hiện mã lỗi thô; câu trả lời về bộ nhớ hiện "[số]" thay cho ngày; hội thoại mới chờ làm nóng khoảng 15 giây.
+- Router ý định chạy Claude Haiku 4.5 (Nova 2 Lite dự phòng) từ Runtime v33. Model vẫn có lúc để trống hoặc điền sai các trường phải tự suy; harness kiểm bằng dữ liệu rồi lùi an toàn (hỏi lại một câu hoặc lùi về quy tắc theo loại chi, không ghi sai). Trên app v33: câu du lịch không nêu hũ ra đúng hũ Du lịch nhờ đường lùi theo loại chi; câu xem lộ trình ở cùng hội thoại ngay sau "Giữ bản cũ" bị xếp sai ý định (thành tra cứu dự báo, rồi trò chuyện), ở hội thoại mới thì đúng; lời trò chuyện do router tự viết không qua bộ kiểm số; dòng "Bạn chưa nói hũ nào…" có lúc hiện cả khi người dùng đã nêu hũ. Haiku giới hạn 8 lượt/phút: khi chạm, router chờ tới 20 giây rồi mới sang Nova.
+- Thấy trên app v33, chưa sửa: chip chuyển phần có thể khi chuyển tiền từ Dự phòng không nhắc luật giữ quỹ dự phòng; phương án chuyển bù của what-if có lúc chuyển nhiều hơn phần thiếu; hạn nêu trong câu hỏi chi tiêu (ví dụ "tháng sau") chưa được dùng, khoản vẫn tính như chi ngay.
 - Lần gọi đầu sau khi Aurora ngủ chậm 15–20 giây (khi cấu hình tối thiểu 0 ACU).
 - Dữ liệu có thể được xử lý ngoài Singapore: các model gọi qua inference profile `global.`.
 - Dải dự báo của hũ thưa vẫn lệch về đuôi dưới ở lịch sử ngắn; CQR chỉ áp cho hũ dày. Persona `lan` chỉ có 47 ngày lịch sử nên hũ thưa không hiện %.
@@ -154,7 +154,8 @@ Danh sách đầy đủ kèm phụ thuộc gián tiếp: `uv.lock`, `frontend/pa
 | Vai | Model chính → dự phòng | Việc |
 |---|---|---|
 | `planner` | Claude Sonnet 4.6 → Kimi K3 | Dựng kịch bản what-if, Analyst, soạn nháp lộ trình |
-| `small` | Amazon Nova 2 Lite → Claude Haiku 4.5 | Router ý định, viết câu trả lời, câu giải thích ngắn |
+| `small` | Amazon Nova 2 Lite → Claude Haiku 4.5 | Viết câu trả lời, câu giải thích ngắn |
+| `router` | Claude Haiku 4.5 → Amazon Nova 2 Lite | Router ý định (từ Runtime v33, 26/11) |
 | `ingest` | Claude Sonnet 4.6 → Kimi K3 | Đọc ảnh chứng từ |
 | `ingest_columns` | Amazon Nova 2 Lite → Claude Haiku 4.5 | Ánh xạ cột CSV lạ, gợi ý hũ cho dòng nạp |
 | `embedding` | Cohere Embed Multilingual v3 | Phân loại giao dịch bằng láng giềng gần (pgvector) |

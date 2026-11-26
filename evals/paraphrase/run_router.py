@@ -1,8 +1,8 @@
 """Bộ câu diễn đạt lại cho ROUTER (kiểm toán prompt, mục 4): mỗi câu một ý định, cách nói khác hẳn câu golden và ví dụ trong lời nhắc.
 
-Chỉ chấm router: mỗi câu gọi `yofina_agent.router.route` đúng MỘT lần (vai `small`, qua `yofina_core.llm` nên bị đếm vào trần ngày như mọi
-lượt), không gọi Runtime, tool hay writer. Chấm bằng mã: ý định đúng, và mỗi tham số ghi trong `params` của ca có đúng giá trị (giá trị
-`null` nghĩa là router phải để trống ô đó). Tham số không ghi trong ca thì không chấm.
+Chỉ chấm router: mỗi câu gọi `yofina_agent.router.route` đúng MỘT lần (vai `router`: Haiku 4.5, dự phòng Nova 2 Lite; qua
+`yofina_core.llm` nên bị đếm vào trần ngày như mọi lượt), không gọi Runtime, tool hay writer. Chấm bằng mã: ý định đúng, và mỗi tham số
+ghi trong `params` của ca có đúng giá trị (giá trị `null` nghĩa là router phải để trống ô đó). Tham số không ghi trong ca thì không chấm.
 
     $env:AWS_REGION='ap-southeast-1'; $env:YOFINA_USAGE_TABLE='yofina-usage'
     uv run python evals/paraphrase/run_router.py                 # cả bộ, nghỉ 4 giây giữa hai câu
@@ -104,7 +104,7 @@ def _router(max_attempts: int, max_tokens: int) -> Callable[[str], Awaitable[Any
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--only", nargs="*", help="chỉ chạy các id này")
-    ap.add_argument("--min-interval", type=float, default=4.0, help="giây nghỉ giữa hai câu (quota của vai small)")
+    ap.add_argument("--min-interval", type=float, default=4.0, help="giây nghỉ giữa hai câu (quota của vai router)")
     args = ap.parse_args(argv)
     cases = load()
     if args.only:

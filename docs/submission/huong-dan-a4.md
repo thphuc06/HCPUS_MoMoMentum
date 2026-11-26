@@ -14,7 +14,7 @@ Trợ lý tài chính "Hũ nhìn trước" (chủ đề Trợ lý AI · Trợ l�
 Mở tab **Nhìn trước**. Hũ Ăn uống dự kiến cạn ngày 23/11, trước kỳ lương 5/12. Chạm vào hũ để xem đường số dư 30 ngày và độ tin cậy.
 
 **Cảnh 2 · Hỏi "nếu thì"** (khoảng 1 phút)
-Bấm **Hỏi Yofina**, gõ: *Nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao?* Chờ khoảng 15–30 giây: đường số dư trước và sau, tổng chi phí gồm phí, 2–3 phương án; hũ Nghĩa vụ báo thiếu tiền cho khoản Trả sau đến hạn 05/12, đúng ngày lương (khoản này trả bằng số dư trước khi lương về). Bấm **Vì sao** để xem dữ liệu đã dùng và luật đã kiểm, rồi **Chi tiết kỹ thuật** để xem trace từng bước.
+Bấm **Hỏi Yofina**, gõ: *Nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao?* Chờ khoảng 20–30 giây: đường số dư trước và sau, tổng chi phí gồm phí, 2–3 phương án; hũ Nghĩa vụ báo thiếu tiền cho khoản Trả sau đến hạn 05/12, đúng ngày lương (khoản này trả bằng số dư trước khi lương về). Bấm **Vì sao** để xem dữ liệu đã dùng và luật đã kiểm, rồi **Chi tiết kỹ thuật** để xem trace từng bước.
 
 **Cảnh 3 · Cú sốc** (khoảng 30 giây)
 Tab **Nhìn trước** → mục **Điểm chống chịu** → **Thử cú sốc tài chính** → **Mất việc 2 tháng**. Điểm tụt và app báo số ngày trụ được.
