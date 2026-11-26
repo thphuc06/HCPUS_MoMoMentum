@@ -563,12 +563,17 @@ def user_message(text: str) -> dict[str, Any]:
 
 
 # --- schema cho ép tool ---------------------------------------------------------------------
-def bedrock_json_schema(model: type[BaseModel]) -> dict[str, Any]:
+def bedrock_json_schema(model: type[BaseModel], *, require_all: bool = True) -> dict[str, Any]:
     """JSON Schema phẳng cho `toolSpec.inputSchema`: giải `$ref`, bỏ `title`/`default`, `X | None`
     thành `type: [X, "null"]`, mọi thuộc tính đều `required`, `additionalProperties: false`.
 
     Dạng này đã chạy 14/14 với Nova 2 Lite, Haiku 4.5, Sonnet 4.6 và Kimi K3
     (spikes/bedrock-models/03_tooluse.py).
+
+    `require_all=False`: `required` giữ đúng như Pydantic (chỉ trường không có giá trị mặc
+    định), trường tùy chọn được bỏ. Cho schema nhiều trường tùy chọn mà mỗi lượt chỉ dùng vài
+    trường (router): khi mọi trường là bắt buộc, Claude Haiku 4.5 chép đủ mọi trường kể cả null
+    và vượt trần token đầu ra của router (đo ở #39).
     """
     schema = model.model_json_schema()
     defs = schema.pop("$defs", {})
@@ -602,7 +607,8 @@ def bedrock_json_schema(model: type[BaseModel]) -> dict[str, Any]:
             if k not in {"title", "default"}
         }
         if out.get("type") == "object" and "properties" in out:
-            out["required"] = list(out["properties"])
+            if require_all:
+                out["required"] = list(out["properties"])
             out["additionalProperties"] = False
         return out
 
@@ -940,12 +946,14 @@ class LlmGateway:
         max_attempts: int = 3,
         max_tokens: int = 512,
         scope: TurnScope | None = None,
+        require_all_fields: bool = True,
     ) -> StructuredResult[T]:
         """Ép model gọi một tool có schema của `output_model` và kiểm bằng Pydantic.
 
         Không dùng `outputConfig` (Nova không hỗ trợ). Lỗi kiểm schema hoặc model không gọi tool thì
         gửi lại lỗi cho model và thử lại, tối đa `max_attempts` lần gọi model (mỗi lần được đếm và
         giới hạn như mọi lời gọi khác). Lỗi `ModelBudgetExceeded`/`AllModelsFailed` đi thẳng ra ngoài.
+        `require_all_fields`: như `require_all` của `bedrock_json_schema`.
         """
         if max_attempts < 1:
             raise ValueError("max_attempts phải >= 1")
@@ -955,7 +963,9 @@ class LlmGateway:
                     "toolSpec": {
                         "name": tool_name,
                         "description": description,
-                        "inputSchema": {"json": bedrock_json_schema(output_model)},
+                        "inputSchema": {
+                            "json": bedrock_json_schema(output_model, require_all=require_all_fields)
+                        },
                     }
                 }
             ],

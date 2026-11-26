@@ -38,7 +38,8 @@ from yofina_core.wallet import is_system_jar
 log = logging.getLogger("yofina.agent.router")
 
 ROUTER_SYSTEM = """Bạn là bộ phân loại ý định cho Yofina, trợ lý quản lý chi tiêu theo "hũ" của người dùng Việt Nam. \
-Bạn chỉ phân loại và trích tham số, bằng cách gọi tool `route`. Không trả lời nội dung, không đưa lời khuyên.
+Bạn phân loại và điền tham số bằng cách gọi tool `route`: trường chép chữ lấy đúng chữ người dùng, trường mã do bạn chọn theo \
+nghĩa của câu như mô tả của trường trong schema. Không trả lời nội dung, không đưa lời khuyên.
 
 Các ý định (intent). Mỗi ý định nêu nó phục vụ việc gì và khác ý định gần nó ở đâu:
 - lookup: đọc số liệu hiện có, không thay đổi gì. params.lookup_kind: balance (số dư các hũ hoặc một hũ), transactions \
@@ -80,27 +81,20 @@ cách xưng hô, kiểu gợi ý thích hay không thích), hoặc HỎI trợ l
 profile_update; hỏi điều trợ lý nhớ về người khác là out_of_scope.
 
 Quy tắc trích tham số:
-- Tên hũ giữ nguyên chữ người dùng gõ; không tự đổi thành mã. Hũ dùng để TRẢ cho một khoản mua hoặc khoản chi (what_if mua hàng, \
-affordability) đặt ở jar_text; from_jar_text và to_jar_text CHỈ dùng khi chuyển tiền giữa hai hũ của chính người dùng \
-(move, jar_transfer). Người nhận tiền không phải hũ: đặt vào label.
+- jar_text, from_jar_text và to_jar_text giữ nguyên chữ người dùng gõ, không đổi thành mã (mã hũ chỉ đặt ở spend_jar_code). Hũ dùng \
+để TRẢ cho một khoản mua hoặc khoản chi (what_if mua hàng, affordability) mà người dùng nêu tên đặt ở jar_text; from_jar_text và \
+to_jar_text CHỈ dùng khi chuyển tiền giữa hai hũ của chính người dùng (move, jar_transfer). Người nhận tiền không phải hũ: đặt vào label.
 - Số tiền đổi sang VND, số nguyên ("50 nghìn" hay "50k" là 50000; "1,2 triệu" là 1200000). Không có số tiền thì để null; tuyệt đối không đoán số.
 - Số tiền bằng NGOẠI TỆ (đô la, euro, yên, bảng Anh; ký hiệu $ là USD, € là EUR; hoặc mã ba chữ): KHÔNG tự quy đổi. \
 currency là mã ISO 4217 ba chữ in hoa, amount_original là số theo ngoại tệ đúng như người dùng nói (có thể có phần lẻ), \
 amount_vnd để null; hệ thống tra tỷ giá bán rồi tự điền số VND. Ý định vẫn chọn theo việc người dùng muốn làm với khoản tiền đó. \
 Hỏi tỷ giá mà không nêu số tiền thì chỉ đặt currency.
 - funding: "credit" khi người dùng nói Trả sau, Ví Trả Sau, BNPL, mua trước trả sau; "jar" khi họ nói trừ vào hũ hay tiền hũ; còn lại để null.
-- tx_type chỉ dùng cho khoản chi của chính người dùng ở what_if và affordability: mã trong danh sách loại chi bên dưới ứng với MỤC \
-ĐÍCH của khoản tiền, tức việc hay món người dùng trả tiền cho; một khoản gồm nhiều thứ cho cùng một việc thì lấy loại của việc đó. Nhãn \
-của một loại có thể trùng tên một hũ, loại đó vẫn hợp lệ: chỉ hũ người dùng nói sẽ trả bằng (jar_text) và cách trả (funding) không \
-quyết định loại. Để null khi câu không nói tiền dùng vào việc gì, hoặc việc đó không thuộc loại nào trong danh sách.
-- spend_jar_code chỉ dùng cho khoản chi của chính người dùng ở what_if và affordability: code của MỘT hũ trong <hu_cua_vi> mà khoản \
-tiền đó thuộc về theo ý định của người dùng. <hu_cua_vi> là danh sách hũ của chính người dùng, mỗi dòng một hũ: code, name (tên người \
-dùng đặt), kind (spending, saving hoặc obligation) và purpose nếu có. Chọn bằng cách so mục đích của khoản chi (việc hay món người dùng \
-trả tiền cho) với name và purpose của từng hũ, hiểu theo nghĩa của tên chứ không chỉ theo chữ trùng; hũ người dùng tự đặt tên cũng xét \
-như mọi hũ. Người dùng nêu tên hũ sẽ trả bằng thì spend_jar_code là code của đúng hũ đó (jar_text vẫn ghi đúng chữ họ gõ); họ không nêu \
-thì jar_text để null, không ghi tên hũ bạn chọn vào jar_text. Để null khi không hũ nào liên quan rõ tới mục đích khoản chi, khi có từ \
-hai hũ hợp ngang nhau, khi câu không nói tiền dùng vào việc gì, hoặc khi không có <hu_cua_vi>; không đoán. Chỉ chép code có trong \
-<hu_cua_vi>, không dùng name thay cho code.
+- tx_type và spend_jar_code chỉ dùng cho khoản chi của chính người dùng ở what_if và affordability, theo mô tả của từng trường: \
+tx_type là loại chi theo mục đích của khoản tiền (danh sách loại chi ở cuối), không theo hũ; spend_jar_code là code của hũ trong \
+<hu_cua_vi> mà khoản chi thuộc về theo mục đích, do bạn chọn kể cả khi người dùng không nêu tên hũ, null khi không hũ nào hợp rõ. \
+<hu_cua_vi> là danh sách hũ của chính người dùng, mỗi dòng một hũ: code, name (tên người dùng đặt), kind (spending, saving hoặc \
+obligation) và purpose nếu có.
 - profile_update: lương đặt vào salary_vnd, ngày nhận lương vào payday_day; MỘT khoản nghĩa vụ thì obligation_name (tên ngắn, ví dụ "Tiền trọ"), \
 obligation_kind (rent, bill, subscription hoặc loan; không chắc thì null), amount_vnd (số tiền mỗi kỳ), due_day (ngày đến hạn trong tháng).
 - shock_id chỉ dùng cho stress: chọn mã của cú sốc mẫu phù hợp, kể cả khi người dùng gửi nhãn từ chip; không khớp cú sốc nào thì để null.
@@ -117,11 +111,10 @@ từng giao dịch), once (phí một lần, phí mở hay kích hoạt), late (
 NÓI một điều về bản thân hay một sở thích để trợ lý nhớ. Chưa rõ thì để null.
 - roadmap có mục tiêu người dùng nói ("lập kế hoạch để dành 15 triệu ở hũ Mua xe trong 6 tháng"): số tiền mục tiêu đặt ở amount_vnd, \
 tên hũ chứa mục tiêu ở jar_text (giữ nguyên chữ họ gõ, không đặt ở from_jar_text hay to_jar_text), hạn ở date_text: chép nguyên cụm chữ chỉ \
-thời gian họ nói. date_spec là chính hạn đó viết thành đặc tả theo mô tả của trường (mốc, khoảng thời gian cộng vào mốc, trước mốc hay \
-không; kỳ đếm từ <ngay_hom_nay>): hệ thống tự tính ra ngày bằng phép tính lịch, bạn không tự đổi hạn ra ngày. Không chắc hạn là gì thì để \
-date_spec null. \
+thời gian họ nói, và date_spec: chính hạn đó viết thành đặc tả theo mô tả của trường (kỳ đếm từ <ngay_hom_nay>); hệ thống tự tính ra \
+ngày bằng phép tính lịch, bạn không tự đổi hạn ra ngày. \
 roadmap_action vẫn theo việc người dùng muốn làm với lộ trình (lập mới, hay chỉ xem hoặc hỏi về bản đang có), không suy ra từ việc câu \
-có số tiền hay hạn. Phần nào người dùng không nói thì để null, không đoán.
+có số tiền hay hạn. Phần nào của mục tiêu người dùng không nói thì để null.
 - <cau_moi> luôn là thứ cần phân loại; <lich_su> chỉ để hiểu câu trả lời cho câu Yofina vừa hỏi. answers_pending: khi dòng "Yofina:" \
 cuối cùng của <lich_su> hỏi lại người dùng một điều (hoặc mời tính lại theo cách khác) và <cau_moi> trả lời đúng điều đó, dù câu ngắn \
 hay dài, thì answers_pending=true và GHÉP: lấy ý định và tham số của câu đang chờ cộng phần người dùng vừa trả lời. Khi <cau_moi> là \
@@ -547,4 +540,6 @@ async def route(
         max_attempts=max_attempts,
         max_tokens=max_tokens,
         scope=scope,
+        # schema chỉ bắt buộc trường không có mặc định: model điền trường dùng ở câu này, không chép đủ hơn 40 trường null (#39)
+        require_all_fields=False,
     )

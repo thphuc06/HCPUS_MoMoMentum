@@ -88,12 +88,15 @@ DATE_SPEC_DESCRIPTION = (
     "Đặc tả một ngày để hệ thống tính bằng phép tính lịch tất định (độ dài tháng, năm nhuận, quý, Tết âm lịch); bạn không tự đổi ra "
     "ngày. anchor là mốc: today là hôm nay; next_payday là ngày nhận lương kế tiếp; start_of và end_of là ngày đầu và ngày cuối của "
     "kỳ period (week từ thứ Hai tới Chủ nhật, month, quarter là ba tháng bắt đầu từ tháng 1, 4, 7, 10, year); lunar_new_year là Mùng "
-    "1 Tết âm lịch, lunar_year là năm dương lịch chứa Mùng 1 đó khi người dùng nêu năm; date là một ngày trong tháng (day), kèm month "
-    "và year chỉ khi người dùng nêu. period_offset đếm kỳ từ kỳ chứa hôm nay: 0 kỳ này, 1 kỳ kế tiếp, -1 kỳ trước; với date, period "
-    "month hoặc year cùng period_offset chọn tháng hoặc năm của ngày đó; với lunar_new_year, period year cùng period_offset chọn năm "
-    "của Tết. Mốc không nêu năm (hoặc tháng) thì hệ thống lấy lần gần nhất sau hôm nay. offset là khoảng thời gian cộng vào mốc "
-    "(years, months, weeks, days; được âm, được có phần lẻ). before là true khi ngày cần là ngày liền trước ngày tính được, tức trước "
-    "mốc và không gồm chính mốc. Trường không dùng để null."
+    "1 Tết âm lịch; date là một ngày trong tháng (day). period_offset đếm kỳ từ kỳ chứa hôm nay (0 kỳ này, 1 kỳ kế tiếp, -1 kỳ trước) "
+    "và chỉ có nghĩa khi có period. Mỗi mốc chỉ nhận trường của nó: today và next_payday không nhận trường nào ngoài offset và before; "
+    "start_of và end_of cần period; lunar_new_year nhận lunar_year (năm dương lịch chứa Mùng 1 đó, khi người dùng nêu số năm) hoặc "
+    "period year cùng period_offset (khi họ nói năm theo cách tương đối), không nhận cả hai, hoặc không nhận gì (lần Tết gần nhất); "
+    "date cần day, còn tháng và năm của ngày đó nêu bằng month và year (khi người dùng nêu) hoặc bằng period cùng period_offset: period "
+    "month thay cho cả month và year, period year thay cho year và vẫn cần month. Mốc không nêu năm (hoặc tháng) thì hệ thống lấy lần "
+    "gần nhất sau hôm nay. offset là khoảng thời gian cộng vào mốc (years, months, weeks, days; được âm, được có phần lẻ). before là "
+    "true khi ngày cần là ngày liền trước ngày tính được, tức trước mốc và không gồm chính mốc. Chỉ đưa trường có nghĩa với câu: trường "
+    "không dùng thì bỏ hoặc để null, không điền 0 hay false cho đủ."
 )
 
 
@@ -213,17 +216,54 @@ ROUTER_TX_TYPES: dict[str, str] = {code: label for code, label, _ in SPENDING_TX
 RouterTxType = Literal[tuple(ROUTER_TX_TYPES)]  # type: ignore[valid-type]
 #: Đặc tả hạn mục tiêu lộ trình router trả (`IntentParams.date_spec`).
 RouterDateSpec = date_spec_field(
-    "Hạn của mục tiêu lộ trình (chính hạn ở date_text) viết thành đặc tả; null khi câu không nói hạn hoặc không chắc hạn là gì."
+    "Hạn của mục tiêu lộ trình (chính hạn ở date_text) viết thành đặc tả: câu lộ trình có hạn thì điền, kỳ đếm từ <ngay_hom_nay>; "
+    "null khi câu không nói hạn hoặc không chắc hạn là gì."
 )
+
+# Mô tả của các trường router phải TỰ CHỌN theo nghĩa (không chép chữ người dùng), đặt ngay ở trường trong schema của tool; lời nhắc
+# hệ thống chỉ chỉ tới đây. Đo ở #39 (24 câu, logs QQ): Claude Haiku 4.5 điền đúng spend_jar_code 8/8, date_spec 6/7, answers_pending
+# 3/4; Nova 2 Lite vẫn gần như không điền ba trường này dù mô tả nằm ở lời nhắc hay ở trường.
+_ANSWERS_PENDING_DESCRIPTION = (
+    "Chỉ xét khi dòng Yofina: cuối của <lich_su> hỏi lại người dùng một điều (hoặc mời tính lại theo cách khác); khi đó luôn điền: true "
+    "nếu <cau_moi> trả lời điều đó (ngắn hay dài), false nếu <cau_moi> là yêu cầu mới. Null khi không có <lich_su> hoặc dòng cuối của "
+    "Yofina không hỏi gì."
+)
+_JAR_TEXT_DESCRIPTION = (
+    "Tên hũ người dùng TỰ NÊU, chép đúng chữ họ gõ: hũ để trả khoản chi (what_if mua hàng, affordability) hoặc hũ chứa mục tiêu lộ "
+    "trình. Họ không nêu tên hũ thì null; hũ bạn chọn theo mục đích khoản chi đặt ở spend_jar_code, không đặt ở đây."
+)
+_SPEND_JAR_DESCRIPTION = (
+    "Chỉ cho khoản chi của chính người dùng ở what_if và affordability: code của MỘT hũ trong <hu_cua_vi> mà khoản tiền thuộc về theo "
+    "mục đích chi. Bạn chọn, người dùng không cần nêu tên hũ: so việc hay món họ trả tiền cho với name và purpose của từng hũ theo "
+    "nghĩa của tên; hũ người dùng tự đặt tên xét như mọi hũ, hũ đặt riêng cho đúng việc đó hợp hơn hũ dùng chung, kind không loại hũ "
+    "nào. Người dùng nêu tên hũ sẽ trả thì là code của đúng hũ đó. Null khi câu không nói tiền dùng vào việc gì, khi không hũ nào hợp "
+    "rõ hoặc có từ hai hũ hợp ngang nhau, hoặc khi không có <hu_cua_vi>. Chỉ chép code có trong <hu_cua_vi>."
+)
+_TX_TYPE_DESCRIPTION = (
+    "Chỉ cho khoản chi của chính người dùng ở what_if và affordability: mã trong danh sách Loại chi của lời nhắc hệ thống theo MỤC "
+    "ĐÍCH của khoản tiền (nhiều thứ cho cùng một việc thì lấy loại của việc đó). Không phụ thuộc hũ: hũ trả do spend_jar_code và "
+    "jar_text nói, cách trả do funding nói. Null khi câu không nói tiền dùng vào việc gì hoặc không loại nào hợp."
+)
+_DATE_TEXT_DESCRIPTION = "Cụm chữ chỉ thời gian người dùng nói (hạn của mục tiêu, thời điểm của khoản chi), chép nguyên văn."
 
 
 class IntentParams(_Model):
-    """Tham số người dùng nói (router không đoán). Tên hũ giữ nguyên chữ họ gõ."""
+    """Tham số của <cau_moi>. Trường chép chữ (jar_text, from_jar_text, to_jar_text, label, date_text, obligation_name) giữ đúng chữ
+    người dùng gõ và để null khi họ không nói; số tiền chỉ lấy số họ nói. Trường mã (spend_jar_code, tx_type, date_spec,
+    answers_pending và các trường kind, action, topic) là lựa chọn của bạn theo nghĩa của câu, theo mô tả của từng trường."""
 
+    # Docstring trên là `description` của `params` trong schema tool router (model đọc), không phải ghi chú cho lập trình viên.
+    # Thứ tự trường là thứ tự trong schema: trường chọn theo nghĩa đứng cạnh trường chữ nó đi cùng (hũ, hạn), cờ trả lời câu hỏi lại
+    # đứng đầu vì nó nói về cả câu.
+    answers_pending: bool | None = Field(default=None, description=_ANSWERS_PENDING_DESCRIPTION)
     lookup_kind: LookupKind | None = (
         None  # chỉ với intent `lookup`: tra số dư, giao dịch, dự báo một hũ hay nghĩa vụ
     )
-    jar_text: str | None = None
+    jar_text: str | None = Field(default=None, description=_JAR_TEXT_DESCRIPTION)
+    # what_if có khoản chi và affordability: MÃ của hũ trong danh sách hũ của ví (thẻ <hu_cua_vi> của prompt router) mà khoản định chi thuộc
+    # về theo ý định của người dùng, hoặc null. Mã kiểm theo danh sách đã đưa ở lượt (`router.checked_spend_jar`); người dùng không nêu hũ
+    # thì đây là nguồn đầu tiên của hũ trả (`clarify.infer_pay_jar`), loại chi `tx_type` là đường lùi.
+    spend_jar_code: str | None = Field(default=None, description=_SPEND_JAR_DESCRIPTION)
     from_jar_text: str | None = None
     to_jar_text: str | None = None
     amount_vnd: Annotated[int, Field(ge=1)] | None = None
@@ -232,8 +272,16 @@ class IntentParams(_Model):
         "one_time_purchase", "bnpl_purchase", "income_change", "recurring_expense",
         "jar_transfer", "goal_delay",
     ] | None = None  # fmt: skip
-    date_text: str | None = None
+    date_text: str | None = Field(default=None, description=_DATE_TEXT_DESCRIPTION)
+    # roadmap có hạn: chính hạn ở date_text viết thành đặc tả ngày (V1, #39; cùng dạng với đầu vào tool `knowledge___resolve_date`). Mã
+    # tính ngày bằng `yofina_core.dates.resolve_date` trong tiến trình; đặc tả sai, ngày đã qua hay năm Tết ngoài bảng thì hỏi lại một
+    # câu. Cách đọc date_text bằng mã chỉ là đường lùi khi router không trả đặc tả.
+    date_spec: RouterDateSpec = None
     label: Annotated[str, Field(max_length=80)] | None = None
+    # what_if có khoản chi và affordability: loại chi của khoản đó theo danh mục loại giao dịch của sản phẩm (router trích, không đoán).
+    # Người dùng không nêu hũ và router không chọn hũ (spend_jar_code) thì mã đưa loại này qua quy tắc phân loại của ví để biết hũ trả
+    # (`clarify.infer_pay_jar`).
+    tx_type: RouterTxType | None = Field(default=None, description=_TX_TYPE_DESCRIPTION)
     days_back: Annotated[int, Field(ge=1)] | None = None
     limit: Annotated[int, Field(ge=1)] | None = None
     # khai báo hồ sơ bằng chat (profile_update): lương, ngày nhận lương, hoặc MỘT khoản nghĩa vụ
@@ -249,10 +297,6 @@ class IntentParams(_Model):
     # jar_text (hũ, giữ chữ họ gõ) và date_text (cụm chỉ hạn họ nói, ví dụ "cuối tháng này"); handler đổi hũ và ngày bằng mã.
     # Sửa bước: amount_vnd là số tiền mới người dùng muốn (nếu nói).
     roadmap_action: Literal["view", "create", "edit_step"] | None = None
-    # roadmap có hạn: chính hạn ở date_text viết thành đặc tả ngày (V1, #39; cùng dạng với đầu vào tool `knowledge___resolve_date`). Mã
-    # tính ngày bằng `yofina_core.dates.resolve_date` trong tiến trình; đặc tả sai, ngày đã qua hay năm Tết ngoài bảng thì hỏi lại một
-    # câu. Cách đọc date_text bằng mã chỉ là đường lùi khi router không trả đặc tả.
-    date_spec: RouterDateSpec = None
     # Ý định phụ do router trích (thay cho đoán bằng từ khóa trên chữ): loại nhận xét hành vi, loại phí được hỏi, hỏi cách nạp hay lần nạp.
     insight_kind: BehaviorInsightKind | None = None  # behavior; null khi hỏi chung về thói quen
     fee_topic: Literal["monthly", "per_transaction", "once", "late", "other"] | None = None  # knowledge; null khi hỏi chung biểu phí
@@ -264,17 +308,8 @@ class IntentParams(_Model):
     # `knowledge___get_exchange_rate` và điền amount_vnd từ kết quả tool. currency là mã ISO 4217, amount_original là số theo ngoại tệ.
     currency: str | None = None
     amount_original: Annotated[float, Field(gt=0)] | None = None
-    # what_if có khoản chi và affordability: loại chi của khoản đó theo danh mục loại giao dịch của sản phẩm (router trích, không đoán).
-    # Người dùng không nêu hũ thì mã đưa loại này qua quy tắc phân loại của ví để biết hũ trả (`clarify.infer_pay_jar`).
-    tx_type: RouterTxType | None = None
-    # what_if có khoản chi và affordability: MÃ của hũ trong danh sách hũ của ví (thẻ <hu_cua_vi> của prompt router) mà khoản định chi thuộc
-    # về theo ý định của người dùng, hoặc null. Mã kiểm theo danh sách đã đưa ở lượt (`router.checked_spend_jar`); người dùng không nêu hũ
-    # thì đây là nguồn đầu tiên của hũ trả (`clarify.infer_pay_jar`), loại chi `tx_type` là đường lùi.
-    spend_jar_code: str | None = None
-    # Lịch sử có câu hỏi lại của Yofina đang chờ (dòng "Yofina:" cuối của <lich_su>): true khi <cau_moi> trả lời đúng câu hỏi đó (dù câu
-    # ngắn hay dài), false khi <cau_moi> là yêu cầu mới; null khi không có câu hỏi nào đang chờ. Mã chỉ ghép câu trả lời với câu đang
-    # chờ khi cờ này đúng hoặc câu trùng một chip của câu hỏi mã đã đặt (`router.merge_pending`), không theo độ dài câu.
-    answers_pending: bool | None = None
+    # answers_pending (đầu lớp): mã chỉ ghép câu trả lời với câu đang chờ khi cờ này đúng hoặc câu trùng một chip của câu hỏi mã đã đặt
+    # (`router.merge_pending`), không theo độ dài câu.
 
     @field_validator("spend_jar_code", mode="before")
     @classmethod

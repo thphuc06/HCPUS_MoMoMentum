@@ -658,6 +658,39 @@ def test_schema_phang_khong_con_ref_va_moi_truong_la_required():
     assert schema["properties"]["kind"]["description"] == "mô tả"
 
 
+def test_schema_require_all_false_chi_bat_buoc_truong_khong_co_mac_dinh():
+    """Router (#39): schema chỉ bắt buộc trường không có mặc định, ở mọi tầng; vẫn phẳng, vẫn cấm trường lạ."""
+
+    class Inner(BaseModel):
+        k: int
+        opt: str | None = None
+
+    class Outer(BaseModel):
+        name: str
+        maybe: int | None = None
+        inner: Inner | None = None
+
+    schema = bedrock_json_schema(Outer, require_all=False)
+    assert schema["required"] == ["name"]
+    assert schema["additionalProperties"] is False
+    inner = schema["properties"]["inner"]
+    assert inner["type"] == ["object", "null"] and inner["required"] == ["k"]
+    assert inner["additionalProperties"] is False
+    assert "$ref" not in json.dumps(schema) and "anyOf" not in json.dumps(schema)
+    default = bedrock_json_schema(Outer)
+    assert default["required"] == ["name", "maybe", "inner"]  # mặc định không đổi
+
+
+def test_structured_json_require_all_fields_false_gui_schema_khong_bat_buoc_moi_truong():
+    client = FakeClient([tool_response("report", {"intent": "a"})])
+    r = gateway(client).structured_json(
+        "small", output_model=Out, messages=[user_message("x")], require_all_fields=False
+    )
+    assert r.value == Out(intent="a")
+    tool = client.calls[0]["toolConfig"]["tools"][0]["toolSpec"]
+    assert tool["inputSchema"]["json"]["required"] == ["intent"]
+
+
 def test_schema_giu_field_ten_title_va_default():
     """Field tên `title`/`default` là dữ liệu (vd. dàn ý lộ trình), không phải khóa mô tả của pydantic: phải còn trong schema,
     nếu không model không gửi được field bắt buộc và mọi lần gọi đều hỏng xác thực."""
