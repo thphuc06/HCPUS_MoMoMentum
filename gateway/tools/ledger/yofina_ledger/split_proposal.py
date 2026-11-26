@@ -19,10 +19,11 @@ Quy tắc:
 - Sàn của mọi hũ nguồn (không theo mã): tổng nghĩa vụ đã khai đang hoạt động trả từ hũ đó, quy về tháng như tỷ lệ cần của Nghĩa vụ
   (Netflix trả từ Giải trí giữ Giải trí ở 2% lương). Hũ đang thấp hơn sàn của nó thì không bị lấy thêm (không bị nâng); hũ không có
   khoản định kỳ nào thì sàn 0 như trước.
-- **Sàn chi** (#39, chốt 26/11 chiều) của hũ chi không thiết yếu (theo loại giao dịch): tỷ lệ giữ x mức chi điển hình mỗi tháng của cả
-  hũ, cùng nguồn số và tham số với LP phân bổ (`spending_floors_vnd`, `SpendFloorSettings`), quy ra điểm lương làm tròn LÊN như sàn khoản
-  định kỳ, không vượt tỷ lệ đang đặt. Hũ chi không thiết yếu chỉ nhường tới sàn chi; Dự phòng tới sàn, hũ để dành khác (mục tiêu) đi
-  trước; còn thiếu thì sàn chi mới nhường (nghĩa vụ trước, không làm đề xuất thành "chưa khả thi"), rồi tới hũ chi thiết yếu.
+- **Sàn chi** (#39, chốt 26/11 chiều) của hũ chi không thiết yếu (theo loại giao dịch): tỷ lệ giữ x mức nền bền mỗi tháng của cả hũ
+  (trung vị chi theo tuần trên 12 tuần, `yofina_core.spend_baseline`, cùng hàm, nguồn số và tham số với LP phân bổ; chưa đủ tuần thì chi
+  trung bình 30 ngày gần nhất như trước, chốt 26/11 tối: `spending_floors_vnd`, `SpendFloorSettings`), quy ra điểm lương làm tròn LÊN như
+  sàn khoản định kỳ, không vượt tỷ lệ đang đặt. Hũ chi không thiết yếu chỉ nhường tới sàn chi; Dự phòng tới sàn, hũ để dành khác (mục
+  tiêu) đi trước; còn thiếu thì sàn chi mới nhường (nghĩa vụ trước, không làm đề xuất thành "chưa khả thi"), rồi tới hũ chi thiết yếu.
 - Nghĩa vụ + Quỹ dồn + sàn Dự phòng + sàn các hũ nguồn vượt 100%: không đề xuất tỷ lệ, không gợi ý cắt khoản thiết yếu (BR-21); trả
   danh sách nghĩa vụ theo thứ tự ưu tiên (nhà ở, điện nước, rồi nợ) để giao diện mở lộ trình.
 - Mẫu số chỉ là lương đã khai. Lần lương nhận gần nhất lệch số khai quá ngưỡng BR-12 thì hỏi cập nhật lương trước.
@@ -44,6 +45,12 @@ from yofina_core.config import Config
 from yofina_core.money import format_vnd
 from yofina_core.params import ParamsError, TxTypeInfo, normalize_sinking_items, unique_jar_code
 from yofina_core.schedule import expand_due_dates
+from yofina_core.spend_baseline import (
+    DEFAULT_BASELINE_MIN_WEEKS,
+    DEFAULT_BASELINE_WEEKS,
+    BaselineSettings,
+    typical_monthly,
+)
 from yofina_core.wallet import (
     DEFAULT_ESSENTIAL_CATEGORIES,
     DEFAULT_SPENDING_JAR,
@@ -104,14 +111,20 @@ def essential_categories() -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class SpendFloorSettings:
-    """Tham số sàn chi, cùng khóa cấu hình với Lambda forecast: tỷ lệ giữ (`allocation_spending_keep_ratio`), cửa sổ mức chi điển hình
-    (`resilience_window_days`), số ngày một tháng (`allocation_month_days`) và cổng dữ liệu "ước lượng ban đầu" của dự báo
-    (`forecast_cold_start_min_days`)."""
+    """Tham số sàn chi, cùng khóa cấu hình với Lambda forecast: tỷ lệ giữ (`allocation_spending_keep_ratio`), cửa sổ mức chi gần đây, cũng
+    là cửa sổ của cách lùi (`resilience_window_days`), số ngày một tháng (`allocation_month_days`), cổng dữ liệu "ước lượng ban đầu" của dự
+    báo (`forecast_cold_start_min_days`) và cửa sổ mức nền bền (`allocation_spend_baseline_weeks`, `allocation_spend_baseline_min_weeks`;
+    mặc định chung ở `yofina_core.spend_baseline`)."""
 
     keep_ratio: float
     window_days: int
     month_days: int
     min_history_days: int
+    baseline_weeks: int = DEFAULT_BASELINE_WEEKS
+    baseline_min_weeks: int = DEFAULT_BASELINE_MIN_WEEKS
+
+    def __post_init__(self) -> None:
+        self.baseline  # noqa: B018  (BaselineSettings ném ValueError khi cửa sổ mức nền không hợp lệ)
 
     @classmethod
     def from_config(cls, cfg: Config | None = None) -> SpendFloorSettings:
@@ -121,15 +134,22 @@ class SpendFloorSettings:
             window_days=cfg.get_int("resilience_window_days", default=DEFAULT_SPEND_WINDOW_DAYS),
             month_days=cfg.get_int("allocation_month_days", default=DEFAULT_MONTH_DAYS),
             min_history_days=cfg.get_int("forecast_cold_start_min_days", default=DEFAULT_MIN_HISTORY_DAYS),
+            baseline_weeks=cfg.get_int("allocation_spend_baseline_weeks", default=DEFAULT_BASELINE_WEEKS),
+            baseline_min_weeks=cfg.get_int("allocation_spend_baseline_min_weeks", default=DEFAULT_BASELINE_MIN_WEEKS),
         )
         if not 0 <= out.keep_ratio <= 1 or out.window_days < 1 or out.month_days < 1:
             raise ValueError("tham số sàn chi không hợp lệ")
         return out
 
     @property
+    def baseline(self) -> BaselineSettings:
+        """Tham số mức nền bền: cùng hàm và cùng mặc định với LP phân bổ; lùi về chi trung bình `window_days` ngày gần nhất."""
+        return BaselineSettings(self.baseline_weeks, self.baseline_min_weeks, self.month_days, self.window_days)
+
+    @property
     def context_window_days(self) -> int:
-        """Cửa sổ đọc ngữ cảnh: đủ để thấy cả cửa sổ mức chi lẫn cổng số ngày lịch sử."""
-        return max(self.window_days, self.min_history_days)
+        """Cửa sổ đọc ngữ cảnh: đủ để thấy cửa sổ mức nền bền, cửa sổ mức chi gần đây và cổng số ngày lịch sử."""
+        return max(self.window_days, self.min_history_days, self.baseline.window_days)
 
 
 @lru_cache(maxsize=1)
@@ -139,8 +159,9 @@ def spend_floor_settings() -> SpendFloorSettings:
 
 def spending_floors_vnd(rows: Iterable[Mapping[str, Any]], settings: SpendFloorSettings) -> dict[str, int]:
     """Sàn chi (VND/tháng) của từng hũ chi từ các dòng `app_get_forecast_context` (phần meta và hũ; chính nguồn số của LP phân bổ): tỷ lệ
-    giữ x mức chi điển hình = chi trung bình `window_days` ngày gần nhất (chuỗi `spend`, không gồm khoản gắn nghĩa vụ) x `month_days`,
-    cùng công thức `yofina_forecast.resilience.variable_monthly_spend`. Tài khoản dưới `min_history_days` ngày lịch sử thì rỗng."""
+    giữ x mức nền bền của hũ (chuỗi `spend`, không gồm khoản gắn nghĩa vụ), cùng hàm `yofina_core.spend_baseline.typical_monthly` với LP
+    (#39, chốt 26/11 tối: trung vị chi theo tuần; chưa đủ tuần thì chi trung bình `window_days` ngày gần nhất x `month_days` như trước).
+    Tài khoản dưới `min_history_days` ngày lịch sử thì rỗng."""
     meta: Mapping[str, Any] | None = None
     jars: list[Mapping[str, Any]] = []
     for r in rows:
@@ -153,12 +174,12 @@ def spending_floors_vnd(rows: Iterable[Mapping[str, Any]], settings: SpendFloorS
     history = (date.fromisoformat(str(meta["app_date"])) - date.fromisoformat(str(meta["history_start"]))).days
     if history < settings.min_history_days:
         return {}
+    baseline = settings.baseline
     out: dict[str, int] = {}
     for j in jars:
         if j.get("kind") != "spending":
             continue
-        tail = [max(int(v), 0) for v in (j.get("spend") or [])][-settings.window_days :]
-        typical = round(sum(tail) / len(tail) * settings.month_days) if tail else 0
+        typical = typical_monthly(j.get("spend") or [], baseline).monthly_vnd
         out[str(j["code"])] = round(settings.keep_ratio * typical)
     return out
 

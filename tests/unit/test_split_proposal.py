@@ -595,8 +595,9 @@ def test_committed_floor_keeps_a_jar_already_below_it_and_never_raises_it():
 
 # --- sàn chi theo mức chi thật gần đây (#39, quyết định 26/11 chiều): hũ chi không thiết yếu không bị lấy dưới tỷ lệ giữ x mức chi
 # điển hình của chính nó, trừ khi nghĩa vụ không còn chỗ nào khác; cùng nguồn số và tham số với LP phân bổ ---------------------------
-#: mức chi điển hình đo trên ví demo `minh` sau "Đặt lại" (chuỗi chi 30 ngày của ngữ cảnh dự báo, tests/local_pg/test_demo_scenes.py -s)
-MINH_TYPICAL = {"chi_hang_ngay": 210_000, "giai_tri": 409_000}
+#: mức chi đo trên ví demo `minh` sau "Đặt lại" (tests/local_pg/test_demo_scenes.py -s): mức nền bền (trung vị chi theo tuần trên 12 tuần),
+#: mức gốc của sàn chi từ 26/11 tối. Chi 30 ngày gần nhất là 210.000 ₫ và 409.000 ₫ (mức gốc trước đó); điểm lương làm tròn lên không đổi
+MINH_TYPICAL = {"chi_hang_ngay": 190_714, "giai_tri": 390_000}
 
 
 def spend_floors(typical, ratio=0.5):
@@ -618,13 +619,24 @@ def context(spend_by_jar, *, days=30, kinds=None):
 SPEND = sp.SpendFloorSettings(keep_ratio=0.5, window_days=30, month_days=30, min_history_days=21)
 
 
-def test_san_chi_dung_cung_muc_chi_dien_hinh_cua_lp():
+def test_san_chi_tinh_tu_muc_nen_ben_cung_ham_voi_lp():
+    """Sàn chi của đề xuất tỷ lệ = tỷ lệ giữ x mức nền bền của hũ (#39, chốt 26/11 tối): CÙNG hàm `yofina_core.spend_baseline.typical_monthly`
+    và cùng tham số mặc định với LP phân bổ, không chép công thức. Đợt chi tăng hai tuần không kéo sàn lên; chưa đủ sáu tuần thì như
+    trước (chi trung bình 30 ngày gần nhất)."""
+    from yofina_core.spend_baseline import typical_monthly
     from yofina_forecast.resilience import variable_monthly_spend
 
-    series = [0, 0, 120_000] * 20  # 60 ngày, cửa sổ 30 ngày gần nhất
-    floors = sp.spending_floors_vnd(context({"giai_tri": series, "an_uong": [90_000] * 60}, days=60), SPEND)
-    assert floors["giai_tri"] == round(0.5 * variable_monthly_spend(series, 30, 30)) == 600_000
-    assert floors["an_uong"] == round(0.5 * variable_monthly_spend([90_000] * 60, 30, 30))
+    spike = [120_000] * 70 + [378_571] * 14  # mười hai tuần, hai tuần cuối gấp khoảng 3,15 lần
+    floors = sp.spending_floors_vnd(context({"giai_tri": spike, "an_uong": [90_000] * 84}, days=84), SPEND)
+    assert floors["giai_tri"] == round(0.5 * typical_monthly(spike, SPEND.baseline).monthly_vnd) == round(0.5 * 3_600_000)
+    assert round(0.5 * variable_monthly_spend(spike, 30, 30)) > 2 * floors["giai_tri"]  # cách cũ: theo đợt tăng
+    assert floors["an_uong"] == round(0.5 * 90_000 * 30)
+    short = [120_000] * 21 + [378_571] * 14  # năm tuần
+    assert sp.spending_floors_vnd(context({"giai_tri": short}, days=35), SPEND) == {
+        "giai_tri": round(0.5 * variable_monthly_spend(short, 30, 30))
+    }
+    # đọc đủ cửa sổ mức nền (12 tuần), không chỉ 30 ngày như trước
+    assert SPEND.context_window_days == 84
 
 
 def test_san_chi_chi_cho_hu_chi_va_khi_du_lich_su():
@@ -651,11 +663,19 @@ def test_tham_so_san_chi_cung_mac_dinh_voi_bo_toi_uu_va_doc_tu_cau_hinh():
     base = sp.SpendFloorSettings.from_config(Config(env={}))
     assert base == sp.SpendFloorSettings(DEFAULT_ALLOCATION_PARAMS.spending_keep_ratio, window,
                                          DEFAULT_ALLOCATION_PARAMS.month_days, cold)  # fmt: skip
+    # cửa sổ mức nền bền: cùng mặc định với LP (`spend_baseline_weeks`, `spend_baseline_min_weeks`)
+    assert (base.baseline_weeks, base.baseline_min_weeks) == (
+        DEFAULT_ALLOCATION_PARAMS.spend_baseline_weeks, DEFAULT_ALLOCATION_PARAMS.spend_baseline_min_weeks,
+    )  # fmt: skip
     over = sp.SpendFloorSettings.from_config(Config(env={
         "YOFINA_ALLOCATION_SPENDING_KEEP_RATIO": "0.7", "YOFINA_RESILIENCE_WINDOW_DAYS": "14",
         "YOFINA_ALLOCATION_MONTH_DAYS": "31", "YOFINA_FORECAST_COLD_START_MIN_DAYS": "10",
+        "YOFINA_ALLOCATION_SPEND_BASELINE_WEEKS": "8", "YOFINA_ALLOCATION_SPEND_BASELINE_MIN_WEEKS": "4",
     }))  # fmt: skip
-    assert over == sp.SpendFloorSettings(0.7, 14, 31, 10)
+    assert over == sp.SpendFloorSettings(0.7, 14, 31, 10, baseline_weeks=8, baseline_min_weeks=4)
+    assert over.context_window_days == 56
+    with pytest.raises(ValueError):
+        sp.SpendFloorSettings.from_config(Config(env={"YOFINA_ALLOCATION_SPEND_BASELINE_MIN_WEEKS": "13"}))
 
 
 @pytest.mark.parametrize(
