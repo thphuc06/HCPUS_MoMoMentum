@@ -19,7 +19,7 @@ import pytest
 from agent_helpers import blocks_of, check_agui_order, make_llm, route_response, run_turn
 from test_infer_pay_jar import DEMO_8, _calls, _jar, _tools, _types
 from yofina_agent import notices
-from yofina_agent.router import routed_summary
+from yofina_agent.router import is_fragment, merge_pending, pending_params, routed_summary
 from yofina_agent.schemas import IntentParams, IntentResult
 
 from yofina_core.blocks import CLARIFY_MAX_CHIPS, parse_block
@@ -105,6 +105,42 @@ def test_vi_toi_da_so_hu_thi_chip_khong_vuot_hop_dong(monkeypatch):
     block = blocks_of(events)[0]
     assert len(block["data"]["chips"]) == CLARIFY_MAX_CHIPS
     assert parse_block(block).type == "clarify"
+
+
+#: Câu chuyển tiền tự đủ nghĩa (có số tiền, quá 6 từ) gõ trong CÙNG hội thoại sau câu chuyến đi còn chờ hỏi hũ; câu của test, không trùng
+#: câu trên app hay câu eval.
+TRANSFER_Q = "gửi cho bạn thân 300k vậy có ổn không"
+TRIP_HISTORY = [
+    {"id": "m1", "role": "user", "content": TRIP_Q},
+    {"id": "m2", "role": "assistant", "content": notices.CLARIFY["pay_jar"]["question"]},
+    {"id": "m3", "role": "user", "content": TRANSFER_Q},
+]
+
+
+def test_cau_chuyen_tien_du_nghia_khong_bi_ghep_voi_cau_dang_cho_bang_ma():
+    """Trên app, cùng hội thoại, câu chuyển tiền có số tiền bị hỏi số tiền; hội thoại mới thì hỏi hũ. Phần ghép bằng mã (`merge_pending`)
+    chỉ áp cho câu cụt, nên câu tự đủ nghĩa giữ nguyên đầu ra router: câu hỏi số tiền chỉ có thể đến từ router (model) để trống số tiền."""
+    assert not is_fragment(TRANSFER_Q)
+    pending = pending_params([(m["role"], m["content"]) for m in TRIP_HISTORY[:2]])
+    assert pending and pending["amount_vnd"] == 2_000_000  # câu chuyến đi đang chờ có số tiền của nó
+    routed = IntentResult.model_validate(
+        {"intent": "affordability", "params": {"amount_vnd": 300_000}, "confidence": 0.9, "needs_clarification": False}
+    )
+    assert merge_pending(routed, TRANSFER_Q, pending) is routed
+
+
+@pytest.mark.parametrize(
+    ("router_params", "slot"),
+    [
+        ({"amount_vnd": 300_000, "label": "bạn thân"}, "jar"),  # như hội thoại mới trên app: hỏi hũ
+        ({"label": "bạn thân"}, "amount"),  # router để trống số tiền: mới hỏi số tiền
+    ],
+)
+def test_cung_hoi_thoai_o_hoi_lai_theo_dung_dau_ra_router(monkeypatch, router_params, slot):
+    llm = make_llm([route_response(intent="affordability", **router_params)])
+    events, _, _ = run_turn(None, llm=llm, tools=_tools(DEMO_8), monkeypatch=monkeypatch, messages=TRIP_HISTORY)
+    (block,) = blocks_of(events)
+    assert block["type"] == "clarify" and block["data"]["slot"] == slot
 
 
 def test_tom_tat_dau_ra_router_khong_mang_chu_nguoi_dung_hay_so_tien():
