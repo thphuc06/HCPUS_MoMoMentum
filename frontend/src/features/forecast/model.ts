@@ -40,7 +40,10 @@ export type ChartModel = {
   hasCompare: boolean
   /** Điểm cạn của đường SAU (khối trước-sau). */
   afterRunout: { x: number; date: string } | null
-  /** Mức xếp lớp (0, 1, 2) của nhãn mốc theo thứ tự `events`: mốc gần nhau (trong 4 ngày) xếp lên các tầng khác nhau để nhãn không chồng. */
+  /**
+   * Tầng (0, 1, 2) của nhãn mốc theo thứ tự `events` ở bề ngang vùng vẽ tham chiếu (`REF_PLOT_WIDTH_PX`): chỉ để chừa lề trên đủ cho
+   * các tầng; vị trí thật tính lúc vẽ bằng `layoutEventLabels` với bề ngang thật, không vượt số tầng đã chừa.
+   */
   eventLevels: number[]
 }
 
@@ -68,20 +71,76 @@ function xTickList(lastX: number): number[] {
   return out
 }
 
-/** Phần bề ngang vùng vẽ mà một nhãn mốc chiếm (chữ 12 px, khung 390 px). */
-export const LABEL_SPAN = 0.34
+/** Bề rộng ước lượng (px) của một ký tự nhãn mốc 12 px đậm; khoảng trắng hẹp hơn. Hơi rộng hơn chữ thật để hai nhãn sát nhau không chạm. */
+export const LABEL_CHAR_PX = 7
+export const LABEL_SPACE_PX = 3.5
+/** Khoảng trống tối thiểu (px) giữa hai nhãn cùng tầng. */
+export const LABEL_GAP_PX = 6
+/** Số tầng nhãn tối đa phía trên vùng vẽ. */
+export const MAX_LABEL_LEVELS = 3
+/**
+ * Bề ngang vùng vẽ tham chiếu (px) để chừa lề trên cho các tầng nhãn trước khi biết bề ngang thật: biểu đồ trong khung chat và màn
+ * Chi tiết hũ ở khổ 390 px (thẻ khoảng 326 px, trừ trục Y 50 px và lề phải 18 px).
+ */
+export const REF_PLOT_WIDTH_PX = 256
 
-/** Tầng của nhãn mốc: mốc đứng gần mốc trước (cách dưới `minGap` ngày) lên tầng kế tiếp, tối đa 3 tầng; đủ xa thì về tầng 0. */
-export function stackLevels(xs: readonly number[], minGap = 4, maxLevels = 3): number[] {
-  const out: number[] = []
-  let prevX = Number.NEGATIVE_INFINITY
-  let level = 0
-  for (const x of xs) {
-    level = x - prevX < minGap ? (level + 1) % maxLevels : 0
-    out.push(level)
-    prevX = x
+/** Bề rộng ước lượng (px) của chữ nhãn mốc (jsdom không đo được chữ; ước lượng giữ vị trí nhãn tính được bằng hàm thuần). */
+export function labelWidth(text: string): number {
+  let w = 0
+  for (const ch of text) w += ch === ' ' ? LABEL_SPACE_PX : LABEL_CHAR_PX
+  return w
+}
+
+/** Vị trí một nhãn mốc (px trong khung biểu đồ): `x` và `anchor` cho `<text>`, `left`/`right` là hộp chữ, `level` là tầng (0 sát vùng vẽ). */
+export type EventLabel = { text: string; x: number; anchor: 'start' | 'middle' | 'end'; left: number; right: number; level: number }
+
+/** Tên mốc rút gọn bằng "…" (giữ ngày) cho vừa `maxWidth`; null nếu không rút được. */
+function fitLabel(label: string, day: string, maxWidth: number): string | null {
+  const chars = Array.from(label)
+  for (let n = chars.length - 1; n >= 1; n--) {
+    const text = `${chars.slice(0, n).join('').trimEnd()}… ${day}`
+    if (labelWidth(text) <= maxWidth) return text
   }
-  return out
+  return null
+}
+
+/**
+ * Đặt nhãn mốc ("Tiền điện 26/11") phía trên vùng vẽ (#39, ảnh h-c ở khổ 390 px: nhãn sát mép trái bị cắt và đè "Lương về 05/12").
+ * Mỗi nhãn căn giữa vạch mốc; tràn mép thì neo theo mép vùng vẽ (`start` ở mép trái, `end` ở mép phải). Nhãn chạm nhãn đã đặt (cách
+ * dưới `LABEL_GAP_PX`) thì lên tầng kế tiếp, tối đa `maxLevels` tầng; hết tầng thì rút gọn còn ngày, vẫn không có chỗ thì bỏ chữ (null:
+ * vạch mốc vẫn vẽ, mốc vẫn có trong "Chi tiết dự báo"). Nhãn dài hơn cả vùng vẽ thì rút gọn tên bằng "…". `events` theo x tăng dần.
+ */
+export function layoutEventLabels(
+  events: readonly { x: number; label: string; date: string }[],
+  lastX: number,
+  plot: { left: number; width: number },
+  maxLevels = MAX_LABEL_LEVELS,
+): (EventLabel | null)[] {
+  const right = plot.left + plot.width
+  const placed: EventLabel[] = []
+  const free = (level: number, l: number, r: number) =>
+    placed.every((p) => p.level !== level || l >= p.right + LABEL_GAP_PX || r <= p.left - LABEL_GAP_PX)
+  return events.map((e) => {
+    const px = plot.left + (lastX > 0 ? (e.x / lastX) * plot.width : 0)
+    const day = formatDayMonth(e.date)
+    const full = `${e.label} ${day}`
+    const texts = [labelWidth(full) <= plot.width ? full : fitLabel(e.label, day, plot.width), day]
+    for (const text of texts) {
+      if (text === null) continue
+      const w = labelWidth(text)
+      if (w > plot.width) continue
+      let box: Omit<EventLabel, 'level'> = { text, x: px, anchor: 'middle', left: px - w / 2, right: px + w / 2 }
+      if (box.left < plot.left) box = { text, x: plot.left, anchor: 'start', left: plot.left, right: plot.left + w }
+      else if (box.right > right) box = { text, x: right, anchor: 'end', left: right - w, right }
+      for (let level = 0; level < maxLevels; level++) {
+        if (!free(level, box.left, box.right)) continue
+        const label = { ...box, level }
+        placed.push(label)
+        return label
+      }
+    }
+    return null
+  })
 }
 
 function runoutPoint(d: { origin: string; runout?: string }, rows: ChartRow[], pick: (r: ChartRow) => number | undefined, lastX: number): { x: number; date: string } | null {
@@ -151,8 +210,8 @@ export function buildChartModel(d: ForecastTimelineData): ChartModel {
   const paydayX = px >= 0 && px <= lastX ? px : null
   const shortfallRange = runout ? { x1: runout.x, x2: Math.max(runout.x, paydayX ?? lastX) } : null
 
-  // Nhãn mốc 12 px rộng khoảng 1/3 vùng vẽ trên khung 390 px: hai mốc cách nhau dưới 1/3 khoảng ngày thì xếp tầng khác nhau.
-  const eventLevels = stackLevels(events.map((e) => e.x), Math.max(4, lastX * LABEL_SPAN))
+  // Tầng nhãn ở bề ngang tham chiếu (khổ 390 px) chỉ để chừa lề trên; biểu đồ đặt nhãn lại theo bề ngang thật (`layoutEventLabels`).
+  const eventLevels = layoutEventLabels(events, lastX, { left: 0, width: REF_PLOT_WIDTH_PX }).map((l) => l?.level ?? 0)
   return {
     rows,
     lastX,
@@ -203,6 +262,25 @@ export function noOutflowExpected(d: ForecastTimelineData): boolean {
     !d.events.some((e) => e.kind === 'obligation') &&
     d.days.every((day) => day.p10_vnd >= start)
   )
+}
+
+/**
+ * Hũ để dành còn tiền mà dự báo không thấy gì rút (#39 lần hai): điều cần nói ở hũ này, theo số của khối. Hũ để dành là khối có
+ * `jar.purpose` (chỉ hũ `saving` mới có, ràng buộc của migration 0057). Không nói "không có khoản chi" vì lịch sử có thể có khoản rút
+ * tay mà dự báo không tính. Có mốc lương trong kỳ thì `salary` (số và ngày của mốc sớm nhất); không thì `flat` khi mọi ngày (P10, P50,
+ * P90) bằng số dư hôm nay; còn lại `steady` (chỉ biết số dư không xuống dưới mức hôm nay). Khối không có số mục tiêu nên không nói tiến
+ * độ mục tiêu. Null với hũ 0 ₫, hũ không phải hũ để dành, hoặc dự báo có rút tiền. Cùng định nghĩa với `_no_outflow_sentence` của
+ * `yofina_core.blocks`.
+ */
+export type IdleSaving = { kind: 'salary'; date: string; amountVnd: number } | { kind: 'flat' } | { kind: 'steady' }
+
+export function idleSaving(d: ForecastTimelineData): IdleSaving | null {
+  const start = d.start_balance_vnd
+  if (!d.jar.purpose || start <= 0 || !noOutflowExpected(d)) return null
+  const salary = d.events.filter((e) => e.kind === 'salary').sort((a, b) => a.date.localeCompare(b.date))[0]
+  if (salary) return { kind: 'salary', date: salary.date, amountVnd: salary.amount_vnd }
+  if (d.days.every((day) => day.p10_vnd === start && day.p50_vnd === start && day.p90_vnd === start)) return { kind: 'flat' }
+  return { kind: 'steady' }
 }
 
 /** Mức tham chiếu để vẽ hũ: mục tiêu nếu có, không thì số lớn nhất mà dự báo cho thấy (số dư, P90). */

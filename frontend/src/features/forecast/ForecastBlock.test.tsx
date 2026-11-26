@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ForecastTimelineData } from '@/contracts/blocks'
 import { validBlock } from '@/test/fixtures'
 import { chartLabel, ForecastBlock, forecastHeadline, forecastSummary } from './ForecastBlock'
-import { buildChartModel } from './model'
+import { buildChartModel, idleSaving, noOutflowExpected } from './model'
 import { formatVnd } from '@/lib/format'
 
 const data = (name: string): ForecastTimelineData => structuredClone((validBlock(name) as unknown as { data: ForecastTimelineData }).data)
@@ -45,6 +45,32 @@ describe('ForecastBlock: biểu đồ', { timeout: 20_000 }, () => {
     const { container } = await mount(d)
     expect(container.querySelectorAll('.recharts-reference-dot')).toHaveLength(0)
     expect(container.querySelectorAll('.recharts-reference-area')).toHaveLength(0)
+  })
+
+  it('nhãn mốc ở khung chat 390 px (#39, ảnh h-c): sát mép trái neo mép trái vùng vẽ, mốc gần nhau lên tầng trên, sát mép phải neo mép phải', async () => {
+    const d = data('forecast_timeline.short')
+    d.events = [
+      { date: '2026-11-23', kind: 'obligation', label: 'Tiền cơm văn phòng', amount_vnd: 450_000 },
+      { date: '2026-12-05', kind: 'salary', label: 'Lương về', amount_vnd: 2_700_000 },
+      { date: '2026-12-20', kind: 'obligation', label: 'Trả sau', amount_vnd: 300_000 },
+    ]
+    // Thẻ trong khung chat 390 px rộng khoảng 326 px: vùng vẽ từ 50 (sau trục Y) tới 308 (lề phải 18).
+    const r = render(<ForecastBlock data={d} chartSize={{ width: 326, height: 240 }} />)
+    await waitFor(() => expect(r.container.querySelector('svg.recharts-surface')).not.toBeNull(), { timeout: 15_000 })
+    const labels = Array.from(r.container.querySelectorAll('text[data-event-label]'))
+    expect(labels.map((t) => t.textContent)).toEqual(['Tiền cơm văn phòng 23/11', 'Lương về 05/12', 'Trả sau 20/12'])
+    const [first, salary, last] = labels as [Element, Element, Element]
+    const num = (t: Element, a: string) => Number(t.getAttribute(a))
+    expect(first.getAttribute('text-anchor')).toBe('start')
+    expect(num(first, 'x')).toBe(50)
+    expect(salary.getAttribute('text-anchor')).toBe('middle')
+    expect(num(salary, 'y')).toBeLessThan(num(first, 'y')) // tầng trên, không đè nhãn đầu
+    expect(last.getAttribute('text-anchor')).toBe('end')
+    expect(num(last, 'x')).toBe(308)
+    expect(num(last, 'y')).toBe(num(first, 'y'))
+    // Tầng trên cùng vẫn nằm trong khung (lề trên đã chừa đủ).
+    expect(Math.min(...labels.map((t) => num(t, 'y')))).toBeGreaterThanOrEqual(12)
+    expect(r.container.querySelectorAll('.recharts-reference-line')).toHaveLength(1 + d.events.length)
   })
 })
 
@@ -281,10 +307,45 @@ describe('ForecastBlock: hũ không có gì rút tiền (#39)', { timeout: 20_00
     expect(container.querySelector('header')).toHaveTextContent(/Đang hết tiền$/)
   })
 
-  it('hũ mục tiêu có tiền, chỉ nhận lương: không có khoản chi dự kiến, số dư không giảm (không nói "đủ tới lương")', () => {
+  it('hũ mục tiêu có tiền, nhận phần lương: nói phần lương vào hũ (số và ngày của mốc), không nói "không có khoản chi" (#39 lần hai)', async () => {
     const d = idle({ code: 'muc_tieu', name: 'Du lịch', purpose: 'goal' }, 2_000_000, 500_000)
-    expect(forecastHeadline(d)).toBe(`Không có khoản chi dự kiến trong ${d.horizon_days} ngày.`)
-    expect(forecastSummary(d)).toBe(`Hũ Du lịch không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới; số dư không giảm.`)
+    expect(noOutflowExpected(d)).toBe(true)
+    expect(idleSaving(d)).toEqual({ kind: 'salary', date: d.payday.date, amountVnd: 500_000 })
+    expect(forecastHeadline(d)).toBe(`Dự kiến thêm ${formatVnd(500_000)} khi lương về 05/12.`)
+    expect(forecastSummary(d)).toBe(`Hũ Du lịch dự kiến nhận thêm ${formatVnd(500_000)} khi lương về 05/12.`)
+    const { container } = await mount(d)
+    expect(container.textContent).not.toMatch(/không có khoản chi/i)
+  })
+
+  it.each([
+    ['buffer', 'du_phong', 'Dự phòng'],
+    ['long_term', 'dau_tu', 'Đầu tư'],
+    ['goal', 'muc_tieu', 'Du lịch'],
+  ] as const)('hũ để dành (%s) có tiền, không nhận lương, số dư không đổi ngày nào: "Số dư giữ nguyên"', (purpose, code, name) => {
+    const d = idle({ code, name, purpose }, 2_700_000)
+    expect(idleSaving(d)).toEqual({ kind: 'flat' })
+    expect(forecastHeadline(d)).toBe(`Số dư giữ nguyên trong ${d.horizon_days} ngày tới.`)
+    expect(forecastSummary(d)).toBe(`Hũ ${name} dự kiến giữ nguyên số dư trong ${d.horizon_days} ngày tới.`)
+  })
+
+  it('hũ để dành có tiền, số dư có ngày cao hơn hôm nay mà không có mốc lương (dữ liệu lệch hiếm): không nói "giữ nguyên"', () => {
+    const d = idle({ code: 'du_phong', name: 'Dự phòng', purpose: 'buffer' }, 2_700_000)
+    d.days[10] = { ...d.days[10]!, p90_vnd: 3_000_000 }
+    expect(idleSaving(d)).toEqual({ kind: 'steady' })
+    expect(forecastHeadline(d)).toBe(`Số dư không xuống dưới mức hôm nay trong ${d.horizon_days} ngày tới.`)
+    expect(forecastSummary(d)).toBe(`Số dư hũ Dự phòng dự kiến không xuống dưới mức hôm nay trong ${d.horizon_days} ngày tới.`)
+  })
+
+  it('hũ không phải hũ để dành (khối không có purpose) có tiền mà không có gì rút: giữ câu cũ; hũ để dành 0 ₫ nhận lương vẫn "chưa có tiền"', () => {
+    for (const salary of [0, 500_000]) {
+      const d = idle({ code: 'an_uong', name: 'Ăn uống' }, 2_000_000, salary)
+      expect(idleSaving(d)).toBeNull()
+      expect(forecastHeadline(d)).toBe(`Không có khoản chi dự kiến trong ${d.horizon_days} ngày.`)
+      expect(forecastSummary(d)).toBe(`Hũ Ăn uống không có khoản chi nào dự kiến trong ${d.horizon_days} ngày tới; số dư không giảm.`)
+    }
+    const empty = idle({ code: 'muc_tieu', name: 'Du lịch', purpose: 'goal' }, 0, 500_000)
+    expect(idleSaving(empty)).toBeNull()
+    expect(forecastHeadline(empty)).toBe(`Chưa có tiền, không có khoản chi dự kiến trong ${empty.horizon_days} ngày.`)
   })
 
   it('còn một khoản đến hạn hoặc số dư có ngày giảm (kể cả cận dưới): vẫn là câu "đủ tới lương" như cũ', () => {

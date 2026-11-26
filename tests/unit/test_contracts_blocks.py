@@ -14,6 +14,7 @@ from referencing.jsonschema import DRAFT202012
 
 from yofina_core import blocks as b
 from yofina_core.confirm import canonical_json, hash_normalized_params, params_hash
+from yofina_core.money import format_vnd
 
 BLOCK_TYPES = [
     "jar_summary",
@@ -425,10 +426,49 @@ def test_cau_thay_the_hu_de_danh_0_dong_khong_lich_su_noi_chua_co_tien_khong_co_
     assert _fallback(data) == "Hũ Đầu tư chưa có tiền và không có khoản chi nào dự kiến trong 30 ngày tới."
 
 
-def test_cau_thay_the_hu_muc_tieu_co_tien_chi_nhan_luong():
+def test_cau_thay_the_hu_muc_tieu_co_tien_chi_nhan_luong_noi_phan_luong_vao_hu():
+    """#39: hũ để dành còn tiền mà dự báo không thấy gì rút (Du lịch trên ví demo `minh`, lịch sử có khoản rút tay "Bù tiền ăn cuối
+    tháng"): không nói "không có khoản chi"; khối có phần lương vào hũ trong kỳ thì nói đúng số và ngày của mốc đó (không bịa số).
+    Khối không có số mục tiêu (`goal_vnd`) nên không nói tiến độ."""
     data = _idle_forecast({"code": "muc_tieu", "name": "Du lịch", "purpose": "goal"}, 2_000_000, salary=500_000)
     assert b.no_outflow_expected(data)
-    assert _fallback(data) == "Hũ Du lịch không có khoản chi nào dự kiến trong 30 ngày tới; số dư không giảm."
+    assert _fallback(data) == f"Hũ Du lịch dự kiến nhận thêm {format_vnd(500_000)} khi lương về 05/12."
+
+
+@pytest.mark.parametrize(
+    ("jar", "name"),
+    [
+        ({"code": "du_phong", "name": "Dự phòng", "purpose": "buffer"}, "Dự phòng"),
+        ({"code": "dau_tu", "name": "Đầu tư", "purpose": "long_term"}, "Đầu tư"),
+        ({"code": "muc_tieu", "name": "Du lịch", "purpose": "goal"}, "Du lịch"),
+    ],
+)
+def test_cau_thay_the_hu_de_danh_co_tien_khong_nhan_luong_noi_so_du_giu_nguyen(jar, name):
+    """#39: hũ để dành còn tiền, không phần lương, không ngày nào khác số dư hôm nay: câu trung tính, không nói "không có khoản chi"."""
+    data = _idle_forecast(jar, 2_700_000)
+    assert b.no_outflow_expected(data)
+    assert _fallback(data) == f"Hũ {name} dự kiến giữ nguyên số dư trong 30 ngày tới."
+
+
+def test_cau_thay_the_hu_de_danh_co_tien_so_du_tang_ma_khong_co_moc_luong():
+    """Dữ liệu lệch hiếm (số dư có ngày cao hơn hôm nay mà khối không có mốc lương): không nói "giữ nguyên", chỉ nói điều số cho thấy."""
+    data = _idle_forecast({"code": "du_phong", "name": "Dự phòng", "purpose": "buffer"}, 2_700_000)
+    data["days"][10]["p90_vnd"] = 3_000_000
+    assert b.no_outflow_expected(data)
+    assert _fallback(data) == "Số dư hũ Dự phòng dự kiến không xuống dưới mức hôm nay trong 30 ngày tới."
+
+
+def test_cau_thay_the_hu_khong_phai_hu_de_danh_co_tien_khong_rut_giu_cau_cu():
+    """Hũ chi tiêu (khối không có `purpose`: chỉ hũ `saving` mới có) còn tiền mà dự báo không thấy gì rút: câu như #39 lần một."""
+    for salary in (0, 500_000):
+        data = _idle_forecast({"code": "an_uong", "name": "Ăn uống"}, 2_000_000, salary=salary)
+        assert b.no_outflow_expected(data)
+        assert _fallback(data) == "Hũ Ăn uống không có khoản chi nào dự kiến trong 30 ngày tới; số dư không giảm."
+
+
+def test_cau_thay_the_hu_de_danh_0_dong_nhan_luong_van_noi_chua_co_tien():
+    data = _idle_forecast({"code": "muc_tieu", "name": "Du lịch", "purpose": "goal"}, 0, salary=500_000)
+    assert _fallback(data) == "Hũ Du lịch chưa có tiền và không có khoản chi nào dự kiến trong 30 ngày tới."
 
 
 def test_cau_thay_the_hu_chi_tieu_0_dong_con_chi_van_la_can():
