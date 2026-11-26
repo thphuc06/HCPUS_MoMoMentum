@@ -50,7 +50,8 @@ TASKS: dict[str, str] = {
         "đầu vì còn ít dữ liệu, stale true nghĩa là số liệu có thể đã cũ: người dùng cần biết hai điều này khi chúng đúng. "
         "no_outflow_expected true nghĩa là dự báo không thấy gì rút tiền khỏi hũ trong kỳ dự báo: số dư không xuống dưới mức hôm "
         "nay, chỉ giữ nguyên hoặc tăng ở các mốc lương về trong upcoming. Cờ này nói điều dự báo thấy, không nói hũ chưa từng chi "
-        "hay rút tiền: hũ để dành còn tiền vẫn có thể có khoản rút tay mà dự báo không tính."
+        "hay rút tiền: hũ để dành còn tiền vẫn có thể có khoản rút tay mà dự báo không tính. end_of_forecast là số dư giữa dự kiến ở "
+        "ngày cuối của kỳ dự báo (date_text), số của dự báo chứ không phải số dư hôm nay cộng các khoản sắp về."
     ),
     "confirm_move": (
         "Thẻ xác nhận chuyển tiền giữa hai hũ đã hiện, có số dư trước và sau. Chưa có khoản tiền nào được chuyển cho tới khi "
@@ -158,12 +159,25 @@ FX_GUIDE = (
     "</ty_gia>"
 )
 
+#: Việc tra cứu mà câu hỏi có thể nêu số tiền của chính người dùng ("có đủ ... không"): bản gọn nhận các số đó làm dữ kiện
+#: (`compact.said_amounts`, trường `SAID_AMOUNTS_KEY`), nghĩa của trường ở `SAID_AMOUNTS_GUIDE` (#39, câu e sau Runtime v33).
+SAID_AMOUNT_TASKS = frozenset({"balance", "transactions", "forecast", "obligations"})
+SAID_AMOUNTS_KEY = "so_tien_nguoi_dung_noi"
+#: Nghĩa của `SAID_AMOUNTS_KEY`, thêm sau <du_lieu> CHỈ khi bản gọn có trường đó.
+SAID_AMOUNTS_GUIDE = (
+    "<so_tien_nguoi_dung_noi>"
+    "so_tien_nguoi_dung_noi là các số tiền người dùng tự nói trong <cau_hoi>, hệ thống đọc lại (amount_text dạng đầy đủ, short_text "
+    "dạng ngắn). Chúng chỉ để nhắc lại đúng số người dùng nói; đó không phải số liệu của ví hay của dự báo, và không dùng để tự tính."
+    "</so_tien_nguoi_dung_noi>"
+)
+
 
 def build_writer_prompt(task: str, question: str, compact: Mapping[str, Any], memory: str = "") -> str:
     """Prompt người viết. `memory` là khối `<bo_nho_nguoi_dung>` đã làm sạch (`TurnMemory.prompt_block`), chỉ thêm cho `MEMORY_TASKS`,
     kèm `MEMORY_GUIDE`. Khối này KHÔNG vào `compact` nên không bao giờ thành căn cứ cho số tiền (`allowed_amounts`).
     `<` và `>` trong dữ liệu được thoát (JSON `\\u003c`, `\\u003e`) để chữ của một dòng không đóng được thẻ `<du_lieu>`; bản gọn có chữ
-    không tin cậy của dòng (`compact.has_untrusted_text`) thì thêm `UNTRUSTED_GUIDE` ngay sau dữ liệu; có tỷ giá thì thêm `FX_GUIDE`."""
+    không tin cậy của dòng (`compact.has_untrusted_text`) thì thêm `UNTRUSTED_GUIDE` ngay sau dữ liệu; có tỷ giá thì thêm `FX_GUIDE`; có
+    số tiền người dùng nói (`SAID_AMOUNTS_KEY`) thì thêm `SAID_AMOUNTS_GUIDE`."""
     parts = [f"<nhiem_vu>{TASKS[task]}</nhiem_vu>"]
     if memory and task in MEMORY_TASKS:
         parts.append(memory)
@@ -175,6 +189,8 @@ def build_writer_prompt(task: str, question: str, compact: Mapping[str, Any], me
         parts.append(UNTRUSTED_GUIDE)
     if "exchange_rate" in compact:
         parts.append(FX_GUIDE)
+    if SAID_AMOUNTS_KEY in compact:
+        parts.append(SAID_AMOUNTS_GUIDE)
     return "\n".join(parts)
 
 

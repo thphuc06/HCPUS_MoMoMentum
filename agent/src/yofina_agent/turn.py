@@ -71,6 +71,7 @@ from yofina_agent.compact import (
     compact_roadmap_steps,
     compact_stress,
     compact_transactions,
+    said_amounts,
 )
 from yofina_agent.fallback import classify_by_rules
 from yofina_agent.fee_citation import on_knowledge
@@ -127,6 +128,8 @@ from yofina_agent.whatif import WhatIfState, run_what_if
 from yofina_agent.writer import (
     MEMORY_TASKS,
     PHASE4_TASKS,
+    SAID_AMOUNT_TASKS,
+    SAID_AMOUNTS_KEY,
     check_grounding,
     has_ungrounded_numbers,
     write_stream,
@@ -726,6 +729,9 @@ class Turn:
     async def write(self, task: str, question: str, compact: Mapping[str, Any]) -> None:
         if self.llm_down:
             return
+        if task in SAID_AMOUNT_TASKS and (said := said_amounts(question)):
+            # số tiền người dùng nói trong câu tra cứu là dữ kiện của writer (#39): lời nhắc lại đúng số đó có căn cứ, bộ kiểm không nới
+            compact = {**compact, SAID_AMOUNTS_KEY: said}
         if task in PHASE4_TASKS:
             await self.write_buffered(
                 task, question, compact, timeout=None, max_tokens=self.s.writer_max_tokens
