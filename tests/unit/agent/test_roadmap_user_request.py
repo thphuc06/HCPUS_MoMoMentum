@@ -61,6 +61,8 @@ def test_loi_nguoi_dung_vao_ngu_canh_nhu_du_lieu_da_che_pii():
     system = client.calls[0]["system"][0]["text"]
     assert system == ROADMAP_SYSTEM + ROADMAP_REQUEST_GUIDE
     assert "protect_jars" in ROADMAP_REQUEST_GUIDE and "user_amount" in ROADMAP_REQUEST_GUIDE
+    # lời người dùng không đổi được luật an toàn: không lấy quỹ dự phòng cho chi tiêu không thiết yếu, không bỏ bước kiểm tra
+    assert "quỹ dự phòng cho chi tiêu không thiết yếu" in ROADMAP_REQUEST_GUIDE and "không bỏ bước kiểm tra" in ROADMAP_REQUEST_GUIDE
 
 
 def test_buoc_chuyen_ngay_dung_so_tien_nguoi_dung_neu_khi_so_du_du():
