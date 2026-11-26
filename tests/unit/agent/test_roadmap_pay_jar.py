@@ -117,6 +117,21 @@ def test_khoan_lap_den_han_nhieu_lan_truoc_ky_luong_duoc_cong_du_so_lan():
     assert _obligation_dues(_payload([weekly, overdue]), JARS, PAYDAY) == {"nghia_vu": 450_000}
 
 
+def test_khoan_den_han_dung_ngay_luong_thuoc_truoc_luong_theo_cua_so_chung():
+    """Trả sau đến hạn ĐÚNG ngày lương 05/12 thuộc "trước lương" (`schedule.due_before_payday`, BR-22, #39) và trả bằng số dư hiện có
+    (chưa có lương), cùng cửa sổ với khối dự báo; khoản 06/12 sau kỳ lương không tính."""
+    on_payday = [
+        _ob("Tiền điện", "bill", 375_000, "2026-11-26", "nghia_vu"),
+        _ob("Trả sau (mô phỏng)", "bnpl", 1_200_000, "2026-12-05", "nghia_vu"),
+        _ob("Tiền thuê phòng", "rent", 2_000_000, "2026-12-06", "nghia_vu"),
+    ]
+    assert _obligation_dues(_payload(on_payday), JARS, PAYDAY) == {"nghia_vu": 1_575_000}
+    (row,) = _obligation_pay_jars(_payload(on_payday), JARS, PAYDAY)
+    assert row["status"] == "thiếu" and row["shortfall_text"] == "125.000 ₫"
+    weekly = {**_ob("Góp hụi", "loan", 100_000, "2026-11-28", "nghia_vu"), "cycle": "weekly"}  # 28/11 và đúng 05/12
+    assert _obligation_dues(_payload([weekly]), JARS, PAYDAY) == {"nghia_vu": 200_000}
+
+
 # --- kiểm bước khi nhận ----------------------------------------------------------------------------------------------------------
 def _context(jars=JARS, obligations=MINH_OBLIGATIONS):
     return {

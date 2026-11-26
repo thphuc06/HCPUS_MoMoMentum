@@ -45,7 +45,7 @@ from yofina_core.roadmap import (
     RoadmapDraftPhase,
     RoadmapDraftStep,
 )
-from yofina_core.schedule import expand_due_dates
+from yofina_core.schedule import due_before_payday, expand_due_dates
 from yofina_core.suitability import Proposal, SuitabilityVerdict
 from yofina_core.wallet import SAVE_JARS, is_goal_jar, resolve_obligation_pay_jar
 
@@ -686,7 +686,8 @@ def _set_allocation(
 def _obligation_dues(
     obligations: dict[str, Any], jars: list[dict[str, Any]], payday: date, today: date | None = None
 ) -> dict[str, int]:
-    """Tổng tiền mỗi hũ trả phải trả cho các khoản nghĩa vụ đang hoạt động trong [hôm nay, kỳ lương kế `payday`): mọi lần đến hạn của khoản
+    """Tổng tiền mỗi hũ trả phải trả cho các khoản nghĩa vụ đang hoạt động từ hôm nay tới kỳ lương kế `payday` theo cửa sổ chung
+    `schedule.due_before_payday` (gồm khoản đến hạn ĐÚNG ngày lương, trả bằng số dư trước khi lương về; BR-22): mọi lần đến hạn của khoản
     lặp (`schedule.expand_due_dates`: khoản hằng tuần đến hạn hai lần trước kỳ lương thì cộng hai lần), khoản đã quá hạn tính vào hôm nay
     như lịch của dự báo. Hũ trả theo đúng quy tắc của dự báo (`wallet.resolve_obligation_pay_jar`: hũ đã lưu ở khoản, không có thì hũ trả
     mặc định của ví). `today` vắng thì là `app_date` của kết quả tool."""
@@ -699,7 +700,6 @@ def _obligation_dues(
         return {}
     names = {str(j["code"]) for j in jars}
     kinds = [(str(j["code"]), str(j.get("kind") or "spending")) for j in jars]  # như `compact_obligations`
-    through = payday - timedelta(days=1)
     due: dict[str, int] = {}
     for o in (obligations.get("data") or {}).get("obligations") or []:
         if o.get("status", "active") != "active":
@@ -711,7 +711,8 @@ def _obligation_dues(
             due_day = int(o["due_day"]) if o.get("due_day") is not None else None
         except (KeyError, TypeError, ValueError):
             continue
-        times = len(expand_due_dates(when, cycle, due_day, first=today, through=through))
+        dates = expand_due_dates(when, cycle, due_day, first=today, through=payday)
+        times = sum(1 for d in dates if due_before_payday(d, payday))
         code = resolve_obligation_pay_jar(kinds, saved=o.get("pay_jar"))
         if times and code in names:
             due[code] = due.get(code, 0) + amount * times
