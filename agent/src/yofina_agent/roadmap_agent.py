@@ -27,7 +27,7 @@ from yofina_core import blocks as B
 from yofina_core.clock import payday_in_month
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
-from yofina_core.money import format_vnd
+from yofina_core.money import format_vnd, to_vnd
 from yofina_core.params import (
     ParamsError,
     normalize_move_params,
@@ -45,7 +45,7 @@ from yofina_core.roadmap import (
     RoadmapDraftStep,
 )
 from yofina_core.suitability import Proposal, SuitabilityVerdict
-from yofina_core.wallet import SAVE_JARS, is_goal_jar
+from yofina_core.wallet import SAVE_JARS, is_goal_jar, resolve_obligation_pay_jar
 
 ROADMAP_SYSTEM = """Bạn là Yofina, trợ lý lập lộ trình quản lý chi tiêu theo hũ. Viết tiếng Việt ngắn gọn, tự nhiên.
 Khuôn lộ trình:
@@ -62,7 +62,9 @@ Mỗi bước là MỘT hành động cụ thể người dùng tự làm đư�
   tiền từ hũ nào sang hũ nào. reason là một câu ngắn nói vì sao, dựa trên dữ liệu (hũ sắp cạn, nghĩa vụ sắp đến hạn,
   mục tiêu đang chậm, thành phần yếu nhất).
 - set_aside và pay_obligation là chuyển tiền: bắt buộc có jar_code (hũ nguồn), to_jar_code (hũ nhận, khác hũ nguồn) và
-  amount_ref. Dùng pay_obligation khi hũ nhận là hũ nghĩa vụ cần thêm tiền trước hạn.
+  amount_ref. Dùng pay_obligation khi hũ nhận là hũ trả (pay_jar_code trong context.obligations) của khoản nghĩa vụ sắp đến
+  hạn và hũ đó cần thêm tiền; ở giai đoạn đầu, hũ đó phải đang thiếu trong context.obligation_pay_jars. Khoản do hũ khác trả
+  không phải lý do để chuyển tiền vào hũ nghĩa vụ.
 - cut_spending bắt buộc có jar_code là hũ không thiết yếu và amount_ref trỏ proposed_decrease của chính hũ đó.
 - adjust_split cần amount_ref (hũ được tăng hoặc giảm phần chia) hoặc action save_jars.
 - Bước không có số tiền chỉ được là remind hoặc review_goal và phải có action schedule_nudge để có ngày nhắc.
@@ -521,6 +523,71 @@ def _set_allocation(compact: dict[str, Any], plan: AllocationPlanData) -> None:
         if fitting:
             sources[code] = {"max_text": jar["balance_text"], "refs": fitting}
     compact["first_phase_sources"] = sources
+
+
+def _obligation_pay_jars(
+    obligations: dict[str, Any], jars: list[dict[str, Any]], payday: date
+) -> list[dict[str, Any]]:
+    """Hũ trả của các khoản nghĩa vụ đang hoạt động đến hạn trước kỳ lương kế `payday` (cùng cửa sổ với `schedule.obligation_window`, kể
+    cả khoản đã quá hạn), mỗi hũ một dòng: tổng phải trả từ hũ đó và đủ hay thiếu so với số dư HIỆN CÓ của hũ. Hũ trả theo đúng quy tắc
+    của dự báo (`wallet.resolve_obligation_pay_jar`: hũ đã lưu ở khoản, không có thì hũ trả mặc định của ví). Dữ kiện có cấu trúc cho
+    bước chuyển tiền của giai đoạn đầu: khoản do hũ Ăn uống trả không phải lý do để nạp thêm hũ Nghĩa vụ (#39)."""
+    names = {str(j["code"]): str(j["name"]) for j in jars}
+    balances = {str(j["code"]): int(j["balance_vnd"]) for j in jars}
+    kinds = [(str(j["code"]), str(j.get("kind") or "spending")) for j in jars]  # như `compact_obligations`
+    due: dict[str, int] = {}
+    for o in (obligations.get("data") or {}).get("obligations") or []:
+        if o.get("status", "active") != "active":
+            continue
+        try:
+            when = date.fromisoformat(str(o["due_date"]))
+            amount = to_vnd(o["amount_vnd"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        code = resolve_obligation_pay_jar(kinds, saved=o.get("pay_jar"))
+        if when < payday and code in names:
+            due[code] = due.get(code, 0) + amount
+    out: list[dict[str, Any]] = []
+    for code, total in due.items():
+        gap = total - balances[code]
+        row: dict[str, Any] = {
+            "jar_code": code,
+            "jar_name": names[code],
+            "due_before_payday_text": format_vnd(total),
+            "status": "thiếu" if gap > 0 else "đủ",
+        }
+        if gap > 0:
+            row["shortfall_text"] = format_vnd(gap)
+        out.append(row)
+    return out
+
+
+def _obligation_step_issue(
+    item: StepOutline, compact: dict[str, Any], *, immediate: bool
+) -> str | None:
+    """Bước `pay_obligation` (chuyển tiền vào hũ nghĩa vụ VÌ khoản nghĩa vụ) phải nạp đúng hũ trả của khoản: hũ nhận không trả khoản nào
+    trong `context.obligations`, hoặc ở giai đoạn đầu hũ đó đã đủ cho các khoản nó trả trước kỳ lương (`context.obligation_pay_jars`),
+    thì bước vào vòng sửa. Kiểm trên dữ kiện có cấu trúc (mã hũ của bước, hũ trả của khoản), không đọc chữ của lý do."""
+    if item.kind != "pay_obligation" or not item.to_jar_code:
+        return None
+    name = next((j["name"] for j in compact.get("jars", []) if j.get("code") == item.to_jar_code), item.to_jar_code)
+    window = compact.get("obligation_pay_jars")
+    payers = {o.get("pay_jar_code") for o in compact.get("obligations", [])} | {
+        p["jar_code"] for p in window or []
+    }
+    if item.to_jar_code not in payers:
+        return (
+            f"Hũ {name} không trả khoản nghĩa vụ nào trong context.obligations (xem pay_jar_code của từng khoản): bước pay_obligation"
+            " chỉ chuyển tiền vào hũ trả của khoản sắp đến hạn. Đổi hũ nhận, đổi loại bước hoặc bỏ bước."
+        )
+    if immediate and window is not None:
+        row = next((p for p in window if p["jar_code"] == item.to_jar_code), None)
+        if row is None or row["status"] != "thiếu":
+            return (
+                f"Hũ {name} đã đủ cho các khoản nghĩa vụ nó trả trước kỳ lương (context.obligation_pay_jars), nên giai đoạn đầu không"
+                " cần chuyển thêm vào hũ này. Khoản do hũ khác trả thì lo ở hũ trả của khoản đó; không thì bỏ bước."
+            )
+    return None
 
 
 async def _ask[T: RoadmapOutline](
@@ -1151,6 +1218,13 @@ async def _verify(
                 )
                 rejected(phase.phase_id, item, "step_invalid", "step_invalid", detail=code)
                 continue
+            # Bước chuyển tiền "vì" nghĩa vụ vào một hũ không phải hũ trả đang thiếu của khoản đó: vòng sửa, không tốn check_suitability.
+            if (wrong_payer := _obligation_step_issue(item, compact, immediate=phase_start <= today)) is not None:
+                issues.append(
+                    RepairIssue(step_id=item.step_id, rule_id="obligation_pay_jar", message=wrong_payer)
+                )
+                rejected(phase.phase_id, item, "obligation_pay_jar", "obligation_pay_jar")
+                continue
             # Bước dựng được nhưng chưa là một hành động cụ thể: đưa vào vòng sửa, không tốn lượt check_suitability.
             if (vague := _vague_reason(item)) is not None:
                 issues.append(
@@ -1345,7 +1419,7 @@ async def build_roadmap(
         if (goal_date_text := _date_text(jar.get("goal_date"))) is not None:
             jar["goal_date_text"] = goal_date_text
     try:
-        obligations_view = compact_obligations(obligations.payload or {})
+        obligations_view = compact_obligations(obligations.payload or {}, jars=compact["jars"])
     except (TypeError, ValueError, KeyError):
         return RoadmapResult(outcome=_tool_error(obligations))
     for item in obligations_view["obligations"]:
@@ -1387,6 +1461,11 @@ async def build_roadmap(
         return RoadmapResult(outcome=_tool_error(optimized))
     plan, (period_start, period_end) = allocated
     _set_allocation(compact, plan)
+    if today < period_start:
+        # giai đoạn đầu (từ hôm nay tới ngày lương kế) lấy tiền từ số dư hiện có: hũ trả nào đủ, hũ nào thiếu cho khoản của chính nó
+        compact["obligation_pay_jars"] = _obligation_pay_jars(
+            obligations.payload or {}, compact["jars"], period_start
+        )
 
     await stage("draft")
     if llm is None or not model_left():

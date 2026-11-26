@@ -58,3 +58,34 @@ def test_mo_ta_no_outflow_expected_theo_nghia_du_lieu_khop_loi_giao_dien():
     field = text[text.index("no_outflow_expected") :]
     assert "giữ nguyên" in field and "lương về" in field
     assert "số dư không giảm" not in field and "không có khoản chi" not in field
+
+
+def _new_account_credit_check() -> dict:
+    """Kiểm tra trước khi chi trên tài khoản mới (lượt thấy trên app 26/11, #39): món 200.000 ₫, nếu trả sau thì món tốn 233.000 ₫ gồm
+    phí 33.000 ₫; không có ngoại tệ."""
+    from agent_helpers import fixture
+
+    payload = fixture("affordability_check.ok.json")
+    cost = payload["data"]["credit"]["cost"]
+    cost.update(principal_vnd=200_000, fee_added_vnd=33_000, item_cost_vnd=233_000, existing_due_vnd=0, total_due_vnd=233_000)
+    return payload
+
+
+def test_phan_tra_sau_cua_kiem_tra_truoc_khi_chi_tach_goc_va_phi():
+    from yofina_agent.compact import compact_affordability
+
+    credit = compact_affordability(_new_account_credit_check())["credit"]
+    assert (credit["principal_text"], credit["fee_added_text"], credit["item_cost_text"]) == ("200.000 ₫", "33.000 ₫", "233.000 ₫")
+    task = writer.TASKS["affordability"]
+    for field in ("item_cost_text", "principal_text", "fee_added_text", "total_due_text", "existing_due_text"):
+        assert field in task  # nghĩa của từng con số Trả sau nói rõ ở nhiệm vụ
+
+
+def test_cau_ve_ty_gia_chi_co_khi_ban_gon_co_ty_gia():
+    from yofina_agent.compact import compact_affordability
+
+    compact = compact_affordability(_new_account_credit_check())
+    plain = writer.build_writer_prompt("affordability", "ăn tối 200k có ổn không", compact)
+    assert "chuyển đổi" not in plain and "tỷ giá" not in plain
+    with_fx = writer.build_writer_prompt("affordability", "q", {**compact, "exchange_rate": {"currency": "USD"}})
+    assert writer.FX_GUIDE in with_fx and "phí chuyển đổi ngoại tệ" in with_fx

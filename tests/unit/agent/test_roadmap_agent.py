@@ -99,6 +99,24 @@ def scripted_tools(
     )
 
 
+def obligations_result(*, due_from_nghia_vu: int | None = None, **pay_jars: str):
+    """`get_obligations` giả từ fixture: `pay_jars` đổi hũ trả theo tên khoản; `due_from_nghia_vu` thêm một khoản tiền trọ trả từ hũ
+    Nghĩa vụ đến hạn trước kỳ lương (ngày 28/11, kỳ lương 05/12 của phương án fixture)."""
+    payload = fixture("get_obligations.ok.json")
+    for item in payload["data"]["obligations"]:
+        if item["name"] in pay_jars:
+            item["pay_jar"] = pay_jars[item["name"]]
+    if due_from_nghia_vu is not None:
+        payload["data"]["obligations"].append(
+            {
+                "id": "5d1f0b9e-8c2a-4e3b-9f6d-7a8b9c0d1e2f", "kind": "rent", "name": "Tiền trọ",
+                "amount_vnd": due_from_nghia_vu, "fee_vnd": 0, "due_date": "2026-11-28", "cycle": "monthly",
+                "due_day": 28, "status": "active", "pay_jar": "nghia_vu", "is_essential": True, "source": "declared",
+            }
+        )  # fmt: skip
+    return lambda _args: classify_result("get_obligations", mcp_ok(payload))
+
+
 def block_jar_funded(args):
     """check_suitability giả: chặn đề xuất lấy tiền từ hũ (funding_source jar), cho qua bước còn lại."""
     name = "violation" if args["proposal"].get("funding_source") == "jar" else "ok"
@@ -1102,7 +1120,11 @@ def test_agent_proposal_matches_ledger_save_check_in_later_phase():
 def test_agent_proposal_matches_ledger_save_check(draft_step):
     # Trước đây bước pay_obligation một hũ bị agent gắn funding_source jar (ledger thì không) nên bị source_jar_covers chặn
     # oan; bước set_aside không action thì agent không gắn nguồn (ledger có) nên lỗi chỉ lộ ra lúc lưu.
-    tools = scripted_tools()
+    extra = {}
+    if draft_step["kind"] == "pay_obligation":
+        # bước nạp hũ Nghĩa vụ ở giai đoạn đầu chỉ hợp lệ khi hũ đó thiếu cho khoản nó trả trước kỳ lương (#39)
+        extra["get_obligations"] = obligations_result(due_from_nghia_vu=1_200_000)
+    tools = scripted_tools(**extra)
     result, _, _ = build(tools, {"phases": [{"phase_id": "p", "title": "Ổn định", "steps": [draft_step]}]})
     assert result.outcome.ok
     (stored,) = args_for(tools, "save_roadmap")
