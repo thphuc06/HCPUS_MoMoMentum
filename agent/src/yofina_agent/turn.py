@@ -1814,14 +1814,20 @@ class Turn:
             return r  # đọc hũ lỗi: để đường hỏi lại hoặc tool báo lỗi đúng chỗ của nó
         found = infer_pay_jar(r, self._jar_rows)
         self.inferred_jar, self._jar_candidates = found.inferred, found.candidates
+        if found.inferred is not None:
+            event = "pay_jar_inferred"
+        elif found.result.params.jar_text and not lacks_pay_jar(found.result):
+            event = "pay_jar_named"  # hũ router chọn là hũ người dùng tự nêu (`spend_jar_named`): đã rõ, không phải hũ suy
+        else:
+            event = "pay_jar_unclear"
         log.info(
             json.dumps(
                 {
-                    "event": "pay_jar_inferred" if found.inferred else "pay_jar_unclear",
+                    "event": event,
                     "source": found.inferred.source if found.inferred else None,
                     "spend_jar_code": r.params.spend_jar_code,
                     "tx_type": r.params.tx_type,
-                    "jar": found.inferred.code if found.inferred else None,
+                    "jar": found.inferred.code if found.inferred else (r.params.spend_jar_code if event == "pay_jar_named" else None),
                     "candidates": list(found.candidates),
                 }
             )

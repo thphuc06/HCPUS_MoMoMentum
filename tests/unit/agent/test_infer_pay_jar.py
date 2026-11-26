@@ -213,6 +213,31 @@ def test_nguoi_dung_noi_ten_hu_thi_ten_hu_thang_va_khong_co_notice_suy_hu(monkey
     assert _inferred_notice(events) is None and "clarify" not in _types(events)
 
 
+def test_hu_router_chon_ma_nguoi_dung_tu_neu_thi_dung_hu_do_khong_noi_la_suy():
+    """`spend_jar_named` true (#39, i2 sau Runtime v33): người dùng tự nêu hũ (ở câu mới hoặc câu trả lời câu hỏi hũ), router chỉ trả mã
+    hũ, không chép tên vào `jar_text`. Hũ đó là hũ người dùng chọn: điền tên như người dùng đã nói, không đánh dấu là hũ mã suy."""
+    r = _routed(amount_vnd=400_000, funding="jar", tx_type="transfer_person", spend_jar_code="giai_tri", spend_jar_named=True)
+    found = infer_pay_jar(r, DEMO_8)
+    assert found.inferred is None and found.candidates == ()
+    assert found.result.params.jar_text == "Giải trí" and found.result.params.amount_vnd == 400_000
+
+
+def test_tra_loi_cau_hoi_hu_bang_chu_thi_khong_hien_dong_chua_noi_hu(monkeypatch):
+    msgs = [
+        {"id": "m1", "role": "user", "content": "gui ban 400k co duoc khong"},
+        {"id": "m2", "role": "assistant", "content": PAY_QUESTION},
+        {"id": "m3", "role": "user", "content": "lay o hu giai tri giup minh"},
+    ]
+    route = {
+        "intent": "affordability", "amount_vnd": 400_000, "funding": "jar", "tx_type": "transfer_person",
+        "spend_jar_code": "giai_tri", "spend_jar_named": True,
+    }  # fmt: skip
+    llm = make_llm([route_response(**route)])
+    events, tools, _ = run_turn(None, llm=llm, tools=_tools(DEMO_8), monkeypatch=monkeypatch, messages=msgs)
+    assert _calls(tools, "affordability_check")[0]["jar"] == "giai_tri"
+    assert _inferred_notice(events) is None and "clarify" not in _types(events)
+
+
 @pytest.mark.parametrize(
     "tx_type",
     [pytest.param(None, id="khong-co-loai"), pytest.param("transfer_person", id="loai-khong-co-hu-nhan")],
