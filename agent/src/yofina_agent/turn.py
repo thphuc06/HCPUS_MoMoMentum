@@ -41,7 +41,7 @@ from ag_ui.core import BaseEvent, RunAgentInput
 from yofina_agent import advisor, behavior_chat, notices, trace
 from yofina_agent import events as ev
 from yofina_agent import memory as agent_memory
-from yofina_agent.clarify import resolve_clarify
+from yofina_agent.clarify import InferredJar, infer_pay_jar, lacks_pay_jar, resolve_clarify
 from yofina_agent.compact import (
     compact_affordability,
     compact_confirm,
@@ -66,6 +66,7 @@ from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
 from yofina_agent.router import PENDING_INTENTS, merge_pending, pending_params, route
 from yofina_agent.schemas import (
+    ROUTER_TX_TYPES,
     ClarifyChipIn,
     ClarifyRequest,
     Intent,
@@ -216,6 +217,10 @@ class Turn:
         self._llm: LlmGateway | None = None
         self._jars: CallResult | None = None
         self._jar_rows: list[dict[str, Any]] = []
+        # hũ trả mã suy từ loại chi khi người dùng không nêu hũ (lượt chỉ đọc), hũ ứng viên ngang nhau khi chưa rõ (chip đứng đầu)
+        self.inferred_jar: InferredJar | None = None
+        self._jar_candidates: tuple[str, ...] = ()
+        self._inferred_noticed = False
         # dấu vết cho bản ghi lượt
         self._t0 = time.perf_counter()
         self.steps: list[trace.TurnStep] = []  # theo thứ tự bắt đầu; mỗi lần gọi tool một bước (call_tool)
@@ -868,6 +873,8 @@ class Turn:
                 return
             routed = converted
         handler = self._intent_handlers()[routed.intent]
+        # Lượt chỉ đọc chưa nêu hũ trả: suy hũ từ loại chi router trích (quy tắc phân loại của ví) trước khi quyết định hỏi lại.
+        routed = await self.infer_pay_jar(routed)
         # Chỉ ý định có ô bắt buộc mới hỏi lại (clarify.CLARIFY_INTENTS); handler khác tự xử lý phần còn thiếu.
         if req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed):
             await self.emit_clarify(req, routed)
@@ -1502,6 +1509,45 @@ class Turn:
         return out
 
     # --- what-if và kiểm tra trước khi quẹt -------------------------------------------------
+    async def infer_pay_jar(self, r: IntentResult) -> IntentResult:
+        """Lượt chỉ đọc thiếu hũ trả (`clarify.lacks_pay_jar`) mà router đã trích loại chi: suy hũ bằng quy tắc phân loại của ví
+        (`clarify.infer_pay_jar`). Đã rõ thì trả ý định đã điền tên hũ (không hỏi); chưa rõ thì giữ nguyên ý định để hỏi như cũ, nhớ
+        hũ ứng viên cho chip. Chỉ đọc danh sách hũ (một tool call, cũng là lần đọc mà câu hỏi hũ hay lượt tính sẽ dùng), không gọi model."""
+        if r.params.tx_type is None or not lacks_pay_jar(r):
+            return r
+        jars = await self.ensure_jars()
+        if not jars.outcome.ok:
+            return r  # đọc hũ lỗi: để đường hỏi lại hoặc tool báo lỗi đúng chỗ của nó
+        found = infer_pay_jar(r, self._jar_rows)
+        self.inferred_jar, self._jar_candidates = found.inferred, found.candidates
+        log.info(
+            json.dumps(
+                {
+                    "event": "pay_jar_inferred" if found.inferred else "pay_jar_unclear",
+                    "tx_type": r.params.tx_type,
+                    "jar": found.inferred.code if found.inferred else None,
+                    "candidates": list(found.candidates),
+                }
+            )
+        )
+        return found.result
+
+    def note_inferred_jar(self, code: str | None) -> None:
+        """Khối `notice` thông tin "Tính theo hũ X" khi lượt tính theo đúng hũ mã đã suy (một lần mỗi lượt): người dùng thấy hũ nào
+        được dùng và biết nhắn tên hũ khác để đổi ở lượt sau. Hũ được dùng khác hũ đã suy (Orchestrator chọn hũ khác) thì không nói,
+        để thông báo không sai với số liệu."""
+        inferred = self.inferred_jar
+        if inferred is None or code != inferred.code or self._inferred_noticed:
+            return
+        self._inferred_noticed = True
+        label = ROUTER_TX_TYPES.get(inferred.tx_type, inferred.tx_type)
+        self.emit_notice(
+            kind="info",
+            code=notices.INFERRED_JAR_CODE,
+            title=notices.INFERRED_JAR_TITLE.format(name=inferred.name)[:80],
+            message=notices.INFERRED_JAR_MESSAGE.format(name=inferred.name, label=label)[:280],
+        )
+
     async def on_what_if(self, r: IntentResult, question: str) -> None:
         self.whatif = await run_what_if(self, r, question, self.history)
         if self.whatif.spec is not None or self.whatif.handled:
@@ -1526,6 +1572,7 @@ class Turn:
             jars = await self.ensure_jars()
             if jars.outcome.ok and (m := resolve_jar(p.jar_text, self._jar_rows)).status == "ok":
                 args["jar"] = m.code
+        self.note_inferred_jar(args.get("jar"))
         res = await self.call_tool_retry(
             "affordability_check",
             args,
@@ -1711,11 +1758,13 @@ class Turn:
 
     # --- hỏi lại ----------------------------------------------------------------------------
     async def jar_chips(self) -> list[ClarifyChipIn]:
-        """Chip là các hũ CÓ THẬT của người dùng (không có dữ liệu hũ thì không chip, không bịa)."""
+        """Chip là các hũ CÓ THẬT của người dùng (không có dữ liệu hũ thì không chip, không bịa), theo thứ tự trong ví; hũ ứng viên
+        ngang nhau của lần suy hũ trả (nếu có) đứng đầu."""
         jars = await self.ensure_jars()
         if not jars.outcome.ok:
             return []
-        rows = [j for j in self._jar_rows if j.get("name")]
+        first = {code: i for i, code in enumerate(self._jar_candidates)}
+        rows = sorted((j for j in self._jar_rows if j.get("name")), key=lambda j: first.get(j["code"], len(first)))
         return [ClarifyChipIn(label=str(j["name"])[:40], value=f"Hũ {j['name']}"[:80]) for j in rows[:6]]
 
     async def unknown_jar_clarify(self, r: IntentResult) -> ClarifyRequest | None:

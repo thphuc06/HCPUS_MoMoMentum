@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from yofina_core.blocks import ActionToolName, BehaviorInsightKind, ClarifySlot, JarCode, OptionKind, RuleId
 from yofina_core.scenario import SCENARIO_ADAPTER, ScenarioSpec
 from yofina_core.suitability import Proposal, SuitabilityVerdict
-from yofina_core.wallet import INTENTS
+from yofina_core.wallet import INTENTS, SPENDING_TX_TYPES, TX_TYPE_BNPL_PURCHASE
 
 # Phase 3 có bảy ý định; phase 4 thêm `resilience`, `stress`, `roadmap`; phase 5 thêm `behavior`, `knowledge`, `ingest`, `memory`
 # (khớp `wallet.INTENTS`, cùng thứ tự với CHECK của migration 0053).
@@ -86,6 +86,10 @@ class ClarifyRequest(_Model):
 
 LookupKind = Literal["balance", "transactions", "forecast", "obligations"]
 ObligationKind = Literal["rent", "bill", "subscription", "loan"]
+#: Loại chi router trích được (`IntentParams.tx_type`): danh mục loại CHI của bảng tra loại giao dịch (`wallet.SPENDING_TX_TYPES`), mã ->
+#: nhãn theo thứ tự của bảng; trừ mua bằng Trả sau vì đó là cách trả (đã có `funding`), không phải việc được trả tiền.
+ROUTER_TX_TYPES: dict[str, str] = {code: label for code, label, _ in SPENDING_TX_TYPES if code != TX_TYPE_BNPL_PURCHASE}
+RouterTxType = Literal[tuple(ROUTER_TX_TYPES)]  # type: ignore[valid-type]
 
 
 class IntentParams(_Model):
@@ -128,6 +132,15 @@ class IntentParams(_Model):
     # `knowledge___get_exchange_rate` và điền amount_vnd từ kết quả tool. currency là mã ISO 4217, amount_original là số theo ngoại tệ.
     currency: str | None = None
     amount_original: Annotated[float, Field(gt=0)] | None = None
+    # what_if có khoản chi và affordability: loại chi của khoản đó theo danh mục loại giao dịch của sản phẩm (router trích, không đoán).
+    # Người dùng không nêu hũ thì mã đưa loại này qua quy tắc phân loại của ví để biết hũ trả (`clarify.infer_pay_jar`).
+    tx_type: RouterTxType | None = None
+
+    @field_validator("tx_type", mode="before")
+    @classmethod
+    def _known_tx_type(cls, value: Any) -> Any:
+        """Mã ngoài danh mục loại chi coi như router không trích được loại (mã hỏi lại hũ như cũ), không bắt router thử lại."""
+        return value if isinstance(value, str) and value in ROUTER_TX_TYPES else None
 
     @field_validator("currency", mode="before")
     @classmethod
@@ -367,6 +380,7 @@ class Verdict(_Model):
 __all__ = [
     "INTENTS",
     "PLAN_TOOLS",
+    "ROUTER_TX_TYPES",
     "Analysis",
     "AnalysisOption",
     "BasisKey",

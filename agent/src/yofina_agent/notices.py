@@ -156,6 +156,14 @@ SWITCH_JAR_SUMMARY_SHORT = "Hũ {name} chỉ còn {balance}, không đủ trả 
 #: Tên hũ người dùng gõ không khớp hũ nào (hoặc khớp nhiều hũ): đúng một câu hỏi, chip là các hũ có thật.
 UNKNOWN_JAR_QUESTION = "Mình chưa thấy hũ “{name}” trong ví của bạn. Bạn muốn dùng hũ nào?"
 UNKNOWN_JAR_QUESTION_NO_NAME = "Mình chưa xác định được hũ bạn nói. Bạn muốn dùng hũ nào?"
+#: Lượt chỉ đọc tự suy hũ trả từ loại chi (`clarify.infer_pay_jar`): khối `notice` thông tin nói đang tính theo hũ nào và cách đổi.
+#: {name}: tên hũ; {label}: nhãn loại chi của bảng tra loại giao dịch. Không có dấu hỏi (lịch sử không coi đây là câu hỏi đang chờ).
+INFERRED_JAR_CODE = "PAY_JAR_INFERRED"
+INFERRED_JAR_TITLE = "Tính theo hũ {name}"
+INFERRED_JAR_MESSAGE = (
+    "Bạn chưa nói hũ nào nên mình tính theo hũ {name}, hũ nhận các khoản loại “{label}” trong ví của bạn. "
+    "Muốn tính theo hũ khác, bạn nhắn tên hũ đó nhé."
+)
 
 STRESS_QUESTION = "Bạn muốn thử cú sốc nào?"
 STRESS_CHIP_VALUE = "Thử cú sốc {label}"

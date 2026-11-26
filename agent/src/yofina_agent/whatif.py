@@ -588,6 +588,7 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
         st.handled = True
         return st
     st.with_scenarios = with_scenarios
+    turn.note_inferred_jar(pay_jar(spec))  # hũ mã đã suy từ loại chi: nói rõ trước khối số liệu
 
     # 2) kế hoạch và tool đọc (bước đã đọc ở 1 dùng lại kết quả, không đọc lần hai)
     plan = build_plan(

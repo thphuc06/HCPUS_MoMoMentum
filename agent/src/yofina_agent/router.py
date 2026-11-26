@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from yofina_agent.clarify import CLARIFY_INTENTS, missing_slot
 from yofina_agent.fallback import _CREDIT, _has, _jar_phrase, classify_by_rules
-from yofina_agent.schemas import IntentResult
+from yofina_agent.schemas import ROUTER_TX_TYPES, IntentResult
 from yofina_agent.textutil import goal_date_phrase, normalize, parse_amount_vnd
 from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
 from yofina_core.resilience import load_shock_set
@@ -72,6 +72,8 @@ currency là mã ISO 4217 ba chữ in hoa, amount_original là số theo ngoại
 amount_vnd để null; hệ thống tra tỷ giá bán rồi tự điền số VND. Ý định vẫn chọn theo việc người dùng muốn làm với khoản tiền đó. \
 Hỏi tỷ giá mà không nêu số tiền thì chỉ đặt currency.
 - funding: "credit" khi người dùng nói Trả sau, Ví Trả Sau, BNPL, mua trước trả sau; "jar" khi họ nói trừ vào hũ hay tiền hũ; còn lại để null.
+- tx_type chỉ dùng cho khoản chi của chính người dùng ở what_if và affordability: mã trong danh sách loại chi bên dưới mà khoản tiền \
+đó thuộc về, chọn theo việc hay món được trả tiền, không theo cách trả hay tên hũ. Không loại nào khớp rõ thì để null, không đoán.
 - profile_update: lương đặt vào salary_vnd, ngày nhận lương vào payday_day; MỘT khoản nghĩa vụ thì obligation_name (tên ngắn, ví dụ "Tiền trọ"), \
 obligation_kind (rent, bill, subscription hoặc loan; không chắc thì null), amount_vnd (số tiền mỗi kỳ), due_day (ngày đến hạn trong tháng).
 - shock_id chỉ dùng cho stress: chọn mã của cú sốc mẫu phù hợp, kể cả khi người dùng gửi nhãn từ chip; không khớp cú sốc nào thì để null.
@@ -111,11 +113,17 @@ Khi hỏi lại thì clarify có giá trị, nếu không thì clarify là null;
 
 @cache
 def build_router_system() -> str:
+    """Lời nhắc hệ thống của router: quy tắc, rồi hai danh mục lấy từ dữ liệu của sản phẩm (loại chi của bảng tra loại giao dịch,
+    cú sốc mẫu của cấu hình)."""
+    tx_types = "\n".join(f"- {code}: {label}" for code, label in ROUTER_TX_TYPES.items())
     shocks = "\n".join(
         f"- {shock.shock_id}: {shock.label} — {shock.description}"
         for shock in load_shock_set().shocks
     )
-    return f"{ROUTER_SYSTEM}\n\nCú sốc mẫu (shock_id: nhãn — mô tả):\n{shocks}"
+    return (
+        f"{ROUTER_SYSTEM}\n\nLoại chi (tx_type: nhãn):\n{tx_types}"
+        f"\n\nCú sốc mẫu (shock_id: nhãn — mô tả):\n{shocks}"
+    )
 
 
 def build_router_prompt(question: str, history: str) -> str:
