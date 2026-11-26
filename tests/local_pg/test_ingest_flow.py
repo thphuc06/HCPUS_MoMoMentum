@@ -687,6 +687,70 @@ def test_dong_trung_giao_dich_da_co_trong_vi_thanh_duplicate_va_khong_chot_duoc(
     assert ids_by_amount(ing.job(far["job_id"]))[int(tx[2])]["review_status"] == "auto_added"
 
 
+def _statuses(job: dict[str, Any], amount: int) -> list[str]:
+    return sorted(r["review_status"] for r in job["review"]["data"]["rows"] if r["amount_vnd"] == amount)
+
+
+def _confirm_one(ing: Ctx, data: bytes, row: dict[str, Any]) -> None:
+    """Nạp một ảnh một dòng rồi chốt dòng đó vào sổ cái (ngoài ví) như màn duyệt."""
+    up = ing.upload()
+    ing.process(up, data, doc(row))
+    (r,) = ing.job(up["job_id"])["review"]["data"]["rows"]
+    code, receipt = ing.confirm({"job_id": up["job_id"], "rows": [{"row_id": r["row_id"], "jar": "giai_tri"}]})
+    assert code == 200, receipt
+
+
+def test_hai_ly_ca_phe_giong_het_so_da_co_mot_thi_mot_dong_trung_mot_dong_moi(ing, env):
+    """Ghép một-một (C6 của #39): ví ghi một ly Highlands 45.000 ₫, ảnh lịch sử có hai ly cùng ngày. Một dòng là bản trùng, dòng kia
+    là lần mua thật: vào hàng duyệt, chốt được."""
+    amount, merchant = 45_000, "Highlands Coffee"
+    env.act(MINH, "record_transaction", {"kind": "expense", "amount_vnd": amount, "jar": "an_uong", "counterparty": merchant})
+    (tx_id, day) = q(
+        env, "SELECT id, app_date FROM transactions WHERE user_id = %s AND funding_source = 'jar' AND amount_vnd = %s "
+        "AND merchant = %s ORDER BY created_at DESC LIMIT 1", MINH, -amount, merchant,
+    )[0]  # fmt: skip
+    up = ing.upload()
+    cup = tx_row(date=day.isoformat(), amount_vnd=amount, counterparty=merchant, description="Ca phe sua da")
+    ing.process(up, PNG, doc(cup, cup))
+    job = ing.job(up["job_id"])
+    rows = [r for r in job["review"]["data"]["rows"] if r["amount_vnd"] == amount]
+    assert _statuses(job, amount) == ["auto_added", "duplicate"] and job["review"]["data"]["counts"]["duplicate"] == 1
+    assert next(r for r in rows if r["review_status"] == "duplicate")["duplicate_of"] == str(tx_id)
+    fresh = next(r for r in rows if r["review_status"] != "duplicate")
+    assert ing.confirm({"job_id": up["job_id"], "rows": [{"row_id": fresh["row_id"]}]})[0] == 200
+    assert [abs(int(r[3])) for r in external(env)] == [amount]
+
+
+def test_hai_lan_chuyen_500k_cho_cung_nguoi_so_da_co_mot_thi_mot_lan_la_moi(ing, env):
+    """Lần nạp trước đã chốt một khoản chuyển 500.000 ₫ cho "Nguyễn Thu Hà" (người nhận đã lưu, tên không bị che); sao kê sau có hai
+    lần chuyển 500.000 ₫ cho cùng người, cùng ngày: chỉ một lần là bản trùng."""
+    send = tx_row(date="2026-11-18", amount_vnd=500_000, counterparty="Nguyễn Thu Hà", counterparty_is_person=True,
+                  description="CK Nguyen Thu Ha", tx_type="transfer_person", jar_code=None)  # fmt: skip
+    _confirm_one(ing, PNG, send)
+    (prior,) = external(env)
+    assert prior[11] == "Nguyễn Thu Hà"
+    up = ing.upload()
+    ing.process(up, PNG + b"sao-ke", doc(send, {**send, "description": "CK Nguyen Thu Ha lan 2"}))
+    job = ing.job(up["job_id"])
+    assert _statuses(job, 500_000) == ["duplicate", "pending"]
+    assert next(r for r in job["review"]["data"]["rows"] if r["review_status"] == "duplicate")["duplicate_of"] == str(prior[0])
+
+
+def test_hai_khoan_1_trieu_cho_hai_nguoi_da_che_ten_khong_trung(ing, env):
+    """Sổ cái có khoản 1.000.000 ₫ ngoài ví cho một người đã che tên ("N***", lần nạp trước); ảnh mới có khoản 1.000.000 ₫ cùng ngày cho
+    người khác cũng bị che ("T***"). Cùng số tiền không đủ bằng chứng là cùng người: dòng mới vào hàng duyệt, không bị ẩn."""
+    first = tx_row(date="2026-11-18", amount_vnd=1_000_000, counterparty="NGUYEN VAN A", counterparty_is_person=True,
+                   description="CK", tx_type="transfer_person", jar_code=None)  # fmt: skip
+    _confirm_one(ing, PNG, first)
+    assert [r[11] for r in external(env)] == ["N***"]
+    up = ing.upload()
+    ing.process(up, PNG + b"khac", doc({**first, "counterparty": "TRAN VAN B"}))
+    job = ing.job(up["job_id"])
+    (r,) = job["review"]["data"]["rows"]
+    assert (r["counterparty"], r["review_status"]) == ("T***", "pending")
+    assert job["review"]["data"]["counts"]["duplicate"] == 0
+
+
 def test_cung_noi_dung_voi_job_con_song_bi_tu_choi_va_nap_lai_duoc_sau_khi_that_bai(ing, env):
     first = ing.upload()
     ing.process(first, PNG, THREE_ROWS)
