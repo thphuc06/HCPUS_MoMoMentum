@@ -422,7 +422,7 @@ def test_essential_spending_jars_on_wallet_with_daily_jar_and_own_category_jars(
         # 39%: +6 điểm, Chi hằng ngày (không thiết yếu, hũ chung đứng đầu) về 0 trước, rồi Giải trí
         (3_000_000, {"chi_hang_ngay": 0, "giai_tri": 4, "an_uong": 30, "di_lai": 7, "muc_tieu": 10, "du_phong": 10,
                      "nghia_vu": 39}),
-        # 53%: hết hũ chi không thiết yếu, Dự phòng giữ sàn 10, rồi hũ mục tiêu; Ăn uống, Đi lại giữ nguyên
+        # 53%: hết hũ chi không thiết yếu rồi tới hũ mục tiêu; Dự phòng ở sàn 10, Ăn uống và Đi lại giữ nguyên
         (4_400_000, {"chi_hang_ngay": 0, "giai_tri": 0, "an_uong": 30, "di_lai": 7, "muc_tieu": 0, "du_phong": 10,
                      "nghia_vu": 53}),
         # 69%: hết nguồn không thiết yếu mới tới hũ chi thiết yếu (Ăn uống trước Đi lại theo thứ tự hũ)
@@ -475,7 +475,7 @@ def test_essential_spending_jars_follow_transaction_types_not_codes():
     [
         # 3.900.000 = 39%: +3 điểm từ Giải trí
         (3_000_000, {"giai_tri": 4, "an_uong": 30, "di_lai": 7, "muc_tieu": 10, "du_phong": 10, "nghia_vu": 39}),
-        # 53%: Giải trí về 0, Dự phòng giữ sàn 10, rồi hũ mục tiêu; Ăn uống, Đi lại giữ nguyên
+        # 53%: Giải trí về 0 rồi tới hũ mục tiêu; Dự phòng ở sàn 10, Ăn uống và Đi lại giữ nguyên
         (4_400_000, {"giai_tri": 0, "an_uong": 30, "di_lai": 7, "muc_tieu": 0, "du_phong": 10, "nghia_vu": 53}),
         # 69%: hết nguồn không thiết yếu mới tới hũ thiết yếu (hũ chi đầu tiên trước)
         (6_000_000, {"giai_tri": 0, "an_uong": 14, "di_lai": 7, "muc_tieu": 0, "du_phong": 10, "nghia_vu": 69}),
@@ -600,9 +600,9 @@ def test_legacy_wallet_keeps_entertainment_above_its_subscription():
     ]
     result = propose(jars=jars, obligations=obs, essential_jars=essential(jars))
     shares = after(result)
-    # trước: Giải trí 10 -> 5; nay giữ 7, 2 điểm còn lại lấy từ Dự phòng (ví cũ, `purpose` NULL) xuống không dưới sàn 10
-    assert (shares["nghia_vu"], shares["giai_tri"], shares["du_phong"], shares["an_uong"]) == (10, 7, 13, 25)
-    assert shares["hoa_don"] == 30 and shares["du_lich"] == 5
+    # Giải trí giữ 7% cho Netflix; Du lịch (purpose NULL) nhường 2 điểm trước Dự phòng.
+    assert (shares["nghia_vu"], shares["giai_tri"], shares["du_phong"], shares["an_uong"]) == (10, 7, 15, 25)
+    assert shares["hoa_don"] == 30 and shares["du_lich"] == 3
 
 
 def test_committed_floor_keeps_a_jar_already_below_it_and_never_raises_it():
@@ -623,6 +623,66 @@ MINH_TYPICAL = {"chi_hang_ngay": 190_714, "giai_tri": 390_000}
 
 def spend_floors(typical, ratio=0.5):
     return {code: round(ratio * value) for code, value in typical.items()}
+
+
+@pytest.mark.parametrize(
+    ("invest", "buffer", "expected"),
+    [
+        pytest.param(0, 10, (0, 30, 10, 23, 7, 2, 0, 0, 28), id="reset-minh"),
+        pytest.param(12, 15, (2, 30, 15, 13, 7, 3, 2, 0, 28), id="long-term-then-goal"),
+        pytest.param(5, 15, (0, 30, 13, 20, 7, 2, 0, 0, 28), id="spending-floor-before-buffer"),
+        pytest.param(1, 15, (0, 30, 10, 23, 7, 2, 0, 0, 28), id="buffer-floor-before-essential"),
+    ],
+)
+def test_minh_tet_uses_br65_sources(invest, buffer, expected):
+    jars = demo_daily_jars()
+    # Ví reset có Đầu tư 0% và Dự phòng ngay sàn. Chuyển vài điểm từ Ăn uống để kiểm thứ tự các nguồn có thể nhường.
+    changes = {"dau_tu": invest, "du_phong": buffer, "an_uong": 40 - buffer - invest}
+    for j in jars:
+        if j["code"] in changes:
+            j["split_percent"] = changes[j["code"]]
+    items = sp.parse_known_items([{"name": "Tết", "amount_vnd": 5_000_000, "needed_date": "2027-02-05"}], TODAY)
+    result = propose(
+        jars=jars,
+        obligations=minh_obligations(),
+        known_items=items,
+        essential_jars=essential(jars),
+        spend_floor_vnd=spend_floors(MINH_TYPICAL),
+    )
+    assert result["status"] == "proposed"
+    (plan,) = result["sinking_items"]
+    assert (plan["paydays"], plan["per_payday_vnd"]) == (2, 2_500_000)
+    before = (3, 33, buffer, 40 - buffer - invest, 7, 7, 10, invest, 0)
+    codes = [j["code"] for j in jars] + ["quy_don"]
+    print("\nHũ | Trước (%) | Sau (%)")
+    for row in result["jars"]:
+        print(f"{row['code']} | {row['split_before']} | {row['split_after']}")
+    assert [(j["code"], j["split_before"]) for j in result["jars"]] == list(zip(codes, before, strict=True))
+    assert params_split(result) == after(result) == dict(zip(codes, expected, strict=True))
+
+
+def test_manual_sinking_jar_is_never_a_source():
+    items = [{"name": "Học phí", "amount_vnd": 2_000_000, "needed_date": "2027-02-10"}]
+    jars = [
+        *three(5, 33, 25),
+        jar("hoc_phi", "saving", 27, "sinking", sinking_items=items),
+        jar("du_lich", "saving", 10, "goal", goal_vnd=6_000_000),
+    ]
+    result = propose(jars=jars, obligations=[ob("Tiền trọ", 4_320_000)])
+    assert result["status"] == "proposed"
+    assert after(result) == {"chi_hang_ngay": 0, "nghia_vu": 48, "du_phong": 25, "hoc_phi": 27, "du_lich": 0}
+    assert next(j for j in result["params"]["jars"] if j["code"] == "hoc_phi")["sinking_items"] == items
+
+
+def test_goal_sources_exclude_another_buffer_jar():
+    jars = [
+        *three(5, 33, 25),
+        jar("dem_them", "saving", 17, "buffer"),
+        jar("du_lich", "saving", 20, "goal", goal_vnd=6_000_000),
+    ]
+    result = propose(jars=jars, obligations=[ob("Tiền trọ", 4_320_000)])
+    assert result["status"] == "proposed"
+    assert after(result) == {"chi_hang_ngay": 0, "nghia_vu": 48, "du_phong": 25, "dem_them": 17, "du_lich": 10}
 
 
 def context(spend_by_jar, *, days=30, kinds=None):
@@ -738,14 +798,13 @@ def test_minh_demo_wallet_spending_floor_never_makes_proposal_infeasible():
 @pytest.mark.parametrize(
     ("rent", "expected"),
     [
-        # 70%, +37: Chi hằng ngày (cả hũ, chi điển hình 3.000.000 ₫ -> sàn chi 17%) nhường tới sàn chi, phần còn lại lấy từ Dự phòng
-        # (trước: Chi hằng ngày 5, Dự phòng 25)
-        (6_300_000, {"chi_hang_ngay": 17, "nghia_vu": 70, "du_phong": 13}),
-        # 84%, +51: Dự phòng xuống sàn 10 rồi sàn chi của Chi hằng ngày mới nhường (trước: 0 / 84 / 16)
-        (7_500_000, {"chi_hang_ngay": 6, "nghia_vu": 84, "du_phong": 10}),
+        # 70%, +37: Chi hằng ngày nhường 25 điểm tới sàn chi 17%, rồi nhường thêm 12 điểm từ sàn chi.
+        (6_300_000, {"chi_hang_ngay": 5, "nghia_vu": 70, "du_phong": 25}),
+        # 84%, +51: Chi hằng ngày nhường hết sàn chi, rồi Dự phòng nhường 9 điểm.
+        (7_500_000, {"chi_hang_ngay": 0, "nghia_vu": 84, "du_phong": 16}),
     ],
 )
-def test_three_jar_wallet_daily_jar_keeps_spending_floor_until_buffer_floor(rent, expected):
+def test_three_jar_wallet_daily_jar_spending_floor_yields_before_buffer(rent, expected):
     jars = three()
     result = propose(jars=jars, obligations=[ob("Tiền trọ", rent)], essential_jars=essential(jars),
                      spend_floor_vnd={"chi_hang_ngay": 1_500_000})  # fmt: skip
@@ -759,20 +818,20 @@ def test_legacy_wallet_entertainment_keeps_larger_of_subscription_and_spending_f
         ob("Khoản vay", 900_000, kind="loan"),
         ob("Netflix", 600_000, kind="subscription", essential=False, pay="giai_tri"),  # 6,67% -> 7
     ]
-    # Giải trí chi điển hình 1.500.000 ₫/tháng: sàn chi 750.000 ₫ = 8,33% -> 9 (trên Netflix 7); Dự phòng nhường 4 điểm (trước: 7 / 13)
+    # Sàn chi Giải trí 750.000 ₫ -> 9%, trên Netflix 7%. Du lịch nhường 4 điểm tiếp theo nên Giải trí giữ sàn chi.
     result = propose(jars=jars, obligations=obs, essential_jars=essential(jars), spend_floor_vnd={"giai_tri": 750_000})
     shares = after(result)
-    assert (shares["nghia_vu"], shares["giai_tri"], shares["du_phong"], shares["an_uong"]) == (10, 9, 11, 25)
-    assert shares["hoa_don"] == 30 and shares["du_lich"] == 5
+    assert (shares["nghia_vu"], shares["giai_tri"], shares["du_phong"], shares["an_uong"]) == (10, 9, 15, 25)
+    assert shares["hoa_don"] == 30 and shares["du_lich"] == 1
 
 
-def test_spending_floor_keeps_a_jar_already_below_it_and_never_raises_it():
+def test_spending_floor_above_current_share_can_yield_without_raising_it():
     jars = [jar("chi_hang_ngay", "spending", 1), jar("nghia_vu", "obligation", 33), jar("du_phong", "saving", 65, "buffer"),
             jar("giai_tri", "spending", 1)]  # fmt: skip
     shares = after(propose(jars=jars, obligations=[ob("Tiền trọ", 3_240_000)], essential_jars=essential(jars),
                            spend_floor_vnd={"chi_hang_ngay": 450_000, "giai_tri": 450_000}))  # fmt: skip
-    # +3 điểm, sàn chi 5% của hai hũ đang 1%: không bị lấy thêm cũng không được nâng; Dự phòng nhường
-    assert shares == {"chi_hang_ngay": 1, "nghia_vu": 36, "du_phong": 62, "giai_tri": 1}
+    # +3 điểm: hai hũ chi đang dưới sàn 5%, mỗi hũ nhường 1 điểm ở lượt dùng sàn chi rồi Dự phòng nhường 1 điểm.
+    assert shares == {"chi_hang_ngay": 0, "nghia_vu": 36, "du_phong": 64, "giai_tri": 0}
 
 
 def test_no_spending_history_keeps_previous_behaviour():
