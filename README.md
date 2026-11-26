@@ -117,7 +117,7 @@ Khai theo thể lệ (Điều 12.5, 28.1). Phần không liệt kê ở đây đ
 
 | Tài sản | Có từ trước | Dùng thế nào |
 |---|---|---|
-| Proposal Swinburne (đề xuất có trước cuộc thi) | Có | Proposal Yofina dùng lại khoảng một nửa nền kỹ thuật của nó ở mức thiết kế: pipeline phân loại hũ 3 bước, lộ trình thích ứng, suitability và Cedar, audit trail với `trace_id`, số chỉ lấy từ SQL, cổng khởi đầu lạnh. Bảng giữ/đổi/bỏ ở [proposal-summary §16](docs/proposal/proposal-summary.md#16-kế-thừa-từ-swinburne-và-câu-hỏi-mở-16) |
+| Một đề xuất kỹ thuật của thành viên đội, có trước cuộc thi | Có | Proposal Yofina dùng lại khoảng một nửa nền kỹ thuật của nó ở mức thiết kế: pipeline phân loại hũ 3 bước, lộ trình thích ứng, suitability và Cedar, audit trail với `trace_id`, số chỉ lấy từ SQL, cổng khởi đầu lạnh. Bảng giữ/đổi/bỏ ở mục 16 của [proposal-summary.md](docs/proposal/proposal-summary.md) |
 | Proposal Yofina Foresight ([PDF](docs/proposal/Proposal-Yofina-Foresight.pdf), bản nháp 20/11/2026) | Viết trước commit đầu tiên | Spec của sản phẩm; tóm tắt ở [proposal-summary.md](docs/proposal/proposal-summary.md) |
 | Khung FAST (Fullstack AgentCore Solution Template), mẫu công khai của AWS | Có | Chỉ đọc để tham khảo, không chép mã ([project-structure.md](docs/architecture/project-structure.md)) |
 
@@ -153,7 +153,7 @@ Danh sách đầy đủ kèm phụ thuộc gián tiếp: `uv.lock`, `frontend/pa
 | Bộ nhớ (AgentCore Memory) | Claude Haiku 4.5 | Trích xuất và hợp nhất sở thích, sự thật người dùng tự kể |
 | An toàn | Amazon Bedrock Guardrails | Lọc chủ đề cấm và prompt injection ở đầu vào, đầu ra |
 
-**Khi làm sản phẩm**: Claude Code (Anthropic; model Claude Opus 5.5, Claude Sonnet 5.5, Claude Fable 5.2) điều phối, viết mã, tài liệu và review; Kiro CLI (AWS; model Claude Opus 5.5) chạy các worker song song theo issue; Codex (OpenAI, `gpt-6.2-sol`) viết mã và test cho luồng agent và frontend của phase 4 (ngày 23/11); Figma MCP cho thiết kế giao diện. Mỗi thay đổi do AI làm có một mục trong [docs/ai-log/](docs/ai-log/README.md) (ai làm, đổi gì, vì sao, đã kiểm gì).
+**Khi làm sản phẩm**: trợ lý lập trình AI (agent viết mã) được dùng để điều phối, viết mã, tài liệu, test và review, chạy các worker song song theo issue; Figma MCP cho thiết kế giao diện. Mỗi thay đổi do AI làm có một mục trong [docs/ai-log/](docs/ai-log/README.md) (ai làm, đổi gì, vì sao, đã kiểm gì).
 
 ## Nguồn dữ liệu
 
