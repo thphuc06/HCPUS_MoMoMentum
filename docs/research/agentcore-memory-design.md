@@ -307,7 +307,9 @@ Vẫn ghi: `memory`, `profile_update` (hoàn cảnh: đổi việc, chuyển nh�
   `memory_degraded`, lượt chạy bình thường.
 - Bản ghi đọc về là DỮ LIỆU KHÔNG TIN CẬY: kiểm namespace, `sanitize_recalled` (bỏ dấu thời gian Unix và mẩu nhãn rỗng nó để lại, che lại
   PII, tên, số tiền, rồi thay MỌI con số còn lại trừ giờ trong ngày bằng `[số]`, bỏ `<` `>` để không đóng được thẻ prompt), cắt 300 ký tự
-  mỗi bản ghi, 1.200 ký tự tổng.
+  mỗi bản ghi, 1.200 ký tự tổng. Chữ HIỂN THỊ cho người dùng ở lượt hỏi bộ nhớ ("bạn đang lưu gì về mình", `RecalledItem.shown`, #39) giữ
+  thêm ngày tháng họ tự kể ("hạn 05/02/2027", "trước Tết âm lịch 2027") như màn Bộ nhớ của tôi; số tiền vẫn là `[số tiền]`, phần trăm và
+  số đếm vẫn là `[số]`; chữ vào prompt không đổi.
 - **Khử trùng giữa hai loại** (`memory.dedupe_items`, từ 25/11 gọi `yofina_core.memory_text.dedupe_by_meaning`, cùng hàm với
   `GET /memory`): hai bản ghi là cùng ý nếu tập từ (chữ thường, CÒN dấu, bỏ từ đệm như "người dùng", "muốn", "vào") có hệ số Dice ≥ 0,8;
   giữ bản `preference`. Còn dấu để "buổi tối" không trùng "buổi sáng". Không khử trùng được hai bản khác ngôn ngữ. Chỉ dẫn trích xuất mới

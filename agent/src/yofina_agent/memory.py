@@ -270,13 +270,17 @@ def record_text(content: Any) -> str:
     return _record_text(content)
 
 
-def sanitize_recalled(text: str, max_chars: int) -> str:
+def sanitize_recalled(text: str, max_chars: int, *, keep_dates: bool = False) -> str:
     """Chữ ĐỌC từ Memory trước khi vào prompt hay hiện cho người dùng: như khi ghi (che lại, phòng bản ghi cũ hay strategy lọt), thêm
     bỏ dấu thời gian Unix của bước tóm tắt và mẩu nhãn rỗng nó để lại, thay mọi con số còn lại trừ giờ trong ngày bằng `[số]` (bộ nhớ
     không bao giờ là căn cứ cho con số: bản ghi cũ từng chép "37%", "47 ngày" từ lời trợ lý) và bỏ ký tự `<` `>` để chữ không đóng được
-    thẻ của prompt."""
+    thẻ của prompt.
+
+    `keep_dates`: chữ HIỂN THỊ cho người dùng (lượt hỏi bộ nhớ "bạn đang lưu gì về mình"), không vào prompt: giữ cả ngày tháng người dùng
+    tự kể ("hạn 05/02/2027", "trước Tết âm lịch 2027"), như màn Bộ nhớ của tôi (`GET /memory`) (#39). Số tiền vẫn che (`[số tiền]`),
+    phần trăm và số đếm vẫn thay bằng `[số]`."""
     t = drop_empty_labels(strip_epoch_timestamps(text or ""))
-    return mask_numbers_except_time(sanitize_for_memory(t, max_chars)).translate(_TAG_CHARS)
+    return mask_numbers_except_time(sanitize_for_memory(t, max_chars), keep_dates=keep_dates).translate(_TAG_CHARS)
 
 
 #: Giờ trong ngày ("9 giờ", "21h", "7h30", "22:00"), so trên chữ đã bỏ dấu cùng độ dài.
@@ -284,15 +288,25 @@ _TIME_RE = re.compile(
     r"(?<![\w.,/])\d{1,2}(?:\s*(?:h|gio|g)(?:\s*\d{1,2}(?:\s*phut)?)?|:\d{2})(?![\w])",
     re.IGNORECASE,
 )
+#: Ngày tháng ("05/02/2027", "5-2", "ngày 5", "tháng 2", "mùng 1", "năm 2027", năm 19xx/20xx đứng riêng như "Tết âm lịch 2027"), so trên chữ
+#: đã bỏ dấu cùng độ dài. Không nhận dấu chấm làm dấu ngăn ngày ("2.5" có thể là số thập phân); số tiền đã thành `[số tiền]` trước bước này.
+_DATE_RE = re.compile(
+    r"(?<![\w.,/:\-])\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?(?!\w|[.,/:\-]\d)"
+    r"|(?<![\w])(?:ngay|thang|mung|mong|nam)\s+\d{1,4}(?!\w|[.,:]\d)"
+    r"|(?<![\w.,/:\-])(?:19|20)\d{2}(?!\w|[.,/:\-]\d|\s*%)",
+    re.IGNORECASE,
+)
 _ANY_NUMBER_RE = re.compile(r"(?<![\w])\d+(?:[.,:/\-]\d+)*(?:\s*%)?")
 
 
-def mask_numbers_except_time(text: str) -> str:
+def mask_numbers_except_time(text: str, *, keep_dates: bool = False) -> str:
     """Thay mọi con số (kể cả phần trăm, ngày tháng, số đếm) bằng `[số]`, trừ giờ trong ngày (sở thích "đừng nhắc trước 9 giờ" cần
-    giờ). Dùng cho chữ đọc ra khỏi bộ nhớ."""
+    giờ). Dùng cho chữ đọc ra khỏi bộ nhớ. `keep_dates`: giữ cả ngày tháng (`_DATE_RE`), cho chữ hiện cho người dùng."""
     t = unicodedata.normalize("NFC", text)
     folded = _fold_same_length(t)
     keep = [m.span() for m in _TIME_RE.finditer(folded)]
+    if keep_dates:
+        keep += [m.span() for m in _DATE_RE.finditer(folded)]
     out, last = [], 0
     for m in _ANY_NUMBER_RE.finditer(folded):
         if any(a <= m.start() < b for a, b in keep):
@@ -313,6 +327,13 @@ class RecalledItem:
     score: float | None = None
     #: thời điểm dịch vụ tạo bản ghi (`createdAt`, giờ thật); khối prompt đổi sang ngày mô phỏng của ứng dụng
     created_at: datetime | None = None
+    #: chữ hiện cho người dùng ở lượt hỏi bộ nhớ (`sanitize_recalled` với `keep_dates`: giữ ngày tháng họ tự kể, vẫn che số tiền); rỗng
+    #: thì dùng `text`. `text` (che mọi con số trừ giờ) là chữ vào prompt
+    display: str = ""
+
+    @property
+    def shown(self) -> str:
+        return self.display or self.text
 
 
 PROMPT_TAG = "bo_nho_nguoi_dung"
@@ -518,7 +539,8 @@ class AgentMemory:
         if not namespaces or kind_of_namespace(str(namespaces[0]), sub) != kind:
             _event("memory_foreign_record", kind=kind)
             return None
-        text = sanitize_recalled(record_text(rec.get("content")), self.s.record_max_chars)
+        raw = record_text(rec.get("content"))
+        text = sanitize_recalled(raw, self.s.record_max_chars)
         if not text:
             return None
         score = rec.get("score")
@@ -529,6 +551,7 @@ class AgentMemory:
             record_id=str(rec.get("memoryRecordId") or ""),
             score=float(score) if isinstance(score, (int, float)) else None,
             created_at=created if isinstance(created, datetime) else None,
+            display=sanitize_recalled(raw, self.s.record_max_chars, keep_dates=True),
         )
 
     def _list_preferences(self, sub: str) -> list[RecalledItem]:
@@ -899,7 +922,8 @@ async def on_memory(turn: Turn, r: IntentResult, question: str) -> None:
         if not ctx.items:
             await turn.emit_fixed_text(TEXT_RECALL_EMPTY)
             return
-        lines = [f"- {i.text}" for i in sorted(ctx.items, key=lambda i: RECALL_KINDS.index(i.kind))]
+        # chữ hiện cho người dùng (`RecalledItem.shown`): giữ ngày tháng họ tự kể như màn Bộ nhớ của tôi, số tiền vẫn che (#39)
+        lines = [f"- {i.shown}" for i in sorted(ctx.items, key=lambda i: RECALL_KINDS.index(i.kind))]
         text = "\n".join([TEXT_RECALL_HEAD, *lines, TEXT_RECALL_TAIL])
         gr = await turn.check_output(text)
         if gr is not None and gr.blocked:
