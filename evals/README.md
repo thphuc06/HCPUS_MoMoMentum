@@ -9,7 +9,65 @@
 
 ## `run.py`: golden và adversarial phase 3, 4, 5
 
-`uv run python evals/run.py <golden|adversarial> --phase <3|4|5>` gọi Runtime đã deploy bằng token Cognito của tài khoản demo (mặc định `minh`) và chấm bằng code; cách chấm từng trường ở docstring của `run.py`. Kết quả ở `evals/results/phase<N>-<bộ>.jsonl` (gitignored). Mọi khóa của bộ câu phải nằm trong `CASE_KEYS` (test `test_moi_khoa_cua_bo_cau_hoi_deu_duoc_runner_hieu`), nên thêm khóa mới thì phải cài bộ chấm.
+`uv run python evals/run.py <golden|adversarial> --phase <3|4|5>` gọi Runtime đã deploy bằng token Cognito của tài khoản demo (mặc định `minh`) và chấm bằng code; cách chấm từng trường ở docstring của `run.py`. Kết quả ở `evals/results/phase<N>-<bộ>.jsonl` (gitignored). Mọi khóa của bộ câu phải nằm trong `CASE_KEYS` (test `test_moi_khoa_cua_bo_cau_hoi_deu_duoc_runner_hieu`), nên thêm khóa mới thì phải cài bộ chấm. `--list` chỉ liệt kê ca của bộ (mỗi ca một dòng JSON: lượt chat, lần nạp tệp, lời gọi judge; dòng cuối là tổng), không gọi gì.
+
+### Tài khoản eval và bộ hũ (ví demo 8 hũ, issue #34, #39)
+
+Sau "Đặt lại dữ liệu" (`uv run scripts/seed_demo.py minh`), `minh` có 8 hũ theo thứ tự: `chi_hang_ngay` Chi hằng ngày, `nghia_vu` Nghĩa vụ (gộp Hóa đơn cũ, hũ trả Trả sau), `du_phong` Dự phòng (`buffer`), `an_uong` Ăn uống, `di_lai` Đi lại, `giai_tri` Giải trí, `muc_tieu` tên hiển thị "Du lịch" (hũ mục tiêu `goal`), `dau_tu` Đầu tư (`long_term`, 0 ₫). Không còn hũ `hoa_don`, `du_lich`. Trả sau đến hạn ngày 3 (lương ngày 5). Lộ trình chỉ có v1 (đã thay) và v2 (đang dùng); không có bản v3 hay dấu hiệu đổi hành vi cài sẵn. Số dư và tỷ lệ ở bảng "Demo (Reset data)" của [default-six-jars-rollout.md](../docs/plan/default-six-jars-rollout.md).
+
+- Bộ chấm không chép tay mã, tên hay số của ví: `demo_wallet_jars(account)` dựng ví demo của tài khoản chạy eval từ bộ sinh (`generate` + `apply_demo_layout`, như `tests/integration/conftest.py`). Số kỳ vọng lấy từ kết quả tool của chính lượt.
+- Ca nhắc hũ bằng mã (`expect_memory_used`, `expect_memory_records.jar`, `forbid_option_source_jars`, `forbid_runout_jars`, `expect_ingest_jars`) dùng mã của ví demo (hũ Du lịch là `muc_tieu`); khi dò trong chữ (câu trả lời, bản ghi bộ nhớ) bộ chấm dò theo tên hiển thị của mã (`jar_phrases`), không đọc `muc_tieu` thành "mục tiêu".
+
+Ca cho hành vi mới của đợt này, mỗi ca 1 lượt chat:
+
+| Ca | Bộ | Kiểm |
+|---|---|---|
+| `lookup-runout-overview` | golden 3 | "hũ nào sắp cạn" trên ví 8 hũ dự báo cả Đầu tư và Chi hằng ngày và không nói hai hũ đó cạn, hụt, hết tiền (`forbid_runout_jars`) |
+| `whatif-bnpl-due-before-payday` | golden 3 | what-if Trả sau: hũ Nghĩa vụ liệt kê khoản đến hạn trước lương theo ngày, có khoản Trả sau của lượt (`expect_obligation_window`) |
+| `roadmap-goal-ask-jar` | golden 4 | câu lập lộ trình có số tiền, hạn mà không nêu hũ: hỏi đúng một câu chọn hũ, chip là hũ có thật, không lập bản nào (`expect_clarify_slot`) |
+| `roadmap-buffer-goal` | golden 4 | lộ trình có đích là số dư hũ Dự phòng: mục tiêu ở hũ `buffer`, đúng số tiền, có hạn (`expect_roadmap_goal`) |
+| `ingest-food-jar` | golden 5 | dòng ăn uống của tệp nạp (s07) được đề xuất vào Ăn uống, không vào Chi hằng ngày (`expect_ingest_jars`; thêm 1 lần nạp tệp) |
+
+`roadmap-regenerate-after-spending-change` chấm thông báo thay bản đề xuất theo bản mới nhất mà lượt đọc trước khi lưu (`expect_replaced_notice`): sau đặt lại không có bản chờ nào, nên thông báo chỉ bắt buộc khi ca trước (`roadmap-create-emergency-fund`) đã để lại bản đề xuất. Chưa có ca cho "chi lặt vặt vào Chi hằng ngày": bộ thử nạp (`evals/ingest`, sinh bằng `scripts/make_ingest_synthetic.py`) chưa có tệp nào chứa khoản lặt vặt.
+
+### Chạy một lượt đầy đủ sau deploy
+
+Một lượt đầy đủ: 115 ca (golden 33 + 16 + 16, đối kháng 16 + 12 + 14 + 8), **117 lượt chat** (hai ca bộ nhớ có một phiên trước), 11 lần nạp tệp, 1 lời gọi judge; cộng 18 lời gọi router của bộ diễn đạt lại (không qua Runtime, không tính lượt chat). In lại bằng `--list` của từng bộ. Chi phí ước tính khoảng **2,5–3 USD** (mốc 2,2–2,5 USD cho 102 ca ở Runtime v25, khoảng 80% là Sonnet 4.6; nay thêm 13 ca, trong đó 2 ca lập lộ trình); đo phân loại ví 3 hũ thêm khoảng 0,3 USD ([classification/README.md](classification/README.md)).
+
+Điều kiện trước khi chạy:
+1. Hỏi chủ dự án (tốn tiền model). Deploy đã xong và ổn.
+2. **Quota**: trần mặc định 100 lượt chat mỗi tài khoản mỗi ngày (`yofina_core.quota`, tính cả lượt kiểm tay trên app bằng `minh` trong ngày), ít hơn 117 lượt của một lượt đầy đủ: đặt SSM `/yofina/quota/chat_turns_per_day` cao hơn (ví dụ 300) cho ngày chạy, xóa khóa sau khi xong (#13, #35). Trần nạp 20 tệp mỗi ngày (`/yofina/quota/uploads_per_day`) đủ cho 11 lần nạp của một lượt; chạy lại ca nạp nhiều lần thì nâng cả khóa này. Giá trị SSM được nhớ 5 phút.
+3. **Đặt lại `minh`** trước mỗi nhóm bộ như dưới (nạp lại cùng tệp bị từ chối `INGEST_DUPLICATE_FILE`, ca nạp để lại dòng chờ duyệt, ca lộ trình để lại bản đề xuất), và sau khi xong.
+4. Kết quả cũ trong `evals/results/phase<N>-<bộ>.jsonl` làm runner bỏ qua ca đã có: xóa tệp hoặc thêm `--redo` khi chạy lại sau khi đặt lại.
+
+```powershell
+uv run scripts/seed_demo.py minh
+uv run python evals/run.py golden --phase 3
+uv run python evals/run.py golden --phase 4          # theo thứ tự tệp: ca lập lộ trình trước ca lập lại
+uv run scripts/seed_demo.py minh
+uv run python evals/run.py golden --phase 5 --memory-wait 120
+uv run scripts/seed_demo.py minh
+uv run python evals/run.py adversarial --phase 3
+uv run python evals/run.py adversarial --phase 4
+uv run python evals/run.py adversarial --phase 5
+uv run scripts/seed_demo.py minh                     # c04 nạp cả ở phase 5 và 6
+uv run python evals/run.py adversarial --phase 6
+uv run scripts/seed_demo.py minh
+uv run python evals/paraphrase/run_router.py
+```
+
+Chỉ các ca đã sửa hay thêm cho bộ hũ mới, trừ `memory-reuse-new-session` (13 lượt chat, 1 lần nạp; đặt lại `minh` trước):
+
+```powershell
+uv run python evals/run.py golden --phase 3 --only lookup-runout-overview,whatif-bnpl-due-before-payday,afford-4,multiturn-clarify-jar-keeps-amount
+uv run python evals/run.py golden --phase 4 --only roadmap-create-emergency-fund,roadmap-regenerate-after-spending-change,roadmap-goal-ask-jar,roadmap-buffer-goal,stress-rent-specific-amount
+uv run python evals/run.py golden --phase 5 --only ingest-food-jar,memory-state-preference,memory-whatif-protect-jar
+uv run python evals/run.py adversarial --phase 4 --only roadmap-other-user
+```
+
+`memory-reuse-new-session` cũng đổi mã hũ (2 lượt chat) nhưng phụ thuộc thời gian trích bộ nhớ; chạy riêng khi cần.
+
+Ca chờ quyết định chưa có trong bản này: nhánh tự suy hũ chi từ ý định (`int/infer-jar`, issue #39) nếu được gộp trước lượt eval thì `multiturn-new-question` ("đi du lịch 5 triệu", đang chờ khối hỏi lại và cấm `run_scenario`) và có thể `clarify-funding` sẽ ra thẳng kết quả. Kỳ vọng của hai ca chưa đổi; chấm chúng theo quyết định của chủ dự án.
 
 Phase 4 thêm `roadmap_shape`: khối `roadmap` cuối đủ `expect_roadmap_min_phases` giai đoạn, `expect_roadmap_min_steps` bước, và với `expect_roadmap_step_concrete` thì mọi bước có số tiền kèm hũ nguồn → hũ đích (trường của bước hoặc tham số `move_between_jars`), hoặc có ngày (`due_date`, `fire_on` của nhắc).
 

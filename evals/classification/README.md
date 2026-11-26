@@ -23,10 +23,34 @@ Số thật rồi ghi vào "Kết quả thực hiện" của phase 4; chưa đ�
 | `dataset.jsonl` | 334 giao dịch có nhãn (minh 118, lan 108, khoa 108), theo thời gian trong mỗi persona. Sinh bằng `build_dataset.py` (tất định; `--check` kiểm lệch) |
 | `build_dataset.py` | bộ sinh và bất biến (đủ 300 dòng, mọi nhãn thuộc hũ của persona, có chuyển khoản tên riêng không lời nhắn) |
 | `sim.py` | mô phỏng trực tuyến: kho nhãn k-NN trong bộ nhớ (cosine như `app_knn_labeled`), sổ cái, luật, người dùng mô phỏng hợp tác; chỉ số, ma trận nhầm |
-| `run_eval.py` | `warm`, `calibrate`, `run`; chế độ `live` (Bedrock thật, có đệm), `dry` và `cache` (chỉ đọc đệm đã commit, không tạo client AWS; thiếu đệm thì dừng và báo số lời gọi cần). `--add-jar ma:tên:loại[:số dư]` thêm hũ cho mọi persona (đo hũ "Khác", xem [2026-11-26-hu-khac.md](../../docs/research/2026-11-26-hu-khac.md)); `--out` ghi báo cáo ra tệp khác |
+| `run_eval.py` | `warm`, `calibrate`, `run`; chế độ `live` (Bedrock thật, có đệm), `dry` và `cache` (chỉ đọc đệm đã commit, không tạo client AWS; thiếu đệm thì dừng và báo số lời gọi cần). `--add-jar ma:tên:loại[:số dư]` thêm hũ cho mọi persona (đo hũ "Khác", xem [2026-11-26-hu-khac.md](../../docs/research/2026-11-26-hu-khac.md)); `--wallet multi\|three` chọn ví (mục "Ví 3 hũ" bên dưới); `--limit N` lấy N dòng đầu mỗi persona; `--out` ghi báo cáo ra tệp khác |
 | `fakes.py` | embedding băm và model từ khóa GIẢ, chỉ cho chế độ khô (kiểm đường ống) |
 | `build_seed_labels.py` | sinh nhãn seed của persona vào `data/personas/classify_labels/` bằng Bedrock thật |
-| `results/` | báo cáo `classification-<chế độ>-<ngày>.json`, `calibration-*.json`, đệm `embedding_cache.json` và `llm_cache.json` (chỉ chế độ live ghi) |
+| `results/` | báo cáo `classification-<chế độ>[-three]-<ngày>.json`, `calibration-*.json`, đệm `embedding_cache.json` (chung mọi ví), `llm_cache.json` (ví nhiều hũ) và `llm_cache_three.json` (ví 3 hũ, chưa có) (chỉ chế độ live ghi) |
+
+## Ví 3 hũ (`--wallet three`)
+
+Số 92% / 17,4% ở trên đo trên ví nhiều hũ của persona. Tài khoản mới nhận 3 hũ (Chi hằng ngày, Nghĩa vụ, Dự phòng; issue #39), và phần có model của ví này chưa đo ([2026-11-26-do-vi-ba-hu.md](../../docs/research/2026-11-26-do-vi-ba-hu.md), khuyến nghị P1). `--wallet three` đo nó bằng đúng mã quyết định của Lambda:
+
+- Ví là các hũ `is_default` của migration 0059; danh sách hũ trong lời nhắn model nhỏ là 3 hũ đó (hũ thêm bằng `--add-jar` xếp sau).
+- Đáp án, cờ "luôn luôn" của người dùng mô phỏng và nhãn seed đổi mã theo đúng quy tắc sản phẩm qua `scripts/measure_three_jars.py` (`yofina_core.wallet.transaction_jar`); bước 0 của mô phỏng và của tập thông điệp cần gọi cũng đi qua `transaction_jar` như `Classifier.classify`, nên loại giao dịch có hũ chung không tới model. `--seed-labels mapped` (mặc định, nhãn seed của persona đổi mã, như lượt C của ghi chú đo) hoặc `none` (tài khoản mới không có nhãn seed, như lượt F); hai chế độ cùng thông điệp nên cùng đệm.
+- Đệm phán quyết riêng `results/llm_cache_three.json` (khóa đệm là băm thông điệp, mà thông điệp chứa danh sách hũ); đệm embedding dùng chung.
+- Chỉ `run` và `warm`. `calibrate` từ chối `--wallet three` vì nó ghi ngưỡng của sản phẩm.
+- Chế độ live in ước tính TRƯỚC lời gọi đầu tiên và ghi đệm sau mỗi 10 phán quyết mới cùng lúc kết thúc (kể cả khi lỗi), nên đứt giữa chừng thì chạy lại cùng lệnh chỉ gọi phần còn thiếu. Lời gọi model lỗi trong `run` thì quyết định đó suy giảm như Lambda; báo cáo ghi `llm_errors` và in cảnh báo.
+
+Ước tính đo được từ đệm đã commit (26/11, chạy `run --mode cache --wallet three`, không gọi gì): **294 lời gọi model nhỏ** (Nova 2 Lite, vai `small`), 1 lời gọi embedding (4 chuỗi mất khóa đệm do bộ che PII đổi ở #16), khoảng 107.000 token vào và tối đa 75.000 token ra, **khoảng 0,30 USD** (tối đa 0,97 USD nếu mọi lời gọi phải thử lại ở giá Haiku 4.5), khoảng 16 phút ở 18 lượt/phút. Giá lấy từ AWS Price List ngày 25/11 (`SMALL_PRICE_USD_PER_MTOK`); token ước bằng số ký tự chia 3, chưa tính schema của tool. Tính vào trần ngày của vai `small` (2.000), không tính vào trần lượt chat.
+
+```powershell
+# không cần AWS: chỉ in ước tính rồi dừng (mã thoát 3)
+uv run python evals/classification/run_eval.py run --mode cache --wallet three
+# cần AWS ap-southeast-1 (hỏi chủ dự án trước): thử ít trước, rồi cả bộ; đứt thì chạy lại cùng lệnh
+$env:AWS_REGION='ap-southeast-1'; $env:YOFINA_USAGE_TABLE='yofina-usage'
+uv run python evals/classification/run_eval.py warm --wallet three --limit 5
+uv run python evals/classification/run_eval.py warm --wallet three
+# chấm từ đệm (không gọi gì), hai chế độ nhãn seed
+uv run python evals/classification/run_eval.py run --mode cache --wallet three --out $env:TEMP/cls-three.json
+uv run python evals/classification/run_eval.py run --mode cache --wallet three --seed-labels none --out $env:TEMP/cls-three-noseed.json
+```
 
 ## Bộ dữ liệu
 
