@@ -1,0 +1,6 @@
+{
+  "status": "ERROR",
+  "code": "LUNAR_YEAR_UNSUPPORTED",
+  "message": "Chưa tra được ngày Tết năm 2036: lịch Tết của Yofina chỉ có các năm 2026–2035.",
+  "field": "lunar_year"
+}

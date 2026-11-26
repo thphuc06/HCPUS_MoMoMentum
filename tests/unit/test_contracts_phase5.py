@@ -453,8 +453,8 @@ def test_ket_qua_get_fee_schedule_pydantic_khop_json_schema(registry, name):
 
 def test_rag_da_cat_khoi_hop_dong():
     """Chủ dự án cắt luồng C (RAG) ngày 24/11: không tool tìm kiếm, không fixture, không module, không bảng hay hàm trong 0053."""
-    # target `knowledge` chỉ có tool đọc bảng có cấu trúc (biểu phí, tỷ giá), không có tool tìm kiếm tài liệu
-    assert list(KNOWLEDGE) == ["get_fee_schedule", "get_exchange_rate"] == list(wallet.KNOWLEDGE_TOOLS)
+    # target `knowledge` chỉ có tool đọc bảng có cấu trúc (biểu phí, tỷ giá) và tính ngày (#39), không có tool tìm kiếm tài liệu
+    assert list(KNOWLEDGE) == ["get_fee_schedule", "get_exchange_rate", "resolve_date"] == list(wallet.KNOWLEDGE_TOOLS)
     assert not {k for k in FEE_RESULTS if k.startswith("Knowledge")}
     assert not list((FIX / "tools").glob("**/search.*.json"))
     assert importlib.util.find_spec("yofina_core.knowledge") is None

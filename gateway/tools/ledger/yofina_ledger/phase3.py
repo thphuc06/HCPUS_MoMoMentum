@@ -1,5 +1,5 @@
-"""Phía ĐỌC và phản hồi của phase 3 trong Lambda ledger: biểu phí (`knowledge`), kiểm suitability (`planner`), bản ghi lượt và
-phản hồi phương án (`audit`). Mixin của `LedgerService`.
+"""Phía ĐỌC và phản hồi của phase 3 trong Lambda ledger: biểu phí, tỷ giá và tính ngày (`knowledge`), kiểm suitability (`planner`),
+bản ghi lượt và phản hồi phương án (`audit`). Mixin của `LedgerService`.
 
 Người điều phối chốt (2026-11-22): mã `audit`, `planner`, `knowledge` chạy CHUNG Lambda `yofina-ledger` (cùng lớp DB, token xác
 nhận và dữ liệu tham chiếu); ba target Gateway mới cùng trỏ vào Lambda này. Logic nằm ở gói riêng `yofina_knowledge`,
@@ -21,6 +21,7 @@ from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.fx import FxConverter, default_converter
 from yofina_core.suitability import Proposal
 from yofina_core.wallet import FEEDBACK_DECISIONS
+from yofina_knowledge.dates import date_spec, resolve_date_data
 from yofina_knowledge.fees import fee_schedule_data
 from yofina_knowledge.fx_rates import exchange_rate_data
 from yofina_planner.engine import evaluate
@@ -78,6 +79,23 @@ class Phase3Reads:
         today = self._app_date(self.repo.clock_offset(user_id), now)
         converter = self.fx or default_converter()
         data = exchange_rate_data(converter, today, currency=currency, day=date, amount=amount)
+        return {
+            "status": "OK",
+            "as_of": format_instant(now),
+            "app_date": today.isoformat(),
+            "data": data,
+        }
+
+    def resolve_date_result(self, user_id: str, **spec: Any) -> dict[str, Any]:
+        """`knowledge___resolve_date`: ngày tính từ đặc tả có cấu trúc. Hôm nay là ngày mô phỏng CỦA người gọi và ngày lương lấy
+        từ hồ sơ của người đó (một lần đọc `app_get_user`); model không điền hai thứ này. Đặc tả sai thì lỗi trước khi đọc DB."""
+        parsed = date_spec(spec)
+        now = self.now()
+        user = self.repo.user_row(user_id)
+        offset = user.get("clock_offset_days") if user else None
+        payday = user.get("payday_day") if user else None
+        today = self._app_date(int(offset) if offset is not None else None, now)
+        data = resolve_date_data(parsed, today, int(payday) if payday is not None else None)
         return {
             "status": "OK",
             "as_of": format_instant(now),

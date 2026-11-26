@@ -1479,7 +1479,7 @@ def test_buoc_dua_phan_chia_cua_hu_xuong_duoi_san_vao_vong_sua(lines, bad, fixed
     assert result.outcome.ok and scope.calls == 2
     (feedback,) = prompt(client, 1)["feedback"]
     assert feedback["rule_id"] == "step_invalid" and "dưới sàn" in feedback["message"]
-    assert "Giải trí" in feedback["message"]
+    assert "Giải trí" in feedback["message"] and "mức chi thật gần đây" in feedback["message"]  # sàn chi (#39, 26/11 chiều)
     (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
     assert rejected["detail"] == "amount_below_floor"
     later = args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]

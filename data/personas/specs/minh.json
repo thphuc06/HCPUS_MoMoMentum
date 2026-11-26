@@ -88,9 +88,7 @@
         {"name": "Tạp hóa Cô Sáu", "tx_type": "qr_other", "weight": 3},
         {"name": "Pharmacity", "tx_type": "other_expense", "weight": 2},
         {"name": "Giặt sấy Hoa Mai", "tx_type": "qr_other", "weight": 2},
-        {"name": "Guardian", "tx_type": "other_expense"},
-        {"name": "Shopee - Đồ gia dụng", "tx_type": "other_expense"},
-        {"name": "Tiệm tóc Anh Tuấn", "tx_type": "qr_other"}
+        {"name": "Guardian", "tx_type": "other_expense"}
       ]
     }
   ],

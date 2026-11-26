@@ -1,0 +1,16 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-15T03:00:00Z",
+  "app_date": "2026-11-26",
+  "data": {
+    "date": "2027-02-05",
+    "today": "2026-11-26",
+    "weekday": 5,
+    "days_from_today": 71,
+    "anchor": "lunar_new_year",
+    "anchor_date": "2027-02-06",
+    "lunar_new_year": { "year": 2027, "date": "2027-02-06", "name": "Đinh Mùi" },
+    "next_occurrence": true,
+    "before": true
+  }
+}

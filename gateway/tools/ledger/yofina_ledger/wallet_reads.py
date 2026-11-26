@@ -471,6 +471,10 @@ class WalletReads:
         )
         try:
             items = split_proposal.parse_known_items(body.get("sinking_items"), today)
+            spend = split_proposal.spend_floor_settings()
+            spend_rows = self.repo.spend_context(
+                user_id, now, self.settings.app_timezone, spend.context_window_days
+            )
             data = split_proposal.build_proposal(
                 today=today,
                 salary_vnd=(
@@ -488,6 +492,8 @@ class WalletReads:
                 essential_jars=split_proposal.essential_spending_jars(
                     jars, self.ref.tx_types(), split_proposal.essential_categories()
                 ),
+                # sàn chi (#39): cùng chuỗi chi và tham số với LP phân bổ của Lambda forecast
+                spend_floor_vnd=split_proposal.spending_floors_vnd(spend_rows, spend),
                 sinking_template=(
                     {
                         "code": template.code,

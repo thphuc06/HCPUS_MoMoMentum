@@ -23,7 +23,7 @@ from pipeline_helpers import make_settings
 from yofina_core.wallet import resolve_obligation_pay_jar
 from yofina_forecast.allocation import AllocationEngine
 from yofina_forecast.repo import ForecastRepo
-from yofina_forecast.resilience import ResilienceEngine, monthly_equivalent
+from yofina_forecast.resilience import ResilienceEngine, monthly_equivalent, variable_monthly_spend
 from yofina_forecast.runner import Pipeline
 from yofina_forecast.scenario import ScenarioEngine
 from yofina_forecast.stress import StressEngine
@@ -141,3 +141,24 @@ def test_phan_bo_lp_cua_vi_demo_khong_cat_hu_nao_duoi_khoan_dinh_ky_tra_tu_no(en
         assert lines[code]["floor_vnd"] >= amount, code
         assert lines[code]["proposed_monthly_vnd"] >= amount, code
     assert not lines["giai_tri"]["is_essential"]
+    # Dự phòng 2.700.000 ₫ còn dưới đích tự tính (3 tháng chi thiết yếu, BR-64) nên LP không cắt phần chia của nó để tăng hũ mục tiêu
+    # (BR-65, #39 26/11 trưa); trước đó Dự phòng 900.000 → 831.400 ₫ trong khi Du lịch 900.000 → 962.000 ₫
+    buffer = lines["du_phong"]
+    assert buffer["jar"].get("purpose") == "buffer"
+    assert buffer["proposed_monthly_vnd"] >= buffer["current_monthly_vnd"]
+    raised = [c for c, x in lines.items() if x["kind"] == "saving" and c != "du_phong"
+              and x["proposed_monthly_vnd"] > x["current_monthly_vnd"]]  # fmt: skip
+    print(f"  hũ để dành khác được tăng: {raised}")
+    # sàn chi (#39, 26/11 chiều): Chi hằng ngày và Giải trí không xuống dưới tỷ lệ giữ x mức chi điển hình của chính hũ (cùng chuỗi chi
+    # của ngữ cảnh dự báo mà LP dùng); trước đó Chi hằng ngày 270.000 → 42.600 ₫ trong khi hũ chi thật khoảng 245.000 ₫/tháng
+    gathered = ResilienceEngine(p).gather(USER, p.now())
+    spend = {j["code"]: j["spend"] for j in gathered.ctx.jars}
+    settings = p.settings
+    for code in ("chi_hang_ngay", "giai_tri"):
+        typical = variable_monthly_spend(spend[code], settings.resilience_window_days, settings.allocation.month_days)
+        keep = min(round(settings.allocation.spending_keep_ratio * typical), lines[code]["current_monthly_vnd"])
+        print(f"  sàn chi {code}: mức chi điển hình {typical}, sàn {keep}")
+        assert keep > 0 and lines[code]["floor_vnd"] >= keep, code
+        assert lines[code]["proposed_monthly_vnd"] >= keep, code
+    for g in data["goals"]:
+        print(f"  mục tiêu {g['jar']['code']}: kịp hạn {g['on_track']}, cần {g['monthly_needed_vnd']}/tháng, dự kiến {g.get('projected_date')}")

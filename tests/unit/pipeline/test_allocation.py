@@ -454,6 +454,7 @@ def test_cau_hinh_mac_dinh_la_gia_tri_mo_phong_co_the_ghi_de_bang_cau_hinh():
                 **keys,
                 "YOFINA_ALLOCATION_RELAX_DELAY_MONTHS": "3",
                 "YOFINA_ALLOCATION_WEIGHT_GOAL": "4.5",
+                "YOFINA_ALLOCATION_BUFFER_TARGET_MONTHS": "1.5",
                 "YOFINA_ESSENTIAL_JAR_CODES": "an_uong, hoa_don",
                 "YOFINA_ALLOCATION_HORIZON_MONTHS": "6",
                 "YOFINA_RESILIENCE_WINDOW_DAYS": "14",
@@ -461,6 +462,7 @@ def test_cau_hinh_mac_dinh_la_gia_tri_mo_phong_co_the_ghi_de_bang_cau_hinh():
         )
     )
     assert over.allocation.relax_delay_months == 3 and over.allocation.weight_goal == 4.5
+    assert P.buffer_target_months == 3.0 and over.allocation.buffer_target_months == 1.5
     assert (
         over.essential_jar_codes == ("an_uong", "hoa_don") and over.allocation_horizon_months == 6
     )
@@ -603,13 +605,18 @@ def test_obligation_jar_floor_also_counts_its_non_essential_obligations():
 def test_lp_never_proposes_a_jar_below_the_obligations_it_pays():
     res, _ = run(TIGHT_GOAL)
     plain = {line["jar"]["code"]: line for line in res["data"]["lines"]}
-    assert plain["giai_tri"]["proposed_monthly_vnd"] == 0  # hũ không có khoản định kỳ: vẫn cắt như trước
+    # hũ không có khoản định kỳ: trước 26/11 chiều vòng nới cắt về 0; nay chỉ tới sàn chi (nửa mức chi điển hình 300.000 ₫, #39)
+    fun = plain["giai_tri"]
+    assert fun["proposed_monthly_vnd"] == fun["floor_vnd"] == round(P.spending_keep_ratio * 300_000)
     w = committed(NETFLIX, LUNCH)
     out = AllocationEngine(pipe(w)).optimize(USER, TIGHT_GOAL)
     assert not errors_of(RESULT, out), errors_of(RESULT, out)
     d = AllocationPlanData.model_validate(out["data"])
     by = {line.jar.code: line for line in d.lines}
-    assert d.status == "relaxed"
+    # từ 26/11 chiều (#39): Du lịch không lấy được tiền dưới sàn chi của Giải trí hay phần chia của Dự phòng chưa tới đích, nên "chưa khả
+    # thi" kèm hai lựa chọn (trước: "relaxed", bỏ giữ Dự phòng để Du lịch lùi hạn); mọi sàn vẫn đủ
+    assert d.status == "infeasible" and len(d.alternatives) == 2
+    assert all(line.floor_gap_vnd == 0 for line in d.lines)
     assert by["giai_tri"].floor_vnd == 180_000 and by["giai_tri"].proposed_monthly_vnd >= 180_000
     assert by["giai_tri"].floor_gap_vnd == 0 and not by["giai_tri"].is_essential  # vẫn là hũ không thiết yếu với model
     assert by["an_uong"].proposed_monthly_vnd >= by["an_uong"].floor_vnd
@@ -627,15 +634,16 @@ def test_non_essential_obligations_stay_the_cuttable_part_when_floors_exceed_inc
     assert "480.000" in cut.summary  # Netflix 180.000 + cơm văn phòng 300.000 mỗi tháng
 
 
-def three_jar_world(*obligations, salary=9_000_000, days=47):
-    """Ví ba hũ của tài khoản mới (Chi hằng ngày 42, Nghĩa vụ 33, Dự phòng `buffer` 25) với các nghĩa vụ đã khai."""
+def three_jar_world(*obligations, salary=9_000_000, days=47, buffer_code="du_phong"):
+    """Ví ba hũ của tài khoản mới (Chi hằng ngày 42, Nghĩa vụ 33, Dự phòng `buffer` 25) với các nghĩa vụ đã khai. `buffer_code` đổi mã
+    của hũ Dự phòng (hũ đệm nhận ra theo `purpose`, không theo mã)."""
     from pipeline_helpers import context_rows, jar_row
     from test_resilience import World, _ledger_obligation
 
     jars = [
         ("chi_hang_ngay", "spending", 900_000, 42, 1, None, None),
         ("nghia_vu", "obligation", 1_000_000, 33, 2, None, None),
-        ("du_phong", "saving", 500_000, 25, 3, None, None),
+        (buffer_code, "saving", 500_000, 25, 3, None, None),
     ]
     spend = {"chi_hang_ngay": [80_000 + 20_000 * (i % 4) for i in range(days)]}
     ctx_jars = [jar_row(c, k, b, s, o, spend.get(c, [0] * days)) for c, k, b, s, o, _g, _d in jars]
@@ -645,7 +653,7 @@ def three_jar_world(*obligations, salary=9_000_000, days=47):
         [_ledger_obligation(dict(o)) for o in obligations],
     )
     rows = w.jar_state
-    w.jar_state = lambda user_id: [{**r, "purpose": "buffer"} if r["code"] == "du_phong" else r for r in rows(user_id)]
+    w.jar_state = lambda user_id: [{**r, "purpose": "buffer"} if r["code"] == buffer_code else r for r in rows(user_id)]
     return w
 
 
@@ -710,7 +718,13 @@ def test_hu_du_phong_nhan_dich_so_du_giu_vai_dem_va_chieu_ra_goals():
     by = {line.jar.code: line for line in d.lines}
     assert by["du_phong"].is_essential and by["du_phong"].proposed_monthly_vnd >= goal.monthly_needed_vnd
     assert {x.jar.code for x in d.goals} == {"du_lich", "du_phong"}  # mục tiêu đã khai ở hũ goal vẫn có
-    assert d.status == "optimal" and w.score_saves == 0
+    # số dư 2.000.000 ₫ chưa tới đích 3.000.000 ₫ nên Dự phòng giữ phần chia ở vòng chặt (BR-65, #39): Du lịch không còn lấy tiền từ Dự
+    # phòng để kịp hạn (trước 26/11 trưa: "optimal", Dự phòng 1.800.000 → 1.142.000 ₫, Du lịch tăng) mà lùi hạn; Dự phòng chỉ nhường
+    # phần sàn thiết yếu còn thiếu sau khi Giải trí về 0
+    assert d.status == "relaxed" and w.score_saves == 0
+    assert {(r.kind, r.jar_code) for r in d.relaxations} == {("discretionary_reduced", "giai_tri"), ("goal_delayed", "du_lich")}
+    assert by["du_lich"].proposed_monthly_vnd <= by["du_lich"].current_monthly_vnd
+    assert all(line.floor_gap_vnd == 0 for line in d.lines)
 
 
 def test_dich_du_phong_khong_doc_goal_vnd_cua_hu():
@@ -780,3 +794,230 @@ def test_muc_can_cua_hu_du_phong_xep_truoc_muc_tieu_khac_br65(buffer_first):
     assert prop(sol, "du_phong") >= need and sol.outcome("du_phong").goal_on_track
     assert not sol.outcome("du_lich").goal_on_track
     assert {(r.kind, r.jar_code) for r in sol.relaxations} == {("goal_delayed", "du_lich")}
+
+
+# =====================================================================================
+# Hũ đệm chưa tới đích giữ phần chia hiện tại ở vòng chặt (BR-65, #39 26/11): Dự phòng trước, mục tiêu sau. Trước đây mức cần theo hạn
+# của hũ mục tiêu (phạt `penalty_goal_need`) thắng phần cắt hũ đệm (`weight_emergency`), nên LP cắt Dự phòng để tăng Du lịch.
+# =====================================================================================
+def held_problem(*, hold: bool, an_uong_floor: int = 3_000_000, income: int = 10_000_000, trip: bool = True, allow: bool = True):
+    """Du lịch cần 1.800.000 ₫/tháng để kịp hạn mà đang nhận 1.000.000 ₫; ở vòng chặt Giải trí chỉ nhường được 500.000 ₫, Ăn uống và
+    Nghĩa vụ đang đúng bằng sàn. `trip=False`: Du lịch không có mục tiêu."""
+    goal = GoalSpec("du_lich", 5_400_000, 90, 6_000_000, None) if trip else None
+    return AllocationProblem(
+        income,
+        (
+            JarSpec("an_uong", "essential", 3_000_000, an_uong_floor),
+            JarSpec("nghia_vu", "obligation", 3_000_000, 3_000_000, "obligation"),
+            JarSpec("giai_tri", "discretionary", 1_000_000),
+            JarSpec("du_lich", "goal", 1_000_000, goal=goal),
+            JarSpec("du_phong", "emergency", 2_000_000, hold_current=hold),
+        ),
+        P,
+        allow_relaxation=allow,
+    )
+
+
+def proposals(sol) -> dict[str, int]:
+    return {j.code: j.proposed_vnd for j in sol.jars}
+
+
+def goal_up_while_buffer_cut(sol, problem, buffer: str) -> list[str]:
+    """Hũ mục tiêu được TĂNG trong khi hũ đệm bị CẮT (điều BR-65 cấm khi hũ đệm chưa tới đích)."""
+    cur = {j.code: j.current_vnd for j in problem.jars}
+    if sol.outcome(buffer).proposed_vnd >= cur[buffer]:
+        return []
+    return [j.code for j in problem.jars if j.role == "goal" and sol.outcome(j.code).proposed_vnd > cur[j.code]]
+
+
+def test_hu_dem_duoc_giu_khong_bi_cat_de_tang_hu_muc_tieu():
+    before = optimize(held_problem(hold=False))
+    # hành vi cũ: Dự phòng mất 300.000 ₫ để Du lịch kịp hạn
+    assert before.status == "optimal" and prop(before, "du_phong") < 2_000_000 and prop(before, "du_lich") >= 1_800_000
+    problem = held_problem(hold=True)
+    sol = optimize(problem)
+    assert prop(sol, "du_phong") == 2_000_000 and goal_up_while_buffer_cut(sol, problem, "du_phong") == []
+    # Du lịch vẫn kịp hạn nhờ cắt sâu hũ không thiết yếu (vòng nới), không lấy từ Dự phòng
+    assert sol.status == "relaxed" and sol.outcome("du_lich").goal_on_track
+    assert {(r.kind, r.jar_code) for r in sol.relaxations} == {("discretionary_reduced", "giai_tri")}
+    assert total(sol) == problem.income_vnd and all(o.floor_gap_vnd == 0 for o in sol.jars)
+
+
+@pytest.mark.parametrize("income,status", [(10_000_000, "relaxed"), (5_000_000, "infeasible")])
+def test_san_nghia_vu_va_thiet_yeu_van_thang_hu_dem_duoc_giu(income, status):
+    """Sàn thiết yếu cần thêm 2.000.000 ₫ mà ở vòng chặt hũ khác chỉ nhường được 1.500.000 ₫. Từ 26/11 chiều (#39, thứ tự ưu tiên chốt:
+    giữ hũ đệm đứng trên phần cắt sâu của hũ không thiết yếu): vòng nới cắt Giải trí về 0 trước, Dự phòng giữ nguyên (trước đó vòng
+    chặt cắt Dự phòng 500.000 ₫, "optimal"). Thu nhập không đủ sàn thì vẫn vô nghiệm như trước, Dự phòng vẫn bị lấy cho sàn thiết yếu."""
+    kw = {"an_uong_floor": 5_000_000, "income": income, "trip": False}
+    held, plain = optimize(held_problem(hold=True, **kw)), optimize(held_problem(hold=False, **kw))
+    assert held.status == status and plain.status == ("optimal" if status == "relaxed" else status)
+    assert all(o.floor_gap_vnd == 0 for o in held.jars) == (status == "relaxed")
+    if status == "relaxed":
+        assert prop(plain, "du_phong") < 2_000_000 and prop(held, "du_phong") == 2_000_000
+        assert {(r.kind, r.jar_code) for r in held.relaxations} == {("discretionary_reduced", "giai_tri")}
+    else:
+        assert (proposals(held), held.relaxations) == (proposals(plain), plain.relaxations)
+        assert prop(held, "du_phong") < 2_000_000
+
+
+def test_khong_cho_noi_thi_giu_hu_dem_khong_lam_ca_kha_thi_thanh_vo_nghiem():
+    """Không cho nới, Du lịch chỉ kịp hạn nếu lấy phần chia của Dự phòng chưa tới đích. Từ 26/11 chiều (#39: giữ hũ đệm đứng trên mức cần
+    của mục tiêu, kể cả khi vì thế mà mục tiêu chưa khả thi): vô nghiệm vì mục tiêu không kịp, Dự phòng giữ nguyên, mọi sàn vẫn đủ (trước
+    đó: giữ mà vô nghiệm thì trả nghiệm không giữ, Dự phòng bị cắt cho Du lịch)."""
+    plain = optimize(held_problem(hold=False, allow=False))
+    held = optimize(held_problem(hold=True, allow=False))
+    assert plain.status == "optimal" and prop(plain, "du_phong") < 2_000_000
+    assert held.status == "infeasible" and prop(held, "du_phong") == 2_000_000
+    assert all(o.floor_gap_vnd == 0 for o in held.jars) and not held.outcome("du_lich").goal_on_track
+
+
+def test_giu_hu_dem_khong_bao_gio_lam_bai_toan_te_hon_va_khong_cat_hu_dem_nhieu_hon():
+    """Giữ hũ đệm không bao giờ làm thiếu sàn nghĩa vụ hay thiết yếu, không cắt hũ đệm nhiều hơn; vô nghiệm chỉ thêm khi mục tiêu không
+    kịp (từ 26/11 chiều mục tiêu không lấy phần chia của hũ đệm chưa tới đích, #39)."""
+    rng = np.random.default_rng(39)
+    for _ in range(300):
+        income = int(rng.integers(0, 30_000_000))
+        kw = {
+            "days": int(rng.integers(5, 400)),
+            "remaining": int(rng.integers(0, 12_000_000)),
+            "oblig_floor": int(rng.integers(0, 6_000_000)),
+            "essential_floor": int(rng.integers(0, 5_000_000)),
+        }
+        allow = bool(rng.integers(0, 2))
+        base = jars(**kw)
+        held_jars = tuple(replace(j, hold_current=True) if j.code == "du_phong" else j for j in base)
+        plain = optimize(AllocationProblem(income, base, P, allow_relaxation=allow))
+        held = optimize(AllocationProblem(income, held_jars, P, allow_relaxation=allow))
+        assert total(held) == income and all(j.proposed_vnd >= 0 for j in held.jars)
+        held_gaps, plain_gaps = (sum(o.floor_gap_vnd for o in s.jars) for s in (held, plain))
+        assert held_gaps <= plain_gaps + STEP, (income, kw, allow)
+        if held.status == "infeasible" and plain.status != "infeasible":
+            assert held_gaps == 0 and not held.outcome("du_lich").goal_on_track, (income, kw, allow)
+        assert prop(held, "du_phong") >= prop(plain, "du_phong") - STEP, (income, kw, allow)
+
+
+def built_for(w, goal_args=()):
+    engine = AllocationEngine(pipe(w))
+    gathered = engine.resilience.gather(USER, NOW)
+    built = engine.build(gathered, horizon_months=3, goal_args=list(goal_args), shock_id=None, allow_relaxation=True)
+    return gathered, built, {j.code: j for j in built.problem.jars}
+
+
+def without_hold(problem: AllocationProblem) -> AllocationProblem:
+    return replace(problem, jars=tuple(replace(j, hold_current=False) for j in problem.jars))
+
+
+def with_balance(w, code: str, balance: int):
+    w.jars = [(c, k, balance if c == code else b, s, o, gv, gd) for c, k, b, s, o, gv, gd in w.jars]
+    return w
+
+
+def test_dich_tu_tinh_cua_hu_dem_la_so_thang_chi_thiet_yeu():
+    """Hũ đệm không có đích trong lượt này: đích là `buffer_target_months` tháng chi thiết yếu (BR-64, C-13) = nghĩa vụ cứng (thiết yếu,
+    nợ) quy về tháng cộng mức chi thiết yếu hằng tháng, cùng các số LP dùng cho sàn (chưa nhân `essential_floor_percent`)."""
+    from yofina_forecast.resilience import variable_monthly_spend
+
+    gathered, built, by = built_for(purposed())
+    spend = {j["code"]: j["spend"] for j in gathered.ctx.jars}
+    essential = sum(variable_monthly_spend(spend[c], 30, P.month_days) for c in ("an_uong", "di_lai"))
+    hard = 2_000_000 + 375_000 + round(1_000_000 / 3)  # tiền thuê phòng, tiền điện, Trả sau một lần chia 3 tháng
+    assert P.buffer_target_months > 0
+    assert built.buffer_target_vnd == round(P.buffer_target_months * (hard + essential))
+    assert gathered.jar_rows[4]["balance_vnd"] < built.buffer_target_vnd and by["du_phong"].hold_current
+    assert [c for c, j in by.items() if j.hold_current] == ["du_phong"]
+
+
+def test_vi_co_du_phong_duoi_dich_khong_cat_du_phong_de_tang_du_lich():
+    _, built, _ = built_for(purposed())
+    plain, held = optimize(without_hold(built.problem)), optimize(built.problem)
+    assert goal_up_while_buffer_cut(plain, built.problem, "du_phong") == ["du_lich"]  # hành vi cũ
+    assert goal_up_while_buffer_cut(held, built.problem, "du_phong") == []
+    assert prop(held, "du_phong") > prop(plain, "du_phong")
+    assert held.status != "infeasible" and all(o.floor_gap_vnd == 0 for o in held.jars)
+
+
+def test_vi_co_du_phong_da_dat_dich_thi_duoc_giam_nhu_cu():
+    _, first, _ = built_for(purposed())
+    w = with_balance(purposed(), "du_phong", first.buffer_target_vnd)
+    _, built, by = built_for(w)
+    assert not by["du_phong"].hold_current
+    sol = optimize(built.problem)
+    assert proposals(sol) == proposals(optimize(without_hold(built.problem)))
+    assert prop(sol, "du_phong") < by["du_phong"].current_vnd  # đủ đích rồi thì cắt được như trước
+    out = AllocationEngine(pipe(w)).optimize(USER, {})
+    assert not errors_of(RESULT, out), errors_of(RESULT, out)
+
+
+def test_dich_nguoi_dung_neu_thay_dich_tu_tinh():
+    # đích 3 triệu, số dư 2 triệu: chưa tới đích thì giữ; đích 1,5 triệu: đã tới đích (dù chưa đủ số tháng chi thiết yếu) thì không giữ
+    _, built, by = built_for(purposed(), [buffer_goal()])
+    assert built.buffer_target_vnd == 3_000_000 and by["du_phong"].hold_current
+    _, built, by = built_for(purposed(), [buffer_goal(1_500_000)])
+    assert built.buffer_target_vnd == 1_500_000 and not by["du_phong"].hold_current
+
+
+def test_vi_bay_hu_cu_hu_du_phong_theo_quy_tac_tuong_thich_cung_duoc_giu():
+    # ví cũ `purpose` NULL: hũ tiết kiệm không mục tiêu là hũ đệm (`emergency_jar`); có đích trong lượt này thì vẫn là vai mục tiêu
+    _, built, by = built_for(world())
+    assert by["du_phong"].role == "emergency" and by["du_phong"].hold_current and not by["du_lich"].hold_current
+    held = optimize(built.problem)
+    assert goal_up_while_buffer_cut(held, built.problem, "du_phong") == []
+    _, built, by = built_for(world(), [buffer_goal()])
+    assert by["du_phong"].role == "goal" and not by["du_phong"].hold_current
+
+
+def test_nhieu_hu_dem_thi_chi_giu_hu_dem_dau_tien_theo_thu_tu():
+    _, _, by = built_for(purposed(purposes={"du_lich": "buffer"}))
+    assert by["du_lich"].role == by["du_phong"].role == "emergency"
+    assert by["du_lich"].hold_current and not by["du_phong"].hold_current
+
+
+@pytest.mark.parametrize("code", ["du_phong", "quy_khan_cap"])
+def test_vi_ba_hu_giu_du_phong_theo_purpose_va_san_nghia_vu_van_thang(code):
+    def rent(amount):
+        return {**NETFLIX, "id": "00000000-0000-0000-0000-0000000000a5", "kind": "rent", "name": "Tiền trọ", "amount_vnd": amount,
+                "due_date": "2026-12-06", "due_day": 6, "pay_jar_code": "nghia_vu"}  # fmt: skip
+
+    # tiền trọ 2.000.000 ₫ vừa phần Nghĩa vụ: đích tự tính 3 tháng x 2.000.000 ₫, Dự phòng 500.000 ₫ chưa tới nên được giữ
+    _, built, by = built_for(three_jar_world(rent(2_000_000), buffer_code=code))
+    assert built.buffer_target_vnd == round(P.buffer_target_months * 2_000_000)
+    assert by[code].hold_current and by[code].role == "emergency"
+    sol = optimize(built.problem)
+    assert sol.status == "optimal" and prop(sol, code) == by[code].current_vnd
+    # tiền trọ 7.500.000 ₫ vượt phần Nghĩa vụ: Dự phòng vẫn bị cắt cho sàn nghĩa vụ. Từ 26/11 chiều (#39, thứ tự ưu tiên chốt: giữ hũ
+    # đệm đứng trên sàn chi) Chi hằng ngày nhường hết, kể cả phần dưới sàn chi, trước khi Dự phòng bị cắt (trước đó: y hệt khi không giữ,
+    # Dự phòng về 0 trong khi Chi hằng ngày còn)
+    _, built, by = built_for(three_jar_world(rent(7_500_000), buffer_code=code))
+    assert by[code].hold_current and by["chi_hang_ngay"].spend_floor_vnd > 0
+    held, plain = optimize(built.problem), optimize(without_hold(built.problem))
+    assert held.status == plain.status == "relaxed"
+    assert prop(held, "chi_hang_ngay") == 0 and prop(plain, "chi_hang_ngay") > 0
+    assert prop(plain, code) < prop(held, code) < by[code].current_vnd
+    assert held.outcome("nghia_vu").floor_gap_vnd == 0
+
+
+def test_lam_tron_khong_bien_hu_dem_dang_giu_hay_muc_can_da_du_thanh_hut():
+    """Số như LP mặc định của `minh` trên ví demo: vòng nới đủ mức cần theo hạn gốc của Du lịch và giữ Dự phòng, nhưng làm tròn sàn
+    Nghĩa vụ lên bội 1.000 ₫ làm thừa vài trăm đồng. Phần thừa không lấy từ Dự phòng đang giữ hay Đi lại (LP không cắt hai hũ này), cũng
+    không làm Du lịch thành "lùi hạn": hũ LP đã cắt (Chi hằng ngày) nhận phần đó."""
+    trip = GoalSpec("muc_tieu", 4_200_000, 131, 6_000_000, date(2027, 4, 1))
+    problem = AllocationProblem(
+        9_000_000,
+        (
+            JarSpec("chi_hang_ngay", "discretionary", 270_000),
+            JarSpec("nghia_vu", "obligation", 2_970_000, 3_170_733, "obligation"),
+            JarSpec("du_phong", "emergency", 900_000, hold_current=True),
+            JarSpec("an_uong", "essential", 2_700_000, 3_114_400),
+            JarSpec("di_lai", "essential", 630_000, 471_200),
+            JarSpec("giai_tri", "discretionary", 630_000, 180_000),
+            JarSpec("muc_tieu", "goal", 900_000, goal=trip),
+            JarSpec("dau_tu", "saving", 0),
+        ),
+        P,
+    )
+    sol = optimize(problem)
+    assert sol.status == "relaxed" and total(sol) == 9_000_000
+    assert prop(sol, "du_phong") == 900_000 and sol.outcome("muc_tieu").goal_on_track
+    assert prop(sol, "di_lai") == 630_000 and prop(sol, "chi_hang_ngay") < 270_000
+    assert {r.kind for r in sol.relaxations} == {"discretionary_reduced"}
+    assert goal_up_while_buffer_cut(sol, problem, "du_phong") == []

@@ -45,5 +45,61 @@
       },
       "required": ["currency"]
     }
+  },
+  {
+    "name": "resolve_date",
+    "description": "Tính một ngày dương lịch từ đặc tả có cấu trúc: mốc (anchor), độ lệch (offset) và tùy chọn lùi một ngày (before). Dùng khi người dùng nói một thời điểm hay một hạn theo cách tương đối (khoảng thời gian tính từ hôm nay, đầu hoặc cuối một tuần, tháng, quý, năm, kỳ lương tới, Tết âm lịch, một ngày trong tháng hay trong năm); không tự đếm ngày, độ dài tháng, năm nhuận hay tra lịch âm. Hôm nay là ngày mô phỏng của ứng dụng và ngày lương lấy từ hồ sơ, hệ thống tự lấy theo người gọi. Thứ tự tính: mốc, cộng phần tháng của độ lệch (giữ ngày trong tháng, vượt cuối tháng thì lấy ngày cuối tháng), cộng phần ngày, rồi lùi một ngày nếu before. Kết quả (date) không trước hôm nay; ngày tính ra đã qua thì trả lỗi DATE_IN_PAST: hỏi lại người dùng, không tự đổi năm hay kỳ. Năm Tết ngoài bảng tra thì lỗi LUNAR_YEAR_UNSUPPORTED. Kết quả kèm trường giải thích: mốc đã dùng và ngày của mốc, độ lệch đã quy đổi ra tháng và ngày, năm Tết đã tra và tên năm. Chỉ đọc, không ghi gì.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Hệ thống tự điền từ đăng nhập. Để trống, không tự điền."
+        },
+        "anchor": {
+          "type": "string",
+          "description": "Mốc tính: today (hôm nay), next_payday (ngày lương kế tiếp sau hôm nay, theo ngày lương đã khai), start_of hoặc end_of (ngày đầu hoặc ngày cuối của một kỳ, cần period), lunar_new_year (Mùng 1 Tết âm lịch), date (một ngày trong tháng, cần day)."
+        },
+        "period": {
+          "type": "string",
+          "description": "Kỳ: week (thứ Hai tới Chủ nhật), month, quarter (ba tháng bắt đầu từ tháng 1, 4, 7, 10) hoặc year. Bắt buộc với start_of và end_of. Với date: month (ngày day của tháng chọn bằng period_offset, không kèm month, year) hoặc year (ngày day tháng month của năm chọn bằng period_offset, không kèm year). Với lunar_new_year: year (Tết trong năm dương lịch chọn bằng period_offset)."
+        },
+        "period_offset": {
+          "type": "integer",
+          "description": "Số kỳ tính từ kỳ chứa hôm nay: 0 kỳ này, 1 kỳ kế tiếp, 2 kỳ sau nữa, -1 kỳ trước. Chỉ dùng kèm period; vắng là 0."
+        },
+        "lunar_year": {
+          "type": "integer",
+          "description": "Năm dương lịch chứa Mùng 1 Tết cần tra, khi người dùng nêu rõ năm (anchor lunar_new_year). Vắng lunar_year và period thì lấy Tết gần nhất sau hôm nay."
+        },
+        "day": {
+          "type": "integer",
+          "description": "Ngày trong tháng, 1 đến 31 (anchor date). Với period month, ngày lớn hơn số ngày của tháng thì lấy ngày cuối tháng."
+        },
+        "month": {
+          "type": "integer",
+          "description": "Tháng, 1 đến 12 (anchor date). Vắng month và period thì lấy lần gần nhất sau hôm nay có ngày day."
+        },
+        "year": {
+          "type": "integer",
+          "description": "Năm dương lịch (anchor date, cần month), chỉ khi người dùng nêu rõ năm. Vắng year và period thì lấy lần gần nhất sau hôm nay có ngày day tháng month (hôm nay không tính)."
+        },
+        "offset": {
+          "type": "object",
+          "description": "Độ lệch cộng vào mốc. Mỗi thành phần có thể âm (lùi) hoặc có phần lẻ, tối đa 4 chữ số lẻ. Quy đổi: một năm là 12 tháng; phần lẻ của tổng số tháng tính 30 ngày mỗi tháng; một tuần là 7 ngày; tổng số ngày làm tròn tới ngày (nửa ngày làm tròn ra xa 0). Vắng là không lệch.",
+          "properties": {
+            "years": { "type": "number", "description": "Số năm." },
+            "months": { "type": "number", "description": "Số tháng." },
+            "weeks": { "type": "number", "description": "Số tuần." },
+            "days": { "type": "number", "description": "Số ngày." }
+          }
+        },
+        "before": {
+          "type": "boolean",
+          "description": "true khi hạn là ngày liền trước ngày tính được (trước mốc, không gồm chính mốc). Vắng là false."
+        }
+      },
+      "required": ["anchor"]
+    }
   }
 ]

@@ -51,7 +51,7 @@ Bảng dưới là số đo của bản thử ngày 21/11, giữ để tra ngư�
 - **Ngoài MVP, đã có hướng thiết kế (§4)**: tự phát hiện khoản định kỳ; nhận diện loại tiền vào; thu nhập không đều (freelancer, tài xế, người bán online); lương về ngân hàng thay vì ví.
 - Mở rộng kỹ thuật: Automated Reasoning checks, AgentCore Evaluations và Code Interpreter (§14), contextual bandit cho F7, Chronos-2 ("MVP nếu kịp"; chủ dự án chốt để ngoài ngày 21/11, xem [open-questions](open-questions.md) và [ADR-0004](../decisions/0004-lech-so-voi-proposal.md)).
 - Cắt đầu tiên nếu đội 2 người: F6 (§15).
-- **Bộ hũ (chủ dự án chốt 26/11, issue #39):** tài khoản mới nhận 3 hũ mặc định theo mục đích; muốn theo dõi riêng một khoản (dự báo, ngày cạn, phát hiện đổi hành vi) thì tách hũ riêng. Để sau hạn nộp: phân tích theo nhóm loại chi bên trong hũ gộp (hướng: gợi ý tách hũ khi hũ gộp có dấu hiệu tăng), bộ hũ theo giai đoạn sống (BR-70, BR-71), mục tiêu và khóa mềm hũ đệm (BR-64), cổng hũ dài hạn (BR-68). Không làm: hũ "Khác" cho khoản nhỏ một lần (#28).
+- **Bộ hũ (chủ dự án chốt 26/11, issue #39):** tài khoản mới nhận 3 hũ mặc định theo mục đích; muốn theo dõi riêng một khoản (dự báo, ngày cạn, phát hiện đổi hành vi) thì tách hũ riêng. Để sau hạn nộp: phân tích theo nhóm loại chi bên trong hũ gộp (hướng: gợi ý tách hũ khi hũ gộp có dấu hiệu tăng), bộ hũ theo giai đoạn sống (BR-70, BR-71), mục tiêu và khóa mềm hũ đệm (BR-64), cổng hũ dài hạn (BR-68), bắt buộc mục đích cho hũ để dành và chặn hũ đệm thứ hai (BR-63; hiện hũ để dành cũ có thể chưa có mục đích, có nhiều hũ đệm thì lấy hũ đệm đầu tiên theo thứ tự). Không làm: hũ "Khác" cho khoản nhỏ một lần (#28).
 
 ## Giả định scope cần đội xác nhận (§1)
 

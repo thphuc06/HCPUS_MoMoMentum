@@ -22,7 +22,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 
 | FR | Tên | | Bằng chứng chính | Còn lại |
 |---|---|---|---|---|
-| FR1 | Hồ sơ, hũ, sổ cái | ✅ | Đóng phase 2 | Bộ hũ mới **đã code và deploy 26/11** (#39): tài khoản mới 3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai; ví demo của `minh` 8 hũ. Hoãn: BR-64, 68, 70, 71 ([02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)) |
+| FR1 | Hồ sơ, hũ, sổ cái | ✅ | Đóng phase 2 | Bộ hũ mới **đã code và deploy 26/11** (#39): tài khoản mới 3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai; ví demo của `minh` 8 hũ. Hoãn: BR-64, 68, 70, 71; BR-63 chưa bắt buộc trước hạn nộp (chốt 26/11: hũ để dành cũ có thể chưa có mục đích, nhiều hũ đệm thì lấy hũ đầu tiên theo thứ tự) ([02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)) |
 | FR2 | Phân hũ tự động | ◐ | Đủ 4 bước; **đúng 92%** trên phần tự gán (mục tiêu 90%), đo trên ví nhiều hũ theo loại chi | **Tỷ lệ phải hỏi 17,4%** (mục tiêu dưới 10%, NFR-14). Ví 3 hũ: phần có model chưa đo (không model: đúng 92,08%, hỏi 39,52%) |
 | FR3 | Dự báo theo hũ | ✅ | Backtest: pinball bằng 0,64 lần mốc so sánh; độ phủ khoảng 80% là 0,79–0,82 ([backtest](../research/backtest-phase-2.md)) | Số ngày cảnh báo trước (K5, NFR-12) chưa đo. Ví 3 hũ: dải của hũ gộp Chi hằng ngày phủ thừa (0,865 ở 120 ngày) |
 | FR4 | Nghĩa vụ | ✅ | Đóng phase 2 | C-07 chốt 26/11 (hũ trả theo một quy tắc chung) |
@@ -117,7 +117,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 
 **T-07 [Thông tin] Quy tắc nghiệp vụ mới chưa có trong code**
 - Chưa có: cơ cấu hũ theo mục đích và giai đoạn sống (BR-63 đến 73), chi phí trả sau minh bạch (BR-74 đến 76), hỗ trợ trước hạn (BR-77), FR14.
-- **26/11 (issue #39):** đã làm BR-67, BR-69 và một phần BR-63, 65, 66, 73, 78 (3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai, hũ Nghĩa vụ chung); hoãn BR-64, 68, 70, 71. BR-72, 74 đến 77 và FR14 vẫn chưa có.
+- **26/11 (issue #39):** đã làm BR-67, BR-69 và một phần BR-63, 65, 66, 73, 78 (3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai, hũ Nghĩa vụ chung); hoãn BR-64, 68, 70, 71; phần còn lại của BR-63 (bắt buộc mục đích, chặn hũ đệm thứ hai) để sau hạn nộp. BR-72, 74 đến 77 và FR14 vẫn chưa có.
 - **Đề xuất:** không đưa vào demo, trừ **G1** (hiện chi phí trả sau quy ra năm trên thẻ kiểm tra trước khi chi, BR-75) vì làm nhanh được. Phần còn lại ghi là lộ trình sau cuộc thi.
 - **BA chốt trước:** G-01, C-12 (đã đưa vào [12 mục 2.1](12-tong-hop-va-viec-can-chot.md#21-gấp-technical-đang-chờ-chốt-trước-deploy-đợt-1-2811), hạn 28/11).
 
