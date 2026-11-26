@@ -96,7 +96,25 @@ Các điểm này được thử trong [phase 1](../plan/phases/phase-1-nen-va-l
 
 - [ ] **Độ trễ Guardrail** (đo 23/11, `scripts/measure_phase3.py`): `ApplyGuardrail` p50 446 ms, p95 531 ms trong lượt, vượt ngưỡng 400 ms của kế hoạch phase 3. Đầu vào chạy song song với router nên không cộng vào lượt; đầu ra chạy tuần tự trước khi phát chữ (khoảng 0,4 s). Chấp nhận, hay bỏ lọc đầu ra cho phần chữ đã qua NumericGrounding và luật suitability?
 - [ ] **Guardrail fail-open** (F5): lưu ý 22–23/11 Guardrail luôn AccessDenied trên Runtime mà không ai thấy vì fail-open chỉ ghi log; nên có cảnh báo CloudWatch cho `guardrail_error`. `guardrail_fail_open: true` trong `agent/src/yofina_agent/defaults.json`; Guardrail lỗi hoặc quá 3 giây thì lượt đi tiếp không lọc đầu vào, chỉ còn router và Verifier chặn. Giữ fail-open (ưu tiên demo không gãy) hay đổi sang fail-closed (chặn khi không lọc được)?
-- [ ] **Ngưỡng đủ/sát/hụt**: `short_floor` và `tight_floor` cùng bằng 0 nên Hóa đơn 250.000 ₫ của `minh` ra "hụt" (không phải "vàng" như câu chữ tiêu chí 3) và dải "sát" rất hẹp; hụt 1 đồng và hụt 200 nghìn cùng một nhãn. Giữ, hay đặt `tight_floor` > 0 (CDK context `affordabilityTightP10FloorVnd`)?
+- [ ] **Ngưỡng đủ/sát/hụt**: `short_floor` và `tight_floor` cùng bằng 0 nên Hóa đơn 250.000 ₫ của `minh` ra "hụt" (không phải "vàng" như câu chữ tiêu chí 3) và dải "sát" rất hẹp; hụt 1 đồng và hụt 200 nghìn cùng một nhãn. Giữ, hay đặt `tight_floor` > 0 (CDK context `affordabilityTightP10FloorVnd`)? Từ 26/11 hũ Hóa đơn của ví demo gộp vào Nghĩa vụ (issue #39), nên ca này nay là hũ Nghĩa vụ (C-02 ở [ba/02](../ba/02-business-rules.md)).
 - [ ] **Phí Trả sau trong tiêu chí 1 và 3** (đã chốt tạm 22/11 theo engine: 2.200.000 ₫ và 1.250.000 ₫): giữ quy tắc phí một lần mỗi nghĩa vụ, hay đổi quy tắc hoặc persona `minh` để ra 1.233.000 ₫ và 283.000 ₫ như câu chữ cũ?
 - [ ] **Trần model mỗi lượt** (F6): 4 lượt (`max_model_calls_per_turn`) làm vòng sửa thứ hai của Verifier không chạy được. Giữ 4 (khớp tiêu chí 9) hay nâng lên 5?
 - [ ] **Tên miền Amplify trong repo public** (F10): tên miền `*.amplifyapp.com` ở `HANDOFF.md` và `docs/aws-resources.md`. Giữ, hay thay bằng chỗ giữ chỗ?
+
+## Bộ hũ mặc định (phát sinh 26/11, issue #39)
+
+Chi tiết và trạng thái từng quy tắc ở cuối mục B2a của [ba/02](../ba/02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411).
+
+- [x] **Bộ hũ của tài khoản mới**: bảy hũ theo loại chi hay bộ hũ theo mục đích?
+  - Chốt 26/11 (chủ dự án): ba hũ mặc định Chi hằng ngày 42%, Nghĩa vụ 33%, Dự phòng 25% (tỷ lệ là giả định thử nghiệm); hũ khác là hũ tự thêm. Ví có hũ riêng khớp loại giao dịch thì hũ riêng nhận giao dịch, không có thì vào Chi hằng ngày. Bộ hũ theo giai đoạn sống (BR-70, BR-71) hoãn.
+- [x] **Bộ hũ của tài khoản demo**
+  - Chốt 26/11 (chủ dự án): Chi hằng ngày, Nghĩa vụ (gộp Hóa đơn), Dự phòng, rồi hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch (hũ mục tiêu), Đầu tư. `minh`, `vy` 8 hũ; `lan`, `khoa` 7 hũ. Giữ Ăn uống, Đi lại, Giải trí riêng vì phát hiện đổi hành vi và hồ sơ hành vi tính theo từng hũ.
+- [x] **Phân tích theo nhóm loại chi bên trong hũ gộp** (dự báo, ngày cạn, phát hiện đổi hành vi cho từng loại chi trong Chi hằng ngày)
+  - Chốt 26/11 (chủ dự án): không làm trước hạn nộp. Ai muốn theo dõi riêng một khoản thì tách hũ riêng. Hướng sau hạn nộp: gợi ý tách hũ khi hũ gộp có dấu hiệu tăng.
+- [x] **Hũ "Khác" cho khoản nhỏ một lần** (issue #28)
+  - Chốt 26/11: không làm, issue đóng. Đo offline chỉ giảm tỷ lệ hỏi tối đa khoảng 1,2 điểm, dưới ngưỡng 3 điểm ([ghi chú](../research/2026-11-26-hu-khac.md)).
+- [x] **Trường hũ có cấu trúc trong bước lập luận** (issue #7)
+  - Chốt: không thêm; ghi là giới hạn đã biết.
+- [ ] **Sàn cho hũ không thiết yếu khi đề xuất tỷ lệ**: trên ví demo, đề xuất tỷ lệ khi kê khai và bản lộ trình v3 của cảnh 4 đưa Giải trí về 0% (đúng quy tắc "cắt hũ không thiết yếu trước"). Có đặt sàn không, bao nhiêu?
+- [ ] **Đo phân loại ví 3 hũ có model**: cần thêm tùy chọn ví cho `evals/classification/run_eval.py` và khoảng 294 lời gọi model nhỏ (gọi Bedrock, cần duyệt chi phí). Chưa đo thì tài liệu nộp chỉ gắn 92% / 17,4% với ví nhiều hũ ([đo ví 3 hũ](../research/2026-11-26-do-vi-ba-hu.md)).
+- [ ] **BR-79 đến BR-84** chỉ có ở trang Notion "Feedback hũ", chưa đưa vào repo. BA đồng bộ vào [ba/02](../ba/02-business-rules.md).

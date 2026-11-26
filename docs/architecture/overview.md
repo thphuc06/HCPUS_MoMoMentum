@@ -235,11 +235,11 @@ Mapping đầy đủ (chức năng, phía sau, ghi hay không) ở [proposal-sum
 
 ## Mô hình dữ liệu
 
-(§7) Aurora PostgreSQL Serverless v2, pgvector cho bước embedding của phân loại; truy cập qua Data API với role riêng và RLS (xem [Dữ liệu](#dữ-liệu)). Schema thực là chuỗi [migration](../../db/README.md) (0001 tới 0054 ngày 25/11). Bảng chính:
+(§7) Aurora PostgreSQL Serverless v2, pgvector cho bước embedding của phân loại; truy cập qua Data API với role riêng và RLS (xem [Dữ liệu](#dữ-liệu)). Schema thực là chuỗi [migration](../../db/README.md) (0001 tới 0059 ngày 26/11). Bảng chính:
 
 | Bảng | Nội dung | Trạng thái |
 |---|---|---|
-| `users`, `jars` | Người dùng, lương và ngày nhận đã khai, mức chấp nhận rủi ro. Hũ có `kind` (spending, saving, obligation, system), `split_percent`, mục tiêu và hạn. **Hai hũ hệ thống** mỗi người: "Tiền vào khác" (`system_role other_income`) và "Chưa phân loại" (`unclassified`, số dư được âm); tổng số dư là tổng mọi hũ | 0001, 0005 |
+| `users`, `jars` | Người dùng, lương và ngày nhận đã khai, mức chấp nhận rủi ro. Hũ có `kind` (spending, saving, obligation, system), `split_percent`, mục tiêu và hạn. **Hai hũ hệ thống** mỗi người: "Tiền vào khác" (`system_role other_income`) và "Chưa phân loại" (`unclassified`, số dư được âm); tổng số dư là tổng mọi hũ. Từ 26/11 (issue #39): `purpose` cho hũ `saving` (`buffer`, `sinking`, `goal`, `long_term`; ví cũ để trống) và `sinking_items` (khoản cần của Quỹ dồn: tên, số tiền, ngày cần) | 0001, 0005, 0057, 0058 |
 | `transactions` | Sổ cái: thời gian, số tiền, đối tác (`merchant`), lời nhắn (`note`), hũ, `tx_type`, nguồn trả (`funding_source` jar hoặc credit), người nhận, nghĩa vụ liên kết, khóa khử trùng, nhãn phân loại (`classified_by`, `classification_confidence`, `needs_review`) | 0001, 0005 |
 | `payees` | Người nhận của ví mô phỏng (seed theo persona) | 0005 |
 | `obligations` | Khoản tiền ra theo lịch: trả sau (tự sinh), khoản vay, tiền trọ, hóa đơn, thuê bao (người dùng khai); số tiền kỳ vọng và khoảng, phí, ngày đến hạn, chu kỳ, trạng thái, hũ trả | 0005 |
@@ -247,7 +247,7 @@ Mapping đầy đủ (chức năng, phía sau, ghi hay không) ở [proposal-sum
 | `fee_schedules` | Biểu phí có cấu trúc theo sản phẩm tín dụng, kèm nguồn và ngày hiệu lực | 0005, seed |
 | `salary_events` | Lương về chờ xác nhận một chạm rồi chia vào hũ | 0005 |
 | `category_rules` | Luật phân loại học từ lần người dùng sửa, kèm phạm vi (một lần hay luôn luôn cho người nhận đó) | 0005 (phase 4 dùng) |
-| `tx_type_map`, `jar_templates` | Bảng tra: loại giao dịch sang hũ (bước 0 của phân loại), hũ mặc định cho onboarding | 0005, seed |
+| `tx_type_map`, `jar_templates` | Bảng tra: loại giao dịch sang hũ (bước 0 của phân loại), hũ mặc định cho onboarding. Từ 26/11 (issue #39): hũ mặc định là Chi hằng ngày, Nghĩa vụ, Dự phòng (`is_default`), bảy hũ cũ thành hũ tự thêm; loại giao dịch vào hũ riêng khớp loại nếu ví có, không có thì vào Chi hằng ngày (chi) hoặc Nghĩa vụ (hóa đơn, thuê bao) (`yofina_core.wallet.transaction_jar`). Đặt lại ví demo dùng bộ hũ riêng (`jar_layout.DEMO_LAYOUT`), không dùng bộ mặc định này | 0005, 0057, 0059, seed |
 | `forecast_runs`, `forecast_jar_summaries`, `forecasts` | Lần chạy dự báo (model, ngày gốc, độ phủ, nhãn tin cậy, cờ ước lượng ban đầu), tóm tắt mỗi hũ (ngày cạn, xác suất hụt, đủ/sát/hụt), phân vị chi tiêu ngày và số dư theo ngày | 0006 |
 | `conversation_turns`, `turn_blocks`, `confirm_resolutions` | Lượt hội thoại, khối UI đã phát, trạng thái đã thực hiện của khối xác nhận | 0001, 0003, 0004 |
 | `resilience_scores` | Điểm và 4 thành phần theo ngày | 0052 |
