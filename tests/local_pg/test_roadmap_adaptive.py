@@ -23,7 +23,15 @@ from typing import Any
 
 from ledger_fakes import gateway_context, http_event
 from pipeline_helpers import make_settings
-from test_roadmap_regen_scene4 import FORECAST, LEDGER, LocalAllocation, LocalLambda, Planner, _llm, rejected_steps
+from test_roadmap_regen_scene4 import (
+    FORECAST,
+    LEDGER,
+    LocalAllocation,
+    LocalLambda,
+    Planner,
+    _llm,
+    rejected_steps,
+)
 from yofina_agent import notices
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
 from yofina_agent.settings import AgentSettings

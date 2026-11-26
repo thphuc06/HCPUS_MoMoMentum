@@ -24,7 +24,12 @@ from test_roadmap_agent import (
     step,
 )
 from yofina_agent.compact import compact_obligations
-from yofina_agent.roadmap_agent import StepOutline, _obligation_dues, _obligation_pay_jars, _obligation_step_issue
+from yofina_agent.roadmap_agent import (
+    StepOutline,
+    _obligation_dues,
+    _obligation_pay_jars,
+    _obligation_step_issue,
+)
 from yofina_agent.tools import classify_result
 
 PAYDAY = date(2026, 12, 5)  # period_start của phương án fixture (optimize_allocation.ok)
