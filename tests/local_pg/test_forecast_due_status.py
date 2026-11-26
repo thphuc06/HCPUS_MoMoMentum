@@ -14,6 +14,8 @@ nói hụt, không hiện xác suất của engine. Không gọi AWS, không g�
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from test_demo_scenes import USER, _pipeline, _reset_demo
 
 PAY_JAR = "nghia_vu"
@@ -38,8 +40,13 @@ def test_khoan_dung_ngay_luong_thieu_tien_thi_moi_noi_hien_hut(env):
     assert summary["status"] == "ok" and "first_shortfall" not in window
 
     env.act(USER, "move_between_jars", {"from_jar": PAY_JAR, "to_jar": "du_phong", "amount_vnd": 100_000})
-    assert p.run_user(USER, trigger="manual").status == "ok"
+    # đồng hồ test đứng yên: hai lần chạy cùng computed_at thì "mới nhất" (computed_at DESC, id DESC) rơi vào run_id uuid4 ngẫu nhiên,
+    # nửa số lần đọc lại lần chạy lúc đặt lại; đẩy đồng hồ thêm một giây để lần chạy sau khi chuyển chắc chắn là lần mới nhất
+    env.clock.now += timedelta(seconds=1)
+    run = p.run_user(USER, trigger="manual")
+    assert run.status == "ok"
     summary, block, jar = _nghia_vu(env)
+    assert str(summary["run_id"]) == run.run_id
     data = block["data"]
     window = data["obligations_before_payday"]
     print("[sau khi chuyển 100.000 ₫] trạng thái", summary["status"], "| Tổng quan", jar.get("status"), "| danh sách", window)
