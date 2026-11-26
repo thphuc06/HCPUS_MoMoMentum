@@ -9,6 +9,7 @@ import os
 import sys
 
 import uvicorn
+from yofina_agent import app as agent_app
 from yofina_agent.app import app
 
 
@@ -21,4 +22,6 @@ def configure_logging() -> None:
 
 if __name__ == "__main__":
     configure_logging()
+    # Nạp thư viện và mô hình dịch vụ TRƯỚC khi nghe cổng: Runtime V2 chụp snapshot khi /ping đạt, mọi phiên khôi phục từ đó (#39)
+    agent_app.preload()
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8080")), log_level="warning")
