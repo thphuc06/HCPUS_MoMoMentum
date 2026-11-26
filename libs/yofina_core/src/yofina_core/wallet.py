@@ -105,6 +105,46 @@ def transaction_jar(
     return next((code for code in (*own, *shared) if code in codes), None)
 
 
+#: Loại CHI của bảng tra loại giao dịch (các dòng chiều `out` của db/seed/tx_type_map.sql, theo `sort_order`): (mã loại, nhãn, hũ mặc
+#: định `default_jar_code`). Hũ mặc định None: loại không có hũ nào nhận, giao dịch rơi về hũ hệ thống. Gói agent không mang tệp seed
+#: nên router đọc danh mục loại chi từ đây; test `test_danh_muc_loai_chi_trung_seed_tx_type_map` giữ hai nơi trùng nhau.
+SPENDING_TX_TYPES: tuple[tuple[str, str, str | None], ...] = (
+    ("food_drink", "Ăn uống", "an_uong"),
+    ("food_delivery", "Giao đồ ăn", "an_uong"),
+    ("grocery", "Đi chợ, siêu thị", "an_uong"),
+    ("qr_food", "Quét QR quán ăn, cà phê", "an_uong"),
+    ("ride_hailing", "Gọi xe", "di_lai"),
+    ("public_transport", "Xe buýt, tàu, metro", "di_lai"),
+    ("fuel", "Xăng xe", "di_lai"),
+    ("qr_transport", "Quét QR vận tải", "di_lai"),
+    ("bill_electricity", "Tiền điện", "hoa_don"),
+    ("bill_water", "Tiền nước", "hoa_don"),
+    ("bill_internet", "Internet", "hoa_don"),
+    ("bill_phone", "Cước điện thoại", "hoa_don"),
+    ("phone_topup", "Nạp điện thoại", "hoa_don"),
+    ("rent", "Tiền thuê nhà", "hoa_don"),
+    ("subscription", "Gói thuê bao", "giai_tri"),
+    ("entertainment", "Giải trí", "giai_tri"),
+    ("qr_entertainment", "Quét QR giải trí", "giai_tri"),
+    ("travel", "Du lịch", "du_lich"),
+    ("obligation_payment", "Trả nghĩa vụ", "nghia_vu"),
+    ("bnpl_purchase", "Mua bằng Trả sau (mô phỏng)", None),
+    ("transfer_person", "Chuyển tiền cho người khác", None),
+    ("qr_other", "Quét QR cửa hàng khác", None),
+    ("other_expense", "Chi tiêu khác", None),
+)
+
+
+def spending_tx_type_jar(tx_type: str | None, jar_codes: Iterable[str]) -> str | None:
+    """Hũ người dùng của ví nhận một khoản CHI loại `tx_type`, theo đúng quy tắc phân loại giao dịch (`transaction_jar` với hũ mặc
+    định của loại trong `SPENDING_TX_TYPES`): hũ riêng khớp loại thắng, không có thì hũ chung của bộ ba. None khi không có loại, loại
+    không thuộc danh mục loại chi, loại không có hũ mặc định (giao dịch rơi về Chưa phân loại) hoặc ví không có hũ nào nhận. Mã hũ hệ
+    thống trong `jar_codes` không bao giờ là kết quả."""
+    default = next((jar for code, _, jar in SPENDING_TX_TYPES if code == tx_type), None)
+    user_codes = [code for code in jar_codes if code not in SYSTEM_JAR_CODES.values()]
+    return transaction_jar(default, user_codes, tx_type=tx_type)
+
+
 # --- giao dịch ---------------------------------------------------------------------------------
 TRANSACTION_KINDS = ("expense", "income", "transfer")
 #: jar: trừ hoặc cộng số dư hũ. credit: mua bằng hạn mức trả sau, không đổi số dư hũ. external (phase 5, migration 0050): chi
