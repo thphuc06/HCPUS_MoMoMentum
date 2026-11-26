@@ -217,3 +217,48 @@ def test_obligation_kind_labels_match_frontend():
     frontend = dict(re.findall(r"(\w+):\s*'([^']*)'", body["body"]))
     assert frontend == wallet.OBLIGATION_KIND_LABELS
     assert set(wallet.OBLIGATION_KIND_LABELS) == set(wallet.OBLIGATION_KINDS)
+
+
+def test_danh_muc_loai_chi_trung_seed_tx_type_map():
+    """`SPENDING_TX_TYPES` là bản Python của các dòng chiều `out` trong db/seed/tx_type_map.sql (dữ liệu sản phẩm): cùng mã, nhãn,
+    hũ mặc định và thứ tự. Gói agent không mang tệp seed nên đọc danh mục từ đây; lệch là test đỏ."""
+    import re
+    from pathlib import Path
+
+    seed = (Path(__file__).resolve().parents[3] / "db" / "seed" / "tx_type_map.sql").read_text("utf-8")
+    rows = re.findall(r"\('([a-z_]+)',\s*'([^']*)',\s*'out',\s*(NULL|'[a-z_]+')", seed)
+    assert len(rows) > 10
+    expected = tuple((t, label, None if jar == "NULL" else jar.strip("'")) for t, label, jar in rows)
+    assert expected == wallet.SPENDING_TX_TYPES
+
+
+@pytest.mark.parametrize(
+    ("wallet_codes", "tx_type", "expected"),
+    [
+        pytest.param(_DEMO_DAILY_WALLET, "travel", "muc_tieu", id="du-lich-vi-demo-vao-hu-goal"),
+        pytest.param(_DEMO_DAILY_WALLET, "food_drink", "an_uong", id="an-uong-vi-demo"),
+        pytest.param(_THREE_JAR_WALLET, "food_drink", "chi_hang_ngay", id="an-uong-vi-ba-hu"),
+        pytest.param((*_THREE_JAR_WALLET, "an_uong"), "food_drink", "an_uong", id="an-uong-vi-ba-hu-them-an-uong"),
+        pytest.param(_THREE_JAR_WALLET, "travel", "chi_hang_ngay", id="du-lich-vi-ba-hu"),
+        pytest.param(_THREE_JAR_WALLET, "bill_electricity", "nghia_vu", id="hoa-don-vao-nghia-vu"),
+        pytest.param(_THREE_JAR_WALLET, "subscription", "nghia_vu", id="thue-bao-vi-ba-hu"),
+        pytest.param(_DEMO_DAILY_WALLET, "obligation_payment", "nghia_vu", id="tra-nghia-vu"),
+        # loại không có hũ nhận (rơi về Chưa phân loại), loại lạ, không có loại, ví không có hũ nào nhận
+        pytest.param(_DEMO_DAILY_WALLET, "transfer_person", None, id="chuyen-cho-nguoi-khac"),
+        pytest.param(_DEMO_DAILY_WALLET, "other_expense", None, id="chi-tieu-khac"),
+        pytest.param(_DEMO_DAILY_WALLET, "salary", None, id="tien-vao-khong-phai-loai-chi"),
+        pytest.param(_DEMO_DAILY_WALLET, None, None, id="khong-co-loai"),
+        pytest.param(("du_phong", "dau_tu"), "travel", None, id="vi-khong-co-hu-nhan"),
+    ],
+)  # fmt: skip
+def test_hu_cua_khoan_chi_theo_loai_cung_quy_tac_phan_loai(wallet_codes, tx_type, expected):
+    assert wallet.spending_tx_type_jar(tx_type, wallet_codes) == expected
+    if expected is not None:
+        default = next(jar for code, _, jar in wallet.SPENDING_TX_TYPES if code == tx_type)
+        assert expected == wallet.transaction_jar(default, wallet_codes, tx_type=tx_type)
+
+
+def test_hu_cua_khoan_chi_khong_bao_gio_la_hu_he_thong():
+    system = tuple(wallet.SYSTEM_JAR_CODES.values())
+    assert wallet.spending_tx_type_jar("transfer_person", (*_DEMO_DAILY_WALLET, *system)) is None
+    assert wallet.spending_tx_type_jar("food_drink", system) is None
