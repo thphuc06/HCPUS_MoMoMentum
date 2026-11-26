@@ -29,8 +29,15 @@ from yofina_agent.clarify import (
 from yofina_agent.notices import ROADMAP_GOAL_JAR_QUESTION
 
 RR9 = "lo trinh hien tai co kip gom 20 trieu truoc Tet khong"  # câu số 9 của báo cáo RR
-GOAL = {"amount_vnd": 20_000_000, "date_text": "trước Tết", "target_date": "2027-02-05"}  # router đổi hạn ra ngày (V1)
-CHOICE_Q = roadmap_choice_question(20_000_000, "trước Tết", "2027-02-05")
+GOAL = {"amount_vnd": 20_000_000, "date_text": "trước Tết", "date_spec": {"anchor": "lunar_new_year", "before": True}}  # đặc tả hạn (V1)
+TET_EVE = date(2027, 2, 5)  # ngày liền trước Tết Đinh Mùi (06/02/2027)
+CHOICE_Q = roadmap_choice_question(20_000_000, "trước Tết", TET_EVE)
+#: hạn đã tính từ đặc tả, làm dữ kiện cho writer (mốc đã dùng, năm Tết): nói được "trước Tết" kèm ngày
+TET_FACTS = {
+    "date_text": "05/02/2027", "day_month_text": "05/02", "weekday_text": "thứ Sáu", "days_from_today": 76,
+    "anchor": "lunar_new_year", "anchor_date_text": "06/02/2027", "before_anchor": True,
+    "lunar_new_year": {"name": "Đinh Mùi", "date_text": "06/02/2027", "year": 2027}, "next_occurrence": True,
+}  # fmt: skip
 WRITES = {"save_roadmap", "optimize_allocation", "move_between_jars"}
 
 
@@ -65,9 +72,11 @@ def test_router_noi_xem_thi_chi_xem_du_cau_co_so_tien_va_han(monkeypatch):
     # không lưu bản mới, nên cũng không bỏ bản đề xuất đang chờ (lưu bản mới là việc bỏ bản đang chờ)
     assert not {tool for tool, _ in tools.calls} & WRITES
     (call,) = writer.calls
-    # mục tiêu người dùng nêu là dữ kiện cho writer (số đã định dạng để kiểm căn cứ), không thành bản mới
+    # mục tiêu người dùng nêu là dữ kiện cho writer (số đã định dạng để kiểm căn cứ, hạn đã tính kèm mốc), không thành bản mới
     assert call["task"] == "roadmap"
-    assert call["compact"]["muc_tieu_nguoi_dung_hoi"] == {"so_tien_text": "20.000.000 ₫", "han_nguoi_dung_noi": "trước Tết"}
+    assert call["compact"]["muc_tieu_nguoi_dung_hoi"] == {
+        "so_tien_text": "20.000.000 ₫", "han_nguoi_dung_noi": "trước Tết", "han": TET_FACTS,
+    }  # fmt: skip
 
 
 def test_router_de_trong_ma_da_co_ban_dang_dung_thi_hoi_mot_cau_hai_chip(monkeypatch):
@@ -75,43 +84,43 @@ def test_router_de_trong_ma_da_co_ban_dang_dung_thi_hoi_mot_cau_hai_chip(monkeyp
     (block,) = blocks_of(events)
     assert block["type"] == "clarify"
     data = block["data"]
-    # câu hỏi nói lại mục tiêu (số tiền, đúng chữ chỉ hạn người dùng nói)
+    # câu hỏi nói lại mục tiêu (số tiền, đúng chữ chỉ hạn người dùng nói kèm ngày đã tính)
     assert data["question"] == CHOICE_Q and data["question"].count("?") == 1
-    assert "20.000.000 ₫" in CHOICE_Q and "“trước Tết”" in CHOICE_Q
+    assert "20.000.000 ₫" in CHOICE_Q and "“trước Tết” (05/02/2027)" in CHOICE_Q
     assert [(c["label"], c["value"]) for c in data["chips"]] == [(label, value) for label, value, _ in ROADMAP_CHOICE_CHIPS]
     assert calls_of(tools, "get_roadmap") == [{"which": "active"}]
     assert not {tool for tool, _ in tools.calls} & WRITES and not writer.calls
     given = recognize_prompt(CHOICE_Q)
-    assert given is not None and dict(given.given) == {"amount_vnd": 20_000_000, "date_text": "trước Tết"}
+    assert given is not None and dict(given.given) == {
+        "amount_vnd": 20_000_000, "date_text": "trước Tết", "date_spec": {"anchor": "date", "day": 5, "month": 2, "year": 2027},
+    }  # fmt: skip
 
 
 def test_router_de_trong_chua_co_lo_trinh_thi_lap_hoi_hu_cua_muc_tieu(monkeypatch):
     events, tools, _ = _turn(monkeypatch, route_response(intent="roadmap", **GOAL), latest="error_not_found")
     (block,) = blocks_of(events)
-    # câu hỏi hũ nói lại số tiền và hạn mã đã hiểu (ngày router tính)
-    assert block["type"] == "clarify" and block["data"]["question"] == goal_jar_question(20_000_000, date(2027, 2, 5))
+    # câu hỏi hũ nói lại số tiền và hạn mã đã hiểu (ngày tính từ đặc tả)
+    assert block["type"] == "clarify" and block["data"]["question"] == goal_jar_question(20_000_000, TET_EVE)
     assert "20.000.000 ₫" in block["data"]["question"] and "05/02/2027" in block["data"]["question"]
     assert not {tool for tool, _ in tools.calls} & WRITES
 
 
 @pytest.mark.parametrize(
-    ("routed", "question"),
+    "routed",
     [
-        # router không nói gì thêm (chip quyết lập): chữ chỉ hạn của câu cũ chưa thành ngày, router lượt này không tính lại -> hỏi hạn
-        (route_response(intent="roadmap"), GOAL_DATE_QUESTION),
-        (route_response(intent="roadmap", roadmap_action="create", answers_pending=True), GOAL_DATE_QUESTION),
-        # router ghép lại cả hạn: lập theo hạn đó, mục tiêu chưa có hũ nên hỏi hũ
-        (
-            route_response(intent="roadmap", roadmap_action="create", answers_pending=True, **GOAL),
-            goal_jar_question(20_000_000, date(2027, 2, 5)),
-        ),
+        # router không nói gì thêm (chip quyết lập): hạn đọc lại từ câu hỏi (chữ của người dùng kèm ngày đã tính), không hỏi hạn
+        route_response(intent="roadmap"),
+        route_response(intent="roadmap", roadmap_action="create", answers_pending=True),
+        # router ghép lại cả hạn: lập theo hạn đó
+        route_response(intent="roadmap", roadmap_action="create", answers_pending=True, **GOAL),
     ],
 )
-def test_bam_chip_lap_ban_moi_thi_lap_theo_muc_tieu_cua_cau_truoc(monkeypatch, routed, question):
+def test_bam_chip_lap_ban_moi_thi_lap_theo_muc_tieu_cua_cau_truoc(monkeypatch, routed):
     events, tools, _ = _turn(monkeypatch, routed, messages=_choice_messages(_chip("create")))
-    # đi đường lập với mục tiêu của câu trước, không hỏi lại lập hay xem
+    # đi đường lập với mục tiêu của câu trước, không hỏi lại lập hay xem, không hỏi lại hạn; mục tiêu chưa có hũ nên hỏi hũ
     (block,) = blocks_of(events)
-    assert block["type"] == "clarify" and block["data"]["question"] == question
+    assert block["type"] == "clarify" and block["data"]["question"] == goal_jar_question(20_000_000, TET_EVE)
+    assert GOAL_DATE_QUESTION not in block["data"]["question"]
     assert not calls_of(tools, "get_roadmap") and not {tool for tool, _ in tools.calls} & WRITES
 
 
@@ -124,7 +133,14 @@ def test_bam_chip_xem_ban_dang_dung_thi_chi_xem(monkeypatch, routed):
     assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
     assert calls_of(tools, "get_roadmap") == [{"which": "latest"}]
     assert not {tool for tool, _ in tools.calls} & WRITES
-    assert writer.calls[0]["compact"]["muc_tieu_nguoi_dung_hoi"] == {"so_tien_text": "20.000.000 ₫", "han_nguoi_dung_noi": "trước Tết"}
+    assert writer.calls[0]["compact"]["muc_tieu_nguoi_dung_hoi"] == {
+        "so_tien_text": "20.000.000 ₫", "han_nguoi_dung_noi": "trước Tết",
+        # hạn đọc lại từ câu hỏi là đúng ngày đã tính (mốc date): chữ của người dùng vẫn ở han_nguoi_dung_noi
+        "han": {
+            "date_text": "05/02/2027", "day_month_text": "05/02", "weekday_text": "thứ Sáu", "days_from_today": 76,
+            "anchor": "date", "anchor_date_text": "05/02/2027", "before_anchor": False,
+        },
+    }  # fmt: skip
 
 
 def test_router_noi_xem_o_cau_tra_loi_hu_cua_muc_tieu_thi_van_chi_xem(monkeypatch):

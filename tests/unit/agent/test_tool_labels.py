@@ -58,18 +58,9 @@ def test_co_du_tool_trong_hop_dong():
     assert len(tools) >= 28
 
 
-#: tool đã có trên Gateway nhưng agent chưa gọi (#39, brief JJ: phần nối vào agent làm sau, cùng lúc thêm nhãn vào
-#: `trace.TOOL_LABELS` và bỏ tên ở đây). Nhãn tiến độ của frontend đã có.
-NOT_YET_CALLED_BY_AGENT = {"resolve_date"}
-
-
 def test_moi_tool_co_nhan_nguon_du_lieu_cua_bang_vi_sao():
-    missing = contract_tools() - set(trace.TOOL_LABELS)
-    assert missing <= NOT_YET_CALLED_BY_AGENT, missing
-    # miễn trừ chỉ đúng khi agent chưa gọi tool qua Gateway: nối tool vào agent thì phải thêm nhãn cùng lúc
-    sources = "".join(f.read_text(encoding="utf-8") for f in AGENT_SRC.glob("*.py"))
-    for name in missing:
-        assert f"knowledge___{name}" not in sources and f'"{name}"' not in sources, name
+    # không còn miễn trừ: agent gọi `knowledge___resolve_date` (#39, brief LL) nên nhãn có cùng lúc
+    assert contract_tools() - set(trace.TOOL_LABELS) == set()
 
 
 def test_moi_tool_co_nhan_tien_do_o_the_yofina_da_lam():

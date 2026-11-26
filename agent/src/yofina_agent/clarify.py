@@ -194,8 +194,9 @@ ROADMAP_CHOICE_CHIPS: tuple[tuple[str, str, str], ...] = (
     ("Lập bản mới", "Lập lộ trình mới theo mục tiêu này", "create"),
     ("Xem bản đang dùng", "Xem lộ trình đang dùng", "view"),
 )
-#: Hạn của mục tiêu lộ trình chưa xác định được (V1): router không trả ngày và mã không đọc trọn được cụm chỉ hạn, hoặc ngày router trả
-#: lệch rõ với cách đọc bằng mã. Có ngày ứng viên thì mỗi ngày một chip ({date}: dd/mm/yyyy).
+#: Hạn của mục tiêu lộ trình chưa xác định được (V1): router không trả đặc tả hạn và mã không đọc trọn được cụm chỉ hạn, hoặc đặc tả
+#: không tính được (sai dạng, ngày đã qua, năm Tết ngoài bảng; câu hỏi khi đó có lời của phép tính đứng trước). Có ngày ứng viên thì mỗi
+#: ngày một chip ({date}: dd/mm/yyyy).
 GOAL_DATE_QUESTION = "Bạn muốn gom đủ mục tiêu này trước ngày nào?"
 GOAL_DATE_CHIP_LABEL = "Trước {date}"
 GOAL_DATE_CHIP_VALUE = "Hạn {date}"
@@ -206,6 +207,8 @@ GOAL_JAR_QUESTION = "Mục tiêu {goal} thuộc hũ nào để mình lập lộ 
 GOAL_JAR_DATE = "trước {date}"
 #: chữ chỉ hạn người dùng nói mà mã chưa đổi ra ngày ({text}: đúng chữ họ gõ)
 GOAL_TEXT_DATE = "hạn “{text}”"
+#: chữ chỉ hạn người dùng nói kèm ngày mã đã tính từ đặc tả hạn ({date}: dd/mm/yyyy)
+GOAL_TEXT_DATE_ON = "hạn “{text}” ({date})"
 _DMY_TEXT_RE = re.compile(r"(?<!\d)(\d{2})/(\d{2})/(\d{4})(?!\d)")
 _QUOTED_RE = re.compile(r"“([^”]+)”")
 #: Chip của thông báo "Tính theo hũ X" ở lượt chỉ đọc (V4): chọn hũ khác, và tính bằng Trả sau khi ví có hạn mức. Chữ gửi đi nói rõ
@@ -253,11 +256,17 @@ class AskedPrompt:
                 day = date(int(m[3]), int(m[2]), int(m[1]))
             except ValueError:
                 return None
-            return {"target_date": day.isoformat(), "date_text": day.strftime("%d/%m/%Y")}
+            return {"date_spec": exact_date_spec(day), "date_text": day.strftime("%d/%m/%Y")}
         return None
 
 
 UNKNOWN_PROMPT = AskedPrompt()
+
+
+def exact_date_spec(day: date) -> dict[str, Any]:
+    """Đặc tả của đúng một ngày dương lịch (mốc `date` đủ ngày, tháng, năm): ngày mã đã biết (chip ngày, ngày nói lại trong câu hỏi) đi
+    qua cùng ô và cùng phép tính với hạn router trả, `dates.resolve_date` ra lại đúng ngày đó."""
+    return {"anchor": "date", "day": day.day, "month": day.month, "year": day.year}
 
 
 def _chip_map(pairs: Iterable[tuple[str, Mapping[str, Any]]]) -> dict[str, Mapping[str, Any]]:
@@ -314,7 +323,7 @@ _PROMPTS: tuple[tuple[str | re.Pattern[str], AskedPrompt], ...] = (
     (ROADMAP_CHOICE_QUESTION, _ROADMAP_CHOICE),
     (
         GOAL_DATE_QUESTION,
-        AskedPrompt(keys=("date_text", "target_date"), date_chips=True, intent="roadmap", implies=_ROADMAP_CREATE),
+        AskedPrompt(keys=("date_text", "date_spec"), date_chips=True, intent="roadmap", implies=_ROADMAP_CREATE),
     ),
     (_template(notices.INFERRED_JAR_MESSAGE), AskedPrompt(keys=("jar_text", "funding"), chips=_notice_chips())),
     (_template(notices.INFERRED_JAR_MESSAGE_INTENT), AskedPrompt(keys=("jar_text", "funding"), chips=_notice_chips())),
@@ -346,12 +355,15 @@ def recognize_prompt(text: str) -> AskedPrompt | None:
 
 
 def goal_phrase(amount_vnd: int | None, *, deadline: date | None = None, date_text: str | None = None) -> str:
-    """Mục tiêu lộ trình mã đã hiểu, nói lại trong câu hỏi: số tiền đã định dạng, hạn dạng dd/mm/yyyy (`deadline`) hoặc đúng chữ chỉ hạn
-    người dùng nói khi chưa đổi ra ngày (`date_text`). Rỗng khi không có gì."""
+    """Mục tiêu lộ trình mã đã hiểu, nói lại trong câu hỏi: số tiền đã định dạng, hạn dạng dd/mm/yyyy (`deadline`), đúng chữ chỉ hạn người
+    dùng nói (`date_text`), hoặc cả hai (chữ của họ kèm ngày đã tính). Rỗng khi không có gì."""
     parts = [format_vnd(amount_vnd)] if amount_vnd is not None else []
-    if deadline is not None:
+    cleaned = date_text.replace("“", "").replace("”", "").strip()[:40] if date_text else ""
+    if deadline is not None and cleaned:
+        parts.append(GOAL_TEXT_DATE_ON.format(text=cleaned, date=deadline.strftime("%d/%m/%Y")))
+    elif deadline is not None:
         parts.append(GOAL_JAR_DATE.format(date=deadline.strftime("%d/%m/%Y")))
-    elif date_text and (cleaned := date_text.replace("“", "").replace("”", "").strip()[:40]):
+    elif cleaned:
         parts.append(GOAL_TEXT_DATE.format(text=cleaned))
     return " ".join(parts)
 
@@ -362,28 +374,30 @@ def goal_jar_question(amount_vnd: int | None, deadline: date | None) -> str:
     return GOAL_JAR_QUESTION.format(goal=goal) if goal else notices.ROADMAP_GOAL_JAR_QUESTION
 
 
-def roadmap_choice_question(amount_vnd: int | None, date_text: str | None, target_date: str | None = None) -> str:
-    """Câu hỏi lập bản mới hay xem bản đang dùng (C2), nói lại mục tiêu người dùng nêu (chữ chỉ hạn của họ; chỉ có ngày router tính thì
-    ngày đó); không có thì câu chung."""
-    deadline = date.fromisoformat(target_date) if target_date and not date_text else None
+def roadmap_choice_question(amount_vnd: int | None, date_text: str | None, deadline: date | None = None) -> str:
+    """Câu hỏi lập bản mới hay xem bản đang dùng (C2), nói lại mục tiêu người dùng nêu: chữ chỉ hạn của họ, kèm ngày đã tính từ đặc tả
+    hạn nếu có (lượt trả lời đọc lại được cả hai, không phải hỏi hạn lần nữa); không có thì câu chung."""
     goal = goal_phrase(amount_vnd, deadline=deadline, date_text=date_text)
     return ROADMAP_CHOICE_QUESTION_FOR.format(goal=goal) if goal else ROADMAP_CHOICE_QUESTION
 
 
 def _goal_given(goal: str) -> dict[str, Any]:
-    """Số tiền và hạn đọc lại từ phần {goal} của câu hỏi (`goal_phrase`, chuỗi do chính mã dựng)."""
+    """Số tiền và hạn đọc lại từ phần {goal} của câu hỏi (`goal_phrase`, chuỗi do chính mã dựng): ngày dd/mm/yyyy thành đặc tả của đúng
+    ngày đó, chữ trong ngoặc kép là chữ chỉ hạn người dùng nói."""
     out: dict[str, Any] = {}
     head = re.split(r"\s(?:trước|hạn)\s", f"{goal} ", maxsplit=1)[0]
     if (amount := parse_amount_vnd(head)) is not None:
         out["amount_vnd"] = amount
+    quoted = _QUOTED_RE.search(goal)
+    if quoted:
+        out["date_text"] = quoted[1]
     if m := _DMY_TEXT_RE.search(goal):
         try:
             day = date(int(m[3]), int(m[2]), int(m[1]))
         except ValueError:
             return out
-        out["target_date"], out["date_text"] = day.isoformat(), m[0]
-    elif q := _QUOTED_RE.search(goal):
-        out["date_text"] = q[1]
+        out["date_spec"] = exact_date_spec(day)
+        out.setdefault("date_text", m[0])
     return out
 
 

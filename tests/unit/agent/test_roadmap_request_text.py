@@ -56,7 +56,7 @@ def test_luot_tra_loi_cau_hoi_hu_kem_cau_yeu_cau_goc(monkeypatch):
         {"id": "m2", "role": "assistant", "content": goal_jar_question(3_000_000, None)},
         {"id": "m3", "role": "user", "content": "Hũ Du lịch"},
     ]
-    llm = make_llm([route_response(intent="roadmap", jar_text="Hũ Du lịch", answers_pending=True, target_date="2027-02-21")])
+    llm = make_llm([route_response(intent="roadmap", jar_text="Hũ Du lịch", answers_pending=True, date_spec={"anchor": "today", "offset": {"months": 3}})])
     run_turn(None, llm=llm, tools=roadmap_tools(DEMO_JARS), monkeypatch=monkeypatch, messages=messages)
     (kw,) = captured
     assert kw["user_request"] == f"{ask}\nHũ Du lịch"

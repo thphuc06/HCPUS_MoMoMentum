@@ -8,13 +8,17 @@ from yofina_agent.router import ROUTER_SYSTEM, route
 from yofina_agent.schemas import IntentResult
 
 
-def test_prompt_router_day_trich_muc_tieu_lo_trinh_va_doi_han_ra_ngay():
+def test_prompt_router_day_trich_muc_tieu_lo_trinh_va_viet_han_thanh_dac_ta():
     assert "roadmap có mục tiêu người dùng nói" in ROUTER_SYSTEM
     rule = ROUTER_SYSTEM.split("roadmap có mục tiêu người dùng nói", 1)[1].split("\n- ", 1)[0]
-    for key in ("amount_vnd", "jar_text", "date_text", "target_date", "YYYY-MM-DD", "<ngay_hom_nay>"):
+    for key in ("amount_vnd", "jar_text", "date_text", "date_spec", "<ngay_hom_nay>"):
         assert key in rule
-    # V1 (#39): router đổi hạn ra ngày; C2: roadmap_action không suy ra từ việc câu có số tiền hay hạn
-    assert "không tự đổi thành ngày" not in rule and 'roadmap_action là "create"' not in rule
+    # V1 (#39): router viết hạn thành đặc tả, hàm tính ngày; không tự đổi ra ngày, không liệt kê cách nói thời gian
+    assert "target_date" not in rule and "YYYY-MM-DD" not in rule and "ví dụ \"cuối tháng" not in rule
+    assert "không tự đổi hạn ra ngày" in rule
+    # C2: roadmap_action không suy ra từ việc câu có số tiền hay hạn
+    assert 'roadmap_action là "create"' not in rule
+    assert "không suy ra từ việc câu có số tiền hay hạn" in rule
     assert "không suy ra từ việc câu có số tiền hay hạn" in rule
     # mã bỏ câu hỏi lại router đặt cho roadmap (clarify.CLARIFY_INTENTS); handler lộ trình tự hỏi hũ khi mục tiêu chưa có hũ
     from yofina_agent.clarify import resolve_clarify

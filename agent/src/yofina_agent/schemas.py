@@ -15,14 +15,18 @@ chuyển router sang kiểu này.
 from __future__ import annotations
 
 import ast
+import copy
 import json
 import logging
 import re
-from datetime import date
+from collections.abc import Mapping
+from decimal import Decimal
+from functools import cache
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, WithJsonSchema, field_validator, model_validator
 
+from yofina_core import dates as D
 from yofina_core.blocks import (
     ActionToolName,
     BehaviorInsightKind,
@@ -56,6 +60,7 @@ PLAN_TOOLS = (
     "forecast___run_scenario",
     "forecast___affordability_check",
     "knowledge___get_fee_schedule",
+    "knowledge___resolve_date",
     "planner___check_suitability",
 )
 PlanToolName = Literal[
@@ -67,12 +72,117 @@ PlanToolName = Literal[
     "forecast___run_scenario",
     "forecast___affordability_check",
     "knowledge___get_fee_schedule",
+    "knowledge___resolve_date",
     "planner___check_suitability",
 ]
 
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+# --- đặc tả ngày model điền (router, Orchestrator) ----------------------------------------------------
+#: Nghĩa của đặc tả ngày cho model, theo nghĩa của từng trường (mốc, kỳ, độ lệch, trước mốc), không câu mẫu: là `description` của
+#: schema mọi trường đặc tả ngày (router, Orchestrator), nên mọi vai model đọc cùng một chỗ.
+DATE_SPEC_DESCRIPTION = (
+    "Đặc tả một ngày để hệ thống tính bằng phép tính lịch tất định (độ dài tháng, năm nhuận, quý, Tết âm lịch); bạn không tự đổi ra "
+    "ngày. anchor là mốc: today là hôm nay; next_payday là ngày nhận lương kế tiếp; start_of và end_of là ngày đầu và ngày cuối của "
+    "kỳ period (week từ thứ Hai tới Chủ nhật, month, quarter là ba tháng bắt đầu từ tháng 1, 4, 7, 10, year); lunar_new_year là Mùng "
+    "1 Tết âm lịch, lunar_year là năm dương lịch chứa Mùng 1 đó khi người dùng nêu năm; date là một ngày trong tháng (day), kèm month "
+    "và year chỉ khi người dùng nêu. period_offset đếm kỳ từ kỳ chứa hôm nay: 0 kỳ này, 1 kỳ kế tiếp, -1 kỳ trước; với date, period "
+    "month hoặc year cùng period_offset chọn tháng hoặc năm của ngày đó; với lunar_new_year, period year cùng period_offset chọn năm "
+    "của Tết. Mốc không nêu năm (hoặc tháng) thì hệ thống lấy lần gần nhất sau hôm nay. offset là khoảng thời gian cộng vào mốc "
+    "(years, months, weeks, days; được âm, được có phần lẻ). before là true khi ngày cần là ngày liền trước ngày tính được, tức trước "
+    "mốc và không gồm chính mốc. Trường không dùng để null."
+)
+
+
+def _number_offsets(node: Any) -> Any:
+    """Phần độ lệch của `DateSpec` là `Decimal` (schema Pydantic: số hoặc chuỗi): model chỉ được điền số."""
+    if isinstance(node, list):
+        return [_number_offsets(x) for x in node]
+    if not isinstance(node, dict):
+        return node
+    if "anyOf" in node:
+        kinds = [o.get("type") for o in node["anyOf"]]
+        if "number" in kinds and "string" in kinds:
+            node = {**node, "anyOf": [o for o in node["anyOf"] if o.get("type") != "string"]}
+    return {k: _number_offsets(v) for k, v in node.items()}
+
+
+@cache
+def _date_spec_object_schema() -> dict[str, Any]:
+    """JSON Schema của một đặc tả ngày, sinh từ `yofina_core.dates.DateSpec`: cùng định nghĩa với đầu vào tool `knowledge___resolve_date`
+    (trừ `user_id`) và với hàm `dates.resolve_date` mã gọi trong tiến trình, không viết lại trường nào ở agent. `$ref` đã giải."""
+    schema = D.DateSpec.model_json_schema()
+    defs = schema.pop("$defs", {})
+
+    def inline(node: Any) -> Any:
+        if isinstance(node, list):
+            return [inline(x) for x in node]
+        if not isinstance(node, dict):
+            return node
+        if "$ref" in node:
+            return inline(copy.deepcopy(defs[node["$ref"].rsplit("/", 1)[-1]]))
+        return {k: inline(v) for k, v in node.items()}
+
+    out = _number_offsets(inline(schema))
+    out.pop("description", None)  # docstring của lớp là ghi chú cho lập trình viên; nghĩa cho model ở `DATE_SPEC_DESCRIPTION`
+    return out
+
+
+def date_spec_json_schema(purpose: str = "") -> dict[str, Any]:
+    """Schema của một trường đặc tả ngày (đối tượng hoặc null): `purpose` (ngày nào của câu) đứng trước nghĩa chung của đặc tả."""
+    obj = {**copy.deepcopy(_date_spec_object_schema()), "description": f"{purpose} {DATE_SPEC_DESCRIPTION}".strip()}
+    return {"anyOf": [obj, {"type": "null"}]}
+
+
+def raw_date_spec(value: Any) -> dict[str, Any] | None:
+    """Đặc tả ngày model trả, giữ dạng thô (chỉ bỏ giá trị null và độ lệch rỗng): đúng hay sai do `dates.resolve_date` kiểm lúc dùng, nên
+    đặc tả sai thành câu hỏi lại hoặc lỗi có mã, không bắt model thử lại. Không có trường nào (model trả đối tượng toàn null) là không
+    có đặc tả. Giá trị không phải đối tượng bị bỏ và ghi log (`date_spec_dropped`, cắt ngắn)."""
+    if isinstance(value, str) and value.strip().startswith("{"):
+        try:
+            value = json.loads(value)  # model nhỏ đôi khi trả đối tượng lồng thành chuỗi JSON
+        except ValueError:
+            pass
+    if value is None or value == "":
+        return None
+    if not isinstance(value, Mapping):
+        log.warning(json.dumps({"event": "date_spec_dropped", "value": str(value)[:40]}, ensure_ascii=False))
+        return None
+    out = {str(k): v for k, v in value.items() if v is not None}
+    if isinstance(offset := out.get("offset"), Mapping):
+        parts = {str(k): v for k, v in offset.items() if v is not None}
+        if parts:
+            out["offset"] = parts
+        else:
+            out.pop("offset")
+    if out.get("before") is False:
+        out.pop("before")
+    return out or None
+
+
+def date_spec_field(purpose: str) -> Any:
+    """Kiểu của một trường đặc tả ngày trong đầu ra của model: dạng thô (`raw_date_spec`), schema từ `DateSpec` (`date_spec_json_schema`)."""
+    return Annotated[
+        dict[str, Any] | None, BeforeValidator(raw_date_spec), WithJsonSchema(date_spec_json_schema(purpose))
+    ]
+
+
+def _wire_number(value: Decimal) -> int | float:
+    return int(value) if value == value.to_integral_value() else float(value)
+
+
+def date_spec_args(spec: Mapping[str, Any]) -> dict[str, Any]:
+    """Tham số của tool `knowledge___resolve_date` từ một đặc tả: đã kiểm bằng `dates.parse_spec` (sai thì `DateResolveError`
+    PARAMS_INVALID), chỉ trường có giá trị, độ lệch là số JSON (schema của Gateway là `number`). Không có `user_id` (interceptor điền)."""
+    parsed = D.parse_spec(spec).model_dump(exclude_none=True)
+    if parsed.get("before") is False:
+        parsed.pop("before")
+    if "offset" in parsed:
+        parsed["offset"] = {k: _wire_number(v) for k, v in parsed["offset"].items()}
+    return parsed
 
 
 # --- L1: IntentResult ------------------------------------------------------------------------
@@ -101,6 +211,10 @@ ObligationKind = Literal["rent", "bill", "subscription", "loan"]
 #: nhãn theo thứ tự của bảng; trừ mua bằng Trả sau vì đó là cách trả (đã có `funding`), không phải việc được trả tiền.
 ROUTER_TX_TYPES: dict[str, str] = {code: label for code, label, _ in SPENDING_TX_TYPES if code != TX_TYPE_BNPL_PURCHASE}
 RouterTxType = Literal[tuple(ROUTER_TX_TYPES)]  # type: ignore[valid-type]
+#: Đặc tả hạn mục tiêu lộ trình router trả (`IntentParams.date_spec`).
+RouterDateSpec = date_spec_field(
+    "Hạn của mục tiêu lộ trình (chính hạn ở date_text) viết thành đặc tả; null khi câu không nói hạn hoặc không chắc hạn là gì."
+)
 
 
 class IntentParams(_Model):
@@ -135,9 +249,10 @@ class IntentParams(_Model):
     # jar_text (hũ, giữ chữ họ gõ) và date_text (cụm chỉ hạn họ nói, ví dụ "cuối tháng này"); handler đổi hũ và ngày bằng mã.
     # Sửa bước: amount_vnd là số tiền mới người dùng muốn (nếu nói).
     roadmap_action: Literal["view", "create", "edit_step"] | None = None
-    # roadmap có hạn: chính hạn ở date_text đổi ra ngày YYYY-MM-DD theo <ngay_hom_nay> của prompt router (V1, #39; như Orchestrator
-    # what-if tính ngày). Mã chỉ kiểm ngày hợp lệ và sau hôm nay; cách đọc date_text bằng mã chỉ là đường lùi và để đối chiếu.
-    target_date: str | None = None
+    # roadmap có hạn: chính hạn ở date_text viết thành đặc tả ngày (V1, #39; cùng dạng với đầu vào tool `knowledge___resolve_date`). Mã
+    # tính ngày bằng `yofina_core.dates.resolve_date` trong tiến trình; đặc tả sai, ngày đã qua hay năm Tết ngoài bảng thì hỏi lại một
+    # câu. Cách đọc date_text bằng mã chỉ là đường lùi khi router không trả đặc tả.
+    date_spec: RouterDateSpec = None
     # Ý định phụ do router trích (thay cho đoán bằng từ khóa trên chữ): loại nhận xét hành vi, loại phí được hỏi, hỏi cách nạp hay lần nạp.
     insight_kind: BehaviorInsightKind | None = None  # behavior; null khi hỏi chung về thói quen
     fee_topic: Literal["monthly", "per_transaction", "once", "late", "other"] | None = None  # knowledge; null khi hỏi chung biểu phí
@@ -181,20 +296,6 @@ class IntentParams(_Model):
             return value
         if value not in (None, ""):
             log.warning(json.dumps({"event": "router_tx_type_dropped", "value": str(value)[:40]}, ensure_ascii=False))
-        return None
-
-    @field_validator("target_date", mode="before")
-    @classmethod
-    def _iso_target_date(cls, value: Any) -> Any:
-        """Chỉ nhận ngày có thật dạng YYYY-MM-DD; giá trị khác coi như router không tính được ngày (mã hỏi lại hoặc dùng đường lùi), không
-        bắt router thử lại. Giá trị bị bỏ được ghi log (`router_target_date_dropped`, cắt ngắn)."""
-        if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip()):
-            try:
-                return date.fromisoformat(value.strip()).isoformat()
-            except ValueError:
-                pass
-        if value not in (None, ""):
-            log.warning(json.dumps({"event": "router_target_date_dropped", "value": str(value)[:40]}, ensure_ascii=False))
         return None
 
     @field_validator("answers_pending", mode="before")
@@ -450,6 +551,7 @@ class Verdict(_Model):
 
 
 __all__ = [
+    "DATE_SPEC_DESCRIPTION",
     "INTENTS",
     "PLAN_TOOLS",
     "ROUTER_TX_TYPES",
@@ -473,4 +575,8 @@ __all__ = [
     "ReasoningStepIn",
     "UngroundedNumber",
     "Verdict",
+    "date_spec_args",
+    "date_spec_field",
+    "date_spec_json_schema",
+    "raw_date_spec",
 ]

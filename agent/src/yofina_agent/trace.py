@@ -6,10 +6,12 @@ Hình dạng khớp cột của migration `0010_what_if_audit.sql` (`audit_event
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from yofina_agent.tools import ToolKind, ToolOutcome
@@ -58,6 +60,7 @@ TOOL_LABELS: dict[str, str] = {
     # knowledge
     "get_fee_schedule": "Biểu phí",
     "get_exchange_rate": "Tỷ giá ngoại tệ",
+    "resolve_date": "Ngày tính theo lịch",
     # ingest
     "start_job": "Tạo lượt nạp dữ liệu",
     "get_job_status": "Tiến độ nạp dữ liệu",
@@ -96,6 +99,10 @@ def describe_tool(outcome: ToolOutcome) -> tuple[str, str | None]:
         value = d.get("product_label")
     elif name == "get_exchange_rate":
         value = d.get("currency")
+    elif name == "resolve_date" and isinstance(d.get("date"), str):
+        with contextlib.suppress(ValueError):
+            day = date.fromisoformat(d["date"])
+            value = f"{day.day:02d}/{day.month:02d}/{day.year}"
     elif name == "affordability_check":
         value = d.get("label")
     elif name == "query_transactions":

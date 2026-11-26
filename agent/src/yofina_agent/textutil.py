@@ -1,4 +1,5 @@
-"""Xử lý chuỗi tiếng Việt dùng chung: bỏ dấu, đọc số tiền, tách số tiền để kiểm căn cứ, đọc hạn mục tiêu.
+"""Xử lý chuỗi tiếng Việt dùng chung: bỏ dấu, đọc số tiền, tách số tiền để kiểm căn cứ, đọc hạn mục tiêu (đường lùi), dữ kiện của một
+ngày đã tính từ đặc tả.
 
 Đây là mã ngôn ngữ chung chung (không chứa câu hỏi hay số của persona).
 """
@@ -10,9 +11,11 @@ import unicodedata
 from collections.abc import Callable, Iterable
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Any
 
 from yofina_agent.notices import STRESS_CHIP_VALUE
 from yofina_core.clock import payday_in_month
+from yofina_core.dates import ResolvedDate
 from yofina_core.resilience import load_shock_set
 
 _UNITS: dict[str, int] = {
@@ -304,7 +307,8 @@ def parse_goal_date(text: str, today: date, *, whole: bool = False) -> date | No
 
     Chỉ nhận cách nói rõ ràng; không đọc được hoặc ngày không sau hôm nay thì None (người gọi nói rõ, không đoán). `whole=True`: chỉ nhận
     khi luật đọc được TRỌN cụm (mọi chữ của `text` nằm trong phần khớp), để cụm có chữ luật không hiểu ("đầu năm sau", "ngày 15 tháng
-    sau") không bị đọc thành một ngày khác; đây là cách đọc bằng mã đứng sau ngày của model (V1, #39).
+    sau") không bị đọc thành một ngày khác. Với hạn mục tiêu, đây chỉ là đường lùi khi router không trả đặc tả hạn (`date_spec`, tính
+    bằng `yofina_core.dates.resolve_date`), và là ngày ứng viên cho chip khi đặc tả không tính được (V1, #39).
 
     >>> parse_goal_date("cuối tháng sau", date(2026, 11, 21))
     datetime.date(2026, 12, 31)
@@ -335,3 +339,41 @@ def goal_date_phrase(text: str) -> str | None:
         return None
     start, end = found[1]
     return text[start:end].strip() or None
+
+
+# --- ngày đã tính từ đặc tả (`yofina_core.dates.resolve_date`), làm dữ kiện cho model viết câu trả lời ------------------------------------
+_WEEKDAYS = ("thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật")
+
+
+def _dmy(day: date) -> str:
+    return f"{day.day:02d}/{day.month:02d}/{day.year}"
+
+
+def resolved_date_facts(resolved: ResolvedDate) -> dict[str, Any]:
+    """Dữ kiện có cấu trúc của một ngày tính từ đặc tả, cho người viết câu trả lời (writer, Analyst): ngày (dd/mm/yyyy và dd/mm, thứ, số
+    ngày tới đó) và các trường giải thích của phép tính (mốc đã dùng và ngày của mốc, trước mốc hay không, kỳ, năm Tết và tên năm, ngày
+    lương, độ lệch đã quy đổi, lần gần nhất sau hôm nay, đã về cuối tháng), để câu trả lời nói được hạn theo cách người dùng nói kèm
+    đúng ngày. Ngày ở dạng chữ có sẵn để bước kiểm số của người viết tìm thấy; không có câu viết sẵn."""
+    out: dict[str, Any] = {
+        "date_text": _dmy(resolved.date),
+        "day_month_text": f"{resolved.date.day:02d}/{resolved.date.month:02d}",
+        "weekday_text": _WEEKDAYS[resolved.weekday - 1],
+        "days_from_today": resolved.days_from_today,
+        "anchor": resolved.anchor,
+        "anchor_date_text": _dmy(resolved.anchor_date),
+        "before_anchor": resolved.before,
+    }
+    if resolved.period is not None:
+        out["period"] = resolved.period
+        out["period_offset"] = resolved.period_offset or 0
+    if (tet := resolved.lunar_new_year) is not None:
+        out["lunar_new_year"] = {"name": tet.name, "date_text": _dmy(tet.date), "year": tet.year}
+    if resolved.payday_day is not None:
+        out["payday_day"] = resolved.payday_day
+    if resolved.offset is not None:
+        out["offset"] = {"months": resolved.offset.months, "days": resolved.offset.days}
+    if resolved.next_occurrence:
+        out["next_occurrence"] = True
+    if resolved.month_end_clamped:
+        out["month_end_clamped"] = True
+    return out

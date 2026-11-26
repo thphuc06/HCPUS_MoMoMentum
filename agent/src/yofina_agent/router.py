@@ -117,9 +117,9 @@ từng giao dịch), once (phí một lần, phí mở hay kích hoạt), late (
 NÓI một điều về bản thân hay một sở thích để trợ lý nhớ. Chưa rõ thì để null.
 - roadmap có mục tiêu người dùng nói ("lập kế hoạch để dành 15 triệu ở hũ Mua xe trong 6 tháng"): số tiền mục tiêu đặt ở amount_vnd, \
 tên hũ chứa mục tiêu ở jar_text (giữ nguyên chữ họ gõ, không đặt ở from_jar_text hay to_jar_text), hạn ở date_text: chép nguyên cụm chữ chỉ \
-thời gian họ nói (ví dụ "cuối tháng này", "31/12", "6 tháng nữa"). target_date là chính hạn đó đổi ra ngày YYYY-MM-DD, tính theo \
-<ngay_hom_nay>: một khoảng thời gian thì cộng từ hôm nay; một mốc (đầu, giữa hay cuối của tháng, quý, năm; một dịp lễ; một ngày cụ thể) \
-thì lấy ngày của mốc đó, lần gần nhất sau hôm nay. Không chắc là ngày nào, hoặc không có <ngay_hom_nay>, thì để target_date null. \
+thời gian họ nói. date_spec là chính hạn đó viết thành đặc tả theo mô tả của trường (mốc, khoảng thời gian cộng vào mốc, trước mốc hay \
+không; kỳ đếm từ <ngay_hom_nay>): hệ thống tự tính ra ngày bằng phép tính lịch, bạn không tự đổi hạn ra ngày. Không chắc hạn là gì thì để \
+date_spec null. \
 roadmap_action vẫn theo việc người dùng muốn làm với lộ trình (lập mới, hay chỉ xem hoặc hỏi về bản đang có), không suy ra từ việc câu \
 có số tiền hay hạn. Phần nào người dùng không nói thì để null, không đoán.
 - <cau_moi> luôn là thứ cần phân loại; <lich_su> chỉ để hiểu câu trả lời cho câu Yofina vừa hỏi. answers_pending: khi dòng "Yofina:" \
@@ -238,8 +238,8 @@ def build_router_prompt(
     jars: Sequence[Mapping[str, str]] | None = None,
     today: date | None = None,
 ) -> str:
-    """Tin người dùng gửi router (phần đổi theo lượt, sau system và schema tool là phần tĩnh): ngày mô phỏng hôm nay nếu biết (router đổi
-    hạn mục tiêu ra ngày theo nó, V1), danh sách hũ của ví nếu có, lịch sử, rồi câu mới ở cuối."""
+    """Tin người dùng gửi router (phần đổi theo lượt, sau system và schema tool là phần tĩnh): ngày mô phỏng hôm nay nếu biết (router đếm
+    kỳ của đặc tả hạn mục tiêu từ đó, V1), danh sách hũ của ví nếu có, lịch sử, rồi câu mới ở cuối."""
     parts = []
     if today is not None:
         parts.append(f"<ngay_hom_nay>{today.isoformat()}</ngay_hom_nay>")
@@ -273,7 +273,7 @@ _ROUTED_CODE_KEYS = (
     "spend_jar_code",
     "obligation_kind",
     "roadmap_action",
-    "target_date",
+    "date_spec",
     "insight_kind",
     "fee_topic",
     "ingest_action",
@@ -317,7 +317,7 @@ _CODE_KEYS = (
     "scenario_kind",
     "date_text",
 )
-#: Ô mang qua lượt trả lời, theo nhóm: một nhóm là một ô (cụm chỉ hạn và ngày hạn là một ô), lấy trọn từ một nguồn.
+#: Ô mang qua lượt trả lời, theo nhóm: một nhóm là một ô (cụm chỉ hạn và đặc tả của hạn là một ô), lấy trọn từ một nguồn.
 _CARRY_GROUPS: tuple[tuple[str, ...], ...] = (
     ("amount_vnd",),
     ("jar_text",),
@@ -326,7 +326,7 @@ _CARRY_GROUPS: tuple[tuple[str, ...], ...] = (
     ("funding",),
     ("label",),
     ("scenario_kind",),
-    ("date_text", "target_date"),
+    ("date_text", "date_spec"),
     ("roadmap_action",),
 )
 _CARRY_KEYS = tuple(k for group in _CARRY_GROUPS for k in group)
@@ -536,7 +536,7 @@ async def route(
 ) -> StructuredResult[IntentResult]:
     """Một lần phân loại. `jars`: danh sách hũ người dùng của ví (`router_jar_list`) để router chọn hũ chi; None khi lượt chưa đọc được
     ví (router để `spend_jar_code` null). Người gọi kiểm mã router chọn bằng `checked_spend_jar` với đúng danh sách này. `today`: ngày mô
-    phỏng hôm nay (None: router không đổi hạn ra ngày)."""
+    phỏng hôm nay (None: router không có mốc để đếm kỳ của đặc tả hạn)."""
     return await gateway.astructured_json(
         "small",
         output_model=IntentResult,

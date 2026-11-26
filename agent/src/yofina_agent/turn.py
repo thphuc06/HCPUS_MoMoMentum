@@ -99,6 +99,7 @@ from yofina_agent.schemas import (
     IntentParams,
     IntentResult,
     Verdict,
+    date_spec_args,
 )
 from yofina_agent.settings import AgentSettings
 from yofina_agent.store import (
@@ -106,7 +107,7 @@ from yofina_agent.store import (
     TurnRecordStore,
     UnconfiguredTurnRecordStore,
 )
-from yofina_agent.textutil import match_shock_id, normalize, parse_amount_vnd, parse_goal_date
+from yofina_agent.textutil import match_shock_id, normalize, parse_amount_vnd, parse_goal_date, resolved_date_facts
 from yofina_agent.tools import (
     ContractMismatch,
     GatewayTools,
@@ -134,6 +135,7 @@ from yofina_agent.writer import (
 from yofina_core import blocks as B
 from yofina_core import quota as daily_quota
 from yofina_core.clock import app_timezone
+from yofina_core.dates import DateResolveError, ResolvedDate, resolve_date
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
 from yofina_core.money import format_vnd, format_vnd_short
@@ -683,9 +685,34 @@ class Turn:
         return router_jar_list(self._jar_rows) if jars.outcome.ok else None
 
     def router_today(self) -> date | None:
-        """Ngày mô phỏng hôm nay đưa router (đổi hạn mục tiêu ra ngày, V1): ngày của lần đọc ví ở lượt này, không có thì ngày frontend gửi
-        kèm danh sách hũ; không có cả hai thì None (router để `target_date` trống). Mã kiểm hạn theo ngày của tool phía server."""
+        """Ngày mô phỏng hôm nay đưa router (đếm kỳ của đặc tả hạn mục tiêu, V1): ngày của lần đọc ví ở lượt này, không có thì ngày frontend
+        gửi kèm danh sách hũ; không có cả hai thì None. Mã tính hạn theo ngày của tool phía server (`date_today`)."""
         return self.app_date or self._client_app_date
+
+    def date_today(self) -> date:
+        """Hôm nay cho phép tính ngày trong tiến trình: ngày mô phỏng của lần đọc ví (tool phía server), không có thì ngày frontend gửi,
+        không có cả hai thì ngày theo đồng hồ của ứng dụng (`block_app_date`)."""
+        return self.app_date or self._client_app_date or self.block_app_date()
+
+    async def resolve_date_spec(self, spec: Mapping[str, Any]) -> tuple[ResolvedDate | None, DateResolveError | None]:
+        """Ngày của một đặc tả router trả, bằng `yofina_core.dates.resolve_date` TRONG TIẾN TRÌNH (không qua mạng): hôm nay là ngày mô
+        phỏng của lượt (`date_today`). Ngày lương đã khai không có trong dữ liệu nào của lượt (không tool đọc nào của agent trả nó), nên
+        chỉ mốc ngày lương (lỗi PROFILE_INCOMPLETE trong tiến trình) mới gọi tool `knowledge___resolve_date` qua Gateway, một lần: tool
+        đọc hôm nay và ngày lương phía server theo người gọi. Trả (ngày và trường giải thích, None) hoặc (None, lỗi có mã)."""
+        try:
+            return resolve_date(spec, self.date_today()), None
+        except DateResolveError as exc:
+            if exc.code is not ErrorCode.PROFILE_INCOMPLETE:
+                return None, exc
+        res = await self.call_tool_retry("resolve_date", date_spec_args(spec), target="knowledge")
+        outcome = res.outcome
+        if outcome.ok:
+            with contextlib.suppress(ValueError):
+                return ResolvedDate.model_validate((outcome.payload or {}).get("data")), None
+        code = ErrorCode.INTERNAL_ERROR
+        with contextlib.suppress(ValueError):
+            code = ErrorCode(outcome.code or "")
+        return None, DateResolveError(code, outcome.message or notices.GENERIC_ERROR_MESSAGE)
 
     def emit_jars_block(self) -> None:
         """Hiện thẻ số dư từ lần đọc hũ đã có (dùng khi cần cho người dùng thấy số)."""
@@ -966,11 +993,11 @@ class Turn:
         # Câu trả lời cho câu hỏi lại: giữ tham số của câu đang chờ (số tiền, người nhận, hũ...) bằng mã, không trông vào model nhớ.
         pending = self.pending_params_before(index)
         merged = merge_pending(routed, question, pending)
-        # Cụm chỉ hạn chỉ có vì mã đọc lại câu cũ (router lượt này không nhắc lại, không có ngày): không dùng cách đọc bằng mã cho nó (V1)
+        # Cụm chỉ hạn chỉ có vì mã đọc lại câu cũ (router lượt này không nhắc lại, không có đặc tả): không dùng cách đọc bằng mã cho nó (V1)
         self._date_from_history = (
             merged.params.date_text is not None
             and routed.params.date_text is None
-            and merged.params.target_date is None
+            and merged.params.date_spec is None
             and merged.params.date_text == (pending or {}).get("date_text")
         )
         if merged is not routed and (pending or {}).get("_text"):
@@ -1391,20 +1418,27 @@ class Turn:
         compact = res.compact
         if states_goal:
             # câu XEM có nêu số tiền hoặc hạn ("bản đang dùng có kịp ... không"): dữ kiện cho writer, không lập, không lưu gì
-            compact = {**compact, "muc_tieu_nguoi_dung_hoi": _asked_goal_facts(r.params)}
+            facts = _asked_goal_facts(r.params)
+            if r.params.date_spec is not None:
+                resolved, _ = await self.resolve_date_spec(r.params.date_spec)
+                if resolved is not None:
+                    facts["han"] = resolved_date_facts(resolved)  # hạn đã tính kèm mốc đã dùng: nói được theo cách người dùng nói
+            compact = {**compact, "muc_tieu_nguoi_dung_hoi": facts}
         await self.write("roadmap", question, compact)
 
     async def ask_roadmap_choice(self, r: IntentResult) -> bool:
         """Câu lộ trình nêu mục tiêu mà router không nói xem hay lập (C2): đã có bản đang dùng thì hỏi đúng một câu kèm hai chip (lập bản
         mới, xem bản đang dùng) và kết thúc lượt; True nếu đã hỏi. Không có bản đang dùng (hoặc đọc lỗi) thì False: người gọi lập bản mới,
-        đường lập đọc lại và báo lỗi của tool đúng chỗ. Chỉ đọc (`get_roadmap` active, không hiện thẻ), không lưu gì."""
+        đường lập đọc lại và báo lỗi của tool đúng chỗ. Chỉ đọc (`get_roadmap` active, không hiện thẻ), không lưu gì. Câu hỏi nói lại chữ
+        chỉ hạn của người dùng kèm ngày đã tính từ đặc tả hạn (nếu tính được), nên bấm chip lập thì không phải hỏi hạn lần nữa."""
         res = await self.call_tool_retry("get_roadmap", {"which": "active"}, target="planner", emit=False)
         active = _roadmap_of(res.outcome)
         if active is None or active.status != "active":
             return False
         chips = [ClarifyChipIn(label=label, value=value) for label, value, _ in ROADMAP_CHOICE_CHIPS]
         p = r.params
-        question = roadmap_choice_question(p.amount_vnd, p.date_text, p.target_date)
+        resolved = (await self.resolve_date_spec(p.date_spec))[0] if p.date_spec is not None else None
+        question = roadmap_choice_question(p.amount_vnd, p.date_text, resolved.date if resolved else None)
         await self.emit_clarify(ClarifyRequest(slot="other", question=question[:200]), r, chips=chips)
         return True
 
@@ -1490,36 +1524,52 @@ class Turn:
     async def goal_deadline(self, r: IntentResult) -> tuple[date | None, bool]:
         """Hạn của mục tiêu lộ trình (V1, #39): (ngày, đã hỏi lại hay chưa).
 
-        Router đổi hạn ra ngày theo ngày mô phỏng (`target_date`); mã chỉ kiểm ngày có thật và sau hôm nay. Cách đọc `date_text` bằng mã
-        (`parse_goal_date`, chỉ khi đọc được TRỌN cụm) là đường lùi khi router không trả ngày, và để đối chiếu: hai bên lệch quá
-        `_GOAL_DATE_TOLERANCE_DAYS` ngày, hoặc không bên nào ra ngày, thì hỏi đúng một câu (khối `clarify`, chip là các ngày ứng viên) và
-        kết thúc lượt. Cụm chỉ hạn mã đọc lại từ câu cũ trong lịch sử (router lượt này không nhắc lại) không dùng làm đường lùi: phần mã
-        đọc được có thể đã mất chữ bổ nghĩa của người dùng."""
+        Router viết hạn thành đặc tả (`date_spec`, cùng dạng với đầu vào tool `knowledge___resolve_date`); mã tính ngày bằng hàm tất định
+        `yofina_core.dates.resolve_date` trong tiến trình (`resolve_date_spec`). Hàm là nguồn tính duy nhất nên không đối chiếu với cách
+        đọc bằng mã. Cách đọc `date_text` bằng mã (`parse_goal_date`, chỉ khi đọc được TRỌN cụm) chỉ là đường lùi khi router không trả
+        đặc tả. Đặc tả không tính được (sai dạng, ngày đã qua, năm Tết ngoài bảng, chưa khai ngày lương), hoặc router để trống mà câu có
+        chữ chỉ hạn mã không đọc trọn được, thì hỏi đúng một câu (khối `clarify`; lời của phép tính đứng trước câu hỏi khi lỗi nói được
+        cho người dùng; chip là ngày ứng viên nếu có) và kết thúc lượt. Cụm chỉ hạn mã đọc lại từ câu cũ trong lịch sử (router lượt này
+        không nhắc lại) không dùng làm đường lùi: phần mã đọc được có thể đã mất chữ bổ nghĩa của người dùng."""
         p = r.params
-        if not (p.date_text and p.date_text.strip()) and p.target_date is None:
+        said = p.date_text.strip() if p.date_text and p.date_text.strip() else None
+        if p.date_spec is None and said is None:
             return None, False
-        today = self.app_date or self.block_app_date()
-        model = date.fromisoformat(p.target_date) if p.target_date else None
-        if model is not None and model <= today:
-            model = None  # hạn phải sau hôm nay
-        read = None
-        if p.date_text and not self._date_from_history:
-            read = parse_goal_date(p.date_text, today, whole=True)
-        candidates: list[date] = []
-        if model is not None and read is not None and abs((model - read).days) > _GOAL_DATE_TOLERANCE_DAYS:
-            candidates, source = [model, read], "mismatch"
-        elif model is not None or read is not None:
-            source = "router" if model is not None else "text"
-            log.info(json.dumps({"event": "goal_date", "source": source, "date": (model or read).isoformat()}))  # type: ignore[union-attr]
-            return model or read, False
-        else:
-            source = "unknown"
-        log.info(json.dumps({"event": "goal_date_unclear", "source": source, "candidates": [d.isoformat() for d in candidates]}))
-        await self.emit_clarify(ClarifyRequest(slot="date", question=GOAL_DATE_QUESTION), r, chips=goal_date_chips(candidates))
+        failed, note, code = False, None, "unknown"  # đặc tả không tính được; lời nói cho người dùng vì sao hỏi lại; mã lý do cho log
+        if p.date_spec is not None:
+            resolved, error = await self.resolve_date_spec(p.date_spec)
+            if resolved is not None and resolved.days_from_today > 0:
+                log.info(json.dumps({"event": "goal_date", "source": "spec", "anchor": resolved.anchor, "date": resolved.date.isoformat()}))
+                return resolved.date, False
+            failed = True
+            if resolved is not None:  # hạn phải sau hôm nay
+                note, code = notices.GOAL_DATE_IS_TODAY.format(date=resolved.date.strftime("%d/%m/%Y")), "TODAY"
+            else:
+                assert error is not None
+                code = error.code.value
+                note = error.message if code in _DATE_ERRORS_SAID else None
+        read = parse_goal_date(said, self.date_today(), whole=True) if said and not self._date_from_history else None
+        if not failed and read is not None:
+            log.info(json.dumps({"event": "goal_date", "source": "text", "date": read.isoformat()}))
+            return read, False
+        candidates = [read] if read is not None else []
+        log.info(
+            json.dumps(
+                {
+                    "event": "goal_date_unclear",
+                    "source": code,
+                    "candidates": [d.isoformat() for d in candidates],
+                }
+            )
+        )
+        question = f"{note} {GOAL_DATE_QUESTION}" if note else GOAL_DATE_QUESTION
+        if len(question) > 200:
+            question = GOAL_DATE_QUESTION
+        await self.emit_clarify(ClarifyRequest(slot="date", question=question), r, chips=goal_date_chips(candidates))
         return None, True
 
     async def roadmap_user_goal(self, r: IntentResult) -> UserGoal | None:
-        """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text, target_date) ra mã hũ và ngày ISO. Nhận hũ mục tiêu (`is_goal_jar`) và
+        """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text, date_spec) ra mã hũ và ngày ISO. Nhận hũ mục tiêu (`is_goal_jar`) và
         hũ Dự phòng (`buffer`: đích số dư, cần số tiền).
 
         Hạn chưa rõ thì hỏi hạn (`goal_deadline`); hũ chưa xác định thì hỏi hũ (`ask_goal_jar`); khi đã hỏi thì đặt `_goal_asked` và
@@ -2135,9 +2185,13 @@ _GOAL_NOT_SAVING = (
 _GOAL_USE_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Bạn đặt mục tiêu này ở hũ {goal_jars} nhé."
 _GOAL_ADD_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Thêm hũ Mục tiêu ở màn Thêm hoặc sửa hũ để đặt mục tiêu này."
 _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa đặt hạn này. Bạn cho mình biết số tiền muốn gom nhé."
-#: Ngày hạn router tính (`target_date`) và cách đọc cụm chỉ hạn bằng mã lệch quá số ngày này là "lệch rõ": hỏi lại hạn (V1). Bất biến
-#: của phép đối chiếu (không phải tham số nghiệp vụ): vài ngày lệch là cách hiểu "cuối tháng", "tháng sau" khác nhau, không đổi kế hoạch.
-_GOAL_DATE_TOLERANCE_DAYS = 7
+#: Mã lỗi của phép tính ngày mà lời của nó (`DateResolveError.message`, cùng lời tool `knowledge___resolve_date` trả) nói được cho người
+#: dùng trước câu hỏi hạn: ngày đã qua (kèm ngày đã tính), năm Tết ngoài bảng (kèm các năm có), chưa khai ngày lương. Đặc tả sai dạng
+#: (PARAMS_INVALID) là lỗi của router: chỉ hỏi hạn. Hàm tính ngày là nguồn tính duy nhất nên không còn phép đối chiếu với cách đọc bằng
+#: mã (bỏ ngưỡng lệch 7 ngày của V1 bản đầu).
+_DATE_ERRORS_SAID = frozenset(
+    {ErrorCode.DATE_IN_PAST.value, ErrorCode.LUNAR_YEAR_UNSUPPORTED.value, ErrorCode.PROFILE_INCOMPLETE.value}
+)
 #: Tên tham số tùy chọn của `roadmap_agent.build_roadmap` nhận câu của người dùng (C4: ràng buộc như "đừng đụng hũ X"; nhánh khác thêm
 #: tham số đó). Truyền theo tên khi chữ ký hàm có một trong các tên này, nên hai nhánh gộp theo thứ tự nào cũng chạy; tên cuối cùng khác
 #: thì chỉ cần thêm vào đây.
@@ -2157,7 +2211,7 @@ def _roadmap_request_kwargs(text: str) -> dict[str, str]:
 
 def _states_goal(p: IntentParams) -> bool:
     """Câu lộ trình có nêu mục tiêu (số tiền hoặc hạn)."""
-    return p.amount_vnd is not None or bool(p.date_text and p.date_text.strip()) or p.target_date is not None
+    return p.amount_vnd is not None or bool(p.date_text and p.date_text.strip()) or p.date_spec is not None
 
 
 def _asked_goal_facts(p: IntentParams) -> dict[str, Any]:

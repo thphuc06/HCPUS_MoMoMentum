@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from yofina_agent import memory, roadmap_agent, router, whatif, writer
+from yofina_agent import memory, roadmap_agent, router, schemas, whatif, writer
 from yofina_agent.textutil import normalize
 
 REPO = Path(__file__).resolve().parents[3]
@@ -76,6 +76,8 @@ def agent_prompts() -> dict[str, str]:
         "roadmap.ROADMAP_ADVICE_GUIDE": roadmap_agent.ROADMAP_ADVICE_GUIDE,
         "whatif.ANALYST_MEMORY_GUIDE": whatif.ANALYST_MEMORY_GUIDE,
         "memory.PROMPT_NOTICE": memory.PROMPT_NOTICE,
+        # nghĩa của đặc tả ngày: description của schema trường đặc tả (router, Orchestrator) gửi model
+        "schemas.DATE_SPEC_DESCRIPTION": schemas.DATE_SPEC_DESCRIPTION,
     }
     prompts |= {f"writer.TASKS[{k}]": v for k, v in writer.TASKS.items()}
     prompts |= {f"roadmap._REPAIR_HINTS[{k}]": v for k, v in roadmap_agent._REPAIR_HINTS.items()}
