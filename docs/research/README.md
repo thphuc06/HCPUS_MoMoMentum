@@ -32,6 +32,7 @@ Bảy ghi chú dưới đây do subagent (Claude Sonnet 5.5) viết ngày 2026-1
 | [spending-visualization.md](spending-visualization.md) | Biểu đồ chi tiêu (theo hũ, hũ sắp cạn, cuối tuần, Trả sau, so kỳ trước): dữ liệu từ endpoint/tool nào, khoảng trống hợp đồng, khối chat, thư viện, ưu tiên P0/P1/P2; minh họa [spending-visualization-preview.html](spending-visualization-preview.html) |
 | [2026-11-26-canh4-pelt.md](2026-11-26-canh4-pelt.md) | Cảnh 4 chạy thật (#22): hệ số tăng chi tối thiểu để PELT xác nhận trên `minh` 120 ngày (2,1 lần, không đổi penalty), độ bền theo lệch ngày, tệp sao kê CSV cho giám khảo và đường phân loại không cần model; đã chạy offline |
 | [2026-11-26-hu-khac.md](2026-11-26-hu-khac.md) | Hũ "Khác" 0% (#28): biến thể có hũ `khac` cần 294 lời gọi model nhỏ nên không đo được offline; đường cơ sở tái tạo offline (hỏi 17,37%, đúng 92,03%); luật khoản nhỏ một lần chạm tối đa 2/167 mục hỏi (−1,2 điểm, độ đúng −1,3 điểm), hũ 0% số dư 0 thì không chạy; đề xuất đóng, kèm lệnh đo lại |
+| [2026-11-26-do-vi-ba-hu.md](2026-11-26-do-vi-ba-hu.md) | Ví 3 hũ của tài khoản mới (#39), đo offline bằng `scripts/measure_three_jars.py`: phân loại không model hỏi 39,5% (ví 7 hũ 58,1%) nhưng tự gán sai 4,2% do luật theo người nhận, phần có model chưa đo; hũ Chi hằng ngày gộp luôn là hũ dày, dải phủ thừa 0,87 (trượt cổng ở mép trên); PELT trên chuỗi gộp của `minh` cần 2,3 lần (hũ riêng 2,1) và mất độ bền lệch một ngày của tệp cảnh 4; năm khuyến nghị kèm ưu tiên trước 03/12 |
 
 ### Kiểm toán toàn dự án sau 5 phase (2026-11-25)
 
