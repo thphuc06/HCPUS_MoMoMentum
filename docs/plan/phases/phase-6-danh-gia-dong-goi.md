@@ -366,3 +366,11 @@ Kết luận: "Bắt đầu từ bước chuyển tiền bổ sung hũ Nghĩa v�
 - Kiểm bằng mã không bắt được lập luận nói khác bản đã lưu: ở lộ trình, bước 1 nói "chuyển từ hũ Giải trí sang Ăn uống" trong khi bản lưu chuyển từ hũ Đi lại (lập luận viết cùng bản phác thảo, mã chỉ kiểm số và căn cứ). Kết luận what-if khai `personal: behavior` nhưng câu không nhắc thói quen (mã chỉ kiểm nguồn có thật, không kiểm câu có dùng).
 - Bộ chấm `evals/run.py` chưa kiểm số trong chữ của khối `reasoning` (chỉ chữ trả lời và phương án) và gom mọi bản phát dần như nhiều khối; nên thêm khi sửa bộ chấm.
 - K4 (gợi ý hỏi tiếp) không làm.
+
+### Bộ hũ mặc định và đợt "agent thích ứng" (issue #39), 26/11 (Runtime v29–v32, Amplify job 25–28)
+
+Không thuộc các luồng A–K ban đầu: chủ dự án thêm ngày 25–26/11. Chi tiết từng đợt ở [ai-log](../../ai-log/2026-11.md) (các entry 26/11) và [HANDOFF](../../../HANDOFF.md) mục "Trạng thái tối 26/11".
+
+- **Đã làm và deploy**: tài khoản mới 3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai (migration 0057–0059); ví demo 8 hũ; sàn hũ theo khoản định kỳ, sàn chi và sàn thiết yếu theo mức nền bền; lộ trình có đích Dự phòng, nhận câu người dùng; router dùng danh sách hũ của ví; hàm và tool tính ngày `knowledge___resolve_date`; khoản đến hạn đúng ngày lương là trước lương (BR-22); khử trùng dòng nạp ghép một-một; `scripts/scan_repo.py`.
+- **Kiểm trên app** (mỗi câu một lần, không chạy eval): v32 đạt cảnh 1, 2, 4 (cảnh 2 thiếu 1.167.673 ₫, cảnh 4 sinh lại sau 19,6 s); v31 đạt cảnh 3 (29 → 12, trụ 26 ngày), 5, 6. Không đạt ở v32: router không điền `spend_jar_code`, `date_spec` (câu du lịch không nêu hũ, hũ tự đặt tên, "trước Tết").
+- **Còn lại**: router chạy Claude Haiku 4.5 (Nova dự phòng) và sửa 5 lỗi thấy trên app đang làm; eval cho mọi thay đổi 26/11 chưa chạy (ca có thể đổi ở ai-log entry 16:40 ngày 26/11); #40, #41, #44 trước hạn tính năng 30/11; #45 trước freeze 01/12.
