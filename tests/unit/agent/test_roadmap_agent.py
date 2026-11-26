@@ -1779,14 +1779,15 @@ def test_metric_buoc_chuyen_sau_ky_luong_theo_phan_tang_cua_hu_nhan():
     [
         (
             "active", "relaxed", None,
-            "Đây là lộ trình bạn đang dùng, phiên bản 3 (1 giai đoạn, 1 bước). Mục tiêu chỉ kịp sau khi nới hạn hoặc mức,"
-            " chi tiết ở thẻ. Bước tiếp theo: mở trang Lộ trình để chấp nhận, sửa hoặc từ chối từng bước.",
+            "Đây là lộ trình bạn đang dùng, phiên bản 3 (1 giai đoạn, 1 bước). Phương án phân bổ đề xuất đã phải giảm chi ở hũ"
+            " không thiết yếu hoặc lùi hạn mục tiêu, chi tiết ở thẻ. Bước tiếp theo: mở trang Lộ trình để chấp nhận, sửa hoặc"
+            " từ chối từng bước.",
         ),
         (
             "proposed", "on_track", 2,
             "Đây là bản đề xuất phiên bản 3 (1 giai đoạn, 1 bước), chưa thay lộ trình bạn đang dùng. Bản đang dùng vẫn là"
-            " phiên bản 2. Theo phương án phân bổ đề xuất, mục tiêu kịp hạn. Bước tiếp theo: bấm So với bản đang dùng trên"
-            " thẻ, rồi chọn Dùng bản mới hoặc Giữ bản cũ.",
+            " phiên bản 2. Theo phương án phân bổ đề xuất, các khoản cần lo đều đủ mà không phải lùi hạn hay giảm sâu hũ nào."
+            " Bước tiếp theo: bấm So với bản đang dùng trên thẻ, rồi chọn Dùng bản mới hoặc Giữ bản cũ.",
         ),
     ],
 )  # fmt: skip

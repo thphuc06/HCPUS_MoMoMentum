@@ -490,16 +490,38 @@ def compact_stress(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def compact_roadmap(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Lộ trình cho writer (lượt xem): phiên bản, lý do, khả năng kịp mục tiêu, và các mục tiêu có cấu trúc (V5 của báo cáo rà soát #39):
+    đích, hạn (hoặc `no_deadline` khi chưa có hạn), kịp hay không, phần thiếu, ngày dự kiến; `goals` rỗng là bản không có mục tiêu."""
     data = payload["data"]
     return {
         "version": data["version"],
         "status": data["status"],
         "reason": data["reason"]["text"],
         "feasibility": data["feasibility"],
+        "goals": [_roadmap_goal(g) for g in data.get("goals") or []],
         "counts": data["counts"],
         "phase_count": len(data["phases"]),
         "step_titles": [step["title"] for phase in data["phases"] for step in phase["steps"]][:3],
     }
+
+
+def _dmy(value: str) -> str:
+    d = date.fromisoformat(value)
+    return f"{d.day:02d}/{d.month:02d}/{d.year}"
+
+
+def _roadmap_goal(g: Mapping[str, Any]) -> dict[str, Any]:
+    row: dict[str, Any] = {"jar": g["jar"]["name"], "target_text": format_vnd(g["target_vnd"])}
+    if g.get("target_date"):
+        row["target_date_text"] = _dmy(g["target_date"])
+    else:
+        row["no_deadline"] = True
+    row["on_track"] = bool(g["on_track"])
+    if g.get("shortfall_vnd"):
+        row["shortfall_text"] = format_vnd(g["shortfall_vnd"])
+    if g.get("projected_date"):
+        row["projected_date_text"] = _dmy(g["projected_date"])
+    return row
 
 
 def compact_roadmap_steps(payload: Mapping[str, Any], jar_names: Mapping[str, str]) -> dict[str, Any]:

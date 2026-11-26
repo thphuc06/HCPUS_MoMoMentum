@@ -78,10 +78,13 @@ TASKS: dict[str, str] = {
         "runway_days_emergency là số ngày riêng hũ Dự phòng trụ được, null thì không nhắc; shortfall_text là khoản thiếu."
     ),
     "roadmap": (
-        "Thẻ lộ trình đã hiện các giai đoạn và bước. version là phiên bản, reason là lý do có phiên bản này, feasibility là khả năng "
-        "kịp mục tiêu (on_track kịp, relaxed kịp sau khi nới hạn hoặc mức, infeasible chưa khả thi). status proposed là bản đề xuất "
-        "chưa thay lộ trình đang dùng (người dùng so và chọn ở trang Lộ trình); active là lộ trình đang dùng. Không tự tính tổng "
-        "và không đề xuất bước mới."
+        "Thẻ lộ trình đã hiện các giai đoạn và bước. version là phiên bản, reason là lý do có phiên bản này. goals là các mục tiêu "
+        "của bản này (đích, hạn, kịp hay không); goals rỗng nghĩa là bản không có mục tiêu nào, nên không nói về kịp hạn. Mục tiêu có "
+        "no_deadline là chưa có hạn: nói rõ chưa có hạn, không nói kịp hay trễ, có thể hỏi người dùng hạn. feasibility on_track là "
+        "phương án không phải nới gì; relaxed là phương án đã phải nới một lần: mục tiêu nào có on_track false phải lùi hạn, còn khi "
+        "mọi mục tiêu on_track thì chỉ phải giảm chi ở hũ không thiết yếu và mục tiêu vẫn đúng hạn; infeasible là có mục tiêu chưa "
+        "khả thi trong hạn. status proposed là bản đề xuất chưa thay lộ trình đang dùng (người dùng so và chọn ở trang Lộ trình); "
+        "active là lộ trình đang dùng. Không tự tính tổng và không đề xuất bước mới."
     ),
     "roadmap_step_edit": (
         "Người dùng muốn sửa một bước của lộ trình đang dùng; thẻ lộ trình đó đã hiện. Chat chưa sửa được bước nên chưa có gì "

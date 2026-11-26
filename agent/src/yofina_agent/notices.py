@@ -2,11 +2,18 @@
 
 Đây là chuỗi sản phẩm cố định theo **mã lỗi** (ví dụ chạm trần model, hết lượt), không phụ thuộc câu
 hỏi của người dùng và không chứa số liệu tài chính. Câu trả lời trong chat luôn do model sinh ở lượt đó.
+Riêng lời kết dựng bằng mã của lượt lập lộ trình chọn câu theo dữ kiện có cấu trúc của bản đã lưu (`roadmap_outlook`).
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
 from yofina_core.errors import ErrorCode
+
+if TYPE_CHECKING:
+    from yofina_core.blocks import GoalProjection, RoadmapData
 
 # mã -> (tiêu đề <= 80, nội dung <= 280)
 DEGRADED: dict[str, tuple[str, str]] = {
@@ -215,11 +222,23 @@ ROADMAP_CLOSING_PROPOSED = (
 ROADMAP_CLOSING_IN_USE = "Bản đang dùng vẫn là phiên bản {active}."
 ROADMAP_CLOSING_ACTIVE = "Đây là lộ trình bạn đang dùng, phiên bản {version} ({phases} giai đoạn, {steps} bước)."
 ROADMAP_CLOSING_OTHER = "Đây là lộ trình phiên bản {version} ({phases} giai đoạn, {steps} bước)."
+#: Câu theo `feasibility` khi lời kết chưa chọn bằng `roadmap_outlook`: mỗi câu đúng với MỌI trường hợp của trạng thái đó (V5 của báo cáo
+#: rà soát #39: `relaxed` có thể chỉ vì giảm chi mà mục tiêu vẫn đúng hạn, ví có thể không có mục tiêu nào).
 ROADMAP_CLOSING_FEASIBILITY: dict[str, str] = {
-    "on_track": "Theo phương án phân bổ đề xuất, mục tiêu kịp hạn.",
-    "relaxed": "Mục tiêu chỉ kịp sau khi nới hạn hoặc mức, chi tiết ở thẻ.",
+    "on_track": "Theo phương án phân bổ đề xuất, các khoản cần lo đều đủ mà không phải lùi hạn hay giảm sâu hũ nào.",
+    "relaxed": "Phương án phân bổ đề xuất đã phải giảm chi ở hũ không thiết yếu hoặc lùi hạn mục tiêu, chi tiết ở thẻ.",
     "infeasible": "Với thu nhập hiện tại, mục tiêu chưa khả thi trong hạn.",
 }
+#: Câu về khả năng kịp mục tiêu, chọn bằng `roadmap_outlook` theo dữ kiện có cấu trúc của bản đã lưu. {names}: tên các hũ có mục tiêu chưa
+#: có hạn, nối bằng dấu phẩy.
+ROADMAP_OUTLOOK_ON_TRACK = "Theo phương án phân bổ đề xuất, mục tiêu kịp hạn."
+ROADMAP_OUTLOOK_NO_GOAL = "Phương án phân bổ đề xuất đủ cho các khoản cần lo trong kỳ."
+ROADMAP_OUTLOOK_CUT_ONLY = "Mục tiêu vẫn kịp hạn nhờ giảm chi ở hũ không thiết yếu, chi tiết ở thẻ."
+ROADMAP_OUTLOOK_CUT_NO_GOAL = "Phương án cần giảm chi ở hũ không thiết yếu để đủ cho các khoản cần lo, chi tiết ở thẻ."
+ROADMAP_OUTLOOK_DELAYED = "Mục tiêu chỉ kịp sau khi nới hạn hoặc mức, chi tiết ở thẻ."
+ROADMAP_OUTLOOK_NO_DEADLINE = (
+    "Mục tiêu của hũ {names} chưa có hạn nên lộ trình chưa đặt mức cần mỗi tháng; bạn cho mình biết hạn để mình tính xem có kịp không."
+)
 ROADMAP_CLOSING_GOAL_INFEASIBLE = "Với thu nhập hiện tại, mục tiêu {goal} chưa khả thi."
 ROADMAP_CLOSING_GOAL_NOTE = "Mục tiêu {goal} chỉ dùng để lập lộ trình này, chưa lưu vào hũ."
 ROADMAP_CLOSING_GOAL_NOTE_SHORT = "Mục tiêu này chỉ dùng để lập lộ trình, chưa lưu vào hũ."
@@ -286,3 +305,26 @@ SESSION_EXPIRED_MESSAGE = "Phiên đăng nhập đã hết hạn. Bạn đăng n
 UNAVAILABLE_MESSAGE = "Dịch vụ dữ liệu đang tạm thời không phản hồi. Bạn thử lại sau ít phút nhé."
 
 EMPTY_INPUT_MESSAGE = "Không thấy câu hỏi nào của người dùng trong yêu cầu."
+
+
+def roadmap_outlook(data: RoadmapData) -> list[str]:
+    """Câu về khả năng kịp mục tiêu trong lời kết của lượt lập lộ trình, chọn theo dữ kiện có cấu trúc của bản đã lưu chứ không chỉ theo
+    `feasibility` (V5 của báo cáo rà soát #39). Bản đã lưu không mang `relaxations` của bộ tối ưu, nhưng mục tiêu phải lùi hạn
+    (`goal_delayed`) đúng là mục tiêu có hạn mà `on_track` false; nên `relaxed` với mọi mục tiêu có hạn đều đúng hạn là chỉ giảm chi ở hũ
+    không thiết yếu. Ví không có mục tiêu có hạn thì không nói "mục tiêu kịp hạn". Mục tiêu chưa có hạn (V2) thêm một câu nói chưa có hạn
+    để người dùng cho biết hạn."""
+    goals: Sequence[GoalProjection] = data.goals
+    dated = [g for g in goals if g.target_date is not None]
+    undated = [g for g in goals if g.target_date is None]
+    if data.feasibility == "infeasible":
+        out = [ROADMAP_CLOSING_FEASIBILITY["infeasible"]]
+    elif data.feasibility == "relaxed":
+        if any(not g.on_track for g in dated):
+            out = [ROADMAP_OUTLOOK_DELAYED]
+        else:
+            out = [ROADMAP_OUTLOOK_CUT_ONLY if dated else ROADMAP_OUTLOOK_CUT_NO_GOAL]
+    else:
+        out = [ROADMAP_OUTLOOK_ON_TRACK if dated else ROADMAP_OUTLOOK_NO_GOAL]
+    if undated:
+        out.append(ROADMAP_OUTLOOK_NO_DEADLINE.format(names=", ".join(dict.fromkeys(g.jar.name for g in undated))))
+    return out
