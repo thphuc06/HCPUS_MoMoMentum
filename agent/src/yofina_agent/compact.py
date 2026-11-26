@@ -6,14 +6,14 @@ Mỗi số tiền kèm chuỗi đã định dạng (`*_text`) để model chép 
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
 from yofina_agent.textutil import extract_amounts
 from yofina_core.blocks import no_outflow_expected
 from yofina_core.money import format_vnd, to_vnd
-from yofina_core.wallet import OBLIGATION_KIND_LABELS
+from yofina_core.wallet import OBLIGATION_KIND_LABELS, resolve_obligation_pay_jar
 
 #: Trường chữ chép nguyên từ giao dịch hoặc từ tệp người dùng nạp (đối tác, nội dung chuyển khoản, ghi chú), đã che PII nhưng không bỏ
 #: chỉ dẫn: dữ liệu KHÔNG tin cậy. Prompt người viết đánh dấu chúng (`writer.build_writer_prompt`) và số trong chúng không bao giờ là
@@ -291,6 +291,9 @@ def compact_impact(d: Mapping[str, Any]) -> dict[str, Any]:
         "due_date_text": _dm(c["due_date"]),
         "item_cost_vnd": to_vnd(c["item_cost_vnd"]),
         "item_cost_text": format_vnd(c["item_cost_vnd"]),
+        # gốc của món: món này tốn = gốc + phí phát sinh thêm (bất biến của hợp đồng); thiếu gốc thì model nhỏ coi cả số đó là phí (#39)
+        "principal_vnd": to_vnd(c["principal_vnd"]),
+        "principal_text": format_vnd(c["principal_vnd"]),
         "fee_added_vnd": to_vnd(c["fee_added_vnd"]),
         "fee_added_text": format_vnd(c["fee_added_vnd"]),
         "existing_due_vnd": to_vnd(c["existing_due_vnd"]),
@@ -402,8 +405,24 @@ def compact_affordability(payload: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
-def compact_obligations(payload: Mapping[str, Any]) -> dict[str, Any]:
+def compact_obligations(
+    payload: Mapping[str, Any], *, jars: Sequence[Mapping[str, Any]] | None = None
+) -> dict[str, Any]:
+    """`get_obligations` -> bản gọn. Có `jars` (hũ người dùng: code, name, kind) thì mỗi khoản kèm HŨ TRẢ (`pay_jar_code`,
+    `pay_jar_name`): hũ đã lưu ở khoản, không có thì hũ trả mặc định của ví (`wallet.resolve_obligation_pay_jar`, cùng quy tắc với dự
+    báo); ví không có hũ trả nào thì không có hai khóa đó. Lộ trình cần dữ kiện này để không chuyển tiền vào một hũ "vì" khoản mà hũ
+    khác trả (#39)."""
     d = payload["data"]
+    names = {str(j["code"]): str(j["name"]) for j in jars or ()}
+    # hũ của get_jar_balances là hũ người dùng (không có hũ hệ thống): bản tin cũ không có kind vẫn tính là hũ người dùng
+    kinds = [(str(j["code"]), str(j.get("kind") or "spending")) for j in jars or ()]
+
+    def pay_jar(o: Mapping[str, Any]) -> dict[str, str]:
+        if jars is None:
+            return {}
+        code = resolve_obligation_pay_jar(kinds, saved=o.get("pay_jar"))
+        return {"pay_jar_code": code, "pay_jar_name": names[code]} if code in names else {}
+
     rows = [
         {
             "name": o["name"],
@@ -412,6 +431,7 @@ def compact_obligations(payload: Mapping[str, Any]) -> dict[str, Any]:
             "amount_vnd": to_vnd(o["amount_vnd"]),
             "amount_text": format_vnd(o["amount_vnd"]),
             "due_date_text": _dm(o["due_date"]),
+            **pay_jar(o),
         }
         for o in d["obligations"][:8]
     ]

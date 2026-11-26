@@ -1,0 +1,60 @@
+{
+  "v": 1,
+  "id": "clarify:8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+  "fallback_text": "Bạn định trả bằng tiền của hũ nào?",
+  "source": {
+    "tool": "agent",
+    "as_of": "2026-12-10T03:00:00Z",
+    "app_date": "2026-11-21"
+  },
+  "type": "clarify",
+  "data": {
+    "question": "Bạn định trả bằng tiền của hũ nào?",
+    "slot": "jar",
+    "chips": [
+      {
+        "id": "c1",
+        "label": "Chi hằng ngày",
+        "value": "Hũ Chi hằng ngày"
+      },
+      {
+        "id": "c2",
+        "label": "Nghĩa vụ",
+        "value": "Hũ Nghĩa vụ"
+      },
+      {
+        "id": "c3",
+        "label": "Dự phòng",
+        "value": "Hũ Dự phòng"
+      },
+      {
+        "id": "c4",
+        "label": "Ăn uống",
+        "value": "Hũ Ăn uống"
+      },
+      {
+        "id": "c5",
+        "label": "Đi lại",
+        "value": "Hũ Đi lại"
+      },
+      {
+        "id": "c6",
+        "label": "Giải trí",
+        "value": "Hũ Giải trí"
+      },
+      {
+        "id": "c7",
+        "label": "Du lịch",
+        "value": "Hũ Du lịch"
+      },
+      {
+        "id": "c8",
+        "label": "Đầu tư",
+        "value": "Hũ Đầu tư"
+      }
+    ],
+    "pending_intent": "affordability",
+    "allow_free_text": true
+  }
+}

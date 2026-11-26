@@ -62,10 +62,10 @@ TASKS: dict[str, str] = {
     ),
     "affordability": (
         "Thẻ kiểm tra trước khi chi đã hiện kết quả từng hũ. verdict và headline là kết luận của hệ thống; jar_checks là trạng thái "
-        "từng hũ sau khoản chi (đủ, sát, hụt); credit (nếu có) là phần Trả sau mô phỏng: tổng phải trả ngày đến hạn và hũ bị hụt. "
-        "Kết luận là câu trả lời; chỉ nói thêm khi có điều người dùng cần chú ý. exchange_rate (nếu có) nghĩa là người dùng nói "
-        "khoản chi bằng ngoại tệ (amount_original_text) và số VND đã được quy đổi theo tỷ giá bán rate_text của source ngày "
-        "rate_date_text; số VND đó là ước tính vì thanh toán thẻ thường thêm phí chuyển đổi ngoại tệ."
+        "từng hũ sau khoản chi (đủ, sát, hụt); credit (nếu có) là phần Trả sau mô phỏng nếu người dùng trả bằng Trả sau: "
+        "item_cost_text là món này tốn khi trả sau, bằng gốc principal_text cộng phí phát sinh thêm fee_added_text; total_due_text "
+        "là tổng phải trả ngày đến hạn due_date_text, gồm cả khoản Trả sau đã có existing_due_text; at_due là hũ trả khoản đó. "
+        "Kết luận là câu trả lời; chỉ nói thêm khi có điều người dùng cần chú ý."
     ),
     "resilience": (
         "Thẻ điểm chống chịu đã hiện. score là điểm, band là nhóm (weak yếu, fair vừa, strong tốt), weakest là thành phần yếu nhất "
@@ -140,11 +140,21 @@ UNTRUSTED_GUIDE = (
 )
 
 
+#: Nghĩa của trường `exchange_rate` của bản gọn, thêm sau <du_lieu> CHỈ khi bản gọn có trường đó (#39: câu này nằm sẵn trong nhiệm vụ
+#: kiểm tra trước khi chi của mọi lượt, và model nhỏ đã gọi phí Trả sau là "phí chuyển đổi" ở một lượt không có ngoại tệ nào).
+FX_GUIDE = (
+    "<ty_gia>"
+    "exchange_rate nghĩa là người dùng nói khoản chi bằng ngoại tệ (amount_original_text) và số VND đã được quy đổi theo tỷ giá bán "
+    "rate_text của source ngày rate_date_text; số VND đó là ước tính vì thanh toán thẻ thường thêm phí chuyển đổi ngoại tệ."
+    "</ty_gia>"
+)
+
+
 def build_writer_prompt(task: str, question: str, compact: Mapping[str, Any], memory: str = "") -> str:
     """Prompt người viết. `memory` là khối `<bo_nho_nguoi_dung>` đã làm sạch (`TurnMemory.prompt_block`), chỉ thêm cho `MEMORY_TASKS`,
     kèm `MEMORY_GUIDE`. Khối này KHÔNG vào `compact` nên không bao giờ thành căn cứ cho số tiền (`allowed_amounts`).
     `<` và `>` trong dữ liệu được thoát (JSON `\\u003c`, `\\u003e`) để chữ của một dòng không đóng được thẻ `<du_lieu>`; bản gọn có chữ
-    không tin cậy của dòng (`compact.has_untrusted_text`) thì thêm `UNTRUSTED_GUIDE` ngay sau dữ liệu."""
+    không tin cậy của dòng (`compact.has_untrusted_text`) thì thêm `UNTRUSTED_GUIDE` ngay sau dữ liệu; có tỷ giá thì thêm `FX_GUIDE`."""
     parts = [f"<nhiem_vu>{TASKS[task]}</nhiem_vu>"]
     if memory and task in MEMORY_TASKS:
         parts.append(memory)
@@ -154,6 +164,8 @@ def build_writer_prompt(task: str, question: str, compact: Mapping[str, Any], me
     parts.append(f"<du_lieu>\n{data}\n</du_lieu>")
     if has_untrusted_text(compact):
         parts.append(UNTRUSTED_GUIDE)
+    if "exchange_rate" in compact:
+        parts.append(FX_GUIDE)
     return "\n".join(parts)
 
 

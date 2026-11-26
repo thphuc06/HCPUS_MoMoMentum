@@ -788,6 +788,11 @@ class ExplainBlock(_BlockBase):
 ClarifySlot = Literal["amount", "funding_source", "jar", "date", "scenario_kind", "other"]
 
 
+#: Số chip tối đa của khối `clarify` (`maxItems` của hợp đồng): bằng số hũ người dùng tối đa của một ví (`maxItems` của `jars` trong
+#: `JarsResponse` của OpenAPI, 20), vì câu hỏi "trả bằng hũ nào" đưa đủ mọi hũ người dùng chi được làm chip (#39).
+CLARIFY_MAX_CHIPS = 20
+
+
 class ClarifyChip(_Strict):
     id: SlugKey
     label: Annotated[str, Field(min_length=1, max_length=40)]
@@ -797,7 +802,7 @@ class ClarifyChip(_Strict):
 class ClarifyData(_Strict):
     question: Annotated[str, Field(min_length=1, max_length=200)]
     slot: ClarifySlot
-    chips: Annotated[list[ClarifyChip], Field(max_length=6)]
+    chips: Annotated[list[ClarifyChip], Field(max_length=CLARIFY_MAX_CHIPS)]
     pending_intent: Literal["what_if", "affordability", "move", "profile_update"] | None = None
     allow_free_text: bool | None = None
 

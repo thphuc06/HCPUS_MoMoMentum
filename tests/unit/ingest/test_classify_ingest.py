@@ -342,3 +342,49 @@ def test_buoc_loai_giao_dich_cua_dong_nap_theo_hu_rieng_roi_hu_chung(jars, expec
     assert {t: (choice.code, choice.source) for t, choice in zip(expected, got, strict=True)} == {
         t: (code, "type_map") for t, code in expected.items()
     }
+
+
+_LEGACY_7 = [
+    ("an_uong", "spending"), ("di_lai", "spending"), ("nghia_vu", "obligation"), ("giai_tri", "spending"),
+    ("muc_tieu", "saving"), ("du_phong", "saving"), ("dau_tu", "saving"),
+]  # fmt: skip
+
+
+def _inputs(jars):
+    return ctx(
+        None, jars=[{"code": code, "name": code, "kind": kind, "balance_vnd": 0} for code, kind in jars]
+    ).classify_inputs()
+
+
+@pytest.mark.parametrize(
+    ("jars", "proposal", "expected"),
+    [
+        # cảnh 4 trên ví demo 8 hũ (#39, lần nạp 26/11): model đọc tệp gắn loại "đi chợ, siêu thị" cho Circle K, Bách Hóa Xanh nhưng đề
+        # xuất hũ chung Chi hằng ngày; bảng loại giao dịch chọn hũ riêng Ăn uống. Hai đoán cùng một loại: không hạ xuống "cần duyệt".
+        pytest.param(_DEMO_DAILY, "chi_hang_ngay", "an_uong", id="vi-demo-8-de-xuat-hu-chung"),
+        pytest.param(_DEMO_DAILY, "an_uong", "an_uong", id="vi-demo-8-de-xuat-hu-rieng"),
+        # ví 7 hũ cũ (không có Chi hằng ngày) và ví 3 hũ giữ hành vi
+        pytest.param(_LEGACY_7, "an_uong", "an_uong", id="vi-7-hu-cu"),
+        pytest.param(_THREE, "chi_hang_ngay", "chi_hang_ngay", id="vi-3-hu"),
+    ],
+)
+def test_de_xuat_hu_chung_cung_loai_khong_ha_do_tin_cay_cua_bang_loai(jars, proposal, expected):
+    th = load_thresholds()
+    (choice,) = classify_rows([RowInput(TODAY, 66000, "Circle K", None, False, "grocery", proposal, 0.9)], _inputs(jars))
+    assert (choice.code, choice.source, choice.tier) == (expected, "type_map", "auto")
+    assert choice.confidence == th.type_map_confidence >= th.auto_min_confidence
+
+
+@pytest.mark.parametrize(
+    ("jars", "proposal"),
+    [
+        pytest.param(_DEMO_DAILY, "giai_tri", id="vi-demo-8-hu-cua-loai-khac"),
+        pytest.param(_DEMO_DAILY, "du_phong", id="vi-demo-8-hu-de-danh"),
+        pytest.param(_LEGACY_7, "di_lai", id="vi-7-hu-cu"),
+        pytest.param(_THREE, "nghia_vu", id="vi-3-hu"),
+    ],
+)
+def test_de_xuat_hu_cua_loai_khac_van_vao_hang_cho(jars, proposal):
+    (choice,) = classify_rows([RowInput(TODAY, 66000, "Circle K", None, False, "grocery", proposal, 0.9)], _inputs(jars))
+    assert (choice.source, choice.tier) == ("type_map", "review")
+    assert choice.confidence <= load_thresholds().review_min_confidence

@@ -81,6 +81,29 @@ describe('Tổng quan: bản tin chủ động', () => {
     mountApp(backend({ 'GET /nudges/today': json(503, { error: { code: 'DATABASE_UNAVAILABLE' } }) }))
     expect(await screen.findByText('Hũ Ăn uống dự kiến cạn ngày 29/11')).toBeInTheDocument()
   })
+
+  it('bản tin cảnh báo cạn (#39): có "Hỏi vì sao" như thẻ tất định; bấm thì ghi acted và mở chat với câu server dựng', async () => {
+    const runout = NudgeTodayResponse.parse(restFixture('NudgeTodayResponse.canh_bao_can'))
+    const path = `/nudges/${runout.nudge!.nudge_id}/feedback`
+    const user = userEvent.setup()
+    const { calls } = mountApp(
+      backend({
+        'GET /nudges/today': runout,
+        [`POST ${path}`]: (init) => ({ nudge_id: runout.nudge!.nudge_id, outcome: JSON.parse(String(init.body)).outcome, recorded_at: '2026-12-10T03:00:00Z' }),
+        'POST /invocations': async () => sseResponse([runStarted(), runFinished()]),
+      }),
+    )
+    const region = (await screen.findByText('Hũ Ăn uống dự kiến cạn ngày 23/11')).closest('section') as HTMLElement
+    expect(region).toHaveAttribute('data-kind', 'runout_warning')
+    for (const name of ['Xem dự báo', 'Hỏi vì sao', 'Để sau', 'Ít nhắc loại này']) expect(within(region).getByRole('button', { name })).toBeInTheDocument()
+    await user.click(within(region).getByRole('button', { name: 'Hỏi vì sao' }))
+    expect(await screen.findByTestId('chat-sheet', {}, { timeout: 10_000 })).toBeInTheDocument()
+    await waitFor(() => expect(callsTo(calls, 'POST', path).map((c) => bodyOf(c).outcome)).toEqual(['acted']))
+    await waitFor(() => {
+      const msgs = runCalls(calls).map((c) => bodyOf(c).messages as Array<{ role: string; content: string }>)
+      expect(msgs.some((m) => m.at(-1)?.content === 'Vì sao hũ Ăn uống dự kiến cạn ngày 23/11?')).toBe(true)
+    })
+  })
 })
 
 describe('lối vào Lộ trình', () => {

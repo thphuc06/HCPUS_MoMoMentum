@@ -262,3 +262,22 @@ def test_hu_cua_khoan_chi_khong_bao_gio_la_hu_he_thong():
     system = tuple(wallet.SYSTEM_JAR_CODES.values())
     assert wallet.spending_tx_type_jar("transfer_person", (*_DEMO_DAILY_WALLET, *system)) is None
     assert wallet.spending_tx_type_jar("food_drink", system) is None
+
+
+@pytest.mark.parametrize(
+    ("default", "tx_type", "chain"),
+    [
+        ("an_uong", "grocery", ("an_uong", "chi_hang_ngay")),
+        ("du_lich", "travel", ("du_lich", "muc_tieu", "chi_hang_ngay")),
+        ("hoa_don", "bill_electricity", ("hoa_don", "nghia_vu")),
+        ("giai_tri", "subscription", ("giai_tri", "nghia_vu")),
+        ("nghia_vu", "obligation_payment", ("nghia_vu",)),
+        (None, "transfer_person", ()),
+    ],
+)
+def test_chuoi_hu_cua_loai_giao_dich_hu_rieng_truoc_hu_chung_sau(default, tx_type, chain):
+    """Mọi hũ "của" một loại theo thứ tự `transaction_jar` chọn (#39): `transaction_jar` là hũ đầu tiên của chuỗi mà ví có."""
+    assert wallet.transaction_jar_chain(default, tx_type=tx_type) == chain
+    for wallet_codes in (_DEMO_WALLET, _DEMO_DAILY_WALLET, _THREE_JAR_WALLET):
+        expected = next((code for code in chain if code in wallet_codes), None)
+        assert wallet.transaction_jar(default, wallet_codes, tx_type=tx_type) == expected

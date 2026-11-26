@@ -378,6 +378,30 @@ describe('lỗi có câu tiếng Việt và lối thoát', () => {
     expect(await screen.findByTestId('ingest-error')).toHaveTextContent('Tệp này đã được nạp trước đó rồi')
   })
 
+  it('tải lại đúng tệp của lần nạp còn chờ duyệt (#39): nói rõ chưa thêm dòng nào, "Duyệt tiếp" mở lại lần đó', async () => {
+    const earlier = '0b4c1d2e-3f40-4a51-8b62-7c83d94e0f15'
+    const dup = { ...job('rejected'), error_code: 'INGEST_DUPLICATE_FILE', error_message: 'dup', duplicate_of: { job_id: earlier, status: 'review' } }
+    const pending = { ...job('review'), job_id: earlier, review: { ...job('review').review, data: { ...job('review').review.data, job_id: earlier } } }
+    const { router } = mountIngest(withS3(ingestBackend([dup], { [`GET /ingest/jobs/${earlier}`]: pending })))
+    const user = userEvent.setup()
+    await pickImage(user)
+    const alert = await screen.findByTestId('ingest-error')
+    expect(alert).toHaveTextContent('Tệp này đang chờ bạn duyệt ở lần nạp trước, chưa có dòng nào được thêm.')
+    expect(alert).not.toHaveTextContent('không nạp thêm lần nữa')
+    expect(screen.getByRole('button', { name: 'Chọn tệp khác' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Duyệt tiếp' }))
+    await screen.findByRole('list', { name: 'Dòng đã đọc' })
+    expect(router.state.location.search).toBe(`?job=${earlier}`)
+  })
+
+  it('trùng tệp với lần nạp đã chốt: giữ câu "đã được nạp", không có nút duyệt tiếp', async () => {
+    const dup = { ...job('rejected'), error_code: 'INGEST_DUPLICATE_FILE', error_message: 'dup', duplicate_of: { job_id: '0b4c1d2e-3f40-4a51-8b62-7c83d94e0f15', status: 'done' } }
+    mountIngest(withS3(ingestBackend([dup])))
+    await pickImage(userEvent.setup())
+    expect(await screen.findByTestId('ingest-error')).toHaveTextContent('Tệp này đã được nạp trước đó rồi')
+    expect(screen.queryByRole('button', { name: 'Duyệt tiếp' })).toBeNull()
+  })
+
   it('loại tệp sai: chặn ở máy, không gọi API; tệp quá lớn: cũng chặn', async () => {
     const { calls } = mountIngest(withS3(ingestBackend([job('review')])))
     const user = userEvent.setup({ applyAccept: false })

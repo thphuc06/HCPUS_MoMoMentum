@@ -50,15 +50,19 @@ export function jarForecastLevel(
   return jar.status === 'short' && jar.runout_date ? 0 : null
 }
 
+/** Hũ 0 ₫ chưa từng có tiền vào và chưa có giao dịch (#39): sự thật trung tính, không phải cảnh báo. */
+export const NEVER_FUNDED_CHIP: { kind: ChipKind; label: string } = { kind: 'info', label: 'Chưa có tiền' }
+
 /**
  * Chip trạng thái từ `status` của server: cùng bộ chữ Đủ / Sát / Hụt với B2 và thẻ kiểm tra (ui-design-review.md §3.2 #13),
- * hũ hụt kèm ngày cạn ("Hụt · cạn 27/11"). Luôn có biểu tượng + chữ (StatusChip).
+ * hũ hụt kèm ngày cạn ("Hụt · cạn 27/11"). Luôn có biểu tượng + chữ (StatusChip). `neverFunded`: hũ 0 ₫ mà server cho biết chưa
+ * từng có dòng sổ cái nào (`has_activity: false`, #39): nói "Chưa có tiền" thay cho "Đang hết tiền".
  */
-export function jarStatusChip(status: JarStatus, runoutDate?: string, emptyNow = false): { kind: ChipKind; label: string } {
+export function jarStatusChip(status: JarStatus, runoutDate?: string, emptyNow = false, neverFunded = false): { kind: ChipKind; label: string } {
   if (status === 'ok') return { kind: 'ok', label: 'Đủ' }
   if (status === 'tight') return { kind: 'warn', label: 'Sát' }
-  // Hũ đã không còn tiền (0 ₫): không nói "cạn ngày ..." như thể còn tiền để cạn.
-  if (emptyNow) return { kind: 'bad', label: 'Đang hết tiền' }
+  // Hũ đã không còn tiền (0 ₫): không nói "cạn ngày ..." như thể còn tiền để cạn; chưa từng có tiền thì cũng không nói "hết tiền".
+  if (emptyNow) return neverFunded ? NEVER_FUNDED_CHIP : { kind: 'bad', label: 'Đang hết tiền' }
   return { kind: 'bad', label: runoutDate ? `Hụt · cạn ${formatDayMonth(runoutDate)}` : 'Hụt' }
 }
 

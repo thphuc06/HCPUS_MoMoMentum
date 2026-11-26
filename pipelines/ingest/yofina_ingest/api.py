@@ -222,6 +222,19 @@ class IngestApi:
             jobs.append(item)
         return {"jobs": jobs}
 
+    def _duplicate_of(self, uid: str, job_id: str, job: Mapping[str, Any]) -> dict[str, Any] | None:
+        """Lần nạp CÒN SỐNG cùng nội dung tệp (`IngestDuplicateOf`) của một job bị từ chối vì trùng tệp: thiết kế chỉ cho một job sống
+        mỗi nội dung (khóa khử trùng của dòng tính từ băm tệp), nên tải lại đúng tệp đó khi lần trước còn chờ duyệt thì không tạo job
+        mới mà chỉ đường về job đó để người dùng duyệt tiếp. None nếu không phải job trùng tệp, job cũ (chưa ghi băm) hoặc lần nạp kia
+        đã không còn (thất bại, bị từ chối, đã xóa)."""
+        sha = job.get("content_sha256")
+        if job.get("status") != "rejected" or job.get("error_code") != "INGEST_DUPLICATE_FILE" or not sha:
+            return None
+        dup = self.repo.find_job_by_content(uid, str(sha))
+        if dup is None or str(dup["id"]) == job_id:
+            return None
+        return {"job_id": str(dup["id"]), "status": dup["status"]}
+
     def get_job(
         self,
         uid: str,
@@ -250,6 +263,8 @@ class IngestApi:
             out["error_message"] = job["error_message"]
         if job.get("error_reason"):
             out["error_reason"] = job["error_reason"]
+        if (dup := self._duplicate_of(uid, job_id, job)) is not None:
+            out["duplicate_of"] = dup
         if job.get("finished_at"):
             out["finished_at"] = _iso(job["finished_at"])
         if job["status"] in ("review", "done"):

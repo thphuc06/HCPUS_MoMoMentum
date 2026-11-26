@@ -73,7 +73,7 @@ from yofina_core.llm import (  # noqa: E402
 )
 from yofina_core.params import TxTypeInfo, fold_text  # noqa: E402
 from yofina_core.pii import PiiPolicy  # noqa: E402
-from yofina_core.wallet import transaction_jar  # noqa: E402
+from yofina_core.wallet import transaction_jar, transaction_jar_chain  # noqa: E402
 from yofina_ledger.classify_config import ClassifyThresholds, load_thresholds  # noqa: E402
 
 log = logging.getLogger("yofina.ingest.classify")
@@ -264,6 +264,10 @@ def classify_rows(rows: Sequence[RowInput], inputs: ClassifyInputs) -> list[JarC
         k: TypeInfo(k, v.label, v.direction, transaction_jar(v.default_jar_code, jars, tx_type=k))
         for k, v in inputs.type_map.items()
     }
+    #: mọi hũ "của" từng loại (hũ riêng rồi hũ chung), để so đề xuất hũ của model với loại nó đoán
+    type_jars = {
+        k: transaction_jar_chain(v.default_jar_code, tx_type=k) for k, v in inputs.type_map.items()
+    }
     person_types = {k for k, v in inputs.type_map.items() if v.is_person_transfer}
     merchants = [r.counterparty for r in rows if r.counterparty]
     keys = [fold_text(m)[:MERCHANT_KEY_MAX] for m in merchants]
@@ -333,7 +337,15 @@ def classify_rows(rows: Sequence[RowInput], inputs: ClassifyInputs) -> list[JarC
             out.append(None)
             continue
         tier, conf = d.tier, float(d.confidence)
-        if d.stage == "type_map" and judge.jar in jars and judge.jar != jar:
+        if (
+            d.stage == "type_map"
+            and judge.jar in jars
+            and judge.jar != jar
+            and judge.jar not in type_jars.get(r.tx_type or "", ())
+        ):
+            # Đề xuất hũ của model trái với loại giao dịch nó đoán: một trong hai đoán sai, nên dòng vào hàng chờ. Đề xuất là một hũ khác
+            # CỦA CHÍNH loại đó (hũ chung Chi hằng ngày khi ví có hũ riêng Ăn uống, #39) thì không trái: quy tắc "hũ riêng thắng hũ chung"
+            # đã chọn hũ, độ tin cậy của bảng loại giao dịch giữ nguyên dù ví có thêm hũ chung.
             tier, conf = "review", min(conf, th.review_min_confidence)
         out.append(
             JarChoice(

@@ -180,6 +180,20 @@ describe('clarify (hỏi lại đúng một câu)', () => {
     setup(b, { stale: true })
     for (const c of b.data.chips) expect(screen.getByRole('button', { name: c.label })).toBeDisabled()
   })
+
+  it('hỏi hũ trên ví 8 hũ (#39): đủ 8 chip theo thứ tự server gửi, xuống dòng trong khung 390 px, bấm chip gửi "Hũ …"', async () => {
+    const b = validBlock('clarify.jar_demo_8') as Json
+    const { user, actions } = setup(b)
+    const list = screen.getByRole('list', { name: 'Câu trả lời nhanh' })
+    const chips = within(list).getAllByRole('button')
+    expect(chips.map((c) => c.textContent)).toEqual(b.data.chips.map((c: Json) => c.label))
+    expect(chips).toHaveLength(8)
+    // bố cục chip không đổi: danh sách flex-wrap (chip dài xuống dòng, không cuộn ngang, không cắt bớt), mỗi chip cao tối thiểu 44 px
+    expect(list.className).toContain('flex-wrap')
+    for (const c of chips) expect(c.className).toContain('min-h-11')
+    await user.click(screen.getByRole('button', { name: 'Du lịch' }))
+    expect(actions.ask).toHaveBeenCalledWith('Hũ Du lịch')
+  })
 })
 
 describe('suggestions và notice mở rộng', () => {

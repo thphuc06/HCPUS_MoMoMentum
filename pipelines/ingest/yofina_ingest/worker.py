@@ -200,8 +200,9 @@ class Worker:
         *,
         status: str = "rejected",
         reason: str | None = None,
+        extra: Mapping[str, Any] | None = None,
     ) -> Outcome:
-        patch = {"error_code": code, "error_message": message[:280]}
+        patch = {"error_code": code, "error_message": message[:280], **(extra or {})}
         if reason:
             patch["error_reason"] = reason
         self.repo.update_job(uid, job_id, status, patch=patch)
@@ -240,23 +241,24 @@ class Worker:
             )
         sha = content_sha256(data)
         dup = self.repo.find_job_by_content(uid, sha)
+        # Job bị từ chối vì trùng nội dung vẫn ghi băm của tệp (chỉ mục duy nhất theo nội dung không tính job `rejected`), để
+        # `GET /ingest/jobs/{id}` chỉ ra lần nạp còn sống cùng tệp (`duplicate_of`): người dùng mở lại lần đang chờ duyệt.
+        same_file = {"content_sha256": sha, "size_bytes": len(data)}
         if dup is not None and str(dup["id"]) != job_id:
             self._delete_object(bucket, key)
             return self._reject(
-                uid, job_id, "INGEST_DUPLICATE_FILE", "Tệp này đã được nạp rồi (cùng nội dung)."
+                uid, job_id, "INGEST_DUPLICATE_FILE", "Tệp này đã được nạp rồi (cùng nội dung).", extra=same_file
             )
         if status == "awaiting_upload":
             try:
-                queued = self.repo.update_job(
-                    uid, job_id, "queued", 5, {"content_sha256": sha, "size_bytes": len(data)}
-                )
+                queued = self.repo.update_job(uid, job_id, "queued", 5, same_file)
             except (
                 YofinaError
             ) as exc:  # khóa duy nhất theo nội dung: hai tệp giống nhau tới cùng lúc
                 if exc.code != ErrorCode.INTERNAL_ERROR:
                     raise
                 return self._reject(
-                    uid, job_id, "INGEST_DUPLICATE_FILE", "Tệp này đã được nạp rồi (cùng nội dung)."
+                    uid, job_id, "INGEST_DUPLICATE_FILE", "Tệp này đã được nạp rồi (cùng nội dung).", extra=same_file
                 )
             if queued is None:
                 return Outcome("skipped", job_id, "job_state_changed")

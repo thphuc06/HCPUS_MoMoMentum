@@ -2483,6 +2483,12 @@ components:
             "mực dự báo" trên thẻ hũ. Có dấu (âm là hụt). Vắng khi hũ chưa có dự báo. Server tính từ bảng `forecasts` (hàm
             `app_get_forecast_summaries`, migration 0008); pipeline dự báo không ghi thêm gì.
           $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+        has_activity:
+          description: |
+            Chỉ có ở hũ người dùng có `balance_vnd` ≤ 0 (#39): hũ đã từng có ít nhất một dòng sổ cái chưa (tiền vào, chia lương, chi,
+            chuyển hũ). Sai là hũ chưa từng có tiền, giao diện không nói "hết tiền" về nó; đúng là hũ đã tiêu hết. Vắng ở hũ còn tiền
+            và hũ hệ thống. Server đếm từ `app_get_jar_usage` (Tổng quan) hoặc giao dịch gần đây của hũ (Chi tiết hũ), không theo mã hũ.
+          type: boolean
     OverviewBalance:
       type: object
       required: [total_vnd, jars_total_vnd, other_income_vnd, unclassified_vnd]
@@ -3350,6 +3356,8 @@ components:
           maxLength: 280
         error_reason:
           $ref: '#/components/schemas/IngestErrorReason'
+        duplicate_of:
+          $ref: '#/components/schemas/IngestDuplicateOf'
         created_at:
           $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
         updated_at:
@@ -3362,6 +3370,20 @@ components:
         coverage_change:
           description: Có khi done.
           $ref: '../blocks/coverage_change.schema.json'
+    IngestDuplicateOf:
+      description: |
+        Tùy chọn (#39, 26/11): job `rejected` với `INGEST_DUPLICATE_FILE` chỉ ra lần nạp CÒN SỐNG (không failed, không rejected) có
+        cùng nội dung tệp. Một nội dung tệp chỉ có một job sống mỗi người dùng (khóa khử trùng của dòng tính từ băm tệp), nên tải lại
+        đúng tệp khi lần trước còn `review` không tạo job mới: giao diện mở lại job này để duyệt tiếp. Vắng ở job không trùng tệp, job
+        từ chối trước khi có trường này, hoặc khi lần nạp kia đã không còn sống.
+      type: object
+      required: [job_id, status]
+      additionalProperties: false
+      properties:
+        job_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        status:
+          $ref: '../blocks/ingest_review.schema.json#/$defs/IngestJobStatus'
     IngestErrorReason:
       type: string
       description: |

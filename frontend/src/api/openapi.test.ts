@@ -263,6 +263,12 @@ describe('khớp openapi.yaml', () => {
     expect(Object.keys(OpsDayModelCalls.shape).sort()).toEqual(Object.keys(schemas.OpsDayModelCalls!.properties!).sort())
     expect(Object.keys(OpsModelDayCalls.shape).sort()).toEqual(Object.keys(schemas.OpsModelDayCalls!.properties!).sort())
   })
+
+  it('JarFull: Zod có đủ mọi trường của hợp đồng (has_activity của hũ 0 ₫ không bị bỏ khi parse, #39)', () => {
+    expect(Object.keys(JarFull.shape).sort()).toEqual(Object.keys(schemas.JarFull!.properties!).sort())
+    const jar = { code: 'chi_hang_ngay', name: 'Chi hằng ngày', color_key: 'brown', icon_key: 'basket', kind: 'spending', balance_vnd: 0, split_percent: 42 }
+    expect(JarFull.parse({ ...jar, has_activity: false }).has_activity).toBe(false)
+  })
 })
 
 // Mọi fixture REST của hợp đồng đi qua Zod của frontend: hợp lệ thì parse được, sai thì bị từ chối.

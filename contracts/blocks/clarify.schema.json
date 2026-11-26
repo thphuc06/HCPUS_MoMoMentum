@@ -53,10 +53,10 @@
           "enum": ["amount", "funding_source", "jar", "date", "scenario_kind", "other"]
         },
         "chips": {
-          "description": "Chip trả lời nhanh. Rỗng khi cần nhập tự do (ví dụ số tiền).",
+          "description": "Chip trả lời nhanh. Rỗng khi cần nhập tự do (ví dụ số tiền). Hỏi hũ (slot jar) thì chip là mọi hũ người dùng của ví, nên tối đa bằng số hũ người dùng tối đa của một ví (`JarsResponse.jars` của OpenAPI, 20).",
           "type": "array",
           "items": { "$ref": "#/$defs/ClarifyChip" },
-          "maxItems": 6
+          "maxItems": 20
         },
         "pending_intent": {
           "description": "Ý định đang chờ đủ tham số, để frontend và agent ghép câu trả lời với câu hỏi.",
