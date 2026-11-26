@@ -83,7 +83,7 @@ flowchart LR
 | Mã | Luồng | Đường | Trạng thái | FR |
 |---|---|---|---|---|
 | L01 | Đăng nhập, mở phiên, làm nóng agent | A, B | Đang chạy | — |
-| L02 | Onboarding tài khoản trắng | A | Đang chạy (chưa thử trên API thật) | FR1 |
+| L02 | Onboarding tài khoản trắng | A | Đang chạy; 26/11 kiểm trên app với tài khoản tạm: 3 hũ mặc định 42/33/25, kê khai trọ và điện ra đề xuất 36/39/25 | FR1 |
 | L03 | Xem Tổng quan và Chi tiết hũ (đọc, độ tươi dự báo) | A | Đang chạy | FR1, FR3 |
 | L04 | **Ghi từ màn hình: xem trước → xác nhận → thực hiện** | A | Đang chạy | FR1, FR12 |
 | L05 | Một lượt chat (router → tool → khối UI → câu trả lời) | B | Đang chạy | FR3, FR12 |
@@ -100,8 +100,8 @@ flowchart LR
 | L16 | Sinh và sinh lại lộ trình | B, C | Đang chạy (phase 4); lập được trong chat | FR8 |
 | L17 | Nạp ảnh và CSV | A, C | Đã deploy (phase 5, chưa đóng); có quy đổi ngoại tệ | FR9 |
 | L18 | Nhắc chủ động và bản tin | C | Đã deploy (phase 5, chưa đóng) | FR13 |
-| L19 | **Chia tiền dư theo thứ tự ưu tiên, trích quỹ dồn, theo dõi hũ đệm** | A, C | Đề xuất 24/11 | FR3, FR7, FR8 |
-| L20 | **Gợi ý chuyển giai đoạn sống** | C → A | Đề xuất 24/11 | FR8 |
+| L19 | **Chia tiền dư theo thứ tự ưu tiên, trích quỹ dồn, theo dõi hũ đệm** | A, C | Một phần 26/11: thứ tự bù khi đề xuất tỷ lệ (BR-65), khoản Quỹ dồn tính một lần khi kê khai (BR-66); mục tiêu và khóa mềm hũ đệm (BR-64), cổng hũ dài hạn (BR-68), mốc Quỹ dồn hoãn | FR3, FR7, FR8 |
+| L20 | **Gợi ý chuyển giai đoạn sống** | C → A | Hoãn 26/11 (BR-70, BR-71) | FR8 |
 
 ## 3. Các luồng đang chạy
 
@@ -119,15 +119,16 @@ flowchart TD
     S([Đăng nhập lần đầu]) --> P{Đã có hồ sơ?}
     P -- Có --> OV[Tổng quan]
     P -- Chưa --> O1["O1: nhập lương thực nhận<br/>và ngày nhận (bắt buộc)"]
-    O1 --> O2["O2: chọn bộ hũ mẫu<br/>GET /jar-templates<br/>(đề xuất: hỏi giai đoạn sống, tùy chọn)"]
-    O2 --> O3["O3: xem lại tỷ lệ chia<br/>tổng = 100%"]
-    O3 --> CF["Xác nhận (L04)<br/>tool update_profile"]
-    CF --> CR["Server tạo hồ sơ, 2 hũ hệ thống<br/>và các hũ mặc định"]
+    O1 --> CF["Xác nhận (L04)<br/>tool update_profile"]
+    CF --> CR["Server tạo hồ sơ, 2 hũ hệ thống<br/>và 3 hũ mặc định: Chi hằng ngày,<br/>Nghĩa vụ, Dự phòng (từ 26/11)"]
     CR --> FC["Tính dự báo lần đầu<br/>nhãn: ước lượng ban đầu"]
-    FC --> OV
+    FC --> O2["O2: chia lương vào các hũ (bỏ qua được)<br/>sửa tỷ lệ, tổng = 100%, save_jars"]
+    O2 --> O3["O3: Chi phí cố định (bỏ qua được)<br/>khai nghĩa vụ, khoản biết trước"]
+    O3 --> SP["POST /jars/split-proposal<br/>thẻ đề xuất tỷ lệ, duyệt qua save_jars (L04)"]
+    SP --> OV
 ```
 
-- Quy tắc: BR-01 (chỉ hai trường bắt buộc), BR-04, BR-05, BR-29.
+- Quy tắc: BR-01 (chỉ hai trường bắt buộc), BR-04, BR-05, BR-29, BR-78 (tỷ lệ Nghĩa vụ theo số đã khai). Bỏ qua O3 thì giữ 42/33/25 và thẻ hũ ghi "chưa có số khai". Câu hỏi giai đoạn sống (BR-70) **hoãn 26/11**. Bộ 7 hũ cũ chỉ còn là hũ tự thêm (cuối [B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)).
 - Onboarding cũng là một thao tác ghi, nên vẫn đi qua xác nhận bằng token.
 
 ### L03 — Xem màn hình (đọc) và độ tươi của dự báo
@@ -338,10 +339,11 @@ flowchart TD
     OB -- Có --> ADD["Cộng dồn gốc vào nghĩa vụ đó<br/>(phí chỉ tính 1 lần)"]
     NEW & ADD --> NOJ["Số dư hũ KHÔNG đổi,<br/>hạn mức còn lại giảm theo gốc"]
     NOJ --> MK["Mốc 'Phải trả dd/mm' trên dòng thời gian dự báo"]
-    MK --> PAY["Đến hạn: trả từ một hũ<br/>-> nghĩa vụ chuyển 'đã trả'"]
+    MK --> PAY["Đến hạn: trả từ hũ trả<br/>-> nghĩa vụ chuyển 'đã trả'"]
 ```
 
 - Quy tắc: BR-22 đến BR-26. Bản xem trước ở bước "Xem lại" hiện "Phải trả ngày dd/mm: trước → sau" và "Hạn mức còn lại: trước → sau".
+- Hũ trả (26/11, issue #39, `resolve_obligation_pay_jar`): hũ đã lưu, hũ người dùng chọn, hũ Nghĩa vụ, rồi hũ `obligation` đầu tiên. Ví không có hũ nào như vậy thì phải chọn hũ trả trước khi mua (agent và màn chuyển tiền hỏi; C-07). Ví demo của `minh` dùng ngày đến hạn 3 (điều khoản mô phỏng, BR-22).
 
 ### L09 — Tính lại dự báo sau giao dịch (sự kiện)
 
@@ -410,7 +412,7 @@ flowchart TD
 ### L12 — Đặt lại dữ liệu demo
 
 1. Người dùng vào Hồ sơ và bấm "Đặt lại dữ liệu", gọi `POST /demo/reset`.
-2. Server chỉ xóa dữ liệu của **chính người gọi**, rồi sinh lại persona theo seed.
+2. Server chỉ xóa dữ liệu của **chính người gọi**, rồi sinh lại persona theo seed, nạp vào bộ hũ demo (từ 26/11: Chi hằng ngày, Nghĩa vụ, Dự phòng cộng hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch, Đầu tư; `minh` 8 hũ), không vào bộ mặc định của onboarding (BR-62).
 3. Ngày mô phỏng quay về ngày neo 21/11/2026; dự báo được tính đồng bộ ngay.
 4. Mất khoảng 6 giây. Trả `forecast_ready: true` để mở app là có số.
 
@@ -482,12 +484,15 @@ flowchart TD
     CONF -- "≥ 0,9" --> ASG
     CONF -- "0,6 đến < 0,9" --> REV["Gán + đưa vào 'Xem lại'"]
     CONF -- "< 0,6" --> WORTH{"Đáng hỏi?<br/>(đủ lớn hoặc sẽ lặp lại)"}
-    WORTH -- Không --> OTHER["Hũ 'Khác', không hỏi"]
+    WORTH -- Không --> OTHER["Hũ 'Khác', không hỏi<br/>(không làm, #28)"]
     WORTH -- Có --> UNC["Chưa phân loại -> hỏi gộp 1 lần/ngày,<br/>mỗi khoản 2 gợi ý"]
     REV & UNC --> FIX["Người dùng sửa:<br/>'chỉ lần này' hoặc 'luôn luôn cho người này'"]
     FIX --> RULE["Tạo luật -> lần sau đi thẳng bước 1"]
     ASG & REV --> UPD["Cập nhật số dư hũ -> L09"]
 ```
+
+- Bước 0 chọn hũ theo `yofina_core.wallet.transaction_jar` (26/11): ví có hũ riêng khớp loại giao dịch thì hũ riêng nhận (ví demo: Ăn uống, Đi lại, Giải trí, Du lịch); không có thì vào Chi hằng ngày (khoản chi) hoặc Nghĩa vụ (hóa đơn, thuê bao). Bốn loại `bnpl_purchase`, `transfer_person`, `qr_other`, `other_expense` không có hũ mặc định nên đi tiếp sang bước 1–3 trên mọi ví ([đo ví 3 hũ](../research/2026-11-26-do-vi-ba-hu.md)).
+- Nhánh hũ "Khác": **không làm** (chủ dự án chốt 26/11, issue #28 đóng; BR-18). Khoản nhỏ một lần đi theo ngưỡng tin cậy như mọi khoản.
 
 ### L16 — Sinh và sinh lại lộ trình
 
@@ -536,6 +541,8 @@ flowchart TD
 
 ### L19 — Chia tiền dư, trích quỹ dồn, theo dõi hũ đệm (đề xuất 24/11)
 
+**Trạng thái 26/11:** một phần, xem dòng L19 ở mục 2 và BR-64 đến BR-68 ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411). Sơ đồ dưới là thiết kế đầy đủ.
+
 ```mermaid
 flowchart TD
     S["Có tiền dư<br/>(lương cao hơn khai, cuối kỳ hũ chi còn thừa)"] --> O{"Nghĩa vụ đến hạn<br/>đã đủ tiền?"}
@@ -555,6 +562,8 @@ flowchart TD
 - Hũ đệm và dài hạn **không tính là tiền có thể chi** trong L14 (BR-68).
 
 ### L20 — Gợi ý chuyển giai đoạn sống (đề xuất 24/11)
+
+**Trạng thái 26/11:** hoãn cùng BR-70, BR-71 (mọi tài khoản mới nhận cùng 3 hũ mặc định).
 
 ```mermaid
 flowchart TD
