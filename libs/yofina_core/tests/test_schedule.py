@@ -15,6 +15,7 @@ from yofina_core.schedule import (
     first_due_from_day,
     midpoint,
     obligation_window,
+    salary_part_on,
 )
 
 
@@ -165,6 +166,24 @@ def test_moc_bieu_do_cua_hu_hoa_don(origin):
         salary_vnd=9_000_000, payday_day=5, split_shares=shares, salary_label="Lương về",
     )  # fmt: skip
     assert all(e.label != "Trả sau" for e in none)
+
+
+def test_phan_luong_cua_hu_dung_ngay_luong_khop_moc_luong_cua_bieu_do():
+    """`salary_part_on` cho đúng số của mốc lương mà `build_timeline_events` vẽ (và đầu vào Monte Carlo cộng), 0 ở ngày khác."""
+    origin = date(2026, 11, 21)
+    shares = [("nghia_vu", 33), ("an_uong", 67)]
+    kw = dict(jar_code="nghia_vu", origin=origin, salary_vnd=9_000_000, payday_day=5, split_shares=shares)
+    (mark,) = [
+        e for e in build_timeline_events(
+            jar_code="nghia_vu", obligations=[], origin=origin, horizon_days=30, default_pay_jar=None,
+            salary_vnd=9_000_000, payday_day=5, split_shares=shares, salary_label="Lương về",
+        )
+    ]  # fmt: skip
+    assert salary_part_on(date(2026, 12, 5), **kw) == mark.amount_vnd == 2_970_000
+    assert salary_part_on(date(2026, 12, 4), **kw) == 0
+    assert salary_part_on(date(2026, 11, 5), **{**kw, "origin": date(2026, 11, 5)}) == 0  # ngày lương là ngày gốc: đã chia
+    assert salary_part_on(date(2026, 12, 5), **{**kw, "salary_vnd": None}) == 0
+    assert salary_part_on(date(2026, 12, 5), **{**kw, "split_shares": [("nghia_vu", 33)]}) == 0  # tỷ lệ không đủ 100%
 
 
 def _due(day, label, amount):

@@ -157,6 +157,28 @@ def build_timeline_events(
     return events
 
 
+def salary_part_on(
+    day: date,
+    *,
+    jar_code: str,
+    origin: date,
+    salary_vnd: int | None,
+    payday_day: int | None,
+    split_shares: Sequence[tuple[str, Any]],
+) -> int:
+    """Phần lương về hũ `jar_code` đúng ngày `day` theo lịch lương của dự báo gốc `origin`: ngày lương sau `origin`, phần chia bằng
+    `split_amount` (cùng quy tắc mốc lương của `build_timeline_events` và đầu vào Monte Carlo của pipeline). 0 khi `day` không phải
+    ngày lương, chưa khai lương, hoặc tỷ lệ chia không đủ 100% (khi đó dự báo không mô phỏng lương)."""
+    if not salary_vnd or not payday_day or day <= origin:
+        return 0
+    if day != payday_in_month(int(payday_day), day.year, day.month):
+        return 0
+    try:
+        return split_amount(int(salary_vnd), list(split_shares)).get(jar_code, 0)
+    except ValueError:
+        return 0
+
+
 def due_before_payday(due: date | str, payday: date | str) -> bool:
     """Cửa sổ "đến hạn trước lương" của kỳ lương `payday`: khoản đến hạn TRƯỚC HOẶC ĐÚNG ngày lương (chốt 26/11, BR-22, #39).
 

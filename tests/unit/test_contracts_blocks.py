@@ -494,6 +494,27 @@ def test_co_khoan_den_han_hoac_so_du_co_ngay_giam_thi_khong_phai_hu_khong_rut_ti
         assert _fallback(data) == "Hũ Dự phòng đủ tới kỳ lương 05/12."
 
 
+def test_cau_thay_the_what_if_hut_ma_ngay_can_sau_ky_luong_khong_noi_so_ngay_am():
+    """Chốt 26/11 (BR-22, phương án B): khoản đến hạn đúng ngày lương thiếu tiền trước khi lương về thì hũ hụt dù số dư cuối ngày (đã
+    cộng lương) chỉ chạm 0 sau kỳ lương (cảnh 2: Trả sau 05/12, tiền thuê 06/12 làm hũ Nghĩa vụ cạn 06/12). Câu không được nói "cạn
+    ngày 06/12, còn -1 ngày tới kỳ lương"; nói hụt trước kỳ lương, khoản thiếu đầu tiên có ngày riêng."""
+    data = load_json(CONTRACTS / "fixtures/blocks/valid/forecast_timeline.what_if.json")["data"]
+    after = {
+        **data["compare"]["after"], "status": "short", "runout_date": "2026-12-06",
+        "obligations_before_payday": {
+            "items": [{"date": "2026-12-05", "kind": "obligation", "label": "Trả sau", "amount_vnd": 2_200_000}],
+            "first_shortfall": {"date": "2026-12-05", "label": "Trả sau", "shortfall_vnd": 1_168_392},
+        },
+    }  # fmt: skip
+    data = {**data, "compare": {**data["compare"], "after": after}}
+    text = _fallback(data)
+    assert "-1 ngày" not in text
+    assert text == (
+        "Nếu Mua tai nghe 500.000 ₫ từ hũ Giải trí: Hũ Giải trí dự kiến hụt trước kỳ lương 05/12. "
+        f"Trả sau ngày 05/12 thiếu {format_vnd(1_168_392)}."
+    )
+
+
 def test_builders_confirm_action_va_receipt_action_chi_nhan_tool_khac_chuyen_hu():
     kw = dict(trace_id="t1", source_tool="x", app_date=date(2026, 11, 21))
     now = datetime(2026, 12, 10, tzinfo=UTC)

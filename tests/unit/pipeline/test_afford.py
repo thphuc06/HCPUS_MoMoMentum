@@ -119,6 +119,41 @@ def test_hoan_toi_ky_luong_dung_so_du_sau_khi_luong_ve():
     assert bad["runout_date_after"] == (PAYDAY + timedelta(days=1)).isoformat()
 
 
+def test_hu_co_khoan_den_han_dung_ngay_luong_xet_ca_ngay_luong_bang_so_du_truoc_khi_luong_ve():
+    """Chốt 26/11 (BR-22, phương án B): khoản đến hạn đúng ngày lương là đến hạn trước lương, trả bằng số dư TRƯỚC khi lương ngày đó
+    về. Hũ Nghĩa vụ 625.000 ₫ tới 04/12; 05/12 trừ Trả sau 1.000.000 ₫ và cộng 1.800.000 ₫ lương (cuối ngày 1.425.000 ₫). Chi
+    250.000 ₫ hôm nay: các ngày trước lương vẫn dương, nhưng trước khi lương về hũ còn 375.000 ₫ cho khoản 1.000.000 ₫."""
+    p50 = [625_000] * 13 + [1_425_000] * 17  # 22/11 .. 21/12, ngày thứ 14 là 05/12
+    assert series(p50)[13][0] == PAYDAY
+    common = dict(
+        jar=JAR, balance_now_vnd=625_000, series=series(p50), origin=APP_DATE, payday=PAYDAY, runout_before=None,
+        amount_vnd=250_000, pay_date=APP_DATE, short_floor_vnd=0, tight_floor_vnd=0, runout_threshold_vnd=0,
+    )  # fmt: skip
+    old = jar_check(**common)  # hũ không có khoản đến hạn đúng ngày lương: như trước, cửa sổ dừng ở 04/12
+    assert old["status"] == "ok" and "shortfall_vnd" not in old
+    c = jar_check(**common, payday_salary_vnd=1_800_000)
+    assert c["status"] == "short"
+    assert c["shortfall_vnd"] == 1_800_000 - (1_425_000 - 250_000)  # 625.000 ₫ thiếu cho khoản ngày lương
+    assert c["balance_before_vnd"] == 625_000 and c["balance_after_vnd"] == 375_000
+    # chi ĐÚNG ngày lương (phương án hoãn): chi sau khi lương về, không đổi
+    assert jar_check(**{**common, "pay_date": PAYDAY}, payday_salary_vnd=1_800_000) == jar_check(**{**common, "pay_date": PAYDAY})
+
+
+def test_tra_sau_den_han_dung_ngay_luong_tinh_so_du_truoc_khi_luong_ve():
+    """`JarAtDue` của khoản đến hạn đúng ngày lương (phương án B): số dư cuối ngày đến hạn đã trừ khoản và đã cộng lương; tiền có để
+    trả là số dư đó cộng lại khoản, TRỪ lương về cùng ngày. Cuối ngày 05/12 còn 225.000 ₫ sau 2.200.000 ₫ Trả sau và 1.800.000 ₫
+    lương: trước khi lương về hũ có 625.000 ₫, thiếu 1.575.000 ₫."""
+    from yofina_forecast.credit import jar_at_due
+
+    days = [(PAYDAY - timedelta(days=1), 600_000, 625_000, 650_000), (PAYDAY, 200_000, 225_000, 250_000)]
+    kw = dict(jar=JAR, days=days, due_date=PAYDAY, due_vnd=2_200_000, short_floor_vnd=0, tight_floor_vnd=0)
+    old = jar_at_due(**kw)  # không có lương cùng ngày: như trước
+    assert (old["status"], old["balance_before_due_vnd"], old["shortfall_vnd"]) == ("ok", 2_425_000, 0)
+    at = jar_at_due(**kw, income_on_due_vnd=1_800_000)
+    assert (at["status"], at["balance_before_due_vnd"], at["shortfall_vnd"]) == ("short", 625_000, 1_575_000)
+    assert at["due_vnd"] == 2_200_000
+
+
 # --- engine ------------------------------------------------------------------------------------------
 def engine(**kw):
     pipeline, mem, repo, ref, settings = build(**kw)
@@ -198,6 +233,46 @@ def test_nguon_tra_sau_rieng_khong_co_jar_checks_va_ket_luan_theo_tra_sau():
     assert d["funding_source"] == "credit" and d["jar_checks"] == []
     assert d["verdict"] == d["credit"]["status"]
     assert d["credit"]["cost"]["total_due_vnd"] == 2_200_000
+
+
+#: phần lương của hũ Nghĩa vụ trong dữ liệu dựng sẵn: 20% của 9.000.000 ₫, về ngày lương 05/12
+NGHIA_VU_SALARY = 1_800_000
+
+
+def _p50(eng, jar):
+    return {r["day"]: int(r["balance_p50_vnd"]) for r in eng.repo.forecast_series(USER, jar)}
+
+
+def test_tra_sau_den_han_dung_ngay_luong_thieu_tien_truoc_khi_luong_ve_la_hut():
+    """Chốt 26/11 (BR-22, phương án B): Trả sau đến hạn 05/12, đúng ngày lương. Tiền để trả là số dư hũ Nghĩa vụ TRƯỚC khi lương ngày
+    đó về: cuối ngày 05/12 (đã trừ 2.200.000 ₫, đã cộng lương) còn dương nhưng trước khi lương về thì thiếu."""
+    eng, _, _ = engine()
+    p50 = _p50(eng, "nghia_vu")
+    d = ok(eng, amount_vnd=1_200_000, funding_source="credit")
+    at = d["credit"]["at_due"][0]
+    end_of_day = p50[PAYDAY] - 1_200_000  # số dư cuối ngày đến hạn sau khi thêm món
+    assert end_of_day >= 0  # tiền đề: lương cùng ngày che được khoản, quy tắc cũ nói "đủ"
+    before_salary = end_of_day - NGHIA_VU_SALARY + 2_200_000
+    assert (at["status"], at["balance_before_due_vnd"], at["due_vnd"]) == ("short", before_salary, 2_200_000)
+    assert at["shortfall_vnd"] == 2_200_000 - before_salary > 0
+    assert d["credit"]["status"] == d["verdict"] == "short"
+
+
+def test_chi_tu_hu_tra_khoan_den_han_dung_ngay_luong_xet_so_du_truoc_khi_luong_ve():
+    """Chi 250.000 ₫ từ hũ Nghĩa vụ hôm nay: các ngày trước 05/12 vẫn dương, nhưng khoản Trả sau 1.000.000 ₫ đến hạn đúng ngày lương
+    trả bằng số dư trước khi lương về (phương án B), nên hụt đúng phần thiếu của khoản đó."""
+    eng, _, _ = engine()
+    p50 = _p50(eng, "nghia_vu")
+    d = ok(eng, amount_vnd=250_000, jar="nghia_vu")
+    first = d["jar_checks"][0]
+    before_payday = [v - 250_000 for day, v in p50.items() if day < PAYDAY]
+    on_payday = p50[PAYDAY] - 250_000 - NGHIA_VU_SALARY
+    assert min(before_payday) >= 0 > on_payday  # tiền đề: quy tắc cũ (chỉ ngày trước lương) nói "đủ"
+    assert first["jar"]["code"] == "nghia_vu" and first["status"] == "short"
+    assert first["shortfall_vnd"] == -on_payday
+    # hũ không có khoản đến hạn đúng ngày lương thì như trước: cửa sổ dừng ở ngày trước lương
+    giai_tri = next(c for c in ok(eng, amount_vnd=30_000, jar="giai_tri")["jar_checks"] if c["jar"]["code"] == "giai_tri")
+    assert giai_tri["status"] == "ok"
 
 
 def test_tra_sau_vuot_han_muc_khi_xet_rieng_la_loi_con_khi_xet_ca_hai_thi_bo_qua_tra_sau():

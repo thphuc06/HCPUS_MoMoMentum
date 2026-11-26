@@ -657,36 +657,58 @@ def _runs_out_by_payday(jf: JarForecast) -> bool:
     return s.runout_date is not None and s.runout_date <= s.payday_date
 
 
-def _status(jf: JarForecast) -> str:
-    """Trạng thái hiển thị trên thẻ what-if: trạng thái của engine, trừ khi hũ cạn trước hoặc đúng ngày lương thì là hụt (cùng
-    nghĩa "hụt trước kỳ lương" mà người dùng đọc cạnh ngày cạn và số dư thấp nhất của chính thẻ)."""
-    return "short" if _runs_out_by_payday(jf) else jf.summary.status
+def _due_window(inputs: ForecastInputs, jf: JarForecast) -> dict[str, Any]:
+    """Khoản đến hạn trước lương (gồm ngày lương) của hũ của `jf` và khoản thiếu đầu tiên theo số dư P50 của chính dự báo đó
+    (`yofina_core.schedule.obligation_window`: khoản đến hạn đúng ngày lương trả bằng số dư trước khi lương ngày đó về)."""
+    jar = inputs.jars[_jar_index(inputs, jf.summary.jar_code)]
+    return obligation_window(
+        _events_payload(jar, include_original_dates=True),
+        jf.summary.payday_date.isoformat(),
+        {d.date.isoformat(): d.balance_p50_vnd for d in jf.days},
+        opening_balance_vnd=jar.balance_vnd,
+    )
 
 
-def _p(jf: JarForecast) -> float | None:
-    """Xác suất hụt để hiển thị. Bỏ khi hũ cạn ngay ngày lương: xác suất của engine không xét ngày đó nên con số (thường 0%)
-    sẽ nói ngược với trạng thái hụt và ngày cạn; khi đó thẻ chỉ nói ngày cạn."""
+def _short_by_payday(jf: JarForecast, window: Mapping[str, Any] | None) -> bool:
+    """Hụt tới kỳ lương mà xác suất của engine không thấy: hũ cạn trước hoặc đúng ngày lương, hoặc một khoản đến hạn trước lương
+    thiếu tiền (`window`, từ `_due_window`). Khoản đến hạn ĐÚNG ngày lương trả bằng số dư trước khi lương về (chốt 26/11, BR-22), nên
+    số dư cuối ngày lương (đã cộng lương) còn dương mà khoản đó vẫn thiếu."""
+    return _runs_out_by_payday(jf) or bool(window and window.get("first_shortfall"))
+
+
+def _status(jf: JarForecast, window: Mapping[str, Any] | None = None) -> str:
+    """Trạng thái hiển thị trên thẻ what-if: trạng thái của engine, trừ khi hũ hụt tới kỳ lương theo `_short_by_payday` thì là hụt
+    (cùng nghĩa "hụt trước kỳ lương" mà người dùng đọc cạnh ngày cạn, số dư thấp nhất và khoản thiếu đầu tiên của chính thẻ)."""
+    return "short" if _short_by_payday(jf, window) else jf.summary.status
+
+
+def _p(jf: JarForecast, window: Mapping[str, Any] | None = None) -> float | None:
+    """Xác suất hụt để hiển thị. Bỏ khi hũ hụt mà engine không thấy (`_short_by_payday`: cạn ngay ngày lương, khoản đến hạn đúng
+    ngày lương thiếu tiền trước khi lương về): xác suất của engine không xét ngày lương nên con số (thường 0%) sẽ nói ngược với trạng
+    thái hụt; khi đó thẻ chỉ nói ngày cạn hoặc khoản thiếu."""
     s = jf.summary
     if not s.show_probability or s.p_shortfall is None:
         return None
-    if _runs_out_by_payday(jf) and s.status != "short":
+    if _short_by_payday(jf, window) and s.status != "short":
         return None
     return round(float(s.p_shortfall), 4)
 
 
-def _p_se(jf: JarForecast) -> float | None:
+def _p_se(jf: JarForecast, window: Mapping[str, Any] | None = None) -> float | None:
     s = jf.summary
     return (
         round(float(s.p_shortfall_se), 5)
-        if _p(jf) is not None and s.p_shortfall_se is not None
+        if _p(jf, window) is not None and s.p_shortfall_se is not None
         else None
     )
 
 
-def _impact_key(b: JarForecast, a: JarForecast) -> tuple[int, int, int]:
+def _impact_key(
+    b: JarForecast, a: JarForecast, wb: Mapping[str, Any] | None = None, wa: Mapping[str, Any] | None = None
+) -> tuple[int, int, int]:
     """Hũ bị tác động nhiều hơn xếp trước: trạng thái xấu đi nhiều, rồi số dư thấp nhất giảm nhiều, rồi trạng thái SAU nặng hơn."""
-    worsen = STATUS_RANK[_status(a)] - STATUS_RANK[_status(b)]
-    return (-worsen, _min_p50(a) - _min_p50(b), -STATUS_RANK[_status(a)])
+    worsen = STATUS_RANK[_status(a, wa)] - STATUS_RANK[_status(b, wb)]
+    return (-worsen, _min_p50(a) - _min_p50(b), -STATUS_RANK[_status(a, wa)])
 
 
 class ScenarioEngine:
@@ -999,7 +1021,12 @@ class ScenarioEngine:
     ) -> dict[str, Any]:
         s = self.settings
         pairs = list(zip(before.jars, after.jars, strict=True))
-        pairs.sort(key=lambda p: _impact_key(p[0], p[1]))
+        # khoản đến hạn trước lương (gồm ngày lương) của từng hũ TRƯỚC và SAU: danh sách của hũ Nghĩa vụ, và trạng thái hụt khi một khoản
+        # thiếu tiền mà xác suất của engine không thấy (khoản đúng ngày lương trả bằng số dư trước khi lương về)
+        windows = {
+            b.summary.jar_code: (_due_window(built_inputs, b), _due_window(applied.inputs, a)) for b, a in pairs
+        }
+        pairs.sort(key=lambda p: _impact_key(p[0], p[1], *windows[p[0].summary.jar_code]))
         basis = self._basis(before, after, now)
         run = before.run
         horizon = s.horizon_days
@@ -1015,28 +1042,29 @@ class ScenarioEngine:
             )
             runout_b = sb.runout_date if date_shown else None
             runout_a = sa.runout_date if date_shown else None
+            wb, wa = windows[sb.jar_code]
             effect: dict[str, Any] = {
                 "jar": meta.ref(),
-                "status_before": _status(b),
-                "status_after": _status(a),
+                "status_before": _status(b, wb),
+                "status_after": _status(a, wa),
                 "min_balance_delta_vnd": _min_p50(a) - _min_p50(b),
             }
             if runout_b:
                 effect["runout_date_before"] = runout_b.isoformat()
             if runout_a:
                 effect["runout_date_after"] = runout_a.isoformat()
-            if _p(b) is not None:
-                effect["p_shortfall_before"] = _p(b)
-            if _p(a) is not None:
-                effect["p_shortfall_after"] = _p(a)
+            p_b, p_a = _p(b, wb), _p(a, wa)
+            if p_b is not None:
+                effect["p_shortfall_before"] = p_b
+            if p_a is not None:
+                effect["p_shortfall_after"] = p_a
             effects.append(effect)
             if len(timelines) >= MAX_TIMELINES:
                 continue
             code = sb.jar_code
             jar_in = built_inputs.jars[_jar_index(built_inputs, code)]
-            p_b, p_a = _p(b), _p(a)
             path: dict[str, Any] = {
-                "status": _status(a),
+                "status": _status(a, wa),
                 "min_balance_p50_vnd": _min_p50(a),
                 "days": _days_payload(a),
             }
@@ -1044,8 +1072,8 @@ class ScenarioEngine:
                 path["runout_date"] = runout_a.isoformat()
             if p_a is not None:
                 path["p_shortfall"] = p_a
-                if _p_se(a) is not None:
-                    path["p_shortfall_se"] = _p_se(a)
+                if _p_se(a, wa) is not None:
+                    path["p_shortfall_se"] = _p_se(a, wa)
             extra = applied.extra_events.get(code)
             if extra:
                 path["events"] = extra[:60]
@@ -1057,7 +1085,7 @@ class ScenarioEngine:
                 delta["p_shortfall_delta"] = round(p_a - p_b, 4)
             tl: dict[str, Any] = {
                 "jar": meta.ref(),
-                "status": _status(b),
+                "status": _status(b, wb),
                 "origin_date": today.isoformat(),
                 "start_balance_vnd": sb.start_balance_vnd,
                 "horizon_days": horizon,
@@ -1081,22 +1109,15 @@ class ScenarioEngine:
                 },
             }
             if code == DEFAULT_OBLIGATION_JAR and meta.kind == "obligation":
-                jar_after = applied.inputs.jars[_jar_index(applied.inputs, code)]
-                for target, source, forecast in ((tl, jar_in, b), (path, jar_after, a)):
-                    target["obligations_before_payday"] = obligation_window(
-                        _events_payload(source, include_original_dates=True),
-                        forecast.summary.payday_date.isoformat(),
-                        {d.date.isoformat(): d.balance_p50_vnd for d in forecast.days},
-                        opening_balance_vnd=source.balance_vnd,
-                    )
+                tl["obligations_before_payday"], path["obligations_before_payday"] = wb, wa
             if runout_b:
                 tl["runout_date"] = runout_b.isoformat()
             if not date_shown:
                 tl["runout_date_shown"] = False
             if p_b is not None:
                 tl["p_shortfall"] = p_b
-                if _p_se(b) is not None:
-                    tl["p_shortfall_se"] = _p_se(b)
+                if _p_se(b, wb) is not None:
+                    tl["p_shortfall_se"] = _p_se(b, wb)
             if run.data_coverage is not None:
                 tl["coverage"] = round(float(run.data_coverage), 3)
             timelines.append(
@@ -1142,6 +1163,10 @@ class ScenarioEngine:
             (d.date, d.balance_p10_vnd, d.balance_p50_vnd, d.balance_p90_vnd) for d in jf.days
         ]
         due_vnd = applied.existing_due_on_pay_jar + cost["principal_vnd"] + cost["fee_added_vnd"]
+        # đến hạn đúng ngày lương: trả bằng số dư trước khi lương ngày đó về (BR-22), lương lấy từ chính đầu vào Monte Carlo của hũ
+        salary = sum(
+            f.amount_vnd for f in applied.inputs.jars[_jar_index(applied.inputs, applied.pay_jar)].inflows if f.date == due
+        )
         entry = jar_at_due(
             jar=metas[applied.pay_jar].ref(),
             days=series,
@@ -1149,6 +1174,7 @@ class ScenarioEngine:
             due_vnd=due_vnd,
             short_floor_vnd=short_floor,
             tight_floor_vnd=tight_floor,
+            income_on_due_vnd=salary,
         )
         view, ob_rows = facts_inputs
         facts = facts_from_rows(

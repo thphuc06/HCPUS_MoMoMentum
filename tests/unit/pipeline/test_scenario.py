@@ -254,6 +254,46 @@ def test_tra_sau_den_han_dung_ngay_luong_lam_hu_can_thi_trang_thai_sau_la_hut(sa
     assert tl["status"] == eff["status_before"]  # TRƯỚC giữ đúng trạng thái của dự báo nền
 
 
+def test_tra_sau_den_han_dung_ngay_luong_tra_bang_so_du_truoc_khi_luong_ve(saved):
+    """Chốt 26/11 (BR-22, phương án B): khoản đến hạn ĐÚNG ngày lương là đến hạn trước lương, và tiền để trả nó không gồm lương về
+    cùng ngày. Dữ liệu dựng sẵn: hũ Nghĩa vụ 1.000.000 ₫, tiền điện 375.000 ₫ ngày 26/11, Trả sau 1.000.000 ₫ ngày 05/12, lương chia
+    vào hũ ngày 05/12. Mua thêm 1.200.000 ₫: cuối ngày 05/12 (đã cộng lương) hũ vẫn dương, nên quy tắc cũ (số dư cuối ngày) nói "đủ";
+    trước khi lương về thì thiếu. Danh sách, khoản thiếu đầu tiên, hũ hụt khi đến hạn và trạng thái SAU cùng một mốc."""
+    from datetime import UTC, datetime
+
+    from yofina_core.blocks import build_forecast_timeline_from_data
+
+    eng, _ = engine()
+    d = run(eng, {"kind": "bnpl_purchase", "amount_vnd": 1_200_000, "funding_source": "credit", "label": "tai nghe"}, saved)
+    tl = d["timelines"][0]
+    payday = tl["payday"]["date"]
+    after = tl["compare"]["after"]
+    assert tl["jar"]["code"] == "nghia_vu" and d["obligation_impact"]["cost"]["due_date"] == payday
+    salary = next(e["amount_vnd"] for e in tl["events"] if e["kind"] == "salary" and e["date"] == payday)
+    end_of_day = next(x["p50_vnd"] for x in after["days"] if x["date"] == payday)
+    assert end_of_day >= 0 and "runout_date" not in after  # tiền đề: lương cùng ngày che được khoản theo số dư cuối ngày
+    before_salary = end_of_day + 2_200_000 - salary  # tiền có để trả khoản ngày lương
+    window = after["obligations_before_payday"]
+    assert [(i["date"], i["amount_vnd"]) for i in window["items"]][-1] == (payday, 2_200_000)
+    assert window["first_shortfall"] == {
+        "date": payday, "label": "Trả sau (mô phỏng)", "shortfall_vnd": 2_200_000 - before_salary,
+    }  # fmt: skip
+    at = d["obligation_impact"]["at_due"][0]
+    assert (at["status"], at["balance_before_due_vnd"], at["shortfall_vnd"]) == (
+        "short", before_salary, 2_200_000 - before_salary,
+    )  # fmt: skip
+    assert d["obligation_impact"]["status"] == "short"
+    # trạng thái SAU là hụt, không kèm xác suất của engine (chỉ xét các ngày trước ngày lương, nói ngược với chữ "Hụt")
+    assert after["status"] == "short" and "p_shortfall" not in after and "p_shortfall_delta" not in tl["compare"]["delta"]
+    eff = next(e for e in d["effects"] if e["jar"]["code"] == "nghia_vu")
+    assert eff["status_after"] == "short" and "p_shortfall_after" not in eff
+    block = build_forecast_timeline_from_data(
+        data=tl, trace_id="t1", source_tool="forecast___run_scenario", as_of=datetime(2026, 12, 10, tzinfo=UTC),
+        app_date=APP_DATE,
+    )  # fmt: skip
+    assert "đủ tới kỳ lương" not in block.fallback_text and "Hũ Nghĩa vụ dự kiến hụt" in block.fallback_text
+
+
 def test_recurring_obligation_defaults_to_shared_jar(saved):
     eng, _ = engine()
     data = run(eng, {

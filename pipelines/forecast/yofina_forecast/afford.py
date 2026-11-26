@@ -7,7 +7,8 @@ phối; trừ một khoản tất định `a` khỏi mọi đường từ ngày 
 đọc được chính xác từ bảng `forecasts` (cùng dãy số ngẫu nhiên với dự báo của hũ), không cần mô phỏng lại:
 
 - **hụt**: số dư P50 sau khi chi xuống dưới ngưỡng `affordability_short_p50_floor_vnd` ở một ngày nào trước kỳ lương (hoặc số
-  dư hôm nay không đủ chi); `shortfall_vnd` là số đồng thiếu (M đồng trước kỳ lương);
+  dư hôm nay không đủ chi); `shortfall_vnd` là số đồng thiếu (M đồng trước kỳ lương). Hũ trả một khoản đến hạn ĐÚNG ngày lương thì
+  ngày lương cũng được xét, bằng số dư trước khi lương về (chốt 26/11, BR-22);
 - **sát**: không hụt nhưng số dư P10 (kịch bản xấu) xuống dưới `affordability_tight_p10_floor_vnd` trước kỳ lương; `days_earlier` là
   số ngày hũ cạn sớm hơn so với dự báo hiện tại khi có ngày cạn;
 - **đủ**: còn lại.
@@ -22,7 +23,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -35,7 +36,7 @@ from yofina_core.blocks import (
 from yofina_core.clock import app_today
 from yofina_core.errors import PAY_JAR_FIELD, ErrorCode, YofinaError
 from yofina_core.money import format_vnd, to_vnd
-from yofina_core.schedule import bnpl_due_date
+from yofina_core.schedule import bnpl_due_date, salary_part_on
 from yofina_core.suitability import Proposal
 from yofina_core.wallet import BNPL_PRODUCT_CODE, resolve_obligation_pay_jar
 from yofina_forecast.common import (
@@ -96,6 +97,7 @@ def jar_check(
     tight_floor_vnd: int,
     runout_threshold_vnd: int,
     runout_date_shown: bool = True,
+    payday_salary_vnd: int | None = None,
 ) -> dict[str, Any]:
     """`JarCheck` của một hũ nếu chi `amount_vnd` ngày `pay_date` bằng tiền hũ này (xem docstring module cho luật trạng thái).
 
@@ -103,6 +105,10 @@ def jar_check(
     tới kỳ lương"): lương đã về hũ trong ngày đó nên số dư lúc chi là số dư P50 cuối chính ngày chi (đã gồm lương và các khoản đến hạn
     cùng ngày, cách tính thận trọng), và cửa sổ xét hụt/sát là từ ngày chi tới hết khoảng dự báo, vì các ngày trước kỳ lương không
     bị khoản chi này đụng tới.
+
+    `payday_salary_vnd` (chỉ khi hũ trả một khoản đến hạn ĐÚNG ngày lương, chốt 26/11, BR-22): khoản đó là đến hạn trước lương và trả
+    bằng số dư TRƯỚC khi lương về, nên cửa sổ của khoản chi trước ngày lương gồm cả ngày lương, với số dư cuối ngày đó trừ phần lương
+    về hũ (như `yofina_core.schedule.obligation_window`). None: hũ không có khoản như vậy, cửa sổ dừng ở ngày trước lương.
 
     `runout_date_shown` sai (hũ thưa, #25: cột cùng tên của dòng tóm tắt dự báo) thì không nêu ngày cạn trước, sau và số ngày cạn
     sớm hơn (ngày cạn của hũ thưa sai trung bình hơn 6 ngày); trạng thái và phần thiếu tính như cũ."""
@@ -121,6 +127,9 @@ def jar_check(
         window = [x for x in after if x[0] >= start]
     else:
         window = [x for x in after if first <= x[0] < payday]
+        if payday_salary_vnd is not None:
+            s = payday_salary_vnd
+            window += [(d, p10 - s, p50 - s, p90 - s) for d, p10, p50, p90 in after if d == payday]
     min_p50 = min((x[2] for x in window), default=None)
     min_p10 = min((x[1] for x in window), default=None)
     lows = [v for v in (min_p50, after_balance) if v is not None]
@@ -188,6 +197,46 @@ def jar_headline(check: Mapping[str, Any], payday: date, amount_vnd: int) -> str
         f"Hụt: hũ {name} dự kiến hụt khoảng {format_vnd(check.get('shortfall_vnd', 0))} "
         f"trước kỳ lương {dm(payday)}."
     )
+
+
+def _salary_lookup(
+    user: Mapping[str, Any], user_jars: Sequence[Mapping[str, Any]], by_summary: Mapping[str, Mapping[str, Any]]
+) -> Callable[[str, date], int]:
+    """(mã hũ, ngày) -> phần lương về hũ đúng ngày đó theo lịch của dự báo đã lưu của hũ (`yofina_core.schedule.salary_part_on`:
+    hồ sơ lương, tỷ lệ chia của ví, ngày gốc của lần chạy), để xét khoản đến hạn đúng ngày lương bằng số dư trước khi lương về."""
+    shares = [(j["code"], j["split_percent"]) for j in user_jars]
+
+    def salary_on(code: str, day: date) -> int:
+        summ = by_summary.get(code)
+        if summ is None:
+            return 0
+        return salary_part_on(
+            day,
+            jar_code=code,
+            origin=to_date(summ["run_app_date"]),  # type: ignore[arg-type]
+            salary_vnd=to_vnd(user["monthly_salary_vnd"]),
+            payday_day=int(user["payday_day"]),
+            split_shares=shares,
+        )
+
+    return salary_on
+
+
+def _pays_on_payday(
+    facts: SuitabilityFacts, codes: Iterable[str], by_summary: Mapping[str, Mapping[str, Any]]
+) -> list[str]:
+    """Hũ trong `codes` trả ít nhất một khoản đến hạn ĐÚNG ngày lương kế của dự báo của hũ (khoản đó là đến hạn trước lương, chốt 26/11,
+    BR-22). Khoản xét từ ngày dự báo đầu tiên như dự báo trừ (khoản quá hạn dồn vào ngày đó)."""
+    out = []
+    for code in codes:
+        summ = by_summary.get(code)
+        if summ is None:
+            continue
+        payday = to_date(summ["payday_date"])
+        first = to_date(summ["run_app_date"]) + timedelta(days=1)  # type: ignore[operator]
+        if any(d == payday and facts.pay_jar_of(ob) == code for ob, d in facts.dues_between(first, payday)):  # type: ignore[arg-type]
+            out.append(code)
+    return out
 
 
 # =====================================================================================
@@ -341,6 +390,11 @@ class AffordabilityEngine:
             futures = {c: pool.submit(self.repo.forecast_series, user_id, c) for c in needed}
             series = {c: self._series(f.result()) for c, f in futures.items()}
         stale = any(self._is_stale(by_summary[c], today, now) for c in needed if c in by_summary)
+        salary_on = _salary_lookup(user, user_jars, by_summary)
+        payday_salary = {
+            c: salary_on(c, to_date(by_summary[c]["payday_date"]))  # type: ignore[arg-type]
+            for c in _pays_on_payday(facts, needed, by_summary)
+        }
 
         short_floor = self.s.affordability_short_p50_floor_vnd
         tight_floor = self.s.affordability_tight_p10_floor_vnd
@@ -368,6 +422,7 @@ class AffordabilityEngine:
                     tight_floor_vnd=tight_floor,
                     runout_threshold_vnd=runout_thr,
                     runout_date_shown=summ.get("runout_date_shown") is not False,
+                    payday_salary_vnd=payday_salary.get(code),
                 )
             )
 
@@ -383,6 +438,7 @@ class AffordabilityEngine:
                 basis,
                 facts,
                 amount,
+                salary_on,
             )
             if credit_ctx is not None
             else None
@@ -440,6 +496,7 @@ class AffordabilityEngine:
             verdict=verdict,
             thresholds=(short_floor, tight_floor, runout_thr),
             origin=today,
+            payday_salary=payday_salary,
         )
 
         card: dict[str, Any] = {
@@ -613,10 +670,12 @@ class AffordabilityEngine:
             if funding == "credit" or pay_jar is not None:
                 raise YofinaError(ErrorCode.PARAMS_INVALID, "Chọn hũ để trả khoản Trả sau này.", field=PAY_JAR_FIELD)
             return None
+        # khoản của hũ trả đến hạn ĐÚNG ngày đó (như các khoản dự báo trừ ngày đó): xét từ ngày mai, vì `dues_between` dồn khoản có hạn
+        # trước ngày đầu của khoảng vào ngày đầu (tiền điện 26/11 từng bị cộng vào ngày đến hạn 05/12 của Trả sau)
         dues = [
             ob.amount_vnd
-            for ob, d in facts.dues_between(due, due)  # type: ignore[arg-type]
-            if facts.pay_jar_of(ob) == pay
+            for ob, d in facts.dues_between(today + timedelta(days=1), due)  # type: ignore[arg-type]
+            if d == due and facts.pay_jar_of(ob) == pay
         ]
         return {"cost": cost, "pay_jar": pay, "existing_on_jar": sum(dues), "due": due}
 
@@ -631,6 +690,7 @@ class AffordabilityEngine:
         basis: Mapping[str, Any],
         facts: SuitabilityFacts,
         amount: int,
+        salary_on: Callable[[str, date], int],
     ) -> dict[str, Any]:
         cost = cc["cost"]
         pay = cc["pay_jar"]
@@ -645,6 +705,7 @@ class AffordabilityEngine:
             due_vnd=cc["existing_on_jar"] + charge,
             short_floor_vnd=short_floor,
             tight_floor_vnd=tight_floor,
+            income_on_due_vnd=salary_on(pay, due),  # đến hạn đúng ngày lương: trả bằng số dư trước khi lương về (BR-22)
         )
         ratio = obligation_ratio_figures(facts, cost["item_cost_vnd"], self.rules)
         verdict = evaluate(
@@ -699,6 +760,7 @@ class AffordabilityEngine:
         verdict: str,
         thresholds: tuple[int, int, int],
         origin: date,
+        payday_salary: Mapping[str, int] | None = None,
     ) -> list[dict[str, Any]]:
         """Phương án tất định. Chỉ khi chưa "đủ" mới đưa phương án; mỗi phương án đã qua bộ luật, bị block thì loại."""
         if verdict == "ok":
@@ -800,6 +862,7 @@ class AffordabilityEngine:
                 tight_floor_vnd=tight_floor,
                 runout_threshold_vnd=runout_thr,
                 runout_date_shown=summ.get("runout_date_shown") is not False,
+                payday_salary_vnd=(payday_salary or {}).get(base_jar),
             )
             deferred = jar_check(amount_vnd=amount, pay_date=payday, **common)  # type: ignore[arg-type]
             out.append(
