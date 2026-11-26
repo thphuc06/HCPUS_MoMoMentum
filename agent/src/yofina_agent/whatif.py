@@ -780,8 +780,9 @@ def code_spec(r: IntentResult, rows: list[dict[str, Any]]) -> dict[str, Any] | N
     Đủ nghĩa là router đã trích loại kịch bản (`scenario_kind`), `deterministic_spec` dựng được spec hợp lệ với mã hũ thật, và router
     không trích điều gì mà spec dựng bằng mã bỏ qua. Loại trống thì `deterministic_spec` đoán loại từ nguồn tiền (Trả sau, hũ): đủ
     cho đường dự phòng khi model lỗi, nhưng câu chi lặp lại mà router bỏ sót loại sẽ thành mua một lần, nên để model dựng.
-    `deterministic_spec` không đọc ngày, nên câu có cụm chỉ thời gian (`date_text`) cũng để model đổi ra ngày cụ thể."""
-    if r.params.scenario_kind is None or r.params.date_text:
+    `deterministic_spec` không đọc ngày, nên câu có cụm chỉ thời gian (`date_text`) hay đặc tả ngày (`date_spec`) cũng để model dựng
+    (Orchestrator đổi đặc tả ra ngày bằng tool `knowledge___resolve_date`)."""
+    if r.params.scenario_kind is None or r.params.date_text or r.params.date_spec is not None:
         return None
     spec = deterministic_spec(r, rows)
     spec = validate_spec(spec) if spec is not None else None

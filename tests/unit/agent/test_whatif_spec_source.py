@@ -256,6 +256,11 @@ def test_cum_ngay_cua_router_thi_khong_dung_spec_bang_ma():
         update={"params": with_date.params.model_copy(update={"date_text": None})}
     )
     assert code_spec(plain, jars) == BNPL_SPEC
+    # router chỉ trả đặc tả ngày (không chép cụm chữ): mã cũng không tự dựng spec bỏ mất ngày, để Orchestrator đổi đặc tả ra ngày
+    spec_only = with_date.model_copy(
+        update={"params": with_date.params.model_copy(update={"date_text": None, "date_spec": {"anchor": "start_of", "period": "week", "period_offset": 1}})}
+    )
+    assert code_spec(spec_only, jars) is None
 
 
 def test_router_khong_trich_loai_kich_ban_thi_khong_dung_spec_bang_ma():
