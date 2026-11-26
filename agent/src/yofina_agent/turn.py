@@ -1345,23 +1345,27 @@ class Turn:
 
     async def ask_goal_jar(self, r: IntentResult) -> bool:
         """Mục tiêu người dùng nêu chưa gắn được với hũ nào (router không trích hũ, hoặc chữ họ gõ khớp nhiều hũ): hỏi lại đúng một câu
-        chọn hũ (khối `clarify`, chip là các hũ gắn được mục tiêu lộ trình, theo thứ tự trong ví) và kết thúc lượt. True nếu đã hỏi.
+        chọn hũ (khối `clarify`, chip là mọi hũ gắn được mục tiêu lộ trình, theo thứ tự trong ví) và kết thúc lượt. True nếu đã hỏi.
 
-        Không hỏi khi đọc hũ hỏng (lập lộ trình báo lỗi của tool) hoặc ví không có hũ nào gắn được mục tiêu (không có gì để chọn)."""
+        Không hỏi khi đọc hũ hỏng (lập lộ trình báo lỗi của tool) hoặc ví không có hũ nào gắn được mục tiêu (không có gì để chọn).
+        Chat chưa có luồng thêm hũ (chip chỉ gửi chữ vào chat, không mở màn hình), nên không có chip "thêm hũ Mục tiêu"."""
         jars = await self.ensure_jars()
         if not jars.outcome.ok:
             return False
         match = resolve_jar(r.params.jar_text, self._jar_rows)
         if match.status not in ("empty", "ambiguous"):
             return False
+        # Mọi hũ gắn được mục tiêu (hũ mục tiêu, hũ Dự phòng), theo thứ tự trong ví, không cắt bớt (T1, #39): số chip tối đa của khối
+        # bằng số hũ người dùng tối đa của một ví.
         eligible = [j for j in self._jar_rows if _holds_roadmap_target(j) and j.get("name")]
         among = [j for j in eligible if j["code"] in match.candidates]
-        rows = (among or eligible)[:6]
+        rows = (among or eligible)[: B.CLARIFY_MAX_CHIPS]
         if not rows:
             return False
         chips = [ClarifyChipIn(label=str(j["name"])[:40], value=f"Hũ {j['name']}"[:80]) for j in rows]
+        # chip đi thẳng vào khối (trần của khối), không qua `ClarifyRequest` (trần chip router được đặt)
         await self.emit_clarify(
-            ClarifyRequest(slot="jar", question=notices.ROADMAP_GOAL_JAR_QUESTION, chips=chips), r
+            ClarifyRequest(slot="jar", question=notices.ROADMAP_GOAL_JAR_QUESTION), r, chips=chips
         )
         return True
 
@@ -1842,9 +1846,12 @@ class Turn:
         question = notices.UNKNOWN_JAR_QUESTION.format(name=name) if name else notices.UNKNOWN_JAR_QUESTION_NO_NAME
         return ClarifyRequest(slot="jar", question=question)  # chip là mọi hũ thật: `emit_clarify` điền (`jar_chips`)
 
-    async def emit_clarify(self, req: ClarifyRequest, r: IntentResult) -> None:
-        """Khối `clarify` đúng một câu hỏi kèm chip; kết thúc lượt (lượt sau người dùng trả lời, router ghép với câu trước)."""
-        chips = [_readable_amount_chip(c) for c in req.chips]
+    async def emit_clarify(
+        self, req: ClarifyRequest, r: IntentResult, *, chips: Sequence[ClarifyChipIn] | None = None
+    ) -> None:
+        """Khối `clarify` đúng một câu hỏi kèm chip; kết thúc lượt (lượt sau người dùng trả lời, router ghép với câu trước). `chips`: chip
+        mã dựng sẵn (tới trần của khối), thay cho chip của `req`."""
+        chips = [_readable_amount_chip(c) for c in (req.chips if chips is None else chips)]
         if req.slot == "jar" and not chips:
             chips = await self.jar_chips()  # hỏi hũ nào thì chip là các hũ thật
         self.emit_block(

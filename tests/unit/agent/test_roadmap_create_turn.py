@@ -188,6 +188,20 @@ def test_ten_hu_khop_nhieu_hu_hoi_lai_chon_trong_cac_hu_do(monkeypatch):
     assert {tool for tool, _ in tools.calls} == {"get_jar_balances"}
 
 
+def test_chip_hu_muc_tieu_dua_moi_hu_gan_duoc_muc_tieu_khong_cat(monkeypatch):
+    """T1 (#39): ví có nhiều hũ mục tiêu thì chip là MỌI hũ gắn được mục tiêu (hũ mục tiêu và Dự phòng) theo thứ tự trong ví,
+    không cắt còn 6; hũ chi tiêu, nghĩa vụ, tích lũy dài hạn không có chip."""
+    goals = [
+        {"code": f"quy_{i}", "name": f"Quỹ số {i}", "kind": "saving", "purpose": "goal", "goal_vnd": 1_000_000 * i}
+        for i in range(1, 8)
+    ]
+    rows = [*THREE_JARS, {"code": "dau_tu", "name": "Đầu tư", "kind": "saving", "purpose": "long_term"}, *goals]
+    events, _, _, _ = ask_turn(monkeypatch, rows, amount_vnd=TARGET, roadmap_action="create")
+    (block,) = blocks_of(events)
+    assert block["type"] == "clarify"
+    assert [c["label"] for c in block["data"]["chips"]] == ["Dự phòng", *(g["name"] for g in goals)]
+
+
 def test_lap_lai_khong_neu_muc_tieu_van_lap_khong_hoi_lai(monkeypatch):
     """"Lập lại lộ trình giúp mình" (không số tiền, không hạn, không hũ): lập ngay như trước, không hỏi hũ."""
     llm = make_llm(
