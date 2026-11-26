@@ -427,6 +427,9 @@ def compact_affordability(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
     if d.get("label"):
         out["label"] = d["label"]
+    if d.get("pay_date") and d["pay_date"] != payload.get("app_date"):
+        # ngày chi engine đã tính (người dùng nói thời điểm chi, #39): vắng là chi hôm nay
+        out["pay_date_text"] = _dmy(d["pay_date"])
     if d.get("credit"):
         out["credit"] = compact_impact(d["credit"])
     return out

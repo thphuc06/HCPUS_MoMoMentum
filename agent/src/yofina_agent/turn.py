@@ -1437,6 +1437,8 @@ class Turn:
                 resolved, _ = await self.resolve_date_spec(r.params.date_spec)
                 if resolved is not None:
                     facts["han"] = resolved_date_facts(resolved)  # hạn đã tính kèm mốc đã dùng: nói được theo cách người dùng nói
+            # bản đang xem có đúng mục tiêu này không (#39): không có thì chưa có phép tính kịp hay không cho nó, và đó là lý do thật
+            facts["co_trong_ban_nay"] = _goal_in_version(r.params, resolved, res.outcome.payload)
             compact = {**compact, "muc_tieu_nguoi_dung_hoi": facts}
         said = len(self.assistant_parts)
         await self.write("roadmap", question, compact)
@@ -1890,6 +1892,27 @@ class Turn:
         t, m = notices.SCENARIO_UNBUILDABLE
         self.emit_notice(kind="error", code=ErrorCode.SCENARIO_INVALID.value, title=t, message=m)
 
+    async def spend_date(self, p: IntentParams) -> date | None:
+        """Ngày chi của khoản người dùng hỏi (#39, câu b sau Runtime v33): router viết thời điểm chi thành đặc tả (`date_spec`), mã tính
+        ngày bằng `resolve_date_spec` như hạn của mục tiêu lộ trình. Chỉ ngày SAU hôm nay mô phỏng mới là ngày chi (engine nhận `date`
+        và từ chối ngày đã qua); không có đặc tả, đặc tả không tính được hoặc rơi vào hôm nay thì None: kiểm tra như chi hôm nay."""
+        if p.date_spec is None:
+            return None
+        resolved, error = await self.resolve_date_spec(p.date_spec)
+        when = resolved.date if resolved is not None and resolved.days_from_today > 0 else None
+        log.info(
+            json.dumps(
+                {
+                    "event": "spend_date",
+                    "anchor": p.date_spec.get("anchor"),
+                    "date": when.isoformat() if when else None,
+                    "error": error.code.value if error is not None else None,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return when
+
     async def on_affordability(self, r: IntentResult, question: str) -> None:
         """F3 trong chat: `affordability_check` -> khối `affordability_card` NGAY -> model nhỏ viết 2 câu trong thời hạn (lỗi/quá hạn: bỏ lời)."""
         p = r.params
@@ -1902,6 +1925,8 @@ class Turn:
             jars = await self.ensure_jars()
             if jars.outcome.ok and (m := resolve_jar(p.jar_text, self._jar_rows)).status == "ok":
                 args["jar"] = m.code
+        if (spend_on := await self.spend_date(p)) is not None:
+            args["date"] = spend_on.isoformat()
 
         def card(outcome: ToolOutcome, trace_id: str) -> list[Any]:
             # "Tính theo hũ X" (hũ mã đã suy) đứng trước thẻ; chip Trả sau chỉ khi ví có hạn mức (thẻ có phần Trả sau)
@@ -2295,6 +2320,25 @@ def _asked_goal_facts(p: IntentParams) -> dict[str, Any]:
     if p.date_text and p.date_text.strip():
         out["han_nguoi_dung_noi"] = p.date_text.strip()[:40]
     return out
+
+
+def _goal_in_version(p: IntentParams, resolved: ResolvedDate | None, payload: Mapping[str, Any] | None) -> bool:
+    """Mục tiêu người dùng hỏi trong câu xem lộ trình có trong bản vừa đọc không: một mục tiêu của bản (`goals`) cùng số tiền đích (khi
+    người dùng nêu số tiền) và cùng hạn (khi hạn đã tính được). So dữ kiện có cấu trúc, không đọc chữ. False thì bản chưa có phép tính kịp
+    hay không cho mục tiêu đó (#39, câu e ở hội thoại mới sau Runtime v33: writer đã tự đặt lý do "chưa có hạn cụ thể")."""
+    goals = ((payload or {}).get("data") or {}).get("goals") or []
+    want_date = resolved.date.isoformat() if resolved is not None else None
+    if p.amount_vnd is None and want_date is None:
+        return False
+    for g in goals:
+        if not isinstance(g, Mapping):
+            continue
+        if p.amount_vnd is not None and g.get("target_vnd") != p.amount_vnd:
+            continue
+        if want_date is not None and g.get("target_date") != want_date:
+            continue
+        return True
+    return False
 
 
 def _holds_roadmap_target(jar: Mapping[str, Any]) -> bool:

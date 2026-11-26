@@ -77,6 +77,7 @@ def test_router_noi_xem_thi_chi_xem_du_cau_co_so_tien_va_han(monkeypatch):
     assert call["task"] == "roadmap"
     assert call["compact"]["muc_tieu_nguoi_dung_hoi"] == {
         "so_tien_text": "20.000.000 ₫", "so_tien_short_text": "20 triệu", "han_nguoi_dung_noi": "trước Tết", "han": TET_FACTS,
+        "co_trong_ban_nay": False,  # bản đang dùng chỉ có mục tiêu Du lịch: chưa có phép tính cho mục tiêu này
     }  # fmt: skip
 
 
@@ -143,6 +144,7 @@ def test_bam_chip_xem_ban_dang_dung_thi_chi_xem(monkeypatch, routed):
             "date_text": "05/02/2027", "day_month_text": "05/02", "weekday_text": "thứ Sáu", "days_from_today": 76,
             "anchor": "date", "anchor_date_text": "06/02/2027", "before_anchor": True,
         },
+        "co_trong_ban_nay": False,
     }  # fmt: skip
 
 

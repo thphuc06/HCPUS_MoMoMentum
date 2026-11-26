@@ -67,7 +67,8 @@ TASKS: dict[str, str] = {
         "từng hũ sau khoản chi (đủ, sát, hụt); credit (nếu có) là phần Trả sau mô phỏng nếu người dùng trả bằng Trả sau: "
         "item_cost_text là món này tốn khi trả sau, bằng gốc principal_text cộng phí phát sinh thêm fee_added_text; total_due_text "
         "là tổng phải trả ngày đến hạn due_date_text, gồm cả khoản Trả sau đã có existing_due_text; at_due là hũ trả khoản đó. "
-        "Kết luận là câu trả lời; chỉ nói thêm khi có điều người dùng cần chú ý."
+        "pay_date_text (nếu có) là ngày chi hệ thống đã tính từ thời điểm người dùng nói và kết quả là cho ngày chi đó; vắng là chi hôm "
+        "nay. Kết luận là câu trả lời; chỉ nói thêm khi có điều người dùng cần chú ý."
     ),
     "resilience": (
         "Thẻ điểm chống chịu đã hiện. score là điểm, band là nhóm (weak yếu, fair vừa, strong tốt), weakest là thành phần yếu nhất "
@@ -90,7 +91,9 @@ TASKS: dict[str, str] = {
         "dồn theo riêng đợt chi mới: khi đó là chi tăng thì nói thật hũ đó đang chi cao hơn mức thường, và có thể hỏi người dùng đây "
         "là đợt tạm hay nhịp chi mới. muc_tieu_nguoi_dung_hoi (nếu có) là mục tiêu người dùng vừa hỏi, han là hạn hệ thống đã tính: "
         "before_anchor true nghĩa là date_text là ngày liền trước mốc anchor_date_text, nên nói trước mốc đó (hoặc chậm nhất "
-        "date_text), không nói trước date_text. Không tự tính tổng và không đề xuất bước mới."
+        "date_text), không nói trước date_text. co_trong_ban_nay false nghĩa là bản này không có mục tiêu đó trong goals, nên chưa "
+        "có phép tính kịp hay không cho nó (không phải vì thiếu hạn); true nghĩa là đó chính là một mục tiêu trong goals. Không tự "
+        "tính tổng và không đề xuất bước mới."
     ),
     "roadmap_step_edit": (
         "Người dùng muốn sửa một bước của lộ trình đang dùng; thẻ lộ trình đó đã hiện. Chat chưa sửa được bước nên chưa có gì "
