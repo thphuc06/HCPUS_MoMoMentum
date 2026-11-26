@@ -10,6 +10,7 @@
     uv run python evals/run.py golden --score-only          # chỉ chấm lại kết quả đã lưu (không gọi gì)
     uv run python evals/run.py golden --only whatif-bnpl,afford-1
     uv run python evals/run.py golden --background          # chạy nền; log ở evals/results/phase3-<bộ>.log, kết quả ở phase3-<bộ>.jsonl
+    uv run python evals/run.py golden --phase 4 --list      # chỉ liệt kê ca (lượt chat, lần nạp tệp, lời gọi judge) và tổng; không gọi gì
 
 Giãn nhịp theo quota (Claude 4.x chỉ 10 request/phút mỗi model; một lượt what-if gọi 2 lần Sonnet): `--min-interval` giây giữa hai lượt
 gọi Runtime (mặc định 20, tính cả lượt của phiên trước). Mỗi câu ghi một dòng vào `evals/results/<bộ>.jsonl` (id, sự kiện đã gom, điểm);
