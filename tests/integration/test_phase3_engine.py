@@ -27,7 +27,7 @@ pytestmark = pytest.mark.usefixtures("fresh")
 TOOLS = "https://contracts.yofina.invalid/tools"
 BLOCKS = "https://contracts.yofina.invalid/blocks"
 REPORT_DIR = REPO / "build" / "reports"
-# Trả sau của minh trên ví demo đến hạn ngày 3 (`DEMO_CREDIT_DUE_DAY`, trước lương 05/12) thay vì ngày 5 của spec (#39)
+# Trả sau của minh trên ví demo đến hạn ngày 3 (spec `credit_line.demo_due_day`, trước lương 05/12) thay vì ngày 5 của spec (#39)
 MINH_BNPL_DUE = f"2026-12-{demo_wallet('minh').credit_due_day:02d}"
 MEASURES: dict[str, object] = {}
 

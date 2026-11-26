@@ -169,6 +169,31 @@ def test_bo_hu_demo_cua_minh_theo_ty_le_spec():
     assert demo.credit_due_day == 3
 
 
+def test_ngay_den_han_tra_sau_cua_vi_demo_doc_tu_spec():
+    """Ngày đến hạn Trả sau trên ví demo là dữ liệu của spec (`credit_line.demo_due_day`), không phải bảng theo tên persona trong mã:
+    spec nào khai thì ví demo dùng số đó, ví persona vẫn dùng `credit_line.due_day`; spec không khai thì ví demo như ví persona."""
+    import personas.six_jars as six_jars
+
+    assert not hasattr(six_jars, "DEMO_CREDIT_DUE_DAY")
+    own = generate("x", anchor=ANCHOR, spec=_spec(lambda s: s["credit_line"].update(demo_due_day=4)))
+    assert own.credit_due_day == 5 and apply_demo_layout(own, DEMO_LAYOUT).credit_due_day == 4
+    plain = generate("x", anchor=ANCHOR, spec=_spec(lambda s: s["credit_line"].pop("demo_due_day")))
+    assert apply_demo_layout(plain, DEMO_LAYOUT).credit_due_day == 5
+
+
+@pytest.mark.parametrize(
+    ("persona", "due_day", "bnpl_due"),
+    [("minh", 3, [date(2026, 12, 3)]), ("khoa", 5, []), ("lan", 5, []), ("vy", 5, [])],
+)
+def test_dat_lai_demo_han_muc_va_khoan_tra_sau_nhu_truoc(persona, due_day, bnpl_due):
+    """Đặt lại ví demo (`materialize` của ví sau `apply_demo_layout`, như `LedgerService.reset_demo`) cho đúng hạn mức và khoản Trả sau
+    như khi ngày đến hạn còn nằm trong mã: `minh` ngày 3 (khoản 967.000 ₫ đến hạn 03/12), các persona khác ngày 5. KỲ VỌNG viết tay."""
+    _, demo = _demo(persona)
+    seeded = materialize(demo, anchor=ANCHOR, now=NOW, tz=TZ, user_id=persona, obligation_pay_jar="nghia_vu")
+    assert seeded.credit_line["due_day"] == due_day
+    assert [o["due_date"] for o in seeded.obligations if o["kind"] == "bnpl"] == bnpl_due
+
+
 @pytest.mark.parametrize("persona", PERSONAS)
 def test_bo_hu_demo_giu_nguyen_tung_dong_cua_hu_chi_tieu(persona):
     """Ràng buộc 1 của #39: Ăn uống, Đi lại, Giải trí giữ nguyên mã và mọi dòng (chi, chia lương, chuyển giữa hũ, khoản trả nghĩa vụ,

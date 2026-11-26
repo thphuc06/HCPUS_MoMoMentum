@@ -23,7 +23,7 @@ pytestmark = pytest.mark.usefixtures("fresh")
 # `muc_tieu`, thêm Đầu tư 0 ₫), suy từ bộ sinh persona qua cùng ánh xạ mã hũ của đặt lại; tổng là 7.730.000 ₫ của bảng số Figma cộng
 # số dư hũ Chi hằng ngày
 DEMO_BALANCES = demo_balances("minh")
-# Trả sau của minh trên ví demo đến hạn ngày 3 (`DEMO_CREDIT_DUE_DAY`, trước lương 05/12) thay vì ngày 5 của spec
+# Trả sau của minh trên ví demo đến hạn ngày 3 (spec `credit_line.demo_due_day`, trước lương 05/12) thay vì ngày 5 của spec
 MINH_BNPL_DUE = f"2026-12-{demo_wallet('minh').credit_due_day:02d}"
 
 

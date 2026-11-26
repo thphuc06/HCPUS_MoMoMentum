@@ -183,7 +183,7 @@ DEMO_ANCHOR = "2026-11-21"
 
 def demo_wallet(persona: str):
     """Ví demo mà `POST /demo/reset` nạp cho persona (bộ hũ demo của issue #39): `PersonaData` sau `apply_demo_layout`, suy từ bộ sinh
-    qua đúng ánh xạ mã hũ mà đặt lại dùng, không chép số. Ví dụ `credit_due_day` của minh là 3 (`DEMO_CREDIT_DUE_DAY`)."""
+    qua đúng ánh xạ mã hũ mà đặt lại dùng, không chép số. Ví dụ `credit_due_day` của minh là 3 (spec `credit_line.demo_due_day`)."""
     from datetime import date
 
     from personas import generate

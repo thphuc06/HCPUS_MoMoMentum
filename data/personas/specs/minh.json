@@ -117,7 +117,7 @@
      "pay_jar": "an_uong", "is_essential": false, "paid_in_history": true, "tx_type": "subscription",
      "merchant": "Căng tin văn phòng"}
   ],
-  "credit_line": {"limit_vnd": 5000000, "due_day": 5},
+  "credit_line": {"limit_vnd": 5000000, "due_day": 5, "demo_due_day": 3},
   "bnpl": {
     "purchases": [
       {"days_ago": 12, "amount_vnd": 520000, "jar": "giai_tri", "tx_type": "entertainment", "merchant": "Lazada - Bàn phím cơ"},
