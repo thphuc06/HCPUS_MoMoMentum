@@ -209,10 +209,25 @@ def test_rest_route_reads_only_and_validates_known_items(env):
         assert json.loads(res["body"])["error"]["code"] == "PARAMS_INVALID", res
 
 
+def _spend_floor_percent(env, user, code):
+    """Sàn chi của hũ theo đúng số LP phân bổ dùng (chuỗi chi của ngữ cảnh dự báo, `variable_monthly_spend`, tỷ lệ giữ của bộ tối ưu),
+    quy ra điểm lương làm tròn lên."""
+    from yofina_forecast.inputs import Context
+    from yofina_forecast.repo import ForecastRepo
+    from yofina_forecast.resilience import variable_monthly_spend
+    from yofina_forecast.settings import DEFAULT_ALLOCATION_PARAMS as P
+
+    ctx = Context.from_rows(ForecastRepo(env.db).context(user, env.clock(), "Asia/Ho_Chi_Minh", 330))
+    spend = next(j["spend"] for j in ctx.jars if j["code"] == code)
+    typical = variable_monthly_spend(spend, 30, P.month_days)
+    return typical, math.ceil(Fraction(round(P.spending_keep_ratio * typical) * 100, SALARY))
+
+
 def test_demo_wallet_proposal_keeps_essential_jars_and_takes_from_entertainment_first(env):
     """Ví demo (Chi hằng ngày cạnh Ăn uống, Đi lại, Giải trí): khai thêm khoản vay thì phần chênh lấy từ Chi hằng ngày rồi Giải trí (hũ
     chi không thiết yếu theo loại giao dịch của bảng tra thật), không từ Ăn uống hay Đi lại (BR-21, BR-54); Giải trí không xuống dưới
-    phần lương của khoản định kỳ trả từ nó (Netflix của `minh`, #39 26/11), phần còn thiếu lấy tiếp từ hũ mục tiêu."""
+    phần lương của khoản định kỳ trả từ nó (Netflix của `minh`, #39 26/11). Từ 26/11 chiều (#39) hai hũ chi đó chỉ xuống tới sàn chi
+    (nửa mức chi thật gần đây, cùng số của LP), phần còn thiếu lấy tiếp từ hũ mục tiêu (trước: Chi hằng ngày về 0, Giải trí 2%)."""
     user = "declare-demo"
     assert handle_http(http_event("POST", "/demo/reset", sub=user, groups="persona-minh"), env.svc)["statusCode"] == 200
     before = _shares(env, user)
@@ -220,13 +235,34 @@ def test_demo_wallet_proposal_keeps_essential_jars_and_takes_from_entertainment_
     paid_by_fun = sum(int(o["amount_vnd"]) for o in obligations if o.get("pay_jar") == "giai_tri")
     assert paid_by_fun > 0  # Netflix
     fun_floor = math.ceil(Fraction(paid_by_fun * 100, SALARY))
+    _, daily_keep = _spend_floor_percent(env, user, "chi_hang_ngay")
+    _, fun_keep = _spend_floor_percent(env, user, "giai_tri")
+    assert 0 < daily_keep < before["chi_hang_ngay"] and fun_floor < fun_keep < before["giai_tri"]
     _declare(env, user, "loan", "Khoản vay", 1_500_000, 10)
     result = env.svc.split_proposal_response(user, {})
     assert result["status"] == "proposed"
     after = {j["code"]: j["split_after"] for j in result["jars"]}
     gained = after["nghia_vu"] - before["nghia_vu"]
-    assert gained > before["chi_hang_ngay"] + before["giai_tri"] - fun_floor  # đủ lớn để chạm sàn của Giải trí
+    assert gained > before["chi_hang_ngay"] + before["giai_tri"] - daily_keep - fun_keep  # đủ lớn để chạm sàn chi của cả hai
     assert after["an_uong"] == before["an_uong"] and after["di_lai"] == before["di_lai"]
-    assert after["chi_hang_ngay"] == 0 and after["giai_tri"] == fun_floor
+    assert after["chi_hang_ngay"] == daily_keep and after["giai_tri"] == fun_keep
     assert after["muc_tieu"] < before["muc_tieu"]
     assert sum(after.values()) == 100
+
+
+def test_demo_wallet_proposal_with_loan_1_8_million(env):
+    """Số đo cho báo cáo #39 (in với `-s`): khoản vay 1.800.000 ₫ trên ví demo của `minh`. Hũ mục tiêu về 0 trước khi sàn chi nhường;
+    sàn chi chỉ nhường đúng phần nghĩa vụ còn thiếu."""
+    user = "declare-demo-18"
+    assert handle_http(http_event("POST", "/demo/reset", sub=user, groups="persona-minh"), env.svc)["statusCode"] == 200
+    before = _shares(env, user)
+    keeps = {code: _spend_floor_percent(env, user, code) for code in ("chi_hang_ngay", "giai_tri")}
+    _declare(env, user, "loan", "Khoản vay", 1_800_000, 10)
+    result = env.svc.split_proposal_response(user, {})
+    after = {j["code"]: j["split_after"] for j in result["jars"]}
+    print(f"\n[đề xuất tỷ lệ, khoản vay 1,8 triệu] {result['status']}; sàn chi (mức chi điển hình, điểm): {keeps}")
+    for code, pct in after.items():
+        print(f"  {code}: {before[code]} -> {pct}")
+    assert result["status"] == "proposed" and sum(after.values()) == 100
+    assert after["muc_tieu"] == 0 and after["giai_tri"] == keeps["giai_tri"][1]
+    assert after["an_uong"] == before["an_uong"] and after["di_lai"] == before["di_lai"]

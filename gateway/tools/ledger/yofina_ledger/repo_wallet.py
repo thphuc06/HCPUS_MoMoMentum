@@ -76,6 +76,12 @@ SQL_LIST_PAYEES = "SELECT * FROM app_list_payees(:uid, CAST(:lim AS integer))"
 SQL_CREDIT_LINE = "SELECT * FROM app_get_credit_line(:uid)"
 SQL_SALARY_EVENTS = "SELECT * FROM app_list_salary_events(CAST(:uid AS text), CAST(:status AS text), CAST(:lim AS integer))"
 SQL_CASHFLOW = "SELECT app_get_cashflow_summary(:uid, CAST(:from_date AS date), CAST(:to_date AS date)) AS data"
+#: chuỗi chi theo ngày của từng hũ trong `win` ngày gần nhất: CHÍNH hàm ngữ cảnh mà Lambda forecast (LP phân bổ) đọc, chỉ lấy phần meta và hũ
+SQL_SPEND_CONTEXT = (
+    "SELECT section, jar_code, payload FROM app_get_forecast_context("
+    "CAST(:uid AS text), CAST(:now AS timestamptz), CAST(:tz AS text), CAST(:win AS integer)) "
+    "WHERE section IN ('meta', 'jar')"
+)
 SQL_UNCLASSIFIED = "SELECT * FROM app_get_unclassified(:uid, CAST(:lim AS integer))"
 SQL_REVIEW_STATS = "SELECT * FROM app_get_review_stats(:uid)"
 SQL_GET_TRANSACTION = "SELECT * FROM app_get_transaction(:uid, CAST(:id AS uuid))"
@@ -492,6 +498,14 @@ class WalletRepo:
             max_rows=1,
         )
         return rows[0]["data"]
+
+    def spend_context(self, user_id: str, now: datetime, tz: str, window_days: int) -> list[Row]:
+        """Phần meta (ngày mô phỏng, đầu lịch sử) và hũ (chuỗi `spend`) của `app_get_forecast_context` cho sàn chi của đề xuất tỷ lệ."""
+        return self.db.query(
+            SQL_SPEND_CONTEXT,
+            {"uid": user_id, "now": now, "tz": tz, "win": window_days},
+            max_rows=41,
+        )
 
     def unclassified(self, user_id: str, limit: int) -> list[Row]:
         return self.db.query(SQL_UNCLASSIFIED, {"uid": user_id, "lim": limit}, max_rows=50)
