@@ -71,8 +71,8 @@ Ví demo 8 hũ (issue #34, #39; trường tùy chọn, ca không có thì không
 mã đó (`jar_phrases`: hũ goal `muc_tieu` tên "Du lịch"), chỉ đọc mã như chữ khi mã không có trên ví demo.
 - clarify_slot (`expect_clarify_slot`): khối `clarify` hỏi đúng ô đó; ô `jar` thì mỗi chip là tên một hũ có thật.
 - roadmap_goal (`expect_roadmap_goal` {purpose, target_vnd}): khối `roadmap` cuối có mục tiêu ở hũ mang mục đích đó, đúng số tiền, có hạn.
-- obligation_window (`expect_obligation_window`): what-if Trả sau liệt kê khoản đến hạn trước ngày lương ở hũ trả nghĩa vụ, theo ngày,
-  có khoản Trả sau của lượt khi nó đến hạn trước lương.
+- obligation_window (`expect_obligation_window`): what-if Trả sau liệt kê khoản đến hạn trước lương (trước hoặc đúng ngày lương,
+  `yofina_core.schedule.due_before_payday`) ở hũ trả nghĩa vụ, theo ngày, có khoản Trả sau của lượt khi nó đến hạn trước lương.
 - runout_claims (`forbid_runout_jars`): "hũ nào sắp cạn" dự báo các hũ đó và không nói chúng cạn, hụt, hết tiền.
 - ingest_jars (`expect_ingest_jars` [{amount_vnd, jar}]): dòng chi của tệp nạp có số tiền đó được đề xuất vào đúng hũ.
 - replaced_notice (`expect_replaced_notice`): thông báo thay bản đề xuất có khi và chỉ khi lượt thay một bản đang chờ (đọc từ
@@ -2170,13 +2170,16 @@ def roadmap_goal(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, A
 
 
 def obligation_window(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, Any]:
-    """`expect_obligation_window` (what-if Trả sau): khối `forecast_timeline` của hũ trả nghĩa vụ liệt kê các khoản đến hạn TRƯỚC ngày
-    lương sau khi mua (`compare.after.obligations_before_payday.items`, `yofina_core.schedule.obligation_window`):
-    - danh sách không rỗng; mọi khoản là nghĩa vụ có ngày trước `payday.date`; xếp theo ngày;
+    """`expect_obligation_window` (what-if Trả sau): khối `forecast_timeline` của hũ trả nghĩa vụ liệt kê các khoản đến hạn trước lương
+    sau khi mua (`compare.after.obligations_before_payday.items`, `yofina_core.schedule.obligation_window`). "Trước lương" là quy tắc chung
+    `yofina_core.schedule.due_before_payday`: trước HOẶC ĐÚNG ngày lương (chốt 26/11, BR-22).
+    - danh sách không rỗng; mọi khoản là nghĩa vụ đến hạn trước lương so với `payday.date`; xếp theo ngày;
     - khoản Trả sau của lượt (`obligation_impact.cost`: `due_date`, `total_due_vnd`) có trong danh sách (cùng ngày, cùng số tiền) khi nó
-      đến hạn trước ngày lương, và không có khi nó đến hạn từ ngày lương trở đi;
+      đến hạn trước lương, và không có khi nó đến hạn sau ngày lương;
     - hũ của khối là hũ trả của `obligation_impact.at_due` (khi khối đó có).
     Mọi số lấy từ khối do code dựng từ kết quả `run_scenario` của chính lượt."""
+    from yofina_core.schedule import due_before_payday
+
     timelines = [
         b["data"]
         for b in _blocks_of(run, "forecast_timeline")
@@ -2195,18 +2198,19 @@ def obligation_window(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[s
     fails = []
     if not items:
         fails.append("danh_sach_rong")
-    if any(str(i.get("date")) >= payday or i.get("kind") != "obligation" for i in items):
-        fails.append("khoan_tu_ngay_luong")
+    if any(not _before_payday(i.get("date"), payday, due_before_payday) or i.get("kind") != "obligation" for i in items):
+        fails.append("khoan_sau_ngay_luong")
     dates = [str(i.get("date")) for i in items]
     if dates != sorted(dates):
         fails.append("khong_theo_ngay")
     due, total = cost.get("due_date"), cost.get("total_due_vnd")
     if due and total and items:
         listed = any(str(i.get("date")) == due and i.get("amount_vnd") == total for i in items)
-        if str(due) < payday and not listed:
+        before = _before_payday(due, payday, due_before_payday)
+        if before and not listed:
             fails.append("thieu_khoan_tra_sau")
-        elif str(due) >= payday and listed:
-            fails.append("khoan_tu_ngay_luong")
+        elif not before and listed:
+            fails.append("khoan_sau_ngay_luong")
     if pay_jars and str((data.get("jar") or {}).get("code")) not in pay_jars:
         fails.append("sai_hu_tra")
     return {
@@ -2216,6 +2220,14 @@ def obligation_window(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[s
         "payday": payday,
         "items": [[str(i.get("date")), i.get("amount_vnd")] for i in items],
     }
+
+
+def _before_payday(day: Any, payday: str, rule: Callable[[str, str], bool]) -> bool:
+    """`rule` (`due_before_payday`) trên hai ngày ISO của khối; ngày hỏng hoặc thiếu không bao giờ là "trước lương"."""
+    try:
+        return rule(str(day), payday)
+    except ValueError:
+        return False
 
 
 #: Lời nói một hũ cạn (đã bỏ mệnh đề phủ định bằng `_NEGATION_RE`): "dự kiến cạn", "có thể cạn", "hụt", "hết tiền". "Sát số dư" không tính.
