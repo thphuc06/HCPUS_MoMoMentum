@@ -56,7 +56,13 @@ def test_tools_list_dung_ten_co_tien_to_target(gw):
     if not phase3 <= names:  # Gateway còn bản phase 2 cho tới khi YofinaAgent được deploy (bước ghép)
         assert names == EXPECTED_TOOLS | {"forecast___get_forecast"}
         pytest.skip("Gateway chưa có tool phase 3: chờ deploy YofinaAgent")
-    assert names == EXPECTED_TOOLS | phase3
+    # target `ingest` (phase 5): ba tool nạp dữ liệu của contracts/tools/ingest.json (start_job, get_job_status, confirm_rows)
+    ingest = {
+        f"ingest___{t['name']}"
+        for t in json.loads((REPO / "contracts" / "tools" / "ingest.json").read_text(encoding="utf-8"))
+    }
+    assert len(ingest) == 3
+    assert names == EXPECTED_TOOLS | phase3 | ingest
 
 
 def test_minh_doc_hu_qua_gateway_khop_rest(gw, api):

@@ -45,6 +45,21 @@ def conversation(api, who, sid):
     return body
 
 
+#: Lượt được ghi SAU RUN_FINISHED (#11: `Turn.persist_then_close` chạy nền, mỗi việc ghi có trần `turn_*_timeout_seconds` và thử lại
+#: một lần), nên test đọc lại lượt phải chờ có giới hạn thay vì đọc ngay.
+SAVED_TURN_WAIT_SECONDS = 30.0
+
+
+def saved_turns(api, who, sid, *, count=1, timeout=SAVED_TURN_WAIT_SECONDS, step=1.0):
+    """Các lượt đã lưu của cuộc chat `sid`, chờ tới khi có đủ `count` lượt (tối đa `timeout` giây)."""
+    end = time.monotonic() + timeout
+    while True:
+        turns = conversation(api, who, sid)["turns"]
+        if len(turns) >= count or time.monotonic() >= end:
+            return turns
+        time.sleep(step)
+
+
 def test_so_du_cac_hu_khop_rest_va_duoc_luu(agent_url, tokens, api, schema_validator):
     sid = new_session_id()
     run = ask(agent_url, tokens, "minh", "số dư các hũ của mình", session_id=sid)
@@ -60,9 +75,9 @@ def test_so_du_cac_hu_khop_rest_va_duoc_luu(agent_url, tokens, api, schema_valid
     # khối khớp hợp đồng JSON Schema
     schema_validator("https://contracts.yofina.invalid/blocks/jar_summary.schema.json", jar_block)
 
-    saved = conversation(api, "minh", sid)
-    assert len(saved["turns"]) == 1
-    turn = saved["turns"][0]
+    saved = saved_turns(api, "minh", sid)
+    assert len(saved) == 1
+    turn = saved[0]
     assert turn["trace_id"] == run.trace_id
     assert turn["user_text"] == "số dư các hũ của mình"
     assert turn["assistant_text"] == run.text
