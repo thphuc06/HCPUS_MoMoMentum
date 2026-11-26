@@ -29,6 +29,13 @@ log = logging.getLogger(__name__)
 _HANDLED_TOOL_ERRORS = {
     "get_roadmap": {ErrorCode.ROADMAP_NOT_FOUND},
     "save_roadmap": {ErrorCode.ROADMAP_VERSION_CONFLICT, ErrorCode.ROADMAP_INVALID},
+    # ngày nhắc theo đặc tả của model không tính được: bước vào vòng sửa của Roadmap agent, job không hỏng
+    "resolve_date": {
+        ErrorCode.PARAMS_INVALID,
+        ErrorCode.DATE_IN_PAST,
+        ErrorCode.LUNAR_YEAR_UNSUPPORTED,
+        ErrorCode.PROFILE_INCOMPLETE,
+    },
 }
 _REQUIRED_RESULT_MODELS = {
     "get_resilience_score": ResilienceScoreData,
@@ -94,6 +101,7 @@ class RoadmapRunner:
             {
                 "ledger": ledger,
                 "planner": ledger,
+                "knowledge": ledger,
                 "forecast": self._settings.forecast_function_name,
             },
             uid,

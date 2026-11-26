@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from yofina_agent import advisor
 from yofina_agent.compact import compact_jars, compact_obligations
-from yofina_agent.schemas import ReasoningStepIn
+from yofina_agent.schemas import ReasoningStepIn, date_spec_args, date_spec_field
 from yofina_agent.settings import AgentSettings
 from yofina_agent.textutil import extract_amounts
 from yofina_agent.tools import ToolKind, ToolOutcome
@@ -26,6 +26,7 @@ from yofina_agent.verifier import Allowed, NumericGrounding, passed_rules, suita
 from yofina_agent.writer import has_ungrounded_numbers
 from yofina_core import blocks as B
 from yofina_core.clock import payday_in_month
+from yofina_core.dates import DateResolveError
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
 from yofina_core.money import format_vnd, to_vnd
@@ -70,7 +71,9 @@ Mỗi bước là MỘT hành động cụ thể người dùng tự làm đư�
   nạp thêm hay không. context.obligations chỉ liệt kê các khoản đầu; has_more là còn khoản chưa hiện.
 - cut_spending bắt buộc có jar_code là hũ không thiết yếu và amount_ref trỏ proposed_decrease của chính hũ đó.
 - adjust_split cần amount_ref (hũ được tăng hoặc giảm phần chia) hoặc action save_jars.
-- Bước không có số tiền chỉ được là remind hoặc review_goal và phải có action schedule_nudge để có ngày nhắc.
+- Bước không có số tiền chỉ được là remind hoặc review_goal và phải có action schedule_nudge để có ngày nhắc. Ngày nhắc
+  là ngày cuối giai đoạn của bước; lời nhắc cần rơi vào một mốc khác trong giai đoạn thì điền nudge_on_spec theo mô tả của
+  trường, chương trình tính ra ngày bằng phép tính lịch.
 - Ví dụ khuôn dạng một bước (chữ trong ngoặc nhọn là chỗ điền theo dữ liệu, không phải dữ liệu thật): kind set_aside,
   title "Chuyển từ {tên hũ nguồn} sang {tên hũ nhận} trước kỳ lương", jar_code {mã hũ nguồn}, to_jar_code {mã hũ nhận},
   amount_ref {jar_code: mã hũ nhận, field: proposed_increase}, action move_between_jars.
@@ -169,6 +172,9 @@ bước set_aside, pay_obligation hay cut_spending, đặt amount_ref.field là 
 
 #: lần gọi model tối đa cho bản phác thảo đầu: lần thứ hai nhận lỗi schema của lần đầu (ví dụ `kind` ngoài enum).
 _DRAFT_ATTEMPTS = 2
+#: số đặc tả ngày nhắc khác nhau (`StepOutline.nudge_on_spec`) tối đa được tính bằng tool trong một lần lập; mỗi đặc tả tính một lần, dùng
+#: lại qua các vòng sửa. Dành sẵn trong `_tool_budget` để không lấy phần của check_suitability hay lần lưu.
+_NUDGE_DATE_CALLS = 2
 #: lời người dùng đưa cho planner: tối đa từng này ký tự (sau khi che PII), và tối đa từng này số tiền đọc được trong đó
 _REQUEST_MAX_CHARS = 500
 _USER_AMOUNTS_MAX = 5
@@ -335,6 +341,16 @@ class AmountRef(_Model):
     index: Annotated[int, Field(ge=0, le=4)] | None = None
 
 
+#: Đặc tả ngày nhắc của bước có `schedule_nudge` (cùng định nghĩa với đầu vào tool `knowledge___resolve_date`, `schemas.date_spec_field`):
+#: model hiểu mốc thời gian, mã gọi tool tính ra ngày (`_nudge_date`) qua hàm gọi tool sẵn có của lượt chat hay job; vắng thì ngày nhắc
+#: là ngày cuối giai đoạn như trước.
+NudgeDateSpec = date_spec_field(
+    "Chỉ cho bước có action schedule_nudge: ngày nhắc khi lời nhắc cần rơi vào một mốc thời gian khác ngày cuối giai đoạn. Hệ thống "
+    "gọi tool knowledge___resolve_date để ra ngày; ngày đó phải sau hôm nay và nằm trong giai đoạn của bước. Null thì nhắc vào ngày "
+    "cuối giai đoạn."
+)
+
+
 class StepOutline(_Model):
     step_id: B.SlugKey
     kind: B.RoadmapStepKind
@@ -344,6 +360,7 @@ class StepOutline(_Model):
     to_jar_code: B.JarCode | None = None
     amount_ref: AmountRef | None = None
     action: B.RoadmapStepActionTool | None = None
+    nudge_on_spec: NudgeDateSpec = None
 
 
 class PhaseOutline(_Model):
@@ -563,6 +580,41 @@ def _date_text(value: Any) -> str | None:
     except ValueError:
         return None
     return f"{when.day:02d}/{when.month:02d}/{when.year}"
+
+
+def _dmy(day: date) -> str:
+    return f"{day.day:02d}/{day.month:02d}/{day.year}"
+
+
+async def _nudge_date(
+    tools: RoadmapTools, spec: dict[str, Any], cache: dict[str, asyncio.Task[ToolOutcome]]
+) -> date | _StepInvalid:
+    """Ngày nhắc tính từ đặc tả model điền (`StepOutline.nudge_on_spec`) bằng tool `knowledge___resolve_date` qua hàm gọi tool sẵn có của
+    lần lập (`tools`); mã không tự tính ngày. Mỗi đặc tả khác nhau chỉ gọi tool một lần trong một lần lập (vòng sửa dùng lại), tối đa
+    `_NUDGE_DATE_CALLS` đặc tả. Đặc tả sai dạng, tool trả lỗi (ngày đã qua, năm Tết ngoài bảng...) hay đã hết số lần tính thì trả lỗi
+    cho vòng sửa."""
+    try:
+        args = date_spec_args(spec)
+    except DateResolveError as exc:
+        return _StepInvalid("nudge_date_spec", f"nudge_on_spec chưa hợp lệ ({exc.message}). Sửa đặc tả hoặc để null.")
+    key = json.dumps(args, sort_keys=True, ensure_ascii=False)
+    task = cache.get(key)
+    if task is None:
+        if len(cache) >= _NUDGE_DATE_CALLS:
+            return _StepInvalid(
+                "nudge_date_budget",
+                "Đã dùng hết số lần tính ngày nhắc của lần lập này: dùng lại một nudge_on_spec đã có hoặc để null để nhắc vào ngày"
+                " cuối giai đoạn.",
+            )
+        task = cache[key] = asyncio.ensure_future(tools("resolve_date", args, "knowledge"))
+    outcome = await task
+    if not outcome.ok:
+        reason = _clean_text(outcome.message) if outcome.message else "tool tính ngày không trả kết quả"
+        return _StepInvalid("nudge_date_error", f"Chưa tính được ngày nhắc từ nudge_on_spec: {reason}. Sửa đặc tả hoặc để null.")
+    try:
+        return date.fromisoformat(str((_data(outcome) or {})["date"]))
+    except (KeyError, TypeError, ValueError):
+        return _StepInvalid("nudge_date_error", "Chưa tính được ngày nhắc từ nudge_on_spec. Sửa đặc tả hoặc để null.")
 
 
 def _is_buffer(jar: dict[str, Any]) -> bool:
@@ -848,8 +900,10 @@ def _build_action(
     today: date,
     balances: list[B.JarBalance],
     lines: dict[str, AllocationLine],
+    nudge_on: date | None = None,
 ) -> B.RoadmapStepAction | None:
-    """Dựng action bằng mã. Lỗi nguồn tham chiếu hoặc action được đưa vào vòng sửa."""
+    """Dựng action bằng mã. Lỗi nguồn tham chiếu hoặc action được đưa vào vòng sửa. `nudge_on`: ngày nhắc đã tính từ đặc tả của model
+    (đã kiểm nằm trong giai đoạn, `_build_step`); vắng thì nhắc vào ngày cuối giai đoạn."""
     if outline.action == "move_between_jars":
         try:
             params = normalize_move_params(
@@ -877,7 +931,7 @@ def _build_action(
             raise _StepInvalid(
                 "nudge_past", "Lời nhắc cần nằm trong một giai đoạn có ngày trong tương lai."
             )
-        params = {"kind": "review_needed", "fire_on": phase_end.isoformat()}
+        params = {"kind": "review_needed", "fire_on": (nudge_on or phase_end).isoformat()}
         if outline.jar_code is not None:
             params["jar_code"] = outline.jar_code
         try:
@@ -1182,14 +1236,23 @@ def _build_step(
     immediate: bool = False,
     caps: _NowCaps | None = None,
     user_amounts: tuple[int, ...] = (),
+    nudge_on: date | None = None,
 ) -> tuple[RoadmapDraftStep, Proposal]:
     """`immediate`: giai đoạn của bước bắt đầu ngay đầu kỳ (bước chuyển tiền lấy từ số dư hiện có của hũ nguồn, trần theo `caps`).
-    `user_amounts`: số tiền đọc bằng mã từ lời người dùng (tham chiếu `user_amount`)."""
+    `user_amounts`: số tiền đọc bằng mã từ lời người dùng (tham chiếu `user_amount`). `nudge_on`: ngày nhắc tính từ `nudge_on_spec`
+    (`_nudge_date`); phải sau hôm nay và trong giai đoạn của bước."""
     phase_start, phase_end = phase
     jars = {jar.code for jar in balances}
     jar, to_jar = outline.jar_code, outline.to_jar_code
     if {code for code in (jar, to_jar) if code is not None} - jars:
         raise _StepInvalid("unknown_jar", "Chỉ chọn mã hũ có trong danh sách hũ.")
+    if nudge_on is not None and not (today < nudge_on and phase_start <= nudge_on <= phase_end):
+        raise _StepInvalid(
+            "nudge_out_of_phase",
+            f"Ngày nhắc tính từ nudge_on_spec là {_dmy(nudge_on)}, không nằm trong giai đoạn của bước (từ {_dmy(phase_start)} tới"
+            f" {_dmy(phase_end)}) hoặc chưa sau hôm nay. Đặt bước vào giai đoạn chứa ngày đó, hoặc để nudge_on_spec null để nhắc vào"
+            " ngày cuối giai đoạn.",
+        )
     amount, metrics = None, None
     if (ref := outline.amount_ref) is not None:
         if ref.jar_code not in (jar, to_jar) or ref.jar_code not in lines:
@@ -1208,7 +1271,7 @@ def _build_step(
         if (issue := _amount_issue(outline, ref, amount, lines, by_code, immediate, caps)) is not None:
             raise _StepInvalid(*issue)
         metrics = _step_metrics(outline, ref, line, amount, immediate, by_code)
-    action = _build_action(outline, amount, phase_end, today, balances, lines)
+    action = _build_action(outline, amount, phase_end, today, balances, lines, nudge_on)
     step = RoadmapDraftStep(
         step_id=outline.step_id,
         kind=outline.kind,
@@ -1398,11 +1461,13 @@ async def _verify(
     user_amounts: tuple[int, ...] = (),
     protected: frozenset[str] = frozenset(),
     buffer_ok: frozenset[str] = frozenset(),
+    date_cache: dict[str, asyncio.Task[ToolOutcome]] | None = None,
 ) -> tuple[list[RoadmapDraftPhase], list[RepairIssue], list[tuple[str | None, SuitabilityVerdict]]]:
     """Các giai đoạn đạt, các lỗi cho vòng sửa, và các phán quyết mới của vòng kèm hũ nguồn của đề xuất được kiểm (để lập luận
     biết luật nào đã loại hũ nào, #7). `caps`: trần của bước chuyển làm ngay (`_NowCaps`); vắng thì dựng từ số dư, không trừ khoản nào.
     `user_amounts`, `protected`: số tiền đọc từ lời người dùng và hũ người dùng dặn giữ (C4, #39). `buffer_ok`: hũ chi người dùng nói rõ
-    muốn lấy tiền quỹ dự phòng sang (ngoại lệ của `_buffer_issue`)."""
+    muốn lấy tiền quỹ dự phòng sang (ngoại lệ của `_buffer_issue`). `date_cache`: ngày nhắc đã tính theo đặc tả trong lần lập này
+    (`_nudge_date`), dùng lại qua các vòng."""
     lines = {line.jar.code: line for line in plan.lines}
     start, horizon_end = period
     cache = {} if cache is None else cache
@@ -1518,6 +1583,15 @@ async def _verify(
                     field=where + ("reason" if bad_reason else ""),
                 )
                 continue
+            # Ngày nhắc theo mốc model điền: tool tính ngày (qua hàm gọi tool của lần lập), không tự tính; lỗi vào vòng sửa.
+            nudge_on: date | None = None
+            if item.action == "schedule_nudge" and item.nudge_on_spec is not None:
+                found = await _nudge_date(tools, item.nudge_on_spec, date_cache if date_cache is not None else {})
+                if isinstance(found, _StepInvalid):
+                    issues.append(RepairIssue(step_id=item.step_id, rule_id="step_invalid", message=str(found)))
+                    rejected(phase.phase_id, item, "step_invalid", "step_invalid", detail=found.code)
+                    continue
+                nudge_on = found
             try:
                 step, proposal = _build_step(
                     item,
@@ -1528,6 +1602,7 @@ async def _verify(
                     immediate=phase_start <= today,
                     caps=caps,
                     user_amounts=user_amounts,
+                    nudge_on=nudge_on,
                 )
             except ValueError as exc:
                 if isinstance(exc, ValidationError):
@@ -1617,8 +1692,8 @@ def _tool_budget(settings: AgentSettings, remaining: int, rounds: int, has_lates
     # Context đọc 4 tool, dùng lại lần đọc latest từ chat nếu có. Tối ưu chạy một lần trước bản phác thảo và có thể thêm một lần
     # nếu bản phác thảo xin phương án khác; kiểm mỗi bước một lần/vòng (trường hợp xấu nhất: không bước nào dùng lại được phán
     # quyết cũ) và có thể lưu mỗi vòng. Xung đột dành thêm hai call cho một lần đọc latest và một lần lưu lại. `extra_reads`: lần đọc
-    # ngữ cảnh thêm (chat có người tư vấn đọc hồ sơ hành vi).
-    fixed = (4 - int(has_latest)) + extra_reads + 2 + (1 + rounds) + 2
+    # ngữ cảnh thêm (chat có người tư vấn đọc hồ sơ hành vi). Dành sẵn `_NUDGE_DATE_CALLS` lần tính ngày nhắc từ đặc tả của model.
+    fixed = (4 - int(has_latest)) + extra_reads + 2 + (1 + rounds) + 2 + _NUDGE_DATE_CALLS
     return min(settings.roadmap_max_steps, max(0, (remaining - fixed) // (1 + rounds)))
 
 
@@ -1944,6 +2019,7 @@ async def build_roadmap(
     saving = False
     outline: RoadmapOutline = sketch
     checked_proposals: dict[str, asyncio.Task[SuitabilityVerdict | None]] = {}
+    nudge_dates: dict[str, asyncio.Task[ToolOutcome]] = {}
 
     async def repair(issues: list[RepairIssue]) -> RoadmapOutline | None:
         nonlocal retries, model_error, advice_src
@@ -2047,6 +2123,7 @@ async def build_roadmap(
             user_amounts=user_amounts,
             protected=protected,
             buffer_ok=buffer_ok,
+            date_cache=nudge_dates,
         )
         verdicts.extend(v for _, v in checked)
         judged.extend(checked)

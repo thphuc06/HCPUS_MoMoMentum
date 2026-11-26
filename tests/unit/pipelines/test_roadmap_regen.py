@@ -174,6 +174,7 @@ class FakeBedrock:
         self.repair_needed = False
         self.bad_kind_first = False
         self.only_ungrounded = False
+        self.nudge_spec = None
 
     def converse(self, **kwargs):
         self.prompts.append(json.loads(kwargs["messages"][0]["content"][0]["text"]))
@@ -192,6 +193,15 @@ class FakeBedrock:
         if self.bad_kind_first and len(self.prompts) == 1:
             step["kind"] = "move_between_jars"  # tên action, không phải kind (lỗi thật trên Runtime v17)
         steps = [step]
+        if self.nudge_spec is not None:
+            # bước nhắc có ngày theo mốc: job gọi tool tính ngày (`knowledge___resolve_date`) trên Lambda ledger
+            steps.append(
+                {
+                    "step_id": "nhac_truoc_tet", "kind": "remind", "title": "Đặt nhắc xem lại hũ Du lịch",
+                    "reason": "Xem lại mục tiêu trước mốc người dùng nói", "jar_code": "du_lich",
+                    "action": "schedule_nudge", "nudge_on_spec": self.nudge_spec,
+                }
+            )  # fmt: skip
         if self.only_ungrounded:
             steps = [{**step, "title": "Số 9912345678"}]
         if self.repair_needed:
@@ -411,6 +421,33 @@ def test_model_failure_never_saves(pipeline, fail_on_call):
     assert job["status"] == "failed" and job["finished_at"]
     assert job["error_code"] == ErrorCode.INTERNAL_ERROR
     assert not tools.arguments("planner", "save_roadmap")
+
+
+def test_job_tinh_ngay_nhac_theo_dac_ta_bang_tool_tren_lambda_ledger(pipeline):
+    """Planner điền đặc tả ngày nhắc (`nudge_on_spec`): job gọi `knowledge___resolve_date` trên Lambda ledger với user của sự kiện,
+    ngày của tool là ngày nhắc của bước đã lưu (#39)."""
+    handle, _, tools, model, event = pipeline
+    model.nudge_spec = {"anchor": "lunar_new_year", "before": True}
+    assert handle(event("behavior.changed", "confirmed"), None) == {"status": "done"}
+    (call,) = tools.arguments("knowledge", "resolve_date")
+    assert {k: v for k, v in call.items() if k != "user_id"} == model.nudge_spec and call["user_id"]
+    (saved,) = tools.arguments("planner", "save_roadmap")
+    (nudge,) = [s for phase in saved["phases"] for s in phase["steps"] if s["step_id"] == "nhac_truoc_tet"]
+    assert nudge["action"]["params"]["fire_on"] == "2027-02-05"
+
+
+def test_tool_tinh_ngay_loi_thi_buoc_vao_vong_sua_job_khong_hong(pipeline):
+    """Ngày nhắc không tính được (DATE_IN_PAST): lỗi đã xử lý của job, bước nhắc vào vòng sửa và bị bỏ, phần còn lại vẫn được lưu; cùng
+    đặc tả không gọi lại tool ở vòng sửa."""
+    handle, db, tools, model, event = pipeline
+    model.nudge_spec = {"anchor": "lunar_new_year", "lunar_year": 2026, "before": True}
+    tools.overrides["resolve_date"] = "error_in_past"
+    assert handle(event("behavior.changed", "confirmed"), None) == {"status": "done"}
+    (job,) = db.jobs.values()
+    assert job["status"] == "done"
+    assert len(tools.arguments("knowledge", "resolve_date")) == 1
+    (saved,) = tools.arguments("planner", "save_roadmap")
+    assert [s["step_id"] for phase in saved["phases"] for s in phase["steps"]] == ["bu_du_phong"]
 
 
 def test_unconfirmed_behavior_cannot_run(pipeline):

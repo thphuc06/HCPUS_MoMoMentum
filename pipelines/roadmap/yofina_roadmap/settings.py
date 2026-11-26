@@ -14,6 +14,8 @@ ALLOWED_TOOLS = {
     "planner": frozenset(
         {"get_roadmap", "check_suitability", "optimize_allocation", "save_roadmap"}
     ),
+    # ngày nhắc theo mốc của bước lộ trình (`StepOutline.nudge_on_spec`): tool tính ngày chạy trong Lambda ledger
+    "knowledge": frozenset({"resolve_date"}),
 }
 
 
