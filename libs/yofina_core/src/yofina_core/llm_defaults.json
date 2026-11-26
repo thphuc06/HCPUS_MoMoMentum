@@ -1,5 +1,5 @@
 {
-  "_ghi_chu": "Cấu hình mặc định của yofina_core.llm. Ghi đè bằng biến môi trường YOFINA_LLM_<TÊN> hoặc SSM /yofina/llm/<tên> (roles, daily_cap_<vai>, rate_limit_max_wait_seconds, budget_timezone, usage_ttl_days, read_timeout_seconds). Model id, tốc độ và trần ngày chỉ nằm ở đây và ở các nguồn ghi đè đó, không nằm trong logic. prompt_cache (mặc định false): gắn cachePoint sau system và sau tool schema; chỉ bật cho model mà tài liệu Bedrock xác nhận nhận cachePoint ở cả system lẫn tools của Converse (Sonnet 4.6); Kimi K3 trả ValidationException nên tắt. Đang bật ở vai planner (Orchestrator, Analyst, phác thảo lộ trình); vai ingest (đọc ảnh) chưa bật vì chưa kiểm đường đó. Ghi đè roles bằng SSM thì phải ghi lại cả cờ này.",
+  "_ghi_chu": "Cấu hình mặc định của yofina_core.llm. Ghi đè bằng biến môi trường YOFINA_LLM_<TÊN> hoặc SSM /yofina/llm/<tên> (roles, daily_cap_<vai>, rate_limit_max_wait_seconds, budget_timezone, usage_ttl_days, read_timeout_seconds). Model id, tốc độ và trần ngày chỉ nằm ở đây và ở các nguồn ghi đè đó, không nằm trong logic. prompt_cache (mặc định false): gắn cachePoint sau system và sau tool schema; chỉ bật cho model mà tài liệu Bedrock xác nhận nhận cachePoint ở cả system lẫn tools của Converse (Sonnet 4.6, Haiku 4.5); Kimi K3 trả ValidationException nên tắt. Đang bật ở vai planner (Orchestrator, Analyst, phác thảo lộ trình) và ở Haiku 4.5 của vai router (#39); vai ingest (đọc ảnh) chưa bật vì chưa kiểm đường đó. Vai router là vai riêng của bộ phân loại ý định (Haiku 4.5 trước, Nova 2 Lite dự phòng); vai small giữ Nova trước cho writer, what-if, phân loại, hồ sơ hành vi. Bộ giới hạn tốc độ và bộ đếm ngày tính theo model id, nên một model ở nhiều vai dùng chung cửa sổ và bộ đếm: rpm và trần của cùng model nên giữ bằng nhau giữa các vai (Haiku 8 rpm: quota 10 RPM dùng chung với Memory). Ghi đè roles bằng SSM thì phải ghi lại cả cờ này.",
   "roles": {
     "planner": {
       "daily_cap": 400,
@@ -27,6 +27,13 @@
       "models": [
         { "id": "global.amazon.nova-2-lite-v1:0", "rpm": 18 },
         { "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0", "rpm": 8 }
+      ]
+    },
+    "router": {
+      "daily_cap": 2000,
+      "models": [
+        { "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0", "rpm": 8, "prompt_cache": true },
+        { "id": "global.amazon.nova-2-lite-v1:0", "rpm": 18 }
       ]
     },
     "embedding": {

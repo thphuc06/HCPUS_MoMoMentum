@@ -18,6 +18,8 @@ import pytest
 from yofina_agent import memory, roadmap_agent, router, schemas, whatif, writer
 from yofina_agent.textutil import normalize
 
+from yofina_core.llm import bedrock_json_schema
+
 REPO = Path(__file__).resolve().parents[3]
 EVAL_DIRS = ("golden", "adversarial", "paraphrase")
 N = 5
@@ -64,9 +66,23 @@ def _ingest_prompts() -> dict[str, str]:
     }
 
 
+def _descriptions(node: Any) -> Iterator[str]:
+    """Mọi `description` trong một JSON Schema (mô tả trường model đọc trong schema tool)."""
+    if isinstance(node, dict):
+        if isinstance(node.get("description"), str):
+            yield node["description"]
+        for v in node.values():
+            yield from _descriptions(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _descriptions(v)
+
+
 def agent_prompts() -> dict[str, str]:
     prompts = {
         "router": router.build_router_system(),
+        # mô tả trường của schema tool router (spend_jar_code, answers_pending, date_spec...; #39) cũng là chữ gửi model
+        "router.tool_schema": "\n".join(_descriptions(bedrock_json_schema(schemas.IntentResult, require_all=False))),
         "writer.WRITER_SYSTEM": writer.WRITER_SYSTEM,
         "writer.MEMORY_GUIDE": writer.MEMORY_GUIDE,
         "writer.UNTRUSTED_GUIDE": writer.UNTRUSTED_GUIDE,

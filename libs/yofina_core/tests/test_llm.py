@@ -117,7 +117,7 @@ def gateway(client: FakeClient, usage: FakeUsage | None = None, **kw: Any) -> Ll
 # --- cấu hình -------------------------------------------------------------------------------
 def test_mac_dinh_dong_goi_co_cac_vai_va_tran():
     s = load_settings(Config({}), env={})
-    assert set(s.roles) == {"planner", "ingest", "ingest_columns", "small", "embedding"}
+    assert set(s.roles) == {"planner", "ingest", "ingest_columns", "small", "router", "embedding"}
     # vai nạp dữ liệu (F6): đọc ảnh bằng Sonnet 4.6 rồi Kimi K3; ánh xạ cột/phân loại CSV bằng model nhỏ; mỗi vai có trần riêng
     assert next(m.id for m in s.roles["ingest"]).endswith("claude-sonnet-4-6")
     assert s.roles["ingest"][1].temperature is False
@@ -130,12 +130,35 @@ def test_mac_dinh_dong_goi_co_cac_vai_va_tran():
     assert s.roles["planner"][1].temperature is False  # Kimi K3 không nhận temperature
 
 
-def test_mac_dinh_dong_goi_bat_cache_chi_cho_sonnet_4_6():
-    """#24: chỉ Sonnet 4.6 (tài liệu xác nhận cachePoint ở system và tools) của vai planner (Orchestrator, Analyst, phác thảo
-    lộ trình) bật cache; Kimi K3 và mọi model khác tắt."""
+HAIKU = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+NOVA = "global.amazon.nova-2-lite-v1:0"
+
+
+def test_vai_router_haiku_truoc_nova_du_phong_va_vai_small_khong_doi():
+    """#39 (chủ dự án 26/11): router chạy Claude Haiku 4.5, Nova 2 Lite dự phòng, bằng một vai riêng; vai `small` (writer, what-if,
+    phân loại, hồ sơ hành vi) giữ Nova trước. Bộ giới hạn tốc độ và bộ đếm ngày theo MODEL id nên Haiku của router và Haiku dự phòng
+    của `small` dùng chung một cửa sổ và một bộ đếm: tốc độ và trần của Haiku giữ đúng mức đang đặt (quota 10 RPM dùng chung với
+    Memory), không thêm chỗ mới."""
+    s = load_settings(Config({}), env={})
+    router, small = s.roles["router"], s.roles["small"]
+    assert [m.id for m in router] == [HAIKU, NOVA]
+    assert [m.id for m in small] == [NOVA, HAIKU]
+    assert (router[0].rpm, router[0].daily_cap) == (small[1].rpm, small[1].daily_cap) == (8, 2000)
+    assert (router[1].rpm, router[1].daily_cap) == (small[0].rpm, small[0].daily_cap) == (18, 2000)
+    assert router[0].prompt_cache is True and router[1].prompt_cache is False
+    assert not any(m.prompt_cache for m in small)
+
+
+def test_mac_dinh_dong_goi_bat_cache_chi_cho_sonnet_4_6_va_haiku_cua_router():
+    """#24: Sonnet 4.6 của vai planner (Orchestrator, Analyst, phác thảo lộ trình) bật cache (tài liệu xác nhận cachePoint ở system và
+    tools). #39: Claude Haiku 4.5 của vai router cũng bật (cùng ba trường nhận cachePoint, tối thiểu 4.096 token cho tiền tố: system và
+    schema của router khoảng 12.000 token). Haiku ở vai khác, Nova (không nhận cachePoint ở tools) và Kimi K3 tắt."""
     s = load_settings(Config({}), env={})
     on = {(role, m.id) for role, chain in s.roles.items() for m in chain if m.prompt_cache}
-    assert on == {("planner", "global.anthropic.claude-sonnet-4-6")}
+    assert on == {
+        ("planner", "global.anthropic.claude-sonnet-4-6"),
+        ("router", "global.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    }
     assert all(not m.prompt_cache for chain in s.roles.values() for m in chain if "kimi" in m.id)
     # cấu hình vai ghi đè bằng JSON (env/SSM) cũng đọc được cờ
     env = {
@@ -527,6 +550,47 @@ def test_structured_json_tran_ngay_di_thang_ra_ngoai():
         gw.structured_json("small", output_model=Out, messages=[user_message("hi")])
 
 
+def truncated(payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Phản hồi dừng ở trần token đầu ra (`stopReason` max_tokens): Bedrock vẫn trả phần đầu vào tool đã sinh được (đo ở #39: lời đáp
+    của câu chào mất hẳn, đối tượng `params` dở dang bị bỏ), có thể vẫn khớp schema vì trường cuối là tùy chọn."""
+    resp = ok_response("đang viết dở") if payload is None else tool_response("report", payload)
+    resp["stopReason"] = "max_tokens"
+    return resp
+
+
+def test_structured_json_bi_cat_o_tran_token_thi_khong_nhan_va_thu_lai():
+    client = FakeClient([truncated({"intent": "a"}), tool_response("report", {"intent": "a", "amount": 5})])
+    r = gateway(client).structured_json(
+        "small", output_model=Out, messages=[user_message("hi")], max_attempts=2, reject_truncated=True
+    )
+    assert r.value == Out(intent="a", amount=5) and r.attempts == 2
+    feedback = client.calls[1]["messages"][-1]["content"][0]["toolResult"]
+    assert feedback["status"] == "error" and "bị cắt" in feedback["content"][0]["text"]
+
+
+def test_structured_json_bi_cat_khong_co_tool_thi_nhac_bang_chu():
+    client = FakeClient([truncated(None), tool_response("report", {"intent": "b"})])
+    r = gateway(client).structured_json("small", output_model=Out, messages=[user_message("hi")], reject_truncated=True)
+    assert r.value.intent == "b"
+    assert "bị cắt" in client.calls[1]["messages"][-1]["content"][0]["text"]
+
+
+def test_structured_json_lan_nao_cung_bi_cat_thi_loi_co_kieu():
+    client = FakeClient([truncated({"intent": "a"}), truncated({"intent": "a"})])
+    with pytest.raises(StructuredOutputError) as e:
+        gateway(client).structured_json(
+            "small", output_model=Out, messages=[user_message("hi")], max_attempts=2, reject_truncated=True
+        )
+    assert e.value.attempts == 2 and "max_tokens" in e.value.last_error
+
+
+def test_structured_json_mac_dinh_van_nhan_ket_qua_bi_cat_hop_le():
+    """Vai khác giữ hành vi cũ (chỉ router bật `reject_truncated`): đổi cho cả vai nạp hay phân loại cần đo riêng."""
+    client = FakeClient([truncated({"intent": "a"})])
+    r = gateway(client).structured_json("small", output_model=Out, messages=[user_message("hi")])
+    assert r.value == Out(intent="a") and r.attempts == 1
+
+
 # --- prompt caching (#24) ---------------------------------------------------------------------
 CACHE_POINT = {"cachePoint": {"type": "default"}}
 
@@ -656,6 +720,39 @@ def test_schema_phang_khong_con_ref_va_moi_truong_la_required():
     assert schema["properties"]["maybe"]["type"] == ["integer", "null"]
     assert schema["properties"]["inner"]["properties"]["k"]["type"] == "integer"
     assert schema["properties"]["kind"]["description"] == "mô tả"
+
+
+def test_schema_require_all_false_chi_bat_buoc_truong_khong_co_mac_dinh():
+    """Router (#39): schema chỉ bắt buộc trường không có mặc định, ở mọi tầng; vẫn phẳng, vẫn cấm trường lạ."""
+
+    class Inner(BaseModel):
+        k: int
+        opt: str | None = None
+
+    class Outer(BaseModel):
+        name: str
+        maybe: int | None = None
+        inner: Inner | None = None
+
+    schema = bedrock_json_schema(Outer, require_all=False)
+    assert schema["required"] == ["name"]
+    assert schema["additionalProperties"] is False
+    inner = schema["properties"]["inner"]
+    assert inner["type"] == ["object", "null"] and inner["required"] == ["k"]
+    assert inner["additionalProperties"] is False
+    assert "$ref" not in json.dumps(schema) and "anyOf" not in json.dumps(schema)
+    default = bedrock_json_schema(Outer)
+    assert default["required"] == ["name", "maybe", "inner"]  # mặc định không đổi
+
+
+def test_structured_json_require_all_fields_false_gui_schema_khong_bat_buoc_moi_truong():
+    client = FakeClient([tool_response("report", {"intent": "a"})])
+    r = gateway(client).structured_json(
+        "small", output_model=Out, messages=[user_message("x")], require_all_fields=False
+    )
+    assert r.value == Out(intent="a")
+    tool = client.calls[0]["toolConfig"]["tools"][0]["toolSpec"]
+    assert tool["inputSchema"]["json"]["required"] == ["intent"]
 
 
 def test_schema_giu_field_ten_title_va_default():

@@ -309,11 +309,11 @@ def review_outline():
     return {"phases": [{"phase_id": "on_dinh", "title": "Ổn định ngân sách", "steps": [step]}]}
 
 
-def goal_turn(monkeypatch, *, tools, writer=None, **params):
+def goal_turn(monkeypatch, *, tools, writer=None, question=GOAL_QUESTION, **params):
     llm = make_llm(
         [route_response(intent="roadmap", **params), tool_response("draft_roadmap", review_outline())]
     )
-    return run_turn(GOAL_QUESTION, llm=llm, tools=tools, writer=writer, monkeypatch=monkeypatch)
+    return run_turn(question, llm=llm, tools=tools, writer=writer, monkeypatch=monkeypatch)
 
 
 def calls_of(tools, name):
@@ -462,7 +462,13 @@ def test_lo_trinh_muc_tieu_o_hu_du_phong_gui_dich_so_du_cho_bo_toi_uu(monkeypatc
     tools = roadmap_tools()
     tools.results["get_jar_balances"] = lambda _a: classify_result("get_jar_balances", mcp_ok(_jars_payload(rows)))
     events, _, _ = goal_turn(
-        monkeypatch, tools=tools, roadmap_action="create", amount_vnd=3_000_000, jar_text="hũ Dự phòng", date_text="3 tháng nữa"
+        monkeypatch,
+        tools=tools,
+        question="lập lộ trình để hũ Dự phòng có 3 triệu sau 3 tháng nữa",  # router giả trả đúng số người dùng nói (mã kiểm số tiền, #39)
+        roadmap_action="create",
+        amount_vnd=3_000_000,
+        jar_text="hũ Dự phòng",
+        date_text="3 tháng nữa",
     )
     check_agui_order(events)
     assert calls_of(tools, "optimize_allocation") == [

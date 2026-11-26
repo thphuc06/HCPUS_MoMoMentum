@@ -14,7 +14,8 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
    RUN_STARTED (đi ngay, trước khi nạp cấu hình)
    turn.py ──> danh sách hũ cho router: mục `yofina.wallet` trong `context` của lượt (frontend gửi), hợp lệ thì không đọc ví;
                không có thì get_jar_balances IM LẶNG (chưa phát TOOL_CALL_*), phát khi phần sau của lượt dùng kết quả
-       ──> router.py (vai `small`, JSON bằng ép tool, tối đa router_max_attempts lần)
+       ──> router.py (vai `router`: Claude Haiku 4.5, Nova 2 Lite dự phòng, cache system + schema ở Haiku; JSON bằng ép tool,
+                      kết quả bị cắt ở trần token không nhận; tối đa router_max_attempts lần, router_max_tokens 800)
         └ lỗi/chạm trần ──> fallback.py (luật tối thiểu; suy giảm có kiểm soát)
       balance_lookup      get_jar_balances ──ACTIVITY_SNAPSHOT(jar_summary)──> TOOL_CALL_RESULT(bản gọn) ──> writer.py (1 câu)
       transactions_lookup get_jar_balances (ánh xạ tên hũ) + query_transactions ──> writer.py
@@ -40,7 +41,7 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
 | `notices.py`, `defaults.json`, `settings.py` | Chuỗi nội dung `notice` theo mã lỗi; mặc định và đọc cấu hình |
 | `main.py` | Entrypoint của Runtime (uvicorn :8080) |
 
-`yofina_core.llm` (libs): mọi lời gọi Bedrock đi qua `LlmGateway`: chuỗi dự phòng theo vai (bắt `ThrottlingException` và `AccessDeniedException`), giới hạn tốc độ mỗi model (cửa sổ 60 giây), trần ngày đếm nguyên tử ở DynamoDB `yofina-usage` (chạm trần: `ModelBudgetExceeded`, không rơi sang model dự phòng), trần mỗi lượt hội thoại, log token. Cấu hình ở `libs/yofina_core/src/yofina_core/llm_defaults.json`.
+`yofina_core.llm` (libs): mọi lời gọi Bedrock đi qua `LlmGateway`: chuỗi dự phòng theo vai (bắt `ThrottlingException` và `AccessDeniedException`), giới hạn tốc độ mỗi model (cửa sổ 60 giây), trần ngày đếm nguyên tử ở DynamoDB `yofina-usage` (chạm trần: `ModelBudgetExceeded`, không rơi sang model dự phòng), trần mỗi lượt hội thoại, log token. Cấu hình ở `libs/yofina_core/src/yofina_core/llm_defaults.json`. Vai `router` (#39) là vai riêng của router; vai `small` (writer, what-if, phân loại, hồ sơ hành vi) vẫn Nova trước. Tốc độ và trần ngày tính theo model id nên Haiku của router dùng chung cửa sổ 8 lượt/phút và bộ đếm ngày với Haiku dự phòng của `small` (quota 10 RPM của tài khoản dùng chung với Memory); cửa sổ đầy thì chờ tối đa `rate_limit_max_wait_seconds` rồi rơi về Nova. Ghi đè trần: `/yofina/llm/daily_cap_router`.
 
 ## Danh sách hũ cho router (`context` của lượt, #39)
 
@@ -52,7 +53,9 @@ Router chọn hũ chi theo danh sách hũ của ví (`<hu_cua_vi>`) và đếm k
 
 `jars`: hũ người dùng từ `GET /overview` (mã, tên, `kind`, `purpose` nếu có; không số dư, không hũ hệ thống), tối đa 20; frontend không gửi khi dữ liệu đang tải hay đang tải lại sau một lần ghi. Agent kiểm chặt (`router.wallet_context`), sai một chỗ là bỏ cả mục và đọc ví như cũ. Danh sách này chỉ vào prompt router, đánh dấu là dữ liệu; mọi tính toán sau đó (hũ trả, số dư, kịch bản, lộ trình) đọc ví bằng tool phía server, mã hũ router chọn phải có trong lần đọc đó. Thứ tự deploy: đổi được theo thứ tự nào cũng chạy (Runtime cũ bỏ qua `context`; frontend cũ không gửi thì Runtime mới đọc ví im lặng), nên deploy frontend và Runtime cùng đợt.
 
-Trường router thêm ở #39 (nghĩa của từng trường ở lời nhắc router, `router.py`, không câu mẫu): `spend_jar_code` (mã MỘT hũ trong `<hu_cua_vi>` mà khoản chi thuộc về; mã ngoài danh sách coi như null, lùi về loại chi rồi hỏi), `answers_pending` (câu mới trả lời câu hỏi lại ở lượt trước; mã chỉ ghép ô đã hỏi khi cờ đúng hoặc câu là chip), `memory_action` (`recall` hay `state`), `date_spec` (hạn mục tiêu lộ trình, mục dưới), `roadmap_action` được tin (`view` thì chỉ xem).
+Trường router thêm ở #39 (nghĩa của từng trường ở mô tả của trường trong schema tool, không câu mẫu): `spend_jar_code` (mã MỘT hũ trong `<hu_cua_vi>` mà khoản chi thuộc về; mã ngoài danh sách coi như null, lùi về loại chi rồi hỏi), `spend_jar_named` (người dùng có tự nêu hũ đó không), `answers_pending` (câu mới trả lời câu hỏi lại ở lượt trước; mã chỉ ghép ô đã hỏi khi cờ đúng hoặc câu là chip), `memory_action` (`recall` hay `state`), `date_spec` (hạn mục tiêu lộ trình, mục dưới), `roadmap_action` được tin (`view` thì chỉ xem).
+
+Mã kiểm đầu ra router trước khi lượt dùng (`router.checked_route`, chạy trong `route`): mã hũ phải thuộc danh sách hũ của lượt; khoản chi có `spend_jar_named` false mà `jar_text` đọc ra đúng hũ model chọn thì bỏ `jar_text` (đó là bản chép của hũ đã suy, lượt nói "Tính theo hũ X"); số tiền VND (`amount_vnd`, `salary_vnd`) phải có trong hội thoại (`textutil.extract_amounts`), không có thì lấy số duy nhất của câu mới hoặc bỏ để hỏi lại; `keep_previous` chỉ nhận khi tin gần nhất của Yofina là câu hỏi giữ hay bỏ khoản trước do mã đặt (không thì what-if hỏi, không gộp ngầm). Kết quả bị cắt ở trần token được thử lại; JSON hỏng hết số lần thử thì dùng luật dự phòng (`fallback.classify_by_rules`) và khối `notice` suy giảm bằng chuỗi sản phẩm.
 
 ## Ngày từ cách nói thời gian (`date_spec`, `knowledge___resolve_date`, #39)
 
@@ -100,7 +103,7 @@ uv sync
 uv run pytest tests/unit/agent libs                          # unit test
 uv run python scripts/agent_run_local.py --mock               # agent + MCP giả (tests/support) ở :8080/:8201
 uv run scripts/agent_call_local.py --message "số dư các hũ của mình"
-uv run python scripts/agent_run_local.py --mock --cap-small 0 --cap-planner 0   # thử đường suy giảm
+uv run python scripts/agent_run_local.py --mock --cap-router 0 --cap-small 0 --cap-planner 0   # thử đường suy giảm
 ```
 
 Chạy local gọi Bedrock thật (Region `ap-southeast-1`, profile mặc định; máy dùng `aws login` cần `awscrt`, đã có trong nhóm dev) và đếm vào `yofina-usage` thật. `tests/support/mock_ledger_mcp.py` chỉ để dev/test: không nằm trong gói sản phẩm và `agent/` không import nó. Trỏ Gateway thật bằng `--gateway-url` hoặc `YOFINA_GATEWAY_URL`.

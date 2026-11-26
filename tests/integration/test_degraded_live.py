@@ -3,8 +3,9 @@
 Hai kiểu ép lỗi, mỗi kiểu chạy ba câu (what-if từ hũ, what-if Trả sau, kiểm tra trước khi chi), mỗi câu một phiên MỚI
 (microVM mới đọc cấu hình model từ SSM lúc dùng lần đầu):
 
-- `tran_bang_0`: SSM `/yofina/llm/daily_cap_small` và `daily_cap_planner` về 0 -> `ModelBudgetExceeded` ở lời gọi model đầu tiên (router).
-- `model_id_sai`: SSM `/yofina/llm/roles` thay vai `small` và `planner` bằng MỘT model id không tồn tại -> Bedrock từ chối mọi lời gọi.
+- `tran_bang_0`: SSM `/yofina/llm/daily_cap_router`, `daily_cap_small` và `daily_cap_planner` về 0 -> `ModelBudgetExceeded` ở lời gọi
+  model đầu tiên (router, vai `router` từ #39).
+- `model_id_sai`: SSM `/yofina/llm/roles` thay vai `router`, `small` và `planner` bằng MỘT model id không tồn tại -> Bedrock từ chối mọi lời gọi.
 
 Đường đi mong đợi: router lỗi -> `fallback.classify_by_rules` (luật dự phòng) -> what-if dựng spec bằng mã (`whatif.deterministic_spec`),
 chạy `run_scenario` thật, phát `forecast_timeline`; kiểm tra trước khi chi gọi `affordability_check`, phát `affordability_card`.
@@ -40,6 +41,7 @@ pytestmark = pytest.mark.usefixtures("fresh")
 #: tên tham số SSM -> giá trị ép lỗi, theo kiểu
 OVERRIDES: dict[str, dict[str, str]] = {
     "tran_bang_0": {
+        "/yofina/llm/daily_cap_router": "0",
         "/yofina/llm/daily_cap_small": "0",
         "/yofina/llm/daily_cap_planner": "0",
     },
@@ -47,7 +49,7 @@ OVERRIDES: dict[str, dict[str, str]] = {
         "/yofina/llm/roles": json.dumps(
             {
                 role: {"daily_cap": 400, "models": [{"id": BAD_MODEL_ID, "rpm": 8}]}
-                for role in ("small", "planner")
+                for role in ("router", "small", "planner")
             }
         ),
     },

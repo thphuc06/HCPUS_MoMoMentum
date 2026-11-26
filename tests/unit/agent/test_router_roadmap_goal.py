@@ -11,8 +11,15 @@ from yofina_agent.schemas import IntentResult
 def test_prompt_router_day_trich_muc_tieu_lo_trinh_va_viet_han_thanh_dac_ta():
     assert "roadmap có mục tiêu người dùng nói" in ROUTER_SYSTEM
     rule = ROUTER_SYSTEM.split("roadmap có mục tiêu người dùng nói", 1)[1].split("\n- ", 1)[0]
-    for key in ("amount_vnd", "jar_text", "date_text", "date_spec", "<ngay_hom_nay>"):
+    for key in ("amount_vnd", "jar_text", "date_text", "date_spec"):
         assert key in rule
+    # không câu mẫu (#39, chủ dự án 26/11): quy tắc nói các phần của mục tiêu, không chép một câu người dùng
+    assert not any(q in rule for q in "\"“”")
+    # kỳ của đặc tả đếm từ <ngay_hom_nay>: nói ở mô tả của trường date_spec, một chỗ
+    from yofina_core.llm import bedrock_json_schema
+
+    described = bedrock_json_schema(IntentResult)["properties"]["params"]["properties"]["date_spec"]["description"]
+    assert "<ngay_hom_nay>" in described
     # V1 (#39): router viết hạn thành đặc tả, hàm tính ngày; không tự đổi ra ngày, không liệt kê cách nói thời gian
     assert "target_date" not in rule and "YYYY-MM-DD" not in rule and "ví dụ \"cuối tháng" not in rule
     assert "không tự đổi hạn ra ngày" in rule

@@ -138,15 +138,34 @@ def _names() -> set[str]:
 
 
 def test_quy_tac_chon_hu_chi_cua_router_khong_chep_ten_hu_nao():
-    rule = next(line for line in ROUTER_SYSTEM.splitlines() if line.startswith("- spend_jar_code"))
-    words = f" {normalize(rule)} "
-    assert not [n for n in _names() if f" {n} " in words]
-    assert "<hu_cua_vi>" in rule and "null" in rule
+    """Nghĩa của spend_jar_code nằm ở mô tả của trường trong schema tool, cạnh trường (#39); lời nhắc hệ thống chỉ chỉ tới đó, không
+    nhắc lại nghĩa. Cả hai không chép tên hũ nào."""
+    rule = next(line for line in ROUTER_SYSTEM.splitlines() if line.startswith("- tx_type và spend_jar_code"))
+    described = bedrock_json_schema(IntentResult)["properties"]["params"]["properties"]["spend_jar_code"]["description"]
+    for text in (rule, described):
+        words = f" {normalize(text)} "
+        assert not [n for n in _names() if f" {n} " in words]
+        assert "<hu_cua_vi>" in text
+    assert "mô tả của từng trường" in rule and "null" in described.lower()
+    assert "người dùng không cần nêu tên hũ" in described
 
 
 def test_schema_router_co_spend_jar_code_chuoi_hoac_null():
     schema = bedrock_json_schema(IntentResult)["properties"]["params"]["properties"]["spend_jar_code"]
-    assert schema == {"type": ["string", "null"]}
+    assert schema["type"] == ["string", "null"] and set(schema) == {"type", "description"}
+
+
+def test_router_khong_bat_model_chep_du_moi_truong_null(monkeypatch):
+    """Schema tool của router chỉ bắt buộc trường không có mặc định (#39: Claude Haiku 4.5, model dự phòng của vai small, chép đủ mọi
+    trường null khi tất cả là bắt buộc và vượt router_max_tokens); trường tùy chọn vẫn có trong schema, vẫn cấm trường lạ."""
+    llm = make_llm([_afford()])
+    run_turn(TRIP_Q, llm=llm, tools=_tools(DEMO_8), monkeypatch=monkeypatch)
+    schema = _router_call(llm)["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]
+    assert schema["required"] == ["intent", "params", "confidence", "needs_clarification"]
+    params = schema["properties"]["params"]
+    assert "required" not in params and params["additionalProperties"] is False
+    assert {"spend_jar_code", "answers_pending", "date_spec"} <= set(params["properties"])
+    assert params["properties"]["date_spec"]["required"] == ["anchor"]
 
 
 @pytest.mark.parametrize("value", [3, ["an_uong"], {"code": "an_uong"}, ""])

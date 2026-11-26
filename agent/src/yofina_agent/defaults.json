@@ -8,7 +8,7 @@
   "tool_timeout_seconds": 20,
   "tool_startup_timeout_seconds": 15,
   "router_max_attempts": 2,
-  "router_max_tokens": 400,
+  "router_max_tokens": 800,
   "writer_max_tokens": 300,
   "writer_turn_limit": 2,
   "writer_output_token_limit": 600,
