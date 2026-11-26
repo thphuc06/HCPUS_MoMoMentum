@@ -378,10 +378,10 @@ def test_cau_lo_trinh_khong_muc_tieu_khong_thanh_cau_dang_cho(text):
     assert pending is None or "_intent" not in pending
 
 
-def test_merge_pending_cau_cut_thanh_lo_trinh_co_muc_tieu():
+def test_merge_pending_cau_tra_loi_thanh_lo_trinh_co_muc_tieu():
     pending = {"_intent": "roadmap", "amount_vnd": TARGET, "date_text": "trong 3 tháng"}
     routed = IntentResult(
-        intent="lookup", params=IntentParams(lookup_kind="balance", jar_text="Du lịch"), confidence=0.6,
+        intent="lookup", params=IntentParams(lookup_kind="balance", jar_text="Du lịch", answers_pending=True), confidence=0.6,
         needs_clarification=False,
     )  # fmt: skip
     merged = merge_pending(routed, "Hũ Du lịch", pending)
@@ -389,13 +389,16 @@ def test_merge_pending_cau_cut_thanh_lo_trinh_co_muc_tieu():
     p = merged.params
     assert (p.amount_vnd, p.date_text, p.lookup_kind) == (TARGET, "trong 3 tháng", None)
     assert normalize(p.jar_text or "") == "du lich"
+    # router không nói là câu trả lời và không có câu hỏi mã nhận ra (không có chip): không ghép
+    plain = routed.model_copy(update={"params": routed.params.model_copy(update={"answers_pending": None})})
+    assert merge_pending(plain, "Hũ Du lịch", pending) is plain
 
 
 def test_merge_pending_giu_tham_so_router_cua_cau_moi():
     """Router (câu mới) thắng mã: router đã ghép hũ, số tiền, hạn thì giữ nguyên; chỉ điền ô router để trống."""
     pending = {"_intent": "roadmap", "amount_vnd": TARGET, "date_text": "trong 3 tháng"}
     routed = IntentResult(
-        intent="roadmap", params=IntentParams(jar_text="Du lịch", date_text="3 tháng"), confidence=0.8,
+        intent="roadmap", params=IntentParams(jar_text="Du lịch", date_text="3 tháng", answers_pending=True), confidence=0.8,
         needs_clarification=False,
     )  # fmt: skip
     p = merge_pending(routed, "Hũ Du lịch", pending).params

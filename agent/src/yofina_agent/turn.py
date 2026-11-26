@@ -226,6 +226,7 @@ class Turn:
         self._llm: LlmGateway | None = None
         self._jars: CallResult | None = None
         self._jar_rows: list[dict[str, Any]] = []
+        self._router_jar_list: list[dict[str, str]] = []  # danh sách hũ đã đưa router ở lượt này (mã, tên, kind, purpose)
         # hũ trả mã suy từ loại chi khi người dùng không nêu hũ (lượt chỉ đọc), hũ ứng viên ngang nhau khi chưa rõ (chip đứng đầu)
         self.inferred_jar: InferredJar | None = None
         self._jar_candidates: tuple[str, ...] = ()
@@ -934,13 +935,17 @@ class Turn:
         }
 
     def pending_params_before(self, index: int) -> dict[str, Any] | None:
-        """Tham số (đọc bằng mã) của câu đang chờ trả lời câu hỏi lại, từ các tin trước `index` (bỏ dòng hệ thống, đã che PII)."""
+        """Câu đang chờ trả lời câu hỏi lại (đọc bằng mã) từ các tin trước `index` (bỏ dòng hệ thống, đã che PII). Tên hũ của ví (danh
+        sách hũ của lượt) để nhận ra chip "Hũ {tên}"."""
         msgs = [
             (m.role, mask_pii(ev.message_text(m)).text)
             for m in self.run_input.messages[:index]
             if m.role in ("user", "assistant") and ev.message_text(m)
         ]
-        return pending_params(msgs, marker_excluded=notices.KEEP_PREVIOUS_MARKER)
+        names = [str(j["name"]) for j in [*self._router_jar_list, *self._jar_rows] if j.get("name")]
+        return pending_params(
+            msgs, marker_excluded=notices.KEEP_PREVIOUS_MARKER, jar_names=list(dict.fromkeys(names))
+        )
 
     async def answer_keep_previous(self, routed: IntentResult, question: str, index: int) -> bool:
         """Người dùng trả lời câu "vẫn giữ khoản trước chứ" (lượt trước agent hỏi để gộp kịch bản). True nếu đã xử lý lượt.
@@ -1020,6 +1025,7 @@ class Turn:
             )
         if not self.llm_down:
             jars = await self.router_jars()
+            self._router_jar_list = list(jars or [])
             try:
                 with self.step("router"):
                     res = await route(

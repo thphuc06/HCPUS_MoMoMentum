@@ -17,7 +17,14 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from yofina_agent.clarify import CLARIFY_INTENTS, missing_slot
+from yofina_agent.clarify import (
+    CLARIFY_INTENTS,
+    UNKNOWN_PROMPT,
+    AskedPrompt,
+    is_asking,
+    missing_slot,
+    recognize_prompt,
+)
 from yofina_agent.fallback import _CREDIT, _has, _jar_phrase, classify_by_rules
 from yofina_agent.schemas import ROUTER_TX_TYPES, IntentResult
 from yofina_agent.textutil import goal_date_phrase, normalize, parse_amount_vnd
@@ -109,11 +116,12 @@ NÓI một điều về bản thân hay một sở thích để trợ lý nhớ.
 tên hũ chứa mục tiêu ở jar_text (giữ nguyên chữ họ gõ, không đặt ở from_jar_text hay to_jar_text), hạn ở date_text: chép nguyên cụm chữ chỉ \
 thời gian họ nói (ví dụ "cuối tháng này", "31/12", "6 tháng nữa"), không tự đổi thành ngày; roadmap_action là "create". \
 Phần nào người dùng không nói thì để null, không đoán.
-- <cau_moi> luôn là thứ cần phân loại; <lich_su> chỉ để hiểu câu cụt. Chỉ GHÉP với câu trước khi <cau_moi> là câu CỤT, \
-tự nó không thành yêu cầu (ví dụ chỉ có "1 triệu", "trả sau", "hũ ăn uống", "chuyển luôn đi"): khi đó lấy ý định và tham số của câu trước \
-cộng phần mới. Nếu <cau_moi> tự đủ nghĩa (có việc cần làm hoặc món, chuyến, khoản tiền riêng) thì đó là yêu cầu MỚI: \
-phân loại chỉ dựa trên <cau_moi>, KHÔNG lấy số tiền, cách trả (funding), hũ hay món từ các câu trước, \
-và các câu trước dù về chủ đề gì cũng không làm câu mới thành out_of_scope.
+- <cau_moi> luôn là thứ cần phân loại; <lich_su> chỉ để hiểu câu trả lời cho câu Yofina vừa hỏi. answers_pending: khi dòng "Yofina:" \
+cuối cùng của <lich_su> hỏi lại người dùng một điều (hoặc mời tính lại theo cách khác) và <cau_moi> trả lời đúng điều đó, dù câu ngắn \
+hay dài, thì answers_pending=true và GHÉP: lấy ý định và tham số của câu đang chờ cộng phần người dùng vừa trả lời. Khi <cau_moi> là \
+yêu cầu MỚI (có việc cần làm hoặc món, chuyến, khoản tiền riêng, kể cả câu rất ngắn) thì answers_pending=false: phân loại chỉ dựa trên \
+<cau_moi>, KHÔNG lấy số tiền, cách trả (funding), hũ hay món từ các câu trước, và các câu trước dù về chủ đề gì cũng không làm câu mới \
+thành out_of_scope. Dòng cuối của Yofina không hỏi gì, hoặc không có <lich_su>, thì answers_pending là null.
 - keep_previous: nếu dòng "Yofina:" gần nhất trong <lich_su> hỏi người dùng có còn giữ ý định một khoản trước đó để tính gộp không, \
 và <cau_moi> trả lời câu đó: đồng ý (giữ, vẫn mua, gộp, có) thì keep_previous=true, từ chối (bỏ, không mua nữa, chỉ tính khoản mới) thì false, \
 intent là what_if (hệ thống tự lấy lại khoản mới từ câu hỏi trước, các tham số khác có thể để null). Mọi trường hợp khác để keep_previous null.
@@ -209,6 +217,7 @@ _ROUTED_CODE_KEYS = (
     "memory_action",
     "currency",
     "keep_previous",
+    "answers_pending",
     "shock_id",
 )
 
@@ -228,14 +237,14 @@ def routed_summary(r: IntentResult) -> dict[str, Any]:
     }
 
 
-# --- ghép câu trả lời cụt với câu đang chờ (bằng mã) -------------------------------------------
+# --- ghép câu trả lời với câu đang chờ (bằng mã) ----------------------------------------------
 #: Ý định có thể đang chờ đủ tham số qua khối `clarify` (cùng tập với `pending_intent` của hợp đồng): đúng tập được hỏi lại.
 PENDING_INTENTS = CLARIFY_INTENTS
-#: Ý định có câu đang chờ ghép được với câu trả lời cụt: các ý định trên, và lộ trình có mục tiêu (số tiền hoặc hạn) mà handler lộ trình
-#: hỏi lại hũ của mục tiêu (#39). Lộ trình không có trong `pending_intent` của hợp đồng khối nên khối hỏi lại của nó không mang trường đó.
+#: Ý định có câu đang chờ ghép được với câu trả lời: các ý định trên, và lộ trình (câu hỏi hũ của mục tiêu, hạn của mục tiêu, lập mới
+#: hay xem bản đang dùng; #39). Lộ trình không có trong `pending_intent` của hợp đồng khối nên khối hỏi lại của nó không mang trường đó.
 _MERGE_INTENTS = PENDING_INTENTS | {"roadmap"}
-#: Tham số mang qua lượt trả lời câu hỏi lại. Chỉ điền vào ô router để trống; giá trị mới (khác None) luôn thắng.
-_CARRY_KEYS = (
+#: Tham số mã đọc được từ chữ một câu (`_code_params`): số tiền, hũ, cách trả, món/người nhận, loại kịch bản, cụm chỉ hạn.
+_CODE_KEYS = (
     "amount_vnd",
     "jar_text",
     "from_jar_text",
@@ -245,21 +254,19 @@ _CARRY_KEYS = (
     "scenario_kind",
     "date_text",
 )
-
-
-#: Câu cụt (câu trả lời cho một câu hỏi lại) ngắn: chip dài nhất hiện có là "Trả bằng Trả sau (mô phỏng)" (6 từ).
-_FRAGMENT_MAX_WORDS = 6
-
-
-def is_fragment(text: str) -> bool:
-    """Câu CỤT (tự nó không thành yêu cầu: "250 nghìn", "Hũ Hóa đơn", "Trả sau"): ngắn và luật chung không nhận ra ý định nào.
-
-    Câu dài hơn coi là yêu cầu mới (quy tắc của router: không lấy số tiền, hũ, cách trả từ câu trước cho câu tự đủ nghĩa).
-    """
-    norm = normalize(text)
-    return (
-        bool(norm) and len(norm.split()) <= _FRAGMENT_MAX_WORDS and classify_by_rules(text) is None
-    )
+#: Ô mang qua lượt trả lời, theo nhóm: một nhóm là một ô (cụm chỉ hạn và ngày hạn là một ô), lấy trọn từ một nguồn.
+_CARRY_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("amount_vnd",),
+    ("jar_text",),
+    ("from_jar_text",),
+    ("to_jar_text",),
+    ("funding",),
+    ("label",),
+    ("scenario_kind",),
+    ("date_text", "target_date"),
+    ("roadmap_action",),
+)
+_CARRY_KEYS = tuple(k for group in _CARRY_GROUPS for k in group)
 
 
 def _code_params(text: str) -> dict[str, Any]:
@@ -268,14 +275,14 @@ def _code_params(text: str) -> dict[str, Any]:
     r = classify_by_rules(text)
     out: dict[str, Any] = {}
     if r is not None and r.intent in PENDING_INTENTS:
-        out = {k: v for k, v in r.params.model_dump().items() if k in _CARRY_KEYS and v is not None}
+        out = {k: v for k, v in r.params.model_dump().items() if k in _CODE_KEYS and v is not None}
         out["_intent"] = r.intent
     elif r is not None and r.intent == "roadmap":
         # Lộ trình có mục tiêu (số tiền hoặc hạn): handler có thể đang hỏi hũ của mục tiêu. Câu lộ trình không nêu mục tiêu (xem, vì
         # sao...) không thành câu đang chờ.
         goal = {"amount_vnd": parse_amount_vnd(text), "date_text": goal_date_phrase(text)}
         if any(v is not None for v in goal.values()):
-            out = {k: v for k, v in {**r.params.model_dump(), **goal}.items() if k in _CARRY_KEYS and v is not None}
+            out = {k: v for k, v in {**r.params.model_dump(), **goal}.items() if k in _CODE_KEYS and v is not None}
             out["_intent"] = r.intent
     norm = normalize(text)
     if "amount_vnd" not in out and (amount := parse_amount_vnd(text)) is not None:
@@ -287,76 +294,156 @@ def _code_params(text: str) -> dict[str, Any]:
     return out
 
 
-def pending_params(
-    messages: Sequence[tuple[str, str]], *, marker_excluded: str | None = None
-) -> dict[str, Any] | None:
-    """Tham số của câu đang chờ trả lời, đọc bằng mã từ lịch sử (không trông vào model nhớ).
+def _answer_params(
+    answer: str, prompt: AskedPrompt, base: Mapping[str, Any], jar_names: Sequence[str]
+) -> tuple[dict[str, Any], set[str]]:
+    """Phần một câu trả lời mang lại cho câu đang chờ `base`: (tham số, các ô câu trả lời quyết định).
 
-    `messages`: (vai, chữ) theo thứ tự, KẾT THÚC ngay trước câu mới; dòng hệ thống đã bỏ. Câu đang chờ khi tin gần nhất là câu HỎI
-    của Yofina (có "?", ví dụ `fallback_text` của khối `clarify`). Đi lùi qua chuỗi hỏi lại: câu người dùng trước câu hỏi; nếu câu đó
-    cũng cụt và trước nó lại là câu hỏi của Yofina thì gộp tiếp. Câu sau ghi đè câu trước khi có giá trị. None nếu không có câu đang chờ.
-    """
+    Bấm chip thì tham số của chip (giá trị None: bỏ giá trị đang có). Rồi chỉ ô ĐÃ HỎI (`prompt.keys`; câu hỏi không nhận ra: các ô
+    `base` còn trống) lấy từ chữ câu trả lời đọc bằng mã; ô khác câu trả lời không đụng tới, kể cả khi trong câu có số tiền hay tên hũ
+    (V3, #39). `prompt.implies` (trả lời câu hỏi này kéo theo) điền vào ô chưa có."""
+    chip = prompt.chip(answer, jar_names) or {}
+    out = dict(chip)
+    decided = {k for k in chip if not k.startswith("_")}
+    if prompt.keys is not None:
+        asked = [g for g in _CARRY_GROUPS if any(k in prompt.keys for k in g)]
+    else:
+        asked = [g for g in _CARRY_GROUPS if all(base.get(k) is None for k in g)]
+    new = _code_params(answer)
+    for group in asked:
+        if any(k in decided for k in group):
+            continue
+        out.update({k: new[k] for k in group if new.get(k) is not None})
+        decided.update(group)
+    for k, v in prompt.implies.items():
+        out.setdefault(k, v)
+    return out, decided
+
+
+def pending_params(
+    messages: Sequence[tuple[str, str]],
+    *,
+    marker_excluded: str | None = None,
+    jar_names: Sequence[str] = (),
+) -> dict[str, Any] | None:
+    """Câu đang chờ trả lời, đọc bằng mã từ lịch sử (không trông vào model nhớ).
+
+    `messages`: (vai, chữ) theo thứ tự, KẾT THÚC ngay trước câu mới; dòng hệ thống đã bỏ. Có câu đang chờ khi tin gần nhất của Yofina
+    đang chờ trả lời (`clarify.is_asking`: câu hỏi, hoặc thông báo có chip). Đi lùi qua chuỗi hỏi lại: câu người dùng trước câu hỏi;
+    nếu câu đó là câu trả lời cho câu hỏi trước nó (bấm chip, hoặc luật chung không nhận ra ý định nào) thì gộp tiếp, câu trả lời chỉ
+    điền ô đã hỏi (`_answer_params`). `jar_names`: tên các hũ của ví (nhận ra chip "Hũ {tên}").
+
+    Kết quả: tham số đọc được, `_intent` (ý định của câu đang chờ nếu biết), `_prompt` (câu hỏi mã đặt ở tin gần nhất, hoặc
+    `UNKNOWN_PROMPT`), `_jar_names`. None nếu không có câu đang chờ."""
+
+    def asking(i: int) -> bool:
+        role, text = messages[i]
+        return role == "assistant" and is_asking(text) and not (marker_excluded and marker_excluded in text)
+
+    def prompt_at(i: int) -> AskedPrompt:
+        return recognize_prompt(messages[i][1]) or UNKNOWN_PROMPT
+
     i = len(messages) - 1
-    chain: list[str] = []
-    while i >= 1 and messages[i][0] == "assistant" and "?" in messages[i][1]:
-        if marker_excluded and marker_excluded in messages[i][1]:
+    if i < 1 or not asking(i):
+        return None
+    last = prompt_at(i)
+    chain: list[tuple[str, AskedPrompt | None]] = []  # (câu người dùng, câu hỏi mà câu đó trả lời), mới trước
+    while i >= 1 and asking(i) and messages[i - 1][0] == "user":
+        text = messages[i - 1][1]
+        prev = i - 2
+        answered = None
+        if prev >= 0 and asking(prev):
+            prompt = prompt_at(prev)
+            if prompt.chip(text, jar_names) is not None or classify_by_rules(text) is None:
+                answered = prompt
+        chain.append((text, answered))
+        if answered is None:
             break
-        user_i = next((j for j in range(i - 1, -1, -1) if messages[j][0] == "user"), None)
-        if user_i is None or user_i != i - 1:
-            break
-        chain.append(messages[user_i][1])
-        if not is_fragment(messages[user_i][1]):
-            break
-        i = user_i - 1
+        i = prev
     if not chain:
         return None
     merged: dict[str, Any] = {}
-    for text in reversed(chain):  # cũ trước, mới sau
-        merged.update(_code_params(text))
-    return merged or None
+    for text, answered in reversed(chain):  # cũ trước, mới sau
+        if answered is None:
+            merged.update(_code_params(text))
+            continue
+        got, decided = _answer_params(text, answered, merged, jar_names)
+        for k in decided:
+            merged.pop(k, None)
+        for k, v in got.items():
+            if k.startswith("_") or v is None:
+                continue
+            if k in decided:
+                merged[k] = v
+            else:
+                merged.setdefault(k, v)  # điều câu hỏi kéo theo chỉ điền ô chưa có
+        if hint := got.get("_intent") or (answered.intent if "_intent" not in merged else None):
+            merged["_intent"] = hint
+    if "_intent" not in merged and last.intent:
+        merged["_intent"] = last.intent
+    merged["_prompt"] = last
+    merged["_jar_names"] = tuple(jar_names)
+    return merged
 
 
 def merge_pending(
     routed: IntentResult, question: str, pending: dict[str, Any] | None
 ) -> IntentResult:
-    """Ghép câu trả lời cụt với câu đang chờ: giữ tham số đã có (số tiền, người nhận, hũ...) qua lượt hỏi lại.
+    """Ghép câu trả lời với câu đang chờ: giữ tham số đã có (số tiền, người nhận, hũ...) qua lượt hỏi lại.
 
-    Chỉ áp khi `question` là câu cụt và router đã xếp nó vào một ý định đang chờ được (không đổi ý định router chọn: câu cụt kiểu
-    "Không cần đâu, cảm ơn" vẫn là chitchat). Thứ tự ưu tiên mỗi ô: router (câu mới) > mã đọc câu mới > mã đọc câu đang chờ.
-    Câu hỏi lại router đặt chỉ giữ khi đúng ô vẫn còn thiếu sau khi ghép; còn lại để `clarify.resolve_clarify` hỏi đúng ô còn thiếu.
-    """
-    if not pending or not is_fragment(question):
+    Chỉ áp khi router nói câu này trả lời câu hỏi đang chờ (`answers_pending`) hoặc câu đúng là một chip của câu hỏi mã đã đặt; không
+    theo độ dài câu (V3, #39): yêu cầu mới, dù ngắn, không kế thừa ô nào của câu cũ. Không đổi ý định router chọn, trừ khi bấm chip của
+    câu hỏi chỉ thuộc một ý định, hoặc câu trả lời bị xếp là tra cứu. Thứ tự mỗi ô: router (câu mới) > chip > ô đã hỏi đọc từ câu trả
+    lời; ô không hỏi lấy từ câu đang chờ. Câu hỏi lại router đặt chỉ giữ khi đúng ô vẫn còn thiếu sau khi ghép; còn lại để
+    `clarify.resolve_clarify` hỏi đúng ô còn thiếu."""
+    if not pending:
         return routed
-    intent = routed.intent
-    if intent == "lookup" and pending.get("_intent") in _MERGE_INTENTS:
-        # "Hũ Hóa đơn" đứng riêng dễ bị xếp là tra số dư; đang có câu chờ trả lời thì đó là câu trả lời cho câu chờ.
-        intent = pending["_intent"]
-    if intent not in _MERGE_INTENTS or (intent == "roadmap" and pending.get("_intent") != "roadmap"):
-        # lộ trình chỉ ghép với câu lộ trình đang chờ (không lấy số tiền của câu what-if đang chờ làm mục tiêu lộ trình)
+    prompt: AskedPrompt = pending.get("_prompt") or UNKNOWN_PROMPT
+    jar_names = tuple(pending.get("_jar_names") or ())
+    tapped = prompt.chip(question, jar_names) is not None
+    if routed.params.answers_pending is not True and not tapped:
         return routed
-    new = _code_params(question)
-    if intent == "roadmap" and not (routed.params.jar_text or new.get("jar_text")):
-        # lộ trình chỉ hỏi lại hũ của mục tiêu: câu cụt không nêu hũ nào ("Giữ bản cũ") không phải câu trả lời cho câu hỏi đó
+    base = {k: v for k, v in pending.items() if not k.startswith("_")}
+    got, decided = _answer_params(question, prompt, base, jar_names)
+    pending_intent = pending.get("_intent")
+    if got.get("_intent"):
+        intent = got["_intent"]
+    elif (tapped or routed.intent == "lookup") and (prompt.intent or pending_intent):
+        # "Hũ Hóa đơn" đứng riêng dễ bị xếp là tra số dư; chip của câu hỏi chỉ thuộc một ý định thì mã biết câu đang chờ là gì
+        intent = prompt.intent or pending_intent
+    else:
+        intent = routed.intent
+    if intent not in _MERGE_INTENTS:
+        return routed
+    if pending_intent is not None and (intent == "roadmap") != (pending_intent == "roadmap"):
+        # lộ trình chỉ ghép với câu lộ trình đang chờ (không lấy số tiền của câu what-if đang chờ làm mục tiêu lộ trình), và ngược lại
         return routed
     params = routed.params.model_dump() if intent == routed.intent else {}
-    filled = False
-    for key in _CARRY_KEYS:
-        if params.get(key) is not None:
+    before = {k: v for k, v in params.items() if v is not None}
+    for k, v in got.items():
+        if k.startswith("_") or k in _CARRY_KEYS:
             continue
-        value = new.get(key, pending.get(key))
-        if value is not None:
-            params[key] = value
-            filled = True
-    if not filled:
+        if v is None or params.get(k) is None:  # chip bỏ giá trị (hũ router đã chọn lại) hoặc điền ô router để trống
+            params[k] = v
+    for group in _CARRY_GROUPS:
+        if any(params.get(k) is not None for k in group):
+            continue
+        source = got if any(k in decided for k in group) else base
+        params.update({k: source[k] for k in group if source.get(k) is not None})
+    for k in decided:
+        if k in got and got[k] is None and k in _CARRY_KEYS:
+            params[k] = None  # chip bỏ giá trị: "chọn hũ khác" không giữ hũ router đọc lại từ lịch sử
+    for k, v in prompt.implies.items():
+        if params.get(k) is None:
+            params[k] = v  # trả lời câu hỏi hũ hay hạn của mục tiêu: đang ở đường lập lộ trình (router nói xem thì vẫn xem)
+    if params.get("funding") == "credit" and params.get("scenario_kind") == "one_time_purchase":
+        params["scenario_kind"] = "bnpl_purchase"  # chọn Trả sau cho khoản mua: kịch bản mua bằng Trả sau
+    after = {k: v for k, v in params.items() if v is not None}
+    if after == before and intent == routed.intent:
         return routed
     try:
         merged = IntentResult.model_validate(
-            {
-                "intent": intent,
-                "params": {k: v for k, v in params.items() if v is not None},
-                "confidence": routed.confidence,
-                "needs_clarification": False,
-            }
+            {"intent": intent, "params": after, "confidence": routed.confidence, "needs_clarification": False}
         )
     except ValidationError:
         return routed

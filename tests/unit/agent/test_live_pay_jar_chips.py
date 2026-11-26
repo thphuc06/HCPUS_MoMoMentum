@@ -19,7 +19,7 @@ import pytest
 from agent_helpers import blocks_of, check_agui_order, make_llm, route_response, run_turn
 from test_infer_pay_jar import DEMO_8, _calls, _jar, _tools, _types
 from yofina_agent import notices
-from yofina_agent.router import is_fragment, merge_pending, pending_params, routed_summary
+from yofina_agent.router import merge_pending, pending_params, routed_summary
 from yofina_agent.schemas import IntentParams, IntentResult
 
 from yofina_core.blocks import CLARIFY_MAX_CHIPS, parse_block
@@ -119,14 +119,16 @@ TRIP_HISTORY = [
 
 def test_cau_chuyen_tien_du_nghia_khong_bi_ghep_voi_cau_dang_cho_bang_ma():
     """Trên app, cùng hội thoại, câu chuyển tiền có số tiền bị hỏi số tiền; hội thoại mới thì hỏi hũ. Phần ghép bằng mã (`merge_pending`)
-    chỉ áp cho câu cụt, nên câu tự đủ nghĩa giữ nguyên đầu ra router: câu hỏi số tiền chỉ có thể đến từ router (model) để trống số tiền."""
-    assert not is_fragment(TRANSFER_Q)
+    chỉ áp khi router nói câu này trả lời câu hỏi đang chờ hoặc câu là chip (V3), nên câu tự đủ nghĩa giữ nguyên đầu ra router: câu hỏi số
+    tiền chỉ có thể đến từ router (model) để trống số tiền."""
     pending = pending_params([(m["role"], m["content"]) for m in TRIP_HISTORY[:2]])
     assert pending and pending["amount_vnd"] == 2_000_000  # câu chuyến đi đang chờ có số tiền của nó
-    routed = IntentResult.model_validate(
-        {"intent": "affordability", "params": {"amount_vnd": 300_000}, "confidence": 0.9, "needs_clarification": False}
-    )
-    assert merge_pending(routed, TRANSFER_Q, pending) is routed
+    for flag in (None, False):
+        routed = IntentResult.model_validate(
+            {"intent": "affordability", "params": {"amount_vnd": 300_000, "answers_pending": flag}, "confidence": 0.9,
+             "needs_clarification": False}
+        )  # fmt: skip
+        assert merge_pending(routed, TRANSFER_Q, pending) is routed
 
 
 @pytest.mark.parametrize(

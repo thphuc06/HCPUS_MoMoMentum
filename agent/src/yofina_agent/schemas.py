@@ -152,6 +152,10 @@ class IntentParams(_Model):
     # về theo ý định của người dùng, hoặc null. Mã kiểm theo danh sách đã đưa ở lượt (`router.checked_spend_jar`); người dùng không nêu hũ
     # thì đây là nguồn đầu tiên của hũ trả (`clarify.infer_pay_jar`), loại chi `tx_type` là đường lùi.
     spend_jar_code: str | None = None
+    # Lịch sử có câu hỏi lại của Yofina đang chờ (dòng "Yofina:" cuối của <lich_su>): true khi <cau_moi> trả lời đúng câu hỏi đó (dù câu
+    # ngắn hay dài), false khi <cau_moi> là yêu cầu mới; null khi không có câu hỏi nào đang chờ. Mã chỉ ghép câu trả lời với câu đang
+    # chờ khi cờ này đúng hoặc câu trùng một chip của câu hỏi mã đã đặt (`router.merge_pending`), không theo độ dài câu.
+    answers_pending: bool | None = None
 
     @field_validator("spend_jar_code", mode="before")
     @classmethod
@@ -174,6 +178,12 @@ class IntentParams(_Model):
         if value not in (None, ""):
             log.warning(json.dumps({"event": "router_tx_type_dropped", "value": str(value)[:40]}, ensure_ascii=False))
         return None
+
+    @field_validator("answers_pending", mode="before")
+    @classmethod
+    def _answers_pending_bool(cls, value: Any) -> Any:
+        """Chỉ nhận true/false; giá trị khác coi như router không nói (mã không ghép), không bắt router thử lại."""
+        return value if isinstance(value, bool) else None
 
     @field_validator("memory_action", mode="before")
     @classmethod

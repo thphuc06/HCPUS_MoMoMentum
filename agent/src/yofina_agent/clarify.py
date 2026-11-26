@@ -10,13 +10,16 @@ không có thì hũ suy từ loại chi bằng quy tắc phân loại của ví 
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+import re
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 from yofina_agent import notices
 from yofina_agent.jars import resolve_jar
 from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, IntentResult
+from yofina_agent.textutil import normalize
 from yofina_core.wallet import is_system_jar, spending_tx_type_jar
 
 #: scenario_kind nào KHÔNG cần số tiền
@@ -163,3 +166,171 @@ def infer_pay_jar(r: IntentResult, jar_rows: Sequence[Mapping[str, Any]]) -> Jar
     if code is None:
         return JarInference(r)
     return _with_jar(r, code, rows, p.tx_type)
+
+
+# --- câu hỏi lại (và thông báo có chip) do mã đặt, nhận ra từ chữ của nó trong lịch sử -----------------------------------------
+# Lịch sử frontend gửi chỉ có chữ (`fallback_text` của khối), không có ô hay chip. Câu hỏi mã đặt là chuỗi sản phẩm nên nhận ra được:
+# biết câu trả lời điền ô nào và chuỗi nào là chip (V3, #39). Câu hỏi router (model) tự đặt thì không nhận ra (`UNKNOWN_PROMPT`).
+
+#: Lượt chỉ đọc chưa rõ hũ trả của khoản chi (V4): MỘT câu cho cả what-if mua hàng và kiểm tra trước khi chi; chip là mọi hũ của ví
+#: cộng Trả sau (`CREDIT_CHIP`, cùng chữ với chip Trả sau của câu hỏi cách trả).
+PAY_QUESTION = "Bạn định trả khoản này bằng hũ nào, hay bằng Trả sau (mô phỏng)?"
+CREDIT_CHIP = ClarifyChipIn(label="Trả sau (mô phỏng)", value="Trả bằng Trả sau (mô phỏng)")
+#: Câu lộ trình nêu mục tiêu, router không nói xem hay lập, và đã có bản đang dùng (C2): một câu, hai chip (nhãn, chữ gửi đi, việc).
+ROADMAP_CHOICE_QUESTION = "Bạn muốn lập lộ trình mới theo mục tiêu này hay xem lộ trình đang dùng?"
+ROADMAP_CHOICE_CHIPS: tuple[tuple[str, str, str], ...] = (
+    ("Lập bản mới", "Lập lộ trình mới theo mục tiêu này", "create"),
+    ("Xem bản đang dùng", "Xem lộ trình đang dùng", "view"),
+)
+#: Hạn của mục tiêu lộ trình chưa xác định được (V1): router không trả ngày và mã không đọc trọn được cụm chỉ hạn, hoặc ngày router trả
+#: lệch rõ với cách đọc bằng mã. Có ngày ứng viên thì mỗi ngày một chip ({date}: dd/mm/yyyy).
+GOAL_DATE_QUESTION = "Bạn muốn gom đủ mục tiêu này trước ngày nào?"
+GOAL_DATE_CHIP_LABEL = "Trước {date}"
+GOAL_DATE_CHIP_VALUE = "Hạn {date}"
+_GOAL_DATE_CHIP_RE = re.compile(r"^han (\d{2}) (\d{2}) (\d{4})$")
+#: Chip của thông báo "Tính theo hũ X" ở lượt chỉ đọc (V4): chọn hũ khác, và tính bằng Trả sau khi ví có hạn mức. Chữ gửi đi nói rõ
+#: việc (mô phỏng hay kiểm tra) để lượt sau biết ý định của câu đang chờ mà không cần đoán.
+NOTICE_CHIP_LABELS: dict[str, str] = {"choose": "Chọn hũ khác", "credit": "Tính bằng Trả sau"}
+NOTICE_CHIP_PROMPTS: dict[str, dict[str, str]] = {
+    "what_if": {"choose": "Mô phỏng lại khoản này với hũ khác", "credit": "Mô phỏng lại khoản này bằng Trả sau"},
+    "affordability": {"choose": "Kiểm tra lại khoản này với hũ khác", "credit": "Kiểm tra lại khoản này bằng Trả sau"},
+}
+
+
+@dataclass(frozen=True)
+class AskedPrompt:
+    """Một câu hỏi lại (hoặc thông báo có chip) mã đã đặt ở lượt trước.
+
+    `keys`: các ô (tên tham số của router) câu trả lời điền; None khi không nhận ra câu hỏi (router tự đặt): khi đó câu trả lời chỉ
+    điền các ô câu đang chờ còn trống. `chips`: chữ chip (đã `normalize`) -> tham số chip đặt; giá trị None là bỏ giá trị đang có
+    (chip "chọn hũ khác" không dùng lại hũ đã suy); khóa `_intent` là ý định của câu đang chờ. `jar_chips`: chip "Hũ {tên}" cho từng hũ
+    của ví, tên hũ vào ô `jar_key` (None: chip hũ không gắn một ô, như câu hỏi hũ nguồn và hũ đích). `date_chips`: chip "Hạn dd/mm/yyyy".
+    `intent`: ý định của câu đang chờ khi câu hỏi chỉ thuộc một ý định; `implies`: tham số mà việc trả lời câu hỏi kéo theo."""
+
+    keys: tuple[str, ...] | None = None
+    chips: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    jar_chips: bool = False
+    jar_key: str | None = None
+    date_chips: bool = False
+    intent: str | None = None
+    implies: Mapping[str, Any] = field(default_factory=dict)
+
+    def chip(self, text: str, jar_names: Iterable[str] = ()) -> dict[str, Any] | None:
+        """Tham số chip đặt nếu `text` đúng là một chip của câu hỏi này (người dùng bấm chip), None nếu không phải chip."""
+        norm = normalize(text)
+        if not norm:
+            return None
+        if norm in self.chips:
+            return dict(self.chips[norm])
+        if self.jar_chips:
+            for name in jar_names:
+                if norm == normalize(f"Hũ {name}"):
+                    return {self.jar_key: name} if self.jar_key else {}
+        if self.date_chips and (m := _GOAL_DATE_CHIP_RE.match(norm)):
+            try:
+                day = date(int(m[3]), int(m[2]), int(m[1]))
+            except ValueError:
+                return None
+            return {"target_date": day.isoformat(), "date_text": day.strftime("%d/%m/%Y")}
+        return None
+
+
+UNKNOWN_PROMPT = AskedPrompt()
+
+
+def _chip_map(pairs: Iterable[tuple[str, Mapping[str, Any]]]) -> dict[str, Mapping[str, Any]]:
+    return {normalize(value): dict(effect) for value, effect in pairs}
+
+
+def _template(text: str) -> re.Pattern[str]:
+    """Mẫu khớp một chuỗi sản phẩm có chỗ điền (`{name}`): phần cố định giữ nguyên, chỗ điền khớp chữ bất kỳ."""
+    parts = re.split(r"\{[a-z_]+\}", text)
+    return re.compile(".+?".join(re.escape(p) for p in parts), re.S)
+
+
+def _notice_chips() -> dict[str, Mapping[str, Any]]:
+    clear = {"jar_text": None, "spend_jar_code": None, "tx_type": None}
+    pairs: list[tuple[str, Mapping[str, Any]]] = []
+    for intent, prompts in NOTICE_CHIP_PROMPTS.items():
+        pairs.append((prompts["choose"], {"_intent": intent, **clear}))
+        pairs.append((prompts["credit"], {"_intent": intent, "funding": "credit", "jar_text": None, "spend_jar_code": None}))
+    return _chip_map(pairs)
+
+
+_PAY_CHIPS = _chip_map([(str(CREDIT_CHIP.value), {"funding": "credit"})])
+_ROADMAP_CREATE = {"roadmap_action": "create"}
+#: (chuỗi cố định hoặc mẫu, câu hỏi) theo thứ tự xét; chuỗi cố định khớp khi nằm trong tin của Yofina (tin có thể gồm chữ của nhiều khối).
+_PROMPTS: tuple[tuple[str | re.Pattern[str], AskedPrompt], ...] = (
+    (PAY_QUESTION, AskedPrompt(keys=("jar_text", "funding"), chips=_PAY_CHIPS, jar_chips=True, jar_key="jar_text")),
+    (notices.CLARIFY["pay_jar"]["question"], AskedPrompt(keys=("jar_text",), jar_chips=True, jar_key="jar_text")),
+    (
+        notices.CLARIFY["funding_source"]["question"],
+        AskedPrompt(
+            keys=("funding", "jar_text"),
+            chips=_chip_map(
+                (c["value"], {"funding": "credit" if c["value"] == CREDIT_CHIP.value else "jar"})
+                for c in notices.CLARIFY["funding_source"]["chips"]
+            ),
+        ),
+    ),
+    (
+        notices.CLARIFY["amount"]["question"],
+        AskedPrompt(keys=("amount_vnd",), chips=_chip_map((c["value"], {}) for c in notices.CLARIFY["amount"]["chips"])),
+    ),
+    (notices.CLARIFY["jar"]["question"], AskedPrompt(keys=("from_jar_text", "to_jar_text"), jar_chips=True)),
+    (_template(notices.UNKNOWN_JAR_QUESTION), AskedPrompt(keys=("jar_text",), jar_chips=True, jar_key="jar_text")),
+    (notices.UNKNOWN_JAR_QUESTION_NO_NAME, AskedPrompt(keys=("jar_text",), jar_chips=True, jar_key="jar_text")),
+    (
+        notices.ROADMAP_GOAL_JAR_QUESTION,
+        AskedPrompt(keys=("jar_text",), jar_chips=True, jar_key="jar_text", intent="roadmap", implies=_ROADMAP_CREATE),
+    ),
+    (
+        ROADMAP_CHOICE_QUESTION,
+        AskedPrompt(
+            keys=("roadmap_action",),
+            chips=_chip_map((value, {"roadmap_action": action}) for _, value, action in ROADMAP_CHOICE_CHIPS),
+            intent="roadmap",
+        ),
+    ),
+    (
+        GOAL_DATE_QUESTION,
+        AskedPrompt(keys=("date_text", "target_date"), date_chips=True, intent="roadmap", implies=_ROADMAP_CREATE),
+    ),
+    (_template(notices.INFERRED_JAR_MESSAGE), AskedPrompt(keys=("jar_text", "funding"), chips=_notice_chips())),
+    (_template(notices.INFERRED_JAR_MESSAGE_INTENT), AskedPrompt(keys=("jar_text", "funding"), chips=_notice_chips())),
+    *(
+        (
+            pattern,
+            AskedPrompt(
+                keys=(),
+                chips=_chip_map(
+                    (c["value"], {"_intent": intent} if intent else {})
+                    for c, intent in zip(notices.CONFIRM_SPENDING_CHIPS, ("what_if", "affordability", None), strict=True)
+                ),
+            ),
+        )
+        for pattern in (_template(notices.CONFIRM_SPENDING_QUESTION), notices.CONFIRM_SPENDING_QUESTION_NO_NAME)
+    ),
+)
+
+
+def recognize_prompt(text: str) -> AskedPrompt | None:
+    """Câu hỏi lại (hoặc thông báo có chip) mã đã đặt trong một tin của Yofina, None nếu tin không có câu nào như vậy."""
+    for pattern, prompt in _PROMPTS:
+        if pattern.search(text) if isinstance(pattern, re.Pattern) else pattern in text:
+            return prompt
+    return None
+
+
+def is_asking(text: str) -> bool:
+    """Tin của Yofina đang chờ người dùng trả lời: có câu hỏi (dấu "?"), hoặc có thông báo kèm chip mã nhận ra."""
+    return "?" in text or recognize_prompt(text) is not None
+
+
+def goal_date_chips(days: Iterable[date]) -> list[ClarifyChipIn]:
+    """Chip ngày ứng viên của câu hỏi hạn mục tiêu (`GOAL_DATE_QUESTION`), theo thứ tự đưa vào, bỏ ngày trùng."""
+    out: list[ClarifyChipIn] = []
+    for day in dict.fromkeys(days):
+        text = day.strftime("%d/%m/%Y")
+        out.append(ClarifyChipIn(label=GOAL_DATE_CHIP_LABEL.format(date=text), value=GOAL_DATE_CHIP_VALUE.format(date=text)))
+    return out

@@ -183,8 +183,9 @@ def test_prompt_router_khong_chua_cau_hoi_demo_va_boc_du_lieu_trong_the():
     assert "<lich_su>" not in build_router_prompt("x", "")
 
 
-def test_prompt_router_chi_ghep_cau_cut_cau_moi_du_nghia_khong_mang_tham_so_cu():
+def test_prompt_router_chi_ghep_cau_tra_loi_cau_moi_du_nghia_khong_mang_tham_so_cu():
     # Lỗi thật 23/11: sau chuỗi câu "mua tai nghe bằng Trả sau", câu mới "đi du lịch 5 triệu" bị ghép nhầm rồi thành out_of_scope.
-    assert "câu CỤT" in ROUTER_SYSTEM
+    # V3 (#39): ghép theo cờ answers_pending (câu trả lời cho câu hỏi đang chờ), không theo độ dài câu.
+    assert "answers_pending=true" in ROUTER_SYSTEM and "câu CỤT" not in ROUTER_SYSTEM
     assert "KHÔNG lấy số tiền, cách trả (funding)" in ROUTER_SYSTEM
     assert "không làm câu mới thành out_of_scope" in ROUTER_SYSTEM
