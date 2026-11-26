@@ -47,7 +47,7 @@ Bằng chứng cho từng AC ghi vào mục "Kết quả thực hiện" của fi
 
 | ID | Cho trước | Khi | Thì | BR | Trạng thái |
 |---|---|---|---|---|---|
-| AC-FR3-01 | `minh` vừa đặt lại (ví demo) | Mở app | Thẻ chủ động và Chi tiết hũ Ăn uống báo **cạn 23/11** mô phỏng, lương 05/12; số dư các hũ so được với bảng Figma (chỗ lệch ghi lại) | BR-28, 34 | Đạt (đóng phase 2, 22/11, bộ 7 hũ). 26/11 trên app (ví demo 7 hũ, bản rạng sáng): Ăn uống 380.000 ₫ cạn 23/11, nhãn Cao. Ví 8 hũ (thêm Chi hằng ngày): đo cục bộ y hệt, chờ đo lại trên app sau deploy |
+| AC-FR3-01 | `minh` vừa đặt lại (ví demo) | Mở app | Thẻ chủ động và Chi tiết hũ Ăn uống báo **cạn 23/11** mô phỏng, lương 05/12; số dư các hũ so được với bảng Figma (chỗ lệch ghi lại) | BR-28, 34 | Đạt (đóng phase 2, 22/11, bộ 7 hũ). 26/11 trên app (ví demo 7 hũ, bản rạng sáng): Ăn uống 380.000 ₫ cạn 23/11, nhãn Cao. Ví 8 hũ (thêm Chi hằng ngày) trên app sau Runtime v31 và v32: Ăn uống cạn 23/11, "Hụt", 12 ngày tới kỳ lương |
 | AC-FR3-02 | Đang xem Chi tiết hũ Ăn uống | Tạo giao dịch 200.000 ₫ từ hũ đó | Trong vòng 1 phút ngày cạn trên Chi tiết hũ cập nhật | BR-33 | Đạt (đóng phase 2, 22/11) |
 | AC-FR3-03 | Có sáu tài khoản demo | Chạy tay batch đêm | Chạy xong cho cả sáu; có bản ghi lần chạy mới | BR-33 | Đạt (đóng phase 2, 22/11) |
 | AC-FR3-04 | Báo cáo backtest | Soát | Hurdle có pinball thấp hơn seasonal naive trên cả hai bộ sinh; độ phủ tổng 30 ngày đạt 0,75–0,85, hoặc giao diện đã chuyển sang nhóm Cao/Vừa/Thấp | BR-31 | Đạt (đóng phase 2, 22/11) |
@@ -73,7 +73,7 @@ Bằng chứng cho từng AC ghi vào mục "Kết quả thực hiện" của fi
 
 | ID | Cho trước | Khi | Thì | BR | Trạng thái |
 |---|---|---|---|---|---|
-| AC-FR5-01 | `minh` vừa đặt lại | Gõ "nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao" | Thấy dòng thời gian trước và sau; khối tác động nghĩa vụ với tổng **1.233.000 ₫** đến hạn 05/12 và khoản hụt tháng sau; ít nhất 2 phương án; lời giải thích. Khối số hiện trước văn bản | BR-37, 39 | Đạt (phase 3, tiêu chí 1; số theo engine). 26/11 trên app (ví demo, bản đang chạy lúc đó có Trả sau ngày 3): khoản Trả sau thành 2.200.000 ₫ (cộng 1.000.000 ₫ có sẵn), hũ Nghĩa vụ liệt kê Tiền điện 26/11 và khoản Trả sau đó, thiếu khoảng 1.162.000 ₫. Sau đợt #39 (Trả sau đến hạn **05/12**, đúng ngày lương), đo cục bộ: thiếu 1.168.392 ₫ (số dư trước khi lương về 1.031.608 ₫); chờ đo lại trên app |
+| AC-FR5-01 | `minh` vừa đặt lại | Gõ "nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao" | Thấy dòng thời gian trước và sau; khối tác động nghĩa vụ với tổng **1.233.000 ₫** đến hạn 05/12 và khoản hụt tháng sau; ít nhất 2 phương án; lời giải thích. Khối số hiện trước văn bản | BR-37, 39 | Đạt (phase 3, tiêu chí 1; số theo engine). 26/11 trên app (ví demo, bản đang chạy lúc đó có Trả sau ngày 3): khoản Trả sau thành 2.200.000 ₫ (cộng 1.000.000 ₫ có sẵn), hũ Nghĩa vụ liệt kê Tiền điện 26/11 và khoản Trả sau đó, thiếu khoảng 1.162.000 ₫. Sau đợt #39 (Trả sau đến hạn **05/12**, đúng ngày lương), đo cục bộ: thiếu 1.168.392 ₫ (số dư trước khi lương về 1.031.608 ₫); trên app (Runtime v32): Trả sau 05/12 2.200.000 ₫, thiếu 1.167.673 ₫ |
 | AC-FR5-02 | Đang xem phương án chuyển giữa hũ | Chọn phương án, xác nhận | Có biên nhận; bấm Hoàn tác thì số dư về như cũ | BR-45, 50 | Đạt (đi cảnh 2 trên app, 23/11) |
 | AC-FR5-03 | Câu hỏi thiếu số tiền ("nếu mua cái điện thoại thì sao") | Gửi | Đúng **một** câu hỏi lại; trả lời xong thì chạy tiếp | BR-40 | Đạt (phase 3, tiêu chí 6) |
 | AC-FR5-04 | Bộ golden có 6 loại kịch bản | Chạy | Mỗi loại có ít nhất một câu đạt; quỹ đạo tool đúng từ 85% | BR-39 | Đạt (golden 30/30, đủ 6 loại) |
@@ -84,7 +84,7 @@ Bằng chứng cho từng AC ghi vào mục "Kết quả thực hiện" của fi
 
 | ID | Cho trước | Khi | Thì | BR | Trạng thái |
 |---|---|---|---|---|---|
-| AC-FR6-01 | `minh` vừa đặt lại (ví demo) | Chuyển 250.000 ₫ cho người nhận demo | Không nêu hũ: thẻ kiểm các hũ chi tiêu, Đi lại và Giải trí **xanh**, Ăn uống **đỏ**; nêu hũ Nghĩa vụ (gộp Hóa đơn cũ) thì thẻ **vàng** hoặc đỏ; chọn trả sau thì tổng phải trả là khoản có sẵn cộng 250.000 ₫ (**1.250.000 ₫**, tháng đã có phí nên không cộng phí; AC gốc ghi 283.000 ₫, tức 250.000 ₫ cộng phí 33.000 ₫) | BR-36, 37 | **Một phần**: test tích hợp viết lại theo ví demo, chạy đạt 26/11 05:09 trên ví 7 hũ; test chỉ khẳng định Nghĩa vụ "sát" hoặc "hụt", chưa chốt màu vàng vì dải "sát" vẫn hẹp (C-02, 13 T-02) |
+| AC-FR6-01 | `minh` vừa đặt lại (ví demo) | Chuyển 250.000 ₫ cho người nhận demo | Không nêu hũ: thẻ kiểm các hũ chi tiêu, Đi lại và Giải trí **xanh**, Ăn uống **đỏ**; nêu hũ Nghĩa vụ (gộp Hóa đơn cũ) thì thẻ **vàng** hoặc đỏ; chọn trả sau thì tổng phải trả là khoản có sẵn cộng 250.000 ₫ (**1.250.000 ₫**, tháng đã có phí nên không cộng phí; AC gốc ghi 283.000 ₫, tức 250.000 ₫ cộng phí 33.000 ₫) | BR-36, 37 | **Một phần**: test tích hợp viết lại theo ví demo, chạy đạt 26/11 05:09 trên ví 7 hũ và sau deploy v31 trên ví 8 hũ (tích hợp phase 3 2/2); test chỉ khẳng định Nghĩa vụ "sát" hoặc "hụt", chưa chốt màu vàng vì dải "sát" vẫn hẹp (C-02, 13 T-02) |
 | AC-FR6-02 | Đang ở bước kiểm tra | Model lỗi hoặc chậm quá 2 giây | Vẫn hiện thẻ số liệu, không có câu giải thích | BR-35 | Đạt (phase 3, tiêu chí 8) |
 | AC-FR6-03 | 10 lượt, phiên ấm | Gọi kiểm tra | p95 dưới 2 giây | NFR-02 | Đạt (p95 282 ms) |
 | AC-FR6-04 **[bổ sung]** | Người dùng bỏ qua cùng một loại cảnh báo nhiều lần | Lần kế tiếp | Tần suất nhắc loại đó giảm | BR-38 | Chưa có bằng chứng |
@@ -95,7 +95,7 @@ Bằng chứng cho từng AC ghi vào mục "Kết quả thực hiện" của fi
 | ID | Cho trước | Khi | Thì | BR | Trạng thái |
 |---|---|---|---|---|---|
 | AC-FR7-01 | `minh` vừa đặt lại | Mở Điểm chống chịu | Điểm 0–100, bốn thành phần có giải thích, dòng "không phải điểm tín dụng" | BR-51, BC-07 | Đạt (phase 4: 33/100, 4 thành phần); 26/11 trên app (ví demo): 29/100 |
-| AC-FR7-02 | Như trên | Bấm "Mất việc 2 tháng" | Điểm tụt; hiện số ngày trụ được (Figma: 58 → 34, 27 ngày; dùng số engine) | BR-52 | Đạt (33 → 13, trụ 31 ngày; số engine). 26/11: 29 → 12, trụ 25 ngày trên app (ví demo 7 hũ); 26 ngày đo cục bộ trên ví 8 hũ, chờ đo lại sau deploy |
+| AC-FR7-02 | Như trên | Bấm "Mất việc 2 tháng" | Điểm tụt; hiện số ngày trụ được (Figma: 58 → 34, 27 ngày; dùng số engine) | BR-52 | Đạt (33 → 13, trụ 31 ngày; số engine). 26/11 trên app: 29 → 12, trụ 25 ngày (ví demo 7 hũ, rạng sáng), trụ 26 ngày (ví demo 8 hũ, Runtime v31) |
 | AC-FR7-03 | Như trên | Bấm hai cú sốc còn lại | Cả hai chạy và cho kết quả | BR-52 | Đạt (integration test) |
 
 ## FR8 — Lộ trình thích ứng
@@ -108,7 +108,7 @@ Bằng chứng cho từng AC ghi vào mục "Kết quả thực hiện" của fi
 | AC-FR8-04 | Mục tiêu không khả thi | Sinh lộ trình | Nói thẳng là chưa khả thi và đưa 2 lựa chọn | BR-54 | Đạt (phase 4, tiêu chí 4) |
 | AC-FR8-05 | Một bước có đổi số dư | Chấp nhận bước đó | Đi qua đề nghị, xác nhận, token | BR-55, 45 | Đạt (phase 4, tiêu chí 2) |
 | AC-FR8-06 | Bộ đối kháng | Chạy | 0 lộ trình chứa hành động vi phạm suitability | BR-42 | Đạt (đối kháng 12/12) |
-| AC-FR8-07 **[đề xuất 24/11]** | Hũ đệm mới đạt 40% mục tiêu, có tiền dư sau kỳ lương | Sinh lộ trình | Tiền dư được gợi ý vào hũ đệm trước, không vào hũ mục tiêu hay dài hạn | BR-65 | Chưa làm (26/11: BR-65 một phần, chưa có bước "đệm tới mục tiêu trước" vì mục tiêu hũ đệm hoãn cùng BR-64) |
+| AC-FR8-07 **[đề xuất 24/11]** | Hũ đệm mới đạt 40% mục tiêu, có tiền dư sau kỳ lương | Sinh lộ trình | Tiền dư được gợi ý vào hũ đệm trước, không vào hũ mục tiêu hay dài hạn | BR-65 | Chưa làm (26/11: BR-65 một phần; bộ tối ưu không cắt phần chia của hũ đệm chưa tới đích tự tính, nhưng chưa có bước đưa tiền dư vào hũ đệm trước) |
 | AC-FR8-08 **[đề xuất 24/11]** | Lương tăng ổn định qua 2 kỳ, hũ đệm đạt mục tiêu | Chạy batch | Lộ trình **gợi ý** chuyển sang bộ hũ giai đoạn kế tiếp; tỷ lệ hũ không tự đổi khi người dùng chưa xác nhận | BR-71 | **Hoãn** (26/11, cùng BR-70, BR-71) |
 
 ## FR9 — Nạp dữ liệu ngoài ví

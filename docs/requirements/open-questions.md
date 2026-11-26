@@ -115,6 +115,13 @@ Chi tiết và trạng thái từng quy tắc ở cuối mục B2a của [ba/02]
   - Chốt 26/11: không làm, issue đóng. Đo offline chỉ giảm tỷ lệ hỏi tối đa khoảng 1,2 điểm, dưới ngưỡng 3 điểm ([ghi chú](../research/2026-11-26-hu-khac.md)).
 - [x] **Trường hũ có cấu trúc trong bước lập luận** (issue #7)
   - Chốt: không thêm; ghi là giới hạn đã biết.
-- [ ] **Sàn cho hũ không thiết yếu khi đề xuất tỷ lệ**: trên ví demo, đề xuất tỷ lệ khi kê khai và bản lộ trình v3 của cảnh 4 đưa Giải trí về 0% (đúng quy tắc "cắt hũ không thiết yếu trước"). Có đặt sàn không, bao nhiêu?
-- [ ] **Đo phân loại ví 3 hũ có model**: cần thêm tùy chọn ví cho `evals/classification/run_eval.py` và khoảng 294 lời gọi model nhỏ (gọi Bedrock, cần duyệt chi phí). Chưa đo thì tài liệu nộp chỉ gắn 92% / 17,4% với ví nhiều hũ ([đo ví 3 hũ](../research/2026-11-26-do-vi-ba-hu.md)).
+- [x] **Sàn cho hũ không thiết yếu khi đề xuất tỷ lệ**: trên ví demo, đề xuất tỷ lệ khi kê khai và bản lộ trình v3 của cảnh 4 đưa Giải trí về 0% (đúng quy tắc "cắt hũ không thiết yếu trước"). Có đặt sàn không, bao nhiêu?
+  - Chốt 26/11 (chủ dự án): có. Sàn chi = 0,5 × mức chi điển hình của chính hũ (BR-54); từ 26/11 tối mức điển hình là mức nền bền (trung vị chi theo tuần, 12 tuần), đợt chi tăng là dữ kiện cho agent nói, không thành sàn cứng.
+- [x] **Agent chọn hũ của khoản chi khi người dùng không nêu hũ**
+  - Chốt 26/11 (chủ dự án): agent tự suy theo ý định từ danh sách hũ thật của ví (sáng 26/11 suy theo loại chi, đổi trong ngày); không chắc thì hỏi một câu. Router đang chạy (Nova 2 Lite) thường chưa điền trường này; chuyển router sang Claude Haiku 4.5, Nova dự phòng: đang làm.
+- [x] **Khoản đến hạn đúng ngày lương** (BR-22)
+  - Chốt 26/11 (chủ dự án, phương án B): tính là trước lương, trả bằng số dư trước khi lương về; Trả sau của `minh` đến hạn 05/12.
+- [x] **Hệ số tệp sao kê cảnh 4**
+  - Chốt 26/11: giữ 3,5 (bền khi tải trễ một ngày); sau khi sàn tính từ mức nền bền thì bản lộ trình sinh lại vẫn giữ Dự phòng ([ghi chú](../research/2026-11-26-canh4-pelt.md)).
+- [ ] **Đo phân loại ví 3 hũ có model**: đã có tùy chọn `--wallet three` của `evals/classification/run_eval.py` (26/11); còn cần khoảng 294 lời gọi model nhỏ (gọi Bedrock, khoảng 0,3 USD, cần duyệt chi phí). Chưa đo thì tài liệu nộp chỉ gắn 92% / 17,4% với ví nhiều hũ ([đo ví 3 hũ](../research/2026-11-26-do-vi-ba-hu.md)).
 - [ ] **BR-79 đến BR-84** chỉ có ở trang Notion "Feedback hũ", chưa đưa vào repo. BA đồng bộ vào [ba/02](../ba/02-business-rules.md).

@@ -1,6 +1,6 @@
 # 13. Tiến độ technical theo yêu cầu BA
 
-> **Cập nhật lần cuối: 26/11/2026 sáng** (phần bộ hũ, issue #39: mục 2 đến 5 theo HANDOFF "Cập nhật rạng sáng 26/11" và mã ở `c00eec0`). Lần trước 25/11 sáng, đã đối chiếu thêm HANDOFF rạng sáng 25/11 và [kế hoạch phase 6](../plan/phases/phase-6-danh-gia-dong-goi.md) (Runtime v27). Chi tiết lỗi ở mục 4a., đối chiếu với [HANDOFF](../../HANDOFF.md) và mục "Kết quả thực hiện" của [phase 2](../plan/phases/phase-2-vi-va-du-bao.md), [phase 3](../plan/phases/phase-3-what-if-va-kiem-tra.md#kết-quả-thực-hiện), [phase 4](../plan/phases/phase-4-chong-chiu-lo-trinh.md#kết-quả-thực-hiện), [phase 5](../plan/phases/phase-5-nap-du-lieu-ho-so-trace.md#kết-quả-thực-hiện) (Runtime `yofina_agent` v23).
+> **Cập nhật lần cuối: 26/11/2026 tối** (mục 2 và 3 theo HANDOFF "Trạng thái tối 26/11": bản đang chạy `1303eaf`, Runtime v32; lần trước 26/11 sáng, phần bộ hũ đối chiếu mã ở `c00eec0`). Lần trước 25/11 sáng, đã đối chiếu thêm HANDOFF rạng sáng 25/11 và [kế hoạch phase 6](../plan/phases/phase-6-danh-gia-dong-goi.md) (Runtime v27). Chi tiết lỗi ở mục 4a., đối chiếu với [HANDOFF](../../HANDOFF.md) và mục "Kết quả thực hiện" của [phase 2](../plan/phases/phase-2-vi-va-du-bao.md), [phase 3](../plan/phases/phase-3-what-if-va-kiem-tra.md#kết-quả-thực-hiện), [phase 4](../plan/phases/phase-4-chong-chiu-lo-trinh.md#kết-quả-thực-hiện), [phase 5](../plan/phases/phase-5-nap-du-lieu-ho-so-trace.md#kết-quả-thực-hiện) (Runtime `yofina_agent` v23).
 > File này là **bảng điều khiển** cho BA: xem nhanh yêu cầu nào đã chạy, còn lỗi gì, và việc nào BA cần báo lại cho bên technical. Trạng thái chi tiết từng dòng vẫn nằm ở file gốc (02, 03, 04, 05, 07, 09).
 
 ## 1. Bức tranh chung
@@ -12,7 +12,7 @@
 | 3 | What-if, kiểm tra trước khi chi, suitability, "Vì sao" | Đóng 23/11 |
 | 4 | Điểm chống chịu, lộ trình, phân hũ tự động | Đóng 24/11 |
 | 5 | Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, bản tin, trace | **Code xong, đã đo, chưa đóng chính thức** (còn chốt OCR và đi 6 cảnh trên giao diện mới); dự kiến đóng 26/11 |
-| 6 | Đánh giá, cứng hóa, đóng gói | **Đã có kế hoạch** (17 tiêu chí, luồng A–K); luồng K "agent như người tư vấn" đã deploy (khối `reasoning` hiện lập luận) |
+| 6 | Đánh giá, cứng hóa, đóng gói | **Đã có kế hoạch** (17 tiêu chí, luồng A–K); luồng K "agent như người tư vấn" đã deploy (khối `reasoning` hiện lập luận); đợt 1, đợt 2 (25/11), bộ hũ mặc định và đợt "agent thích ứng" (#39, 26/11, Runtime v32) đã deploy; eval RC chưa chạy |
 
 **Quyết định kỹ thuật ảnh hưởng tới BA:** đã cắt RAG (24/11). Câu hỏi về phí lấy số từ bảng biểu phí có cấu trúc và kèm trích dẫn, không tìm trong kho tài liệu.
 
@@ -22,34 +22,34 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 
 | FR | Tên | | Bằng chứng chính | Còn lại |
 |---|---|---|---|---|
-| FR1 | Hồ sơ, hũ, sổ cái | ✅ | Đóng phase 2 | Bộ hũ mới **đã code và deploy 26/11** (#39): tài khoản mới 3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai; ví demo của `minh` 8 hũ. Hoãn: BR-64, 68, 70, 71; BR-63 chưa bắt buộc trước hạn nộp (chốt 26/11: hũ để dành cũ có thể chưa có mục đích, nhiều hũ đệm thì lấy hũ đầu tiên theo thứ tự) ([02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)) |
+| FR1 | Hồ sơ, hũ, sổ cái | ✅ | Đóng phase 2 | Bộ hũ mới **đã code và deploy 26/11** (#39): tài khoản mới 3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai; ví demo của `minh` 8 hũ. BR-64 một phần (đích tự tính chỉ dùng trong bộ tối ưu); hoãn: BR-68, 70, 71; BR-63 chưa bắt buộc trước hạn nộp (chốt 26/11: hũ để dành cũ có thể chưa có mục đích, nhiều hũ đệm thì lấy hũ đầu tiên theo thứ tự) ([02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)) |
 | FR2 | Phân hũ tự động | ◐ | Đủ 4 bước; **đúng 92%** trên phần tự gán (mục tiêu 90%), đo trên ví nhiều hũ theo loại chi | **Tỷ lệ phải hỏi 17,4%** (mục tiêu dưới 10%, NFR-14). Ví 3 hũ: phần có model chưa đo (không model: đúng 92,08%, hỏi 39,52%) |
 | FR3 | Dự báo theo hũ | ✅ | Backtest: pinball bằng 0,64 lần mốc so sánh; độ phủ khoảng 80% là 0,79–0,82 ([backtest](../research/backtest-phase-2.md)) | Số ngày cảnh báo trước (K5, NFR-12) chưa đo. Ví 3 hũ: dải của hũ gộp Chi hằng ngày phủ thừa (0,865 ở 120 ngày) |
 | FR4 | Nghĩa vụ | ✅ | Đóng phase 2 | C-07 chốt 26/11 (hũ trả theo một quy tắc chung) |
-| FR5 | What-if | ✅ | Golden 31/31, đủ 6 loại kịch bản; ép lỗi model 6/6; có khối lập luận (luồng K) | Trọn câu khoảng 38 giây khi có lập luận (NFR-03 mục tiêu 8 giây); lập luận có lúc nói khác bản đã lưu |
+| FR5 | What-if | ✅ | Golden 31/31, đủ 6 loại kịch bản; ép lỗi model 6/6; có khối lập luận (luồng K) | Trọn câu 20,6 giây (v32) và 28,1 giây (v31) trên app 26/11, 37,9 giây lúc mới thêm lập luận 25/11 (NFR-03 mục tiêu 8 giây); lập luận có lúc nói khác bản đã lưu |
 | FR6 | Kiểm tra trước khi quẹt | ◐ | p95 282 ms (mục tiêu 2 giây) | **Dải "sát" (vàng) hẹp và định nghĩa khác BR-36**: hai ngưỡng đều = 0, nên ca hũ Hóa đơn của demo ra "hụt" thay vì "vàng" (C-02); từ 26/11 Hóa đơn gộp vào Nghĩa vụ, ca tương ứng ra "sát" hoặc "hụt" |
-| FR7 | Điểm chống chịu | ✅ | `minh` 33/100, 4 thành phần; "Mất việc 2 tháng" 33 → 13, trụ 31 ngày. 26/11 trên app: 29 → 12, trụ 25 ngày (ví demo 7 hũ); 26 ngày đo cục bộ trên ví 8 hũ | Kỹ thuật đã chọn 4 thành phần (xem C-06) |
+| FR7 | Điểm chống chịu | ✅ | `minh` 33/100, 4 thành phần; "Mất việc 2 tháng" 33 → 13, trụ 31 ngày. 26/11 trên app (ví demo 8 hũ, Runtime v31): 29 → 12, trụ 26 ngày (ví 7 hũ rạng sáng: 25 ngày) | Kỹ thuật đã chọn 4 thành phần (xem C-06) |
 | FR8 | Lộ trình | ✅ | Golden phase 4 14/14, đối kháng 12/12; lập trong chat 20–26 giây | `period_end` tính theo hôm nay, chưa theo ngày lương |
 | FR9 | Nạp ảnh, CSV | ◐ | CSV 50/50; chống trùng; nạp chứng từ ngoại tệ quy đổi VND | OCR ảnh thật 9/11 (v25), r08 đạt ở v26, dự kiến 10/11; chốt ở lượt RC (Q9) |
 | FR10 | Hồ sơ hành vi, bộ nhớ | ◐ | `minh` có 3 nhận xét khớp sổ cái; xóa dữ liệu, xóa bộ nhớ chạy; bộ nhớ sửa gốc (Haiku 4.5), golden bộ nhớ đạt | Theo dõi ca `memory-state-preference`; `turn_persist_timeout` |
 | FR11 | Bảng "Vì sao" | ✅ | Đi cảnh 2: 4 nguồn, 8 luật, `trace_id`; trace người khác bị từ chối | — |
 | FR12 | Suitability, xác nhận | ✅ | 13 ca tấn công token bị chặn; đối kháng 16/16, 12/12, 14/14; **luật thứ bảy `emergency_not_for_discretionary`** đã vá lỗ hổng hũ Dự phòng | Ngưỡng nghĩa vụ trên thu nhập chờ C-03 (T-06) |
-| FR13 | Bản tin chủ động | ◐ | Có thẻ chủ động và bản tin ("Hũ Ăn uống dự kiến cạn ngày 23/11") | Chờ kiểm trên app |
+| FR13 | Bản tin chủ động | ◐ | Có thẻ chủ động và bản tin ("Hũ Ăn uống dự kiến cạn ngày 23/11"); trên app 26/11 (v31) thẻ chủ động duy nhất là Ăn uống | Nút "Hỏi vì sao" của bản tin sửa sau v31 (vào v32), chưa kiểm lại trên app |
 | FR14 | Cảnh báo khoản chuyển lệch thói quen | ⏳ | Không có trong code (phase 5 ghi "nếu kịp", nằm trong thứ tự cắt) | Đề xuất ghi là lộ trình sau cuộc thi |
-| FR15 | Bảng vận hành, trace | ◐ | Trace 18 bước qua REST; tài khoản ngoài nhóm `ops` bị từ chối | Mở từ "Vì sao" chờ kiểm trên app; Transaction Search chưa bật |
+| FR15 | Bảng vận hành, trace | ◐ | Trace 18 bước qua REST; tài khoản ngoài nhóm `ops` bị từ chối | Mở từ "Vì sao" đã kiểm trên app 26/11 (v31, v32); Transaction Search chưa bật |
 
 ## 3. Kịch bản demo
 
-Đi trên app 26/11 rạng sáng (ví demo 7 hũ, chưa có Chi hằng ngày; `giamkhao1`, `minh`). Ví demo 8 hũ (thêm Chi hằng ngày, sáng 26/11) chỉ mới đo cục bộ, chờ đo lại sau deploy; số ở [demo-script](../plan/demo-script.md).
+Đi trên app 26/11 với ví demo 8 hũ (`giamkhao1`): sau Runtime v31 (sáng) và v32 (chiều, bản đang chạy). Số đầy đủ ở [demo-script](../plan/demo-script.md).
 
 | Cảnh | Trạng thái |
 |---|---|
-| 1. Hũ sắp cạn | Chạy; giao diện mới (thẻ có số ngày, dải ô ngày). 26/11: Ăn uống 380.000 ₫ cạn 23/11, nhãn Cao |
-| 2. What-if tai nghe 1,2 triệu | Đi trên app 23/11: đạt. 26/11 (bản đang chạy, Trả sau ngày 3): trọn câu 34 giây, hũ Nghĩa vụ liệt kê Tiền điện 26/11 và khoản Trả sau (2.200.000 ₫), thiếu khoảng 1.162.000 ₫. Sau đợt #39 Trả sau đến hạn 05/12 (đúng ngày lương, trả bằng số dư trước khi lương về), đo cục bộ thiếu 1.168.392 ₫; chờ đo lại trên app |
-| 3. Điểm chống chịu, cú sốc | Đi trên app 24/11: đạt. 26/11: 29 → 12, trụ 25 ngày (cục bộ trên ví 8 hũ: 26 ngày) |
-| 4. Lộ trình | Đi trên app 24/11: đạt. 26/11: 32 dòng vào Ăn uống, bản v3 sau khoảng 30 giây |
-| 5. Nạp ảnh | Đạt qua REST; chờ thử trên điện thoại. 26/11: màn duyệt sau 8,5 giây, chip "Đã che: tên" |
-| 6. Trace | Đạt qua REST; chờ mở từ "Vì sao" |
+| 1. Hũ sắp cạn | Chạy; giao diện mới (thẻ có số ngày, dải ô ngày). 26/11 (v32): Ăn uống cạn 23/11, "Hụt", 12 ngày tới kỳ lương |
+| 2. What-if tai nghe 1,2 triệu | Đi trên app 23/11: đạt. 26/11 (v32): trọn câu 20,6 giây, hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 05/12 (2.200.000 ₫; đúng ngày lương, trả bằng số dư trước khi lương về), thiếu 1.167.673 ₫ (cục bộ 1.168.392 ₫) |
+| 3. Điểm chống chịu, cú sốc | Đi trên app 24/11: đạt. 26/11 (v31, ví 8 hũ): 29 → 12, trụ 26 ngày |
+| 4. Lộ trình | Đi trên app 24/11: đạt. 26/11 (v32): 32 dòng tự thêm vào Ăn uống, Lambda sinh lại 19,6 giây, bản mới kịp hạn, Dự phòng không về 0 |
+| 5. Nạp ảnh | Đạt qua REST; chờ thử trên điện thoại. 26/11 (v31): màn duyệt sau 8,5 giây, chip "Đã che: tên" |
+| 6. Trace | Đạt qua REST. 26/11 (v31, v32): mở từ "Vì sao" → "Chi tiết kỹ thuật" trên app, có số lượt gọi model, token, thời gian từng bước |
 | **Cả 6 cảnh liền mạch** (`giamkhao1`) | **Chưa kiểm** (tiêu chí 10 phase 5, việc của Học) |
 
 ## 4. Việc BA nên báo lại cho bên technical
@@ -119,7 +119,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 - Chưa có: cơ cấu hũ theo mục đích và giai đoạn sống (BR-63 đến 73), chi phí trả sau minh bạch (BR-74 đến 76), hỗ trợ trước hạn (BR-77), FR14.
 - **26/11 (issue #39):** đã làm BR-67, BR-69 và một phần BR-63, 65, 66, 73, 78 (3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai, hũ Nghĩa vụ chung); hoãn BR-64, 68, 70, 71; phần còn lại của BR-63 (bắt buộc mục đích, chặn hũ đệm thứ hai) để sau hạn nộp. BR-72, 74 đến 77 và FR14 vẫn chưa có.
 - **Đề xuất:** không đưa vào demo, trừ **G1** (hiện chi phí trả sau quy ra năm trên thẻ kiểm tra trước khi chi, BR-75) vì làm nhanh được. Phần còn lại ghi là lộ trình sau cuộc thi.
-- **BA chốt trước:** G-01, C-12 (đã đưa vào [12 mục 2.1](12-tong-hop-va-viec-can-chot.md#21-gấp-technical-đang-chờ-chốt-trước-deploy-đợt-1-2811), hạn 28/11).
+- **BA chốt trước:** G-01, C-12 (đã đưa vào [12 mục 2.1](12-tong-hop-va-viec-can-chot.md#21-gấp-technical-đang-chờ-chốt-trước-hạn-tính-năng-3011), hạn 30/11).
 
 ## 5. Số đo hiện có (cho slide và NFR)
 

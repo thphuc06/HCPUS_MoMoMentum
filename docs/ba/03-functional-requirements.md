@@ -7,7 +7,7 @@
 
 | FR | Tên | Tính năng | Mức | Phase | Trạng thái thực hiện |
 |---|---|---|---|---|---|
-| FR1 | Hồ sơ, hũ và sổ cái | nền | MVP | 1–2 | ✅ Đạt (đóng phase 2, 22/11). Bộ hũ mới (26/11, đã deploy): tài khoản mới nhận 3 hũ mặc định, hũ có `purpose`, Quỹ dồn lưu khoản cần, bước 3 onboarding đề xuất tỷ lệ theo số đã khai; BR-64, 68, 70, 71 hoãn |
+| FR1 | Hồ sơ, hũ và sổ cái | nền | MVP | 1–2 | ✅ Đạt (đóng phase 2, 22/11). Bộ hũ mới (26/11, đã deploy): tài khoản mới nhận 3 hũ mặc định, hũ có `purpose`, Quỹ dồn lưu khoản cần, bước 3 onboarding đề xuất tỷ lệ theo số đã khai; BR-64 một phần; BR-68, 70, 71 hoãn |
 | FR2 | Phân hũ tự động | nền | MVP | 2 (bước 0), 4 | ◐ Đủ 4 bước (phase 4, đóng 24/11): đúng 92%; **phải hỏi 17,4%**, chưa đạt < 10% (đo trên ví nhiều hũ theo loại chi; ví 3 hũ chưa đo phần có model) |
 | FR3 | Dự báo theo hũ | F1 | MVP | 2 | ✅ Đạt (phase 2); backtest đạt NFR-10, 11 |
 | FR4 | Quản lý nghĩa vụ | nền, F1, F3 | MVP | 2 | ✅ Đạt (phase 2); C-07 chốt 26/11 (hũ trả theo một quy tắc chung) |
@@ -53,7 +53,7 @@
   - Số tiền vượt trần hoặc vượt số dư hũ: từ chối, kèm lý do.
   - Lương lệch số đã khai quá ngưỡng: hỏi có cập nhật lương không.
   - Gửi trùng giao dịch: không ghi lần hai.
-- **BR**: BR-01, 02, 04–15, 45–47, 62; bộ hũ 26/11: 63, 66, 69, 78 (đã làm hoặc một phần); hoãn: 64, 68, 70; đề xuất: 72
+- **BR**: BR-01, 02, 04–15, 45–47, 62; bộ hũ 26/11: 63, 64, 66, 69, 78 (đã làm hoặc một phần; 64 chỉ có đích tự tính trong bộ tối ưu); hoãn: 68, 70; đề xuất: 72
 - **AC**: [AC-FR1](05-acceptance-criteria.md#fr1--hồ-sơ-hũ-và-sổ-cái)
 
 ## FR2 — Phân hũ tự động
@@ -102,7 +102,7 @@
 
 - **Luồng chính**
   1. Khai nghĩa vụ: loại, số tiền hoặc khoảng, chu kỳ, ngày đến hạn, cờ thiết yếu, hũ dùng để trả. Hũ trả (26/11): hũ đã lưu, hũ người dùng chọn, hũ Nghĩa vụ, rồi hũ `obligation` đầu tiên; ví không có hũ nào như vậy thì phải chọn (BR-26, C-07).
-  2. Mua bằng hạn mức trả sau mô phỏng thì tự sinh hoặc cộng dồn nghĩa vụ trả sau (gốc + phí, đến hạn ngày 5 kế tiếp; ví demo của `minh` dùng ngày 3, điều khoản mô phỏng, BR-22).
+  2. Mua bằng hạn mức trả sau mô phỏng thì tự sinh hoặc cộng dồn nghĩa vụ trả sau (gốc + phí, đến hạn ngày 5 kế tiếp, kể cả ví demo của `minh`; khoản đến hạn đúng ngày lương tính là trước lương, BR-22 chốt 26/11).
   3. Nghĩa vụ hiện thành mốc trên dòng thời gian dự báo, và được nhắc trước khi đến hạn.
   4. Trả nghĩa vụ từ một hũ: khoản một lần chuyển "đã trả", khoản lặp dời sang kỳ sau.
 - **Ngoại lệ**

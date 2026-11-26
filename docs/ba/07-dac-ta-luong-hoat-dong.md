@@ -100,7 +100,7 @@ flowchart LR
 | L16 | Sinh và sinh lại lộ trình | B, C | Đang chạy (phase 4); lập được trong chat | FR8 |
 | L17 | Nạp ảnh và CSV | A, C | Đã deploy (phase 5, chưa đóng); có quy đổi ngoại tệ | FR9 |
 | L18 | Nhắc chủ động và bản tin | C | Đã deploy (phase 5, chưa đóng) | FR13 |
-| L19 | **Chia tiền dư theo thứ tự ưu tiên, trích quỹ dồn, theo dõi hũ đệm** | A, C | Một phần 26/11: thứ tự bù khi đề xuất tỷ lệ (BR-65), khoản Quỹ dồn tính một lần khi kê khai (BR-66); mục tiêu và khóa mềm hũ đệm (BR-64), cổng hũ dài hạn (BR-68), mốc Quỹ dồn hoãn | FR3, FR7, FR8 |
+| L19 | **Chia tiền dư theo thứ tự ưu tiên, trích quỹ dồn, theo dõi hũ đệm** | A, C | Một phần 26/11: thứ tự bù khi đề xuất tỷ lệ (BR-65), khoản Quỹ dồn tính một lần khi kê khai (BR-66), bộ tối ưu giữ phần chia của hũ đệm chưa tới đích tự tính (BR-64 một phần); hiện đích và khóa mềm hũ đệm (BR-64), cổng hũ dài hạn (BR-68), mốc Quỹ dồn hoãn; giữ phần chia Quỹ dồn có khoản sắp cần: issue #44 | FR3, FR7, FR8 |
 | L20 | **Gợi ý chuyển giai đoạn sống** | C → A | Hoãn 26/11 (BR-70, BR-71) | FR8 |
 
 ## 3. Các luồng đang chạy
@@ -343,7 +343,7 @@ flowchart TD
 ```
 
 - Quy tắc: BR-22 đến BR-26. Bản xem trước ở bước "Xem lại" hiện "Phải trả ngày dd/mm: trước → sau" và "Hạn mức còn lại: trước → sau".
-- Hũ trả (26/11, issue #39, `resolve_obligation_pay_jar`): hũ đã lưu, hũ người dùng chọn, hũ Nghĩa vụ, rồi hũ `obligation` đầu tiên. Ví không có hũ nào như vậy thì phải chọn hũ trả trước khi mua (agent và màn chuyển tiền hỏi; C-07). Ví demo của `minh` dùng ngày đến hạn 3 (điều khoản mô phỏng, BR-22).
+- Hũ trả (26/11, issue #39, `resolve_obligation_pay_jar`): hũ đã lưu, hũ người dùng chọn, hũ Nghĩa vụ, rồi hũ `obligation` đầu tiên. Ví không có hũ nào như vậy thì phải chọn hũ trả trước khi mua (agent và màn chuyển tiền hỏi; C-07). Ví demo của `minh` dùng ngày đến hạn 5 như mọi ví; khoản đến hạn đúng ngày lương tính là trước lương, trả bằng số dư trước khi lương về (BR-22, chốt 26/11).
 
 ### L09 — Tính lại dự báo sau giao dịch (sự kiện)
 

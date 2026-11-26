@@ -17,11 +17,11 @@
 | 9 | Stakeholder | 6 nhóm. Chỉ xác nhận bằng token và bảng "Vì sao" có lợi cho mọi bên. 5 xung đột lợi ích, lớn nhất là phí chậm trả của bên cho vay | [10](10-tac-dong-stakeholder.md) |
 | 10 | Chi phí người trẻ và lợi ích đối tác | Phí cố định 33.000 ₫/tháng tương đương khoảng 40–79%/năm trên dư nợ nhỏ. 6 đòn bẩy G1–G6. Bên cho vay có lời ròng nếu từ khoảng 1,9% ca trễ bị mất gốc, hoặc ngay lập tức nếu có G3 (chuyển trả góp) | [11](11-can-bang-chi-phi-va-loi-ich.md) |
 | 11 | CSKH và AI thay nhân lực | Tiết kiệm CSKH dễ chứng minh nhưng nhỏ (khoảng 10% phí nền), dùng làm bằng chứng sớm. **Không** tính cắt nhân sự vào ROI. Chuyển nhân viên sang vai trò "hỗ trợ trước hạn" | [06 mục 4.3c, 4.3d](06-mo-hinh-kinh-doanh.md#43-roi) |
-| 12 | Tiến độ technical | Phase 1–4 đóng; phase 5 chờ đóng 26/11; phase 6 có kế hoạch, hạn nộp giả định 11/12. 7 việc lệch nghiệp vụ T-01 đến T-07: T-01, T-04 đã sửa; T-03, T-05 đã xếp lịch | [13](13-tien-do-technical.md) |
+| 12 | Tiến độ technical | Phase 1–4 đóng; phase 5 chưa đóng chính thức (OCR, đi 6 cảnh); phase 6 đang làm, hạn nộp 03/12 (bản đang chạy 26/11 tối: Runtime v32, gồm bộ hũ mặc định và đợt "agent thích ứng" của #39). 7 việc lệch nghiệp vụ T-01 đến T-07: T-01, T-04 đã sửa; T-03, T-05 đã xếp lịch | [13](13-tien-do-technical.md) |
 | 13 | Lấp số liệu không cần khảo sát | Mượn số **hành vi, rủi ro, quản lý** trả sau từ cơ quan quản lý Indonesia (OJK 2026), Malaysia (BNM 2H 2025); **không mượn cơ cấu chi tiêu**; tỷ lệ hũ tự hiệu chỉnh (BR-78) | [01 mục 7a](01-boi-canh-thi-truong.md#7a-số-liệu-tham-chiếu-từ-các-nước-lân-cận-bổ-sung-2511) |
 | 14 | Tiêu chí độ mới của nguồn | Số thị trường, giá: trong 12 tháng. Bằng chứng nhân quả (thử nghiệm ngẫu nhiên): thiết kế tốt nhất, sát sản phẩm nhất, mới nhất có thể | [08 mục 3.4](08-kpi-kinh-doanh.md#34-k4-và-k4-r-giảm-phí-trễ-hạn-ít-nhất-10-tổng-phí-không-tăng) |
 
-**Tiến độ bên technical:** [13-tien-do-technical.md](13-tien-do-technical.md). Lịch của technical ([phase 6](../plan/phases/phase-6-danh-gia-dong-goi.md)): đóng phase 5 ngày 26/11, **deploy đợt 1 ngày 28/11**, deploy đợt 2 ngày 2/12, chốt nội dung slide trước **5/12** (câu Q15 của technical hỏi BA).
+**Tiến độ bên technical:** [13-tien-do-technical.md](13-tien-do-technical.md). Lịch của technical ([phase 6](../plan/phases/phase-6-danh-gia-dong-goi.md) mục 8, đổi 25/11 theo hạn nộp thật 03/12): đợt 1 và đợt 2 đã deploy khuya 25/11, bộ hũ mới deploy 26/11; **hạn tính năng mới 30/11**, freeze tối 01/12, RC và eval cuối 02/12, nộp (gồm slide) trước 18:00 ngày **03/12**.
 
 ## 2. Việc cần chốt, xếp theo thời điểm
 
@@ -41,12 +41,16 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | T-03, T-05 | Tỷ lệ phải hỏi; OCR ảnh thật | Technical đã xếp lịch ở phase 6 (E7, A4) | 25/11 |
 | C-12 | Đổi bộ hũ của tài khoản demo | Đã đổi: Chi hằng ngày, Nghĩa vụ (gộp Hóa đơn), Dự phòng cộng hũ tự thêm; `minh` 8 hũ, tổng 8.030.000 ₫ | 26/11 |
 | C-07 | Ví không có hũ nghĩa vụ thì mốc trả sau ở đâu | Hũ trả theo một quy tắc chung; ví không có hũ `obligation` thì phải chọn hũ trả | 26/11 |
-| C-11, C-13 | Tỷ lệ 3 bộ hũ theo giai đoạn sống; mục tiêu hũ đệm | Hoãn cùng BR-70 và BR-64 (sau hạn nộp) | 26/11 |
+| C-11, C-13 | Tỷ lệ 3 bộ hũ theo giai đoạn sống; mục tiêu hũ đệm | C-11 hoãn cùng BR-70 (sau hạn nộp). C-13 một phần (26/11 tối): 3 tháng chi thiết yếu (theo mức nền bền) là đích tự tính của hũ đệm bên trong bộ tối ưu, chưa hiện cho người dùng | 26/11 |
 | — | BR-63: bắt buộc mục đích cho hũ để dành, chặn hũ đệm thứ hai | Chưa bắt buộc trước hạn nộp: hũ để dành cũ có thể chưa có mục đích (tương thích ví cũ); có nhiều hũ đệm thì hệ thống lấy hũ đệm đầu tiên theo thứ tự. Siết sau hạn nộp | 26/11 |
 | — | Hũ "Khác" cho khoản nhỏ một lần (issue #28) | Không làm: đo offline giảm tỷ lệ hỏi tối đa khoảng 1,2 điểm, dưới ngưỡng 3 điểm | 26/11 |
-| — | Phân tích theo nhóm loại chi bên trong hũ gộp | Không làm trước hạn nộp; cách dùng: tách hũ riêng. Hướng sau hạn nộp: gợi ý tách hũ khi hũ gộp có dấu hiệu tăng | 26/11 |
+| — | Phân tích theo nhóm loại chi bên trong hũ gộp | Không làm trước hạn nộp; cách dùng: tách hũ riêng. Hướng sau hạn nộp: gợi ý tách hũ khi hũ gộp có dấu hiệu tăng (issue #42 đóng, không làm) | 26/11 |
+| — | Sàn cho hũ chi không thiết yếu (BR-54) | Có: sàn chi = 0,5 × mức chi điển hình của chính hũ; từ 26/11 tối mức điển hình là mức nền bền (trung vị chi theo tuần, 12 tuần), đợt chi tăng là dữ kiện cho agent nói, không thành sàn cứng | 26/11 |
+| — | Khoản đến hạn đúng ngày lương (BR-22) | Tính là đến hạn trước lương, trả bằng số dư trước khi lương về (phương án B); ví demo dùng ngày 5 như mọi ví | 26/11 |
+| — | Hũ của khoản chi khi người dùng hỏi agent mà không nêu hũ | Agent tự suy theo ý định từ danh sách hũ thật của ví (kể cả hũ tự đặt tên), không chắc thì hỏi; hiện "Tính theo hũ X" để đổi (cuối B2a của [02](02-business-rules.md)) | 26/11 |
+| — | Giao diện có chia nhóm "hũ mặc định" và "hũ bạn thêm" không | Không: hũ mặc định chỉ là bộ khởi tạo, sau đó là hũ thường | 26/11 |
 
-### 2.1 Gấp: technical đang chờ (chốt trước deploy đợt 1, 28/11)
+### 2.1 Gấp: technical đang chờ (chốt trước hạn tính năng 30/11)
 
 | ID | Câu hỏi | Đề xuất | Ai chốt | Gỡ việc gì |
 |---|---|---|---|---|
@@ -68,7 +72,7 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | ID | Câu hỏi | Đề xuất | Ai chốt | File |
 |---|---|---|---|---|
 | **I-01** | **Ai trả phí nền R1?** Phí nền chiếm khoảng 68% doanh thu, do ví trả; lợi ích đo được rõ nhất (giảm trễ hạn) thuộc bên cho vay | Chia R1 giữa ví và bên cho vay; hoặc giảm R1, tăng R4 do bên cho vay trả | Nhóm | [06 mục 3a](06-mo-hinh-kinh-doanh.md) |
-| **I-02** | **Duyệt các quy tắc đánh dấu đề xuất**: BC-13, BR-63 đến 78, NFR-44, K10, K11, L19, L20 | Duyệt theo khối: cơ cấu hũ (BR-63 đến 73, 78), chi phí trả sau (74 đến 76), hỗ trợ trước hạn (77). **26/11:** BR-67, 69 chốt và đã làm; BR-63 (chốt chưa bắt buộc trước hạn nộp), 65, 66, 73, 78 một phần; BR-64, 68, 70, 71 hoãn; còn duyệt BR-72, 74 đến 77. BR-79 đến 84 chỉ có ở Notion, chưa vào repo | Nhóm | [02](02-business-rules.md) |
+| **I-02** | **Duyệt các quy tắc đánh dấu đề xuất**: BC-13, BR-63 đến 78, NFR-44, K10, K11, L19, L20 | Duyệt theo khối: cơ cấu hũ (BR-63 đến 73, 78), chi phí trả sau (74 đến 76), hỗ trợ trước hạn (77). **26/11:** BR-67, 69 chốt và đã làm; BR-63 (chốt chưa bắt buộc trước hạn nộp), 64, 65, 66, 73, 78 một phần; BR-68, 70, 71 hoãn; còn duyệt BR-72, 74 đến 77. BR-79 đến 84 chỉ có ở Notion, chưa vào repo | Nhóm | [02](02-business-rules.md) |
 | E-01 | Duyệt mục tiêu K1–K11 | K4 10% nay có căn cứ AFM (đo được 21–24%); chú ý K3 (15%), K10 (25%), K11 (20%) | Nhóm | [08](08-kpi-kinh-doanh.md) |
 | E-03 | KPI nào lên slide | K2, K5 (số thật), **K4 kèm thử nghiệm AFM**, K9 dạng hòa vốn | Nhóm | [08](08-kpi-kinh-doanh.md) |
 | D-01 | Hướng thương mại chính | B2B2C qua ví | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
@@ -79,7 +83,7 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | G-02 | Nói G2 làm ví đối thủ mất thị phần | Không nhấn, nhưng không ghi "mọi bên đều thắng" | Nhóm | [11](11-can-bang-chi-phi-va-loi-ich.md) |
 | H-02 | Tính cắt nhân sự CSKH vào ROI | Không | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
 | C-11 | Tỷ lệ bộ hũ mẫu | Bộ "Mới đi làm" có căn cứ; hai bộ còn lại ghi "minh họa"; dựa vào BR-78. **Hoãn 26/11** cùng BR-70; nếu slide nói về tỷ lệ thì nói 42/33/25 là giả định thử nghiệm | Nhóm | [02](02-business-rules.md) |
-| C-13 | Mục tiêu hũ đệm | 3 tháng chi thiết yếu (CFPB); sinh viên 1 tháng. **Hoãn 26/11** cùng BR-64 | Nhóm | [02](02-business-rules.md) |
+| C-13 | Mục tiêu hũ đệm | 3 tháng chi thiết yếu (CFPB); sinh viên 1 tháng. **Một phần 26/11**: 3 tháng dùng trong bộ tối ưu; hiện cho người dùng và mức theo giai đoạn sống hoãn cùng BR-64 | Nhóm | [02](02-business-rules.md) |
 
 ### 2.3 Sau cuộc thi, khi đi pilot với đối tác
 
