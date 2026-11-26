@@ -16,6 +16,9 @@ Tên file giữ nguyên để không gãy liên kết, nhưng phạm vi đã đ�
 | Q4 | Kê khai ở bước 3 của onboarding (màn "Chi phí cố định") | Khai qua chat chưa làm trong lượt này |
 | Q5 | Hũ Nghĩa vụ mặc định là một hũ chung | Tiền trọ, hóa đơn, khoản vay và Trả Sau cùng trả từ hũ này |
 | Q6 | Hoãn bộ hũ theo giai đoạn sống (BR-70) | Mọi người dùng mới nhận cùng ba hũ; xem mục "Chưa làm trong lượt này" |
+| Q7 | **Chốt 26/11 (chủ dự án)**: ba hũ mặc định chỉ là bộ khởi tạo lúc tạo tài khoản; sau đó là hũ thường, sửa, đổi tỷ lệ, xóa được như mọi hũ khác | Giao diện KHÔNG phân nhóm "hũ mặc định" và "hũ bạn thêm" (màn Hũ và Tổng quan giữ danh sách phẳng). Bản làm thử chia nhóm nằm ở nhánh local `int/jars-grouping` (`3dc71e8`), không gộp |
+| Q8 | **Chốt 26/11 (chủ dự án)**: không phân tích hành vi theo nhóm loại chi bên trong một hũ gộp | Ai muốn theo dõi riêng một khoản (dự báo, phát hiện đổi nhịp chi) thì tách hũ riêng; quy tắc phân loại "hũ riêng khớp loại giao dịch thắng hũ chung" phục vụ việc này. Số đo ở [2026-11-26-do-vi-ba-hu.md](../research/2026-11-26-do-vi-ba-hu.md). Việc sau hạn nộp nếu cần: khi hũ gộp có dấu hiệu tăng thì gợi ý tách hũ |
+| Q9 | **Chốt 26/11 (chủ dự án)**: khi người dùng hỏi về một khoản định chi mà không nêu hũ, agent tự suy hũ từ loại chi nếu đã rõ, chỉ hỏi lại khi chưa rõ | Suy bằng cùng quy tắc phân loại giao dịch (`transaction_jar`), chỉ cho lượt chỉ đọc (what-if, kiểm tra trước khi chi); hiện dòng "Tính theo hũ X" để đổi được |
 
 ## Cấu hình hũ
 
