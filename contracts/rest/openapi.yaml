@@ -3350,6 +3350,8 @@ components:
           maxLength: 280
         error_reason:
           $ref: '#/components/schemas/IngestErrorReason'
+        duplicate_of:
+          $ref: '#/components/schemas/IngestDuplicateOf'
         created_at:
           $ref: '../blocks/envelope.schema.json#/$defs/IsoDateTime'
         updated_at:
@@ -3362,6 +3364,20 @@ components:
         coverage_change:
           description: Có khi done.
           $ref: '../blocks/coverage_change.schema.json'
+    IngestDuplicateOf:
+      description: |
+        Tùy chọn (#39, 26/11): job `rejected` với `INGEST_DUPLICATE_FILE` chỉ ra lần nạp CÒN SỐNG (không failed, không rejected) có
+        cùng nội dung tệp. Một nội dung tệp chỉ có một job sống mỗi người dùng (khóa khử trùng của dòng tính từ băm tệp), nên tải lại
+        đúng tệp khi lần trước còn `review` không tạo job mới: giao diện mở lại job này để duyệt tiếp. Vắng ở job không trùng tệp, job
+        từ chối trước khi có trường này, hoặc khi lần nạp kia đã không còn sống.
+      type: object
+      required: [job_id, status]
+      additionalProperties: false
+      properties:
+        job_id:
+          $ref: '../tools/ledger.results.schema.json#/$defs/Uuid'
+        status:
+          $ref: '../blocks/ingest_review.schema.json#/$defs/IngestJobStatus'
     IngestErrorReason:
       type: string
       description: |

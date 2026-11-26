@@ -42,6 +42,12 @@ function jobErrorMessage(job: Pick<IngestJobResponse, 'error_code' | 'error_mess
 
 type Pending = { kind: IngestSourceKind; file: File }
 
+/** Tệp vừa tải trùng nội dung với một lần nạp chưa xong (`duplicate_of`): chưa có dòng nào của tệp đó được thêm. */
+const DUPLICATE_PENDING_MESSAGE = {
+  review: 'Tệp này đang chờ bạn duyệt ở lần nạp trước, chưa có dòng nào được thêm.',
+  reading: 'Tệp này đang được đọc ở lần nạp trước.',
+} as const
+
 // ---------------------------------------------------------------- I1: chọn tệp
 
 function FilePick({ kind, label, accept, capture, Icon, disabled, onFile }: { kind: IngestSourceKind; label: string; accept: string; capture?: boolean; Icon: typeof Camera; disabled: boolean; onFile: (kind: IngestSourceKind, f: File) => void }) {
@@ -519,12 +525,19 @@ export function IngestPage() {
     body = <PickStep busy={uploading} error={pickError} pending={pending} resumable={recent} onOpen={(id) => setSearch({ job: id })} onFile={(k, f) => void upload(k, f, false)} onConsent={() => pending && void upload(pending.kind, pending.file, true)} onCancelConsent={() => setPending(null)} />
   } else if (job && (job.status === 'failed' || job.status === 'rejected')) {
     step = 'failed'
+    // Tải lại đúng tệp của một lần nạp còn chờ (#39): server không tạo lần nạp thứ hai cho cùng tệp mà chỉ ra lần đó; mở lại để duyệt tiếp.
+    const pendingDup = job.error_code === 'INGEST_DUPLICATE_FILE' && job.duplicate_of && job.duplicate_of.status !== 'done' ? job.duplicate_of : undefined
     body = (
       <section className="space-y-3" data-step="failed">
         <p role="alert" data-testid="ingest-error" className="rounded-card bg-bad-bg p-4 text-small font-semibold text-bad-fg">
-          {jobErrorMessage(job)}
+          {pendingDup ? DUPLICATE_PENDING_MESSAGE[pendingDup.status === 'review' ? 'review' : 'reading'] : jobErrorMessage(job)}
         </p>
-        <Button type="button" className="w-full" onClick={goPick}>
+        {pendingDup && (
+          <Button type="button" className="w-full" onClick={() => setSearch({ job: pendingDup.job_id }, { replace: true })}>
+            {pendingDup.status === 'review' ? 'Duyệt tiếp' : 'Xem tiến độ'}
+          </Button>
+        )}
+        <Button type="button" variant={pendingDup ? 'outline' : 'default'} className="w-full" onClick={goPick}>
           Chọn tệp khác
         </Button>
       </section>

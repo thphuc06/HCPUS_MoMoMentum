@@ -47,6 +47,8 @@ export const IngestJobResponse = z.object({
   error_message: z.string().min(1).max(280).optional(),
   /** Lý do con của INGEST_NO_TRANSACTIONS (IngestErrorReason); dễ tính như `error_code`. */
   error_reason: z.string().max(40).optional(),
+  /** Job trùng tệp (INGEST_DUPLICATE_FILE): lần nạp còn sống cùng nội dung tệp (IngestDuplicateOf), để mở lại lần đang chờ duyệt. */
+  duplicate_of: z.object({ job_id: Uuid, status: IngestJobStatus }).optional(),
   created_at: IsoDateTime,
   updated_at: IsoDateTime,
   finished_at: IsoDateTime.optional(),

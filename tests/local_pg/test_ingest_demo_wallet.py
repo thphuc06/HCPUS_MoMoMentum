@@ -143,3 +143,28 @@ def test_vi_3_hu_giu_hanh_vi(env, with_food):
     _, job, _ = _load(env, user)
     # ví 3 hũ: mọi dòng vào Chi hằng ngày; thêm Ăn uống thì Ăn uống thắng hũ chung
     _assert_all_auto(job, "an_uong" if with_food else DAILY)
+
+
+def test_tai_lai_dung_tep_khi_lan_truoc_chua_chot_thi_chi_duong_ve_lan_do(env):
+    """Rời màn duyệt mà chưa xác nhận rồi tải lại đúng tệp (#39, trên app bị chặn "Tệp này đã được nạp trước đó rồi"): một nội dung tệp
+    chỉ có một lần nạp còn sống (khóa khử trùng dòng tính từ băm tệp) nên lần tải sau vẫn bị từ chối, nhưng chỉ ra lần đang chờ duyệt;
+    lần đó còn nguyên và chốt được. Lần đã chốt thì lần tải sau chỉ ra lần đã chốt (`done`)."""
+    user = "sub-canh4-reupload"
+    r = handle_http(http_event("POST", "/demo/reset", sub=user, groups="persona-minh"), env.svc)
+    assert r["statusCode"] == 200, r
+    ing, first, _ = _load(env, user)
+    up = ing.upload(user, kind="csv", mime="text/csv")
+    ing.run_worker(up, SCENE4_CSV.read_bytes(), LabelingBedrock())
+    again = ing.job(up["job_id"], user=user)
+    assert (again["status"], again["error_code"]) == ("rejected", "INGEST_DUPLICATE_FILE")
+    assert again["duplicate_of"] == {"job_id": first["job_id"], "status": "review"}
+    still = ing.job(first["job_id"], user=user)
+    assert still["status"] == "review" and len(still["review"]["data"]["rows"]) == 32
+    rows = still["review"]["data"]["rows"]
+    code, _ = ing.confirm({"job_id": first["job_id"], "rows": [{"row_id": r["row_id"]} for r in rows]}, user=user)
+    assert code == 200
+    assert ing.job(up["job_id"], user=user)["duplicate_of"] == {"job_id": first["job_id"], "status": "done"}
+    # tệp khác nội dung: không phải job trùng tệp nên không có duplicate_of
+    other = ing.upload(user, kind="csv", mime="text/csv")
+    ing.run_worker(other, b"STT,Ngay,So tien\n1,07/11/2026,1000\n", LabelingBedrock())
+    assert "duplicate_of" not in ing.job(other["job_id"], user=user)
