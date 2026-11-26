@@ -48,3 +48,13 @@ def test_moi_viec_ghi_trong_turn_deu_co_loi_nhac():
         src = inspect.getsource(mod)
         used |= set(re.findall(r"\.write(?:_buffered)?\(\s*\"([a-z_]+)\"", src))
     assert used and used <= set(writer.TASKS)
+
+
+def test_mo_ta_no_outflow_expected_theo_nghia_du_lieu_khop_loi_giao_dien():
+    """#39: cờ `no_outflow_expected` mô tả theo nghĩa dữ liệu như lời mới của giao diện cho hũ để dành: số dư không xuống dưới mức hôm
+    nay, giữ nguyên hoặc chỉ tăng khi lương về. Không mô tả cờ thành "không có khoản chi" hay "số dư không giảm" (hũ để dành còn tiền
+    có thể có khoản rút tay mà dự báo không tính)."""
+    text = writer.TASKS["forecast"]
+    field = text[text.index("no_outflow_expected") :]
+    assert "giữ nguyên" in field and "lương về" in field
+    assert "số dư không giảm" not in field and "không có khoản chi" not in field
