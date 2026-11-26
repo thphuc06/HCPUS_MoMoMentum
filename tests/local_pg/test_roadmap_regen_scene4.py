@@ -9,8 +9,8 @@ sửa nó làm theo phản hồi của chương trình.
 Khẳng định trên CẤU TRÚC bản lộ trình đã lưu:
 - nghĩa vụ model thấy mang nhãn tiếng Việt của bảng chung, không mang mã loại; chữ do mã dựng không có mã loại thô;
 - giai đoạn đầu là từ hôm nay tới ngày lương kế (khoản đến hạn 23/11 nằm trong đó); mọi bước có hạn nằm trong khoảng ngày của giai đoạn;
-- số tiền mỗi bước không vượt tiền có thể chuyển (số dư hũ nguồn với bước làm ngay, khoản hũ nguồn nhận mỗi tháng với bước sau kỳ lương)
-  và không vượt phần hũ nhận cần thêm trong kỳ theo phương án tối ưu.
+- số tiền mỗi bước không vượt tiền có thể chuyển (bước làm ngay: số dư hũ nguồn trừ khoản hũ đó phải trả trước kỳ lương, và phần hũ nhận
+  còn thiếu tới đích; bước sau kỳ lương: khoản hũ nguồn nhận mỗi tháng và phần hũ nhận cần thêm trong kỳ theo phương án tối ưu).
 
 Chạy riêng (in bản lộ trình với `-s`):
 
@@ -252,10 +252,22 @@ def _code_built_texts(rm: dict[str, Any]) -> list[str]:
     return [t for t in texts if isinstance(t, str)]
 
 
-def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env):
+def rejected_steps(caplog) -> list[dict[str, Any]]:
+    """Sự kiện `roadmap_step_rejected` của Roadmap agent (mã luật, vòng, bước; không chữ, không tiền) để đo số bước bị từ chối."""
+    out = []
+    for record in caplog.records:
+        if record.name == "yofina.agent.roadmap" and '"roadmap_step_rejected"' in record.getMessage():
+            out.append(json.loads(record.getMessage()))
+    return out
+
+
+def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env, caplog):
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
     got = _run_scene4(env)
     rm, lines, balances = got["roadmap"], got["lines"], got["balances"]
     print("\n[cảnh 4] bản sinh lại:", json.dumps(rm["phases"], ensure_ascii=False, indent=1))
+    rejected = rejected_steps(caplog)
+    print("[cảnh 4] bước bị từ chối:", len(rejected), [(r["round"], r["step_id"], r.get("detail") or r["rule_id"]) for r in rejected])
     assert (rm["version"], rm["status"], rm["reason"]["code"]) == (3, "proposed", "behavior_changed")
     today = date.fromisoformat(rm["app_date"])
     assert today == ANCHOR
@@ -285,21 +297,30 @@ def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env):
                 assert phase["start_date"] <= step["due_date"] <= phase["end_date"], step
     assert rm["horizon"]["start_date"] == today.isoformat()
 
-    # (c) số tiền: không vượt tiền có thể chuyển, không vượt phần hũ nhận cần thêm trong kỳ (theo LP đã chạy)
+    # (c) số tiền: bước làm ngay không vượt phần hũ nguồn chuyển ngay được (số dư trừ khoản nghĩa vụ hũ đó phải trả trước kỳ lương) và
+    # phần hũ nhận còn thiếu tới đích (C3, #39); bước sau kỳ lương không vượt khoản hũ nguồn nhận mỗi tháng và phần hũ nhận cần thêm trong
+    # kỳ theo LP đã chạy
     def need(code: str) -> int:
         line = lines[code]
         return max(line["proposed_monthly_vnd"] - line["current_monthly_vnd"], line["floor_gap_vnd"], 0)
 
+    due: dict[str, int] = {}
+    for o in got["obligations"]:
+        if o.get("pay_jar") and today.isoformat() <= o["due_date"] < payday.isoformat():
+            due[o["pay_jar"]] = due.get(o["pay_jar"], 0) + o["amount_vnd"]
+    goal_gap = {g["jar"]["code"]: g["target_vnd"] - balances[g["jar"]["code"]]["balance_vnd"] for g in rm["goals"]}
     for phase in rm["phases"]:
         now = phase["start_date"] <= today.isoformat()
         for step in phase["steps"]:
             amount = step.get("amount_vnd")
             if amount is None:
                 continue
-            if step["kind"] in ("set_aside", "pay_obligation"):
+            if step["kind"] in ("set_aside", "pay_obligation") and now:
+                assert amount <= balances[step["jar_code"]]["balance_vnd"] - due.get(step["jar_code"], 0), step
+                assert amount <= goal_gap.get(step["to_jar_code"], amount), step
+            elif step["kind"] in ("set_aside", "pay_obligation"):
                 assert amount <= need(step["to_jar_code"]), step
-                cap = balances[step["jar_code"]]["balance_vnd"] if now else lines[step["jar_code"]]["current_monthly_vnd"]
-                assert amount <= cap, step
+                assert amount <= lines[step["jar_code"]]["current_monthly_vnd"], step
             elif step["kind"] == "adjust_split":
                 assert amount <= need(step["jar_code"]), step
             elif step["kind"] == "cut_spending":

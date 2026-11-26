@@ -44,6 +44,7 @@ from yofina_core.roadmap import (
     RoadmapDraftPhase,
     RoadmapDraftStep,
 )
+from yofina_core.schedule import expand_due_dates
 from yofina_core.suitability import Proposal, SuitabilityVerdict
 from yofina_core.wallet import SAVE_JARS, is_goal_jar, resolve_obligation_pay_jar
 
@@ -62,9 +63,10 @@ Mỗi bước là MỘT hành động cụ thể người dùng tự làm đư�
   tiền từ hũ nào sang hũ nào. reason là một câu ngắn nói vì sao, dựa trên dữ liệu (hũ sắp cạn, nghĩa vụ sắp đến hạn,
   mục tiêu đang chậm, thành phần yếu nhất).
 - set_aside và pay_obligation là chuyển tiền: bắt buộc có jar_code (hũ nguồn), to_jar_code (hũ nhận, khác hũ nguồn) và
-  amount_ref. Dùng pay_obligation khi hũ nhận là hũ trả (pay_jar_code trong context.obligations) của khoản nghĩa vụ sắp đến
-  hạn và hũ đó cần thêm tiền; ở giai đoạn đầu, hũ đó phải đang thiếu trong context.obligation_pay_jars. Khoản do hũ khác trả
-  không phải lý do để chuyển tiền vào hũ nghĩa vụ.
+  amount_ref. Dùng pay_obligation khi hũ nhận là hũ trả (pay_jar_code trong context.obligations) của khoản nghĩa vụ mà bước lo
+  cho; khoản do hũ khác trả không phải lý do để chuyển tiền vào hũ nghĩa vụ. context.obligation_pay_jars cho biết mỗi hũ trả phải
+  trả bao nhiêu trước kỳ lương kế (khoản lặp tính đủ số lần đến hạn) và đang đủ hay thiếu so với số dư: đó là dữ kiện để quyết có
+  nạp thêm hay không. context.obligations chỉ liệt kê các khoản đầu; has_more là còn khoản chưa hiện.
 - cut_spending bắt buộc có jar_code là hũ không thiết yếu và amount_ref trỏ proposed_decrease của chính hũ đó.
 - adjust_split cần amount_ref (hũ được tăng hoặc giảm phần chia) hoặc action save_jars.
 - Bước không có số tiền chỉ được là remind hoặc review_goal và phải có action schedule_nudge để có ngày nhắc.
@@ -85,10 +87,12 @@ Mỗi bước là MỘT hành động cụ thể người dùng tự làm đư�
   hạn, ngày đến hạn, mục tiêu, khoản phân bổ); không tự tính, không ghép hay rút gọn chuỗi, không viết số tháng, phần trăm
   hay số đếm. Không đánh số giai đoạn hay bước (thứ tự đã do vị trí trong danh sách). Chương trình điền tiền, ngày và tham
   số hành động.
-- Số tiền của bước là mức hằng tháng. Bước set_aside hay pay_obligation ở giai đoạn đầu (trước kỳ lương kế) lấy tiền từ số
-  dư HIỆN CÓ của hũ nguồn: hũ nguồn phải có trong context.first_phase_sources, và amount_ref phải là một mục trong refs của
-  chính hũ nguồn đó (dạng mã hũ chấm trường), với mã hũ là hũ nguồn hoặc hũ nhận của bước. Ở các giai đoạn sau kỳ
-  lương, khoản hằng tháng được so với thu nhập tháng. Muốn tăng phần để dành từ lương các kỳ sau, dùng adjust_split.
+- Bước set_aside hay pay_obligation ở giai đoạn đầu (trước kỳ lương kế) là chuyển MỘT LẦN từ số dư hiện có của hũ nguồn: hũ
+  nguồn phải có trong context.first_phase_sources; số tiền không vượt max_text của hũ nguồn (số dư trừ các khoản nghĩa vụ của hũ
+  đó đến hạn trước kỳ lương, due_before_payday_text) và không vượt phần hũ nhận còn thiếu tới đích khi hũ nhận có mục tiêu. refs
+  của hũ nguồn là các tham chiếu (dạng mã hũ chấm trường) vừa các trần đó; amount_ref vẫn trỏ hũ nguồn hoặc hũ nhận của bước. Ở
+  các giai đoạn sau kỳ lương, số tiền của bước là mức hằng tháng: không vượt phần hũ nhận cần thêm trong kỳ và khoản hũ nguồn
+  nhận mỗi tháng. Muốn tăng phần để dành từ lương các kỳ sau, dùng adjust_split.
 - Phương án phân bổ trong dữ liệu đã tính theo mặc định (và theo mục tiêu người dùng nói, nếu có). Thường để trống
   horizon_months và goals; chỉ đặt khi thật sự cần một phương án khác (kỳ khác, hoặc ưu tiên một mục tiêu hơn mục tiêu
   khác bằng trọng số khác một). goals chỉ gồm hũ có kind saving và đã có goal_vnd. Khi sửa, trả lại danh sách giai
@@ -151,6 +155,17 @@ _REF_FIELDS: tuple[str, ...] = (
 #: trường tham chiếu là phần hũ CẦN THÊM (hũ nhận tiền) và phần hũ BỚT ĐI (hũ nguồn) trong phương án tối ưu
 _NEED_FIELDS = frozenset({"proposed_increase", "floor_gap_vnd"})
 _SOURCE_FIELDS = frozenset({"proposed_decrease"})
+#: lỗi số tiền của bước mà phản hồi sửa kèm danh sách tham chiếu dùng được
+_OPTION_CODES = frozenset(
+    {
+        "amount_not_positive",
+        "amount_ref_jar",
+        "amount_over_need",
+        "amount_over_source",
+        "amount_over_available",
+        "amount_over_goal_gap",
+    }
+)
 _ORDINAL_RE = re.compile(
     r"^\s*(?:(?:giai\s+đoạn|bước|phase|step)\s+)?\d{1,2}\s*[:.)\-–—](?!\d)\s*", re.IGNORECASE
 )
@@ -499,42 +514,90 @@ def _allocation_of(outcome: ToolOutcome) -> tuple[AllocationPlanData, tuple[date
     return plan, (period_start, period_end)
 
 
-def _set_allocation(compact: dict[str, Any], plan: AllocationPlanData) -> None:
+@dataclass(frozen=True)
+class _NowCaps:
+    """Trần của bước chuyển tiền LÀM NGAY (giai đoạn đầu, lấy từ số dư hiện có của hũ nguồn; C3 của báo cáo rà soát #39), dựng bằng mã từ
+    dữ liệu tool: số dư từng hũ, khoản nghĩa vụ hũ đó phải trả trước kỳ lương kế (`_obligation_dues`), và với hũ có mục tiêu trong phương
+    án (`plan.goals`, gồm mục tiêu người dùng nói ở lượt này) thì đích và phần còn thiếu tới đích. Bước làm ngay không so với phần tăng
+    MỖI THÁNG của phương án (luật đó chỉ cho bước theo kỳ lương)."""
+
+    balance: dict[str, int]
+    due: dict[str, int]
+    goal: dict[str, tuple[int, int]]
+
+    def available(self, code: str) -> int:
+        """Phần hũ chuyển ngay được: số dư trừ khoản hũ đó phải trả trước kỳ lương, không âm."""
+        return max(self.balance.get(code, 0) - self.due.get(code, 0), 0)
+
+    def cap(self, source: str, target: str | None) -> int:
+        """Trần của một bước chuyển làm ngay từ `source` sang `target` (phần chuyển được, và phần hũ nhận còn thiếu tới đích nếu có)."""
+        available = self.available(source)
+        if target is not None and (goal := self.goal.get(target)) is not None:
+            return min(available, goal[1])
+        return available
+
+
+def _now_caps(jars: list[dict[str, Any]], dues: dict[str, int], plan: AllocationPlanData) -> _NowCaps:
+    balance = {str(j["code"]): int(j["balance_vnd"]) for j in jars}
+    return _NowCaps(
+        balance=balance,
+        due=dict(dues),
+        goal={
+            g.jar.code: (g.target_vnd, max(g.target_vnd - balance.get(g.jar.code, 0), 0))
+            for g in plan.goals
+        },
+    )
+
+
+def _set_allocation(compact: dict[str, Any], plan: AllocationPlanData, dues: dict[str, int]) -> _NowCaps:
     lines = {line.jar.code: line for line in plan.lines}
     compact["allocation"] = _compact_allocation(plan)
     compact["amount_refs"] = refs = _amount_refs(lines)
-    # Bước chuyển tiền của giai đoạn đầu lấy từ số dư hiện có của hũ nguồn (luật source_jar_covers): cho model biết trước hũ nào làm
-    # nguồn được và những tham chiếu nào (của mọi hũ) không vượt số dư đó, để bản phác thảo không phải sửa vì luật này. Model chỉ
-    # cần chọn trong danh sách, không phải tự so số.
+    caps = _now_caps(compact["jars"], dues, plan)
+    # Bước chuyển tiền của giai đoạn đầu lấy MỘT LẦN từ số dư hiện có của hũ nguồn: cho model biết trước hũ nào làm nguồn được, chuyển
+    # ngay được tối đa bao nhiêu (số dư trừ khoản hũ đó phải trả trước kỳ lương) và những tham chiếu nào vừa trần đó (cùng trần
+    # `_amount_issue` kiểm lúc dựng bước), để bản phác thảo không phải sửa vì luật này. Model chỉ cần chọn, không phải tự so số.
     sources: dict[str, dict[str, Any]] = {}
     for jar in compact["jars"]:
-        code, balance = jar["code"], int(jar["balance_vnd"])
-        if balance <= 0:
+        code = jar["code"]
+        available = caps.available(code)
+        if available <= 0:
             continue
-        # chỉ tham chiếu có nghĩa với hũ này làm nguồn: phần cần thêm của hũ nhận (tăng, phần thiếu sàn) hoặc phần giảm của chính hũ
-        # nguồn; cùng luật `_amount_issue` kiểm lúc dựng bước
+        # tham chiếu có nghĩa với hũ này làm nguồn: phần cần thêm của hũ nhận (tăng, phần thiếu sàn), không vượt phần hũ nhận còn thiếu
+        # tới đích, hoặc phần giảm của chính hũ nguồn
         fitting = [
             f"{ref_jar}.{name}"
             for ref_jar, fields in refs.items()
             for name in fields
             if name in (_SOURCE_FIELDS if ref_jar == code else _NEED_FIELDS)
-            and _number_ref(AmountRef(jar_code=ref_jar, field=name), lines[ref_jar]) <= balance  # type: ignore[arg-type]
+            and _number_ref(AmountRef(jar_code=ref_jar, field=name), lines[ref_jar])  # type: ignore[arg-type]
+            <= (available if ref_jar == code else caps.cap(code, ref_jar))
         ]
-        if fitting:
-            sources[code] = {"max_text": jar["balance_text"], "refs": fitting}
+        entry: dict[str, Any] = {"max_text": format_vnd(available), "refs": fitting}
+        if due := caps.due.get(code, 0):
+            entry["due_before_payday_text"] = format_vnd(due)
+        sources[code] = entry
     compact["first_phase_sources"] = sources
+    return caps
 
 
-def _obligation_pay_jars(
-    obligations: dict[str, Any], jars: list[dict[str, Any]], payday: date
-) -> list[dict[str, Any]]:
-    """Hũ trả của các khoản nghĩa vụ đang hoạt động đến hạn trước kỳ lương kế `payday` (cùng cửa sổ với `schedule.obligation_window`, kể
-    cả khoản đã quá hạn), mỗi hũ một dòng: tổng phải trả từ hũ đó và đủ hay thiếu so với số dư HIỆN CÓ của hũ. Hũ trả theo đúng quy tắc
-    của dự báo (`wallet.resolve_obligation_pay_jar`: hũ đã lưu ở khoản, không có thì hũ trả mặc định của ví). Dữ kiện có cấu trúc cho
-    bước chuyển tiền của giai đoạn đầu: khoản do hũ Ăn uống trả không phải lý do để nạp thêm hũ Nghĩa vụ (#39)."""
-    names = {str(j["code"]): str(j["name"]) for j in jars}
-    balances = {str(j["code"]): int(j["balance_vnd"]) for j in jars}
+def _obligation_dues(
+    obligations: dict[str, Any], jars: list[dict[str, Any]], payday: date, today: date | None = None
+) -> dict[str, int]:
+    """Tổng tiền mỗi hũ trả phải trả cho các khoản nghĩa vụ đang hoạt động trong [hôm nay, kỳ lương kế `payday`): mọi lần đến hạn của khoản
+    lặp (`schedule.expand_due_dates`: khoản hằng tuần đến hạn hai lần trước kỳ lương thì cộng hai lần), khoản đã quá hạn tính vào hôm nay
+    như lịch của dự báo. Hũ trả theo đúng quy tắc của dự báo (`wallet.resolve_obligation_pay_jar`: hũ đã lưu ở khoản, không có thì hũ trả
+    mặc định của ví). `today` vắng thì là `app_date` của kết quả tool."""
+    if today is None:
+        try:
+            today = date.fromisoformat(str(obligations["app_date"]))
+        except (KeyError, TypeError, ValueError):
+            return {}
+    if payday <= today:
+        return {}
+    names = {str(j["code"]) for j in jars}
     kinds = [(str(j["code"]), str(j.get("kind") or "spending")) for j in jars]  # như `compact_obligations`
+    through = payday - timedelta(days=1)
     due: dict[str, int] = {}
     for o in (obligations.get("data") or {}).get("obligations") or []:
         if o.get("status", "active") != "active":
@@ -542,13 +605,27 @@ def _obligation_pay_jars(
         try:
             when = date.fromisoformat(str(o["due_date"]))
             amount = to_vnd(o["amount_vnd"])
+            cycle = str(o.get("cycle") or "once")
+            due_day = int(o["due_day"]) if o.get("due_day") is not None else None
         except (KeyError, TypeError, ValueError):
             continue
+        times = len(expand_due_dates(when, cycle, due_day, first=today, through=through))
         code = resolve_obligation_pay_jar(kinds, saved=o.get("pay_jar"))
-        if when < payday and code in names:
-            due[code] = due.get(code, 0) + amount
+        if times and code in names:
+            due[code] = due.get(code, 0) + amount * times
+    return due
+
+
+def _obligation_pay_jars(
+    obligations: dict[str, Any], jars: list[dict[str, Any]], payday: date, today: date | None = None
+) -> list[dict[str, Any]]:
+    """Hũ trả của các khoản nghĩa vụ đến hạn trước kỳ lương kế `payday` (`_obligation_dues`: mọi lần đến hạn, kể cả khoản đã quá hạn), mỗi
+    hũ một dòng: tổng phải trả từ hũ đó và đủ hay thiếu so với số dư HIỆN CÓ của hũ. Dữ kiện có cấu trúc cho model (V7 của báo cáo rà soát
+    #39): đủ hay thiếu không chặn bước nạp sớm; khoản do hũ Ăn uống trả không phải lý do để nạp thêm hũ Nghĩa vụ."""
+    names = {str(j["code"]): str(j["name"]) for j in jars}
+    balances = {str(j["code"]): int(j["balance_vnd"]) for j in jars}
     out: list[dict[str, Any]] = []
-    for code, total in due.items():
+    for code, total in _obligation_dues(obligations, jars, payday, today).items():
         gap = total - balances[code]
         row: dict[str, Any] = {
             "jar_code": code,
@@ -562,31 +639,22 @@ def _obligation_pay_jars(
     return out
 
 
-def _obligation_step_issue(
-    item: StepOutline, compact: dict[str, Any], *, immediate: bool
-) -> str | None:
+def _obligation_step_issue(item: StepOutline, compact: dict[str, Any]) -> str | None:
     """Bước `pay_obligation` (chuyển tiền vào hũ nghĩa vụ VÌ khoản nghĩa vụ) phải nạp đúng hũ trả của khoản: hũ nhận không trả khoản nào
-    trong `context.obligations`, hoặc ở giai đoạn đầu hũ đó đã đủ cho các khoản nó trả trước kỳ lương (`context.obligation_pay_jars`),
-    thì bước vào vòng sửa. Kiểm trên dữ kiện có cấu trúc (mã hũ của bước, hũ trả của khoản), không đọc chữ của lý do."""
+    trong `context.obligations` thì bước vào vòng sửa (bất biến: hũ nhận là hũ trả của khoản), ở mọi giai đoạn. Hũ trả đang đủ hay thiếu
+    trước kỳ lương (`context.obligation_pay_jars`) là dữ kiện cho model, không chặn nạp sớm (V7 của báo cáo rà soát #39). Kiểm trên dữ
+    kiện có cấu trúc (mã hũ của bước, hũ trả của khoản), không đọc chữ của lý do."""
     if item.kind != "pay_obligation" or not item.to_jar_code:
         return None
     name = next((j["name"] for j in compact.get("jars", []) if j.get("code") == item.to_jar_code), item.to_jar_code)
-    window = compact.get("obligation_pay_jars")
     payers = {o.get("pay_jar_code") for o in compact.get("obligations", [])} | {
-        p["jar_code"] for p in window or []
+        p["jar_code"] for p in compact.get("obligation_pay_jars") or []
     }
     if item.to_jar_code not in payers:
         return (
             f"Hũ {name} không trả khoản nghĩa vụ nào trong context.obligations (xem pay_jar_code của từng khoản): bước pay_obligation"
             " chỉ chuyển tiền vào hũ trả của khoản sắp đến hạn. Đổi hũ nhận, đổi loại bước hoặc bỏ bước."
         )
-    if immediate and window is not None:
-        row = next((p for p in window if p["jar_code"] == item.to_jar_code), None)
-        if row is None or row["status"] != "thiếu":
-            return (
-                f"Hũ {name} đã đủ cho các khoản nghĩa vụ nó trả trước kỳ lương (context.obligation_pay_jars), nên giai đoạn đầu không"
-                " cần chuyển thêm vào hũ này. Khoản do hũ khác trả thì lo ở hũ trả của khoản đó; không thì bỏ bước."
-            )
     return None
 
 
@@ -811,18 +879,21 @@ def _amount_issue(
     lines: dict[str, AllocationLine],
     balances: dict[str, B.JarBalance],
     immediate: bool,
+    caps: _NowCaps | None = None,
 ) -> tuple[str, str] | None:
     """Kiểm số tiền của bước theo dữ liệu thật, bằng mã, ở khâu nhận dàn ý (số là số model CHỌN qua `amount_ref`). Số tiền của bước
     là khoản chuyển hoặc khoản thay đổi của bước đó, nên:
 
-    - bước chuyển tiền không vượt phần hũ nhận cần thêm trong kỳ (`_need`), và ở giai đoạn sau kỳ lương không vượt khoản hũ nguồn nhận
-      mỗi tháng theo tỷ lệ chia hiện tại (bước làm ngay đã bị luật `source_jar_covers` chặn theo số dư hiện có);
+    - bước chuyển tiền LÀM NGAY (giai đoạn đầu, lấy một lần từ số dư hiện có, C3 của báo cáo rà soát #39) không vượt phần hũ nguồn chuyển
+      được (số dư trừ khoản nghĩa vụ hũ đó phải trả trước kỳ lương, `_NowCaps`) và không vượt phần hũ nhận còn thiếu tới đích (khi hũ nhận
+      có mục tiêu trong phương án); không so với phần tăng mỗi tháng của phương án;
+    - bước chuyển tiền ở giai đoạn sau kỳ lương (khoản hằng tháng) không vượt phần hũ nhận cần thêm trong kỳ (`_need`) và khoản hũ nguồn
+      nhận mỗi tháng theo tỷ lệ chia hiện tại;
     - bước đổi tỷ lệ chia tăng phần của một hũ không vượt phần hũ đó cần thêm (mức chia mới không phải số tiền của bước), bước giảm phần
       chia hay giảm chi không vượt khoản hũ đó đang nhận mỗi tháng;
     - bước làm giảm khoản một hũ nhận mỗi tháng (giảm chi, giảm phần chia, chuyển tiền sau kỳ lương từ hũ nguồn) không đưa hũ đó xuống
       dưới sàn của dòng phân bổ (`floor_vnd`: gồm mọi khoản định kỳ đang hoạt động trả từ hũ, như Netflix ở Giải trí, #39 26/11, và sàn
       chi theo mức chi thật gần đây của hũ, #39 26/11 chiều; cùng sàn với LP).
-      Bước chuyển tiền làm ngay lấy từ số dư hiện có, không từ phần chia mỗi tháng, nên chỉ chịu luật `source_jar_covers`.
 
     Trả (mã ổn định cho log, phản hồi cho vòng sửa), None khi hợp lệ."""
 
@@ -842,19 +913,21 @@ def _amount_issue(
 
     source, target = outline.jar_code, outline.to_jar_code
     if outline.kind in _MONEY_MOVING_KINDS and source and target and source != target:
+        if immediate:
+            return _now_issue(source, target, amount, caps, name) if caps is not None else None
         need = _need(lines.get(target))
         if amount > need:
             return "amount_over_need", (
-                f"Số tiền {format_vnd(amount)} lớn hơn phần hũ {name(target)} cần thêm trong kỳ ({format_vnd(need)})."
+                f"Số tiền {format_vnd(amount)} mỗi tháng lớn hơn phần hũ {name(target)} cần thêm trong kỳ ({format_vnd(need)})."
                 " Chọn tham chiếu là phần cần thêm của hũ nhận, hoặc chọn hũ nhận khác."
             )
         src = lines.get(source)
-        if not immediate and src is not None and amount > src.current_monthly_vnd:
+        if src is not None and amount > src.current_monthly_vnd:
             return "amount_over_source", (
                 f"Số tiền {format_vnd(amount)} mỗi tháng lớn hơn khoản hũ {name(source)} nhận mỗi tháng"
                 f" ({format_vnd(src.current_monthly_vnd)}). Chọn hũ nguồn khác hoặc tham chiếu nhỏ hơn."
             )
-        if not immediate and src is not None:
+        if src is not None:
             return below_floor(src)
         return None
     line = lines[ref.jar_code]
@@ -875,6 +948,28 @@ def _amount_issue(
     return None
 
 
+def _now_issue(
+    source: str, target: str, amount: int, caps: _NowCaps, name: Callable[[str], str]
+) -> tuple[str, str] | None:
+    """Trần của bước chuyển làm ngay (xem `_NowCaps`): phần hũ nguồn chuyển được, rồi phần hũ nhận còn thiếu tới đích."""
+    available = caps.available(source)
+    if amount > available:
+        due = caps.due.get(source, 0)
+        held = f", các khoản nghĩa vụ hũ này phải trả trước kỳ lương là {format_vnd(due)}" if due else ""
+        return "amount_over_available", (
+            f"Số tiền {format_vnd(amount)} lớn hơn phần hũ {name(source)} chuyển ngay được ({format_vnd(available)}): hũ có"
+            f" {format_vnd(caps.balance.get(source, 0))}{held}. Chọn tham chiếu nhỏ hơn, hũ nguồn khác, hoặc dời bước sang giai"
+            " đoạn sau kỳ lương."
+        )
+    if (goal := caps.goal.get(target)) is not None and amount > goal[1]:
+        target_vnd, gap = goal
+        return "amount_over_goal_gap", (
+            f"Số tiền {format_vnd(amount)} lớn hơn phần hũ {name(target)} còn thiếu tới đích {format_vnd(target_vnd)}"
+            f" ({format_vnd(gap)}). Chọn tham chiếu nhỏ hơn hoặc hũ nhận khác."
+        )
+    return None
+
+
 def _build_step(
     outline: StepOutline,
     balances: list[B.JarBalance],
@@ -883,8 +978,9 @@ def _build_step(
     today: date,
     *,
     immediate: bool = False,
+    caps: _NowCaps | None = None,
 ) -> tuple[RoadmapDraftStep, Proposal]:
-    """`immediate`: giai đoạn của bước bắt đầu ngay đầu kỳ (bước chuyển tiền lấy từ số dư hiện có của hũ nguồn)."""
+    """`immediate`: giai đoạn của bước bắt đầu ngay đầu kỳ (bước chuyển tiền lấy từ số dư hiện có của hũ nguồn, trần theo `caps`)."""
     phase_start, phase_end = phase
     jars = {jar.code for jar in balances}
     jar, to_jar = outline.jar_code, outline.to_jar_code
@@ -905,7 +1001,7 @@ def _build_step(
                 f"Trường {ref.field} của hũ {ref.jar_code} không dương trong phương án tối ưu. Đổi tham chiếu hoặc bỏ số tiền.",
             )
         by_code = {item.code: item for item in balances}
-        if (issue := _amount_issue(outline, ref, amount, lines, by_code, immediate)) is not None:
+        if (issue := _amount_issue(outline, ref, amount, lines, by_code, immediate, caps)) is not None:
             raise _StepInvalid(*issue)
         metrics = _step_metrics(outline, ref, line, amount, immediate, by_code)
     action = _build_action(outline, amount, phase_end, today, balances, lines)
@@ -1085,12 +1181,14 @@ async def _verify(
     *,
     round_no: int = 0,
     cache: dict[str, asyncio.Task[SuitabilityVerdict | None]] | None = None,
+    caps: _NowCaps | None = None,
 ) -> tuple[list[RoadmapDraftPhase], list[RepairIssue], list[tuple[str | None, SuitabilityVerdict]]]:
     """Các giai đoạn đạt, các lỗi cho vòng sửa, và các phán quyết mới của vòng kèm hũ nguồn của đề xuất được kiểm (để lập luận
-    biết luật nào đã loại hũ nào, #7)."""
+    biết luật nào đã loại hũ nào, #7). `caps`: trần của bước chuyển làm ngay (`_NowCaps`); vắng thì dựng từ số dư, không trừ khoản nào."""
     lines = {line.jar.code: line for line in plan.lines}
     start, horizon_end = period
     cache = {} if cache is None else cache
+    caps = caps if caps is not None else _now_caps([j.model_dump() for j in balances], {}, plan)
     issues, verdicts = [], []
     phase_ids: set[str] = set()
     step_ids: set[str] = set()
@@ -1101,13 +1199,11 @@ async def _verify(
         found = {tok for text in texts for tok in _DIGITS_RE.findall(text) if not grounded(tok)}
         return f" ({', '.join(sorted(found)[:5])})" if found else ""
 
-    balance_of = {jar.code: jar.balance_vnd for jar in balances}
-
     def options(item: StepOutline | RoadmapDraftStep, phase_start: date) -> str:
-        """Tham chiếu tiền dùng được cho bước này; bước chuyển tiền của giai đoạn đầu (làm ngay) bị chặn bởi số dư hũ nguồn."""
+        """Tham chiếu tiền dùng được cho bước này; bước chuyển tiền của giai đoạn đầu (làm ngay) bị chặn bởi trần chuyển ngay."""
         cap = None
         if item.kind in _MONEY_MOVING_KINDS and item.jar_code and phase_start <= today:
-            cap = balance_of.get(item.jar_code)
+            cap = caps.cap(item.jar_code, item.to_jar_code)
         return _ref_options((item.jar_code, item.to_jar_code), lines, cap)
 
     def rejected(phase_id: str, item: StepOutline, reason: str, rule_id: str, **extra: Any) -> None:
@@ -1203,6 +1299,7 @@ async def _verify(
                     (phase_start, phase_end),
                     today,
                     immediate=phase_start <= today,
+                    caps=caps,
                 )
             except ValueError as exc:
                 if isinstance(exc, ValidationError):
@@ -1212,15 +1309,15 @@ async def _verify(
                 else:
                     code = exc.code if isinstance(exc, _StepInvalid) else "value_error"
                     message = str(exc)
-                if code in ("amount_not_positive", "amount_ref_jar", "amount_over_need", "amount_over_source"):
+                if code in _OPTION_CODES:
                     message += options(item, phase_start)
                 issues.append(
                     RepairIssue(step_id=item.step_id, rule_id="step_invalid", message=message)
                 )
                 rejected(phase.phase_id, item, "step_invalid", "step_invalid", detail=code)
                 continue
-            # Bước chuyển tiền "vì" nghĩa vụ vào một hũ không phải hũ trả đang thiếu của khoản đó: vòng sửa, không tốn check_suitability.
-            if (wrong_payer := _obligation_step_issue(item, compact, immediate=phase_start <= today)) is not None:
+            # Bước chuyển tiền "vì" nghĩa vụ vào một hũ không trả khoản nghĩa vụ nào: vòng sửa, không tốn check_suitability.
+            if (wrong_payer := _obligation_step_issue(item, compact)) is not None:
                 issues.append(
                     RepairIssue(step_id=item.step_id, rule_id="obligation_pay_jar", message=wrong_payer)
                 )
@@ -1461,11 +1558,14 @@ async def build_roadmap(
     if allocated is None:
         return RoadmapResult(outcome=_tool_error(optimized))
     plan, (period_start, period_end) = allocated
-    _set_allocation(compact, plan)
+    # khoản nghĩa vụ mỗi hũ phải trả trước kỳ lương kế (mọi lần đến hạn): trần của bước chuyển làm ngay và dữ kiện đủ/thiếu cho model
+    next_pay = period_start if today < period_start else _add_month(period_start)
+    dues = _obligation_dues(obligations.payload or {}, compact["jars"], next_pay, today)
+    caps = _set_allocation(compact, plan, dues)
     if today < period_start:
         # giai đoạn đầu (từ hôm nay tới ngày lương kế) lấy tiền từ số dư hiện có: hũ trả nào đủ, hũ nào thiếu cho khoản của chính nó
         compact["obligation_pay_jars"] = _obligation_pay_jars(
-            obligations.payload or {}, compact["jars"], period_start
+            obligations.payload or {}, compact["jars"], period_start, today
         )
 
     await stage("draft")
@@ -1570,7 +1670,7 @@ async def build_roadmap(
         second = await tools("optimize_allocation", args, "planner")
         if (again := _allocation_of(second)) is not None:
             optimized, (plan, (period_start, period_end)) = second, again
-            _set_allocation(compact, plan)
+            caps = _set_allocation(compact, plan, dues)
             model_context["reason_numbers"] = _reason_numbers(compact, _grounding(compact))
             reoptimized = True
         else:
@@ -1686,6 +1786,7 @@ async def build_roadmap(
             today,
             round_no=retries,
             cache=checked_proposals,
+            caps=caps,
         )
         verdicts.extend(v for _, v in checked)
         judged.extend(checked)

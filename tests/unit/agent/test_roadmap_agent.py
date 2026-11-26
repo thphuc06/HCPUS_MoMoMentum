@@ -1038,8 +1038,10 @@ def test_future_step_over_current_balance_but_within_monthly_income_passes_like_
 
 
 def test_step_starting_now_over_current_balance_is_still_blocked(caplog):
-    # Cùng bước đó ở giai đoạn đầu (bắt đầu hôm nay, trước kỳ lương kế): tiền lấy từ số dư hiện có nên vẫn bị chặn và sửa.
+    # Cùng bước đó ở giai đoạn đầu (bắt đầu hôm nay, trước kỳ lương kế): tiền lấy một lần từ số dư hiện có nên vẫn bị chặn và sửa.
     # Từ #19 kỳ lộ trình bắt đầu ngày lương kế tiếp; kỳ chỉ còn bắt đầu hôm nay khi hồ sơ chưa có ngày lương (allocation giữ hôm nay).
+    # Từ C3 (#39) mã chặn bước ngay khi dựng (trần chuyển ngay: số dư trừ khoản hũ nguồn phải trả trước kỳ lương), trước lượt
+    # check_suitability; luật source_jar_covers vẫn chặn cùng bước đó lúc lưu.
     caplog.set_level("WARNING", logger="yofina.agent.roadmap")
     balances, facts = low_entertainment_balances(200_000)
     ok = fixture("optimize_allocation.ok.json")
@@ -1051,10 +1053,10 @@ def test_step_starting_now_over_current_balance_is_still_blocked(caplog):
     result, client, scope = build(tools, outline(step()), fixed)
     assert result.outcome.ok and scope.calls == 2
 
-    move = args_for(tools, "check_suitability")[0]["proposal"]
-    assert move["kind"] == "roadmap_set_aside" and move["start_date"] < facts.next_payday.isoformat()
+    assert all(a["proposal"]["kind"] != "roadmap_set_aside" for a in args_for(tools, "check_suitability"))
     (feedback,) = prompt(client, 1)["feedback"]
-    assert feedback["step_id"] == "bu_du_phong" and feedback["rule_id"] == "source_jar_covers"
+    assert feedback["step_id"] == "bu_du_phong" and feedback["rule_id"] == "step_invalid"
+    assert "200.000 ₫" in feedback["message"]
     # không tham chiếu nào của hai hũ vừa số dư 200.000 ₫ của hũ nguồn: phản hồi nói cách sửa khác
     assert "Không có tham chiếu nào" in feedback["message"]
     assert "dời bước sang giai đoạn sau kỳ lương" in feedback["message"]
@@ -1068,8 +1070,7 @@ def test_step_starting_now_over_current_balance_is_still_blocked(caplog):
     violations, _ = check_steps([phase], facts, cached_rules())
     assert [rule for _, rule, _ in violations] == ["source_jar_covers"]
     (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
-    assert rejected["phase_id"] == "on_dinh" and rejected["rule_id"] == "source_jar_covers"
-    assert rejected["funding_source"] == "jar"
+    assert rejected["phase_id"] == "on_dinh" and rejected["detail"] == "amount_over_available"
 
 
 def test_future_step_over_monthly_income_is_still_blocked():
@@ -1332,6 +1333,57 @@ def test_metric_chuyen_ngay_la_so_du_hai_hu_khop_so_tien_buoc():
         {"label": "Hũ Giải trí", "before": "760.000 ₫", "after": "160.000 ₫"},
         {"label": "Hũ Dự phòng", "before": "2.700.000 ₫", "after": "3.300.000 ₫"},
     ]
+
+
+# --- bước chuyển làm ngay từ số dư (C3 của báo cáo rà soát #39): trần là số dư trừ khoản hũ nguồn phải trả trước kỳ lương, và phần hũ
+# nhận còn thiếu tới đích; không so với phần tăng MỖI THÁNG của phương án tối ưu (luật đó chỉ cho bước theo kỳ lương) ---------------
+def test_buoc_chuyen_ngay_lon_hon_phan_tang_moi_thang_ma_vua_so_du_kha_dung_thi_dat():
+    # Du lịch chỉ cần thêm 120.000 ₫ mỗi tháng theo phương án, nhưng chuyển ngay 600.000 ₫ từ Giải trí (760.000 ₫, không có khoản phải
+    # trả trước kỳ lương) vẫn nằm trong số dư và dưới phần Du lịch còn thiếu tới đích (6.000.000 - 1.800.000 ₫)
+    tools = scripted_tools()
+    move = step(to_jar_code="du_lich", amount_ref={"jar_code": "giai_tri", "field": "proposed_decrease"})
+    result, _, scope = build(tools, outline(move))
+    assert result.outcome.ok and scope.calls == 1
+    (saved,) = args_for(tools, "save_roadmap")[0]["phases"][0]["steps"]
+    assert (saved["to_jar_code"], saved["amount_vnd"]) == ("du_lich", 600_000)
+    # cùng bước đó sau kỳ lương là khoản hằng tháng: vẫn so với phần Du lịch cần thêm mỗi tháng
+    tools = scripted_tools(checks=("ok", "ok"))
+    result, client, _ = build(tools, later_phase(move), later_phase(review()))
+    assert result.outcome.ok and "cần thêm" in prompt(client, 1)["feedback"][0]["message"]
+
+
+def test_buoc_chuyen_ngay_tru_khoan_hu_nguon_phai_tra_truoc_ky_luong(caplog):
+    # Hóa đơn có 450.000 ₫ nhưng Tiền điện 375.000 ₫ trả từ hũ này đến hạn 26/11, trước kỳ lương 05/12: chuyển ngay tối đa 75.000 ₫
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    tools = scripted_tools()
+    move = step(jar_code="hoa_don", to_jar_code="du_lich", amount_ref={"jar_code": "du_lich", "field": "proposed_increase"})
+    result, client, scope = build(tools, outline(move, review()), outline(review()))
+    assert result.outcome.ok and scope.calls == 2
+    source = prompt(client)["context"]["first_phase_sources"]["hoa_don"]
+    assert (source["max_text"], source["due_before_payday_text"]) == ("75.000 ₫", "375.000 ₫")
+    assert source["refs"] == []  # không tham chiếu nào vừa 75.000 ₫
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert feedback["rule_id"] == "step_invalid"
+    assert all(text in feedback["message"] for text in ("450.000 ₫", "375.000 ₫", "75.000 ₫"))
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected["detail"] == "amount_over_available"
+
+
+def test_buoc_chuyen_ngay_khong_vuot_phan_hu_nhan_con_thieu_toi_dich(caplog):
+    # mục tiêu Du lịch 2.000.000 ₫, hũ đang có 1.800.000 ₫: chuyển ngay 600.000 ₫ vượt đích; 120.000 ₫ thì vừa
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    allocation = fixture("optimize_allocation.ok.json")
+    allocation["data"]["goals"][0]["target_vnd"] = 2_000_000
+    tools = scripted_tools(allocation=allocation, checks=("ok", "ok"))
+    over = step(to_jar_code="du_lich", amount_ref={"jar_code": "giai_tri", "field": "proposed_decrease"})
+    fits = step(to_jar_code="du_lich", amount_ref={"jar_code": "du_lich", "field": "proposed_increase"})
+    result, client, _ = build(tools, outline(over), outline(fits))
+    assert result.outcome.ok
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert "200.000 ₫" in feedback["message"] and "2.000.000 ₫" in feedback["message"]
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected["detail"] == "amount_over_goal_gap"
+    assert args_for(tools, "save_roadmap")[0]["phases"][0]["steps"][0]["amount_vnd"] == 120_000
 
 
 @pytest.mark.parametrize(

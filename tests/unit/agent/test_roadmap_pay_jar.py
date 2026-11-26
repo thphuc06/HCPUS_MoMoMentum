@@ -24,7 +24,7 @@ from test_roadmap_agent import (
     step,
 )
 from yofina_agent.compact import compact_obligations
-from yofina_agent.roadmap_agent import StepOutline, _obligation_pay_jars, _obligation_step_issue
+from yofina_agent.roadmap_agent import StepOutline, _obligation_dues, _obligation_pay_jars, _obligation_step_issue
 from yofina_agent.tools import classify_result
 
 PAYDAY = date(2026, 12, 5)  # period_start của phương án fixture (optimize_allocation.ok)
@@ -102,6 +102,16 @@ def test_hu_tra_du_hay_thieu_truoc_ky_luong_theo_so_du_hien_co():
     assert nghia_vu["status"] == "thiếu" and nghia_vu["shortfall_text"] == "375.000 ₫"
 
 
+def test_khoan_lap_den_han_nhieu_lan_truoc_ky_luong_duoc_cong_du_so_lan():
+    """Khoản góp hằng tuần đến hạn 24/11 và 01/12, đều trước kỳ lương 05/12: cộng cả hai lần (`expand_due_dates`), không chỉ lần đầu (V7
+    của báo cáo rà soát #39). Khoản quá hạn tính vào hôm nay như lịch dự báo."""
+    weekly = {**_ob("Góp hụi", "loan", 200_000, "2026-11-24", "nghia_vu"), "cycle": "weekly"}
+    overdue = {**_ob("Điện tháng trước", "bill", 50_000, "2026-11-10", "nghia_vu"), "cycle": "once"}
+    rows = _obligation_pay_jars(_payload([weekly, overdue]), JARS, PAYDAY)
+    assert rows == [{"jar_code": "nghia_vu", "jar_name": "Nghĩa vụ", "due_before_payday_text": "450.000 ₫", "status": "đủ"}]
+    assert _obligation_dues(_payload([weekly, overdue]), JARS, PAYDAY) == {"nghia_vu": 450_000}
+
+
 # --- kiểm bước khi nhận ----------------------------------------------------------------------------------------------------------
 def _context(jars=JARS, obligations=MINH_OBLIGATIONS):
     return {
@@ -117,26 +127,25 @@ def _pay(to_jar, source="du_phong"):
     )
 
 
-def test_nap_hu_nghia_vu_da_du_o_giai_doan_dau_thi_vao_vong_sua():
-    issue = _obligation_step_issue(_pay("nghia_vu"), _context(), immediate=True)
-    assert issue is not None and "Nghĩa vụ" in issue and "đã đủ" in issue
-    assert not any(ch.isdigit() for ch in issue)  # phản hồi sửa không mang số
+def test_nap_hu_nghia_vu_da_du_o_giai_doan_dau_la_du_kien_khong_chan():
+    """Hũ trả đang đủ cho các khoản trước kỳ lương: nạp sớm (khoản đến hạn ngay sau kỳ lương, muốn dư thêm) không bị chặn bằng mã; "đủ"
+    hay "thiếu" là dữ kiện trong `context.obligation_pay_jars` cho model quyết (V7 của báo cáo rà soát #39)."""
+    assert _obligation_step_issue(_pay("nghia_vu"), _context()) is None
 
 
 def test_nap_hu_khong_tra_khoan_nao_thi_vao_vong_sua_o_moi_giai_doan():
-    for immediate in (True, False):
-        issue = _obligation_step_issue(_pay("giai_tri"), _context(), immediate=immediate)
-        assert issue is not None and "Giải trí" in issue and "không trả khoản nghĩa vụ nào" in issue
+    issue = _obligation_step_issue(_pay("giai_tri"), _context())
+    assert issue is not None and "Giải trí" in issue and "không trả khoản nghĩa vụ nào" in issue
+    assert not any(ch.isdigit() for ch in issue)  # phản hồi sửa không mang số
 
 
 def test_buoc_hop_le_khong_bi_chan():
     short = [{**j, "balance_vnd": 1_000_000} if j["code"] == "nghia_vu" else j for j in JARS]
-    assert _obligation_step_issue(_pay("nghia_vu"), _context(jars=short), immediate=True) is None  # hũ trả đang thiếu
-    assert _obligation_step_issue(_pay("nghia_vu"), _context(), immediate=False) is None  # sau kỳ lương: khoản hằng tháng
+    assert _obligation_step_issue(_pay("nghia_vu"), _context(jars=short)) is None  # hũ trả đang thiếu
     plain = StepOutline.model_validate(step())  # set_aside không nói "vì nghĩa vụ"
-    assert _obligation_step_issue(plain, _context(), immediate=True) is None
+    assert _obligation_step_issue(plain, _context()) is None
     no_window = {k: v for k, v in _context().items() if k != "obligation_pay_jars"}  # kỳ phân bổ bắt đầu hôm nay
-    assert _obligation_step_issue(_pay("nghia_vu"), no_window, immediate=True) is None
+    assert _obligation_step_issue(_pay("nghia_vu"), no_window) is None
 
 
 # --- cả lượt lập: ngữ cảnh model thấy, vòng sửa, bản lưu -------------------------------------------------------------------------
@@ -153,7 +162,10 @@ def _minh_tools():
     )
 
 
-def test_lap_lo_trinh_buoc_nap_nghia_vu_vi_khoan_cua_hu_khac_vao_vong_sua_roi_bi_bo(caplog):
+def test_lap_lo_trinh_buoc_lay_tien_hu_con_phai_tra_khoan_truoc_ky_luong_vao_vong_sua_roi_bi_bo(caplog):
+    """Bước nạp hũ Nghĩa vụ (đang đủ) bằng tiền hũ Ăn uống: "đủ" của hũ Nghĩa vụ chỉ là dữ kiện, không chặn (V7). Bước vẫn vào vòng sửa vì
+    trần của bước chuyển làm ngay (C3): Ăn uống có 380.000 ₫ nhưng còn phải trả Tiền cơm văn phòng 300.000 ₫ ngày 23/11, nên chuyển ngay
+    được tối đa 80.000 ₫, ít hơn số tiền bước."""
     caplog.set_level("WARNING", logger="yofina.agent.roadmap")
     tools = _minh_tools()
     wrong = step(
@@ -166,11 +178,15 @@ def test_lap_lo_trinh_buoc_nap_nghia_vu_vi_khoan_cua_hu_khac_vao_vong_sua_roi_bi
     context = prompt(client, 0)["context"]
     assert {o["pay_jar_code"] for o in context["obligations"]} == {"an_uong", "nghia_vu"}
     assert {p["jar_code"]: p["status"] for p in context["obligation_pay_jars"]} == {"an_uong": "đủ", "nghia_vu": "đủ"}
+    # hũ Ăn uống chỉ làm nguồn được tới phần không phải giữ cho khoản của chính nó
+    source = context["first_phase_sources"]["an_uong"]
+    assert (source["max_text"], source["due_before_payday_text"]) == ("80.000 ₫", "300.000 ₫")
     (feedback,) = prompt(client, 1)["feedback"]
-    assert feedback["step_id"] == "bo_sung_nghia_vu" and feedback["rule_id"] == "obligation_pay_jar"
+    assert feedback["step_id"] == "bo_sung_nghia_vu" and feedback["rule_id"] == "step_invalid"
+    assert "80.000 ₫" in feedback["message"] and "300.000 ₫" in feedback["message"]
     (stored,) = args_for(tools, "save_roadmap")
     assert [s["kind"] for p in stored["phases"] for s in p["steps"]] == ["review_goal"]
     # bước sai không tốn lượt check_suitability
     assert all(a["proposal"].get("to_jar_code") != "nghia_vu" for a in args_for(tools, "check_suitability"))
     (event,) = roadmap_events(caplog, "roadmap_step_rejected")
-    assert event["rule_id"] == "obligation_pay_jar"
+    assert event["rule_id"] == "step_invalid" and event["detail"] == "amount_over_available"
