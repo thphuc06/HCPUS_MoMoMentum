@@ -65,16 +65,23 @@ class _Model(BaseModel):
 
 # --- optimize_allocation -----------------------------------------------------------------------
 class AllocationSpend(_Model):
-    """Mức chi thật gần đây của một hũ chi (#39, 26/11): DỮ KIỆN cho người lập lộ trình, không phải ràng buộc cứng. `recent_monthly_vnd` là
-    chi trung bình của cửa sổ gần nhất (`resilience_window_days` ngày) quy về tháng, không gồm khoản gắn nghĩa vụ; `keep_floor_vnd` là sàn
-    chi gợi ý (tỷ lệ giữ x mức đó, không vượt phần chia hiện tại; bộ tối ưu dùng nó làm ràng buộc mềm); `baseline_monthly_vnd` là mức nền
-    dài hơn (phần lịch sử trước cửa sổ gần nhất có trong đầu vào, quy về tháng), vắng khi lịch sử chưa đủ dài; `unusually_high` là mức gần
-    đây cao bất thường so với mức nền (để agent nói ra hoặc hỏi lại)."""
+    """Mức chi của một hũ chi (#39, 26/11): DỮ KIỆN cho người lập lộ trình, không phải ràng buộc cứng. `recent_monthly_vnd` là chi trung
+    bình của cửa sổ gần nhất (`resilience_window_days` ngày) quy về tháng, không gồm khoản gắn nghĩa vụ; `baseline_monthly_vnd` là mức nền
+    bền của chính người dùng (trung vị chi theo tuần trên cửa sổ dài, `yofina_core.spend_baseline`), vắng khi chưa đủ tuần; `keep_floor_vnd`
+    là sàn chi gợi ý (tỷ lệ giữ x mức nền bền, hoặc x mức gần đây khi chưa có mức nền; không vượt phần chia hiện tại; bộ tối ưu dùng nó
+    làm ràng buộc mềm); `unusually_high` là đợt chi tăng: mức gần đây cao bất thường so với mức nền, hoặc bộ phát hiện đổi hành vi đã xác
+    nhận mức chi tăng của hũ. Khi có đợt tăng: `high_since` là ngày bắt đầu (điểm gãy đã xác nhận, hoặc đầu tuần sớm nhất của cửa sổ gần
+    đây có chi tuần vượt ngưỡng), `change_confirmed` là bộ phát hiện đổi hành vi đã xác nhận, `runout_date` là ngày dự báo hiện có thấy hũ
+    cạn nếu giữ nhịp chi (vắng khi dự báo không thấy hũ cạn hoặc không hiện ngày cạn). Ba trường này tùy chọn (Lambda forecast từ 26/11
+    tối)."""
 
     recent_monthly_vnd: Vnd
     keep_floor_vnd: Vnd
     baseline_monthly_vnd: Vnd | None = None
     unusually_high: bool = False
+    high_since: IsoDate | None = None
+    change_confirmed: bool = False
+    runout_date: IsoDate | None = None
 
 
 class AllocationLine(_Model):

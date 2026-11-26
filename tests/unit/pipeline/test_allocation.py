@@ -603,12 +603,19 @@ def test_obligation_jar_floor_also_counts_its_non_essential_obligations():
 
 
 def test_lp_never_proposes_a_jar_below_the_obligations_it_pays():
+    from yofina_core.spend_baseline import BaselineSettings, typical_monthly
+
     res, _ = run(TIGHT_GOAL)
     plain = {line["jar"]["code"]: line for line in res["data"]["lines"]}
-    # hũ không có khoản định kỳ: trước 26/11 chiều vòng nới cắt về 0; nay chỉ tới sàn chi (nửa mức chi điển hình 300.000 ₫, #39). Sàn chi
-    # là sàn mềm: báo ở `recent_spend`, sàn cứng của dòng là 0 (C3 của báo cáo rà soát #39)
+    # hũ không có khoản định kỳ: trước 26/11 chiều vòng nới cắt về 0; nay chỉ tới sàn chi (#39). Sàn chi là nửa mức nền bền của hũ (26/11
+    # tối: Giải trí chi 60.000 ₫ mỗi sáu ngày, tuần điển hình 60.000 ₫, mức nền 257.143 ₫/tháng; trước đó nửa chi 30 ngày 300.000 ₫),
+    # làm tròn lên bước nghìn đồng ở phần đề xuất. Sàn chi là sàn mềm: báo ở `recent_spend`, sàn cứng của dòng là 0 (C3, #39)
     fun = plain["giai_tri"]
-    assert fun["proposed_monthly_vnd"] == fun["recent_spend"]["keep_floor_vnd"] == round(P.spending_keep_ratio * 300_000)
+    series = [60_000 if i % 6 == 0 else 0 for i in range(47)]  # chuỗi Giải trí của `world()`
+    level = typical_monthly(series, BaselineSettings(P.spend_baseline_weeks, P.spend_baseline_min_weeks, P.month_days, 30))
+    keep = round(P.spending_keep_ratio * level.monthly_vnd)
+    assert level.robust and fun["recent_spend"]["keep_floor_vnd"] == keep == 128_572
+    assert fun["proposed_monthly_vnd"] == -(-keep // STEP) * STEP
     assert fun["floor_vnd"] == 0
     w = committed(NETFLIX, LUNCH)
     out = AllocationEngine(pipe(w)).optimize(USER, TIGHT_GOAL)
@@ -916,12 +923,14 @@ def with_balance(w, code: str, balance: int):
 
 def test_dich_tu_tinh_cua_hu_dem_la_so_thang_chi_thiet_yeu():
     """Hũ đệm không có đích trong lượt này: đích là `buffer_target_months` tháng chi thiết yếu (BR-64, C-13) = nghĩa vụ cứng (thiết yếu,
-    nợ) quy về tháng cộng mức chi thiết yếu hằng tháng, cùng các số LP dùng cho sàn (chưa nhân `essential_floor_percent`)."""
-    from yofina_forecast.resilience import variable_monthly_spend
+    nợ) quy về tháng cộng mức chi thiết yếu hằng tháng, cùng các số LP dùng cho sàn (chưa nhân `essential_floor_percent`). Từ 26/11 tối
+    mức chi thiết yếu là mức nền bền (trung vị chi theo tuần, #39), không chi trung bình 30 ngày gần nhất."""
+    from yofina_core.spend_baseline import BaselineSettings, typical_monthly
 
     gathered, built, by = built_for(purposed())
     spend = {j["code"]: j["spend"] for j in gathered.ctx.jars}
-    essential = sum(variable_monthly_spend(spend[c], 30, P.month_days) for c in ("an_uong", "di_lai"))
+    base = BaselineSettings(P.spend_baseline_weeks, P.spend_baseline_min_weeks, P.month_days, 30)
+    essential = sum(typical_monthly(spend[c], base).monthly_vnd for c in ("an_uong", "di_lai"))
     hard = 2_000_000 + 375_000 + round(1_000_000 / 3)  # tiền thuê phòng, tiền điện, Trả sau một lần chia 3 tháng
     assert P.buffer_target_months > 0
     assert built.buffer_target_vnd == round(P.buffer_target_months * (hard + essential))

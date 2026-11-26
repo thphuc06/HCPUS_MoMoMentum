@@ -40,13 +40,14 @@ def _amounts(daily: Sequence[Any]) -> list[int]:
     return [max(int(Decimal(str(v if v is not None else 0)).to_integral_value()), 0) for v in daily]
 
 
-def weekly_totals(daily: Sequence[Any], weeks: int) -> list[int]:
-    """Chi theo tuần (cũ tới mới) của tối đa `weeks` tuần đủ 7 ngày gần nhất, cắt lùi từ ngày cuối, đã bỏ các tuần đầu chưa có chi."""
+def weekly_totals(daily: Sequence[Any], weeks: int, *, skip_leading_zero: bool = True) -> list[int]:
+    """Chi theo tuần (cũ tới mới) của tối đa `weeks` tuần đủ 7 ngày gần nhất, cắt lùi từ ngày cuối; mặc định bỏ các tuần đầu chưa có chi
+    (`skip_leading_zero` False: giữ đủ các tuần, để vị trí tuần ứng với `week_start`)."""
     x = _amounts(daily)
     n = min(len(x) // WEEK_DAYS, max(weeks, 0))
     end = len(x)
     out = [sum(x[end - WEEK_DAYS * (i + 1) : end - WEEK_DAYS * i]) for i in range(n)][::-1]
-    while out and out[0] == 0:
+    while skip_leading_zero and out and out[0] == 0:
         out.pop(0)
     return out
 

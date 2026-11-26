@@ -20,6 +20,7 @@ from conftest import ANCHOR
 from ledger_fakes import http_event
 from pipeline_helpers import make_settings
 
+from yofina_core.spend_baseline import BaselineSettings, typical_monthly, weekly_totals
 from yofina_core.wallet import resolve_obligation_pay_jar
 from yofina_forecast.allocation import AllocationEngine
 from yofina_forecast.repo import ForecastRepo
@@ -149,18 +150,29 @@ def test_phan_bo_lp_cua_vi_demo_khong_cat_hu_nao_duoi_khoan_dinh_ky_tra_tu_no(en
     raised = [c for c, x in lines.items() if x["kind"] == "saving" and c != "du_phong"
               and x["proposed_monthly_vnd"] > x["current_monthly_vnd"]]  # fmt: skip
     print(f"  hũ để dành khác được tăng: {raised}")
-    # sàn chi (#39, 26/11 chiều): Chi hằng ngày và Giải trí không xuống dưới tỷ lệ giữ x mức chi điển hình của chính hũ (cùng chuỗi chi
-    # của ngữ cảnh dự báo mà LP dùng); trước đó Chi hằng ngày 270.000 → 42.600 ₫ trong khi hũ chi thật khoảng 245.000 ₫/tháng
+    # sàn chi (#39, 26/11 chiều): Chi hằng ngày và Giải trí không xuống dưới tỷ lệ giữ x mức chi của chính hũ (cùng chuỗi chi của ngữ
+    # cảnh dự báo mà LP dùng); trước đó Chi hằng ngày 270.000 → 42.600 ₫. Từ 26/11 tối mức gốc là mức nền bền (trung vị chi theo tuần trên
+    # 12 tuần, cùng hàm với ledger), không chi 30 ngày gần nhất: Chi hằng ngày 190.714 ₫ (chi 30 ngày 210.000 ₫), Giải trí 390.000 ₫ (409.000 ₫)
     gathered = ResilienceEngine(p).gather(USER, p.now())
     spend = {j["code"]: j["spend"] for j in gathered.ctx.jars}
     settings = p.settings
+    prm = settings.allocation
+    base = BaselineSettings(prm.spend_baseline_weeks, prm.spend_baseline_min_weeks, prm.month_days, settings.resilience_window_days)
+    for j in gathered.ctx.jars:
+        if j["kind"] == "spending":
+            print(f"  chi theo tuần {j['code']}: {weekly_totals(j['spend'], 17)}")
     for code in ("chi_hang_ngay", "giai_tri"):
-        typical = variable_monthly_spend(spend[code], settings.resilience_window_days, settings.allocation.month_days)
-        keep = min(round(settings.allocation.spending_keep_ratio * typical), lines[code]["current_monthly_vnd"])
+        recent_30 = variable_monthly_spend(spend[code], settings.resilience_window_days, prm.month_days)
+        level = typical_monthly(spend[code], base)
+        keep = min(round(prm.spending_keep_ratio * level.monthly_vnd), lines[code]["current_monthly_vnd"])
         recent = lines[code]["recent_spend"]
-        print(f"  sàn chi {code}: mức chi điển hình {typical}, sàn {keep}, dữ kiện cho agent {recent}")
+        print(f"  sàn chi {code}: mức nền {level.monthly_vnd}, chi 30 ngày {recent_30}, sàn {keep}, dữ kiện cho agent {recent}")
         # sàn chi là sàn mềm với lộ trình (C3, #39 26/11 tối): báo ở `recent_spend`, không nằm trong sàn cứng `floor_vnd`
-        assert keep > 0 and (recent["recent_monthly_vnd"], recent["keep_floor_vnd"]) == (typical, keep), code
+        assert level.robust and keep > 0, code
+        assert (recent["recent_monthly_vnd"], recent["keep_floor_vnd"], recent["baseline_monthly_vnd"]) == (
+            recent_30, keep, level.monthly_vnd,
+        ), code  # fmt: skip
+        assert not recent["unusually_high"], code  # trước khi nạp sao kê, Minh chi đều
         assert lines[code]["proposed_monthly_vnd"] >= keep, code
     for g in data["goals"]:
         print(f"  mục tiêu {g['jar']['code']}: kịp hạn {g['on_track']}, cần {g['monthly_needed_vnd']}/tháng, dự kiến {g.get('projected_date')}")

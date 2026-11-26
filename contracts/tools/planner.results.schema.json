@@ -98,7 +98,7 @@
       }
     },
     "AllocationSpend": {
-      "description": "Mức chi thật gần đây của một hũ chi (#39): dữ kiện cho người lập lộ trình, không phải ràng buộc cứng. `recent_monthly_vnd`: chi trung bình của cửa sổ gần nhất quy về tháng (không gồm khoản gắn nghĩa vụ); `keep_floor_vnd`: sàn chi gợi ý (tỷ lệ giữ x mức đó, không vượt phần chia hiện tại); `baseline_monthly_vnd`: mức nền của phần lịch sử trước cửa sổ gần nhất, vắng khi lịch sử chưa đủ dài; `unusually_high`: mức gần đây cao bất thường so với mức nền.",
+      "description": "Mức chi của một hũ chi (#39): dữ kiện cho người lập lộ trình, không phải ràng buộc cứng. `recent_monthly_vnd`: chi trung bình của cửa sổ gần nhất quy về tháng (không gồm khoản gắn nghĩa vụ); `baseline_monthly_vnd`: mức nền bền (trung vị chi theo tuần trên cửa sổ dài, quy về tháng), vắng khi chưa đủ tuần; `keep_floor_vnd`: sàn chi gợi ý (tỷ lệ giữ x mức nền bền, hoặc x mức gần đây khi chưa có mức nền; không vượt phần chia hiện tại); `unusually_high`: đợt chi tăng (mức gần đây cao bất thường so với mức nền, hoặc bộ phát hiện đổi hành vi đã xác nhận mức chi tăng). Khi có đợt tăng (tùy chọn, 26/11 tối): `high_since` ngày bắt đầu, `change_confirmed` bộ phát hiện đổi hành vi đã xác nhận, `runout_date` ngày dự báo hiện có thấy hũ cạn nếu giữ nhịp chi.",
       "type": "object",
       "required": ["recent_monthly_vnd", "keep_floor_vnd"],
       "additionalProperties": false,
@@ -106,7 +106,10 @@
         "recent_monthly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
         "keep_floor_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
         "baseline_monthly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
-        "unusually_high": { "type": "boolean" }
+        "unusually_high": { "type": "boolean" },
+        "high_since": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" },
+        "change_confirmed": { "type": "boolean" },
+        "runout_date": { "$ref": "../blocks/envelope.schema.json#/$defs/IsoDate" }
       }
     },
     "AllocationRelaxation": {

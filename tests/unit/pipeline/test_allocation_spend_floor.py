@@ -8,15 +8,17 @@ yếu thì lấy được (sàn chi nhường, ví đang trả đủ nghĩa vụ
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 
 import numpy as np
 import pytest
-from pipeline_helpers import NOW, context_rows, jar_row
+from pipeline_helpers import APP_DATE, NOW, context_rows, jar_row
 from test_allocation import RESULT, STEP, prop, total
 from test_resilience import USER, World, _ledger_obligation, errors_of, pipe, world
 
 from yofina_core.config import Config
 from yofina_core.roadmap import AllocationPlanData
+from yofina_core.spend_baseline import BaselineSettings, typical_monthly
 from yofina_forecast.allocation import AllocationEngine
 from yofina_forecast.resilience import variable_monthly_spend
 from yofina_forecast.settings import DEFAULT_ALLOCATION_PARAMS as P
@@ -24,6 +26,8 @@ from yofina_forecast.settings import ForecastSettings
 from yofina_ml.allocation import AllocationProblem, GoalSpec, JarSpec, optimize
 
 INCOME = 9_000_000
+#: mức nền bền (#39, chốt 26/11 tối): sàn chi và sàn thiết yếu tính từ đây, cùng hàm và tham số với LP
+BASE = BaselineSettings(P.spend_baseline_weeks, P.spend_baseline_min_weeks, P.month_days, 30)
 
 
 # =====================================================================================
@@ -215,13 +219,16 @@ def built(w, **kw):
 def test_san_chi_la_ti_le_giu_nhan_muc_chi_dien_hinh_cua_chinh_hu():
     gathered, by = built(world())
     spend = {j["code"]: j["spend"] for j in gathered.ctx.jars}
-    typical = variable_monthly_spend(spend["giai_tri"], 30, P.month_days)
-    assert typical == 300_000 and P.spending_keep_ratio == 0.5
-    # Giải trí (không thiết yếu): nửa mức chi điển hình, không theo mã hũ hay persona
-    assert by["giai_tri"].spend_floor_vnd == round(P.spending_keep_ratio * typical)
+    # mức gốc của sàn chi là mức nền bền (trung vị chi theo tuần, 26/11 tối): Giải trí chi 60.000 ₫ mỗi sáu ngày nên tuần điển hình là
+    # 60.000 ₫, tức 257.143 ₫ mỗi tháng (trước: chi trung bình 30 ngày 300.000 ₫)
+    level = typical_monthly(spend["giai_tri"], BASE)
+    assert variable_monthly_spend(spend["giai_tri"], 30, P.month_days) == 300_000
+    assert level.robust and level.monthly_vnd == 257_143 and P.spending_keep_ratio == 0.5
+    # Giải trí (không thiết yếu): nửa mức nền, không theo mã hũ hay persona
+    assert by["giai_tri"].spend_floor_vnd == round(P.spending_keep_ratio * level.monthly_vnd)
     # hũ chi thiết yếu cũng có sàn chi theo cùng quy tắc nhưng sàn thiết yếu (80%) đã cao hơn; hũ để dành, hũ nghĩa vụ không có
     for code in ("an_uong", "di_lai"):
-        assert by[code].spend_floor_vnd == round(P.spending_keep_ratio * variable_monthly_spend(spend[code], 30, P.month_days))
+        assert by[code].spend_floor_vnd == round(P.spending_keep_ratio * typical_monthly(spend[code], BASE).monthly_vnd)
         assert by[code].floor_vnd >= by[code].spend_floor_vnd
     assert by["du_lich"].spend_floor_vnd == by["du_phong"].spend_floor_vnd == by["nghia_vu"].spend_floor_vnd == 0
 
@@ -274,15 +281,19 @@ def test_vi_ba_hu_san_chi_hang_ngay_la_so_lon_hon_cua_san_thiet_yeu_va_san_chi(d
     res = AllocationEngine(pipe(three_jar(daily_essential))).optimize(USER, {})
     assert not errors_of(RESULT, res), errors_of(RESULT, res)
     line = next(x for x in res["data"]["lines"] if x["jar"]["code"] == "chi_hang_ngay")
-    # sàn CỨNG ở `floor_vnd`; sàn chi là sàn mềm, đi riêng cùng mức chi thật gần đây (C3 của báo cáo rà soát #39)
+    # sàn CỨNG ở `floor_vnd`; sàn chi là sàn mềm, đi riêng cùng mức chi thật gần đây (C3 của báo cáo rà soát #39). Sáu tuần lịch sử đã đủ
+    # cho mức nền bền (26/11 tối; trước đó mức nền cần cả một cửa sổ 30 ngày trước cửa sổ gần nhất nên vắng)
     assert line["floor_vnd"] == essential
-    assert line["recent_spend"] == {"recent_monthly_vnd": 100_000 * P.month_days, "keep_floor_vnd": whole, "unusually_high": False}
+    assert line["recent_spend"] == {
+        "recent_monthly_vnd": 100_000 * P.month_days, "keep_floor_vnd": whole, "baseline_monthly_vnd": 100_000 * P.month_days,
+        "unusually_high": False, "change_confirmed": False,
+    }  # fmt: skip
 
 
-def test_muc_nen_dai_hon_va_co_chi_gan_day_cao_bat_thuong():
-    """C5 phần nhỏ (#39): mức nền là chi trung bình của phần lịch sử TRƯỚC cửa sổ gần nhất, có sẵn trong chuỗi chi của ngữ cảnh. Tháng gần
-    nhất chi gấp ba mức nền thì có cờ để agent nói ra hoặc hỏi lại; chi đều thì không; lịch sử chưa đủ dài thì không có mức nền. Cách tính
-    sàn chi không đổi (tỷ lệ giữ x mức chi gần đây)."""
+def test_muc_nen_ben_va_dot_chi_tang():
+    """Mức nền là mức nền bền (trung vị chi theo tuần trên 12 tuần, #39 chốt 26/11 tối). Tháng gần nhất chi gấp ba mức nền thì có dữ kiện
+    đợt tăng (cờ, từ ngày nào) để agent nói ra hoặc hỏi lại; chi đều thì không; dưới sáu tuần lịch sử thì không có mức nền. Sàn chi là tỷ
+    lệ giữ x mức nền (trước 26/11 tối: x mức chi 30 ngày gần nhất, ca tăng gấp ba là 2.250.000 ₫)."""
 
     def recent(**kw):
         res = AllocationEngine(pipe(three_jar(0, **kw))).optimize(USER, {})
@@ -291,11 +302,14 @@ def test_muc_nen_dai_hon_va_co_chi_gan_day_cao_bat_thuong():
 
     steady = recent(days=90)
     assert steady["baseline_monthly_vnd"] == steady["recent_monthly_vnd"] == 3_000_000 and not steady["unusually_high"]
+    assert "high_since" not in steady
     spike = recent(days=90, spend=[50_000] * 60 + [150_000] * 30)
     assert (spike["recent_monthly_vnd"], spike["baseline_monthly_vnd"]) == (4_500_000, 1_500_000) and spike["unusually_high"]
-    assert spike["keep_floor_vnd"] == min(round(P.spending_keep_ratio * 4_500_000), 3_780_000)
+    assert spike["keep_floor_vnd"] == min(round(P.spending_keep_ratio * 1_500_000), 3_780_000)
+    # bốn tuần đủ của cửa sổ 30 ngày đều chi 1.050.000 ₫ (từ 525.000 ₫ là vượt ngưỡng): từ đầu tuần sớm nhất
+    assert spike["high_since"] == (APP_DATE - timedelta(days=28)).isoformat() and not spike["change_confirmed"]
     assert P.spend_spike_ratio == 1.5
-    short = recent(days=47)
+    short = recent(days=35)
     assert "baseline_monthly_vnd" not in short and not short["unusually_high"]
 
 
@@ -358,4 +372,4 @@ def test_ti_le_giu_doc_tu_cau_hinh():
     assert over.allocation.spending_keep_ratio == 0.7
     w = world()
     _, by = built(w, allocation=over.allocation)
-    assert by["giai_tri"].spend_floor_vnd == round(0.7 * 300_000)
+    assert by["giai_tri"].spend_floor_vnd == round(0.7 * 257_143)  # tỷ lệ giữ x mức nền bền của Giải trí (xem ca đầu)

@@ -34,6 +34,7 @@ def test_tuan_cat_lui_tu_ngay_cuoi_va_bo_cac_tuan_dau_chua_co_chi():
     assert weekly_totals(daily, 12) == [7, 14]
     # tuần đầu chưa có chi (hũ mới tạo) bị bỏ; tuần không chi ở giữa vẫn tính
     assert weekly_totals([0] * 14 + [7] * 7 + [0] * 7 + [7] * 7, 12) == [49, 0, 49]
+    assert weekly_totals([0] * 14 + [7] * 7, 12, skip_leading_zero=False) == [0, 0, 49]
     # chỉ lấy tối đa `weeks` tuần gần nhất; giá trị âm, None, Decimal, chuỗi số đều đọc được
     assert weekly_totals([1] * 7 * 20, 12) == [7] * 12
     assert weekly_totals([-5, None, Decimal("3"), "4", 0, 0, 0], 12) == [7]

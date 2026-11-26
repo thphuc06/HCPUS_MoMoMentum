@@ -81,6 +81,7 @@ def _report(tag: str, got: dict[str, Any]) -> None:
     for g in plan["goals"]:
         print(f"  mục tiêu {g['jar']['code']}: {g}")
     print("  Dự phòng:", {k: lines["du_phong"][k] for k in ("current_monthly_vnd", "proposed_monthly_vnd", "floor_vnd")})
+    print("  phân bổ:", {c: (x["current_monthly_vnd"], x["proposed_monthly_vnd"], x["floor_vnd"]) for c, x in lines.items()})
     print(f"  bản đã lưu v{rm['version']} {rm['status']}, feasibility {rm['feasibility']}, {rm['headline']}")
     for alt in rm["alternatives"]:
         print(f"  lựa chọn {alt['kind']} {alt.get('jar_code')}: {alt['label']} | {alt['summary']}")
@@ -100,13 +101,13 @@ def test_lo_trinh_xay_quy_du_phong_3_trieu_trong_3_thang_tinh_dich_so_du(env):
     assert line["is_essential"]  # vẫn là hũ đệm với model
     assert goal["on_track"] and line["proposed_monthly_vnd"] >= goal["monthly_needed_vnd"]
     # số dư 2.700.000 ₫ chưa tới đích 3.000.000 ₫: Dự phòng giữ phần chia hiện tại (BR-65, 26/11 trưa). Trước đó LP "optimal" cắt Dự phòng
-    # 900.000 → 831.400 ₫ để Du lịch kịp hạn. Từ 26/11 chiều (#39) Chi hằng ngày, Giải trí chỉ xuống tới sàn chi (nửa mức chi thật gần
-    # đây) nên Du lịch không còn kịp hạn gốc mà lùi hạn (trước: cắt Chi hằng ngày còn 42.600 ₫ để Du lịch kịp hạn); bản lưu vẫn là "kịp
-    # hạn sau khi điều chỉnh"
+    # 900.000 → 831.400 ₫ để Du lịch kịp hạn. Từ 26/11 chiều (#39) Chi hằng ngày, Giải trí chỉ xuống tới sàn chi. Từ 26/11 tối sàn thiết
+    # yếu tính từ mức nền bền (trung vị chi theo tuần) thay cho chi 30 ngày: sàn Ăn uống 3.114.400 → 3.061.714 ₫, sàn Nghĩa vụ (hóa đơn trả
+    # lẻ) 3.170.733 → 3.102.047 ₫, đủ chỗ cho Du lịch kịp hạn gốc mà không cắt hũ chi dưới sàn chi: phương án "optimal", bản lưu "kịp hạn"
+    # (trước: "relaxed" với lùi hạn Du lịch)
     assert line["proposed_monthly_vnd"] >= line["current_monthly_vnd"]
-    assert plan["status"] == "relaxed"
-    assert {r["kind"] for r in plan["relaxations"]} == {"discretionary_reduced", "goal_delayed"}
-    assert [g["jar"]["code"] for g in plan["goals"] if not g["on_track"]] == ["muc_tieu"]
+    assert plan["status"] == "optimal" and plan["relaxations"] == []
+    assert all(g["on_track"] for g in plan["goals"])
     lines = {x["jar"]["code"]: x for x in plan["lines"]}
     for code in ("chi_hang_ngay", "giai_tri"):
         # sàn chi (sàn mềm, C3 của báo cáo rà soát #39) báo ở `recent_spend`; LP vẫn giữ nó như ràng buộc mềm
@@ -114,7 +115,7 @@ def test_lo_trinh_xay_quy_du_phong_3_trieu_trong_3_thang_tinh_dich_so_du(env):
     # bản đã lưu mang đúng mục tiêu đó; model thấy mục tiêu người dùng nói trong ngữ cảnh
     saved = next(g for g in rm["goals"] if g["jar"]["code"] == "du_phong")
     assert saved["target_vnd"] == 3_000_000 and saved["on_track"]
-    assert rm["feasibility"] == "relaxed" and rm["reason"]["code"] == "user_request"
+    assert rm["feasibility"] == "on_track" and rm["reason"]["code"] == "user_request"
     assert got["planner"].contexts[0]["context"]["user_goal"]["jar_code"] == "du_phong"
     # không ghi gì vào hũ: mục đích, mục tiêu, tỷ lệ như trước
     keys = ("purpose", "goal_vnd", "goal_date", "split_percent", "balance_vnd")
