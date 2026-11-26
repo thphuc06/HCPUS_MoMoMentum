@@ -127,6 +127,8 @@ def compact_confirm(data: Mapping[str, Any]) -> dict[str, Any]:
 _STATUS_VI = {"ok": "đủ", "tight": "sát", "short": "hụt"}
 _BAND_VI = {"high": "Cao", "medium": "Vừa", "low": "Thấp"}
 FORECAST_EVENTS_SHOWN = 3
+#: số khoản nghĩa vụ tối đa trong bản gọn (giữ ngữ cảnh gọn); cắt bớt thì bản gọn có `has_more` và `hidden_count`
+OBLIGATIONS_SHOWN = 8
 
 
 def _dm(value: str) -> str:
@@ -433,14 +435,18 @@ def compact_obligations(
             "due_date_text": _dm(o["due_date"]),
             **pay_jar(o),
         }
-        for o in d["obligations"][:8]
+        for o in d["obligations"][:OBLIGATIONS_SHOWN]
     ]
     out: dict[str, Any] = {
         "app_date": payload["app_date"],
         "obligations": rows,
         "total_due_vnd": to_vnd(d["total_due_vnd"]),
         "total_due_text": format_vnd(d["total_due_vnd"]),
+        # danh sách bị cắt thì model biết còn khoản chưa hiện (tổng vẫn tính đủ mọi khoản), không coi danh sách là đủ (#39, T2)
+        "has_more": len(d["obligations"]) > len(rows),
     }
+    if out["has_more"]:
+        out["hidden_count"] = len(d["obligations"]) - len(rows)
     return out
 
 

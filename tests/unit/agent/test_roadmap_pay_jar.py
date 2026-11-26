@@ -77,6 +77,18 @@ def test_moi_khoan_nghia_vu_kem_hu_tra_theo_quy_tac_cua_du_bao():
     assert all("pay_jar_code" not in o for o in compact_obligations(_payload(MINH_OBLIGATIONS))["obligations"])
 
 
+def test_ban_gon_nghia_vu_cat_con_tam_khoan_thi_bao_con_bao_nhieu_khoan_bi_an():
+    """Người có hơn 8 khoản (thuê bao, điện nước, khoản vay): bản gọn chỉ giữ 8 khoản đầu, nên model phải biết còn khoản chưa hiện (tổng
+    phải trả vẫn tính đủ mọi khoản), không coi danh sách là đủ (T2 của báo cáo rà soát #39)."""
+    many = [_ob(f"Khoản {i}", "bill", 100_000 + i, f"2026-12-{i + 1:02d}", "nghia_vu") for i in range(10)]
+    view = compact_obligations(_payload(many), jars=JARS)
+    assert len(view["obligations"]) == 8
+    assert view["has_more"] is True and view["hidden_count"] == 2
+    assert view["total_due_vnd"] == sum(o["amount_vnd"] for o in many)
+    few = compact_obligations(_payload(MINH_OBLIGATIONS), jars=JARS)
+    assert few["has_more"] is False and "hidden_count" not in few
+
+
 def test_hu_tra_du_hay_thieu_truoc_ky_luong_theo_so_du_hien_co():
     rows = _obligation_pay_jars(_payload(MINH_OBLIGATIONS), JARS, PAYDAY)
     assert rows == [

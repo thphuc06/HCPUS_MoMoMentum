@@ -57,8 +57,9 @@ TASKS: dict[str, str] = {
         "người dùng bấm Xác nhận trên thẻ; câu trả lời phải nói rõ điều này."
     ),
     "obligations": (
-        "Các khoản sắp đến hạn (không có thẻ riêng). total_due_text là tổng phải trả; mỗi khoản có hạn (due_date_text) và số tiền. "
-        "Danh sách rỗng nghĩa là chưa có khoản nào sắp đến hạn."
+        "Các khoản sắp đến hạn (không có thẻ riêng). total_due_text là tổng phải trả của mọi khoản; mỗi khoản có hạn (due_date_text) "
+        "và số tiền. has_more true nghĩa là danh sách chỉ có một phần, còn hidden_count khoản nữa không hiện (tổng vẫn gồm cả "
+        "chúng). Danh sách rỗng nghĩa là chưa có khoản nào sắp đến hạn."
     ),
     "affordability": (
         "Thẻ kiểm tra trước khi chi đã hiện kết quả từng hũ. verdict và headline là kết luận của hệ thống; jar_checks là trạng thái "
