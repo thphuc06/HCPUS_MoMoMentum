@@ -2483,6 +2483,12 @@ components:
             "mực dự báo" trên thẻ hũ. Có dấu (âm là hụt). Vắng khi hũ chưa có dự báo. Server tính từ bảng `forecasts` (hàm
             `app_get_forecast_summaries`, migration 0008); pipeline dự báo không ghi thêm gì.
           $ref: '../blocks/envelope.schema.json#/$defs/VndSigned'
+        has_activity:
+          description: |
+            Chỉ có ở hũ người dùng có `balance_vnd` ≤ 0 (#39): hũ đã từng có ít nhất một dòng sổ cái chưa (tiền vào, chia lương, chi,
+            chuyển hũ). Sai là hũ chưa từng có tiền, giao diện không nói "hết tiền" về nó; đúng là hũ đã tiêu hết. Vắng ở hũ còn tiền
+            và hũ hệ thống. Server đếm từ `app_get_jar_usage` (Tổng quan) hoặc giao dịch gần đây của hũ (Chi tiết hũ), không theo mã hũ.
+          type: boolean
     OverviewBalance:
       type: object
       required: [total_vnd, jars_total_vnd, other_income_vnd, unclassified_vnd]

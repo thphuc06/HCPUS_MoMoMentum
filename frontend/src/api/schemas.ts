@@ -165,6 +165,8 @@ export const JarFull = z.object({
   confidence_band: ConfidenceBand.optional(),
   /** Số dư dự báo P50 thấp nhất từ ngày mai tới trước kỳ lương (có dấu, có thể âm); vắng khi hũ chưa có dự báo. */
   forecast_floor_vnd: VndSigned.optional(),
+  /** #39: chỉ có ở hũ người dùng 0 ₫ (hoặc âm); sai là hũ chưa từng có dòng sổ cái nào (chưa có tiền vào), không phải hũ đã tiêu hết. */
+  has_activity: z.boolean().optional(),
 })
 export type JarFull = z.infer<typeof JarFull>
 

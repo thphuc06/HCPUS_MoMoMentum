@@ -114,11 +114,23 @@ class WalletReads:
         all_jars = data.get("jars", [])
         user_jars = [j for j in all_jars if j["kind"] != "system"]
         system_jars = [j for j in all_jars if j["kind"] == "system"]
+        # Hũ người dùng 0 ₫ (hoặc âm): đã từng có dòng sổ cái nào chưa (`has_activity`, #39), để chip trạng thái không nói "đang hết
+        # tiền" về hũ chưa từng có tiền vào. Số dòng lấy từ hàm đọc `app_get_jar_usage` sẵn có, chỉ gọi khi có hũ như vậy (ví còn tiền ở
+        # mọi hũ giữ một lệnh gọi Aurora).
+        empty = {j["code"] for j in user_jars if convert.vnd(j["balance_vnd"]) <= 0}
+        used = (
+            {str(u["code"]) for u in self.repo.jars_usage(user_id) if int(u["tx_count"] or 0) > 0}
+            if empty
+            else set()
+        )
 
         def full(j: dict[str, Any]) -> dict[str, Any]:
-            return convert.jar_full_json(
+            out = convert.jar_full_json(
                 j, forecasts.get(j["code"]) if j["kind"] != "system" else None
             )
+            if j["code"] in empty:
+                out["has_activity"] = j["code"] in used
+            return out
 
         jars_total = sum(convert.vnd(j["balance_vnd"]) for j in user_jars)
         by_role = {j.get("system_role"): convert.vnd(j["balance_vnd"]) for j in system_jars}
@@ -245,14 +257,17 @@ class WalletReads:
             computed = convert.to_instant(f["computed_at"])
             assert computed is not None
             meta = self._forecast_meta([f], today, now)
+        recent = data.get("recent_transactions") or []
+        out = convert.jar_full_json(jar, f if jar["kind"] != "system" else None)
+        if jar["kind"] != "system" and convert.vnd(jar["balance_vnd"]) <= 0:
+            # Như Tổng quan (#39): hũ 0 ₫ chưa có dòng sổ cái nào (danh sách giao dịch gần đây của chính hũ rỗng) là hũ chưa từng có tiền.
+            out["has_activity"] = bool(recent)
         return {
             "app_date": today.isoformat(),
             "as_of": format_instant(now),
-            "jar": convert.jar_full_json(jar, f if jar["kind"] != "system" else None),
+            "jar": out,
             "forecast": meta,
-            "recent_transactions": [
-                convert.tx_json(t) for t in data.get("recent_transactions", [])
-            ],
+            "recent_transactions": [convert.tx_json(t) for t in recent],
             "obligations": [convert.obligation_json(o) for o in data.get("obligations", [])],
         }
 
