@@ -67,6 +67,7 @@ def test_router_nhan_ngay_mo_phong_cua_lan_doc_vi(monkeypatch):
     ("text", "whole"),
     [
         ("trong 3 tháng", date(2027, 2, 21)),
+        ("trong 5 tháng tới", None),  # luật đọc "5 tháng tới", còn chữ "trong": ngày của router quyết
         ("cuối tháng sau", date(2026, 12, 31)),
         ("31/12", date(2026, 12, 31)),
         ("đầu năm sau", None),  # luật chỉ hiểu "năm sau" (31/12 năm sau): không đọc trọn cụm thì không dùng
