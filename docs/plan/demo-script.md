@@ -1,15 +1,32 @@
 # Kịch bản demo (video 3 phút)
 
-Nguồn: proposal §15. Kể câu chuyện của persona **Minh** (22 tuổi, thu nhập 9 triệu/tháng, lương ngày 5, 7 hũ, một hạn mức Ví Trả Sau) qua 6 cảnh. Từ 26/11 (issue #39) 7 hũ của tài khoản demo là: Nghĩa vụ (gộp Hóa đơn cũ) và Dự phòng (hũ mặc định), cộng hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch (hũ mục tiêu 6.000.000 ₫, hạn 01/04/2027), Đầu tư (0 ₫); tài khoản mới ngoài demo nhận 3 hũ Chi hằng ngày, Nghĩa vụ, Dự phòng. Số đo trên app 26/11: cảnh 2 hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12 (2.200.000 ₫, gồm phí 33.000 ₫; ngày 3 là điều khoản mô phỏng), thiếu khoảng 1.160.000 ₫; cảnh 3 điểm 29 → 12, trụ 25 ngày. Giám khảo làm lại được từng cảnh bằng tài khoản demo có sẵn dữ liệu (§13: có nút đặt lại, phương án dự phòng tất định, video quay sẵn). Số trong cảnh là minh họa trong proposal, sẽ chỉnh theo persona thật.
+Nguồn: proposal §15. Kể câu chuyện của persona **Minh** (22 tuổi, thu nhập 9 triệu/tháng, lương ngày 5, 8 hũ, một hạn mức Ví Trả Sau) qua 6 cảnh. Từ 26/11 sáng (issue #39) ví demo của Minh sau "Đặt lại dữ liệu" có **8 hũ**: ba hũ mặc định Chi hằng ngày, Nghĩa vụ (gộp Hóa đơn cũ), Dự phòng, rồi hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch (hũ mục tiêu 6.000.000 ₫, hạn 01/04/2027), Đầu tư (0 ₫); tổng 8.030.000 ₫ (bảng ở mục "Yêu cầu dữ liệu"). Câu chuyện: tài khoản mới nhận 3 hũ mặc định, Minh tự thêm hũ cho khoản muốn theo dõi riêng. Tài khoản mới ngoài demo chỉ có 3 hũ Chi hằng ngày, Nghĩa vụ, Dự phòng. Số đo từng cảnh ở mục "Số đo 26/11" ngay dưới bảng. Giám khảo làm lại được từng cảnh bằng tài khoản demo có sẵn dữ liệu (§13: có nút đặt lại, phương án dự phòng tất định, video quay sẵn). Số trong bảng cảnh là lời dẫn; số thật lấy theo engine.
 
 | Cảnh | Thời lượng | Trên màn hình | Tính năng |
 |---|---|---|---|
-| 1 | 0:00–0:30 | Mở app: dòng thời gian báo hũ Ăn uống cạn ngày 23, còn 12 ngày nữa mới tới kỳ lương, độ tin cậy "Cao" | F1 |
-| 2 | 0:30–1:15 | Gõ "nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao". Biểu đồ dịch chuyển, hiện tổng chi phí thật và 2 phương án | F2, F3 |
-| 3 | 1:15–1:45 | Bấm "mất việc 2 tháng". Điểm chống chịu tụt, hiện số ngày trụ được | F4 |
+| 1 | 0:00–0:30 | Mở app: dòng thời gian báo hũ Ăn uống (hũ tự thêm) cạn ngày 23, còn 12 ngày nữa mới tới kỳ lương, độ tin cậy "Cao" | F1 |
+| 2 | 0:30–1:15 | Gõ "nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao". Biểu đồ dịch chuyển, hiện tổng chi phí thật và 2 phương án; hũ Nghĩa vụ báo thiếu trước hạn Trả sau 03/12 (ngày 3 là điều khoản mô phỏng của ví demo) | F2, F3 |
+| 3 | 1:15–1:45 | Bấm "mất việc 2 tháng". Điểm chống chịu tụt (29 → 12), hiện số ngày trụ được | F4 |
 | 4 | 1:45–2:20 | Tải sao kê 2 tuần gần nhất (CSV): các dòng tự vào hũ Ăn uống, xác nhận một lần. Bộ phát hiện xác nhận chi Ăn uống tăng, lộ trình sinh lại thành bản đề xuất mới; mở So với bản cũ và bảng "Vì sao". Hỏi "nên mua cổ phiếu nào" và thấy trợ lý từ chối đúng phạm vi | F5, F6, suitability |
 | 5 | 2:20–2:50 | Trên `giamkhao1`, nạp ảnh chứng từ mẫu `minh_bien_lai_1.png` (họ tên, số điện thoại, số tài khoản nhìn rõ): PII bị che → dòng giao dịch → gợi ý hũ → duyệt. Các bước ở mục "Cảnh 5" bên dưới | F6 |
 | 6 | 2:50–3:00 | Trên **tài khoản giám khảo** (`giamkhao1`), ở câu trả lời vừa rồi bấm "Vì sao" → "Chi tiết kỹ thuật": trace của chính lượt đó (dữ liệu đã dùng, luật đã kiểm, độ tin cậy, thời gian từng bước tính bằng ms, số lượt gọi mô hình, token vào/ra). Tùy chọn, 2–3 giây cuối: bảng vận hành `/ops/summary` quay bằng tài khoản vận hành `minh` | Góc "Future Workspace" |
+
+## Số đo 26/11
+
+Hai nguồn, chưa có số nào đo trên app với ví 8 hũ:
+
+- **Trên app**, 26/11 rạng sáng sau deploy (`giamkhao1`, `minh`): ví demo lúc đó có **7 hũ** (chưa có Chi hằng ngày).
+- **Cục bộ**, 26/11 sáng (PostgreSQL cục bộ, ngày mô phỏng 21/11/2026, 10.000 đường, what-if 5.000 đường; [lộ trình bộ hũ](default-six-jars-rollout.md) Bước 5): ví **8 hũ**. Chờ đo lại trên app sau khi deploy bản có hũ Chi hằng ngày và đặt lại.
+
+| Cảnh | Trên app (ví 7 hũ) | Cục bộ (ví 8 hũ, chờ đo lại) |
+|---|---|---|
+| 1 | Ăn uống 380.000 ₫ cạn 23/11, nhãn Cao | Như trên app: Ăn uống cạn 23/11, nhóm `high` (Cao), thẻ Tổng quan vẫn là Ăn uống. Hũ Chi hằng ngày 300.000 ₫ "đủ", không nêu ngày cạn (hũ thưa), không có thẻ |
+| 2 | Trọn câu 34 giây. Hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12 (2.200.000 ₫: 1.000.000 ₫ có sẵn gồm phí 33.000 ₫, cộng 1.200.000 ₫), thiếu 1.161.791 ₫ | Cùng danh sách, thiếu 1.162.559 ₫. Lời dẫn dùng "thiếu khoảng 1.162.000 ₫" |
+| 3 | Điểm 29 → 12, trụ 25 ngày | Điểm 29 → 12, trụ **26 ngày**. Lệch do hũ mới: số dư cộng 300.000 ₫, chi 30 ngày cộng khoảng 210.000 ₫ |
+| 4 | 32 dòng vào Ăn uống; bản v3 sau khoảng 30 giây, giai đoạn đầu 21/11–05/12, bước lớn nhất vào Ăn uống 2.657.800 ₫ | Phần không cần model như trên app: 32 dòng vào Ăn uống, PELT xác nhận từ hệ số 2,1 (ngưỡng mịn 2,04), tệp (hệ số 3,5) xác nhận khi tải trong ngày và trễ một ngày. Bản v3 cần model, chưa đo trên ví 8 hũ |
+| 5 | Màn duyệt sau 8,5 giây, chip "Đã che: tên" | Không đo |
+
+Các số phân loại 92% / 17,4%, cổng hiện % 47 / 120 ngày và ngưỡng PELT 2,04 đo trên ví nhiều hũ theo loại chi, nên đúng cho ví demo. Không dùng chúng để nói về tài khoản mới 3 hũ ([đo ví 3 hũ](../research/2026-11-26-do-vi-ba-hu.md)).
 
 ## Tài khoản dùng trong demo (issue #17)
 
@@ -32,6 +49,8 @@ Tệp `minh_sao_ke_2_tuan.csv`: tải ở `/samples/minh_sao_ke_2_tuan.csv` trê
 
 Tải lại cùng tệp lần hai bị từ chối vì trùng tệp; muốn làm lại thì đặt lại dữ liệu.
 
+Trên ví 8 hũ, cả 32 dòng vẫn vào Ăn uống, không dòng nào vào Chi hằng ngày; hũ Chi hằng ngày là chuỗi thưa nên bộ phát hiện bỏ qua. Lần đo 26/11 ở [đo ví 3 hũ](../research/2026-11-26-do-vi-ba-hu.md) (mục 3) thấy tệp hiện hành vẫn được xác nhận trên hũ Ăn uống riêng khi tải trễ 2 và 3 ngày, khác câu ở bước 1; chưa tìm nguyên nhân, nên vẫn làm cảnh 4 trong ngày đặt lại.
+
 ## Cảnh 5: ảnh chứng từ có PII (issue #16)
 
 Ảnh mẫu dựng bằng Pillow, mọi tên và số đều hư cấu (chân ảnh ghi "dữ liệu hư cấu"). `data/personas/samples/make_samples.py` sinh ảnh từ spec `data/personas/samples/minh_receipts.json`: số tiền, ngày, giờ đi qua bộ sinh persona, và không trùng số tiền với giao dịch đã seed trong cửa sổ khử trùng. Ảnh được ghi vào `data/personas/samples/` và chép sang `frontend/public/samples/`, nên sau khi build và deploy frontend thì tải được ở `/samples/<tên tệp>` trên miền Amplify. Sinh lại: `uv run --with pillow python data/personas/samples/make_samples.py`.
@@ -47,16 +66,31 @@ Các bước:
 2. Mở `/samples/minh_bien_lai_1.png` trên máy quay và lưu ảnh về máy.
 3. Trong app, mở Nạp dữ liệu (`#/ingest`) → "Chọn ảnh có sẵn" → chọn ảnh vừa lưu. Lần nạp đầu có hộp "Cho phép đọc ảnh": tích đồng ý → "Đồng ý và tải lên".
 4. Màn chờ "Đang đọc các dòng và che thông tin cá nhân…" (cắt đoạn chờ trong video).
-5. Màn duyệt: dòng chi 345.000 ₫ ngày 20/11, đối tác `B***`, không còn họ tên, số điện thoại hay số tài khoản đầy đủ. Dòng có chip "Đã che: tên" (thêm "SĐT", "số TK" nếu model chép các số đó vào nội dung), đầu danh sách có câu "Đã che N thông tin cá nhân trước khi lưu". Chip chỉ nêu loại, không bao giờ hiện giá trị gốc. Hũ gợi ý mong là Ăn uống. Đây là chuyển tiền cho người, nên hũ do model đề xuất từ nội dung và dòng ở trạng thái "Cần duyệt"; hũ trống hay sai thì chạm vào dòng để chọn Ăn uống. Ảnh 2 có loại "Tiền nước", hũ mặc định là Hóa đơn.
+5. Màn duyệt: dòng chi 345.000 ₫ ngày 20/11, đối tác `B***`, không còn họ tên, số điện thoại hay số tài khoản đầy đủ. Dòng có chip "Đã che: tên" (thêm "SĐT", "số TK" nếu model chép các số đó vào nội dung), đầu danh sách có câu "Đã che N thông tin cá nhân trước khi lưu". Chip chỉ nêu loại, không bao giờ hiện giá trị gốc. Hũ gợi ý mong là Ăn uống. Đây là chuyển tiền cho người, nên hũ do model đề xuất từ nội dung và dòng ở trạng thái "Cần duyệt"; hũ trống hay sai thì chạm vào dòng để chọn Ăn uống. Ảnh 2 có loại "Tiền nước", hũ nhận là Nghĩa vụ (ví demo gộp Hóa đơn cũ vào Nghĩa vụ).
 6. "Xong, cập nhật dự báo" → "Xác nhận thêm 1 dòng" → "Đã thêm các dòng ngoài ví". Số dư hũ không đổi. Khoản chi ngoài ví vào lịch sử chi của hũ, và dự báo được xếp lịch tính lại.
 
-Độ phủ dữ liệu của Minh đã ở mức 100% trước khi nạp: tính offline trên 120 ngày lịch sử của bộ sinh, (chi 31.350.000 ₫ + số dư cuối 7.900.000 ₫) / thu nhập 36.000.000 ₫ vượt 1 nên bị kẹp về 1,0. Vì vậy cảnh này không cho thấy độ phủ tăng. Trên AWS, độ phủ tính theo cửa sổ `forecast_history_window_days`, cần kiểm lại. Muốn thấy độ phủ tăng thì dùng persona `vy` với `vy_sao_ke_vcb.csv` (`data/personas/README.md`, mục "Tệp mẫu cho cảnh 5").
+Độ phủ dữ liệu của Minh đã ở mức 100% trước khi nạp: tính offline trên 120 ngày lịch sử của bộ sinh, (chi 31.350.000 ₫ + số dư cuối 7.900.000 ₫) / thu nhập 36.000.000 ₫ vượt 1 nên bị kẹp về 1,0. Số này tính trước khi thêm hũ Chi hằng ngày; hũ mới chỉ cộng thêm vào tử số (số dư đầu kỳ và chi của hũ) nên độ phủ vẫn kẹp 1,0 [suy luận]. Vì vậy cảnh này không cho thấy độ phủ tăng. Trên AWS, độ phủ tính theo cửa sổ `forecast_history_window_days`, cần kiểm lại. Muốn thấy độ phủ tăng thì dùng persona `vy` với `vy_sao_ke_vcb.csv` (`data/personas/README.md`, mục "Tệp mẫu cho cảnh 5"); đo cục bộ trên ví 8 hũ của `vy` (26/11): 0,687 sau đặt lại, 0,862 sau CSV, 0,872 sau thêm ảnh.
 
 Đã kiểm tất định (`tests/unit/test_persona_samples_minh.py`, không OCR, không gọi model): bộ che PII với payee và tên hiển thị của Minh che đủ họ tên, số điện thoại, số tài khoản trên chữ của hai ảnh, còn số tiền, nhà cung cấp, nội dung, mã tham chiếu thì giữ nguyên. Chưa kiểm: model đọc ảnh, hũ gợi ý, và số giây thao tác (issue #16 cần ≤ 10 s) trên tài khoản giám khảo sau khi deploy.
 
 ## Yêu cầu dữ liệu cho demo (suy ra, cần xác nhận)
 
+- **Ví demo của Minh sau đặt lại** (26/11 sáng, cấu hình `DEMO_LAYOUT` và ánh xạ hũ persona, chi tiết ở [lộ trình bộ hũ](default-six-jars-rollout.md), bảng "Demo (Reset data)"). `vy` cũng có 8 hũ; `lan`, `khoa` có 7 hũ (không có hũ mục tiêu).
+
+  | Hũ | Loại | Tỷ lệ | Số dư |
+  |---|---|---:|---:|
+  | Chi hằng ngày (mặc định) | chi theo kỳ | 3% | 300.000 ₫ |
+  | Nghĩa vụ (mặc định, gộp Hóa đơn cũ) | nghĩa vụ | 33% | 1.450.000 ₫ |
+  | Dự phòng (mặc định) | tích lũy, đệm | 10% | 2.700.000 ₫ |
+  | Ăn uống (tự thêm) | chi theo kỳ | 30% | 380.000 ₫ |
+  | Đi lại (tự thêm) | chi theo kỳ | 7% | 640.000 ₫ |
+  | Giải trí (tự thêm) | chi theo kỳ | 7% | 760.000 ₫ |
+  | Du lịch (tự thêm, hũ mục tiêu 6.000.000 ₫, hạn 01/04/2027) | tích lũy, mục tiêu | 10% | 1.800.000 ₫ |
+  | Đầu tư (tự thêm) | tích lũy, dài hạn | 0% | 0 ₫ |
+  | **Tổng** | | **100%** | **8.030.000 ₫** |
+
+  Hũ Chi hằng ngày chứa khoản chi lặt vặt (tạp hóa, giặt sấy, nhà thuốc), không lấy dòng nào của Ăn uống, Đi lại, Giải trí, nên ba hũ này và cảnh 1, cảnh 4 giữ y hệt ví 7 hũ. Giao dịch mới vào hũ riêng khớp loại (ăn uống vào Ăn uống, du lịch vào Du lịch, hóa đơn vào Nghĩa vụ); không có hũ riêng thì vào Chi hằng ngày. Trả sau và nghĩa vụ trả từ hũ Nghĩa vụ; Trả sau của Minh đến hạn ngày 3 trên ví demo (điều khoản mô phỏng; quy tắc chung là ngày 5, BR-22) để khoản này nằm trong danh sách "trước kỳ lương" của cảnh 2.
 - Persona Minh phải sinh ra đúng hiện tượng cảnh 1 (hũ Ăn uống cạn ngày 23, còn 12 ngày tới kỳ lương). Minh có 120 ngày lịch sử (24/7 đến 20/11, issue #8) và **không** có điểm gãy cài sẵn: bộ phát hiện chạy trên lịch sử lúc đặt lại không xác nhận, không nghi hũ nào; cảnh 4 tạo thay đổi lúc chạy bằng tệp sao kê (mục Cảnh 4 ở trên).
-- Số đo cảnh 1 (25/11, chạy offline `yofina_ml.forecast_user` qua `build_inputs` của pipeline trên persona vừa sinh, 600 đường, độ phủ giả định 1,0): Ăn uống 380.000 ₫ cạn **23/11**, `days_to_payday` 14 (lương 5/12, còn 12 ngày sau ngày cạn), `p_shortfall` 1,0, nhóm tin cậy `high` (Cao). Cần đo lại trên AWS sau khi đặt lại: ngày cạn và nhãn của cảnh 1, điểm chống chịu và số ngày trụ được của `Mất việc 2 tháng` (cảnh 3).
+- Số đo cảnh 1 (25/11, chạy offline `yofina_ml.forecast_user` qua `build_inputs` của pipeline trên persona vừa sinh, 600 đường, độ phủ giả định 1,0): Ăn uống 380.000 ₫ cạn **23/11**, `days_to_payday` 14 (lương 5/12, còn 12 ngày sau ngày cạn), `p_shortfall` 1,0, nhóm tin cậy `high` (Cao). Đã đo trên app 26/11 với ví 7 hũ (mục "Số đo 26/11"). **Cần đo lại trên AWS sau khi deploy ví 8 hũ và đặt lại**: ngày cạn và nhãn của cảnh 1, số thiếu của hũ Nghĩa vụ ở cảnh 2, điểm và số ngày trụ được của "Mất việc 2 tháng" (cảnh 3; cục bộ 26 ngày), bản v3 của cảnh 4.
 - Dữ liệu tổng hợp nên hiệu chỉnh theo số công khai (§13 rủi ro "dữ liệu tổng hợp trông không thật"); cho giám khảo tự tạo giao dịch và nạp ảnh.
 - Câu hỏi mở liên quan: demo dùng tên/biểu phí Ví Trả Sau thật hay sản phẩm mô phỏng.
