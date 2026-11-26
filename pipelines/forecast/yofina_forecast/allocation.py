@@ -15,8 +15,10 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
   thiết yếu (mức phạt elastic khác nhau). Sàn của MỌI hũ (không theo mã) không dưới tổng mọi nghĩa vụ đang hoạt động trả từ hũ đó, kể cả
   khoản không thiết yếu (Netflix trả từ Giải trí giữ Giải trí không dưới mức Netflix); hũ chỉ có khoản không thiết yếu vẫn là hũ không
   thiết yếu, sàn bậc thiết yếu.
-- **Mục tiêu** = hũ có `goal_vnd`; mức cần mỗi tháng = phần còn thiếu x ngày của tháng / số ngày còn lại tới hạn (không có hạn thì hết
-  `horizon_months`). `goals` của tham số ghi đè trọng số, số tiền hoặc hạn của từng hũ (hũ không phải hũ tiết kiệm thì từ chối).
+- **Mục tiêu** = hũ có `goal_vnd`; mức cần mỗi tháng = phần còn thiếu x ngày của tháng / số ngày còn lại tới hạn. Không có hạn thì KHÔNG
+  gán hạn ngầm (trước đây coi như hết `horizon_months`, V2 của báo cáo rà soát #39): không có mức cần cứng, hũ nhận phần còn lại theo
+  thứ tự ưu tiên, kết quả không có `target_date` và tiêu đề nói "chưa có hạn" để agent hỏi lại. `goals` của tham số ghi đè trọng số, số
+  tiền hoặc hạn của từng hũ (hũ không phải hũ tiết kiệm thì từ chối).
   Hũ Dự phòng (`purpose` `buffer`, BR-64) nhận một mục `goals` làm đích số dư của lượt này (bắt buộc `target_vnd`, hạn tùy chọn;
   không đọc, không ghi `goal_vnd` của hũ), giữ vai đệm và được chiếu ra `goals` của kết quả như hũ mục tiêu; mức cần của nó xếp trước
   mục tiêu khác (BR-65). Hũ tiết kiệm cũ `purpose` NULL nhận mục tiêu như trước (vai mục tiêu).
@@ -383,7 +385,8 @@ class AllocationEngine:
             goal_spec = None
             if goal is not None:
                 when = goal.target_date
-                days_left = (when - today).days if when else horizon_months * month_days
+                # chưa có hạn: không gán hạn ngầm (trước đây coi như hết `horizon_months`), không có mức cần cứng (V2, #39)
+                days_left = (when - today).days if when else None
                 goal_spec = GoalSpec(
                     jar_code=code,
                     remaining_vnd=max(goal.target_vnd - goal.balance_vnd, 0),
@@ -556,10 +559,13 @@ class AllocationEngine:
     @staticmethod
     def _headline(b: Built, sol: AllocationSolution) -> str:
         names = {c: j["name"] for c, j in b.jars.items()}
-        goal_names = ", ".join(names[c] for c in b.goals)
+        dated = ", ".join(names[c] for c, g in b.goals.items() if g.target_date is not None)
+        undated = ", ".join(names[c] for c, g in b.goals.items() if g.target_date is None)
+        # mục tiêu chưa có hạn không "kịp hạn" hay "trễ hạn": nói rõ chưa có hạn (V2, #39)
+        no_deadline = f" Mục tiêu {undated} chưa có hạn." if undated else ""
         if sol.status == "optimal":
-            tail = f", mục tiêu {goal_names} kịp hạn." if b.goals else "."
-            return clip(f"Phân bổ khả thi: đủ sàn mọi hũ{tail}", 160)
+            tail = f", mục tiêu {dated} kịp hạn." if dated else "."
+            return clip(f"Phân bổ khả thi: đủ sàn mọi hũ{tail}{no_deadline}", 160)
         if sol.status == "relaxed":
             parts = []
             for r in sol.relaxations:
@@ -568,7 +574,7 @@ class AllocationEngine:
                     if r.kind == "discretionary_reduced"
                     else f"lùi hạn mục tiêu {names[r.jar_code]}"
                 )
-            return clip("Phân bổ khả thi sau khi nới một lần: " + ", ".join(parts) + ".", 160)
+            return clip("Phân bổ khả thi sau khi nới một lần: " + ", ".join(parts) + "." + no_deadline, 160)
         reasons = []
         if sol.floor_gap_total_vnd > 0:
             reasons.append(

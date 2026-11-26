@@ -1023,3 +1023,49 @@ def test_lam_tron_khong_bien_hu_dem_dang_giu_hay_muc_can_da_du_thanh_hut():
     assert prop(sol, "di_lai") == 630_000 and prop(sol, "chi_hang_ngay") < 270_000
     assert {r.kind for r in sol.relaxations} == {"discretionary_reduced"}
     assert goal_up_while_buffer_cut(sol, problem, "du_phong") == []
+
+
+# =====================================================================================
+# Mục tiêu không có hạn (V2 của báo cáo rà soát #39): không gán hạn ngầm, không có mức cần cứng
+# =====================================================================================
+def no_deadline_jars(goal_spec: GoalSpec) -> tuple[JarSpec, ...]:
+    return (
+        JarSpec("nghia_vu", "obligation", 3_000_000, 3_000_000, "obligation"),
+        JarSpec("an_uong", "essential", 3_000_000, 2_400_000),
+        JarSpec("giai_tri", "discretionary", 1_000_000, spend_floor_vnd=300_000),
+        JarSpec("quy_cuoi", "goal", 1_000_000, goal=goal_spec),
+        JarSpec("du_phong", "emergency", 1_000_000),
+    )
+
+
+def test_muc_tieu_khong_co_han_khong_dat_muc_can_cung_va_khong_ep_hu_khac():
+    """Quỹ cưới 150 triệu chưa biết khi nào: trước đây coi như hạn 3 tháng (cần 50 triệu mỗi tháng, ép mọi hũ xuống sàn). Nay không có
+    mức cần: hũ mục tiêu giữ phần chia hiện tại theo thứ tự cắt, không nới gì, mục tiêu không bị coi là trễ hạn; ngày dự kiến tới đích
+    theo mức đề xuất vẫn có."""
+    undated = GoalSpec("quy_cuoi", 150_000_000, None, 150_000_000, None)
+    sol = optimize(AllocationProblem(9_000_000, no_deadline_jars(undated), P))
+    assert sol.status == "optimal" and not sol.relaxations and total(sol) == 9_000_000
+    out = sol.outcome("quy_cuoi")
+    assert (out.needed_vnd, out.goal_on_track, out.goal_shortfall_vnd) == (0, True, 0)
+    assert prop(sol, "quy_cuoi") == 1_000_000 and prop(sol, "giai_tri") == 1_000_000
+    assert out.days_to_goal == 150_000_000 * P.month_days // 1_000_000
+    assert goal_need_vnd(undated, P.month_days) == 0
+    # cùng mục tiêu với hạn 3 tháng (cách tính cũ khi không có hạn): ép Giải trí xuống sàn chi, mục tiêu vẫn không kịp
+    dated = optimize(AllocationProblem(9_000_000, no_deadline_jars(replace(undated, days_left=90)), P))
+    assert dated.status == "infeasible" and prop(dated, "giai_tri") == 300_000
+
+
+def test_engine_muc_tieu_nguoi_dung_noi_khong_co_han_thi_bao_chua_co_han():
+    """Lượt lập lộ trình với mục tiêu không hạn trên hũ chưa có hạn: phương án không đặt mức cần, kết quả không có `target_date` (cờ có
+    cấu trúc "chưa có hạn" cho agent hỏi lại), tiêu đề nói chưa có hạn thay vì "kịp hạn"."""
+    res, _ = run({"goals": [{"jar": "du_lich", "target_vnd": 150_000_000}]}, goal=False)
+    assert not errors_of(RESULT, res), errors_of(RESULT, res)
+    d = AllocationPlanData.model_validate(res["data"])
+    (g,) = d.goals
+    assert g.jar.code == "du_lich" and g.target_date is None
+    assert (g.monthly_needed_vnd, g.on_track, g.shortfall_vnd) == (0, True, 0)
+    assert not any(r.kind == "goal_delayed" for r in d.relaxations) and d.status != "infeasible"
+    assert "chưa có hạn" in d.headline and "kịp hạn" not in d.headline
+    # mục tiêu đã khai có hạn thì vẫn theo hạn đó như trước
+    dated, _ = run({"goals": [{"jar": "du_lich", "target_vnd": 9_000_000}]})
+    assert dated["data"]["goals"][0]["target_date"] == "2027-04-01" and dated["data"]["goals"][0]["monthly_needed_vnd"] > 0

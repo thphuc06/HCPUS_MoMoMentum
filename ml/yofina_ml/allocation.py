@@ -28,6 +28,8 @@ Bài toán theo tháng (đơn vị nội bộ là `rounding_step_vnd` VND để 
   (`_keep_spend_floors`).
 - Hũ đệm (`emergency`) có thể mang mục tiêu (đích số dư của lượt lập lộ trình): phần thiếu của mức cần trên hũ đó phạt nặng hơn mục tiêu
   khác theo tỷ lệ `weight_emergency / weight_goal`, nên khi không đủ cho mọi mục tiêu thì hũ đệm được trước (BR-65).
+- Mục tiêu **chưa có hạn** (`GoalSpec.days_left` None, V2 của báo cáo rà soát #39): không có mức cần cứng hay ưa thích, nên không ép hũ
+  nào; hũ giữ phần chia theo thứ tự cắt (nhận phần còn lại sau các bậc trên), không bao giờ bị coi là trễ hạn hay phải lùi hạn.
 - Hũ đệm **chưa tới đích** (`hold_current`, người gọi quyết từ số dư và đích của hũ) giữ mức hiện tại ở CẢ HAI vòng: cắt xuống dưới mức
   hiện tại chịu mức phạt giữ hũ đệm ở trên, nên mục tiêu khác (kể cả khi vì thế mà chưa khả thi) và sàn chi không lấy được tiền từ hũ
   đệm (BR-65: hũ đệm chưa đủ thì không tăng hũ mục tiêu trước), còn sàn nghĩa vụ và sàn thiết yếu (phạt nặng hơn) vẫn lấy được.
@@ -95,9 +97,12 @@ class AllocationParams:
 
 @dataclass(frozen=True)
 class GoalSpec:
+    """Mục tiêu của một hũ. `days_left` None: mục tiêu CHƯA CÓ HẠN (V2 của báo cáo rà soát #39): không có mức cần cứng, hũ chỉ giữ phần
+    chia theo thứ tự cắt và nhận phần còn lại, không bao giờ bị coi là trễ hạn (người gọi báo "chưa có hạn" để agent hỏi lại)."""
+
     jar_code: str
     remaining_vnd: int
-    days_left: int
+    days_left: int | None
     target_vnd: int
     target_date: date | None
     weight: float = 1.0
@@ -167,7 +172,9 @@ class AllocationSolution:
 
 
 def goal_need_vnd(g: GoalSpec, month_days: int, *, extra_months: int = 0) -> int:
-    """Mức cần mỗi tháng để kịp hạn (hạn lùi thêm `extra_months` tháng nếu có)."""
+    """Mức cần mỗi tháng để kịp hạn (hạn lùi thêm `extra_months` tháng nếu có). Mục tiêu chưa có hạn không có mức cần (0)."""
+    if g.days_left is None:
+        return 0
     return monthly_needed_vnd(
         remaining_vnd=g.remaining_vnd,
         days_left=g.days_left + extra_months * month_days,
@@ -390,8 +397,10 @@ def _outcomes(p: AllocationProblem, xs: list[int]) -> tuple[JarOutcome, ...]:
             needed = goal_need_vnd(j.goal, prm.month_days)
             if xs[k] > 0:
                 days = int(np.ceil(j.goal.remaining_vnd * prm.month_days / xs[k]))
-            on_track = xs[k] >= needed
+            # chưa có hạn: không có mức cần nên không bao giờ "trễ hạn"; chỉ có ngày dự kiến theo mức đề xuất
+            on_track = j.goal.days_left is None or xs[k] >= needed
             if not on_track:
+                assert j.goal.days_left is not None
                 shortfall = max(
                     j.goal.remaining_vnd - int(xs[k] * max(j.goal.days_left, 1) / prm.month_days), 0
                 )

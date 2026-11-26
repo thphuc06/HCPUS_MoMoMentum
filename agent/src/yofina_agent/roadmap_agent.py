@@ -100,6 +100,9 @@ Mỗi bước là MỘT hành động cụ thể người dùng tự làm đư�
   của hũ nguồn là các tham chiếu (dạng mã hũ chấm trường) vừa các trần đó; amount_ref vẫn trỏ hũ nguồn hoặc hũ nhận của bước. Ở
   các giai đoạn sau kỳ lương, số tiền của bước là mức hằng tháng: không vượt phần hũ nhận cần thêm trong kỳ và khoản hũ nguồn
   nhận mỗi tháng. Muốn tăng phần để dành từ lương các kỳ sau, dùng adjust_split.
+- context.allocation.goals là các mục tiêu của phương án: đích, hạn, có kịp hay không, mức cần mỗi tháng, ngày dự kiến tới
+  đích. Mục tiêu có no_deadline là mục tiêu chưa có hạn: bộ tối ưu không đặt mức cần mỗi tháng cho nó (hũ chỉ nhận phần còn lại
+  theo thứ tự ưu tiên), nên đừng viết là nó kịp hay trễ hạn; có thể đặt một bước nhắc người dùng chọn hạn.
 - Phương án phân bổ trong dữ liệu đã tính theo mặc định (và theo mục tiêu người dùng nói, nếu có). Thường để trống
   horizon_months và goals; chỉ đặt khi thật sự cần một phương án khác (kỳ khác, hoặc ưu tiên một mục tiêu hơn mục tiêu
   khác bằng trọng số khác một). goals chỉ gồm hũ có kind saving và đã có goal_vnd. Khi sửa, trả lại danh sách giai
@@ -396,7 +399,26 @@ def _compact_allocation(plan: AllocationPlanData) -> dict[str, Any]:
         "period_start": plan.period_start,
         "horizon_months": plan.horizon_months,
         "lines": {line.jar.code: _compact_line(line) for line in plan.lines},
+        "goals": [_compact_goal(goal) for goal in plan.goals],
     }
+
+
+def _compact_goal(goal: B.GoalProjection) -> dict[str, Any]:
+    """Một mục tiêu của phương án cho model: đích, hạn, kịp hay không, mức cần mỗi tháng, ngày dự kiến tới đích. Không có hạn thì cờ có
+    cấu trúc `no_deadline` (bộ tối ưu không đặt mức cần cho nó, V2 của báo cáo rà soát #39) thay cho hạn."""
+    row: dict[str, Any] = {"jar_code": goal.jar.code, "target_text": format_vnd(goal.target_vnd)}
+    if goal.target_date is not None:
+        row["target_date_text"] = _date_text(goal.target_date)
+    else:
+        row["no_deadline"] = True
+    row["on_track"] = goal.on_track
+    if goal.monthly_needed_vnd:
+        row["monthly_needed_text"] = format_vnd(goal.monthly_needed_vnd)
+    if goal.shortfall_vnd:
+        row["shortfall_text"] = format_vnd(goal.shortfall_vnd)
+    if goal.projected_date is not None:
+        row["projected_date_text"] = _date_text(goal.projected_date)
+    return row
 
 
 def _compact_line(line: AllocationLine) -> dict[str, Any]:

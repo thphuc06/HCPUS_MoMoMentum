@@ -1738,6 +1738,31 @@ def test_nguon_giai_doan_dau_va_han_muc_tieu_dang_nguoi_doc():
     assert "31/03/2027" in prompt(client)["reason_numbers"]
 
 
+def test_muc_tieu_trong_phuong_an_va_co_chua_co_han_trong_ngu_canh():
+    """Mục tiêu của phương án vào ngữ cảnh lập lộ trình: đích, hạn, kịp hay không, mức cần mỗi tháng (V2 của báo cáo rà soát #39). Mục tiêu
+    không có hạn mang cờ có cấu trúc `no_deadline` (bộ tối ưu không đặt mức cần) để model không nói kịp hay trễ hạn và có thể nhắc
+    người dùng chọn hạn."""
+    tools = scripted_tools()
+    result, client, _ = build(tools, outline(review()))
+    assert result.outcome.ok
+    assert prompt(client)["context"]["allocation"]["goals"] == [
+        {
+            "jar_code": "du_lich", "target_text": "6.000.000 ₫", "target_date_text": "31/03/2027", "on_track": True,
+            "monthly_needed_text": "1.150.000 ₫", "projected_date_text": "24/03/2027",
+        }
+    ]  # fmt: skip
+    allocation = fixture("optimize_allocation.ok.json")
+    goal = allocation["data"]["goals"][0]
+    del goal["target_date"]
+    goal["monthly_needed_vnd"] = 0
+    tools = scripted_tools(allocation=allocation)
+    result, client, _ = build(tools, outline(review()))
+    assert result.outcome.ok
+    assert prompt(client)["context"]["allocation"]["goals"] == [
+        {"jar_code": "du_lich", "target_text": "6.000.000 ₫", "no_deadline": True, "on_track": True, "projected_date_text": "24/03/2027"}
+    ]
+
+
 def test_metric_buoc_chuyen_sau_ky_luong_theo_phan_tang_cua_hu_nhan():
     tools = scripted_tools(checks=("ok", "ok"))
     result, _, _ = build(tools, later_phase(step()))
