@@ -42,6 +42,7 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | C-12 | Đổi bộ hũ của tài khoản demo | Đã đổi: Chi hằng ngày, Nghĩa vụ (gộp Hóa đơn), Dự phòng cộng hũ tự thêm; `minh` 8 hũ, tổng 8.030.000 ₫ | 26/11 |
 | C-07 | Ví không có hũ nghĩa vụ thì mốc trả sau ở đâu | Hũ trả theo một quy tắc chung; ví không có hũ `obligation` thì phải chọn hũ trả | 26/11 |
 | C-11, C-13 | Tỷ lệ 3 bộ hũ theo giai đoạn sống; mục tiêu hũ đệm | Hoãn cùng BR-70 và BR-64 (sau hạn nộp) | 26/11 |
+| — | BR-63: bắt buộc mục đích cho hũ để dành, chặn hũ đệm thứ hai | Chưa bắt buộc trước hạn nộp: hũ để dành cũ có thể chưa có mục đích (tương thích ví cũ); có nhiều hũ đệm thì hệ thống lấy hũ đệm đầu tiên theo thứ tự. Siết sau hạn nộp | 26/11 |
 | — | Hũ "Khác" cho khoản nhỏ một lần (issue #28) | Không làm: đo offline giảm tỷ lệ hỏi tối đa khoảng 1,2 điểm, dưới ngưỡng 3 điểm | 26/11 |
 | — | Phân tích theo nhóm loại chi bên trong hũ gộp | Không làm trước hạn nộp; cách dùng: tách hũ riêng. Hướng sau hạn nộp: gợi ý tách hũ khi hũ gộp có dấu hiệu tăng | 26/11 |
 
@@ -67,7 +68,7 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | ID | Câu hỏi | Đề xuất | Ai chốt | File |
 |---|---|---|---|---|
 | **I-01** | **Ai trả phí nền R1?** Phí nền chiếm khoảng 68% doanh thu, do ví trả; lợi ích đo được rõ nhất (giảm trễ hạn) thuộc bên cho vay | Chia R1 giữa ví và bên cho vay; hoặc giảm R1, tăng R4 do bên cho vay trả | Nhóm | [06 mục 3a](06-mo-hinh-kinh-doanh.md) |
-| **I-02** | **Duyệt các quy tắc đánh dấu đề xuất**: BC-13, BR-63 đến 78, NFR-44, K10, K11, L19, L20 | Duyệt theo khối: cơ cấu hũ (BR-63 đến 73, 78), chi phí trả sau (74 đến 76), hỗ trợ trước hạn (77). **26/11:** BR-67, 69 chốt và đã làm; BR-63, 65, 66, 73, 78 một phần; BR-64, 68, 70, 71 hoãn; còn duyệt BR-72, 74 đến 77. BR-79 đến 84 chỉ có ở Notion, chưa vào repo | Nhóm | [02](02-business-rules.md) |
+| **I-02** | **Duyệt các quy tắc đánh dấu đề xuất**: BC-13, BR-63 đến 78, NFR-44, K10, K11, L19, L20 | Duyệt theo khối: cơ cấu hũ (BR-63 đến 73, 78), chi phí trả sau (74 đến 76), hỗ trợ trước hạn (77). **26/11:** BR-67, 69 chốt và đã làm; BR-63 (chốt chưa bắt buộc trước hạn nộp), 65, 66, 73, 78 một phần; BR-64, 68, 70, 71 hoãn; còn duyệt BR-72, 74 đến 77. BR-79 đến 84 chỉ có ở Notion, chưa vào repo | Nhóm | [02](02-business-rules.md) |
 | E-01 | Duyệt mục tiêu K1–K11 | K4 10% nay có căn cứ AFM (đo được 21–24%); chú ý K3 (15%), K10 (25%), K11 (20%) | Nhóm | [08](08-kpi-kinh-doanh.md) |
 | E-03 | KPI nào lên slide | K2, K5 (số thật), **K4 kèm thử nghiệm AFM**, K9 dạng hòa vốn | Nhóm | [08](08-kpi-kinh-doanh.md) |
 | D-01 | Hướng thương mại chính | B2B2C qua ví | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
