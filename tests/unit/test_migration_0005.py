@@ -265,7 +265,15 @@ def test_seed_mot_cau_lenh_viet_lai_duoc_khong_tham_so_khong_bi_mat(path):
     stmts = [strip_leading_comments(x) for x in split_migration(sql)]
     (stmt,) = stmts
     assert stmt.startswith("INSERT INTO") and "ON CONFLICT" in stmt
-    assert ("DO NOTHING" if path.stem == "jar_templates" else "DO UPDATE SET") in stmt
+    if path.stem == "jar_templates":
+        # hàng danh mục đã có giữ nguyên (seed chạy lại không bật lại bộ bảy), trừ màu và biểu tượng của Chi hằng ngày (#39)
+        tail = " ".join(stmt.split("ON CONFLICT", 1)[1].split()).rstrip(";")
+        assert tail == (
+            "(code) DO UPDATE SET color_key = EXCLUDED.color_key, icon_key = EXCLUDED.icon_key"
+            " WHERE jar_templates.code = 'chi_hang_ngay'"
+        )
+    else:
+        assert "DO UPDATE SET" in stmt
     assert not any(named_params(s) for s in stmts) and not re.search(r"(?<![:\w]):[A-Za-z_]", sql)
     assert not re.search(r"PASSWORD|SECRET|\b\d{12}\b", code_only(sql), re.I)
 

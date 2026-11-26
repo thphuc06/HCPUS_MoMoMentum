@@ -106,7 +106,11 @@ def test_tat_moi_hu_cua_seed_ngoai_bo_ba():
     assert set(seed) <= set(ROWS)  # mọi hũ của seed có hàng ghi đè
     for code in set(seed) - set(ONBOARDING):
         assert ROWS[code][6] == "false", code
-    assert "ON CONFLICT (code) DO NOTHING" in SEED  # seed chạy lại không bật lại bộ bảy
+    # seed chạy lại không bật lại bộ bảy: phần ghi đè chỉ có màu, biểu tượng của Chi hằng ngày (#39)
+    tail = SEED.split("ON CONFLICT", 1)[1]
+    assert not re.search(r"\b(is_default|default_split_percent|sort_order|kind|purpose|name)\s*=", tail)
+    assert "WHERE jar_templates.code = 'chi_hang_ngay'" in tail
+    assert seed[DEFAULT_SPENDING_JAR][6] == "false"  # trước 0059 hàng được thêm ở trạng thái tắt
 
 
 def test_la_migration_cuoi():

@@ -44,11 +44,11 @@ def test_chi_hang_ngay_khac_an_uong_va_bieu_tuong_rieng():
 
 def test_seed_ghi_de_mau_cua_hang_danh_muc_bang_mau_cua_bo_hu_demo():
     # migration 0059 (đã chạy, không sửa) tạo hàng Chi hằng ngày với màu, biểu tượng của Ăn uống; seed chạy sau migration ghi đè đúng
-    # hai cột đó (không đụng is_default, tỷ lệ, thứ tự: seed không bật bộ hũ)
+    # hai cột đó của đúng hàng đó (không đụng is_default, tỷ lệ, thứ tự: seed không bật bộ hũ)
     assert _template_rows(SQL_0059)[DEFAULT_SPENDING_JAR] == _template_rows(SQL_0059)["an_uong"]
-    update = re.search(
-        r"UPDATE jar_templates SET color_key = '(\w+)', icon_key = '(\w+)' WHERE code = '(\w+)';", SEED
+    assert _template_rows(SEED)[DEFAULT_SPENDING_JAR] == LAYOUT[DEFAULT_SPENDING_JAR]
+    tail = " ".join(SEED.split("ON CONFLICT", 1)[1].split())
+    assert tail == (
+        "(code) DO UPDATE SET color_key = EXCLUDED.color_key, icon_key = EXCLUDED.icon_key"
+        f" WHERE jar_templates.code = '{DEFAULT_SPENDING_JAR}';"
     )
-    assert update is not None and update.group(3) == DEFAULT_SPENDING_JAR
-    assert (update.group(1), update.group(2)) == LAYOUT[DEFAULT_SPENDING_JAR]
-    assert DEFAULT_SPENDING_JAR not in _template_rows(SEED)  # seed không tạo hàng: hàng do migration 0059
