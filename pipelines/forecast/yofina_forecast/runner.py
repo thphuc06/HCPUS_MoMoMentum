@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from yofina_core.errors import ErrorCode, YofinaError
+from yofina_forecast.due_status import with_due_status
 from yofina_forecast.events import ForecastEventPublisher, emf
 from yofina_forecast.inputs import Built, Context, build_inputs
 from yofina_forecast.repo import ForecastRepo, to_date
@@ -163,6 +164,8 @@ class Pipeline:
                 "Kết quả dự báo sai hợp đồng: " + "; ".join(errors[:3]),
             )
         t["compute"] = _ms(started)
+        # trạng thái hiển thị theo khoản đến hạn trước lương (gồm ngày lương) trước khi ghi: mọi nơi đọc tóm tắt cùng một trạng thái
+        result = with_due_status(built.inputs, result)
 
         params = dict(result.run.params)
         params["pipeline"] = {

@@ -42,7 +42,7 @@ from yofina_core.clock import app_today
 from yofina_core.errors import PAY_JAR_FIELD, ErrorCode, YofinaError
 from yofina_core.money import format_vnd_short
 from yofina_core.scenario import parse_scenario, scenario_hash, scenario_to_wire
-from yofina_core.schedule import advance_due, bnpl_due_date, obligation_window
+from yofina_core.schedule import advance_due, bnpl_due_date
 from yofina_core.suitability import Proposal
 from yofina_core.wallet import (
     BNPL_PRODUCT_CODE,
@@ -60,6 +60,10 @@ from yofina_forecast.common import (
     to_date,
 )
 from yofina_forecast.credit import compute_credit_cost, jar_at_due, obligation_impact
+from yofina_forecast.due_status import due_window as _due_window
+from yofina_forecast.due_status import events_payload as _events_payload
+from yofina_forecast.due_status import shown_p as _p
+from yofina_forecast.due_status import shown_status as _status
 from yofina_forecast.inputs import build_inputs
 from yofina_forecast.runner import Pipeline
 from yofina_forecast.settings import ForecastSettings
@@ -615,24 +619,6 @@ def _days_payload(jf: JarForecast) -> list[dict[str, Any]]:
     ]
 
 
-def _events_payload(jar: Any, *, include_original_dates: bool = False) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for f in (*jar.outflows, *jar.inflows):
-        item: dict[str, Any] = {
-            "date": f.date.isoformat(),
-            "kind": f.kind,
-            "label": f.label,
-            "amount_vnd": f.amount_vnd,
-        }
-        if include_original_dates and f.original_due_date is not None:
-            item["original_due_date"] = f.original_due_date.isoformat()
-        if f.amount_max_vnd is not None and f.amount_max_vnd > f.amount_vnd:
-            item["amount_max_vnd"] = f.amount_max_vnd
-        out.append(item)
-    out.sort(key=lambda e: (e["date"], 0 if e["kind"] == "obligation" else 1, e["label"]))
-    return out
-
-
 def _min_p50(jf: JarForecast) -> int:
     return min(d.balance_p50_vnd for d in jf.days)
 
@@ -645,53 +631,6 @@ def _runout_shift(
         return None
     beyond = origin + timedelta(days=horizon + 1)
     return ((after or beyond) - (before or beyond)).days
-
-
-def _runs_out_by_payday(jf: JarForecast) -> bool:
-    """Số dư P50 chạm ngưỡng cạn TRƯỚC hoặc ĐÚNG ngày lương kế.
-
-    Xác suất hụt của engine ML (và trạng thái suy từ nó) chỉ xét các ngày TRƯỚC ngày lương (`window` = số ngày tới lương - 1). Một
-    khoản đến hạn đúng ngày lương (Trả sau của `minh` đến hạn 05/12, lương cũng ngày 5) lớn hơn số dư cộng phần lương về hũ thì hũ
-    cạn ngay ngày đó mà xác suất "trước kỳ lương" vẫn là 0, nên trạng thái "đủ" mâu thuẫn với số dư thấp nhất âm và ngày cạn."""
-    s = jf.summary
-    return s.runout_date is not None and s.runout_date <= s.payday_date
-
-
-def _due_window(inputs: ForecastInputs, jf: JarForecast) -> dict[str, Any]:
-    """Khoản đến hạn trước lương (gồm ngày lương) của hũ của `jf` và khoản thiếu đầu tiên theo số dư P50 của chính dự báo đó
-    (`yofina_core.schedule.obligation_window`: khoản đến hạn đúng ngày lương trả bằng số dư trước khi lương ngày đó về)."""
-    jar = inputs.jars[_jar_index(inputs, jf.summary.jar_code)]
-    return obligation_window(
-        _events_payload(jar, include_original_dates=True),
-        jf.summary.payday_date.isoformat(),
-        {d.date.isoformat(): d.balance_p50_vnd for d in jf.days},
-        opening_balance_vnd=jar.balance_vnd,
-    )
-
-
-def _short_by_payday(jf: JarForecast, window: Mapping[str, Any] | None) -> bool:
-    """Hụt tới kỳ lương mà xác suất của engine không thấy: hũ cạn trước hoặc đúng ngày lương, hoặc một khoản đến hạn trước lương
-    thiếu tiền (`window`, từ `_due_window`). Khoản đến hạn ĐÚNG ngày lương trả bằng số dư trước khi lương về (chốt 26/11, BR-22), nên
-    số dư cuối ngày lương (đã cộng lương) còn dương mà khoản đó vẫn thiếu."""
-    return _runs_out_by_payday(jf) or bool(window and window.get("first_shortfall"))
-
-
-def _status(jf: JarForecast, window: Mapping[str, Any] | None = None) -> str:
-    """Trạng thái hiển thị trên thẻ what-if: trạng thái của engine, trừ khi hũ hụt tới kỳ lương theo `_short_by_payday` thì là hụt
-    (cùng nghĩa "hụt trước kỳ lương" mà người dùng đọc cạnh ngày cạn, số dư thấp nhất và khoản thiếu đầu tiên của chính thẻ)."""
-    return "short" if _short_by_payday(jf, window) else jf.summary.status
-
-
-def _p(jf: JarForecast, window: Mapping[str, Any] | None = None) -> float | None:
-    """Xác suất hụt để hiển thị. Bỏ khi hũ hụt mà engine không thấy (`_short_by_payday`: cạn ngay ngày lương, khoản đến hạn đúng
-    ngày lương thiếu tiền trước khi lương về): xác suất của engine không xét ngày lương nên con số (thường 0%) sẽ nói ngược với trạng
-    thái hụt; khi đó thẻ chỉ nói ngày cạn hoặc khoản thiếu."""
-    s = jf.summary
-    if not s.show_probability or s.p_shortfall is None:
-        return None
-    if _short_by_payday(jf, window) and s.status != "short":
-        return None
-    return round(float(s.p_shortfall), 4)
 
 
 def _p_se(jf: JarForecast, window: Mapping[str, Any] | None = None) -> float | None:
