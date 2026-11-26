@@ -16,9 +16,9 @@ Khi Lambda bị dừng cứng hoặc không ghi được trạng thái cuối, l
 
 ## Gọi tool và quyền IAM
 
-AgentCore Runtime chọn một cơ chế inbound auth. Runtime `yofina_agent` và Gateway hiện cấu hình JWT Cognito, còn Lambda chạy nền có danh tính dịch vụ IAM. Lambda chạy cùng mã Roadmap agent và gọi đồng bộ hai Lambda tool đích bằng `lambda:InvokeFunction`. `ledger` và `planner` trỏ đến `yofina-ledger`. `forecast` trỏ đến `yofina-forecast` phục vụ tool.
+AgentCore Runtime chọn một cơ chế inbound auth. Runtime `yofina_agent` và Gateway hiện cấu hình JWT Cognito, còn Lambda chạy nền có danh tính dịch vụ IAM. Lambda chạy cùng mã Roadmap agent và gọi đồng bộ hai Lambda tool đích bằng `lambda:InvokeFunction`. `ledger`, `planner` và `knowledge` trỏ đến `yofina-ledger`. `forecast` trỏ đến `yofina-forecast` phục vụ tool.
 
-Payload gồm tham số tool và `user_id` của sự kiện hệ thống. `ClientContext` là base64 của JSON `{"custom":{"bedrockAgentCoreToolName":"planner___save_roadmap"}}`. Đường này bỏ qua Cedar của Gateway. Chỉ cấp quyền phát sự kiện, gửi vào SQS và gọi handler cho các thành phần hệ thống được phép. Danh sách tool trong `settings.py` chỉ gồm các lượt đọc, `check_suitability`, `optimize_allocation` và `save_roadmap`. Mọi tham số `confirm_token` bị từ chối.
+Payload gồm tham số tool và `user_id` của sự kiện hệ thống. `ClientContext` là base64 của JSON `{"custom":{"bedrockAgentCoreToolName":"planner___save_roadmap"}}`. Đường này bỏ qua Cedar của Gateway. Chỉ cấp quyền phát sự kiện, gửi vào SQS và gọi handler cho các thành phần hệ thống được phép. Danh sách tool trong `settings.py` chỉ gồm các lượt đọc, `check_suitability`, `optimize_allocation`, `save_roadmap` và `knowledge___resolve_date` (ngày nhắc theo mốc khi planner điền `nudge_on_spec`; lỗi ngày như `DATE_IN_PAST` là lỗi đã xử lý, bước vào vòng sửa, job không hỏng). Mọi tham số `confirm_token` bị từ chối.
 
 - `lambda:InvokeFunction` giới hạn đúng hai Lambda tool trên.
 - `bedrock:InvokeModel` cho các model và inference profile trong chuỗi `planner` của `llm_defaults.json` hoặc cấu hình ghi đè. Cấp `dynamodb:UpdateItem` trên bảng usage mà `LlmGateway` dùng để giữ trần gọi model.

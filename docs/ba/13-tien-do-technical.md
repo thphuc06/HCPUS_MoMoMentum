@@ -45,7 +45,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 | Cảnh | Trạng thái |
 |---|---|
 | 1. Hũ sắp cạn | Chạy; giao diện mới (thẻ có số ngày, dải ô ngày). 26/11: Ăn uống 380.000 ₫ cạn 23/11, nhãn Cao |
-| 2. What-if tai nghe 1,2 triệu | Đi trên app 23/11: đạt. 26/11: trọn câu 34 giây, hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12 (2.200.000 ₫), thiếu khoảng 1.162.000 ₫ |
+| 2. What-if tai nghe 1,2 triệu | Đi trên app 23/11: đạt. 26/11 (bản đang chạy, Trả sau ngày 3): trọn câu 34 giây, hũ Nghĩa vụ liệt kê Tiền điện 26/11 và khoản Trả sau (2.200.000 ₫), thiếu khoảng 1.162.000 ₫. Sau đợt #39 Trả sau đến hạn 05/12 (đúng ngày lương, trả bằng số dư trước khi lương về), đo cục bộ thiếu 1.168.392 ₫; chờ đo lại trên app |
 | 3. Điểm chống chịu, cú sốc | Đi trên app 24/11: đạt. 26/11: 29 → 12, trụ 25 ngày (cục bộ trên ví 8 hũ: 26 ngày) |
 | 4. Lộ trình | Đi trên app 24/11: đạt. 26/11: 32 dòng vào Ăn uống, bản v3 sau khoảng 30 giây |
 | 5. Nạp ảnh | Đạt qua REST; chờ thử trên điện thoại. 26/11: màn duyệt sau 8,5 giây, chip "Đã che: tên" |

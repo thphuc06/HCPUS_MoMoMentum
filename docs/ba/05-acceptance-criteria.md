@@ -61,7 +61,7 @@ Bằng chứng cho từng AC ghi vào mục "Kết quả thực hiện" của fi
 
 | ID | Cho trước | Khi | Thì | BR | Trạng thái |
 |---|---|---|---|---|---|
-| AC-FR4-01 | `minh` có hạn mức trả sau, đã có 1.000.000 ₫ phải trả 05/12 | Mua 300.000 ₫ bằng trả sau | Phải trả ngày 05/12 thành **1.300.000 ₫** (cộng dồn, phí đã tính một lần); hạn mức còn lại giảm 300.000 ₫; số dư hũ không đổi; mốc hiện trên biểu đồ dự báo | BR-22, 23, 25 | Đạt (đóng phase 2, 22/11). Từ 26/11 khoản Trả sau của `minh` trên ví demo đến hạn **03/12** (ngày 3, điều khoản mô phỏng, BR-22); số tiền như cũ |
+| AC-FR4-01 | `minh` có hạn mức trả sau, đã có 1.000.000 ₫ phải trả 05/12 | Mua 300.000 ₫ bằng trả sau | Phải trả ngày 05/12 thành **1.300.000 ₫** (cộng dồn, phí đã tính một lần); hạn mức còn lại giảm 300.000 ₫; số dư hũ không đổi; mốc hiện trên biểu đồ dự báo | BR-22, 23, 25 | Đạt (đóng phase 2, 22/11). Từ 26/11 khoản Trả sau của `minh` trên ví demo đến hạn **05/12** (ngày 5 theo BR-22, đúng ngày lương; khoản đến hạn đúng ngày lương thuộc "trước lương" và trả bằng số dư trước khi lương về); số tiền như cũ |
 | AC-FR4-02 | Tài khoản chưa có khoản trả sau nào trong tháng | Mua 300.000 ₫ bằng trả sau | Sinh nghĩa vụ **333.000 ₫** (gốc + 33.000 ₫ phí) đến hạn ngày 5 kế tiếp | BR-22, 23 | Đạt (đóng phase 2, 22/11) |
 | AC-FR4-03 | Mua đúng ngày 5 | Mua bằng trả sau | Hạn là ngày 5 tháng sau | BR-22 | Đạt (đóng phase 2, 22/11) |
 | AC-FR4-04 | Mua làm dư nợ vượt hạn mức | Gửi | Bị từ chối; không sinh nghĩa vụ | BR-25 | Đạt (đóng phase 2, 22/11) |
@@ -73,7 +73,7 @@ Bằng chứng cho từng AC ghi vào mục "Kết quả thực hiện" của fi
 
 | ID | Cho trước | Khi | Thì | BR | Trạng thái |
 |---|---|---|---|---|---|
-| AC-FR5-01 | `minh` vừa đặt lại | Gõ "nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao" | Thấy dòng thời gian trước và sau; khối tác động nghĩa vụ với tổng **1.233.000 ₫** đến hạn 05/12 và khoản hụt tháng sau; ít nhất 2 phương án; lời giải thích. Khối số hiện trước văn bản | BR-37, 39 | Đạt (phase 3, tiêu chí 1; số theo engine). 26/11 trên app (ví demo): khoản Trả sau đến hạn 03/12 thành 2.200.000 ₫ (cộng 1.000.000 ₫ có sẵn), hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12, thiếu khoảng 1.162.000 ₫ |
+| AC-FR5-01 | `minh` vừa đặt lại | Gõ "nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao" | Thấy dòng thời gian trước và sau; khối tác động nghĩa vụ với tổng **1.233.000 ₫** đến hạn 05/12 và khoản hụt tháng sau; ít nhất 2 phương án; lời giải thích. Khối số hiện trước văn bản | BR-37, 39 | Đạt (phase 3, tiêu chí 1; số theo engine). 26/11 trên app (ví demo, bản đang chạy lúc đó có Trả sau ngày 3): khoản Trả sau thành 2.200.000 ₫ (cộng 1.000.000 ₫ có sẵn), hũ Nghĩa vụ liệt kê Tiền điện 26/11 và khoản Trả sau đó, thiếu khoảng 1.162.000 ₫. Sau đợt #39 (Trả sau đến hạn **05/12**, đúng ngày lương), đo cục bộ: thiếu 1.168.392 ₫ (số dư trước khi lương về 1.031.608 ₫); chờ đo lại trên app |
 | AC-FR5-02 | Đang xem phương án chuyển giữa hũ | Chọn phương án, xác nhận | Có biên nhận; bấm Hoàn tác thì số dư về như cũ | BR-45, 50 | Đạt (đi cảnh 2 trên app, 23/11) |
 | AC-FR5-03 | Câu hỏi thiếu số tiền ("nếu mua cái điện thoại thì sao") | Gửi | Đúng **một** câu hỏi lại; trả lời xong thì chạy tiếp | BR-40 | Đạt (phase 3, tiêu chí 6) |
 | AC-FR5-04 | Bộ golden có 6 loại kịch bản | Chạy | Mỗi loại có ít nhất một câu đạt; quỹ đạo tool đúng từ 85% | BR-39 | Đạt (golden 30/30, đủ 6 loại) |

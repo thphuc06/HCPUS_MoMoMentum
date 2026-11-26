@@ -28,6 +28,8 @@ yofina_ledger/
 
 Dùng chung `yofina_core`: `db` (Data API), `confirm` (token), `params` (chuẩn hóa tham số), `schedule` (chu kỳ nghĩa vụ, mốc biểu đồ), `blocks` (dựng khối), `clock` (`app_today`), `wallet` (hằng số, `split_amount`), `errors`. Dữ liệu persona (`data/personas`) được đóng kèm vào zip.
 
+Từ 26/11 (#39): `split_proposal.py` (đề xuất tỷ lệ khi kê khai, `POST /jars/split-proposal`) tính sàn chi từ mức nền bền (`yofina_core.spend_baseline`, cùng khóa cấu hình với LP) và kiểm tra theo kỳ lương theo cửa sổ chung `schedule.due_before_payday` (khoản đúng ngày lương thuộc kỳ trước, trả bằng số dư trước khi lương về). Lambda này cũng chạy tool `knowledge___resolve_date` (`yofina_knowledge.dates`, hôm nay và ngày lương đọc từ hồ sơ người gọi) cho Gateway và cho job sinh lại lộ trình.
+
 ## Route (HTTP API) và tool (Gateway)
 
 | REST | Việc | Tool Gateway |

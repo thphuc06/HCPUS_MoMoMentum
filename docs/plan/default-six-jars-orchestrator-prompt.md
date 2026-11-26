@@ -96,7 +96,7 @@ Trong PowerShell:
   uv run --python 3.12 --no-project --with pgserver --with "psycopg[binary]" --with pydantic --with pytest --with jsonschema --with pyyaml --with referencing --with numpy --with boto3 pytest tests/local_pg -p no:cacheprovider
 - Frontend: `npm run typecheck`, `npm run lint`, `npm test` trong frontend/.
 - Bước 5: chạy lại cảnh 1–4 bằng engine cục bộ trên PostgreSQL cục bộ. Đối chiếu với số ở lộ trình
-  (cảnh 1: 1.080.000 ₫, cạn 03/12; cảnh 2: đến hạn 2.200.000 ₫ ngày 03/12, gồm phí 33.000 ₫, thiếu
+  (cảnh 1: 1.080.000 ₫, cạn 03/12; cảnh 2: đến hạn 2.200.000 ₫ ngày 03/12 (điều khoản lúc đó; từ 26/11 tối Trả sau đến hạn 05/12, đúng ngày lương), gồm phí 33.000 ₫, thiếu
   khoảng 761.000 ₫). Lệch thì ghi số mới và nguyên nhân; không chỉnh dữ liệu cho khớp số cũ.
 - Các ca ở Bước 6: ví cũ, ví ba hũ, ví demo bốn hũ, reset hai lần, vượt 100%, có sự kiện lương chờ,
   và quay lui về bộ bảy.
