@@ -5,8 +5,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useApiResource } from '@/api/resource'
 import { useOverview } from '@/api/OverviewProvider'
 import { JarSplitEditor } from '@/features/jars/JarSplitEditor'
+import { SplitHelp } from '@/features/jars/SplitHelp'
 
 // "Thêm hoặc sửa hũ" (nút + ở Figma C2): chỉnh tên, tỷ lệ chia lương, thêm hũ từ mẫu. Lưu bằng `save_jars`.
+// Nút "?" ở đầu màn mở cách chia hũ hợp lý (số mặc định lấy từ mẫu hũ khi đã tải).
 export function JarsEditPage() {
   const navigate = useNavigate()
   const ov = useOverview()
@@ -14,7 +16,7 @@ export function JarsEditPage() {
   const loading = ov.status === 'loading' || templates.status === 'loading'
   return (
     <>
-      <ScreenHeader title="Thêm hoặc sửa hũ" backTo="/jars" />
+      <ScreenHeader title="Thêm hoặc sửa hũ" backTo="/jars" right={<SplitHelp place="edit" templates={templates.data?.templates} />} />
       <div className="px-4 pb-10">
         {loading && <Skeleton className="h-[360px] w-full rounded-card" role="status" aria-label="Đang tải hũ" />}
         {ov.status === 'error' && !ov.data && <ErrorState error={ov.error} title="Chưa tải được hũ" onRetry={() => void ov.reload()} />}
