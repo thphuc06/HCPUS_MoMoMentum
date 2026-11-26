@@ -712,9 +712,12 @@ def default_memory() -> AgentMemory:
 
 
 # --- chính sách ghi ---------------------------------------------------------------------------------
-def skip_reason(*, intent: str | None, guardrail_input: Any, user_text: str) -> str | None:
+def skip_reason(
+    *, intent: str | None, guardrail_input: Any, user_text: str, memory_action: str | None = None
+) -> str | None:
     """Lý do KHÔNG ghi lượt này vào bộ nhớ (None: được ghi). Chống đầu độc bộ nhớ theo best practice của AgentCore: chỉ ghi chữ đã
-    qua Guardrail đầu vào (đã thật sự chạy, không lỗi, không bị chặn) và không thuộc nhóm ý định rủi ro."""
+    qua Guardrail đầu vào (đã thật sự chạy, không lỗi, không bị chặn) và không thuộc nhóm ý định rủi ro. `memory_action`: trường của
+    router cho ý định `memory` (`asks_recall`)."""
     if not user_text or not user_text.strip():
         return "empty"
     if intent is None:
@@ -725,7 +728,7 @@ def skip_reason(*, intent: str | None, guardrail_input: Any, user_text: str) -> 
         return f"qa_intent:{intent}"
     if intent in APP_RECORD_INTENTS:
         return f"app_record:{intent}"
-    if intent == "memory" and is_recall_question(user_text):
+    if intent == "memory" and asks_recall(user_text, memory_action):
         return (
             "recall_question"  # lời đáp là chính các bản ghi đã nhớ: ghi lại thì bộ nhớ tự nhân bản
         )
@@ -803,7 +806,10 @@ def schedule_remember(turn: Turn) -> asyncio.Task[bool] | None:
     if not store.active:
         return None
     reason = skip_reason(
-        intent=turn.intent, guardrail_input=turn.guardrail_input, user_text=turn.user_text
+        intent=turn.intent,
+        guardrail_input=turn.guardrail_input,
+        user_text=turn.user_text,
+        memory_action=getattr(turn, "memory_action", None),
     )
     if reason is not None:
         _event("memory_write_skipped", reason=reason)
@@ -861,21 +867,31 @@ TEXT_RECALL_DEGRADED = "Lúc này mình chưa đọc được bộ nhớ. Bạn 
 
 
 def is_recall_question(question: str) -> bool:
-    """Người dùng HỎI trợ lý nhớ gì (khác với NÓI một sở thích để nhớ)."""
+    """Người dùng HỎI trợ lý nhớ gì (khác với NÓI một sở thích để nhớ), đoán bằng chữ. Chỉ là đường lùi khi router không trả
+    `memory_action` (router lỗi hoặc để trống): `asks_recall` dùng trường của router trước."""
     from yofina_agent.textutil import normalize
 
     norm = normalize(question)
     return bool(_ASK_RE.search(norm + (" ?" if "?" in question else "")))
 
 
+def asks_recall(question: str, memory_action: str | None) -> bool:
+    """Câu này HỎI bộ nhớ: theo `memory_action` của router (V6, #39: "recall" hỏi, "state" nói); router để trống thì đoán bằng
+    `is_recall_question`."""
+    if memory_action is not None:
+        return memory_action == "recall"
+    return is_recall_question(question)
+
+
 async def on_memory(turn: Turn, r: IntentResult, question: str) -> None:
     """Bộ xử lý ý định `memory`. Lời đáp là chuỗi sản phẩm cố định (không gọi model); danh sách điều đã nhớ là chữ của chính người dùng
-    đã làm sạch (`sanitize_recalled`) và vẫn qua Guardrail đầu ra. Việc GHI do `schedule_remember` làm sau lượt, theo cùng chính sách."""
+    đã làm sạch (`sanitize_recalled`) và vẫn qua Guardrail đầu ra. Việc GHI do `schedule_remember` làm sau lượt, theo cùng chính sách.
+    Câu HỎI bộ nhớ (`asks_recall`) không bao giờ nhận lời "đã ghi nhận"."""
     store = turn.memory.store
     if not store.active:
         await turn.emit_fixed_text(TEXT_DISABLED)
         return
-    if is_recall_question(question):
+    if asks_recall(question, r.params.memory_action):
         ctx = await turn.memory.context()
         if ctx.degraded and not ctx.items:
             await turn.emit_fixed_text(TEXT_RECALL_DEGRADED)
@@ -892,7 +908,10 @@ async def on_memory(turn: Turn, r: IntentResult, question: str) -> None:
         await turn.emit_fixed_text(text)
         return
     reason = skip_reason(
-        intent="memory", guardrail_input=turn.guardrail_input, user_text=turn.user_text
+        intent="memory",
+        guardrail_input=turn.guardrail_input,
+        user_text=turn.user_text,
+        memory_action=r.params.memory_action,
     )
     await turn.emit_fixed_text(TEXT_SAVED if reason is None else TEXT_NOT_SAVED)
 
@@ -913,6 +932,7 @@ __all__ = [
     "MemorySettings",
     "RecalledItem",
     "TurnMemory",
+    "asks_recall",
     "dedupe_items",
     "default_memory",
     "drain",

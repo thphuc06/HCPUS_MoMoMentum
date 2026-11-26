@@ -103,6 +103,8 @@ weekday_pattern (ngày trong tuần, cuối tuần), time_of_day (giờ trong ng
 từng giao dịch), once (phí một lần, phí mở hay kích hoạt), late (phí trả chậm, quá hạn); "other" khi hỏi về một khoản phí hay \
 điều khoản không thuộc bốn loại đó. Hỏi chung về biểu phí thì để null.
 - ingest_action chỉ dùng cho ingest: "how_to" khi hỏi cách hay chỗ để nạp, "status" khi hỏi về một lần đã nạp. Chưa rõ thì để null.
+- memory_action chỉ dùng cho memory: "recall" khi người dùng HỎI hoặc muốn xem lại những điều trợ lý đang nhớ về họ, "state" khi họ \
+NÓI một điều về bản thân hay một sở thích để trợ lý nhớ. Chưa rõ thì để null.
 - roadmap có mục tiêu người dùng nói ("lập kế hoạch để dành 15 triệu ở hũ Mua xe trong 6 tháng"): số tiền mục tiêu đặt ở amount_vnd, \
 tên hũ chứa mục tiêu ở jar_text (giữ nguyên chữ họ gõ, không đặt ở from_jar_text hay to_jar_text), hạn ở date_text: chép nguyên cụm chữ chỉ \
 thời gian họ nói (ví dụ "cuối tháng này", "31/12", "6 tháng nữa"), không tự đổi thành ngày; roadmap_action là "create". \
@@ -204,6 +206,7 @@ _ROUTED_CODE_KEYS = (
     "insight_kind",
     "fee_topic",
     "ingest_action",
+    "memory_action",
     "currency",
     "keep_previous",
     "shock_id",

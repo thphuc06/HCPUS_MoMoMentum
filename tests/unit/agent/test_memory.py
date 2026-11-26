@@ -781,6 +781,70 @@ def test_cau_hoi_nho_gi_va_cau_noi_so_thich():
     assert not m.is_recall_question("Nhớ ưu tiên hũ Du lịch cho mình")
 
 
+# --- V6 (#39): HỎI bộ nhớ hay NÓI sở thích là trường có cấu trúc của router; regex chỉ là đường lùi khi router để trống ---------
+_MEMORY_RECORDS = {ns("preference"): [rec(ns("preference"), "Đừng nhắc buổi sáng")]}
+
+
+def _memory_text(events: list[Any]) -> str:
+    return "".join(e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT")
+
+
+def test_router_tra_memory_action_trang_thai_hoac_null():
+    from yofina_agent.schemas import IntentParams
+
+    assert IntentParams(memory_action="recall").memory_action == "recall"
+    assert IntentParams(memory_action="state").memory_action == "state"
+    for bad in ("xem", "", 3, ["recall"]):
+        assert IntentParams(memory_action=bad).memory_action is None  # type: ignore[arg-type]
+
+
+def test_prompt_router_mo_ta_memory_action_theo_nghia():
+    from yofina_agent.router import ROUTER_SYSTEM
+
+    rule = next(line for line in ROUTER_SYSTEM.splitlines() if line.startswith("- memory_action"))
+    assert '"recall"' in rule and '"state"' in rule and "null" in rule
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ban dang luu nhung thong tin nao ve minh",  # câu số 20 của báo cáo RR: regex cũ coi là NÓI
+        "xem lại những điều bạn ghi nhớ",
+    ],
+)
+def test_router_noi_la_cau_hoi_bo_nho_thi_liet_ke_khong_noi_da_ghi_nhan(text):
+    assert not m.is_recall_question(text)  # đúng các câu regex đoán sai
+    client = FakeMemoryClient(_MEMORY_RECORDS)
+    events, turn = run_memory_turn([route_response(intent="memory", memory_action="recall")], client, text=text)
+    said = _memory_text(events)
+    assert said.startswith(m.TEXT_RECALL_HEAD) and "Đừng nhắc buổi sáng" in said
+    assert m.TEXT_SAVED not in said
+    assert client.ingests == []  # câu hỏi bộ nhớ không ghi lại vào bộ nhớ
+    assert turn.memory_action == "recall"
+
+
+def test_router_noi_la_cau_noi_so_thich_thi_thang_regex():
+    text = "Bạn nhớ gì cũng được, miễn đừng nhắc mình buổi sáng"  # regex cũ coi là câu HỎI
+    assert m.is_recall_question(text)
+    client = FakeMemoryClient()
+    events, _ = run_memory_turn([route_response(intent="memory", memory_action="state")], client, text=text)
+    assert _memory_text(events) == m.TEXT_SAVED
+    assert len(client.ingests) == 1
+
+
+def test_router_de_trong_memory_action_thi_lui_ve_regex():
+    client = FakeMemoryClient(_MEMORY_RECORDS)
+    events, _ = run_memory_turn([route_response(intent="memory")], client, text="Bạn nhớ gì về mình?")
+    assert _memory_text(events).startswith(m.TEXT_RECALL_HEAD) and client.ingests == []
+
+
+def test_skip_reason_theo_memory_action_cua_router():
+    kw = {"intent": "memory", "guardrail_input": PASSED}
+    assert m.skip_reason(**kw, user_text="xem lại những điều bạn ghi nhớ", memory_action="recall") == "recall_question"
+    assert m.skip_reason(**kw, user_text="Bạn nhớ gì cũng được, miễn đừng nhắc sáng", memory_action="state") is None
+    assert m.skip_reason(**kw, user_text="Bạn nhớ gì về mình?") == "recall_question"  # router trống: regex
+
+
 def test_namespace_cua_cdk_khop_yofina_core():
     """CDK (infra-cdk/lib/memory.ts) và Python (yofina_core.memory) dùng cùng chuỗi namespace cho hai strategy (sở thích, sự thật);
     tóm tắt phiên đã bỏ khỏi CDK, namespace `sessions/` chỉ còn ở yofina_core để xem và xóa bản ghi cũ."""

@@ -138,6 +138,9 @@ class IntentParams(_Model):
     insight_kind: BehaviorInsightKind | None = None  # behavior; null khi hỏi chung về thói quen
     fee_topic: Literal["monthly", "per_transaction", "once", "late", "other"] | None = None  # knowledge; null khi hỏi chung biểu phí
     ingest_action: Literal["how_to", "status"] | None = None  # ingest; null thì xem lần nạp gần nhất
+    # memory: người dùng NÓI một sở thích để nhớ (state) hay HỎI trợ lý đang nhớ gì về họ (recall); null khi chưa rõ (mã lùi về
+    # `memory.is_recall_question`). Như insight_kind: ý định phụ là trường có cấu trúc của router, không đoán bằng chữ.
+    memory_action: Literal["state", "recall"] | None = None
     # Số tiền người dùng nói bằng NGOẠI TỆ: router không quy đổi (amount_vnd để null); `fx_chat.convert_foreign_amount` gọi
     # `knowledge___get_exchange_rate` và điền amount_vnd từ kết quả tool. currency là mã ISO 4217, amount_original là số theo ngoại tệ.
     currency: str | None = None
@@ -170,6 +173,17 @@ class IntentParams(_Model):
             return value
         if value not in (None, ""):
             log.warning(json.dumps({"event": "router_tx_type_dropped", "value": str(value)[:40]}, ensure_ascii=False))
+        return None
+
+    @field_validator("memory_action", mode="before")
+    @classmethod
+    def _known_memory_action(cls, value: Any) -> Any:
+        """Giá trị ngoài hai loại coi như router để trống (mã lùi về đường đoán sẵn có), không bắt router thử lại; giá trị bị bỏ được ghi
+        log (`router_memory_action_dropped`, cắt ngắn)."""
+        if value in ("state", "recall"):
+            return value
+        if value not in (None, ""):
+            log.warning(json.dumps({"event": "router_memory_action_dropped", "value": str(value)[:40]}, ensure_ascii=False))
         return None
 
     @field_validator("currency", mode="before")

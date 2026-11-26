@@ -244,6 +244,7 @@ class Turn:
         self.whatif: WhatIfState | None = None
         self.guardrail_reason: str | None = None
         self.guardrail_input: GuardrailResult | None = None  # kết quả Guardrail đầu vào (bộ nhớ chỉ ghi lượt đã qua)
+        self.memory_action: str | None = None  # ý định `memory`: router nói người dùng HỎI hay NÓI (chính sách ghi bộ nhớ dùng)
         self.memory = agent_memory.TurnMemory.for_deps(deps)
 
     # --- dấu vết ----------------------------------------------------------------------------
@@ -911,6 +912,7 @@ class Turn:
         if req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed):
             await self.emit_clarify(req, routed)
             return
+        self.memory_action = routed.params.memory_action
         await handler(routed, question)
 
     def _intent_handlers(self) -> dict[Intent, Callable[[IntentResult, str], Awaitable[None]]]:
