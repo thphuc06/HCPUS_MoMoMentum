@@ -298,19 +298,25 @@ def _goal_date_match(text: str) -> tuple[Callable[[date], date], tuple[int, int]
     return None
 
 
-def parse_goal_date(text: str, today: date) -> date | None:
+def parse_goal_date(text: str, today: date, *, whole: bool = False) -> date | None:
     """Hạn mục tiêu người dùng nói ("cuối tháng này", "31/12", "6 tháng nữa", "trong 3 tháng", "tháng 3 năm sau") -> ngày, tính theo ngày
     mô phỏng `today`.
 
-    Chỉ nhận cách nói rõ ràng; không đọc được hoặc ngày không sau hôm nay thì None (người gọi nói rõ, không đoán).
+    Chỉ nhận cách nói rõ ràng; không đọc được hoặc ngày không sau hôm nay thì None (người gọi nói rõ, không đoán). `whole=True`: chỉ nhận
+    khi luật đọc được TRỌN cụm (mọi chữ của `text` nằm trong phần khớp), để cụm có chữ luật không hiểu ("đầu năm sau", "ngày 15 tháng
+    sau") không bị đọc thành một ngày khác; đây là cách đọc bằng mã đứng sau ngày của model (V1, #39).
 
     >>> parse_goal_date("cuối tháng sau", date(2026, 11, 21))
     datetime.date(2026, 12, 31)
+    >>> parse_goal_date("đầu năm sau", date(2026, 11, 21), whole=True) is None
+    True
     """
     found = _goal_date_match(text)
     if found is None:
         return None
-    resolve, _ = found
+    resolve, (start, end) = found
+    if whole and normalize(text[:start] + " " + text[end:]):
+        return None
     try:
         when = resolve(today)
     except ValueError:  # 31/02, tháng 13...

@@ -18,6 +18,7 @@ import ast
 import json
 import logging
 import re
+from datetime import date
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -134,6 +135,9 @@ class IntentParams(_Model):
     # jar_text (hũ, giữ chữ họ gõ) và date_text (cụm chỉ hạn họ nói, ví dụ "cuối tháng này"); handler đổi hũ và ngày bằng mã.
     # Sửa bước: amount_vnd là số tiền mới người dùng muốn (nếu nói).
     roadmap_action: Literal["view", "create", "edit_step"] | None = None
+    # roadmap có hạn: chính hạn ở date_text đổi ra ngày YYYY-MM-DD theo <ngay_hom_nay> của prompt router (V1, #39; như Orchestrator
+    # what-if tính ngày). Mã chỉ kiểm ngày hợp lệ và sau hôm nay; cách đọc date_text bằng mã chỉ là đường lùi và để đối chiếu.
+    target_date: str | None = None
     # Ý định phụ do router trích (thay cho đoán bằng từ khóa trên chữ): loại nhận xét hành vi, loại phí được hỏi, hỏi cách nạp hay lần nạp.
     insight_kind: BehaviorInsightKind | None = None  # behavior; null khi hỏi chung về thói quen
     fee_topic: Literal["monthly", "per_transaction", "once", "late", "other"] | None = None  # knowledge; null khi hỏi chung biểu phí
@@ -177,6 +181,20 @@ class IntentParams(_Model):
             return value
         if value not in (None, ""):
             log.warning(json.dumps({"event": "router_tx_type_dropped", "value": str(value)[:40]}, ensure_ascii=False))
+        return None
+
+    @field_validator("target_date", mode="before")
+    @classmethod
+    def _iso_target_date(cls, value: Any) -> Any:
+        """Chỉ nhận ngày có thật dạng YYYY-MM-DD; giá trị khác coi như router không tính được ngày (mã hỏi lại hoặc dùng đường lùi), không
+        bắt router thử lại. Giá trị bị bỏ được ghi log (`router_target_date_dropped`, cắt ngắn)."""
+        if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip()):
+            try:
+                return date.fromisoformat(value.strip()).isoformat()
+            except ValueError:
+                pass
+        if value not in (None, ""):
+            log.warning(json.dumps({"event": "router_target_date_dropped", "value": str(value)[:40]}, ensure_ascii=False))
         return None
 
     @field_validator("answers_pending", mode="before")

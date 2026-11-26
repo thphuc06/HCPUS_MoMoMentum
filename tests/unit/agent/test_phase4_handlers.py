@@ -25,12 +25,12 @@ from agent_helpers import (
     types,
 )
 from yofina_agent import notices
+from yofina_agent.clarify import GOAL_DATE_QUESTION
 from yofina_agent.schemas import Intent
 from yofina_agent.textutil import strip_accents
 from yofina_agent.tools import classify_result
 from yofina_agent.turn import (
     _GOAL_ADD_GOAL_JAR,
-    _GOAL_BAD_DATE,
     _GOAL_NOT_SAVING,
     _GOAL_UNKNOWN_JAR,
     _GOAL_USE_GOAL_JAR,
@@ -460,7 +460,9 @@ def test_lo_trinh_muc_tieu_o_hu_du_phong_gui_dich_so_du_cho_bo_toi_uu(monkeypatc
     ]
     assert "TEXT_MESSAGE_CONTENT" not in types(events)[: types(events).index("ACTIVITY_SNAPSHOT")]
 
-def test_lo_trinh_han_khong_doc_duoc_van_giu_so_tien(monkeypatch):
+def test_lo_trinh_han_khong_doc_duoc_thi_hoi_lai_han_khong_lap(monkeypatch):
+    """V1 (#39): router không đổi được hạn ra ngày và mã không đọc trọn cụm chỉ hạn: hỏi đúng một câu về hạn, không lập với hạn đã khai
+    ở hũ (bỏ câu cố định "dùng hạn đã khai, nếu có")."""
     tools = roadmap_tools()
     events, _, _ = goal_turn(
         monkeypatch,
@@ -470,10 +472,12 @@ def test_lo_trinh_han_khong_doc_duoc_van_giu_so_tien(monkeypatch):
         jar_text="Du lịch",
         date_text="sớm nhất có thể",
     )
-    assert texts_of(events)[0] == _GOAL_BAD_DATE.format(typed="sớm nhất có thể", name="Du lịch")
-    assert calls_of(tools, "optimize_allocation") == [
-        {"goals": [{"jar": "du_lich", "target_vnd": 20_000_000}]}
-    ]
+    check_agui_order(events)
+    (block,) = blocks_of(events)
+    assert block["type"] == "clarify" and block["data"]["slot"] == "date"
+    assert block["data"]["question"] == GOAL_DATE_QUESTION and block["data"]["chips"] == []
+    assert not calls_of(tools, "optimize_allocation") and not calls_of(tools, "save_roadmap")
+    assert "TEXT_MESSAGE_CONTENT" not in types(events)
 
 
 def test_lo_trinh_chi_noi_han_dung_so_tien_da_khai_o_hu(monkeypatch):

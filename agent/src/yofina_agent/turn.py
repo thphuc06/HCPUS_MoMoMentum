@@ -43,12 +43,15 @@ from yofina_agent import advisor, behavior_chat, notices, trace
 from yofina_agent import events as ev
 from yofina_agent import memory as agent_memory
 from yofina_agent.clarify import (
+    GOAL_DATE_QUESTION,
     ROADMAP_CHOICE_CHIPS,
-    ROADMAP_CHOICE_QUESTION,
     InferredJar,
+    goal_date_chips,
+    goal_jar_question,
     infer_pay_jar,
     lacks_pay_jar,
     resolve_clarify,
+    roadmap_choice_question,
 )
 from yofina_agent.compact import (
     compact_affordability,
@@ -253,6 +256,8 @@ class Turn:
         self.guardrail_reason: str | None = None
         self.guardrail_input: GuardrailResult | None = None  # kết quả Guardrail đầu vào (bộ nhớ chỉ ghi lượt đã qua)
         self.memory_action: str | None = None  # ý định `memory`: router nói người dùng HỎI hay NÓI (chính sách ghi bộ nhớ dùng)
+        self._goal_asked = False  # lộ trình: đã hỏi lại hạn hoặc hũ của mục tiêu ở lượt này
+        self._date_from_history = False  # cụm chỉ hạn của mục tiêu chỉ có từ mã đọc lại câu cũ (`goal_deadline`)
         self.memory = agent_memory.TurnMemory.for_deps(deps)
 
     # --- dấu vết ----------------------------------------------------------------------------
@@ -628,6 +633,11 @@ class Turn:
             )
         return router_jar_list(self._jar_rows) if jars.outcome.ok else None
 
+    def router_today(self) -> date | None:
+        """Ngày mô phỏng hôm nay đưa router (đổi hạn mục tiêu ra ngày, V1): ngày của lần đọc ví ở lượt này; chưa có thì None (router để
+        `target_date` trống)."""
+        return self.app_date
+
     def emit_jars_block(self) -> None:
         """Hiện thẻ số dư từ lần đọc hũ đã có (dùng khi cần cho người dùng thấy số)."""
         if self._jars and self._jars.outcome.ok:
@@ -904,8 +914,17 @@ class Turn:
         self.intent = routed.intent
         if await self.answer_keep_previous(routed, question, index):
             return
-        # Câu trả lời cụt cho khối `clarify`: giữ tham số của câu đang chờ (số tiền, người nhận, hũ...) bằng mã, không trông vào model nhớ.
-        routed = merge_pending(routed, question, self.pending_params_before(index))
+        # Câu trả lời cho câu hỏi lại: giữ tham số của câu đang chờ (số tiền, người nhận, hũ...) bằng mã, không trông vào model nhớ.
+        pending = self.pending_params_before(index)
+        merged = merge_pending(routed, question, pending)
+        # Cụm chỉ hạn chỉ có vì mã đọc lại câu cũ (router lượt này không nhắc lại, không có ngày): không dùng cách đọc bằng mã cho nó (V1)
+        self._date_from_history = (
+            merged.params.date_text is not None
+            and routed.params.date_text is None
+            and merged.params.target_date is None
+            and merged.params.date_text == (pending or {}).get("date_text")
+        )
+        routed = merged
         # Số tiền bằng ngoại tệ là tham số của câu hỏi, không phải ý định: đổi sang VND bằng tool tỷ giá TRƯỚC khi hỏi lại ô thiếu,
         # để mọi đường dùng amount_vnd chạy như câu hỏi bằng VND (fx_chat). Tool lỗi thì đã có `notice`, kết thúc lượt.
         if routed.params.currency is not None:
@@ -1043,6 +1062,7 @@ class Turn:
                         max_tokens=self.s.router_max_tokens,
                         scope=self.scope,
                         jars=jars,
+                        today=self.router_today(),
                     )
                 value = checked_spend_jar(res.value, jars)
                 # Đầu ra router (mã và tên trường có giá trị, không chữ người dùng): chẩn đoán được lượt trên app mà không gọi lại model.
@@ -1283,11 +1303,13 @@ class Turn:
                 return
             action = "create"
         create = action == "create"
-        # Lập theo mục tiêu mà chưa biết hũ của mục tiêu thì hỏi lại một câu chọn hũ; lượt trả lời ghép với câu này bằng mã
-        # (`router.merge_pending`) rồi lập theo mục tiêu đó.
-        if create and states_goal and await self.ask_goal_jar(r):
-            return
-        goal = await self.roadmap_user_goal(r.params) if create and states_goal else None
+        goal: UserGoal | None = None
+        if create and states_goal:
+            # Mục tiêu của bản mới: hạn (router đổi ra ngày; chưa rõ thì hỏi một câu), rồi hũ của mục tiêu (chưa rõ thì hỏi một câu); lượt
+            # trả lời ghép với câu này bằng mã (`router.merge_pending`) rồi lập theo mục tiêu đó.
+            goal = await self.roadmap_user_goal(r)
+            if self._goal_asked:
+                return
         which = "latest" if create else self.s.roadmap_default_which
         res = await self.call_tool_retry(
             "get_roadmap",
@@ -1326,7 +1348,9 @@ class Turn:
         if active is None or active.status != "active":
             return False
         chips = [ClarifyChipIn(label=label, value=value) for label, value, _ in ROADMAP_CHOICE_CHIPS]
-        await self.emit_clarify(ClarifyRequest(slot="other", question=ROADMAP_CHOICE_QUESTION), r, chips=chips)
+        p = r.params
+        question = roadmap_choice_question(p.amount_vnd, p.date_text, p.target_date)
+        await self.emit_clarify(ClarifyRequest(slot="other", question=question[:200]), r, chips=chips)
         return True
 
     async def on_roadmap_step_edit(self, r: IntentResult, question: str) -> None:
@@ -1381,9 +1405,10 @@ class Turn:
             return latest, versions
         return res.outcome, replace(versions, active_version=active.version)
 
-    async def ask_goal_jar(self, r: IntentResult) -> bool:
+    async def ask_goal_jar(self, r: IntentResult, deadline: date | None = None) -> bool:
         """Mục tiêu người dùng nêu chưa gắn được với hũ nào (router không trích hũ, hoặc chữ họ gõ khớp nhiều hũ): hỏi lại đúng một câu
         chọn hũ (khối `clarify`, chip là mọi hũ gắn được mục tiêu lộ trình, theo thứ tự trong ví) và kết thúc lượt. True nếu đã hỏi.
+        `deadline`: hạn đã xác định (`goal_deadline`), nói lại trong câu hỏi.
 
         Không hỏi khi đọc hũ hỏng (lập lộ trình báo lỗi của tool) hoặc ví không có hũ nào gắn được mục tiêu (không có gì để chọn).
         Chat chưa có luồng thêm hũ (chip chỉ gửi chữ vào chat, không mở màn hình), nên không có chip "thêm hũ Mục tiêu"."""
@@ -1401,24 +1426,61 @@ class Turn:
         if not rows:
             return False
         chips = [ClarifyChipIn(label=str(j["name"])[:40], value=f"Hũ {j['name']}"[:80]) for j in rows]
-        # chip đi thẳng vào khối (trần của khối), không qua `ClarifyRequest` (trần chip router được đặt)
-        await self.emit_clarify(
-            ClarifyRequest(slot="jar", question=notices.ROADMAP_GOAL_JAR_QUESTION), r, chips=chips
-        )
+        # Câu hỏi nói lại số tiền và hạn mã đã hiểu; lượt trả lời đọc lại đúng hai giá trị đó từ câu hỏi. Chip đi thẳng vào khối (trần
+        # của khối), không qua `ClarifyRequest` (trần chip router được đặt).
+        question = goal_jar_question(r.params.amount_vnd, deadline)
+        await self.emit_clarify(ClarifyRequest(slot="jar", question=question), r, chips=chips)
         return True
 
-    async def roadmap_user_goal(self, p: IntentParams) -> UserGoal | None:
-        """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text) ra mã hũ và ngày ISO bằng mã. Nhận hũ mục tiêu (`is_goal_jar`) và
+    async def goal_deadline(self, r: IntentResult) -> tuple[date | None, bool]:
+        """Hạn của mục tiêu lộ trình (V1, #39): (ngày, đã hỏi lại hay chưa).
+
+        Router đổi hạn ra ngày theo ngày mô phỏng (`target_date`); mã chỉ kiểm ngày có thật và sau hôm nay. Cách đọc `date_text` bằng mã
+        (`parse_goal_date`, chỉ khi đọc được TRỌN cụm) là đường lùi khi router không trả ngày, và để đối chiếu: hai bên lệch quá
+        `_GOAL_DATE_TOLERANCE_DAYS` ngày, hoặc không bên nào ra ngày, thì hỏi đúng một câu (khối `clarify`, chip là các ngày ứng viên) và
+        kết thúc lượt. Cụm chỉ hạn mã đọc lại từ câu cũ trong lịch sử (router lượt này không nhắc lại) không dùng làm đường lùi: phần mã
+        đọc được có thể đã mất chữ bổ nghĩa của người dùng."""
+        p = r.params
+        if not (p.date_text and p.date_text.strip()) and p.target_date is None:
+            return None, False
+        today = self.app_date or self.block_app_date()
+        model = date.fromisoformat(p.target_date) if p.target_date else None
+        if model is not None and model <= today:
+            model = None  # hạn phải sau hôm nay
+        read = None
+        if p.date_text and not self._date_from_history:
+            read = parse_goal_date(p.date_text, today, whole=True)
+        candidates: list[date] = []
+        if model is not None and read is not None and abs((model - read).days) > _GOAL_DATE_TOLERANCE_DAYS:
+            candidates, source = [model, read], "mismatch"
+        elif model is not None or read is not None:
+            source = "router" if model is not None else "text"
+            log.info(json.dumps({"event": "goal_date", "source": source, "date": (model or read).isoformat()}))  # type: ignore[union-attr]
+            return model or read, False
+        else:
+            source = "unknown"
+        log.info(json.dumps({"event": "goal_date_unclear", "source": source, "candidates": [d.isoformat() for d in candidates]}))
+        await self.emit_clarify(ClarifyRequest(slot="date", question=GOAL_DATE_QUESTION), r, chips=goal_date_chips(candidates))
+        return None, True
+
+    async def roadmap_user_goal(self, r: IntentResult) -> UserGoal | None:
+        """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text, target_date) ra mã hũ và ngày ISO. Nhận hũ mục tiêu (`is_goal_jar`) và
         hũ Dự phòng (`buffer`: đích số dư, cần số tiền).
 
-        Không dùng được thì bỏ mục tiêu và nói rõ bằng một câu cố định (lộ trình vẫn lập). Không lưu gì vào hũ. Hũ chưa xác định thì
-        `ask_goal_jar` đã hỏi lại trước khi tới đây.
+        Hạn chưa rõ thì hỏi hạn (`goal_deadline`); hũ chưa xác định thì hỏi hũ (`ask_goal_jar`); khi đã hỏi thì đặt `_goal_asked` và
+        trả None (người gọi kết thúc lượt). Hũ không đặt được mục tiêu thì bỏ mục tiêu và nói rõ bằng một câu cố định (lộ trình vẫn
+        lập). Không lưu gì vào hũ.
         """
-        if p.amount_vnd is None and not p.date_text:
+        p = r.params
+        if not _states_goal(p):
             return None
         jars = await self.ensure_jars()
         if not jars.outcome.ok:
             return None  # build_roadmap đọc lại hũ và báo lỗi của tool
+        deadline, asked = await self.goal_deadline(r)
+        if asked or await self.ask_goal_jar(r, deadline):
+            self._goal_asked = True
+            return None
         match = resolve_jar(p.jar_text, self._jar_rows)
         if match.status != "ok":
             note = (
@@ -1446,23 +1508,13 @@ class Turn:
                 else _GOAL_ADD_GOAL_JAR.format(name=name)
             )
             return None
-        target_date: date | None = None
-        if p.date_text:
-            today = self.app_date or self.block_app_date()
-            target_date = parse_goal_date(p.date_text, today)
-            if target_date is None:
-                await self.emit_fixed_text(
-                    _GOAL_BAD_DATE.format(typed=p.date_text[:40], name=name)
-                )
-                if p.amount_vnd is None:
-                    return None
         if p.amount_vnd is None and (buffer or row.get("goal_vnd") is None):
             await self.emit_fixed_text(_GOAL_NO_AMOUNT.format(name=name))
             return None
         return UserGoal(
             jar=str(match.code),
             target_vnd=p.amount_vnd,
-            target_date=target_date.isoformat() if target_date else None,
+            target_date=deadline.isoformat() if deadline else None,
         )
 
     async def on_roadmap_missing(
@@ -1991,13 +2043,15 @@ _GOAL_NOT_SAVING = (
 #: hũ tiết kiệm nhưng mục đích không phải mục tiêu (Quỹ dồn, Tích lũy dài hạn): nói đúng tình huống, chỉ chỗ đặt mục tiêu
 _GOAL_USE_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Bạn đặt mục tiêu này ở hũ {goal_jars} nhé."
 _GOAL_ADD_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Thêm hũ Mục tiêu ở màn Thêm hoặc sửa hũ để đặt mục tiêu này."
-_GOAL_BAD_DATE = "Mình chưa đọc được hạn “{typed}” nên dùng hạn đã khai ở hũ {name}, nếu có."
 _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa đặt hạn này. Bạn cho mình biết số tiền muốn gom nhé."
+#: Ngày hạn router tính (`target_date`) và cách đọc cụm chỉ hạn bằng mã lệch quá số ngày này là "lệch rõ": hỏi lại hạn (V1). Bất biến
+#: của phép đối chiếu (không phải tham số nghiệp vụ): vài ngày lệch là cách hiểu "cuối tháng", "tháng sau" khác nhau, không đổi kế hoạch.
+_GOAL_DATE_TOLERANCE_DAYS = 7
 
 
 def _states_goal(p: IntentParams) -> bool:
     """Câu lộ trình có nêu mục tiêu (số tiền hoặc hạn)."""
-    return p.amount_vnd is not None or bool(p.date_text and p.date_text.strip())
+    return p.amount_vnd is not None or bool(p.date_text and p.date_text.strip()) or p.target_date is not None
 
 
 def _asked_goal_facts(p: IntentParams) -> dict[str, Any]:

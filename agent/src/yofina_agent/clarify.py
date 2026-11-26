@@ -12,14 +12,15 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any
 
 from yofina_agent import notices
 from yofina_agent.jars import resolve_jar
 from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, IntentResult
-from yofina_agent.textutil import normalize
+from yofina_agent.textutil import normalize, parse_amount_vnd
+from yofina_core.money import format_vnd
 from yofina_core.wallet import is_system_jar, spending_tx_type_jar
 
 #: scenario_kind nào KHÔNG cần số tiền
@@ -176,8 +177,10 @@ def infer_pay_jar(r: IntentResult, jar_rows: Sequence[Mapping[str, Any]]) -> Jar
 #: cộng Trả sau (`CREDIT_CHIP`, cùng chữ với chip Trả sau của câu hỏi cách trả).
 PAY_QUESTION = "Bạn định trả khoản này bằng hũ nào, hay bằng Trả sau (mô phỏng)?"
 CREDIT_CHIP = ClarifyChipIn(label="Trả sau (mô phỏng)", value="Trả bằng Trả sau (mô phỏng)")
-#: Câu lộ trình nêu mục tiêu, router không nói xem hay lập, và đã có bản đang dùng (C2): một câu, hai chip (nhãn, chữ gửi đi, việc).
+#: Câu lộ trình nêu mục tiêu, router không nói xem hay lập, và đã có bản đang dùng (C2): một câu, hai chip (nhãn, chữ gửi đi, việc). Có
+#: mục tiêu thì câu nói lại mục tiêu ({goal}, `goal_phrase`), để lượt trả lời đọc lại đúng số tiền và chữ chỉ hạn từ câu hỏi.
 ROADMAP_CHOICE_QUESTION = "Bạn muốn lập lộ trình mới theo mục tiêu này hay xem lộ trình đang dùng?"
+ROADMAP_CHOICE_QUESTION_FOR = "Bạn muốn lập lộ trình mới cho mục tiêu {goal} hay xem lộ trình đang dùng?"
 ROADMAP_CHOICE_CHIPS: tuple[tuple[str, str, str], ...] = (
     ("Lập bản mới", "Lập lộ trình mới theo mục tiêu này", "create"),
     ("Xem bản đang dùng", "Xem lộ trình đang dùng", "view"),
@@ -188,6 +191,14 @@ GOAL_DATE_QUESTION = "Bạn muốn gom đủ mục tiêu này trước ngày nà
 GOAL_DATE_CHIP_LABEL = "Trước {date}"
 GOAL_DATE_CHIP_VALUE = "Hạn {date}"
 _GOAL_DATE_CHIP_RE = re.compile(r"^han (\d{2}) (\d{2}) (\d{4})$")
+#: Câu hỏi hũ của mục tiêu lộ trình khi mã đã hiểu số tiền và/hoặc hạn ({goal}: `goal_phrase`, ví dụ "5.000.000 ₫ trước 21/01/2027").
+#: Câu nói lại điều mã đã hiểu, và lượt trả lời đọc lại đúng số tiền và ngày từ câu hỏi (không phụ thuộc router nhắc lại).
+GOAL_JAR_QUESTION = "Mục tiêu {goal} thuộc hũ nào để mình lập lộ trình?"
+GOAL_JAR_DATE = "trước {date}"
+#: chữ chỉ hạn người dùng nói mà mã chưa đổi ra ngày ({text}: đúng chữ họ gõ)
+GOAL_TEXT_DATE = "hạn “{text}”"
+_DMY_TEXT_RE = re.compile(r"(?<!\d)(\d{2})/(\d{2})/(\d{4})(?!\d)")
+_QUOTED_RE = re.compile(r"“([^”]+)”")
 #: Chip của thông báo "Tính theo hũ X" ở lượt chỉ đọc (V4): chọn hũ khác, và tính bằng Trả sau khi ví có hạn mức. Chữ gửi đi nói rõ
 #: việc (mô phỏng hay kiểm tra) để lượt sau biết ý định của câu đang chờ mà không cần đoán.
 NOTICE_CHIP_LABELS: dict[str, str] = {"choose": "Chọn hũ khác", "credit": "Tính bằng Trả sau"}
@@ -205,7 +216,8 @@ class AskedPrompt:
     điền các ô câu đang chờ còn trống. `chips`: chữ chip (đã `normalize`) -> tham số chip đặt; giá trị None là bỏ giá trị đang có
     (chip "chọn hũ khác" không dùng lại hũ đã suy); khóa `_intent` là ý định của câu đang chờ. `jar_chips`: chip "Hũ {tên}" cho từng hũ
     của ví, tên hũ vào ô `jar_key` (None: chip hũ không gắn một ô, như câu hỏi hũ nguồn và hũ đích). `date_chips`: chip "Hạn dd/mm/yyyy".
-    `intent`: ý định của câu đang chờ khi câu hỏi chỉ thuộc một ý định; `implies`: tham số mà việc trả lời câu hỏi kéo theo."""
+    `intent`: ý định của câu đang chờ khi câu hỏi chỉ thuộc một ý định; `implies`: tham số mà việc trả lời câu hỏi kéo theo; `given`: tham
+    số chính câu hỏi nói ra (mã đã hiểu, viết lại trong câu hỏi), thắng cách đọc lại câu đang chờ bằng mã."""
 
     keys: tuple[str, ...] | None = None
     chips: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
@@ -214,6 +226,7 @@ class AskedPrompt:
     date_chips: bool = False
     intent: str | None = None
     implies: Mapping[str, Any] = field(default_factory=dict)
+    given: Mapping[str, Any] = field(default_factory=dict)
 
     def chip(self, text: str, jar_names: Iterable[str] = ()) -> dict[str, Any] | None:
         """Tham số chip đặt nếu `text` đúng là một chip của câu hỏi này (người dùng bấm chip), None nếu không phải chip."""
@@ -259,6 +272,11 @@ def _notice_chips() -> dict[str, Mapping[str, Any]]:
 
 _PAY_CHIPS = _chip_map([(str(CREDIT_CHIP.value), {"funding": "credit"})])
 _ROADMAP_CREATE = {"roadmap_action": "create"}
+_ROADMAP_CHOICE = AskedPrompt(
+    keys=("roadmap_action",),
+    chips=_chip_map((value, {"roadmap_action": action}) for _, value, action in ROADMAP_CHOICE_CHIPS),
+    intent="roadmap",
+)
 #: (chuỗi cố định hoặc mẫu, câu hỏi) theo thứ tự xét; chuỗi cố định khớp khi nằm trong tin của Yofina (tin có thể gồm chữ của nhiều khối).
 _PROMPTS: tuple[tuple[str | re.Pattern[str], AskedPrompt], ...] = (
     (PAY_QUESTION, AskedPrompt(keys=("jar_text", "funding"), chips=_PAY_CHIPS, jar_chips=True, jar_key="jar_text")),
@@ -284,14 +302,7 @@ _PROMPTS: tuple[tuple[str | re.Pattern[str], AskedPrompt], ...] = (
         notices.ROADMAP_GOAL_JAR_QUESTION,
         AskedPrompt(keys=("jar_text",), jar_chips=True, jar_key="jar_text", intent="roadmap", implies=_ROADMAP_CREATE),
     ),
-    (
-        ROADMAP_CHOICE_QUESTION,
-        AskedPrompt(
-            keys=("roadmap_action",),
-            chips=_chip_map((value, {"roadmap_action": action}) for _, value, action in ROADMAP_CHOICE_CHIPS),
-            intent="roadmap",
-        ),
-    ),
+    (ROADMAP_CHOICE_QUESTION, _ROADMAP_CHOICE),
     (
         GOAL_DATE_QUESTION,
         AskedPrompt(keys=("date_text", "target_date"), date_chips=True, intent="roadmap", implies=_ROADMAP_CREATE),
@@ -316,10 +327,68 @@ _PROMPTS: tuple[tuple[str | re.Pattern[str], AskedPrompt], ...] = (
 
 def recognize_prompt(text: str) -> AskedPrompt | None:
     """Câu hỏi lại (hoặc thông báo có chip) mã đã đặt trong một tin của Yofina, None nếu tin không có câu nào như vậy."""
+    for pattern, prompt in _GOAL_PROMPTS:
+        if m := pattern.search(text):
+            return replace(prompt, given=_goal_given(m["goal"]))
     for pattern, prompt in _PROMPTS:
         if pattern.search(text) if isinstance(pattern, re.Pattern) else pattern in text:
             return prompt
     return None
+
+
+def goal_phrase(amount_vnd: int | None, *, deadline: date | None = None, date_text: str | None = None) -> str:
+    """Mục tiêu lộ trình mã đã hiểu, nói lại trong câu hỏi: số tiền đã định dạng, hạn dạng dd/mm/yyyy (`deadline`) hoặc đúng chữ chỉ hạn
+    người dùng nói khi chưa đổi ra ngày (`date_text`). Rỗng khi không có gì."""
+    parts = [format_vnd(amount_vnd)] if amount_vnd is not None else []
+    if deadline is not None:
+        parts.append(GOAL_JAR_DATE.format(date=deadline.strftime("%d/%m/%Y")))
+    elif date_text and (cleaned := date_text.replace("“", "").replace("”", "").strip()[:40]):
+        parts.append(GOAL_TEXT_DATE.format(text=cleaned))
+    return " ".join(parts)
+
+
+def goal_jar_question(amount_vnd: int | None, deadline: date | None) -> str:
+    """Câu hỏi hũ của mục tiêu lộ trình, nói lại số tiền và hạn mã đã hiểu (`GOAL_JAR_QUESTION`); không có cả hai thì câu chung."""
+    goal = goal_phrase(amount_vnd, deadline=deadline)
+    return GOAL_JAR_QUESTION.format(goal=goal) if goal else notices.ROADMAP_GOAL_JAR_QUESTION
+
+
+def roadmap_choice_question(amount_vnd: int | None, date_text: str | None, target_date: str | None = None) -> str:
+    """Câu hỏi lập bản mới hay xem bản đang dùng (C2), nói lại mục tiêu người dùng nêu (chữ chỉ hạn của họ; chỉ có ngày router tính thì
+    ngày đó); không có thì câu chung."""
+    deadline = date.fromisoformat(target_date) if target_date and not date_text else None
+    goal = goal_phrase(amount_vnd, deadline=deadline, date_text=date_text)
+    return ROADMAP_CHOICE_QUESTION_FOR.format(goal=goal) if goal else ROADMAP_CHOICE_QUESTION
+
+
+def _goal_given(goal: str) -> dict[str, Any]:
+    """Số tiền và hạn đọc lại từ phần {goal} của câu hỏi (`goal_phrase`, chuỗi do chính mã dựng)."""
+    out: dict[str, Any] = {}
+    head = re.split(r"\s(?:trước|hạn)\s", f"{goal} ", maxsplit=1)[0]
+    if (amount := parse_amount_vnd(head)) is not None:
+        out["amount_vnd"] = amount
+    if m := _DMY_TEXT_RE.search(goal):
+        try:
+            day = date(int(m[3]), int(m[2]), int(m[1]))
+        except ValueError:
+            return out
+        out["target_date"], out["date_text"] = day.isoformat(), m[0]
+    elif q := _QUOTED_RE.search(goal):
+        out["date_text"] = q[1]
+    return out
+
+
+def _goal_pattern(template: str) -> re.Pattern[str]:
+    return re.compile(re.escape(template).replace(re.escape("{goal}"), "(?P<goal>.+?)"))
+
+
+_GOAL_PROMPTS: tuple[tuple[re.Pattern[str], AskedPrompt], ...] = (
+    (
+        _goal_pattern(GOAL_JAR_QUESTION),
+        AskedPrompt(keys=("jar_text",), jar_chips=True, jar_key="jar_text", intent="roadmap", implies=_ROADMAP_CREATE),
+    ),
+    (_goal_pattern(ROADMAP_CHOICE_QUESTION_FOR), _ROADMAP_CHOICE),
+)
 
 
 def is_asking(text: str) -> bool:

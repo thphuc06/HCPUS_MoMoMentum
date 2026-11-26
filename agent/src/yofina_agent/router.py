@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping, Sequence
+from datetime import date
 from functools import cache
 from typing import Any
 
@@ -114,8 +115,11 @@ từng giao dịch), once (phí một lần, phí mở hay kích hoạt), late (
 NÓI một điều về bản thân hay một sở thích để trợ lý nhớ. Chưa rõ thì để null.
 - roadmap có mục tiêu người dùng nói ("lập kế hoạch để dành 15 triệu ở hũ Mua xe trong 6 tháng"): số tiền mục tiêu đặt ở amount_vnd, \
 tên hũ chứa mục tiêu ở jar_text (giữ nguyên chữ họ gõ, không đặt ở from_jar_text hay to_jar_text), hạn ở date_text: chép nguyên cụm chữ chỉ \
-thời gian họ nói (ví dụ "cuối tháng này", "31/12", "6 tháng nữa"), không tự đổi thành ngày; roadmap_action là "create". \
-Phần nào người dùng không nói thì để null, không đoán.
+thời gian họ nói (ví dụ "cuối tháng này", "31/12", "6 tháng nữa"). target_date là chính hạn đó đổi ra ngày YYYY-MM-DD, tính theo \
+<ngay_hom_nay>: một khoảng thời gian thì cộng từ hôm nay; một mốc (đầu, giữa hay cuối của tháng, quý, năm; một dịp lễ; một ngày cụ thể) \
+thì lấy ngày của mốc đó, lần gần nhất sau hôm nay. Không chắc là ngày nào, hoặc không có <ngay_hom_nay>, thì để target_date null. \
+roadmap_action vẫn theo việc người dùng muốn làm với lộ trình (lập mới, hay chỉ xem hoặc hỏi về bản đang có), không suy ra từ việc câu \
+có số tiền hay hạn. Phần nào người dùng không nói thì để null, không đoán.
 - <cau_moi> luôn là thứ cần phân loại; <lich_su> chỉ để hiểu câu trả lời cho câu Yofina vừa hỏi. answers_pending: khi dòng "Yofina:" \
 cuối cùng của <lich_su> hỏi lại người dùng một điều (hoặc mời tính lại theo cách khác) và <cau_moi> trả lời đúng điều đó, dù câu ngắn \
 hay dài, thì answers_pending=true và GHÉP: lấy ý định và tham số của câu đang chờ cộng phần người dùng vừa trả lời. Khi <cau_moi> là \
@@ -177,10 +181,17 @@ def _jar_line(jar: Mapping[str, str]) -> str:
     return json.dumps(dict(jar), ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
 
 
-def build_router_prompt(question: str, history: str, jars: Sequence[Mapping[str, str]] | None = None) -> str:
-    """Tin người dùng gửi router (phần đổi theo lượt, sau system và schema tool là phần tĩnh): danh sách hũ của ví nếu có, lịch sử, rồi
-    câu mới ở cuối."""
+def build_router_prompt(
+    question: str,
+    history: str,
+    jars: Sequence[Mapping[str, str]] | None = None,
+    today: date | None = None,
+) -> str:
+    """Tin người dùng gửi router (phần đổi theo lượt, sau system và schema tool là phần tĩnh): ngày mô phỏng hôm nay nếu biết (router đổi
+    hạn mục tiêu ra ngày theo nó, V1), danh sách hũ của ví nếu có, lịch sử, rồi câu mới ở cuối."""
     parts = []
+    if today is not None:
+        parts.append(f"<ngay_hom_nay>{today.isoformat()}</ngay_hom_nay>")
     if jars:
         parts.append("<hu_cua_vi>\n" + "\n".join(_jar_line(j) for j in jars) + "\n</hu_cua_vi>")
     if history:
@@ -211,6 +222,7 @@ _ROUTED_CODE_KEYS = (
     "spend_jar_code",
     "obligation_kind",
     "roadmap_action",
+    "target_date",
     "insight_kind",
     "fee_topic",
     "ingest_action",
@@ -367,6 +379,7 @@ def pending_params(
         if answered is None:
             merged.update(_code_params(text))
             continue
+        merged.update(answered.given)  # điều câu hỏi nói lại (mã đã hiểu) thắng cách đọc lại câu bằng mã
         got, decided = _answer_params(text, answered, merged, jar_names)
         for k in decided:
             merged.pop(k, None)
@@ -379,6 +392,7 @@ def pending_params(
                 merged.setdefault(k, v)  # điều câu hỏi kéo theo chỉ điền ô chưa có
         if hint := got.get("_intent") or (answered.intent if "_intent" not in merged else None):
             merged["_intent"] = hint
+    merged.update(last.given)
     if "_intent" not in merged and last.intent:
         merged["_intent"] = last.intent
     merged["_prompt"] = last
@@ -466,13 +480,15 @@ async def route(
     max_tokens: int,
     scope: TurnScope | None = None,
     jars: Sequence[Mapping[str, str]] | None = None,
+    today: date | None = None,
 ) -> StructuredResult[IntentResult]:
     """Một lần phân loại. `jars`: danh sách hũ người dùng của ví (`router_jar_list`) để router chọn hũ chi; None khi lượt chưa đọc được
-    ví (router để `spend_jar_code` null). Người gọi kiểm mã router chọn bằng `checked_spend_jar` với đúng danh sách này."""
+    ví (router để `spend_jar_code` null). Người gọi kiểm mã router chọn bằng `checked_spend_jar` với đúng danh sách này. `today`: ngày mô
+    phỏng hôm nay (None: router không đổi hạn ra ngày)."""
     return await gateway.astructured_json(
         "small",
         output_model=IntentResult,
-        messages=[user_message(build_router_prompt(question, history, jars))],
+        messages=[user_message(build_router_prompt(question, history, jars, today))],
         system=build_router_system(),
         tool_name="route",
         description="Báo kết quả phân loại ý định và tham số.",
