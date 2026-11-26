@@ -20,8 +20,10 @@ from conftest import ANCHOR
 from ledger_fakes import http_event
 from pipeline_helpers import make_settings
 
+from yofina_core.wallet import resolve_obligation_pay_jar
+from yofina_forecast.allocation import AllocationEngine
 from yofina_forecast.repo import ForecastRepo
-from yofina_forecast.resilience import ResilienceEngine
+from yofina_forecast.resilience import ResilienceEngine, monthly_equivalent
 from yofina_forecast.runner import Pipeline
 from yofina_forecast.scenario import ScenarioEngine
 from yofina_forecast.stress import StressEngine
@@ -109,3 +111,33 @@ def test_canh_3_mat_viec_hai_thang_diem_tut_va_so_ngay_tru(env):
     )
     assert d["score_before"] == score["score"] and d["score_after"] < d["score_before"]
     assert d["emergency_jar"]["code"] == "du_phong"
+
+
+def test_phan_bo_lp_cua_vi_demo_khong_cat_hu_nao_duoi_khoan_dinh_ky_tra_tu_no(env):
+    """Phương án `optimize_allocation` mặc định của `minh` sau đặt lại (cùng LP mà bản lộ trình dùng): mọi hũ nhận không dưới tổng nghĩa
+    vụ đang hoạt động trả từ nó, quy về tháng (#39, 26/11). Giải trí có Netflix, Ăn uống có Tiền cơm văn phòng."""
+    p = _pipeline(env)
+    _reset_demo(env, p)
+    data = AllocationEngine(p).optimize(USER, {})["data"]
+    horizon = data["horizon_months"]
+    jar_rows = [(j["code"], j["kind"]) for j in env.svc.jars_response(USER, trace_id=TRACE)["jars"]]
+    owed: dict[str, int] = {}
+    for o in env.repo.list_obligations(USER, status="active", limit=100):
+        pay = resolve_obligation_pay_jar(jar_rows, saved=o.get("pay_jar_code"))
+        owed[pay] = owed.get(pay, 0) + monthly_equivalent(
+            o, p.settings.allocation.month_days, once_months=horizon, today=ANCHOR
+        )
+    print(f"\n[phân bổ LP] {data['status']} | {data['headline']}")
+    for line in data["lines"]:
+        code = line["jar"]["code"]
+        print(
+            f"  {code}: {line['split_percent_current']}% -> {line['split_percent_proposed']}%"
+            f" ({line['current_monthly_vnd']} -> {line['proposed_monthly_vnd']}), sàn {line['floor_vnd']},"
+            f" khoản định kỳ {owed.get(code, 0)}"
+        )
+    lines = {line["jar"]["code"]: line for line in data["lines"]}
+    assert owed["giai_tri"] > 0 and owed["an_uong"] > 0
+    for code, amount in owed.items():
+        assert lines[code]["floor_vnd"] >= amount, code
+        assert lines[code]["proposed_monthly_vnd"] >= amount, code
+    assert not lines["giai_tri"]["is_essential"]

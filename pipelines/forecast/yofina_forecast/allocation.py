@@ -9,10 +9,12 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
 - **Thu nhập hằng tháng** = lương đã khai. Có `shock_id` thì thu nhập co theo cú sốc (cùng công thức hệ số thu nhập của `stress_test`),
   nghĩa vụ loại bị tăng giá tăng theo, khoản chi một lần trừ vào thu nhập: dựng lộ trình thích ứng sau `stress_test`.
 - **Mức hiện tại** của hũ = thu nhập x tỷ lệ chia đã khai.
-- **Sàn cứng** = nghĩa vụ phải trả bằng hũ đó (nghĩa vụ thiết yếu và nợ Trả sau, vay; quy về tháng) cộng, với hũ chi tiêu thiết yếu,
-  `essential_floor_percent` của mức chi trung bình hằng tháng. Chi hằng ngày và hũ obligation chỉ tính phần chi có LOẠI giao dịch thiết
-  yếu không gắn nghĩa vụ (`essential_spend`; hũ obligation: hóa đơn trả lẻ như nạp điện thoại). Nghĩa vụ ưu tiên hơn chi tiêu thiết
-  yếu (mức phạt elastic khác nhau).
+- **Sàn cứng** = nghĩa vụ cứng phải trả bằng hũ đó (nghĩa vụ thiết yếu và nợ Trả sau, vay; quy về tháng) cộng, với hũ chi tiêu thiết
+  yếu, `essential_floor_percent` của mức chi trung bình hằng tháng. Chi hằng ngày và hũ obligation chỉ tính phần chi có LOẠI giao dịch
+  thiết yếu không gắn nghĩa vụ (`essential_spend`; hũ obligation: hóa đơn trả lẻ như nạp điện thoại). Nghĩa vụ ưu tiên hơn chi tiêu
+  thiết yếu (mức phạt elastic khác nhau). Sàn của MỌI hũ (không theo mã) không dưới tổng mọi nghĩa vụ đang hoạt động trả từ hũ đó, kể cả
+  khoản không thiết yếu (Netflix trả từ Giải trí giữ Giải trí không dưới mức Netflix); hũ chỉ có khoản không thiết yếu vẫn là hũ không
+  thiết yếu, sàn bậc thiết yếu.
 - **Mục tiêu** = hũ có `goal_vnd`; mức cần mỗi tháng = phần còn thiếu x ngày của tháng / số ngày còn lại tới hạn (không có hạn thì hết
   `horizon_months`). `goals` của tham số ghi đè trọng số, số tiền hoặc hạn của từng hũ (hũ không phải hũ tiết kiệm thì từ chối).
 - Hũ chi tiêu thiết yếu theo cấu hình (`essential_jar_codes`), hũ tiết kiệm không mục tiêu là hũ Dự phòng (giữ mức hiện tại, cắt thì
@@ -195,8 +197,12 @@ class AllocationEngine:
         daily_spend = essential_of.get(DEFAULT_SPENDING_JAR, [])
         default_pay = resolve_obligation_pay_jar((j["code"], j["kind"]) for j in g.jar_rows)
 
-        # nghĩa vụ quy về tháng (có cú sốc tăng giá thì loại bị tăng nặng hơn)
+        # nghĩa vụ quy về tháng (có cú sốc tăng giá thì loại bị tăng nặng hơn). Sàn của hũ gồm nghĩa vụ cứng (thiết yếu, nợ) trả từ hũ
+        # đó; ngoài ra MỌI hũ (không theo mã) không nhận dưới tổng mọi nghĩa vụ đang hoạt động trả từ nó, kể cả khoản không thiết yếu
+        # (Netflix ở Giải trí): cắt dưới mức đó thì khoản đã cam kết không trả được (#39, 26/11). Khoản không thiết yếu vẫn là phần
+        # cắt được của lựa chọn khi sàn vượt thu nhập.
         oblig_floor = dict.fromkeys(codes, 0)
+        owed = dict.fromkeys(codes, 0)
         obligations_total = 0
         cuttable = 0
         for ob in g.obligations:
@@ -208,6 +214,8 @@ class AllocationEngine:
             obligations_total += monthly
             hard = bool(ob.get("is_essential")) or ob["kind"] in DEBT_KINDS
             pay = pay_jar_or_default(jars, ob.get("pay_jar_code"), default_pay)
+            if pay in owed:
+                owed[pay] += monthly
             if hard and pay in oblig_floor:
                 oblig_floor[pay] += monthly
             elif not hard:
@@ -301,6 +309,8 @@ class AllocationEngine:
             # hũ chi tiêu thiết yếu, và hũ obligation với hóa đơn trả lẻ (không gắn nghĩa vụ đã khai): sàn gồm phần chi thiết yếu
             if role == "essential" or role == "obligation":
                 floor += round(monthly_spend * prm.essential_floor_percent / 100.0)
+            # không dưới tổng nghĩa vụ trả từ hũ (gồm khoản không thiết yếu); hũ không có khoản nào giữ sàn như trước
+            floor = max(floor, owed[code])
             goal_spec = None
             if goal is not None:
                 when = goal.target_date
@@ -361,8 +371,10 @@ class AllocationEngine:
                 AllocationLine(
                     jar=ForecastJar.model_validate(self._ref(j)),
                     kind=JAR_KIND_TO_LINE[j["kind"]],  # type: ignore[arg-type]
+                    # hũ thiết yếu theo vai, hoặc có sàn của khoản cứng; sàn chỉ vì khoản không thiết yếu (Netflix ở Giải trí) không biến
+                    # hũ thành thiết yếu với model (bước giảm chi vẫn chọn được, tới sàn)
                     is_essential=sp.role in ("obligation", "essential", "emergency")
-                    or sp.floor_vnd > 0,
+                    or (sp.floor_vnd > 0 and sp.floor_tier == "obligation"),
                     floor_vnd=sp.floor_vnd,
                     current_monthly_vnd=sp.current_vnd,
                     proposed_monthly_vnd=out.proposed_vnd,

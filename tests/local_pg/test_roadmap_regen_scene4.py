@@ -308,3 +308,19 @@ def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env):
     line = lines["an_uong"]
     assert split["amount_vnd"] == line["proposed_monthly_vnd"] - line["current_monthly_vnd"]
     assert split["metrics"][0]["after"].replace(".", "").split()[0] == str(line["proposed_monthly_vnd"])
+
+    # (d) phương án LP của bản sinh lại không đưa hũ nào xuống dưới khoản định kỳ trả từ nó (#39, 26/11): Giải trí giữ phần Netflix,
+    # Ăn uống giữ phần Tiền cơm văn phòng; bước giảm chi hay đổi tỷ lệ không cắt hũ dưới sàn
+    print("[cảnh 4] phân bổ LP:", {c: (x["current_monthly_vnd"], x["proposed_monthly_vnd"], x["floor_vnd"]) for c, x in lines.items()})
+    owed: dict[str, int] = {}
+    for o in got["obligations"]:
+        if o["cycle"] == "monthly" and o.get("pay_jar") in lines:
+            owed[o["pay_jar"]] = owed.get(o["pay_jar"], 0) + o["amount_vnd"]
+    assert owed["giai_tri"] > 0 and owed["an_uong"] > 0
+    for code, amount in owed.items():
+        assert lines[code]["floor_vnd"] >= amount and lines[code]["proposed_monthly_vnd"] >= amount, code
+    for phase in rm["phases"]:
+        for step in phase["steps"]:
+            if step["kind"] == "cut_spending" and step.get("amount_vnd"):
+                jar = lines[step["jar_code"]]
+                assert jar["current_monthly_vnd"] - step["amount_vnd"] >= jar["floor_vnd"], step

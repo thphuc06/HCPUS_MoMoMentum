@@ -545,3 +545,82 @@ def test_obligation_jar_floor_adds_essential_bills_not_tied_to_an_obligation():
     hard = 2_000_000 + 375_000 + round(1_000_000 / 3)
     assert floors[None] == floors[0] == hard  # ví cũ (không có chuỗi) và ví không có hóa đơn: như trước
     assert floors[6_000] == hard + round(6_000 * P.month_days * P.essential_floor_percent / 100)
+
+
+# =====================================================================================
+# Sàn của hũ có khoản định kỳ trả từ chính nó (#39, 26/11): mọi hũ, không theo mã, kể cả khoản không thiết yếu
+# =====================================================================================
+NETFLIX = {
+    "id": "00000000-0000-0000-0000-0000000000a2", "kind": "subscription", "name": "Netflix", "amount_vnd": 180_000,
+    "amount_min_vnd": None, "amount_max_vnd": None, "due_date": "2026-12-15", "cycle": "monthly", "due_day": 15,
+    "pay_jar_code": "giai_tri",
+}  # fmt: skip
+LUNCH = {**NETFLIX, "id": "00000000-0000-0000-0000-0000000000a3", "name": "Tiền cơm văn phòng", "amount_vnd": 300_000,
+         "due_date": "2026-11-23", "due_day": 23, "pay_jar_code": "an_uong"}  # fmt: skip
+#: mục tiêu làm vòng nới cắt hũ không thiết yếu (trước: Giải trí về 0 dù Netflix trả từ đó)
+TIGHT_GOAL = {"goals": [{"jar": "du_lich", "target_vnd": 9_000_000, "target_date": "2027-02-01"}]}
+
+
+def committed(*rows):
+    from test_resilience import _ledger_obligation
+
+    w = world()
+    w.obl.extend(_ledger_obligation(dict(r)) for r in rows)  # không thiết yếu: `is_essential` theo loại, thuê bao là false
+    return w
+
+
+def built_jars(w):
+    engine = AllocationEngine(pipe(w))
+    gathered = engine.resilience.gather(USER, NOW)
+    problem = engine.build(gathered, horizon_months=3, goal_args=[], shock_id=None, allow_relaxation=True).problem
+    return {j.code: j for j in problem.jars}
+
+
+def test_floor_of_each_jar_covers_every_active_obligation_it_pays():
+    bus = {**NETFLIX, "id": "00000000-0000-0000-0000-0000000000a4", "name": "Vé xe buýt tháng", "amount_vnd": 500_000,
+           "pay_jar_code": "di_lai"}  # fmt: skip
+    base, now = built_jars(world()), built_jars(committed(NETFLIX, LUNCH, bus))
+    assert not any(o["is_essential"] for o in committed(NETFLIX, LUNCH).obl if o["kind"] == "subscription")
+    # Giải trí: hũ không thiết yếu, sàn đúng bằng khoản định kỳ của nó; bậc sàn là bậc thiết yếu (khoản cứng vẫn đứng trên)
+    assert (now["giai_tri"].role, now["giai_tri"].floor_vnd, now["giai_tri"].floor_tier) == ("discretionary", 180_000, "essential")
+    # Ăn uống: sàn chi thiết yếu đã cao hơn khoản định kỳ trả từ nó nên giữ nguyên; Đi lại: sàn chi thiết yếu thấp hơn vé tháng nên
+    # sàn lên bằng vé tháng
+    assert base["an_uong"].floor_vnd > 300_000 and now["an_uong"].floor_vnd == base["an_uong"].floor_vnd
+    assert base["di_lai"].floor_vnd < 500_000 and now["di_lai"].floor_vnd == 500_000
+    assert {c: j for c, j in now.items() if c not in ("giai_tri", "di_lai")} == {
+        c: j for c, j in base.items() if c not in ("giai_tri", "di_lai")
+    }
+
+
+def test_obligation_jar_floor_also_counts_its_non_essential_obligations():
+    base = built_jars(world())
+    now = built_jars(committed({**NETFLIX, "pay_jar_code": None}))  # không lưu hũ trả: hũ Nghĩa vụ chung
+    assert now["nghia_vu"].floor_vnd == base["nghia_vu"].floor_vnd + 180_000
+    assert now["nghia_vu"].floor_tier == "obligation" and now["giai_tri"].floor_vnd == 0
+
+
+def test_lp_never_proposes_a_jar_below_the_obligations_it_pays():
+    res, _ = run(TIGHT_GOAL)
+    plain = {line["jar"]["code"]: line for line in res["data"]["lines"]}
+    assert plain["giai_tri"]["proposed_monthly_vnd"] == 0  # hũ không có khoản định kỳ: vẫn cắt như trước
+    w = committed(NETFLIX, LUNCH)
+    out = AllocationEngine(pipe(w)).optimize(USER, TIGHT_GOAL)
+    assert not errors_of(RESULT, out), errors_of(RESULT, out)
+    d = AllocationPlanData.model_validate(out["data"])
+    by = {line.jar.code: line for line in d.lines}
+    assert d.status == "relaxed"
+    assert by["giai_tri"].floor_vnd == 180_000 and by["giai_tri"].proposed_monthly_vnd >= 180_000
+    assert by["giai_tri"].floor_gap_vnd == 0 and not by["giai_tri"].is_essential  # vẫn là hũ không thiết yếu với model
+    assert by["an_uong"].proposed_monthly_vnd >= by["an_uong"].floor_vnd
+    assert sum(line.proposed_monthly_vnd for line in d.lines) + d.unallocated_vnd == d.income_monthly_vnd
+
+
+def test_non_essential_obligations_stay_the_cuttable_part_when_floors_exceed_income():
+    from test_resilience import _ledger_obligation
+
+    w = world(salary=2_000_000, goal=False)
+    w.obl.extend(_ledger_obligation(dict(r)) for r in (NETFLIX, LUNCH))
+    d = AllocationPlanData.model_validate(AllocationEngine(pipe(w)).optimize(USER, {})["data"])
+    assert d.status == "infeasible" and "sàn bắt buộc vượt thu nhập" in d.headline
+    cut = next(a for a in d.alternatives if a.option_id == "cat_khoan_dinh_ky")
+    assert "480.000" in cut.summary  # Netflix 180.000 + cơm văn phòng 300.000 mỗi tháng
