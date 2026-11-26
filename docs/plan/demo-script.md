@@ -73,6 +73,15 @@ Các bước:
 
 Đã kiểm tất định (`tests/unit/test_persona_samples_minh.py`, không OCR, không gọi model): bộ che PII với payee và tên hiển thị của Minh che đủ họ tên, số điện thoại, số tài khoản trên chữ của hai ảnh, còn số tiền, nhà cung cấp, nội dung, mã tham chiếu thì giữ nguyên. Chưa kiểm: model đọc ảnh, hũ gợi ý, và số giây thao tác (issue #16 cần ≤ 10 s) trên tài khoản giám khảo sau khi deploy.
 
+## Batch đêm: tính năng đang chạy thật, chưa có trong 6 cảnh (ghi chú 26/11)
+
+Chủ dự án (26/11): batch đêm là một tính năng đáng nêu trong video, slide hoặc tờ hướng dẫn; hiện 6 cảnh ở trên không cảnh nào cho thấy nó.
+
+- **Nó là gì**: nhịp "batch đêm" của proposal §10.4. EventBridge Scheduler `yofina-nightly-0200` (02:00 mỗi ngày, giờ Việt Nam) gọi Step Functions `yofina-nightly`: lấy danh sách người dùng đã khai lương, chạy lại dự báo từng người (10.000 đường, tối đa 3 người song song), rồi tổng kết; một người lỗi không làm hỏng người khác, có lỗi thì cả lần chạy thất bại để alarm báo về SNS `yofina-alerts`. Mã ở `pipelines/forecast/` (`batch.py`, `handler_batch.py`), mô tả ở [pipelines/nightly/README.md](../../pipelines/nightly/README.md).
+- **Bằng chứng chạy thật** (đọc trên AWS sáng 26/11): 25 lần chạy gần nhất có 24 thành công, 1 thất bại. Các lần tự chạy theo lịch 02:00: 23/11 thành công (khoảng 22 giây), 24/11 thất bại (Aurora đang ngủ, issue #14), 25/11 thành công (khoảng 31 giây), 26/11 thành công (khoảng 33 giây). Bản sửa #14 (thử lại khi cơ sở dữ liệu chưa dậy) deploy tối 25/11.
+- **Cách thể hiện không cần viết thêm mã**: quay vài giây màn lịch sử thực thi của Step Functions `yofina-nightly` bằng tài khoản vận hành (che account ID), hoặc đưa bảng các đêm ở trên vào slide; nói kèm một câu: "mỗi đêm hệ thống tự tính lại dự báo cho mọi tài khoản, nên sáng mở app là số mới". Đây cũng là chỗ nói về ba nhịp chạy: theo sự kiện (cảnh 4: nạp sao kê xong thì tính lại ngay), theo đêm (mục này), theo tuần (đã cắt, ADR-0004).
+- **Chưa xác minh**: tài liệu kiến trúc ghi batch đêm phục vụ cả điểm chống chịu (F4) và hồ sơ hành vi (F7), còn README của job chỉ mô tả việc tính lại dự báo; job đêm để lại dấu vết gì trên giao diện (dấu thời gian cập nhật, bảng vận hành) đang được điều tra, kết quả ghi ở HANDOFF.
+
 ## Yêu cầu dữ liệu cho demo (suy ra, cần xác nhận)
 
 - **Ví demo của Minh sau đặt lại** (26/11 sáng, cấu hình `DEMO_LAYOUT` và ánh xạ hũ persona, chi tiết ở [lộ trình bộ hũ](default-six-jars-rollout.md), bảng "Demo (Reset data)"). `vy` cũng có 8 hũ; `lan`, `khoa` có 7 hũ (không có hũ mục tiêu).
