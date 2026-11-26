@@ -2,35 +2,51 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: **2026-11-26 rạng sáng** (Claude Code điều phối worker `kiro-cli` `claude-opus-5.5`). Nhánh `feat/default-six-jars` của Học **đã gộp vào `main` và đã deploy** (Runtime **v30**, Amplify **job 26**, migration tới **0059**; `main` `c65fa98` là bản đang chạy), đã kiểm trên app, không chạy eval: xem mục "Cập nhật rạng sáng 26/11" ngay dưới. Đợt 1 và đợt 2 phase 6 đã deploy từ khuya 25/11. Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B).
+Cập nhật lần cuối: **2026-11-26 tối** (Claude Code điều phối worker `kiro-cli` `claude-opus-5.5`). Bản đang chạy: `main` **`1303eaf`**, Runtime **v32**, Amplify **job 28**, migration tới **0059**; đã kiểm trên app, **chưa chạy eval**. Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B). Lịch sử từng đợt ngày 26/11: [ai-log](docs/ai-log/2026-11.md).
 
-## Cập nhật rạng sáng 26/11: gộp bộ hũ mặc định theo mục đích (#39), đã deploy, kiểm trên app
+## Trạng thái tối 26/11 (issue #39)
 
-Chủ dự án (đêm 25/11) duyệt: gộp nhánh của Học, push, migration, deploy, kiểm vài ca mới trên app, **không chạy eval**; migration của nhánh đổi số thành 0057–0059; tài khoản mới nhận 3 hũ mặc định; tài khoản demo có thêm hũ tự thêm để vẫn tách được hành vi theo ăn uống, đi lại. Việc theo dõi ở issue [#39](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/39). `main` = `4cf2bdb` lúc deploy.
+**Đang chạy** (`ap-southeast-1`; chi tiết ở [docs/aws-resources.md](docs/aws-resources.md)). Bốn lần deploy ngày 26/11, đều do chủ dự án duyệt từng đợt: v29 / job 25 và v30 / job 26 (rạng sáng, gộp bộ hũ mặc định); **v31 / job 27** (đợt 3, 09:02–10:08 gồm cả lượt kiểm, `863f9af`, kèm seed `jar_templates`); **v32 / job 28** (đợt "agent thích ứng", 15:48–16:34 gồm cả lượt kiểm, `1303eaf`; Gateway target `knowledge` có thêm `knowledge___resolve_date`, Cedar `resolve_date.cedar`). Không có migration nào sau 0059. Cả 6 tài khoản demo đặt lại lúc 16:32–16:33, dự báo đã tính lại; `minh`, `giamkhao1–3` có 8 hũ, lộ trình chỉ v1/v2; `lan`, `khoa` 7 hũ. Đặt lại không xóa bộ nhớ: bộ nhớ của `giamkhao1` trống, của `minh` giữ từ 24/11.
 
-**Bộ hũ hiện hành**
-- **Tài khoản mới (onboarding)**: Chi hằng ngày 42 / Nghĩa vụ 33 / Dự phòng 25 (`jar_templates.is_default`, migration 0059). Hũ khác (Quỹ dồn, Mục tiêu, Tích lũy dài hạn, bảy hũ cũ) là hũ tự thêm. Bước 3 onboarding có kê khai và đề xuất tỷ lệ (`POST /jars/split-proposal`). Quay lui về bộ bảy cho tài khoản tạo sau đó: `uv run scripts/cdk.py deploy YofinaTools --require-approval never -c onboardingJarLayout=legacy`.
-- **Tài khoản demo (sau "Đặt lại dữ liệu")**: Nghĩa vụ (gộp Hóa đơn cũ), Dự phòng (`buffer`), cộng hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch (mã `muc_tieu`, `goal`, chỉ persona có hũ Du lịch mang mục tiêu), Đầu tư (`dau_tu`, `long_term`, 0 ₫). **Không có hũ Chi hằng ngày** (câu chuyện: người dùng đã tách hũ này thành ba hũ chi). `minh`, `vy` 7 hũ; `lan`, `khoa` 6 hũ. Tỷ lệ suy từ spec persona qua ánh xạ mã hũ (`yofina_core.wallet.LEGACY_JAR_ALIASES`, `data/personas/six_jars.py` `apply_demo_layout`). Lý do không dùng bộ demo 4 hũ của nhánh: PELT, hồ sơ hành vi, cờ đổi hành vi tính theo mã hũ; cảnh 1 và cảnh 4 dựa vào hũ `an_uong`. Phân tích theo loại chi (`tx_type`) bên trong một hũ gộp là việc để sau.
-- Ví cũ 7 hũ trên Aurora (chưa đặt lại) vẫn đọc ghi được (`purpose` NULL).
+**Bộ hũ**
+- **Tài khoản mới**: 3 hũ mặc định Chi hằng ngày 42 / Nghĩa vụ 33 / Dự phòng 25 (`jar_templates.is_default`, migration 0059). Hũ mặc định chỉ là bộ khởi tạo, sau đó là hũ thường; giao diện không chia nhóm "mặc định / bạn thêm" (Q7 ở [lộ trình bộ hũ](docs/plan/default-six-jars-rollout.md)). Bước 3 onboarding kê khai và đề xuất tỷ lệ (`POST /jars/split-proposal`); nút "?" ở màn chia hũ. Quay lui bộ bảy cho tài khoản tạo sau đó: `-c onboardingJarLayout=legacy` (lệnh ở Bước 7 của lộ trình bộ hũ).
+- **Ví demo sau "Đặt lại dữ liệu"**: Chi hằng ngày, Nghĩa vụ (gộp Hóa đơn cũ), Dự phòng (`buffer`), rồi hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch (mã `muc_tieu`, hũ mục tiêu 6.000.000 ₫, hạn 01/04/2027), Đầu tư (0 ₫). `minh`, `vy` 8 hũ (`minh` tổng 8.030.000 ₫); `lan`, `khoa` 7 hũ. Trả sau của `minh` đến hạn **05/12** (ngày 5, đúng ngày lương, tính là trước lương theo phương án B). Ví cũ 7 hũ chưa đặt lại vẫn đọc ghi được (`purpose` NULL).
+- Hũ trả nghĩa vụ và Trả sau: quy tắc chung `resolve_obligation_pay_jar`; ví không có hũ obligation thì phải chọn hũ trả. Hũ nhận giao dịch: hũ riêng khớp loại thắng hũ chung (`transaction_jar`). Hũ của một khoản chi khi hỏi agent: router chọn theo ý định từ danh sách hũ thật của ví (`spend_jar_code`, Q9), `tx_type` chỉ còn là đường lùi.
 
-**Quy tắc đổi theo nhánh**: hũ trả nghĩa vụ và Trả sau dùng chung `resolve_obligation_pay_jar` (hũ đã lưu, hũ chọn, `nghia_vu`, hũ obligation đầu tiên); ví không có hũ obligation mà mua bằng Trả sau thì phải chọn hũ trả (agent và màn chuyển tiền hỏi; lỗi tool mang `field: pay_jar`). Khoản Trả sau ghi từ trước chưa có hũ trả vẫn lùi về `bnpl_pay_jar` trong dự báo (giữ sửa lỗi #15). Ngày đến hạn Trả sau của `minh` trên ví demo là ngày 3 (điều khoản mô phỏng; BR-22 ghi ngày 5).
+**Thay đổi lớn trong ngày** (chi tiết, số đo, file: ai-log 26/11)
+- **Đợt 3 (v31)**: ví demo có hũ Chi hằng ngày; lời ở hũ để dành ("Dự kiến thêm … khi lương về"), chip hũ 0 ₫, nhãn mốc biểu đồ không còn bị cắt; câu "lập lộ trình quỹ dự phòng…" lập bản mới, hỏi hũ khi thiếu, LP nhận đích số dư của hũ Dự phòng; sàn của hũ có khoản định kỳ; nút "?"; `scripts/scan_repo.py`; chuẩn bị eval; đo ví 3 hũ.
+- **Sau đợt 3** (vào v32): sửa các lỗi thấy trên app ở v31 (chip đủ mọi hũ, 32 dòng cảnh 4 tự thêm lại, tệp đang chờ duyệt có nút "Duyệt tiếp", hũ trả trong ngữ cảnh lộ trình, nút "Hỏi vì sao" ở bản tin, chip "Chưa có tiền"); LP giữ phần chia của hũ đệm chưa tới đích; sàn chi; BR-63 nới (chưa bắt buộc trước hạn nộp); rà dữ liệu seed.
+- **Đợt "agent thích ứng" (v32)**, theo nguyên tắc chủ dự án: mã giữ bất biến, không ép model, không câu mẫu; agent không cần đúng 100% nhưng sai thì lùi an toàn. Router nhận danh sách hũ của ví và trả `spend_jar_code`, `answers_pending`, `memory_action`, `date_spec`; ngày tính bằng `yofina_core.dates` (tool `knowledge___resolve_date` cho what-if và planner); lộ trình tin `roadmap_action`, nhận câu người dùng, trần bước làm ngay theo số dư, sàn chi là dữ kiện mềm, mục tiêu không hạn không bị gán 3 tháng; sàn thiết yếu, sàn chi và đích Dự phòng tính từ **mức nền bền** (trung vị chi theo tuần, 12 tuần), đợt chi tăng là dữ kiện cho model; khoản đến hạn đúng ngày lương là trước lương (BR-22); khử trùng dòng nạp ghép một-một; bộ chấm bước lộ trình không dò chữ; tệp cảnh 4 giữ hệ số 3,5.
 
-**Số đo trên app sau deploy** (`giamkhao1`, `minh`; ảnh ở `C:\moMo-wt\logs\ui-F\`, máy của Phúc, ngoài repo): cảnh 1 Ăn uống 380.000 ₫ cạn 23/11, nhãn Cao; cảnh 2 trọn câu 34 s, hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12 (2.200.000 ₫), thiếu 1.161.791 ₫; cảnh 3 điểm 29 → 12, trụ 25 ngày; cảnh 4: 32 dòng vào Ăn uống, bản v3 sau khoảng 30 s, không còn chữ "Subscription", giai đoạn đầu 21/11–05/12, bước lớn nhất vào Ăn uống 2.657.800 ₫; cảnh 5 màn duyệt sau 8,5 s, chip "Đã che: tên". Tài khoản mới (tạo tạm bằng admin rồi xóa): 3 hũ 42/33/25, kê khai trọ + điện ra đề xuất 36/39/25. Log khoảng giờ kiểm: 0 `ContractMismatch`, 0 `Traceback`, 0 lỗi 5xx, 1 `turn_persist_timeout`. Tiền model khoảng 0,3–0,5 USD.
+**Kiểm trên app sau deploy v32** (`giamkhao1`, 16:12–16:34; ảnh ở `C:\moMo-wt\logs\ui-NN\`, máy của Phúc, ngoài repo)
+- **Đạt**: cảnh 1 (Ăn uống cạn 23/11, "Hụt", 12 ngày; các hũ khác "Đủ", không tự mâu thuẫn); cảnh 2 (20,6 s; Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 05/12 2.200.000 ₫, thiếu **1.167.673 ₫**; cục bộ 1.168.392 ₫); cảnh 4 (32 dòng tự thêm vào Ăn uống, Lambda sinh lại 19,6 s, bản mới "kịp hạn", Dự phòng không về 0, không chữ thô); câu trả lời tự gõ dài sau câu hỏi hũ giữ 500.000 ₫, "cafe 55k co sao ko" là khoản mới.
+- **Không đạt**: câu Vũng Tàu vẫn hỏi hũ (router không trả `spend_jar_code`); hũ tự tạo "Cà phê" không được chọn (router điền `tx_type`, đường lùi ra Ăn uống); luồng "để dành 5 triệu trước Tết" (router không trả `date_spec`, bấm chip hũ lại hỏi ngày, trả lời hạn bằng chữ thì bản mới mất 5.000.000 ₫).
+- **Một phần**: hỏi bộ nhớ liệt kê đúng nhưng hiện chữ thô "[số]"; "Chào bạn" ở hội thoại mới chờ làm nóng khoảng 15 s; "Chi tiết kỹ thuật" đủ số lượt gọi, token, nhãn tiếng Việt.
+- **Lỗi khác**: câu xem lộ trình ngay sau "Giữ bản cũ" hiện thẻ bản đã bỏ và không có lời (`numeric_ungrounded`); "chuyển ngay 3 triệu từ Dự phòng sang Ăn uống, lập lộ trình theo vậy" thành chuyển hũ và lộ "Mã: INSUFFICIENT_FUNDS"; what-if gợi ý chuyển bù từ Dự phòng sang Giải trí (có cảnh báo).
+- Log: 0 `ContractMismatch`, 0 `Traceback`, 0 `turn_persist_timeout`, 0 ERROR, 0 5xx; 6 `roadmap_step_rejected` (đều sửa trước khi lưu), 1 `numeric_ungrounded`. Tiền model khoảng 0,65–0,7 USD.
+- Từ lượt kiểm sau v31 (sáng, ảnh `C:\moMo-wt\logs\ui-Z\`), phần v32 không kiểm lại: cảnh 3 điểm 29 → 12, trụ 26 ngày; cảnh 5 màn duyệt sau 8,5 s, chip "Đã che: tên"; cảnh 6 "Chi tiết kỹ thuật" đủ, `giamkhao1` bị từ chối ở `/ops`; tài khoản mới 3 hũ 42/33/25, khai tiền trọ 3 triệu ra 37/38/25; job đêm 23/11, 25/11, 26/11 đều 6/6 (24/11 hỏng vì Aurora đang ngủ, `DATABASE_UNAVAILABLE`).
 
-**Test** (`4cf2bdb`): unit 4390 passed, 2 skipped; `tests/local_pg` 264 passed (10 ca đỏ sẵn trên `main` cũ đã viết lại theo #8, #22, #19); `db_local_check.py` 57/57; vitest 1056; CDK 98; tích hợp sau deploy 93 đạt, 1 đỏ (`test_phase3_engine.py::test_chuyen_250k…`, test cũ).
+**Test** (`1303eaf`, cục bộ): unit 5187 passed, 2 skipped (thiếu Pillow); `tests/local_pg` 285; `db_local_check` 57/57; vitest 1118 (4 skipped); CDK 99/99; `gen_contracts --check` OK; `scan_repo.py` 0 phát hiện. Tích hợp sau v31: 105 đạt, 2 đỏ do test cũ; hai test đó đã viết lại, chưa chạy lại.
 
-**Sửa kèm trong đợt này**: bản lộ trình sinh lại ở cảnh 4 (#19): nhãn loại nghĩa vụ tiếng Việt đưa vào ngữ cảnh model, giai đoạn đầu từ hôm nay tới ngày lương, kiểm số tiền bước bằng mã; khử trùng dòng nạp so tên đối tác theo từ (`same_party`); hũ không có gì rút tiền không có ngày cạn; sàn thiết yếu của hóa đơn tính theo loại giao dịch trên hũ obligation; đề xuất tỷ lệ không cắt hũ thiết yếu trước; route `POST /jars/split-proposal` trên HTTP API; test tĩnh so `openapi.yaml` với route CDK.
+**Đang làm** (chưa gộp vào `main`, chưa deploy)
+- **Router chạy Claude Haiku 4.5, Nova 2 Lite dự phòng**, qua một vai riêng (nhánh `int/router-measure`, đầu nhánh `7c83d36`). Đo 26/11 trên 24 câu, gọi thẳng Bedrock: Nova đúng mọi trường 8/24, Haiku với prompt đã sửa 19/24. Ba lỗi "không đạt" ở trên trông vào việc này. Hiện router vẫn là vai `small` (Nova 2 Lite → Haiku 4.5).
+- **Sửa 5 lỗi thấy trên app sau v32** (nhánh `int/app-bugs`): câu xem lộ trình; mã lỗi thô khi số dư không đủ; "[số]" ở câu trả lời bộ nhớ; chờ làm nóng 15 s; what-if chuyển bù từ Dự phòng sang hũ không thiết yếu.
 
-**Phát hành lần sau nhớ**: Runtime cũ kiểm chặt trường trả về (`extra=forbid`), nên khi Lambda thêm trường mới phải **deploy Runtime trước, Lambda sau** (`tests/unit/agent/test_runtime_lambda_compat.py`); không quay lui riêng Runtime. `migrate.py` chạy mọi file chờ: muốn dừng ở một số thì dùng `--dir` với thư mục tạm. Snapshot Aurora `yofina-db-pre-0057-20261126` còn giữ (xóa khi không cần lùi nữa).
+**Còn mở**
+- Issue mới 26/11: [#40](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/40) (Hồ sơ hiện ngày mô phỏng cạnh giờ cập nhật để thấy job đêm, công bố nơi xử lý dữ liệu), [#41](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/41) (khai khoản biết trước qua chat thành Quỹ dồn), [#44](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/44) (LP giữ phần chia của Quỹ dồn có khoản sắp cần, BR-65), [#45](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/45) (cứng hóa, đóng gói còn thiếu: CORS localhost, 57P01, preflight, eval_summary, runbook, security review, alarm Guardrail). #42, #43 đóng, không làm (trái Q8). #39 còn mở.
+- **Eval chưa chạy** cho mọi thay đổi 26/11. Các trường model điền mới (router, `date_spec`, `nudge_on_spec`, lời về đợt chi tăng) chưa đo qua Runtime với model thật. Ca có thể đổi: ai-log entry đợt "agent thích ứng"; lệnh và điều kiện (nâng `/yofina/quota/chat_turns_per_day`): [evals/README.md](evals/README.md).
+- Khối dự báo (`forecast_timeline`) vẫn ghi "Đang hết tiền" cho hũ chưa từng có tiền (chip đã sửa). Dự báo thường nay ghi "hụt" không kèm % cho hũ cạn đúng ngày lương, cho khớp what-if: `minh` không gặp, ví khác có thể đổi trạng thái.
+- Hiếm gặp, chưa kiểm: what-if Trả sau có thể tính trùng khoản cũ chưa lưu hũ trả trên ví không có hũ obligation; hũ đã lưu thắng hũ người dùng chọn cho khoản Trả sau cùng ngày đến hạn.
+- BR-79..84 (trang Notion "Feedback hũ") chưa vào `docs/ba/` (việc của BA). Phân loại ví 3 hũ có model chưa đo (khoảng 294 lời gọi, cần duyệt chi phí).
 
-**Còn mở sau đợt này**
-- **Đã sửa và deploy lần hai lúc 05:09** (`c65fa98`, Runtime v30, Amplify job 26, đóng lại cả 5 zip Lambda): chi tiết hũ không có khoản chi dự kiến ghi "Chưa có tiền, không có khoản chi dự kiến trong 30 ngày." (hũ 0 ₫) hoặc "Không có khoản chi dự kiến trong 30 ngày." thay cho "Đang hết tiền"; lỗi nghiệp vụ 4xx do hàm SQL ném ghi WARNING `data_api_business_error` thay cho ERROR; `test_chuyen_250k…` và `test_phase4_live.py` 06–10 viết lại theo dữ liệu hiện hành và chạy đạt (6/6). Test: unit 4402, `tests/local_pg` 266, vitest 1060. Cả 6 tài khoản demo đã đặt lại lúc 05:06.
-- Thấy khi kiểm lần hai, chưa sửa: hũ Du lịch và Dự phòng ghi "Không có khoản chi dự kiến trong 30 ngày." dù lịch sử có khoản rút "Bù tiền ăn cuối tháng" (đúng theo số dự báo, cần xem lại lời); trong khung chat, nhãn mốc trên biểu đồ dự báo bị cắt ở mép trái và chồng nhãn "Lương về 05/12"; `JarStatusChip.tsx` ghi "Đã hết tiền" cho mọi hũ 0 ₫ chưa có dự báo; `writer.py` có thêm một câu giải thích trường `no_outflow_expected` chưa đo bằng eval.
-- Trên ví demo, đề xuất tỷ lệ khi kê khai và bản v3 cảnh 4 đưa Giải trí về 0% (đúng quy tắc "cắt hũ không thiết yếu trước", nhưng nên có sàn cho hũ không thiết yếu): chờ chủ dự án quyết.
-- Câu "lập giúp mình lộ trình xây quỹ dự phòng…" không lập bản mới: router không trích hũ nên `turn.py` mất ý định tạo (dòng `create = action == "create" or goal is not None`), và hũ Dự phòng (`buffer`) không đặt mục tiêu được. Chưa sửa vì đổi hành vi agent mà không có eval.
-- Hiếm gặp, chưa sửa: what-if Trả sau có thể tính trùng khoản cũ chưa lưu hũ trả trên ví không có hũ obligation; hũ đã lưu thắng hũ người dùng chọn cho khoản Trả sau cùng ngày đến hạn.
-- Tài liệu BA: B2a và C-12 đã ghi quyết định 26/11; BR-63..78 và BR-79..84 (trang Notion "Feedback hũ") chưa đồng bộ vào `docs/ba/` (việc của BA). Eval, độ chính xác phân loại 92% và hiệu chỉnh dự báo đo trên bộ 7 hũ: tài khoản demo giữ các hũ chi cũ nên số cũ còn dùng được cho demo; ví 3 hũ chưa có số đo riêng.
-- Lượt eval cuối (#34) sẽ chạy trên bộ hũ demo mới: ca golden nào hỏi hũ Hóa đơn hoặc "hũ Du lịch" theo mã cũ cần xem lại trước khi chạy.
+**Lưu ý vận hành**
+- Thứ tự Runtime và Lambda khi đổi trường: Runtime kiểm chặt trường trả về (`extra=forbid`), nên Lambda trả thêm trường thì **Runtime trước, Lambda sau** (đợt v32: zip forecast có `recent_spend` đóng và deploy sau Runtime); Runtime gửi thêm đầu vào mà Lambda cũ từ chối thì Lambda trước (đợt v31: `goals` cho hũ Dự phòng). Tool Gateway mới (`YofinaAgent`) lên trước Runtime gọi nó; frontend lên trước khi hợp đồng khối nới (frontend cũ từ chối khối `clarify` quá 6 chip). Test `tests/unit/agent/test_runtime_lambda_compat.py`. Không quay lui riêng Runtime.
+- `migrate.py` chạy mọi file chờ: muốn dừng ở một số thì dùng `--dir` với thư mục tạm. Luôn đóng zip theo các hằng `*_BUILD_COMMAND` trong `infra-cdk/lib/` (zip forecast theo khối "Đóng gói" của `infra-cdk/README.md`).
+- `tests/local_pg` để lại thư mục `pgdata_ledger_*` trong `%TEMP%`; ngày 26/11 ổ C hết chỗ giữa chừng (một lần dọn 256 thư mục, khoảng 24 GB). Chạy với `TEMP`/`TMP` trỏ vào thư mục con riêng rồi xóa; dọn thư mục cũ không còn `postmaster.pid`.
+- Snapshot Aurora `yofina-db-pre-0057-20261126` giữ tới sau 03/12 (tính phí lưu trữ), rồi xóa.
+- Tệp CSV cảnh 4 gắn ngày neo 21/11: đặt lại rồi tải trong ngày, chậm nhất hôm sau.
+
+Các mục "Cập nhật …" dưới đây là ảnh chụp cũ theo thời điểm, giữ để tra; số và trạng thái trong đó có thể đã cũ.
 
 ## Cập nhật khuya 25/11: đã deploy gộp đợt 1 + đợt 2, kiểm trên app (không chạy eval)
 
@@ -47,7 +63,7 @@ Chủ dự án duyệt deploy và dặn: chỉ kiểm vài ca trên app thật, 
 
 **Đã đóng** (đạt "Cách kiểm"): #8, #10, #12, #16, #17, #20, #22, #24, #25, #26, #27, #29 (cùng #18 từ trước). **Còn mở** đã có comment: #7 (ca lộ trình `--only` khi eval; quyết trường hũ có cấu trúc), #11 (đếm `audit_events`, đủ 3 lượt ấm), #13 (SSM trần chung ngày 2/12), #19 (chữ "Subscription" thô và ngày giai đoạn lệch trong bản lộ trình model sinh ở cảnh 4; chưa kiểm tài khoản 0 ₫), #5, #6, #23 (cần eval), #9 (cần tài khoản lịch sử ngắn), #14 (xem job đêm vài đêm), #15 (kiểm trên `lan`), #28 (đề xuất đóng), #32, #36.
 
-**Thấy khi kiểm, chưa sửa**: câu "lập giúp mình lộ trình xây quỹ dự phòng 3 triệu trong 3 tháng" không lập bản mới mà hiện lại bản đang dùng, kèm câu "Bạn chưa nói mục tiêu này thuộc hũ nào…"; bản lộ trình v3 sinh lại ở cảnh 4 có bước "Đổi tỷ lệ chia lương" dồn 5.358.067 ₫ vào Ăn uống. Đáng xem lại trước khi quay video cảnh 4.
+**Thấy khi kiểm, chưa sửa lúc đó** (cả hai đã sửa 26/11: câu quỹ dự phòng lập bản mới từ Runtime v31; phần chia Ăn uống theo mức nền bền từ v32): câu "lập giúp mình lộ trình xây quỹ dự phòng 3 triệu trong 3 tháng" không lập bản mới mà hiện lại bản đang dùng, kèm câu "Bạn chưa nói mục tiêu này thuộc hũ nào…"; bản lộ trình v3 sinh lại ở cảnh 4 có bước "Đổi tỷ lệ chia lương" dồn 5.358.067 ₫ vào Ăn uống. Đáng xem lại trước khi quay video cảnh 4.
 
 **Công cụ kiểm UI**: `%TEMP%\yofina-ui\run.js` (playwright-core điều khiển Chrome cài sẵn; mật khẩu đọc từ secret trong tiến trình, không ghi ra). Kịch bản JSON từng bước ở cùng thư mục. Thư mục tạm, không thuộc repo.
 ## Cập nhật tối 25/11: đợt 2 (lô A + lô C) đã merge vào `main` (đã deploy khuya 25/11, xem mục trên)
@@ -68,7 +84,7 @@ Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vò
 | #28 | Không đo offline được biến thể có hũ Khác; giới hạn trên chỉ giảm 1,2 điểm (ngưỡng 3) | đề xuất đóng, chờ chủ dự án |
 | #32, #36 | Tài liệu đồng bộ, ADR-0004 (28 dòng lệch), README viết lại (nháp), tờ A4 nháp `docs/submission/huong-dan-a4.md`, `scripts/make_submission_zip.py` | #32 còn vài README sót (ghi ở comment issue); #36 chờ số RC và `scan_repo.py` (B2) |
 
-**Deploy gộp (đợt 1 + đợt 2, từ `main` `66807ad`), CHỜ chủ dự án duyệt.** `cdk diff` từng stack trước; một luồng deploy tại một thời điểm; máy mở suốt khoảng 60–75 phút.
+**Deploy gộp (đợt 1 + đợt 2, từ `main` `66807ad`)**, đã làm khuya 25/11 (mục trên); kế hoạch lúc đó: `cdk diff` từng stack trước; một luồng deploy tại một thời điểm; máy mở suốt khoảng 60–75 phút.
 1. `uv run scripts/migrate.py` (tới 0055; chỉ thêm cột/thay hàm, code cũ và mới đều chạy được).
 2. Đóng zip theo khối lệnh "đóng mọi zip" trong `infra-cdk/README.md` (ledger, agent, forecast) và lệnh zip ingest ở cùng file.
 3. `uv run scripts/cdk.py deploy YofinaTools --require-approval never`, rồi `YofinaIngest`, rồi `YofinaAgent` (IAM đọc `/yofina/quota/*`, `/yofina/agent/reasoning_enabled`: nếu chỉ đẩy zip Runtime mà không deploy stack thì hai khóa này bị AccessDenied, trần giữ 100 và công tắc giữ bật, không báo gì).
@@ -84,7 +100,7 @@ Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vò
 - Trần 100 lượt/ngày tính cả tài khoản vận hành `minh`: lượt eval đầy đủ (khoảng 110 lượt, RC chạy 3 lần) sẽ chạm trần. Ngày chạy eval đặt `/yofina/quota/chat_turns_per_day` cao (ví dụ 1000) rồi xóa trước khi nộp (#34, #35).
 - `recalibrate` bật làm đổi dải và % trên màn dự báo; hũ thưa (ví dụ Giải trí) không còn ngày cạn. Kịch bản demo hoặc eval nào nói ngày cạn của hũ thưa sẽ đổi chữ.
 - Tệp CSV cảnh 4 gắn ngày neo 21/11: đặt lại rồi tải trong cùng ngày.
-- `pii.py` có ba lỗi đã thấy (ghi ở comment #16): che sót số tài khoản tách nhóm, che thừa giờ, che nhầm tên quán "Huỳnh Hoa". Chưa có issue riêng.
+- `pii.py` có ba lỗi đã thấy (ghi ở comment #16): che sót số tài khoản tách nhóm, che thừa giờ, che nhầm tên quán "Huỳnh Hoa". Đã sửa khuya 25/11 (#16, mục trên).
 
 **Câu hỏi đang chờ chủ dự án**: xem tin nhắn của người điều phối ngày 25/11 tối (vòng 1, đánh số). Tóm tắt: duyệt deploy gộp; #7 thêm trường hũ có cấu trúc vào bước lập luận; #22 hệ số CSV 2,1 hay 3; #28 đóng; #24 làm nốt giá ghi cache; #23 cho router trích `date_text` cho what-if; câu hỏi của #36 về cách khai tài sản có sẵn.
 
@@ -98,7 +114,7 @@ Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vò
 - Đã làm trên AWS: đăng ký một email vào SNS `yofina-alerts` (đã xác nhận; trước đó topic có 0 người nhận). Yêu cầu tăng quota Bedrock qua API bị từ chối vì quota của tài khoản thấp hơn mặc định: phải mở case AWS Support (#3).
 - Máy của Phúc đã có `uv` và `.venv`; unit 3920 passed, 3 skipped.
 
-## Cập nhật chiều 25/11: đợt 1 đã code và merge vào `main`, CHƯA deploy
+## Cập nhật chiều 25/11: đợt 1 đã code và merge vào `main`, chưa deploy lúc đó (đã deploy gộp khuya 25/11)
 
 11 nhánh `p6/*` (worktree `C:\moMo-wt\p6-*`) đã merge vào `main` qua `p6/wave1`. Unit sau khi gộp: **4007 passed, 3 skipped**. CI GitHub Actions (#18) xanh trên nhánh `p6/ci`.
 
@@ -116,7 +132,7 @@ Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vò
 | #19 | Khả năng hụt bước 5%, không nói 100%/0%; tài khoản 0 ₫; kỳ lộ trình từ ngày lương; nhãn tiếng Việt ở So với bản cũ | Amplify, ledger, forecast tool, forecast-batch |
 | #20 | CSP + `frame-ancestors 'none'` trên Amplify; che tên sau "chị/anh…" trong bộ nhớ | YofinaFrontend + deploy lại zip; Runtime |
 
-**Deploy đợt 1 (chờ chủ dự án duyệt, dự kiến 28/11)**, theo thứ tự:
+**Deploy đợt 1 (kế hoạch lúc đó; đã deploy gộp khuya 25/11)**, theo thứ tự:
 1. `uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --keep-boto --extra data/personas:personas`, rồi `uv run scripts/cdk.py deploy YofinaTools --require-approval never`.
 2. `uv run scripts/agent_deploy.py` (Runtime).
 3. `uv run scripts/cdk.py deploy YofinaFrontend --require-approval never`; `uv run scripts/print_env.py frontend --write`; `npm.cmd run build` trong `frontend/`; `uv run scripts/deploy_frontend.py frontend/dist`.
@@ -132,7 +148,7 @@ Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vò
 
 ### Chưa duyệt
 
-- Deploy gộp đợt 1 + đợt 2 **đã làm khuya 25/11** (chủ dự án duyệt). Deploy sau này vẫn phải hỏi trước, kèm chi phí, tác động, cách rollback. Không deploy, không seed, không đặt SSM, không chạy eval trên Runtime, không gọi Bedrock khi chưa hỏi. Khi xin duyệt: nêu chi phí, tác động, cách rollback.
+- Deploy gộp đợt 1 + đợt 2 **đã làm khuya 25/11**; bốn lần deploy ngày 26/11 (Runtime v29–v32) cũng do chủ dự án duyệt từng đợt. Deploy sau này vẫn phải hỏi trước, kèm chi phí, tác động, cách rollback. Không deploy, không seed, không đặt SSM, không chạy eval trên Runtime, không gọi Bedrock khi chưa hỏi. Khi xin duyệt: nêu chi phí, tác động, cách rollback.
 - Việc cần người hoặc chờ điều kiện: #3, #4, #21, #30, #31, #33, #34, #35, #37, #38.
 
 ### Quy ước giao việc cho worker (đã dùng ở đợt 1 và đợt 2)
@@ -141,11 +157,11 @@ Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vò
 - Commit tiếng Việt, kết bằng `(#số issue)`, **không thêm `Co-authored-by` hay trailer nào** (yêu cầu của chủ dự án).
 - Worker không sửa `docs/ai-log/`, `HANDOFF.md`, file phase 6, issue; người điều phối làm các việc đó.
 - Chạy tối đa khoảng 6 worker song song. Lần trước chạy 11 cùng lúc thì 6 cái bị lỗi mạng, phải chạy lại.
-- Gộp qua một nhánh tích hợp (ví dụ `p6/wave2`), xung đột kiểu "cả hai cùng thêm" thì giữ cả hai, chạy `uv run pytest tests/unit libs/yofina_core/tests -q -p no:cacheprovider` (mốc **4127 passed, 2 skipped** sau đợt 2) trước khi fast-forward `main` và push. `git fetch` trước: BA (bloan0908) hay commit vào `main`, và đầu `docs/ai-log/2026-11.md` hay xung đột (gộp tay, giữ mọi entry, mới nhất ở trên).
+- Gộp qua một nhánh tích hợp (ví dụ `p6/wave2`), xung đột kiểu "cả hai cùng thêm" thì giữ cả hai, chạy `uv run pytest tests/unit libs/yofina_core/tests -q -p no:cacheprovider` (mốc **5187 passed, 2 skipped** ở `1303eaf`) trước khi fast-forward `main` và push. `git fetch` trước: BA (bloan0908) hay commit vào `main`, và đầu `docs/ai-log/2026-11.md` hay xung đột (gộp tay, giữ mọi entry, mới nhất ở trên).
 - Sau khi gộp: comment trạng thái lên từng issue (`gh issue comment <n> --body-file <tệp>`; PowerShell không có heredoc). **Chỉ đóng issue khi đã deploy và kiểm theo mục "Cách kiểm" của issue**, trừ việc không cần deploy (như #18).
 - Repo public: không ghi email, mật khẩu, account ID, thông tin thật về tài khoản AWS vào file hay issue.
 - Bẫy đã gặp: ca eval `leak-1` phải hỏi tài khoản demo khác `minh` (giờ là `lan`); `giamkhao1–3` đều là persona `minh`.
-- Rút ra ở đợt 2: giữ sẵn số migration cho từng worker (0055, 0056… để không trùng); chỉ rõ dòng nào trong file dùng chung (ví dụ `ReadConfig` của `agent-stack.ts`, khóa cuối `defaults.json`) để xung đột chỉ là "cả hai cùng thêm"; worktree mới cần `uv sync --frozen`, còn worker đụng CDK/frontend/contracts thì cần `npm.cmd ci` trong `infra-cdk/`, `frontend/`, gốc repo; `.venv` không có Pillow nên 2 test ảnh bị skip (`uv run --with pillow pytest …` để chạy); vitest cả bộ có 2 test chập chờn khi máy tải nặng; `scripts/scan_repo.py` (B2) chưa có, quét bí mật bằng regex trên dòng thêm trước khi push. Lượt review độc lập sau vòng đầu bắt được lỗi thật (tập hũ của lập luận, trần chặn eval), nên giữ bước này.
+- Rút ra ở đợt 2: giữ sẵn số migration cho từng worker (0055, 0056… để không trùng); chỉ rõ dòng nào trong file dùng chung (ví dụ `ReadConfig` của `agent-stack.ts`, khóa cuối `defaults.json`) để xung đột chỉ là "cả hai cùng thêm"; worktree mới cần `uv sync --frozen`, còn worker đụng CDK/frontend/contracts thì cần `npm.cmd ci` trong `infra-cdk/`, `frontend/`, gốc repo; `.venv` không có Pillow nên 2 test ảnh bị skip (`uv run --with pillow pytest …` để chạy); vitest cả bộ có 2 test chập chờn khi máy tải nặng; trước mỗi commit, push chạy `uv run python scripts/scan_repo.py` (có từ 26/11, phải ra 0 phát hiện). Lượt review độc lập sau vòng đầu bắt được lỗi thật (tập hũ của lập luận, trần chặn eval), nên giữ bước này.
 
 ## Cập nhật rạng sáng 25/11 (sau khi viết bản trên)
 
@@ -158,7 +174,7 @@ Người điều phối (Kiro CLI, máy của Phúc) giao 12 worker theo hai vò
 
 ## Đang ở đâu trong kế hoạch
 
-Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase trong [docs/plan/phases/](docs/plan/phases/). Hạn nộp giả định trước 11/12/2026.
+Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase trong [docs/plan/phases/](docs/plan/phases/). Hạn nộp 23:59:59 ngày 03/12/2026 (mục "Cập nhật trưa 25/11").
 
 | Phase | Trạng thái |
 |---|---|
@@ -167,7 +183,7 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 | [3. What-if, kiểm tra trước khi chi](docs/plan/phases/phase-3-what-if-va-kiem-tra.md) | Đóng 23/11 |
 | [4. Chống chịu, lộ trình, phân hũ tự động](docs/plan/phases/phase-4-chong-chiu-lo-trinh.md) | Đóng 24/11 (tiêu chí 6: tỷ lệ phải hỏi 17,4%, mục tiêu < 10%) |
 | [5. Nạp dữ liệu, hồ sơ hành vi, bộ nhớ, trace](docs/plan/phases/phase-5-nap-du-lieu-ho-so-trace.md) | **Code xong, deploy Runtime v26, đo xong**. Kết quả từng đợt ở mục "Nghiệm thu 24/11" và các mục "Kiểm lại…", "Đo sau đợt sửa kiểm toán và bộ nhớ (Runtime v25)", "Sửa nhỏ sau v25". Còn: tiêu chí 3 (OCR), đi lại 6 cảnh trên UI mới, rồi điền bảng đóng phase |
-| [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) | Chưa bắt đầu |
+| [6. Đánh giá, cứng hóa, đóng gói](docs/plan/phases/phase-6-danh-gia-dong-goi.md) | **Đang làm**: đợt 1 và đợt 2 deploy khuya 25/11 (v28); bộ hũ mặc định và đợt "agent thích ứng" (#39) deploy 26/11 (v29–v32). Còn: router Haiku, sửa lỗi trên app, #40, #41, #44 trước hạn tính năng 30/11; cứng hóa #45 trước freeze 01/12; eval RC 02/12 (#34) |
 
 ## Đã làm trong ngày 24/11 (chi tiết ở ai-log và file phase 5)
 
@@ -180,17 +196,17 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 ## Đang chạy trên AWS (`ap-southeast-1`)
 
 - Bảy stack đều `*_COMPLETE`. Danh sách tài nguyên: [docs/aws-resources.md](docs/aws-resources.md).
-- **Runtime `yofina_agent` v28**, **Amplify job 24**, migration tới **0056** (deploy khuya 25/11). App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
+- **Runtime `yofina_agent` v32**, **Amplify job 28**, migration tới **0059**, mã `main` `1303eaf` (deploy chiều 26/11, mục "Trạng thái tối 26/11"). App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
 - Memory `yofina_memory` (id không đổi) với hai strategy override `preferences_vi`, `facts_vi`: override cả trích xuất lẫn hợp nhất, model **Claude Haiku 4.5** (khoảng $0,007–0,0125 mỗi lượt được ghi; quota 10 RPM dùng chung với model dự phòng của vai `small`). Lambda nạp gọi ra API tỷ giá Vietcombank (không VPC, không NAT).
-- Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. **Mật khẩu đã lộ trong lịch sử chat 23/11: đổi trước buổi chấm.** `minh`, `giamkhao1` thuộc nhóm `ops`.
+- Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. **Mật khẩu đã lộ trong lịch sử chat 23/11: đổi trước buổi chấm.** Chỉ `minh` thuộc nhóm `ops` (#17; `giamkhao1` bị từ chối ở `/ops`, kiểm lại 26/11).
 - Aurora `yofina-db` min 0 ACU (lần gọi đầu chậm 15–20 giây). **Trước buổi demo** lên 0,5 ACU: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`, xong trả về `-c dbMinAcu=0`.
 
 Lệnh hay dùng (chi tiết ở `scripts/README.md`, `infra-cdk/README.md`): `uv run pytest tests/unit libs/yofina_core/tests -q`; `uv run scripts/cdk.py diff|deploy <Stack> --require-approval never`; `uv run scripts/agent_deploy.py` (có thể exit 1 dù READY); `uv run scripts/migrate.py`; `uv run scripts/seed_demo.py <persona>`; frontend: `uv run scripts/print_env.py frontend --write`, `npm.cmd run build` trong `frontend/`, `uv run scripts/deploy_frontend.py frontend/dist`. Đặt `PYTHONIOENCODING=utf-8` khi chạy script in tiếng Việt trên Windows.
 
 ## Số đo mới nhất
 
-- Unit 3871 passed; CDK 77/77; vitest 978.
-- Eval đầy đủ một lần trên Runtime v25: golden phase 3 31/31, phase 4 14/14, phase 5 11/15 (4 ca bộ nhớ trượt do lỗi script nạp bản ghi, đã sửa, chạy lại riêng: 3/4, ca còn lại là judge chấm sai, đã sửa judge và đạt ở v26); adversarial phase 3/4/5 16/16, 12/12, 14/14; router diễn đạt lại 18/18; OCR real 9/11 (r08 đã sửa và đạt ở v26, r12 sai ngày do ảnh mờ).
+- Test cục bộ ở `1303eaf` (26/11): unit 5187 passed, 2 skipped; `tests/local_pg` 285; vitest 1118; CDK 99/99. Số trên app sau v32: mục "Trạng thái tối 26/11".
+- Eval đầy đủ gần nhất (một lần, trên Runtime v25, 24/11; chưa chạy lại sau các đợt 25–26/11): golden phase 3 31/31, phase 4 14/14, phase 5 11/15 (4 ca bộ nhớ trượt do lỗi script nạp bản ghi, đã sửa, chạy lại riêng: 3/4, ca còn lại là judge chấm sai, đã sửa judge và đạt ở v26); adversarial phase 3/4/5 16/16, 12/12, 14/14; router diễn đạt lại 18/18; OCR real 9/11 (r08 đã sửa và đạt ở v26, r12 sai ngày do ảnh mờ).
 - Chi phí một lượt eval đầy đủ khoảng **$2,2–2,5** (khoảng 80% là Sonnet 4.6). Vì vậy: **chỉ chạy eval đầy đủ khi đã deploy xong và ổn hẳn; bình thường chỉ chạy vài ca `--only`**.
 
 ## Việc kế tiếp
