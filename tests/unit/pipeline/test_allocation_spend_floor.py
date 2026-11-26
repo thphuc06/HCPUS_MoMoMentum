@@ -23,7 +23,7 @@ from yofina_forecast.allocation import AllocationEngine
 from yofina_forecast.resilience import variable_monthly_spend
 from yofina_forecast.settings import DEFAULT_ALLOCATION_PARAMS as P
 from yofina_forecast.settings import ForecastSettings
-from yofina_ml.allocation import AllocationProblem, GoalSpec, JarSpec, optimize
+from yofina_ml.allocation import AllocationProblem, GoalSpec, JarSpec, Relaxation, optimize
 
 INCOME = 9_000_000
 #: mức nền bền (#39, chốt 26/11 tối): sàn chi và sàn thiết yếu tính từ đây, cùng hàm và tham số với LP
@@ -59,6 +59,170 @@ def trip(remaining: int, days: int = 90) -> GoalSpec:
 
 def kinds(sol) -> set[tuple[str, str]]:
     return {(r.kind, r.jar_code) for r in sol.relaxations}
+
+
+@pytest.mark.parametrize(
+    "allow,sinking_vnd,spend_vnd", [(False, 300_000, 200_000), (True, 500_000, 0)]
+)
+def test_nghia_vu_va_thiet_yeu_duoc_cat_phan_chia_quy_don(allow, sinking_vnd, spend_vnd):
+    problem = AllocationProblem(
+        5_000_000,
+        (
+            JarSpec("nghia_vu", "obligation", 2_000_000, 2_500_000, "obligation"),
+            JarSpec("an_uong", "essential", 1_600_000, 2_000_000),
+            JarSpec("quy_don", "saving", 1_000_000, hold_current=True),
+            JarSpec("giai_tri", "discretionary", 400_000, spend_floor_vnd=300_000),
+        ),
+        P,
+        allow_relaxation=allow,
+    )
+    sol = optimize(problem)
+    assert (sol.status, sol.relaxation_rounds) == (("relaxed", 1) if allow else ("optimal", 0))
+    assert total(sol) == problem.income_vnd and all(o.floor_gap_vnd == 0 for o in sol.jars)
+    assert prop(sol, "quy_don") == sinking_vnd and prop(sol, "giai_tri") == spend_vnd
+
+
+@pytest.mark.parametrize(
+    "allow,sinking_vnd,spend_vnd", [(False, 600_000, 200_000), (True, 800_000, 0)]
+)
+def test_du_phong_chua_toi_dich_giu_truoc_quy_don(allow, sinking_vnd, spend_vnd):
+    problem = AllocationProblem(
+        1_800_000,
+        (
+            JarSpec("du_phong", "emergency", 1_000_000, hold_current=True),
+            JarSpec("quy_don", "saving", 1_000_000, hold_current=True),
+            JarSpec("giai_tri", "discretionary", 400_000),
+        ),
+        P,
+        allow_relaxation=allow,
+    )
+    sol = optimize(problem)
+    assert (sol.status, sol.relaxation_rounds) == (("relaxed", 1) if allow else ("optimal", 0))
+    assert prop(sol, "du_phong") == 1_000_000
+    assert prop(sol, "quy_don") == sinking_vnd and prop(sol, "giai_tri") == spend_vnd
+
+
+@pytest.mark.parametrize("allow", [False, True], ids=["strict", "relaxed"])
+def test_quy_don_co_khoan_sap_can_giu_truoc_san_chi(allow):
+    problem = AllocationProblem(
+        1_200_000,
+        (
+            JarSpec("quy_don", "saving", 1_000_000, hold_current=True),
+            JarSpec("giai_tri", "discretionary", 400_000, spend_floor_vnd=300_000),
+        ),
+        P,
+        allow_relaxation=allow,
+    )
+    sol = optimize(problem)
+    assert prop(sol, "quy_don") == 1_000_000 and prop(sol, "giai_tri") == 200_000
+    assert (sol.status, sol.relaxation_rounds) == (("relaxed", 1) if allow else ("optimal", 0))
+    assert kinds(sol) == ({("discretionary_reduced", "giai_tri")} if allow else set())
+
+
+@pytest.mark.parametrize("remaining,status", [(3_000_000, "relaxed"), (9_000_000, "infeasible")])
+def test_quy_don_co_khoan_sap_can_giu_truoc_muc_tieu_du_lich(remaining, status):
+    travel = replace(
+        trip(remaining), target_vnd=remaining, target_date=APP_DATE + timedelta(days=90)
+    )
+    problem = AllocationProblem(
+        1_500_000,
+        (
+            JarSpec("quy_don", "saving", 1_000_000, hold_current=True),
+            JarSpec("du_lich", "goal", 500_000, goal=travel),
+        ),
+        P,
+    )
+    strict = optimize(replace(problem, allow_relaxation=False))
+    relaxed = optimize(problem)
+    assert strict.status == "infeasible" and not strict.relaxations
+    assert (relaxed.status, relaxed.relaxation_rounds) == (status, 1)
+    assert kinds(relaxed) == {("goal_delayed", "du_lich")}
+    for sol in (strict, relaxed):
+        assert prop(sol, "quy_don") == 1_000_000 and prop(sol, "du_lich") == 500_000
+        assert not sol.outcome("du_lich").goal_on_track
+
+
+def test_muc_tieu_co_han_xep_truoc_tich_luy_dai_han():
+    travel = replace(trip(3_000_000), target_date=APP_DATE + timedelta(days=90))
+    problem = AllocationProblem(
+        1_500_000,
+        (
+            JarSpec("dau_tu", "saving", 1_000_000),
+            JarSpec("du_lich", "goal", 500_000, goal=travel),
+        ),
+        P,
+    )
+    sol = optimize(problem)
+    assert (sol.status, sol.relaxation_rounds) == ("optimal", 0)
+    assert prop(sol, "du_lich") == 1_000_000 and sol.outcome("du_lich").goal_on_track
+    assert prop(sol, "dau_tu") == 500_000
+
+
+@pytest.mark.parametrize(
+    "remaining,days,budget,status,rounds,shares,unallocated,goal_values",
+    [
+        # Ca thứ 21 của bài toán ngẫu nhiên bên dưới (seed 39).
+        pytest.param(
+            563_405,
+            217,
+            (12_243_185, 3_562_852, 312_799, 473_456),
+            "optimal",
+            0,
+            (3_562_852, 3_000_000, 600_000, 473_456, 1_000_000, 1_000_000),
+            2_606_877,
+            (77_891, True, 0, 17),
+            id="optimal",
+        ),
+        pytest.param(
+            4_800_000,
+            90,
+            (9_000_000, 3_000_000, 300_000, 250_000),
+            "relaxed",
+            1,
+            (3_000_000, 3_000_000, 300_000, 250_000, 1_450_000, 1_000_000),
+            0,
+            (1_600_000, False, 450_000, 100),
+            id="relaxed",
+        ),
+        pytest.param(
+            12_000_000,
+            30,
+            (9_000_000, 3_000_000, 300_000, 250_000),
+            "infeasible",
+            1,
+            (3_000_000, 3_000_000, 300_000, 250_000, 1_450_000, 1_000_000),
+            0,
+            (12_000_000, False, 10_550_000, 249),
+            id="infeasible",
+        ),
+    ],
+)
+def test_phan_bo_khong_co_quy_don_giu_nguyen_so_tien(
+    remaining, days, budget, status, rounds, shares, unallocated, goal_values
+):
+    # Ghi từ solver gốc 907252e với cùng ví: có sàn chi, giữ Dự phòng, Du lịch có hạn.
+    income, oblig_floor, daily_floor, leisure_floor = budget
+    base = tiers(oblig_floor=oblig_floor, trip=trip(remaining, days), hold=True)
+    floors = {"chi_hang_ngay": daily_floor, "giai_tri": leisure_floor}
+    jars = tuple(replace(j, spend_floor_vnd=floors.get(j.code, 0)) for j in base.jars)
+    sol = optimize(replace(base, income_vnd=income, jars=jars))
+    assert (sol.status, sol.relaxation_rounds) == (status, rounds)
+    assert tuple(o.proposed_vnd for o in sol.jars) == shares
+    assert sol.unallocated_vnd == unallocated and sol.floor_gap_total_vnd == 0
+    for out in sol.jars:
+        assert out.floor_gap_vnd == 0
+        expected = goal_values if out.code == "du_lich" else (0, True, 0, None)
+        assert (
+            out.needed_vnd,
+            out.goal_on_track,
+            out.goal_shortfall_vnd,
+            out.days_to_goal,
+        ) == expected
+    assert sol.relaxations == (
+        ()
+        if status == "optimal"
+        else (Relaxation("goal_delayed", "du_lich", goal_values[0], 1_450_000, delay_months=6),)
+    )
 
 
 def test_muc_tieu_khong_lay_tien_duoi_san_chi_ma_lui_han():

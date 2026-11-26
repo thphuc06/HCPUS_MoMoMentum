@@ -774,6 +774,65 @@ def test_hu_tiet_kiem_khac_van_khong_nhan_muc_tieu(purpose):
     assert e.value.code == ErrorCode.PARAMS_INVALID
 
 
+@pytest.mark.parametrize(
+    "commitments,balance,hold",
+    [
+        pytest.param([("2026-11-21", 5_000_000)], 0, False, id="today-excluded"),
+        pytest.param([("2026-11-22", 5_000_000)], 0, True, id="tomorrow-included"),
+        pytest.param([("2027-02-19", 5_000_000)], 0, True, id="horizon-end-included"),
+        pytest.param([("2027-02-20", 5_000_000)], 0, False, id="after-horizon-excluded"),
+        pytest.param(
+            [("2027-01-15", 2_000_000), ("2027-02-05", 3_000_000)],
+            5_000_000,
+            False,
+            id="fully-funded",
+        ),
+        pytest.param(
+            [("2027-01-15", 2_000_000), ("2027-02-05", 3_000_000)],
+            4_999_999,
+            True,
+            id="one-dong-short",
+        ),
+        pytest.param(
+            [("2026-11-20", 7_000_000), ("2027-02-05", 5_000_000), ("2027-02-20", 6_000_000)],
+            5_000_000,
+            False,
+            id="outside-amounts-excluded",
+        ),
+        pytest.param([], 0, False, id="empty"),
+        pytest.param(None, 0, False, id="null"),
+    ],
+)
+def test_quy_don_giu_phan_chia_khi_thieu_tien_cho_khoan_sap_can(commitments, balance, hold):
+    engine = AllocationEngine(pipe(purposed()))
+    gathered = engine.resilience.gather(USER, NOW)
+    assert gathered.app_date == APP_DATE  # ngày của ví, không phải ngày của NOW
+    row = {
+        "code": "quy_don",
+        "kind": "saving",
+        "purpose": "sinking",
+        "balance_vnd": Decimal(balance),
+        "split_percent": Decimal(10),
+        "sinking_items": None
+        if commitments is None
+        else [
+            {"name": f"Khoản {i}", "needed_date": day, "amount_vnd": amount}
+            for i, (day, amount) in enumerate(commitments, 1)
+        ],
+    }
+    built = engine.build(
+        replace(gathered, jar_rows=(*gathered.jar_rows, row)),
+        horizon_months=3,
+        goal_args=[],
+        shock_id=None,
+        allow_relaxation=True,
+    )
+    sinking = built.problem.jars[-1]
+    assert sinking.code == "quy_don" and sinking.role == "saving" and sinking.goal is None
+    assert sinking.current_vnd == 900_000 and sinking.floor_vnd == 0
+    assert sinking.hold_current is hold
+
+
 def test_vi_bay_hu_cu_du_phong_nhan_muc_tieu_nhu_hu_tiet_kiem_cu():
     # `purpose` NULL: hũ Dự phòng nhận mục tiêu như mọi hũ tiết kiệm cũ, vai mục tiêu như trước
     engine = AllocationEngine(pipe(world()))
