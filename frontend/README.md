@@ -118,6 +118,8 @@ scripts/check-bundle.mjs
 
 **Khối `confirm` và `confirm_action` hủy được**: nút "Không" gọi `POST /confirmations/cancel` (server lưu `cancelled`, tải lại trang vẫn thấy đã hủy); gặp `ALREADY_APPLIED` thì không đánh dấu hủy mà đồng bộ lại từ server. Đề nghị quá hạn do server ép (403 `TOKEN_EXPIRED` khi xin token) hiện như "hết hạn, hỏi lại Yofina", không cho bấm lại.
 
+**Trợ giúp chia hũ** (#39, `features/jars/SplitHelp.tsx`): nút "?" cạnh tiêu đề ở màn "Thêm hoặc sửa hũ" và bước 2 của onboarding mở tấm "Chia hũ sao cho hợp lý" (Drawer của Base UI; đóng bằng nút, Esc, chạm ra ngoài; tiêu điểm về nút). Lời nằm ở `features/jars/splitHelpContent.ts`, sửa lời ở đó. Đây là hướng dẫn chung; số duy nhất là tỷ lệ mặc định đọc từ `GET /jar-templates` (`is_default`), không có dữ liệu thì lời định tính; mức sàn Dự phòng không có trong phản hồi nào của hai màn nên chỉ nói "mức sàn". Đối chiếu từng ý với quy tắc và căn cứ (quỹ khẩn cấp, lịch hóa đơn theo ngày lương, mặc định chỉ là điểm bắt đầu) ghi ở chú thích đầu tệp lời; giao diện không nêu tên tổ chức nguồn.
+
 ## Thêm một loại khối UI
 
 1. Tạo `contracts/blocks/<type>.schema.json`, thêm vào `block.schema.json` và `FILES` trong `scripts/gen_contracts.mjs`, viết `build_*` phía Python, thêm fixture hợp lệ/không hợp lệ ([contracts/README.md](../contracts/README.md)).
