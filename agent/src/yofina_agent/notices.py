@@ -160,6 +160,11 @@ GUARDRAIL_OUTPUT_BLOCKED: tuple[str, str] = (
 SWITCH_JAR_LABEL = "Mua bằng hũ {name}"
 SWITCH_JAR_SUMMARY_ENOUGH = "Trả {amount} bằng tiền hũ {name}; hũ đang có {balance}, đủ cho khoản này."
 SWITCH_JAR_SUMMARY_SHORT = "Hũ {name} chỉ còn {balance}, không đủ trả {amount}."
+#: Phương án "chuyển bù vào hũ trả rồi mua" (move_between_jars vào hũ trả khoản mua) khi mã đặt lại số chuyển là phần hũ đó còn thiếu
+#: (`whatif.enforce_top_up`, #39): nhãn và tóm tắt dựng từ hũ thật và số đã tính để chữ khớp số. {src}, {dst}: tên hũ nguồn, hũ trả;
+#: {gap}: số chuyển (phần còn thiếu); {balance}: số dư hũ trả; {amount}: giá món (đều đã định dạng).
+TOP_UP_LABEL = "Chuyển bù từ hũ {src} sang hũ {dst} rồi mua"
+TOP_UP_SUMMARY = "Chuyển {gap} từ hũ {src} sang hũ {dst}: hũ {dst} đang có {balance}, còn thiếu {gap} để trả {amount}."
 #: Chuyển hũ mà hũ nguồn không đủ tiền (`move_between_jars` trả INSUFFICIENT_FUNDS): nói số dư thật của hũ nguồn đọc ở lượt này và hỏi
 #: lại đúng một câu, không chỉ báo lỗi (#39). {src}, {dst}: tên hũ nguồn, hũ đích; {balance}: số dư hũ nguồn; {amount}: số người dùng
 #: muốn chuyển (đều đã định dạng). Còn tiền thì chip chuyển đúng số dư hiện có (người dùng vẫn phải xác nhận trên thẻ như mọi lần chuyển);

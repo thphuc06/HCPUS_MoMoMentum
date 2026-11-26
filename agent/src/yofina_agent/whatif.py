@@ -532,13 +532,29 @@ def _jar_for_analyst(j: Mapping[str, Any], spend_amount: int | None = None) -> d
     """Hũ cho Analyst: mã, tên và số dư đã định dạng (để chọn hũ đủ tiền; số dư nằm trong kết quả `get_jar_balances` nên có căn cứ).
 
     Có khoản chi thì kèm `covers_amount`: mã so số dư với số tiền khoản chi (#11), để Analyst không đề xuất trả bằng hũ không đủ tiền rồi
-    bị luật `source_jar_covers` của Verifier bắt và phải sửa thêm một vòng. Verifier vẫn kiểm luật đó."""
+    bị luật `source_jar_covers` của Verifier bắt và phải sửa thêm một vòng. Verifier vẫn kiểm luật đó. Hũ không đủ thì kèm `missing_text`:
+    phần còn thiếu để trả cả khoản chi, mã tính (`purchase_gaps`), là số của phương án chuyển bù vào hũ đó (#39)."""
     out: dict[str, Any] = {"code": j["code"], "name": j["name"]}
     balance = j.get("balance_vnd")
     if isinstance(balance, int) and not isinstance(balance, bool):
         out["balance_text"] = format_vnd(balance)
         if spend_amount is not None:
             out["covers_amount"] = balance >= spend_amount
+            if balance < spend_amount:
+                out["missing_text"] = format_vnd(spend_amount - max(balance, 0))
+    return out
+
+
+def purchase_gaps(jar_rows: Sequence[Mapping[str, Any]], spend_amount: int | None) -> set[int]:
+    """Phần còn thiếu của từng hũ để trả cả khoản chi của kịch bản (giá món trừ số dư thật, hũ âm tính như 0): số do mã tính từ kết quả
+    tool, cùng số với `missing_text` của danh sách hũ Analyst thấy, nên là căn cứ của bộ kiểm số cho phương án chuyển bù (#39)."""
+    if not spend_amount:
+        return set()
+    out: set[int] = set()
+    for j in jar_rows:
+        balance = j.get("balance_vnd")
+        if isinstance(balance, int) and not isinstance(balance, bool) and balance < spend_amount:
+            out.add(spend_amount - max(balance, 0))
     return out
 
 
@@ -563,7 +579,8 @@ def analyst_prompt(
     jars = [_jar_for_analyst(j, spend_amount) for j in jar_rows]
     covers_note = (
         "\ncovers_amount = true nghĩa là số dư hũ đó đủ trả cả khoản chi (mã đã so). Phương án trả khoản chi bằng tiền hũ "
-        "chỉ dùng hũ có covers_amount = true; không hũ nào đủ thì đừng đề xuất trả ngay bằng tiền hũ."
+        "chỉ dùng hũ có covers_amount = true; không hũ nào đủ thì đừng đề xuất trả ngay bằng tiền hũ. missing_text của hũ không đủ là "
+        "phần hũ đó còn thiếu để trả cả khoản chi (mã đã tính): phương án chuyển bù vào hũ trả khoản chi rồi mua chuyển đúng số này."
         if spend_amount is not None
         else ""
     )
@@ -912,6 +929,9 @@ async def _analyze_and_compose(turn: Turn, question: str, scenario_res: Any, st:
     can_cu = advisor.basis_catalog(advisor.tools_ok(turn.tool_log)) if advise else None
     # tỷ giá trong kết quả tool là chuỗi thập phân ("25790.00"); bản gọn của chính kết quả đó mang dạng đã định dạng mà Analyst chép
     allowed = Allowed.from_payloads([*turn.grounding_payloads(), *([fx] if fx else [])], [question])
+    # phần còn thiếu của từng hũ cho khoản chi (mã tính từ giá món và số dư thật, `missing_text` của danh sách hũ): số của phương án
+    # chuyển bù vào hũ trả (#39)
+    allowed.money.update(purchase_gaps(turn.jar_rows, _spend_amount(st.spec)))
     feedback: list[str] | None = None
     previous: Analysis | None = None
     rounds: list[list[tuple[Any, SuitabilityVerdict]]] = []
@@ -926,6 +946,7 @@ async def _analyze_and_compose(turn: Turn, question: str, scenario_res: Any, st:
             feedback,
             previous,
             spend_amount=_spend_amount(st.spec),
+            purchase_jar=_purchase_jar(st.spec),
             can_cu=can_cu,
             advise=advise,
         )
@@ -967,6 +988,15 @@ def _spend_amount(spec: Mapping[str, Any] | None) -> int | None:
     return amount if isinstance(amount, int) and not isinstance(amount, bool) and amount > 0 else None
 
 
+def _purchase_jar(spec: Mapping[str, Any] | None) -> str | None:
+    """Hũ trả NGAY khoản mua một lần bằng tiền hũ của kịch bản: hũ mà phương án chuyển bù đổ tiền vào để mua (`enforce_top_up`). Trả
+    sau hay khoản chi lặp lại không có hũ trả ngay như vậy."""
+    if not spec or spec.get("kind") != "one_time_purchase" or spec.get("funding_source") == "credit":
+        return None
+    code = spec.get("jar_code")
+    return code if isinstance(code, str) and code else None
+
+
 async def _call_analyst(
     turn: Turn,
     question: str,
@@ -975,11 +1005,12 @@ async def _call_analyst(
     previous: Analysis | None,
     *,
     spend_amount: int | None = None,
+    purchase_jar: str | None = None,
     can_cu: list[dict[str, str]] | None = None,
     advise: bool = True,
 ) -> Analysis | None:
     """Một lời gọi Analyst. `advise` False (công tắc người tư vấn tắt, #7): prompt và schema như trước luồng K, không xin
-    `reasoning`, `conclusion`."""
+    `reasoning`, `conclusion`. `purchase_jar`: hũ trả ngay khoản mua của kịch bản (`_purchase_jar`)."""
     memory = await turn.memory_block()  # đã đọc song song với router; kết quả lưu lại nên vòng sửa không đọc lại
     try:
         with turn.step("analyst"):
@@ -1022,6 +1053,8 @@ async def _call_analyst(
     options = [enforce_switch_jar(o, turn.jar_rows, spend_amount) for o in options]
     # "trả ngay bằng tiền hũ" trả cả khoản mua: số tiền không nhỏ hơn giá món, chữ nói đúng hũ đủ hay không
     options = [enforce_pay_now(o, turn.jar_rows, spend_amount) for o in options]
+    # chuyển bù vào hũ trả khoản mua rồi mua: chuyển đúng phần hũ đó còn thiếu (mã tính), chữ khớp số
+    options = [enforce_top_up(o, turn.jar_rows, spend_amount, purchase_jar) for o in options]
     # id dựng lại theo hũ thật có thể trùng nhau (hai phương án cùng hũ): giữ duy nhất như schema `Analysis` đòi
     options = unique_option_ids(options)
     update: dict[str, Any] = {"options": options}
@@ -1240,6 +1273,47 @@ def enforce_pay_now(o: AnalysisOption, jar_rows: list[dict[str, Any]], spend_amo
         if not enough:
             update["recommended"] = None
     return o.model_copy(update=update) if update else o
+
+
+def enforce_top_up(
+    o: AnalysisOption, jar_rows: list[dict[str, Any]], spend_amount: int | None, purchase_jar: str | None
+) -> AnalysisOption:
+    """Phương án chuyển bù vào hũ trả khoản mua rồi mua (`move_between_jars` có hành động chuyển, hũ nhận là hũ trả ngay của kịch bản,
+    `_purchase_jar`) chuyển đúng phần hũ đó còn thiếu: giá món trừ số dư thật (`purchase_gaps`), số do mã tính, không phải số model chọn.
+    Câu concert sau Runtime v33 (#39): nhãn và tóm tắt nói "chuyển phần thiếu" mà hành động chuyển cả giá món 1.500.000 ₫ (số duy nhất
+    gần đó có trong dữ liệu) khi hũ Giải trí 760.000 ₫ chỉ thiếu 740.000 ₫. Số bị đổi thì nhãn và tóm tắt dựng lại từ hũ thật và số đã
+    tính (như `enforce_switch_jar`), để chữ và số khớp nhau; model đã chuyển đúng số đó thì giữ chữ của model. Chuyển sang hũ khác, hũ
+    trả đã đủ tiền, không biết số dư hay kịch bản không mua bằng tiền hũ thì giữ nguyên. Hũ nguồn không đủ thì luật `source_jar_covers`
+    vẫn chặn như mọi phương án."""
+    act = o.action
+    if o.kind != "move_between_jars" or purchase_jar is None or not spend_amount or act is None:
+        return o
+    if act.tool != "move_between_jars" or act.params.get("to_jar") != purchase_jar:
+        return o
+    src = act.params.get("from_jar")
+    src_row = _jar_row(src if isinstance(src, str) else None, jar_rows)
+    dst_row = _jar_row(purchase_jar, jar_rows)
+    balance = _balance(dst_row)
+    if src_row is None or dst_row is None or balance is None or balance >= spend_amount:
+        return o
+    gap = spend_amount - max(balance, 0)
+    if act.params.get("amount_vnd") == gap:
+        return o
+    try:
+        proposal = type(o.proposal).model_validate({**o.proposal.model_dump(), "jar_code": src, "amount_vnd": gap, "funding_source": "jar"})
+    except ValidationError:
+        return o
+    names = {"src": str(src_row.get("name") or src), "dst": str(dst_row.get("name") or purchase_jar)}
+    return o.model_copy(
+        update={
+            "action": act.model_copy(update={"params": {**act.params, "amount_vnd": gap}}),
+            "proposal": proposal,
+            "label": notices.TOP_UP_LABEL.format(**names)[:60],
+            "summary": notices.TOP_UP_SUMMARY.format(
+                **names, gap=format_vnd(gap), balance=format_vnd(balance), amount=format_vnd(spend_amount)
+            )[:200],
+        }
+    )
 
 
 def jar_short_for_option(o: Any, jar_rows: list[dict[str, Any]]) -> bool:
