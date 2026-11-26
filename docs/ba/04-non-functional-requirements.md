@@ -20,7 +20,7 @@
 | NFR-03 | What-if trọn câu (FR5) | p95 dưới **8 giây** | 10 lượt, phiên ấm | Trọn câu p50 16,7 giây, p95 28,2 giây; khối đầu p50 6,9 giây (23/11) | **Chưa đạt** |
 | NFR-04 | Màn Tổng quan tải dữ liệu | p95 dưới **300 ms** đo từ Lambda | Log thời gian của `app_get_overview` | Đang gộp thành một lệnh gọi (migration 0007) | Chưa ghi số (tiêu chí 10 phase 2) |
 | NFR-05 | Dự báo cập nhật sau giao dịch | Dưới **1 phút** từ lúc ghi | Integration test | Backend báo dự báo mới có sau 3–4 giây | Đạt theo báo cáo, chờ kiểm trên trình duyệt |
-| NFR-06 | Batch đêm | Xong cho mọi tài khoản demo trước 06:00 | Step Functions `yofina-nightly` | Monte Carlo 7 hũ × 10.000 đường khoảng 0,65 giây mỗi người dùng. *Đề xuất 24/11:* bộ hũ mẫu có tới 9 hũ (BR-70), nhưng hũ đệm và dài hạn không chạy Monte Carlo (BR-73), nên số hũ cần mô phỏng gần như không tăng; cần đo lại khi đổi bộ hũ | Chưa ghi số trọn batch |
+| NFR-06 | Batch đêm | Xong cho mọi tài khoản demo trước 06:00 | Step Functions `yofina-nightly` | Monte Carlo 7 hũ × 10.000 đường khoảng 0,65 giây mỗi người dùng. *Đề xuất 24/11:* bộ hũ mẫu có tới 9 hũ (BR-70, **hoãn 26/11**), nhưng hũ đệm và dài hạn không chạy Monte Carlo (BR-73), nên số hũ cần mô phỏng gần như không tăng; cần đo lại khi đổi bộ hũ (từ 26/11: tài khoản mới 3 hũ, ví demo của `minh` 8 hũ) | Chưa ghi số trọn batch |
 
 ## 2. Độ đúng của số
 
@@ -36,15 +36,15 @@
 | ID | Yêu cầu | Chỉ tiêu | Cách đo | Hiện trạng | Trạng thái |
 |---|---|---|---|---|---|
 | NFR-10 | Tốt hơn baseline | Pinball loss thấp hơn seasonal naive trên **cả hai** bộ sinh dữ liệu | Backtest rolling-origin | Pinball bằng 0,64 lần seasonal naive ([backtest](../research/backtest-phase-2.md)) | Đạt |
-| NFR-11 | Khoảng 80% đúng nghĩa | Độ phủ tổng 30 ngày trong **0,75–0,85**; chưa đạt thì hiện nhóm tin cậy thay cho % (BR-31) | Backtest | Dải hiển thị đến từ Monte Carlo (hiệu chỉnh `rho`, `level_sigma`), ACI không phải nguồn: ACI chỉ chỉnh phân vị chi tiêu ngày, cột không hiện trên giao diện. Phase 2: 0,79–0,82 theo họ bộ sinh ([backtest](../research/backtest-phase-2.md)). Theo độ dài lịch sử: hũ dày đạt từ 47 ngày, hũ thưa từ 120 ngày; dưới ngưỡng thì ẩn % (#9). Từ #25, CQR (dải hũ dày) và PAV (`p_shortfall`) hiệu chỉnh lại SAU Monte Carlo: hũ dày ở 120 ngày phủ 0,798, mỗi đuôi khoảng 10% ([backtest-final](../research/backtest-final.md)). PELT/CUSUM chỉ phát hiện đổi hành vi để sinh lại lộ trình, không nối vào cửa sổ dự báo (mô hình không cắt lịch sử sau điểm gãy) | Đạt (dữ liệu tổng hợp) |
+| NFR-11 | Khoảng 80% đúng nghĩa | Độ phủ tổng 30 ngày trong **0,75–0,85**; chưa đạt thì hiện nhóm tin cậy thay cho % (BR-31) | Backtest | Dải hiển thị đến từ Monte Carlo (hiệu chỉnh `rho`, `level_sigma`), ACI không phải nguồn: ACI chỉ chỉnh phân vị chi tiêu ngày, cột không hiện trên giao diện. Phase 2: 0,79–0,82 theo họ bộ sinh ([backtest](../research/backtest-phase-2.md)). Theo độ dài lịch sử: hũ dày đạt từ 47 ngày, hũ thưa từ 120 ngày; dưới ngưỡng thì ẩn % (#9). Từ #25, CQR (dải hũ dày) và PAV (`p_shortfall`) hiệu chỉnh lại SAU Monte Carlo: hũ dày ở 120 ngày phủ 0,798, mỗi đuôi khoảng 10% ([backtest-final](../research/backtest-final.md)). PELT/CUSUM chỉ phát hiện đổi hành vi để sinh lại lộ trình, không nối vào cửa sổ dự báo (mô hình không cắt lịch sử sau điểm gãy). Các số trên đo trên hũ riêng theo loại chi (đúng cho ví demo). **Ví 3 hũ (26/11, offline):** hũ gộp Chi hằng ngày luôn là hũ dày nên hiện % từ 47 ngày, nhưng dải phủ thừa: 0,865 ở 120 ngày, trượt mép trên 0,85 ([đo ví 3 hũ](../research/2026-11-26-do-vi-ba-hu.md)) | Đạt (dữ liệu tổng hợp, hũ riêng); hũ gộp: phủ thừa, chưa có ô hiệu chỉnh riêng |
 | NFR-12 | Báo trước đủ sớm | Số ngày cảnh báo trước khi hũ cạn, tỷ lệ cảnh báo đúng (KPI proposal §6) | Backtest 3 persona | — | Chưa đo; Đề xuất: ghi vào báo cáo phase 6 |
 
 ## 4. Phân loại giao dịch
 
 | ID | Yêu cầu | Chỉ tiêu | Cách đo | Hiện trạng | Trạng thái |
 |---|---|---|---|---|---|
-| NFR-13 | Phân hũ đúng | Từ **90%** trên bộ kiểm thử persona | Bộ test có nhãn | 92% trên phần tự gán (phase 4) | Đạt |
-| NFR-14 | Ít làm phiền | Dưới **10%** giao dịch phải hỏi người dùng | Như trên | 17,4% (phase 4) | **Chưa đạt** |
+| NFR-13 | Phân hũ đúng | Từ **90%** trên bộ kiểm thử persona | Bộ test có nhãn | 92% trên phần tự gán (phase 4, ví nhiều hũ theo loại chi). Ví 3 hũ (26/11, offline, không model): 92,08%; có model chưa đo | Đạt (ví nhiều hũ); ví 3 hũ chưa đo đủ |
+| NFR-14 | Ít làm phiền | Dưới **10%** giao dịch phải hỏi người dùng | Như trên | 17,4% (phase 4, ví nhiều hũ theo loại chi). Ví 3 hũ (26/11, offline, không model): 39,52%; có model chưa đo | **Chưa đạt** |
 
 ## 5. Độ tin cậy
 

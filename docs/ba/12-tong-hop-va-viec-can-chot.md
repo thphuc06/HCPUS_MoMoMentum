@@ -1,6 +1,6 @@
 # 12. Tổng hợp thảo luận và danh sách việc cần chốt
 
-> Cập nhật 25/11/2026 (đối chiếu kế hoạch phase 6 của technical). File này gom các kết luận của bộ tài liệu BA (01–11) và **mọi câu hỏi đang mở** vào một chỗ, xếp theo thời điểm cần chốt. Mỗi dòng trỏ về file gốc; khi chốt, sửa ở file gốc rồi đánh dấu ở đây.
+> Cập nhật 25/11/2026 (đối chiếu kế hoạch phase 6 của technical); phần bộ hũ cập nhật 26/11 (issue #39). File này gom các kết luận của bộ tài liệu BA (01–11) và **mọi câu hỏi đang mở** vào một chỗ, xếp theo thời điểm cần chốt. Mỗi dòng trỏ về file gốc; khi chốt, sửa ở file gốc rồi đánh dấu ở đây.
 
 ## 1. Đã thảo luận và kết luận gì
 
@@ -9,7 +9,7 @@
 | 1 | Bối cảnh thị trường, pain point | 7 pain point (P1–P7) của người 18–30. Nặng nhất: không biết trước lúc thiếu tiền, phí trả sau không thấy trước, nhiều tài khoản trả sau, quỹ đệm mỏng. Khoảng trống thị trường: các ví mạnh ở "nhìn lại", chưa ai làm "nhìn trước" | [01](01-boi-canh-thi-truong.md) |
 | 2 | Phạm vi người dùng | Giữ **18–30 theo giai đoạn sống**, không đổi sang Gen Z, vì trả sau yêu cầu từ 18 tuổi và Gen Z năm 2026 có cả người 14–17 (BC-13) | [01](01-boi-canh-thi-truong.md), [02](02-business-rules.md) |
 | 3 | Quy tắc nghiệp vụ, yêu cầu | BC-01 đến 13, BR-01 đến 78, FR1–FR15, NFR-01 đến 44, AC theo Cho trước / Khi / Thì | [02](02-business-rules.md)–[05](05-acceptance-criteria.md) |
-| 4 | Cơ cấu hũ mới | Hũ tích lũy chia 4 mục đích: đệm, quỹ dồn, mục tiêu, dài hạn. Hũ Hóa đơn chuyển sang nghĩa vụ. 3 bộ hũ mẫu theo giai đoạn sống. Đã nối vào BR, FR, NFR, AC, luồng L19–L20, KPI K10, bảng gói | [02 mục B2a](02-business-rules.md), [07](07-dac-ta-luong-hoat-dong.md) |
+| 4 | Cơ cấu hũ mới | Hũ tích lũy chia 4 mục đích: đệm, quỹ dồn, mục tiêu, dài hạn. Hũ Hóa đơn chuyển sang nghĩa vụ. 3 bộ hũ mẫu theo giai đoạn sống. Đã nối vào BR, FR, NFR, AC, luồng L19–L20, KPI K10, bảng gói. **Chốt 26/11** (chủ dự án, issue #39, đã deploy): tài khoản mới nhận 3 hũ mặc định theo mục đích (Chi hằng ngày 42%, Nghĩa vụ 33%, Dự phòng 25%), hũ khác là hũ tự thêm; Hóa đơn gộp vào hũ Nghĩa vụ chung; ví demo giữ hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch (mục tiêu), Đầu tư. Bộ hũ theo giai đoạn sống hoãn. Muốn theo dõi riêng một khoản thì tách hũ; phân tích theo nhóm loại chi bên trong hũ gộp để sau hạn nộp | [02 mục B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411), [07](07-dac-ta-luong-hoat-dong.md) |
 | 5 | Đối thủ | Chỉ dùng nguồn chính thức. Cùng món hàng 1,2 triệu, tổng phải trả dao động 0–13,5% tùy ví và số ngày trễ. VNPAY không xét là đối thủ (24/11) | [09](09-phan-tich-doi-thu.md) |
 | 6 | Mô hình kinh doanh | **B2B2C qua ví**. 3 gói theo mức dùng AI; phần an toàn có ở mọi gói. 7 nguồn thu R1–R7. Không thu hoa hồng khoản vay, không bán dữ liệu, không quảng cáo trong tư vấn | [06](06-mo-hinh-kinh-doanh.md) |
 | 7 | Luồng hoạt động, human-in-the-loop | 20 luồng. Agent chỉ đọc và đề nghị; mọi thao tác ghi đi qua xem trước và token xác nhận dùng một lần. Đây là human-in-the-loop ở mức con người duyệt từng hành động | [07](07-dac-ta-luong-hoat-dong.md) |
@@ -39,6 +39,11 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | T-01 | Gợi ý tiêu hũ Dự phòng cho khoản không thiết yếu | Technical đã thêm luật suitability thứ bảy | 24/11 |
 | T-04 | Agent nhắc lời dặn không có | Technical đã sửa gốc bộ nhớ | 24/11 |
 | T-03, T-05 | Tỷ lệ phải hỏi; OCR ảnh thật | Technical đã xếp lịch ở phase 6 (E7, A4) | 25/11 |
+| C-12 | Đổi bộ hũ của tài khoản demo | Đã đổi: Chi hằng ngày, Nghĩa vụ (gộp Hóa đơn), Dự phòng cộng hũ tự thêm; `minh` 8 hũ, tổng 8.030.000 ₫ | 26/11 |
+| C-07 | Ví không có hũ nghĩa vụ thì mốc trả sau ở đâu | Hũ trả theo một quy tắc chung; ví không có hũ `obligation` thì phải chọn hũ trả | 26/11 |
+| C-11, C-13 | Tỷ lệ 3 bộ hũ theo giai đoạn sống; mục tiêu hũ đệm | Hoãn cùng BR-70 và BR-64 (sau hạn nộp) | 26/11 |
+| — | Hũ "Khác" cho khoản nhỏ một lần (issue #28) | Không làm: đo offline giảm tỷ lệ hỏi tối đa khoảng 1,2 điểm, dưới ngưỡng 3 điểm | 26/11 |
+| — | Phân tích theo nhóm loại chi bên trong hũ gộp | Không làm trước hạn nộp; cách dùng: tách hũ riêng. Hướng sau hạn nộp: gợi ý tách hũ khi hũ gộp có dấu hiệu tăng | 26/11 |
 
 ### 2.1 Gấp: technical đang chờ (chốt trước deploy đợt 1, 28/11)
 
@@ -46,7 +51,7 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 |---|---|---|---|---|
 | **C-02** | Định nghĩa mức "sát" (vàng) khi kiểm tra trước khi chi | Theo BR-36: vàng khi ngày cạn mới rơi trước kỳ lương nhưng sau ngày cạn cũ. Technical đặt ngưỡng tương ứng | Nhóm | T-02; AC-FR6-01 |
 | **C-03** | Ngưỡng nghĩa vụ trên thu nhập (code đang dùng một ngưỡng 36%) | Đơn giản nhất: **giữ 36% làm mức đỏ** (có căn cứ quy tắc 28/36, nằm giữa đề xuất 30–40%), không tách hai mức trước demo | Nhóm | T-06 |
-| **C-05** | Ngưỡng "khoản đủ lớn mới hỏi" khi phân hũ | Từ 2% lương tháng; khoản nhỏ một lần vào hũ "Khác" | Nhóm | T-03 (E7) |
+| **C-05** | Ngưỡng "khoản đủ lớn mới hỏi" khi phân hũ | Từ 2% lương tháng; ~~khoản nhỏ một lần vào hũ "Khác"~~ (hũ "Khác" không làm, 26/11) | Nhóm | T-03 (E7) |
 | **G-01, C-12, T-07** | Phạm vi demo cho các quy tắc mới | Chỉ thêm **G1** (chi phí quy năm trên thẻ kiểm tra trước khi chi, BR-75). Không đổi bộ hũ demo (C-12): **đổi 26/11**, chủ dự án chốt bộ hũ mặc định theo mục đích và bộ hũ demo có hũ tự thêm, đã deploy (issue #39, xem cuối B2a của [02](02-business-rules.md)). Còn lại ghi là lộ trình | Nhóm, Kỹ thuật | T-07 |
 | C-01 | "Còn N ngày tới lương" tính từ hôm nay hay từ ngày cạn | Tách hai câu: ngày cạn, rồi số ngày trống tới lương | Nhóm | Câu chữ cảnh 1 |
 | C-08 | Vị trí và câu chữ nhãn "do AI tạo" | Dòng nhỏ dưới mỗi câu trả lời và trong màn Giới thiệu. Hỏi technical đã có chưa | Nhóm | AC-DEMO-03 |
@@ -62,7 +67,7 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | ID | Câu hỏi | Đề xuất | Ai chốt | File |
 |---|---|---|---|---|
 | **I-01** | **Ai trả phí nền R1?** Phí nền chiếm khoảng 68% doanh thu, do ví trả; lợi ích đo được rõ nhất (giảm trễ hạn) thuộc bên cho vay | Chia R1 giữa ví và bên cho vay; hoặc giảm R1, tăng R4 do bên cho vay trả | Nhóm | [06 mục 3a](06-mo-hinh-kinh-doanh.md) |
-| **I-02** | **Duyệt các quy tắc đánh dấu đề xuất**: BC-13, BR-63 đến 78, NFR-44, K10, K11, L19, L20 | Duyệt theo khối: cơ cấu hũ (BR-63 đến 73, 78), chi phí trả sau (74 đến 76), hỗ trợ trước hạn (77) | Nhóm | [02](02-business-rules.md) |
+| **I-02** | **Duyệt các quy tắc đánh dấu đề xuất**: BC-13, BR-63 đến 78, NFR-44, K10, K11, L19, L20 | Duyệt theo khối: cơ cấu hũ (BR-63 đến 73, 78), chi phí trả sau (74 đến 76), hỗ trợ trước hạn (77). **26/11:** BR-67, 69 chốt và đã làm; BR-63, 65, 66, 73, 78 một phần; BR-64, 68, 70, 71 hoãn; còn duyệt BR-72, 74 đến 77. BR-79 đến 84 chỉ có ở Notion, chưa vào repo | Nhóm | [02](02-business-rules.md) |
 | E-01 | Duyệt mục tiêu K1–K11 | K4 10% nay có căn cứ AFM (đo được 21–24%); chú ý K3 (15%), K10 (25%), K11 (20%) | Nhóm | [08](08-kpi-kinh-doanh.md) |
 | E-03 | KPI nào lên slide | K2, K5 (số thật), **K4 kèm thử nghiệm AFM**, K9 dạng hòa vốn | Nhóm | [08](08-kpi-kinh-doanh.md) |
 | D-01 | Hướng thương mại chính | B2B2C qua ví | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
@@ -72,8 +77,8 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | F-02 | Nói thẳng xung đột phí chậm trả trên slide | Nên; kèm điểm hòa vốn khoảng 2% so với nợ xấu khu vực 2,4–7,2% | Nhóm | [10](10-tac-dong-stakeholder.md), [11](11-can-bang-chi-phi-va-loi-ich.md) |
 | G-02 | Nói G2 làm ví đối thủ mất thị phần | Không nhấn, nhưng không ghi "mọi bên đều thắng" | Nhóm | [11](11-can-bang-chi-phi-va-loi-ich.md) |
 | H-02 | Tính cắt nhân sự CSKH vào ROI | Không | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
-| C-11 | Tỷ lệ bộ hũ mẫu | Bộ "Mới đi làm" có căn cứ; hai bộ còn lại ghi "minh họa"; dựa vào BR-78 | Nhóm | [02](02-business-rules.md) |
-| C-13 | Mục tiêu hũ đệm | 3 tháng chi thiết yếu (CFPB); sinh viên 1 tháng | Nhóm | [02](02-business-rules.md) |
+| C-11 | Tỷ lệ bộ hũ mẫu | Bộ "Mới đi làm" có căn cứ; hai bộ còn lại ghi "minh họa"; dựa vào BR-78. **Hoãn 26/11** cùng BR-70; nếu slide nói về tỷ lệ thì nói 42/33/25 là giả định thử nghiệm | Nhóm | [02](02-business-rules.md) |
+| C-13 | Mục tiêu hũ đệm | 3 tháng chi thiết yếu (CFPB); sinh viên 1 tháng. **Hoãn 26/11** cùng BR-64 | Nhóm | [02](02-business-rules.md) |
 
 ### 2.3 Sau cuộc thi, khi đi pilot với đối tác
 
@@ -95,7 +100,7 @@ Phần lớn là **số liệu phải xin đối tác**. Trước khi có, dùng
 
 | ID | Câu hỏi | File |
 |---|---|---|
-| C-07 | Tài khoản không có hũ nghĩa vụ thì mốc trả sau hiện ở đâu | [02](02-business-rules.md) |
+| C-07 | Tài khoản không có hũ nghĩa vụ thì mốc trả sau hiện ở đâu (**chốt 26/11**, xem mục 2.0) | [02](02-business-rules.md) |
 | C-10 | Ngưỡng giá trị để gửi nhắc chủ động | [02](02-business-rules.md) |
 | BR-77 | Ngưỡng hụt để đề nghị hỗ trợ trước hạn | [02](02-business-rules.md) |
 | BR-78 | Ngưỡng lệch để gợi ý chỉnh tỷ lệ hũ | [02](02-business-rules.md) |
