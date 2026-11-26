@@ -10,6 +10,7 @@ from yofina_core.schedule import (
     advance_due,
     bnpl_due_date,
     build_timeline_events,
+    due_before_payday,
     expand_due_dates,
     first_due_from_day,
     midpoint,
@@ -166,25 +167,56 @@ def test_moc_bieu_do_cua_hu_hoa_don(origin):
     assert all(e.label != "Trả sau" for e in none)
 
 
-def test_obligation_window_orders_dues_and_excludes_payday():
-    def due(day, label, amount):
-        return {"date": day, "kind": "obligation", "label": label, "amount_vnd": amount}
+def _due(day, label, amount):
+    return {"date": day, "kind": "obligation", "label": label, "amount_vnd": amount}
 
-    rent = due("2026-12-01", "Tiền nhà", 600_000)
-    bill = due("2026-12-03", "Hóa đơn", 100_000)
-    bnpl = due("2026-12-03", "Trả sau", 333_000)
-    on_payday = due("2026-12-05", "Khoản vay", 900_000)
+
+def test_den_han_truoc_luong_gom_ca_ngay_luong():
+    """Chốt 26/11 (BR-22, #39, phương án B): khoản đến hạn ĐÚNG ngày lương tính là đến hạn trước lương; ngày ISO hay `date` đều được."""
+    assert due_before_payday(date(2026, 12, 4), date(2026, 12, 5))
+    assert due_before_payday(date(2026, 12, 5), date(2026, 12, 5))
+    assert not due_before_payday(date(2026, 12, 6), date(2026, 12, 5))
+    assert due_before_payday("2026-12-05", "2026-12-05") and not due_before_payday("2026-12-06", date(2026, 12, 5))
+
+
+def test_obligation_window_orders_dues_and_includes_payday():
+    """Trước 26/11 khoản đến hạn đúng ngày lương bị loại khỏi danh sách (`date < payday`): ví thật có hạn ngày 5 trùng ngày lương 5
+    không bao giờ thấy khoản đó. Theo quy tắc mới khoản đó có trong danh sách; khoản sau ngày lương vẫn không có."""
+    rent = _due("2026-12-01", "Tiền nhà", 600_000)
+    bill = _due("2026-12-03", "Hóa đơn", 100_000)
+    bnpl = _due("2026-12-03", "Trả sau", 333_000)
+    on_payday = _due("2026-12-05", "Khoản vay", 900_000)
+    after_payday = _due("2026-12-06", "Tiền thuê phòng", 2_000_000)
     window = obligation_window(
-        [bnpl, on_payday, rent, bill],
+        [bnpl, after_payday, on_payday, rent, bill],
         "2026-12-05",
-        {"2026-12-01": 450_000, "2026-12-03": -70_000},
+        {"2026-12-01": 450_000, "2026-12-03": -70_000, "2026-12-05": -970_000, "2026-12-06": -2_970_000},
     )
     assert window == {
-        "items": [rent, bill, bnpl],
+        "items": [rent, bill, bnpl, on_payday],
         "first_shortfall": {
             "date": "2026-12-03", "label": "Trả sau", "shortfall_vnd": 70_000,
         },
     }
+
+
+def test_khoan_den_han_dung_ngay_luong_tra_bang_so_du_truoc_khi_luong_ve():
+    """Tiền để trả khoản đến hạn đúng ngày lương là số dư trước khi cộng lương của chính ngày đó (thận trọng: khoản trừ có thể chạy
+    trước khi lương về). Số dư P50 cuối ngày 05/12 đã trừ khoản vay và cộng 2.970.000 ₫ lương; tiền có trước lương là
+    2.450.000 + 900.000 - 2.970.000 = 380.000 ₫, thiếu 520.000 ₫ dù cuối ngày vẫn dương."""
+    on_payday = _due("2026-12-05", "Khoản vay", 900_000)
+    salary = {"date": "2026-12-05", "kind": "salary", "label": "Lương về", "amount_vnd": 2_970_000}
+    later_salary = {"date": "2027-01-05", "kind": "salary", "label": "Lương về", "amount_vnd": 2_970_000}
+    window = obligation_window(
+        [_due("2026-12-01", "Tiền nhà", 600_000), on_payday, salary, later_salary],
+        "2026-12-05",
+        {"2026-12-01": 450_000, "2026-12-03": 380_000, "2026-12-05": 2_450_000},
+    )
+    assert [i["label"] for i in window["items"]] == ["Tiền nhà", "Khoản vay"]
+    assert window["first_shortfall"] == {"date": "2026-12-05", "label": "Khoản vay", "shortfall_vnd": 520_000}
+    # 1.000.000 ₫ trước lương thì đủ: cuối ngày 1.000.000 - 900.000 + 2.970.000 = 3.070.000 ₫
+    enough = obligation_window([on_payday, salary], "2026-12-05", {"2026-12-05": 3_070_000})
+    assert enough == {"items": [on_payday]}
 
 
 def test_due_today_stays_before_payday_even_when_model_debits_it_on_payday():
