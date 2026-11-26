@@ -33,14 +33,14 @@ export function Notice({
 }) {
   const { box, title: titleCls, Icon } = STYLE[kind]
   return (
-    <section role={kind === 'error' ? 'alert' : 'status'} data-notice={kind} className={cn('rounded-card p-4', box)}>
+    <section role={kind === 'error' ? 'alert' : 'status'} data-notice={kind} data-code={code} className={cn('rounded-card p-4', box)}>
       <h3 className={cn('flex items-center gap-2 text-subtitle font-semibold', titleCls)}>
         <Icon className="size-5 shrink-0" aria-hidden />
         <span>{title}</span>
       </h3>
       <p className="mt-1 text-small text-ink">{message}</p>
-      {/* Mã chỉ hiện với lỗi (để báo lỗi kèm mã); notice thông tin, suy giảm, ít dữ liệu không hiện mã nội bộ cho người dùng. */}
-      {code && kind === 'error' && <p className="mt-1 text-note text-ink-2">Mã: {code}</p>}
+      {/* Không hiện mã lỗi thô cho người dùng (#39: "Mã: INSUFFICIENT_FUNDS" trong chat), kể cả với lỗi: tiêu đề và lời tiếng Việt là
+          nội dung; mã chỉ nằm ở `data-code` để tra soát (bảng "Vì sao" và màn trace có mã của lượt). */}
       {children}
       {onRetry && (
         <Button type="button" variant="soft" size="sm" className="mt-3 bg-surface" onClick={onRetry}>

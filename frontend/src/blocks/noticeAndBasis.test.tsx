@@ -36,9 +36,11 @@ describe('khối notice: mã nội bộ', () => {
     expect(screen.queryByText(/Mã:/)).toBeNull()
   })
 
-  it('notice lỗi vẫn hiện mã để báo lỗi', () => {
-    show(validBlock('notice.error_retry'))
-    expect(screen.getByText('Mã: FORECAST_UNAVAILABLE')).toBeInTheDocument()
+  it('notice lỗi cũng không hiện mã thô (#39): người dùng đọc tiêu đề và lời tiếng Việt, mã chỉ nằm ở thuộc tính để tra soát', () => {
+    const { container } = show(validBlock('notice.error_retry'))
+    expect(screen.queryByText(/Mã:/)).toBeNull()
+    expect(screen.queryByText(/FORECAST_UNAVAILABLE/)).toBeNull()
+    expect(container.querySelector('[data-notice="error"]')?.getAttribute('data-code')).toBe('FORECAST_UNAVAILABLE')
   })
 })
 

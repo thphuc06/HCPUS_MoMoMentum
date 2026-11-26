@@ -2034,8 +2034,37 @@ class Turn:
             )
         else:
             if o.code == ErrorCode.INSUFFICIENT_FUNDS.value:
+                if await self.ask_move_short(r, str(src.code), str(dst.code), p.amount_vnd):
+                    return
                 self.emit_jars_block()
             self.tool_failure(o)
+
+    async def ask_move_short(self, r: IntentResult, src_code: str, dst_code: str, amount: int) -> bool:
+        """Hũ nguồn không đủ tiền cho lần chuyển (#39): hiện thẻ số dư rồi hỏi lại đúng một câu nêu số dư THẬT của hũ nguồn (lần đọc ví
+        của lượt này), số người dùng muốn chuyển và hũ đích; còn tiền thì chip chuyển đúng số dư hiện có (vẫn qua thẻ xác nhận như mọi
+        lần chuyển). True nếu đã hỏi. Số dư đọc ở lượt này không giải thích được lỗi (hũ đủ tiền: số dư vừa đổi; không đọc được) thì
+        False: người gọi báo lỗi bằng lời tiếng Việt của tool. Câu và chip dựng bằng mã, không gọi model."""
+        rows = {str(j.get("code")): j for j in self._jar_rows}
+        src, dst = rows.get(src_code), rows.get(dst_code)
+        balance = (src or {}).get("balance_vnd")
+        if src is None or dst is None or not isinstance(balance, int) or isinstance(balance, bool) or balance >= amount:
+            return False
+        names = {"src": str(src.get("name") or src_code), "dst": str(dst.get("name") or dst_code)}
+        texts = {**names, "balance": format_vnd(max(balance, 0)), "amount": format_vnd(amount)}
+        self.emit_jars_block()
+        if balance > 0:
+            value = notices.MOVE_PARTIAL_CHIP_VALUE.format(amount=texts["balance"], **names)
+            chip = ClarifyChipIn(
+                label=notices.MOVE_PARTIAL_CHIP_LABEL.format(amount=texts["balance"])[:40],
+                value=value if len(value) <= 80 else None,
+            )
+            req = ClarifyRequest(slot="amount", question=notices.MOVE_SHORT_QUESTION.format(**texts)[:200])
+            await self.emit_clarify(req, r, chips=[chip])
+        else:
+            req = ClarifyRequest(slot="other", question=notices.MOVE_EMPTY_QUESTION.format(**texts)[:200])
+            await self.emit_clarify(req, r, chips=[])
+        log.info(json.dumps({"event": "move_short_asked", "partial": balance > 0}))
+        return True
 
     # --- ngoài phạm vi và xã giao -----------------------------------------------------------
     async def on_out_of_scope(self, r: IntentResult, question: str) -> None:
