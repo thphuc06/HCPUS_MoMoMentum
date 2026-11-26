@@ -183,6 +183,11 @@ _DMY_RE = re.compile(
 _YEAR = r"(?: nam (\d{4}|nay|sau|toi))?"
 _DAY_MONTH_RE = re.compile(rf"\bngay (\d{{1,2}}) thang (\d{{1,2}}){_YEAR}\b")
 _OFFSET_RE = re.compile(r"(?<!thang )(?<!ngay )\b(\d{1,3}) (ngay|tuan|thang|nam) (?:nua|toi|sau)\b")
+#: hạn là một khoảng thời gian tính từ hôm nay: "trong 3 tháng", "trong vòng 2 tuần" (cùng nghĩa với "3 tháng nữa")
+_WITHIN_RE = re.compile(r"\btrong(?: vong)? (\d{1,3}) (ngay|tuan|thang|nam)\b")
+#: cả cụm hạn (router chép riêng cụm chỉ thời gian vào date_text) chỉ là một khoảng thời gian: "3 tháng". Chỉ khớp TRỌN cụm, nên
+#: khoảng thời gian giữa câu ("để dành 3 tháng lương") không thành hạn.
+_DURATION_RE = re.compile(r"(\d{1,3}) (ngay|tuan|thang|nam)")
 _END_OF_MONTH_N_RE = re.compile(rf"\b(?:cuoi|het) thang (\d{{1,2}}){_YEAR}\b")
 _MONTH_N_RE = re.compile(rf"\bthang (\d{{1,2}}){_YEAR}\b")
 _NEXT_MONTH_RE = re.compile(r"\b(?:cuoi|het) thang (?:sau|toi)\b|\bthang (?:sau|toi)\b")
@@ -264,7 +269,7 @@ def _goal_date_match(text: str) -> tuple[Callable[[date], date], tuple[int, int]
         return (
             lambda today: _on_or_next_year(today, lambda y: date(y, mo, d), _year_of(year_token, today))
         ), span(pos, m)
-    if m := _OFFSET_RE.search(words):
+    if m := _OFFSET_RE.search(words) or _WITHIN_RE.search(words) or _DURATION_RE.fullmatch(words):
         n, unit = int(m[1]), m[2]
         if unit in ("ngay", "tuan"):
             days = n * (7 if unit == "tuan" else 1)
@@ -294,7 +299,8 @@ def _goal_date_match(text: str) -> tuple[Callable[[date], date], tuple[int, int]
 
 
 def parse_goal_date(text: str, today: date) -> date | None:
-    """Hạn mục tiêu người dùng nói ("cuối tháng này", "31/12", "6 tháng nữa", "tháng 3 năm sau") -> ngày, tính theo ngày mô phỏng `today`.
+    """Hạn mục tiêu người dùng nói ("cuối tháng này", "31/12", "6 tháng nữa", "trong 3 tháng", "tháng 3 năm sau") -> ngày, tính theo ngày
+    mô phỏng `today`.
 
     Chỉ nhận cách nói rõ ràng; không đọc được hoặc ngày không sau hôm nay thì None (người gọi nói rõ, không đoán).
 

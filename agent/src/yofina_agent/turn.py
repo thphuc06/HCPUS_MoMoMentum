@@ -114,7 +114,7 @@ from yofina_core.pii import mask_pii
 from yofina_core.resilience import load_shock_set
 from yofina_core.roadmap import JobStage, Roadmap, RoadmapReasonCode
 from yofina_core.suitability import SuitabilityVerdict
-from yofina_core.wallet import is_goal_jar
+from yofina_core.wallet import is_buffer_jar, is_goal_jar
 
 log = logging.getLogger("yofina.agent.turn")
 
@@ -1204,9 +1204,14 @@ class Turn:
         if r.params.roadmap_action == "edit_step":
             await self.on_roadmap_step_edit(r, question)
             return
-        # Người dùng nói mục tiêu trong câu: lập lộ trình theo mục tiêu đó (roadmap không bao giờ hỏi lại).
-        goal = await self.roadmap_user_goal(r.params)
-        create = r.params.roadmap_action == "create" or goal is not None
+        # Người dùng nêu mục tiêu (số tiền hoặc hạn) là xin LẬP bản mới, kể cả khi router để trống roadmap_action hay chưa trích được
+        # hũ (#39): không rơi về xem bản đang dùng. Chưa biết hũ của mục tiêu thì hỏi lại một câu chọn hũ; lượt trả lời ghép với câu
+        # này bằng mã (`router.merge_pending`) rồi lập theo mục tiêu đó.
+        states_goal = _states_goal(r.params)
+        if states_goal and await self.ask_goal_jar(r):
+            return
+        goal = await self.roadmap_user_goal(r.params) if states_goal else None
+        create = r.params.roadmap_action == "create" or states_goal
         which = "latest" if create else self.s.roadmap_default_which
         res = await self.call_tool_retry(
             "get_roadmap",
@@ -1284,10 +1289,33 @@ class Turn:
             return latest, versions
         return res.outcome, replace(versions, active_version=active.version)
 
-    async def roadmap_user_goal(self, p: IntentParams) -> UserGoal | None:
-        """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text) ra mã hũ và ngày ISO bằng mã. Chỉ nhận hũ kind `saving`.
+    async def ask_goal_jar(self, r: IntentResult) -> bool:
+        """Mục tiêu người dùng nêu chưa gắn được với hũ nào (router không trích hũ, hoặc chữ họ gõ khớp nhiều hũ): hỏi lại đúng một câu
+        chọn hũ (khối `clarify`, chip là các hũ gắn được mục tiêu lộ trình, theo thứ tự trong ví) và kết thúc lượt. True nếu đã hỏi.
 
-        Không dùng được thì bỏ mục tiêu và nói rõ bằng một câu cố định (không hỏi lại). Không lưu gì vào hũ.
+        Không hỏi khi đọc hũ hỏng (lập lộ trình báo lỗi của tool) hoặc ví không có hũ nào gắn được mục tiêu (không có gì để chọn)."""
+        jars = await self.ensure_jars()
+        if not jars.outcome.ok:
+            return False
+        match = resolve_jar(r.params.jar_text, self._jar_rows)
+        if match.status not in ("empty", "ambiguous"):
+            return False
+        eligible = [j for j in self._jar_rows if _holds_roadmap_target(j) and j.get("name")]
+        among = [j for j in eligible if j["code"] in match.candidates]
+        rows = (among or eligible)[:6]
+        if not rows:
+            return False
+        chips = [ClarifyChipIn(label=str(j["name"])[:40], value=f"Hũ {j['name']}"[:80]) for j in rows]
+        await self.emit_clarify(
+            ClarifyRequest(slot="jar", question=notices.ROADMAP_GOAL_JAR_QUESTION, chips=chips), r
+        )
+        return True
+
+    async def roadmap_user_goal(self, p: IntentParams) -> UserGoal | None:
+        """Đổi mục tiêu router trích (amount_vnd, jar_text, date_text) ra mã hũ và ngày ISO bằng mã. Chỉ nhận hũ mục tiêu (`is_goal_jar`).
+
+        Không dùng được thì bỏ mục tiêu và nói rõ bằng một câu cố định (lộ trình vẫn lập). Không lưu gì vào hũ. Hũ chưa xác định thì
+        `ask_goal_jar` đã hỏi lại trước khi tới đây.
         """
         if p.amount_vnd is None and not p.date_text:
             return None
@@ -1308,6 +1336,11 @@ class Turn:
         if not is_goal_jar(row.get("kind"), row.get("purpose")):
             if row.get("kind") != "saving":
                 await self.emit_fixed_text(_GOAL_NOT_SAVING.format(name=name))
+                return None
+            if is_buffer_jar(row.get("kind"), row.get("purpose"), row.get("goal_vnd")):
+                # Hũ Dự phòng (BR-64) có mức mục tiêu riêng, không phải hũ goal: không đẩy mục tiêu dự phòng sang hũ khác, không ghi
+                # gì vào hũ. Bộ tối ưu (`optimize_allocation`) chưa nhận đích số dư cho hũ đệm nên bản mới chưa tính mục tiêu này.
+                await self.emit_fixed_text(_GOAL_BUFFER_NOT_PLANNED.format(name=name))
                 return None
             goal_jars = [
                 str(j["name"]) for j in self._jar_rows if is_goal_jar(j.get("kind"), j.get("purpose"))
@@ -1805,11 +1838,29 @@ _GOAL_NOT_SAVING = (
     "Hũ {name} không phải hũ tiết kiệm nên mình không đặt mục tiêu này cho hũ đó. "
     "Lộ trình bên dưới dùng các mục tiêu đã khai ở hũ tiết kiệm."
 )
-#: hũ tiết kiệm nhưng mục đích không phải mục tiêu (Dự phòng, Quỹ dồn, Tích lũy dài hạn): nói đúng tình huống, chỉ chỗ đặt mục tiêu
+#: hũ tiết kiệm nhưng mục đích không phải mục tiêu (Quỹ dồn, Tích lũy dài hạn): nói đúng tình huống, chỉ chỗ đặt mục tiêu
 _GOAL_USE_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Bạn đặt mục tiêu này ở hũ {goal_jars} nhé."
 _GOAL_ADD_GOAL_JAR = "Hũ {name} không đặt mục tiêu được. Thêm hũ Mục tiêu ở màn Thêm hoặc sửa hũ để đặt mục tiêu này."
+#: mục tiêu ở hũ Dự phòng (`buffer`): lộ trình chưa tính được đích số dư của hũ đệm (xem `roadmap_user_goal`)
+_GOAL_BUFFER_NOT_PLANNED = (
+    "Lộ trình chưa tính được mục tiêu số dư cho hũ {name}, nên bản mới này lập theo các mục tiêu đã khai ở hũ, "
+    "chưa theo mục tiêu bạn vừa nêu."
+)
 _GOAL_BAD_DATE = "Mình chưa đọc được hạn “{typed}” nên dùng hạn đã khai ở hũ {name}, nếu có."
 _GOAL_NO_AMOUNT = "Hũ {name} chưa có số tiền mục tiêu nên mình chưa đặt hạn này. Bạn cho mình biết số tiền muốn gom nhé."
+
+
+def _states_goal(p: IntentParams) -> bool:
+    """Câu lộ trình có nêu mục tiêu (số tiền hoặc hạn): là yêu cầu lập bản mới theo mục tiêu đó."""
+    return p.amount_vnd is not None or bool(p.date_text and p.date_text.strip())
+
+
+def _holds_roadmap_target(jar: Mapping[str, Any]) -> bool:
+    """Hũ người dùng có thể gắn mục tiêu lộ trình vào (chip của câu hỏi chọn hũ): hũ mục tiêu (BR-67, cả hũ tiết kiệm cũ `purpose`
+    NULL) và hũ Dự phòng (BR-64, mục tiêu riêng). Bộ tối ưu hiện chỉ nhận mục tiêu của hũ mục tiêu: chọn hũ Dự phòng thì
+    `roadmap_user_goal` nói rõ bản mới chưa tính mục tiêu đó."""
+    kind, purpose = jar.get("kind"), jar.get("purpose")
+    return isinstance(kind, str) and (is_goal_jar(kind, purpose) or is_buffer_jar(kind, purpose, jar.get("goal_vnd")))
 
 
 @dataclass(frozen=True)

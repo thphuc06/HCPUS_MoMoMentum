@@ -16,7 +16,8 @@ _NO_AMOUNT_KINDS = {"goal_delay"}
 _PURCHASE_KINDS = {None, "one_time_purchase", "bnpl_purchase"}
 #: Ý định duy nhất có ô bắt buộc nên được hỏi lại qua khối `clarify` (cùng tập với `pending_intent` của hợp đồng khối). Ý định khác
 #: tự xử lý phần còn thiếu trong handler (dự báo không nói hũ thì đọc mọi hũ, cú sốc chưa chọn thì hỏi bằng danh sách cấu hình,
-#: lộ trình không hỏi lại...), nên câu hỏi lại router đặt cho chúng bị bỏ ở đây, không dặn lại trong lời nhắc của từng ý định.
+#: lộ trình có mục tiêu mà chưa rõ hũ thì handler lộ trình hỏi hũ của mục tiêu...), nên câu hỏi lại router đặt cho chúng bị bỏ ở đây,
+#: không dặn lại trong lời nhắc của từng ý định.
 CLARIFY_INTENTS = frozenset({"what_if", "affordability", "move", "profile_update"})
 
 
