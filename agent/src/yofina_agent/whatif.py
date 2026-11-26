@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator, Iterable, Mapping
+from collections.abc import AsyncIterator, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -1017,7 +1017,7 @@ async def _call_analyst(
     options = [o.model_copy(update={"proposal": normalize_proposal(o)}) for o in a.options]
     # khoản mua của kịch bản là chi tùy ý khi không ai nói khác: phương án trả khoản đó bằng tiền hũ mang cùng phân loại
     if spend_amount is not None:
-        options = [inherit_purchase_class(o) for o in options]
+        options = [inherit_purchase_class(o, turn.jar_rows) for o in options]
     # nhãn, tóm tắt, hũ và số tiền của phương án "dùng hũ khác" theo hũ thật của đề xuất (Verifier kiểm chính chữ đã dựng này)
     options = [enforce_switch_jar(o, turn.jar_rows, spend_amount) for o in options]
     # "trả ngay bằng tiền hũ" trả cả khoản mua: số tiền không nhỏ hơn giá món, chữ nói đúng hũ đủ hay không
@@ -1070,20 +1070,38 @@ CREDIT_OPTION_KINDS = frozenset({"use_credit", "proceed"})
 JAR_SPEND_OPTION_KINDS = frozenset({"switch_jar", "pay_now", "reduce_amount"})
 
 
-def inherit_purchase_class(o: AnalysisOption) -> AnalysisOption:
+def inherit_purchase_class(o: AnalysisOption, jar_rows: Sequence[Mapping[str, Any]] = ()) -> AnalysisOption:
     """Phương án trả khoản mua của kịch bản bằng tiền hũ (dùng hũ khác, trả ngay, giảm số tiền) mang phân loại của khoản mua đó.
 
     Kịch bản mua một lần, Trả sau, chi lặp lại là chi tùy ý khi người gọi không nói `is_essential` (`yofina_planner.engine.
     DISCRETIONARY_KINDS`), nhưng đề xuất của phương án mang `kind` của phương án (`switch_jar`...) nên engine không suy được phân loại.
     Model bỏ trống thì đặt `is_essential=false` và `category=spending`; model đã nói (kể cả "thiết yếu") thì giữ nguyên. Không có phân
-    loại, các luật chỉ áp cho khoản không thiết yếu (nghĩa vụ trước, giữ quỹ dự phòng) bị bỏ qua."""
+    loại, các luật chỉ áp cho khoản không thiết yếu (nghĩa vụ trước, giữ quỹ dự phòng) bị bỏ qua.
+
+    Chuyển bù giữa hũ (`move_between_jars` có hành động chuyển) để lo khoản mua cũng vậy (#39): như bước lộ trình
+    (`roadmap_agent._buffer_issue`), hũ nhận là hũ chi tiêu (`kind` của số dư hũ) thì tiền chuyển vào là để chi, nên mã đặt
+    `category=spending` kể cả khi model ghi khác, và `is_essential=false` khi model bỏ trống; luật giữ quỹ dự phòng cho việc gấp vì vậy
+    luôn xét phương án lấy quỹ dự phòng sang hũ chi không thiết yếu. Hũ nhận là hũ nghĩa vụ hay tiết kiệm thì giữ phân loại của model;
+    không biết loại hũ nhận thì như phương án trả bằng tiền hũ (chỉ điền chỗ trống)."""
     p = o.proposal
-    if o.kind not in JAR_SPEND_OPTION_KINDS or p.funding_source == "credit":
+    if p.funding_source == "credit":
         return o
     update: dict[str, Any] = {}
+    if o.kind == "move_between_jars":
+        act = o.action
+        target = act.params.get("to_jar") if act is not None and act.tool == "move_between_jars" else None
+        if not isinstance(target, str):
+            return o
+        kind = next((r.get("kind") for r in jar_rows if r.get("code") == target), None)
+        if kind == "spending" and p.category != "spending":
+            update["category"] = "spending"
+        elif kind is not None and kind != "spending":
+            return o
+    elif o.kind not in JAR_SPEND_OPTION_KINDS:
+        return o
     if p.is_essential is None:
         update["is_essential"] = False
-    if p.category is None:
+    if p.category is None and "category" not in update:
         update["category"] = "spending"
     if not update:
         return o

@@ -289,7 +289,8 @@ def test_tool_ghi_bi_cedar_tu_choi_thi_notice_va_khong_co_khoi_confirm(monkeypat
     )  # lỗi được báo bằng kết quả có cấu trúc
 
 
-def test_khong_du_so_du_hien_the_so_du_va_notice(monkeypatch):
+def test_khong_du_so_du_hien_the_so_du_va_hoi_lai(monkeypatch):
+    # #39: không chỉ báo lỗi có mã; nói số dư thật của hũ nguồn và hỏi lại (chi tiết ở test_move_insufficient.py)
     err = classify_result(
         "x",
         mcp_ok(
@@ -314,8 +315,9 @@ def test_khong_du_so_du_hien_the_so_du_va_notice(monkeypatch):
         "chuyển", llm=llm, monkeypatch=monkeypatch, tools=FakeTools({"move_between_jars": err})
     )
     check_agui_order(events)
-    assert block_types(events) == ["jar_summary", "notice"]
-    assert blocks_of(events)[1]["data"]["code"] == "INSUFFICIENT_FUNDS"
+    assert block_types(events) == ["jar_summary", "clarify"]
+    question = blocks_of(events)[1]["data"]["question"]
+    assert "760.000 ₫" in question and "5.000.000 ₫" in question
 
 
 def test_tool_ghi_tra_ok_khi_chua_co_token_la_loi_nghiem_trong(monkeypatch):

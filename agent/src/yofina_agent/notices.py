@@ -160,6 +160,14 @@ GUARDRAIL_OUTPUT_BLOCKED: tuple[str, str] = (
 SWITCH_JAR_LABEL = "Mua bằng hũ {name}"
 SWITCH_JAR_SUMMARY_ENOUGH = "Trả {amount} bằng tiền hũ {name}; hũ đang có {balance}, đủ cho khoản này."
 SWITCH_JAR_SUMMARY_SHORT = "Hũ {name} chỉ còn {balance}, không đủ trả {amount}."
+#: Chuyển hũ mà hũ nguồn không đủ tiền (`move_between_jars` trả INSUFFICIENT_FUNDS): nói số dư thật của hũ nguồn đọc ở lượt này và hỏi
+#: lại đúng một câu, không chỉ báo lỗi (#39). {src}, {dst}: tên hũ nguồn, hũ đích; {balance}: số dư hũ nguồn; {amount}: số người dùng
+#: muốn chuyển (đều đã định dạng). Còn tiền thì chip chuyển đúng số dư hiện có (người dùng vẫn phải xác nhận trên thẻ như mọi lần chuyển);
+#: hết tiền thì không có chip, người dùng gõ hũ khác hoặc số khác.
+MOVE_SHORT_QUESTION = "Hũ {src} chỉ còn {balance}, chưa đủ để chuyển {amount} sang hũ {dst}. Bạn muốn chuyển {balance} thôi không?"
+MOVE_EMPTY_QUESTION = "Hũ {src} đang có {balance} nên chưa chuyển được {amount} sang hũ {dst}. Bạn muốn chuyển từ hũ nào khác?"
+MOVE_PARTIAL_CHIP_LABEL = "Chuyển {amount}"
+MOVE_PARTIAL_CHIP_VALUE = "Chuyển {amount} từ hũ {src} sang hũ {dst}"
 #: Tên hũ người dùng gõ không khớp hũ nào (hoặc khớp nhiều hũ): đúng một câu hỏi, chip là các hũ có thật.
 UNKNOWN_JAR_QUESTION = "Mình chưa thấy hũ “{name}” trong ví của bạn. Bạn muốn dùng hũ nào?"
 UNKNOWN_JAR_QUESTION_NO_NAME = "Mình chưa xác định được hũ bạn nói. Bạn muốn dùng hũ nào?"

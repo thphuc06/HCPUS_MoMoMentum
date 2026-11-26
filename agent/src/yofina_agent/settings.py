@@ -146,7 +146,6 @@ class AgentSettings:
     gateway_tool_prefix: str
     forecast_tool_prefix: str
     planner_tool_prefix: str
-    roadmap_default_which: str
     roadmap_fix_max_rounds: int
     roadmap_max_steps: int
     roadmap_max_tool_calls_per_turn: int
@@ -213,7 +212,6 @@ class AgentSettings:
             gateway_tool_prefix=get("gateway_tool_prefix"),
             forecast_tool_prefix=get("forecast_tool_prefix"),
             planner_tool_prefix=get("planner_tool_prefix"),
-            roadmap_default_which=get("roadmap_default_which"),
             roadmap_fix_max_rounds=get("roadmap_fix_max_rounds", int),
             roadmap_max_steps=get("roadmap_max_steps", int),
             roadmap_max_tool_calls_per_turn=get("roadmap_max_tool_calls_per_turn", int),

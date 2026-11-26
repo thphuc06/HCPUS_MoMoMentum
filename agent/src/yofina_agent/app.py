@@ -41,6 +41,46 @@ from yofina_core.llm import LlmGateway, get_gateway
 log = logging.getLogger("yofina.agent.app")
 
 SESSION_HEADER = "x-amzn-bedrock-agentcore-runtime-session-id"
+#: Dịch vụ AWS agent gọi qua boto3 (model và Guardrail, bộ đếm usage và quota, cấu hình SSM, bộ nhớ AgentCore): mô hình dịch vụ của
+#: chúng được nạp sẵn ở `preload`.
+PRELOAD_SERVICES: tuple[str, ...] = ("bedrock-runtime", "dynamodb", "ssm", "bedrock-agentcore")
+
+
+def preload() -> dict[str, Any]:
+    """Nạp MỘT lần lúc tiến trình khởi động, TRƯỚC khi nghe cổng (`main.py` gọi trước `uvicorn.run`), những thứ mọi phiên đều cần:
+    Strands và client MCP (kéo theo boto3, httpx, anyio), và mô hình dịch vụ của botocore (`service-2`, bộ luật endpoint, partitions)
+    cho `PRELOAD_SERVICES` trong phiên boto3 MẶC ĐỊNH mà mọi `boto3.client(...)` của agent dùng.
+
+    Lý do (#39, lỗi 4): Runtime V2 chụp snapshot ngay khi `/ping` đạt rồi khởi động mỗi phiên bằng cách khôi phục snapshot đó; thứ đã
+    nằm trong bộ nhớ lúc chụp thì phiên có sẵn, còn tệp đọc lần đầu sau khôi phục thì chậm (tài liệu AWS "Optimize your agent for
+    Amazon Bedrock AgentCore Runtime V2"). Trước đây các import và mô hình này nạp trong lượt làm nóng của TỪNG phiên, có phiên mất hơn
+    15 giây, đúng trần frontend chờ làm nóng trước lượt chat đầu. Ở đây không gọi mạng, không đọc thông tin xác thực (client tạm dùng
+    khóa giả rồi bỏ), không đọc dữ liệu có thể đổi mà không deploy (SSM, trần, bảng): việc đó vẫn ở `AgentRuntime.warm` của từng phiên.
+    Lỗi chỉ ghi log, không chặn khởi động."""
+    started = time.perf_counter()
+    import strands
+    import strands.tools.mcp  # noqa: F401
+
+    loaded: list[str] = []
+    try:
+        region = Config().region()
+    except ConfigError:
+        region = None
+    if region:
+        try:
+            import boto3
+
+            if boto3.DEFAULT_SESSION is None:
+                boto3.setup_default_session()
+            for name in PRELOAD_SERVICES:
+                # khóa giả: botocore không tìm thông tin xác thực, không gọi mạng; client bỏ đi, mô hình ở lại trong bộ nạp của phiên
+                boto3.client(name, region_name=region, aws_access_key_id="preload", aws_secret_access_key="preload")
+                loaded.append(name)
+        except Exception as exc:
+            log.warning(json.dumps({"event": "preload_failed", "error": repr(exc)[:200]}))
+    info = {"services": loaded, "ms": int((time.perf_counter() - started) * 1000)}
+    log.info(json.dumps({"event": "preload", **info}))
+    return info
 
 
 def _chat_quota() -> daily_quota.AccountQuota:
@@ -102,8 +142,9 @@ class AgentRuntime:
         )
 
     def warm(self) -> dict[str, Any]:
-        """Nạp cấu hình, tạo client Bedrock/DynamoDB, import Strands, dựng sẵn bộ đếm lượt chat và đọc trần (#13: lượt đầu ở microVM
-        lạnh không phải tạo client DynamoDB/SSM trước router). Không gọi model hay tool."""
+        """Nạp cấu hình, tạo client Bedrock/DynamoDB, dựng sẵn bộ đếm lượt chat và đọc trần (#13: lượt đầu ở microVM lạnh không phải tạo
+        client DynamoDB/SSM trước router). Không gọi model hay tool. Thư viện và mô hình dịch vụ của botocore đã nạp sẵn trước snapshot
+        (`preload`); import lại ở đây chỉ để chạy được khi không qua `main.py` (test, chạy tại máy). Log `warm_done` kèm thời gian."""
         started = time.perf_counter()
         gateway = self._llm()
         _ = gateway.client, gateway.usage
@@ -113,12 +154,14 @@ class AgentRuntime:
         deps = self.deps()
         if deps.guardrail is not None and deps.guardrail.enabled:
             _ = deps.guardrail.client  # tạo client bedrock-runtime trước (không gọi ApplyGuardrail)
-        return {
+        info = {
             "warm": True,
             "guardrail": bool(deps.guardrail and deps.guardrail.enabled),
             "quota": self._warm_quota(),
             "ms": int((time.perf_counter() - started) * 1000),
         }
+        log.info(json.dumps({"event": "warm_done", **{k: v for k, v in info.items() if k != "warm"}}))
+        return info
 
     def _warm_quota(self) -> bool:
         """Làm nóng bộ đếm lượt chat; True nếu bộ đếm bật và đã đọc trần. Lỗi chỉ ghi log, không ném ra: lượt đầu tự làm lại việc
