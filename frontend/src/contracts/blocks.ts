@@ -742,7 +742,7 @@ export type ClarifyChip = z.infer<typeof ClarifyChip>
 export const ClarifyData = z.object({
   question: z.string().min(1).max(200),
   slot: z.enum(["amount", "funding_source", "jar", "date", "scenario_kind", "other"]),
-  chips: z.array(ClarifyChip).max(6),
+  chips: z.array(ClarifyChip).max(20),
   pending_intent: z.enum(["what_if", "affordability", "move", "profile_update"]).optional(),
   allow_free_text: z.boolean().optional(),
 })

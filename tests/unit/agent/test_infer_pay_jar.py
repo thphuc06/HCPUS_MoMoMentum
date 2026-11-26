@@ -224,7 +224,7 @@ def test_chua_ro_hu_thi_hoi_nhu_cu_chip_hu_that(monkeypatch, tx_type):
     assert _types(events) == ["clarify"] and not _calls(tools, "affordability_check")
     data = blocks_of(events)[0]["data"]
     assert data["slot"] == "jar" and data["question"] == notices.CLARIFY["pay_jar"]["question"]
-    assert [c["label"] for c in data["chips"]] == [j["name"] for j in DEMO_8][:6]  # thứ tự trong ví như trước
+    assert [c["label"] for c in data["chips"]] == [j["name"] for j in DEMO_8]  # mọi hũ của ví, theo thứ tự trong ví
 
 
 def test_hai_hu_ngang_nhau_thi_hoi_chip_ung_vien_dung_dau(monkeypatch):

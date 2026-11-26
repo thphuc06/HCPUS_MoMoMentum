@@ -72,8 +72,10 @@ currency là mã ISO 4217 ba chữ in hoa, amount_original là số theo ngoại
 amount_vnd để null; hệ thống tra tỷ giá bán rồi tự điền số VND. Ý định vẫn chọn theo việc người dùng muốn làm với khoản tiền đó. \
 Hỏi tỷ giá mà không nêu số tiền thì chỉ đặt currency.
 - funding: "credit" khi người dùng nói Trả sau, Ví Trả Sau, BNPL, mua trước trả sau; "jar" khi họ nói trừ vào hũ hay tiền hũ; còn lại để null.
-- tx_type chỉ dùng cho khoản chi của chính người dùng ở what_if và affordability: mã trong danh sách loại chi bên dưới mà khoản tiền \
-đó thuộc về, chọn theo việc hay món được trả tiền, không theo cách trả hay tên hũ. Không loại nào khớp rõ thì để null, không đoán.
+- tx_type chỉ dùng cho khoản chi của chính người dùng ở what_if và affordability: mã trong danh sách loại chi bên dưới ứng với MỤC \
+ĐÍCH của khoản tiền, tức việc hay món người dùng trả tiền cho; một khoản gồm nhiều thứ cho cùng một việc thì lấy loại của việc đó. Nhãn \
+của một loại có thể trùng tên một hũ, loại đó vẫn hợp lệ: chỉ hũ người dùng nói sẽ trả bằng (jar_text) và cách trả (funding) không \
+quyết định loại. Để null khi câu không nói tiền dùng vào việc gì, hoặc việc đó không thuộc loại nào trong danh sách.
 - profile_update: lương đặt vào salary_vnd, ngày nhận lương vào payday_day; MỘT khoản nghĩa vụ thì obligation_name (tên ngắn, ví dụ "Tiền trọ"), \
 obligation_kind (rent, bill, subscription hoặc loan; không chắc thì null), amount_vnd (số tiền mỗi kỳ), due_day (ngày đến hạn trong tháng).
 - shock_id chỉ dùng cho stress: chọn mã của cú sốc mẫu phù hợp, kể cả khi người dùng gửi nhãn từ chip; không khớp cú sốc nào thì để null.
@@ -132,6 +134,38 @@ def build_router_prompt(question: str, history: str) -> str:
         parts.append(f"<lich_su>\n{history}\n</lich_su>")
     parts.append(f"<cau_moi>\n{question}\n</cau_moi>")
     return "\n".join(parts)
+
+
+#: Tham số router có giá trị là mã trong một tập cố định (không phải chữ người dùng gõ): ghi nguyên giá trị vào log.
+_ROUTED_CODE_KEYS = (
+    "lookup_kind",
+    "funding",
+    "scenario_kind",
+    "tx_type",
+    "obligation_kind",
+    "roadmap_action",
+    "insight_kind",
+    "fee_topic",
+    "ingest_action",
+    "currency",
+    "keep_previous",
+    "shock_id",
+)
+
+
+def routed_summary(r: IntentResult) -> dict[str, Any]:
+    """Đầu ra router cho log (sự kiện `routed`): ý định, các tham số dạng mã, và TÊN các tham số còn lại có giá trị (số tiền, tên hũ,
+    nhãn, cụm ngày) chứ không ghi giá trị của chúng: log không mang chữ người dùng gõ hay số tiền. Đủ để biết router đã trích gì ở một
+    lượt trên app (lỗi #39: câu du lịch không có loại chi) mà không cần gọi lại model."""
+    params = r.params.model_dump(exclude_none=True)
+    return {
+        "intent": r.intent,
+        **{k: params[k] for k in _ROUTED_CODE_KEYS if k in params},
+        "filled": sorted(k for k in params if k not in _ROUTED_CODE_KEYS),
+        "needs_clarification": r.needs_clarification,
+        "clarify_slot": r.clarify.slot if r.clarify else None,
+        "confidence": r.confidence,
+    }
 
 
 # --- ghép câu trả lời cụt với câu đang chờ (bằng mã) -------------------------------------------

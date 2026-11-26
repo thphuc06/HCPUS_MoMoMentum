@@ -16,15 +16,25 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 import re
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from yofina_core.blocks import ActionToolName, BehaviorInsightKind, ClarifySlot, JarCode, OptionKind, RuleId
+from yofina_core.blocks import (
+    ActionToolName,
+    BehaviorInsightKind,
+    ClarifySlot,
+    JarCode,
+    OptionKind,
+    RuleId,
+)
 from yofina_core.scenario import SCENARIO_ADAPTER, ScenarioSpec
 from yofina_core.suitability import Proposal, SuitabilityVerdict
 from yofina_core.wallet import INTENTS, SPENDING_TX_TYPES, TX_TYPE_BNPL_PURCHASE
+
+log = logging.getLogger("yofina.agent.schemas")
 
 # Phase 3 có bảy ý định; phase 4 thêm `resilience`, `stress`, `roadmap`; phase 5 thêm `behavior`, `knowledge`, `ingest`, `memory`
 # (khớp `wallet.INTENTS`, cùng thứ tự với CHECK của migration 0053).
@@ -139,8 +149,13 @@ class IntentParams(_Model):
     @field_validator("tx_type", mode="before")
     @classmethod
     def _known_tx_type(cls, value: Any) -> Any:
-        """Mã ngoài danh mục loại chi coi như router không trích được loại (mã hỏi lại hũ như cũ), không bắt router thử lại."""
-        return value if isinstance(value, str) and value in ROUTER_TX_TYPES else None
+        """Mã ngoài danh mục loại chi coi như router không trích được loại (mã hỏi lại hũ như cũ), không bắt router thử lại. Giá trị bị
+        bỏ được ghi log (`router_tx_type_dropped`, cắt ngắn) để phân biệt router để trống với router trả mã lạ khi xem lượt trên app."""
+        if isinstance(value, str) and value in ROUTER_TX_TYPES:
+            return value
+        if value not in (None, ""):
+            log.warning(json.dumps({"event": "router_tx_type_dropped", "value": str(value)[:40]}, ensure_ascii=False))
+        return None
 
     @field_validator("currency", mode="before")
     @classmethod
@@ -389,9 +404,9 @@ __all__ = [
     "GroundingResult",
     "Intent",
     "IntentParams",
+    "IntentResult",
     "LookupKind",
     "ObligationKind",
-    "IntentResult",
     "OptionActionSpec",
     "OptionConclusionIn",
     "OptionSuitability",

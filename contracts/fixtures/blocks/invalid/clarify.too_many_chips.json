@@ -40,6 +40,62 @@
       {
         "id": "c6",
         "label": "Chip 6"
+      },
+      {
+        "id": "c7",
+        "label": "Chip 7"
+      },
+      {
+        "id": "c8",
+        "label": "Chip 8"
+      },
+      {
+        "id": "c9",
+        "label": "Chip 9"
+      },
+      {
+        "id": "c10",
+        "label": "Chip 10"
+      },
+      {
+        "id": "c11",
+        "label": "Chip 11"
+      },
+      {
+        "id": "c12",
+        "label": "Chip 12"
+      },
+      {
+        "id": "c13",
+        "label": "Chip 13"
+      },
+      {
+        "id": "c14",
+        "label": "Chip 14"
+      },
+      {
+        "id": "c15",
+        "label": "Chip 15"
+      },
+      {
+        "id": "c16",
+        "label": "Chip 16"
+      },
+      {
+        "id": "c17",
+        "label": "Chip 17"
+      },
+      {
+        "id": "c18",
+        "label": "Chip 18"
+      },
+      {
+        "id": "c19",
+        "label": "Chip 19"
+      },
+      {
+        "id": "c20",
+        "label": "Chip 20"
       }
     ],
     "pending_intent": "what_if",

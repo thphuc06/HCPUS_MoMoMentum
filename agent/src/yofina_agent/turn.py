@@ -64,7 +64,13 @@ from yofina_agent.identity import Identity
 from yofina_agent.ingest_chat import on_ingest
 from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
-from yofina_agent.router import PENDING_INTENTS, merge_pending, pending_params, route
+from yofina_agent.router import (
+    PENDING_INTENTS,
+    merge_pending,
+    pending_params,
+    route,
+    routed_summary,
+)
 from yofina_agent.schemas import (
     ROUTER_TX_TYPES,
     ClarifyChipIn,
@@ -995,6 +1001,8 @@ class Turn:
                         max_tokens=self.s.router_max_tokens,
                         scope=self.scope,
                     )
+                # Đầu ra router (mã và tên trường có giá trị, không chữ người dùng): chẩn đoán được lượt trên app mà không gọi lại model.
+                log.info(json.dumps({"event": "routed", **routed_summary(res.value)}, ensure_ascii=False))
                 return res.value
             except (
                 Exception
@@ -1757,14 +1765,18 @@ class Turn:
 
     # --- hỏi lại ----------------------------------------------------------------------------
     async def jar_chips(self) -> list[ClarifyChipIn]:
-        """Chip là các hũ CÓ THẬT của người dùng (không có dữ liệu hũ thì không chip, không bịa), theo thứ tự trong ví; hũ ứng viên
-        ngang nhau của lần suy hũ trả (nếu có) đứng đầu."""
+        """Chip là MỌI hũ CÓ THẬT của người dùng (không có dữ liệu hũ thì không chip, không bịa), theo thứ tự trong ví; hũ ứng viên
+        ngang nhau của lần suy hũ trả (nếu có) đứng đầu. Không cắt bớt (#39: ví 8 hũ từng chỉ có 6 chip, mất Du lịch và Đầu tư): số
+        chip tối đa của khối bằng số hũ người dùng tối đa của một ví (`CLARIFY_MAX_CHIPS`)."""
         jars = await self.ensure_jars()
         if not jars.outcome.ok:
             return []
         first = {code: i for i, code in enumerate(self._jar_candidates)}
         rows = sorted((j for j in self._jar_rows if j.get("name")), key=lambda j: first.get(j["code"], len(first)))
-        return [ClarifyChipIn(label=str(j["name"])[:40], value=f"Hũ {j['name']}"[:80]) for j in rows[:6]]
+        return [
+            ClarifyChipIn(label=str(j["name"])[:40], value=f"Hũ {j['name']}"[:80])
+            for j in rows[: B.CLARIFY_MAX_CHIPS]
+        ]
 
     async def unknown_jar_clarify(self, r: IntentResult) -> ClarifyRequest | None:
         """Tên hũ người dùng gõ mà không khớp hũ nào (hoặc khớp nhiều hũ): hỏi lại đúng một câu kèm chip hũ thật,
@@ -1783,7 +1795,7 @@ class Turn:
             return None
         name = bad.replace("?", " ").strip()[:40]
         question = notices.UNKNOWN_JAR_QUESTION.format(name=name) if name else notices.UNKNOWN_JAR_QUESTION_NO_NAME
-        return ClarifyRequest(slot="jar", question=question, chips=await self.jar_chips())
+        return ClarifyRequest(slot="jar", question=question)  # chip là mọi hũ thật: `emit_clarify` điền (`jar_chips`)
 
     async def emit_clarify(self, req: ClarifyRequest, r: IntentResult) -> None:
         """Khối `clarify` đúng một câu hỏi kèm chip; kết thúc lượt (lượt sau người dùng trả lời, router ghép với câu trước)."""
