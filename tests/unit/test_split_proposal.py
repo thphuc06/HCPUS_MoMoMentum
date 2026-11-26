@@ -487,3 +487,107 @@ def test_three_jar_wallet_keeps_daily_then_buffer():
         result = propose(jars=jars, obligations=[ob("Tiền trọ", rent)], essential_jars=essential(jars))
         assert after(result) == expected
         assert after(result) == after(propose(jars=jars, obligations=[ob("Tiền trọ", rent)]))
+
+
+# --- sàn của hũ có khoản định kỳ trả từ chính nó (#39, 26/11): mọi hũ, không theo mã ----------------------------------------------
+def minh_obligations():
+    """Nghĩa vụ đã khai của `minh` (spec persona, không chép tay), hũ trả theo bộ hũ demo (`LEGACY_JAR_ALIASES`, như đặt lại): tiền nhà
+    và hóa đơn từ Nghĩa vụ, Netflix từ Giải trí, Tiền cơm văn phòng từ Ăn uống."""
+    import json
+    from pathlib import Path
+
+    from yofina_core.wallet import LEGACY_JAR_ALIASES
+
+    spec = Path(__file__).resolve().parents[2] / "data" / "personas" / "specs" / "minh.json"
+    rows = json.loads(spec.read_text(encoding="utf-8"))["obligations"]
+    return [
+        ob(o["name"], o["amount_vnd"], kind=o["kind"], due_day=o["due_day"], essential=o["is_essential"],
+           pay=LEGACY_JAR_ALIASES.get(o["pay_jar"], o["pay_jar"]))
+        for o in rows
+    ]  # fmt: skip
+
+
+def test_minh_demo_obligations_are_paid_from_their_own_jars():
+    by_jar = {}
+    for o in minh_obligations():
+        by_jar.setdefault(o["pay_jar_code"], []).append((o["name"], int(o["amount_vnd"])))
+    assert by_jar["giai_tri"] == [("Netflix", 180_000)]  # 2% lương 9.000.000
+    assert by_jar["an_uong"] == [("Tiền cơm văn phòng", 300_000)]  # 3,33% -> sàn 4%
+
+
+@pytest.mark.parametrize(
+    ("loan", "expected"),
+    [
+        # nhu cầu 29,94% -> 30: thừa 3 điểm về Chi hằng ngày, không hũ nào bị lấy nên sàn không đổi gì
+        (None, {"chi_hang_ngay": 6, "giai_tri": 7, "an_uong": 30, "di_lai": 7, "muc_tieu": 10, "du_phong": 10,
+                "nghia_vu": 30}),
+        # 49,94% -> 50, +17 điểm: Giải trí giữ 2% cho Netflix (trước: về 0), phần còn lại lấy từ hũ mục tiêu
+        (1_800_000, {"chi_hang_ngay": 0, "giai_tri": 2, "an_uong": 30, "di_lai": 7, "muc_tieu": 1, "du_phong": 10,
+                     "nghia_vu": 50}),
+        # 79,94% -> 80, +47 điểm: Ăn uống giữ 4% cho Tiền cơm văn phòng (trước: còn 3%), phần thiếu lấy tiếp từ Đi lại
+        (4_500_000, {"chi_hang_ngay": 0, "giai_tri": 2, "an_uong": 4, "di_lai": 4, "muc_tieu": 0, "du_phong": 10,
+                     "nghia_vu": 80}),
+    ],
+)  # fmt: skip
+def test_minh_demo_wallet_keeps_each_jar_above_obligations_it_pays(loan, expected):
+    jars = demo_daily_jars()
+    obs = minh_obligations() + ([ob("Khoản vay", loan, kind="loan")] if loan else [])
+    result = propose(jars=jars, obligations=obs, essential_jars=essential(jars))
+    assert result["status"] == "proposed"
+    shares = after(result)
+    assert {k: shares[k] for k in expected} == expected
+    assert shares["dau_tu"] == 0 and sum(shares.values()) == 100
+    assert params_split(result) == shares
+
+
+def test_minh_demo_wallet_is_infeasible_when_only_cutting_committed_jars_would_fit():
+    # 89,94% -> 90 + sàn Dự phòng 10 + Netflix 2 + Tiền cơm văn phòng 4 = 106: trước đây "vừa" 100% bằng cách đưa Giải trí, Ăn uống
+    # về 0 (khoản định kỳ của hai hũ đó không còn tiền trả); nay không đề xuất và liệt kê nghĩa vụ theo thứ tự ưu tiên
+    jars = demo_daily_jars()
+    obs = [*minh_obligations(), ob("Khoản vay", 5_400_000, kind="loan")]
+    result = propose(jars=jars, obligations=obs, essential_jars=essential(jars))
+    assert result["status"] == "infeasible"
+    assert result["required_percent"] == 106
+    assert "params" not in result
+    assert [o["name"] for o in result["priority_obligations"]][-2:] == ["Netflix", "Tiền cơm văn phòng"]
+
+
+def test_three_jar_wallet_keeps_daily_jar_above_obligation_it_pays():
+    # khoản định kỳ người dùng chọn trả từ Chi hằng ngày: 300.000 = 3,33% -> sàn 4; nhu cầu 83,33% -> 84, +51 điểm
+    jars = three()
+    obs = [ob("Tiền trọ", 7_500_000), ob("Gửi xe tháng", 300_000, kind="bill", pay="chi_hang_ngay")]
+    result = propose(jars=jars, obligations=obs, essential_jars=essential(jars))
+    assert after(result) == {"chi_hang_ngay": 4, "nghia_vu": 84, "du_phong": 12}  # trước: 0 / 84 / 16
+    # cùng tiền trọ mà không có khoản nào trả từ Chi hằng ngày: như trước
+    plain = propose(jars=jars, obligations=[ob("Tiền trọ", 7_500_000)], essential_jars=essential(jars))
+    assert after(plain) == {"chi_hang_ngay": 0, "nghia_vu": 84, "du_phong": 16}
+
+
+def test_three_jar_wallet_below_committed_floor_is_infeasible_not_cut():
+    jars = three()
+    obs = [ob("Tiền trọ", 7_800_000), ob("Gửi xe tháng", 300_000, kind="bill", pay="chi_hang_ngay")]
+    result = propose(jars=jars, obligations=obs, essential_jars=essential(jars))
+    assert result["status"] == "infeasible" and result["required_percent"] == 101  # 87 + sàn Dự phòng 10 + 4
+
+
+def test_legacy_wallet_keeps_entertainment_above_its_subscription():
+    jars = legacy_jars()
+    obs = [
+        ob("Tiền trọ", 2_500_000, pay="hoa_don"),
+        ob("Khoản vay", 900_000, kind="loan"),
+        ob("Netflix", 600_000, kind="subscription", essential=False, pay="giai_tri"),  # 6,67% -> sàn 7
+    ]
+    result = propose(jars=jars, obligations=obs, essential_jars=essential(jars))
+    shares = after(result)
+    # trước: Giải trí 10 -> 5; nay giữ 7, 2 điểm còn lại lấy từ Dự phòng (ví cũ, `purpose` NULL) xuống không dưới sàn 10
+    assert (shares["nghia_vu"], shares["giai_tri"], shares["du_phong"], shares["an_uong"]) == (10, 7, 13, 25)
+    assert shares["hoa_don"] == 30 and shares["du_lich"] == 5
+
+
+def test_committed_floor_keeps_a_jar_already_below_it_and_never_raises_it():
+    jars = [jar("chi_hang_ngay", "spending", 1), jar("nghia_vu", "obligation", 33), jar("du_phong", "saving", 65, "buffer"),
+            jar("giai_tri", "spending", 1)]  # fmt: skip
+    obs = [ob("Tiền trọ", 3_240_000), ob("Netflix", 180_000, kind="subscription", essential=False, pay="giai_tri")]
+    shares = after(propose(jars=jars, obligations=obs, essential_jars=essential(jars)))
+    # +3 điểm: Giải trí đang 1% (dưới sàn 2%) không bị lấy thêm và cũng không được nâng; trước: Giải trí về 0, Dự phòng 64
+    assert shares == {"chi_hang_ngay": 0, "nghia_vu": 36, "du_phong": 63, "giai_tri": 1}

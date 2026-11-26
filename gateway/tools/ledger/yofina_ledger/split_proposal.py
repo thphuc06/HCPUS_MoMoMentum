@@ -16,8 +16,11 @@ Quy tắc:
   thiết yếu theo LOẠI giao dịch (Chi hằng ngày, hũ trộn, trước; rồi hũ như Giải trí), rồi Dự phòng nhưng không xuống dưới sàn
   `buffer_min_split_percent`, rồi hũ để dành khác (mục tiêu, dài hạn xếp sau nghĩa vụ theo BR-65), hũ chi thiết yếu (chỉ nhận
   loại ăn uống, đi lại, hóa đơn) sau cùng (BR-21, BR-54). Phần thừa trả về hũ chi đầu tiên (Chi hằng ngày trước).
-- Nghĩa vụ + Quỹ dồn + sàn Dự phòng vượt 100%: không đề xuất tỷ lệ, không gợi ý cắt khoản thiết yếu (BR-21); trả danh sách
-  nghĩa vụ theo thứ tự ưu tiên (nhà ở, điện nước, rồi nợ) để giao diện mở lộ trình.
+- Sàn của mọi hũ nguồn (không theo mã): tổng nghĩa vụ đã khai đang hoạt động trả từ hũ đó, quy về tháng như tỷ lệ cần của Nghĩa vụ
+  (Netflix trả từ Giải trí giữ Giải trí ở 2% lương). Hũ đang thấp hơn sàn của nó thì không bị lấy thêm (không bị nâng); hũ không có
+  khoản định kỳ nào thì sàn 0 như trước.
+- Nghĩa vụ + Quỹ dồn + sàn Dự phòng + sàn các hũ nguồn vượt 100%: không đề xuất tỷ lệ, không gợi ý cắt khoản thiết yếu (BR-21); trả
+  danh sách nghĩa vụ theo thứ tự ưu tiên (nhà ở, điện nước, rồi nợ) để giao diện mở lộ trình.
 - Mẫu số chỉ là lương đã khai. Lần lương nhận gần nhất lệch số khai quá ngưỡng BR-12 thì hỏi cập nhật lương trước.
 """
 
@@ -301,6 +304,18 @@ def declared_need(
         Fraction(0),
     )
     return declared, total
+
+
+def committed_percent(
+    obligations: Iterable[Mapping[str, Any]],
+    jars: Sequence[Mapping[str, Any]],
+    jar_code: str,
+    salary_vnd: int,
+) -> Decimal:
+    """Sàn tỷ lệ của MỘT hũ (mọi hũ, không theo mã; #39 26/11): nghĩa vụ đã khai đang hoạt động trả từ hũ đó (`declared_need`), quy
+    về tháng, chia lương, làm tròn LÊN điểm nguyên, cùng cách tính tỷ lệ cần của hũ Nghĩa vụ. Hũ không có khoản định kỳ nào thì 0."""
+    _, monthly = declared_need(obligations, jars, jar_code)
+    return Decimal(ceil_percent(monthly, salary_vnd)) if monthly else ZERO
 
 
 def obligation_reason(monthly_vnd: Fraction, salary_vnd: int) -> str:
@@ -607,8 +622,17 @@ def build_proposal(
     buffer = next((j for j in jars if j["kind"] == "saving" and j.get("purpose") == "buffer"), None) or next(
         (j for j in jars if is_buffer_jar(str(j["kind"]), j.get("purpose"), j.get("goal_vnd"))), None
     )
+    # Sàn của mỗi hũ có khoản định kỳ trả từ nó (Netflix ở Giải trí, cơm văn phòng ở Ăn uống...): phần chia không xuống dưới mức đó,
+    # nhưng hũ đang thấp hơn sàn thì chỉ không bị lấy thêm, không bị nâng (đề xuất chỉ đặt tỷ lệ cho Nghĩa vụ, Quỹ dồn).
+    committed = {
+        code: min(committed_percent(obligations, jars, code, int(salary_vnd)), share)
+        for code, share in shares.items()
+        if code != ob_jar and code not in targets
+    }
     floor = min(Decimal(buffer_min_percent), shares[str(buffer["code"])]) if buffer else ZERO
-    required = o_need + s_need + floor
+    if buffer is not None:
+        floor = max(floor, committed.pop(str(buffer["code"]), ZERO))
+    required = o_need + s_need + floor + sum(committed.values(), ZERO)
     if required > HUNDRED:
         return {
             **base,
@@ -625,16 +649,24 @@ def build_proposal(
     # BR-21, BR-54: không cắt khoản thiết yếu trước. Lấy từ hũ chi không thiết yếu (theo loại giao dịch, `essential_spending_jars`;
     # Chi hằng ngày là hũ trộn nên đứng đầu như trước), rồi Dự phòng xuống tới sàn, rồi hũ để dành khác, hũ chi thiết yếu sau cùng.
     essential_codes = essential_jars or frozenset()
-    flexible = [(str(j["code"]), ZERO) for j in spending if str(j["code"]) not in essential_codes]
+    flexible = [
+        (str(j["code"]), committed.get(str(j["code"]), ZERO))
+        for j in spending
+        if str(j["code"]) not in essential_codes
+    ]
     sources = list(flexible)
     if buffer is not None:
         sources.append((str(buffer["code"]), floor))
     sources += [
-        (str(j["code"]), ZERO)
+        (str(j["code"]), committed.get(str(j["code"]), ZERO))
         for j in jars
         if j["kind"] == "saving" and j is not buffer and j.get("purpose") != "sinking"
     ]
-    sources += [(str(j["code"]), ZERO) for j in spending if str(j["code"]) in essential_codes]
+    sources += [
+        (str(j["code"]), committed.get(str(j["code"]), ZERO))
+        for j in spending
+        if str(j["code"]) in essential_codes
+    ]
     sources = [s for s in sources if s[0] not in targets]
     # phần thừa trả về hũ chi đầu tiên (Chi hằng ngày trước) như trước
     refund_to = next((str(j["code"]) for j in spending if str(j["code"]) not in targets), None)
