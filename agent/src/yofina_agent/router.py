@@ -34,6 +34,7 @@ from yofina_agent.jars import resolve_jar
 from yofina_agent.notices import KEEP_PREVIOUS_MARKER
 from yofina_agent.schemas import ROUTER_TX_TYPES, IntentResult
 from yofina_agent.textutil import extract_amounts, goal_date_phrase, normalize, parse_amount_vnd
+from yofina_agent.verifier import Allowed, NumericGrounding
 from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
 from yofina_core.resilience import load_shock_set
 from yofina_core.wallet import is_system_jar
@@ -275,7 +276,12 @@ _VND_FIELDS = ("amount_vnd", "salary_vnd")
 
 
 def checked_route(
-    r: IntentResult, question: str, history: str, jars: Sequence[Mapping[str, str]] | None
+    r: IntentResult,
+    question: str,
+    history: str,
+    jars: Sequence[Mapping[str, str]] | None,
+    *,
+    said: Sequence[str] = (),
 ) -> IntentResult:
     """Đầu ra router sau các bước kiểm bằng dữ liệu (#39), trước khi lượt dùng. Model quyết phần theo nghĩa (ý định, hũ hợp mục đích,
     đặc tả hạn, câu trả lời hay yêu cầu mới); mã kiểm phần kiểm được và lùi an toàn khi không khớp, không sửa chữ của model:
@@ -288,13 +294,16 @@ def checked_route(
       `textutil.extract_amounts`, trong sai số làm tròn). Không có: dùng số tiền duy nhất của câu mới, câu mới có nhiều hơn một số thì
       bỏ (lượt hỏi lại số tiền đúng một câu). Hội thoại không có số nào mã đọc được (số viết bằng chữ) thì giữ số của model.
     - `keep_previous` chỉ nhận khi tin gần nhất của Yofina là câu hỏi giữ hay bỏ khoản trước do mã đặt (`_without_unasked_keep_previous`).
+    - Chữ router tự viết mà lượt phát nguyên văn (`reply`, câu hỏi lại `clarify.question`) chỉ được có số tiền và phần trăm có căn cứ
+      (`_without_ungrounded_text`): `said` là lời người dùng và dòng "Ứng dụng:" của lịch sử (không có dòng "Yofina:").
 
-    Mỗi lần sửa ghi một dòng log (`router_jar_text_inferred`, `router_amount_ungrounded`, `router_keep_previous_dropped`), không ghi chữ
-    hay số tiền của người dùng."""
+    Mỗi lần sửa ghi một dòng log (`router_jar_text_inferred`, `router_amount_ungrounded`, `router_keep_previous_dropped`,
+    `router_text_ungrounded`), không ghi chữ hay số tiền của người dùng."""
     r = checked_spend_jar(r, jars)
     r = _without_inferred_jar_text(r, jars)
     r = _without_unasked_keep_previous(r, history)
-    return _grounded_amounts(r, question, history)
+    r = _grounded_amounts(r, question, history)
+    return _without_ungrounded_text(r, question, said)
 
 
 #: Nhãn dòng của Yofina trong lịch sử router đọc (`events.format_history`).
@@ -341,6 +350,34 @@ def _grounded_amounts(r: IntentResult, question: str, history: str) -> IntentRes
     if not update:
         return r
     return r.model_copy(update={"params": r.params.model_copy(update=update)})
+
+
+def _without_ungrounded_text(r: IntentResult, question: str, said: Sequence[str]) -> IntentResult:
+    """Chữ router tự viết được phát nguyên văn (lời đáp `reply` của xã giao, câu hỏi lại `clarify.question`), nên số tiền và phần trăm
+    trong đó phải có căn cứ theo cùng bộ kiểm với mọi lời model viết (`verifier.NumericGrounding`). Căn cứ là câu mới và `said` (lời
+    người dùng, dòng "Ứng dụng:" của lịch sử). Dòng "Yofina:" không phải căn cứ: đó là lời model của lượt trước, có thể chưa qua bộ
+    kiểm (#39, câu e sau Runtime v33: lời tra cứu có số 3.600.000 ₫ bị gắn "Hãy đối chiếu số liệu", rồi lời xã giao của router chép lại
+    đúng số đó). Không có căn cứ thì bỏ chữ đó, không sửa chữ: `reply` null thì lượt xã giao dùng writer với dữ kiện của nó; `clarify`
+    null thì `clarify.resolve_clarify` hỏi bằng câu của mã khi vẫn thiếu ô bắt buộc. Chip của câu hỏi lại là câu trả lời gợi ý cho người
+    dùng chọn, không phải điều Yofina khẳng định, nên không kiểm ở đây."""
+    texts: dict[str, str] = {}
+    if r.reply:
+        texts["reply"] = r.reply
+    if r.clarify is not None:
+        texts["clarify"] = r.clarify.question
+    if not texts:
+        return r
+    allowed = Allowed.from_payloads([], [question, *said])
+    update: dict[str, Any] = {}
+    for field, text in texts.items():
+        if NumericGrounding.check({field: text}, allowed).ok:
+            continue
+        log.warning(json.dumps({"event": "router_text_ungrounded", "field": field, "intent": r.intent}))
+        if field == "reply":
+            update["reply"] = None
+        else:
+            update.update(clarify=None, needs_clarification=False)
+    return r.model_copy(update=update) if update else r
 
 
 #: Tham số router có giá trị là mã trong một tập cố định (không phải chữ người dùng gõ): ghi nguyên giá trị vào log.
@@ -613,11 +650,13 @@ async def route(
     scope: TurnScope | None = None,
     jars: Sequence[Mapping[str, str]] | None = None,
     today: date | None = None,
+    said: Sequence[str] = (),
 ) -> StructuredResult[IntentResult]:
     """Một lần phân loại. `jars`: danh sách hũ người dùng của ví (`router_jar_list`) để router chọn hũ chi; None khi lượt chưa đọc được
     ví (router để `spend_jar_code` null). Kết quả đã qua `checked_route` (mã hũ thuộc danh sách, bản chép hũ đã suy, số tiền có trong
-    hội thoại); người gọi gọi lại `checked_spend_jar` với đúng danh sách này thì không đổi gì. `today`: ngày mô phỏng hôm nay (None:
-    router không có mốc để đếm kỳ của đặc tả hạn)."""
+    hội thoại, số trong chữ router tự viết có căn cứ); người gọi gọi lại `checked_spend_jar` với đúng danh sách này thì không đổi gì.
+    `today`: ngày mô phỏng hôm nay (None: router không có mốc để đếm kỳ của đặc tả hạn). `said`: lời người dùng và dòng "Ứng dụng:" của
+    lịch sử (căn cứ cho số trong chữ router tự viết, cùng cửa sổ với `history`); trống thì chỉ câu mới là căn cứ."""
     res = await gateway.astructured_json(
         ROUTER_ROLE,
         output_model=IntentResult,
@@ -633,4 +672,4 @@ async def route(
         # kết quả bị cắt ở trần token có thể vẫn khớp schema mà thiếu trường cuối (lời đáp câu chào, #39): không nhận, thử lại
         reject_truncated=True,
     )
-    return replace(res, value=checked_route(res.value, question, history, jars))
+    return replace(res, value=checked_route(res.value, question, history, jars, said=said))

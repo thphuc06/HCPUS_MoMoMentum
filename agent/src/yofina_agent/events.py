@@ -162,14 +162,28 @@ def pending_question_before(run_input: RunAgentInput, *, before_index: int, mark
     return next((i for i in range(a - 1, -1, -1) if msgs[i].role == "user" and message_text(msgs[i])), None)
 
 
+#: Nhãn dòng lời của trợ lý trong lịch sử (`format_history`): lời model của các lượt trước, không phải căn cứ cho số liệu.
+ASSISTANT_LABEL = _ROLE_LABEL["assistant"]
+
+
+def history_entries(
+    run_input: RunAgentInput, *, before_index: int, max_messages: int, max_chars: int
+) -> list[tuple[str, str]]:
+    """(nhãn, chữ) của các tin trước câu hỏi hiện tại, đúng cửa sổ và độ dài mà `format_history` dựng (nhãn trong `_ROLE_LABEL`)."""
+    lines: list[tuple[str, str]] = []
+    for m in run_input.messages[:before_index]:
+        label = _ROLE_LABEL.get(m.role)
+        text = message_text(m) if label else ""
+        if label and text:
+            lines.append((label, text[:max_chars]))
+    return lines[-max_messages:] if max_messages > 0 else []
+
+
 def format_history(
     run_input: RunAgentInput, *, before_index: int, max_messages: int, max_chars: int
 ) -> str:
     """Bản ghi gọn các tin trước câu hỏi hiện tại (để router hiểu "chuyển luôn đi", "hũ đó"...)."""
-    lines = []
-    for m in run_input.messages[:before_index]:
-        label = _ROLE_LABEL.get(m.role)
-        text = message_text(m) if label else ""
-        if text:
-            lines.append(f"{label}: {text[:max_chars]}")
-    return "\n".join(lines[-max_messages:]) if max_messages > 0 else ""
+    entries = history_entries(
+        run_input, before_index=before_index, max_messages=max_messages, max_chars=max_chars
+    )
+    return "\n".join(f"{label}: {text}" for label, text in entries)

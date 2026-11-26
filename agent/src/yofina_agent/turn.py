@@ -236,6 +236,8 @@ class Turn:
         self.blocks: dict[str, dict[str, Any]] = {}  # id khối -> dạng dây (giữ thứ tự phát)
         self.user_text = ""
         self.history = ""
+        # lời người dùng và dòng "Ứng dụng:" trong cùng cửa sổ lịch sử (không có lời của Yofina): căn cứ cho số trong chữ router tự viết
+        self.history_basis: list[str] = []
         self.assistant_parts: list[str] = []  # các tin nhắn chữ đã phát, để lưu cùng lượt
         self.intent: str | None = None
         self.tool_calls = 0
@@ -967,14 +969,15 @@ class Turn:
         # L0: che PII trước khi vào LLM, vào log và vào bản lưu
         question = mask_pii(raw_question).text
         self.user_text = question
-        self.history = mask_pii(
-            ev.format_history(
-                self.run_input,
-                before_index=index,
-                max_messages=self.s.history_messages,
-                max_chars=self.s.history_chars_per_message,
-            )
-        ).text
+        window = {
+            "before_index": index,
+            "max_messages": self.s.history_messages,
+            "max_chars": self.s.history_chars_per_message,
+        }
+        self.history = mask_pii(ev.format_history(self.run_input, **window)).text
+        self.history_basis = [
+            mask_pii(text).text for label, text in ev.history_entries(self.run_input, **window) if label != ev.ASSISTANT_LABEL
+        ]
         # trần lượt chat theo tài khoản (#13): trước mọi lời gọi model, bộ nhớ và tool
         if not await self.within_quota():
             return
@@ -1143,6 +1146,7 @@ class Turn:
                         scope=self.scope,
                         jars=jars,
                         today=self.router_today(),
+                        said=self.history_basis,
                     )
                 value = checked_spend_jar(res.value, jars)
                 # Đầu ra router (mã và tên trường có giá trị, không chữ người dùng): chẩn đoán được lượt trên app mà không gọi lại model.
@@ -2094,10 +2098,11 @@ class Turn:
         )
 
     async def on_chitchat(self, r: IntentResult, question: str) -> None:
-        """Lời của router chỉ được phát khi mọi số trong đó có căn cứ (câu hỏi, lịch sử có dòng "Ứng dụng") và qua Guardrail."""
+        """Lời của router chỉ được phát khi mọi số trong đó có căn cứ (câu hỏi, lời người dùng và dòng "Ứng dụng" của lịch sử; lời của
+        Yofina các lượt trước không phải căn cứ, `router._without_ungrounded_text`) và qua Guardrail; không thì writer viết từ dữ kiện."""
         if r.reply:
             ok = NumericGrounding.check(
-                {"reply": r.reply}, Allowed.from_payloads([], [question, self.history])
+                {"reply": r.reply}, Allowed.from_payloads([], [question, *self.history_basis])
             ).ok
             gr = await self.check_output(r.reply) if ok else None
             if ok and not (gr is not None and gr.blocked):
