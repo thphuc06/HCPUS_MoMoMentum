@@ -39,8 +39,6 @@ Cách dựng sổ cái (đúng cách ví thật ghi, nên các hàm dự báo đ
    sang, cộng các khóa của một hũ thường: `opening_vnd`, `target_vnd`, `expense_count`, `recent_share`, `rhythm`, `merchants`) thì bộ
    sinh dựng dòng của riêng hũ đó (số dư đầu kỳ, khoản chi) vào `PersonaData.demo_jars` bằng `random.Random` riêng. Ví persona
    (`jars`, `transactions`, `materialize`) không đổi một byte; `personas.six_jars.apply_demo_layout` mới gộp hũ này vào ví demo.
-   Cùng cách đó, `credit_line.demo_due_day` (tùy chọn) là ngày đến hạn Trả sau trên ví demo, vào `PersonaData.demo_credit_due_day`;
-   ví persona dùng `credit_line.due_day`.
 
 Kết quả chỉ dùng "số ngày trước ngày neo" và giờ địa phương; việc ghép với đồng hồ mô phỏng (ngày neo, offset, UTC) và dựng id
 làm ở `materialize`, theo ADR-0003.
@@ -201,9 +199,6 @@ class PersonaData:
     salary_events: tuple[SalaryEventSeed, ...] = ()
     credit_limit_vnd: int | None = None
     credit_due_day: int | None = None
-    #: ngày đến hạn Trả sau trên ví demo (spec `credit_line.demo_due_day`); None là như ví persona. `apply_demo_layout` áp, ví persona
-    #: bỏ qua trường này.
-    demo_credit_due_day: int | None = None
     bnpl_principal_vnd: int = 0
     #: số dư của hai hũ hệ thống theo mã (Tiền vào khác, Chưa phân loại): tổng các dòng của chúng
     system_balances: Mapping[str, int] = field(default_factory=dict)
@@ -724,9 +719,6 @@ def generate(
         salary_events=tuple(salary_events),
         credit_limit_vnd=int(credit["limit_vnd"]) if credit else None,
         credit_due_day=int(credit["due_day"]) if credit else None,
-        demo_credit_due_day=(
-            int(credit["demo_due_day"]) if credit and credit.get("demo_due_day") is not None else None
-        ),
         bnpl_principal_vnd=bnpl_total,
         system_balances=balances,
         seed_salary_events=bool(spec.get("seed_salary_events", False)),

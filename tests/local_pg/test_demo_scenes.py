@@ -92,12 +92,19 @@ def test_canh_2_mua_tai_nghe_tra_sau_hu_nghia_vu_liet_ke_khoan_den_han_truoc_luo
     print("\n[cảnh 2] chi phí:", impact["cost"], "| hũ trả:", impact["at_due"][0])
     print("  trước khi mua:", tl.get("status"), tl.get("runout_date"), before)
     print("  sau khi mua:", tl["compare"]["after"].get("status"), tl["compare"]["after"].get("runout_date"), after)
-    assert impact["at_due"][0]["jar"]["code"] == "nghia_vu"
-    assert impact["cost"]["total_due_vnd"] == 2_200_000 and impact["cost"]["due_date"] == "2026-12-03"
+    payday = tl["payday"]["date"]
+    at_due = impact["at_due"][0]
+    assert at_due["jar"]["code"] == "nghia_vu"
+    # Trả sau đến hạn ngày 5 như BR-22, đúng ngày lương 05/12: chốt 26/11 (phương án B) tính là đến hạn trước lương và trả bằng số dư
+    # trước khi lương về, nên khoản có trong danh sách và thiếu đúng ngày lương
+    assert impact["cost"]["total_due_vnd"] == 2_200_000 and impact["cost"]["due_date"] == payday == "2026-12-05"
     bnpl = [row for row in after["items"] if row["amount_vnd"] == 2_200_000]
-    assert [row["date"] for row in bnpl] == ["2026-12-03"]
-    assert after["first_shortfall"]["shortfall_vnd"] > 0
-    assert all(row["date"] < tl["payday"]["date"] for row in after["items"])
+    assert [row["date"] for row in bnpl] == [payday]
+    assert all(row["date"] <= payday for row in after["items"])
+    assert after["first_shortfall"]["date"] == payday and after["first_shortfall"]["shortfall_vnd"] > 0
+    # hũ trả hụt khi đến hạn cùng số thiếu, trạng thái SAU là hụt; trước khi mua không có khoản thiếu
+    assert at_due["status"] == "short" and at_due["shortfall_vnd"] == after["first_shortfall"]["shortfall_vnd"]
+    assert tl["compare"]["after"]["status"] == "short" and "first_shortfall" not in before
 
 
 def test_canh_3_mat_viec_hai_thang_diem_tut_va_so_ngay_tru(env):

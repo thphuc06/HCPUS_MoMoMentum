@@ -9,9 +9,6 @@ Chi hằng ngày has no persona jar: its history is the small everyday spending 
 with its own random stream (`personas.generator.DemoJarSeed`). Its split share comes from the source jars of `split_from`: each
 salary split of a source shrinks by the new jar's part, and the source's opening balance grows by the sum of those parts, so the
 source keeps the balance of the persona spec on the anchor day. The wallet total is the persona total plus the new jar's balance.
-
-The demo wallet's BNPL due day comes from the spec too (`credit_line.demo_due_day`, Minh: 3 so the December installment falls
-inside the "due before payday" window of the Nghĩa vụ forecast in scene 2); a spec without it keeps `credit_line.due_day`.
 """
 
 from __future__ import annotations
@@ -206,9 +203,5 @@ def apply_demo_layout(data: PersonaData, layout: Sequence[DemoJar]) -> PersonaDa
             for ob in data.obligations
         ),
         salary_events=tuple(events),
-        # the BNPL due day of the demo wallet is spec data (`credit_line.demo_due_day`, `PersonaData.demo_credit_due_day`);
-        # a spec without it keeps the persona due day
-        credit_due_day=data.credit_due_day if data.demo_credit_due_day is None else data.demo_credit_due_day,
-        demo_credit_due_day=None,
         demo_jars=(),
     )
