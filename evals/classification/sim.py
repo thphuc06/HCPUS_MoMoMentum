@@ -17,7 +17,7 @@ import json
 import re
 import sys
 from collections import Counter, defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -48,6 +48,7 @@ from yofina_classify.text import mask_tx  # noqa: E402
 
 from yofina_core.params import fold_text  # noqa: E402
 from yofina_core.pii import PiiPolicy  # noqa: E402
+from yofina_core.wallet import transaction_jar  # noqa: E402
 from yofina_ledger.classify_config import ClassifyThresholds  # noqa: E402
 
 DATASET = ROOT / "evals" / "classification" / "dataset.jsonl"
@@ -172,8 +173,19 @@ def prompt_key(prompt: str) -> str:
 
 
 class CachedJudge:
-    def __init__(self, caches: Caches, live: Any | None = None, *, strict: bool = False) -> None:
+    """Phán quyết model nhỏ có đệm theo băm thông điệp. `on_store(n)` (tùy chọn) được gọi sau mỗi phán quyết MỚI lấy từ model (n là số
+    lời gọi đã làm), để người gọi ghi đệm ra tệp giữa chừng: đứt mạng thì chạy lại không gọi lại thông điệp đã có đệm."""
+
+    def __init__(
+        self,
+        caches: Caches,
+        live: Any | None = None,
+        *,
+        strict: bool = False,
+        on_store: Callable[[int], None] | None = None,
+    ) -> None:
         self.caches, self.live, self.strict = caches, live, strict
+        self.on_store = on_store
         self.calls = 0
 
     def __call__(self, prompt: str, jars: Any) -> Verdict:
@@ -192,6 +204,8 @@ class CachedJudge:
                 "conf": v.confidence,
                 "runner": v.runner_up,
             }
+            if self.on_store is not None:
+                self.on_store(self.calls)
         c = self.caches.verdicts[key]
         return Verdict(
             c["jar"] if c["jar"] in jars else None,
@@ -315,10 +329,16 @@ class Result:
     split: str
 
 
-def seed_state(state: PersonaState, caches: Caches, embedder: CachedEmbedder) -> int:
-    """Nhãn seed của persona: nhúng (đệm) rồi nạp vào kho nhãn nguồn `seed`."""
+def seed_state(
+    state: PersonaState,
+    caches: Caches,
+    embedder: CachedEmbedder,
+    labels: Sequence[tuple[str, str]] | None = None,
+) -> int:
+    """Nhãn seed của persona: nhúng (đệm) rồi nạp vào kho nhãn nguồn `seed`. `labels` (chuỗi, hũ) thay nhãn của persona khi đo trên
+    ví khác ví persona (ví dụ ví 3 hũ, nhãn đổi mã theo quy tắc sản phẩm)."""
     n = 0
-    for text, jar in seed_texts(state.persona):
+    for text, jar in seed_texts(state.persona) if labels is None else labels:
         _, vec = embedder.embed(text)
         state.labels.add(text, jar, "seed", vec)
         n += 1
@@ -340,6 +360,12 @@ def prefetch_texts(rows: list[dict[str, Any]]) -> list[str]:
     return sorted(texts)
 
 
+#: Ví của một persona khi mô phỏng: (persona, hũ thêm) -> {mã: JarInfo}. Mặc định là hũ trong spec persona (`persona_jars`).
+JarsOf = Callable[[str, Sequence[JarInfo]], dict[str, JarInfo]]
+#: Nhãn seed của một persona trên ví đang đo: (persona, mã hũ của ví) -> [(chuỗi, hũ)]. Mặc định là nhãn của persona (`seed_texts`).
+SeedsOf = Callable[[str, list[str]], list[tuple[str, str]]]
+
+
 def run_sim(
     rows: list[dict[str, Any]],
     th: ClassifyThresholds,
@@ -347,14 +373,17 @@ def run_sim(
     embedder: CachedEmbedder,
     judge: CachedJudge,
     extra_jars: Sequence[JarInfo] = (),
+    *,
+    jars_of: JarsOf | None = None,
+    seeds_of: SeedsOf | None = None,
 ) -> list[Result]:
     types = load_type_map()
     splits = split_of(rows)
     results: list[Result] = []
     for persona in sorted({r["persona"] for r in rows}):
-        jars = persona_jars(persona, extra_jars)
+        jars = (jars_of or persona_jars)(persona, extra_jars)
         state = PersonaState(persona, th)
-        seed_state(state, caches, embedder)
+        seed_state(state, caches, embedder, seeds_of(persona, list(jars)) if seeds_of else None)
         clf = Classifier(th, state.labels, embedder, judge)
         for row in sorted((r for r in rows if r["persona"] == persona), key=lambda r: r["seq"]):
             ctx = state.context(row, jars, types)
@@ -369,17 +398,28 @@ def warm_prompts(
     th: ClassifyThresholds,
     embedder: CachedEmbedder,
     extra_jars: Sequence[JarInfo] = (),
+    *,
+    jars_of: JarsOf | None = None,
 ) -> list[str]:
-    """Thông điệp model nhỏ của MỌI giao dịch (lịch sử chỉ theo đáp án nên không phụ thuộc quyết định): để gọi một lượt, lưu đệm."""
+    """Thông điệp model nhỏ của MỌI giao dịch (lịch sử chỉ theo đáp án nên không phụ thuộc quyết định): để gọi một lượt, lưu đệm.
+    Thông điệp chứa danh sách hũ của ví (`jars_of`), nên mỗi ví một bộ thông điệp và một bộ khóa đệm."""
     types = load_type_map()
     prompts: list[str] = []
     for persona in sorted({r["persona"] for r in rows}):
-        jars = persona_jars(persona, extra_jars)
+        jars = (jars_of or persona_jars)(persona, extra_jars)
         state = PersonaState(persona, th)
         clf = Classifier(th, state.labels, embedder, lambda p, j: Verdict(None, 0.0))
         for row in sorted((r for r in rows if r["persona"] == persona), key=lambda r: r["seq"]):
             ctx = state.context(row, jars, types)
-            if row["tx_type"] not in types or types[row["tx_type"]].default_jar_code not in jars:
+            # bước 0 như `Classifier.classify`: loại giao dịch có hũ qua `transaction_jar` (hũ riêng, hũ gộp vào, hũ chung của ví 3 hũ)
+            # thì không tới model, nên không cần thông điệp
+            info = types.get(row["tx_type"])
+            routed = (
+                info is not None
+                and info.direction == "out"
+                and transaction_jar(info.default_jar_code, jars, tx_type=row["tx_type"])
+            )
+            if not routed:
                 prompts.append(clf.build_prompt(facts_of(row), ctx))
             key = state.key_of(row)
             if key:
