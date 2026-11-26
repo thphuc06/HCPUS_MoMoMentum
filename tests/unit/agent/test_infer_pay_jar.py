@@ -236,10 +236,11 @@ def test_hai_hu_ngang_nhau_thi_hoi_chip_ung_vien_dung_dau(monkeypatch):
     assert [c["label"] for c in chips][:3] == ["Du lịch", "Du lịch", "Chi hằng ngày"]
 
 
-def test_thieu_so_tien_van_hoi_so_tien_khong_doc_hu(monkeypatch):
+def test_thieu_so_tien_van_hoi_so_tien_khong_kiem(monkeypatch):
     llm = make_llm([route_response(intent="affordability", tx_type="travel")])
     events, tools, _ = run_turn("đi chơi xa cuối tuần có ổn không", llm=llm, tools=_tools(DEMO_8), monkeypatch=monkeypatch)
-    assert tools.calls == [] and _types(events) == ["clarify"]
+    # chỉ lần đọc ví đầu lượt (danh sách hũ cho router), không suy hũ, không kiểm
+    assert [n for n, _ in tools.calls] == ["get_jar_balances"] and _types(events) == ["clarify"]
     assert blocks_of(events)[0]["data"]["slot"] == "amount"
 
 
@@ -299,7 +300,7 @@ def test_what_if_chua_ro_hu_van_hoi_cach_tra_nhu_cu(monkeypatch):
     llm = make_llm([route_response(**route)])
     events, tools, _ = run_turn(TRAVEL_Q, llm=llm, tools=_tools(DEMO_8), monkeypatch=monkeypatch)
     assert _types(events) == ["clarify"] and blocks_of(events)[0]["data"]["slot"] == "funding_source"
-    assert tools.calls == []  # không loại chi thì không cần đọc hũ (như trước)
+    assert [n for n, _ in tools.calls] == ["get_jar_balances"]  # chỉ lần đọc ví đầu lượt, không đọc lại khi hỏi
 
 
 def test_what_if_tra_sau_giu_quy_tac_hu_tra(monkeypatch):

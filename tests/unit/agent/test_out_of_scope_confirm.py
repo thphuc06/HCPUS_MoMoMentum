@@ -32,7 +32,7 @@ def test_ngoai_pham_vi_nhung_co_dau_hieu_chi_tieu_thi_hoi_xac_nhan(monkeypatch):
     q = c["data"]["question"]
     assert q.count("?") == 1 and "đi du lịch" in q and "5.000.000 ₫" in q
     assert [x["label"] for x in c["data"]["chips"]] == ["Thử nếu chi khoản này", "Kiểm tra có đủ tiền không", "Không cần"]
-    assert not tools.calls  # chưa gọi tool nào: chỉ hỏi lại
+    assert [n for n, _ in tools.calls] == ["get_jar_balances"]  # chỉ lần đọc ví đầu lượt: chỉ hỏi lại
 
 
 def test_chi_co_loai_mua_hang_khong_so_tien_van_hoi_cau_khong_ten(monkeypatch):
@@ -53,7 +53,8 @@ def test_guardrail_chan_thi_tu_choi_du_router_trich_duoc_so_tien(monkeypatch):
     llm = make_llm([route_response(intent="what_if", amount_vnd=10_000_000, label="cổ phiếu FPT")])
     events, tools, _ = run_turn("Có 10 triệu nên mua cổ phiếu FPT không", llm=llm, monkeypatch=monkeypatch, guardrail=g)
     assert types_of(events) == ["notice", "suggestions"]
-    assert not tools.calls
+    # chỉ lần đọc ví đầu lượt (trước router, song song Guardrail); không tool nào của ý định router chọn
+    assert [n for n, _ in tools.calls] == ["get_jar_balances"]
 
 
 def test_tu_choi_ngoai_pham_vi_co_chip_quay_ve_chong_chiu_va_lo_trinh(monkeypatch):

@@ -4,8 +4,8 @@ Router (model) có thể tự hỏi lại kèm chip; mã luôn kiểm lại các
 hoặc model không dùng được (suy giảm), mã dựng câu hỏi từ chuỗi sản phẩm trong `notices.CLARIFY` (không phải câu trả lời soạn sẵn cho một
 câu demo: chỉ là nhãn của ô còn thiếu). Chỉ hỏi một ô mỗi lượt; lượt sau người dùng trả lời thì router ghép với câu trước và chạy tiếp.
 
-Lượt chỉ đọc (what-if mua hàng, kiểm tra trước khi chi) thiếu hũ trả mà router đã trích loại chi thì mã suy hũ bằng quy tắc phân loại
-của ví (`infer_pay_jar`) trước khi quyết định hỏi; chỉ hỏi khi chưa rõ.
+Lượt chỉ đọc (what-if mua hàng, kiểm tra trước khi chi) thiếu hũ trả thì mã dùng hũ router chọn theo ý định trong danh sách hũ của ví,
+không có thì hũ suy từ loại chi bằng quy tắc phân loại của ví (`infer_pay_jar`), trước khi quyết định hỏi; chỉ hỏi khi chưa rõ.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any
 from yofina_agent import notices
 from yofina_agent.jars import resolve_jar
 from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, IntentResult
-from yofina_core.wallet import spending_tx_type_jar
+from yofina_core.wallet import is_system_jar, spending_tx_type_jar
 
 #: scenario_kind nào KHÔNG cần số tiền
 _NO_AMOUNT_KINDS = {"goal_delay"}
@@ -28,8 +28,8 @@ _PURCHASE_KINDS = {None, "one_time_purchase", "bnpl_purchase"}
 #: lộ trình có mục tiêu mà chưa rõ hũ thì handler lộ trình hỏi hũ của mục tiêu...), nên câu hỏi lại router đặt cho chúng bị bỏ ở đây,
 #: không dặn lại trong lời nhắc của từng ý định.
 CLARIFY_INTENTS = frozenset({"what_if", "affordability", "move", "profile_update"})
-#: Lượt CHỈ ĐỌC có hũ trả của một khoản chi (what-if mua hàng, kiểm tra trước khi chi): khi người dùng không nêu hũ, mã suy hũ từ loại
-#: chi router trích (`infer_pay_jar`) thay vì hỏi. Lượt ghi (khai nghĩa vụ, chuyển hũ) giữ luồng hỏi và xác nhận của chúng.
+#: Lượt CHỈ ĐỌC có hũ trả của một khoản chi (what-if mua hàng, kiểm tra trước khi chi): khi người dùng không nêu hũ, mã dùng hũ router
+#: chọn hoặc hũ suy từ loại chi router trích (`infer_pay_jar`) thay vì hỏi. Lượt ghi (khai nghĩa vụ, chuyển hũ) giữ luồng hỏi và xác nhận.
 _INFER_JAR_INTENTS = frozenset({"what_if", "affordability"})
 
 
@@ -95,14 +95,19 @@ def resolve_clarify(r: IntentResult) -> ClarifyRequest | None:
     return _canned("jar", "pay_jar") if slot == "pay_jar" else _canned(slot)
 
 
-# --- suy hũ trả từ loại chi --------------------------------------------------------------------
+# --- suy hũ trả: hũ router chọn theo ý định, rồi loại chi -------------------------------------
 @dataclass(frozen=True)
 class InferredJar:
-    """Hũ trả mã suy từ loại chi (`tx_type`) khi người dùng không nêu hũ: mã và tên hũ trong ví, loại chi đã dùng để suy."""
+    """Hũ trả mã dùng khi người dùng không nêu hũ: mã và tên hũ trong ví, và nguồn. `tx_type` None: router chọn hũ theo ý định trong
+    danh sách hũ của ví (`spend_jar_code`); có giá trị: hũ suy từ loại chi đó bằng quy tắc phân loại (đường lùi)."""
 
     code: str
     name: str
-    tx_type: str
+    tx_type: str | None = None
+
+    @property
+    def source(self) -> str:
+        return "tx_type" if self.tx_type else "router"
 
 
 @dataclass(frozen=True)
@@ -125,20 +130,9 @@ def lacks_pay_jar(r: IntentResult) -> bool:
     )
 
 
-def infer_pay_jar(r: IntentResult, jar_rows: Sequence[Mapping[str, Any]]) -> JarInference:
-    """Hũ trả của khoản chi theo loại chi router trích, bằng CÙNG quy tắc với phân loại giao dịch (`wallet.spending_tx_type_jar`).
-
-    Đã rõ: quy tắc cho đúng một hũ người dùng có trong ví, và tên hũ đó đọc lại (`jars.resolve_jar`) ra đúng hũ ấy. Khi đó ý định được
-    điền tên hũ ở `jar_text` như thể người dùng đã nói, nên mọi bước sau (dựng kịch bản, kiểm tra, hỏi hũ lạ) chạy như cũ. Chưa rõ:
-    không cần suy (`lacks_pay_jar` sai, kể cả khi người dùng đã nêu hũ: tên hũ thắng), router không trích được loại, loại không có hũ
-    nhận (giao dịch loại đó rơi về Chưa phân loại), hoặc tên hũ suy ra trùng hũ khác (hai hũ ngang nhau, trả về làm ứng viên)."""
-    tx_type = r.params.tx_type
-    if tx_type is None or not lacks_pay_jar(r):
-        return JarInference(r)
-    rows = [j for j in jar_rows if j.get("code") and j.get("name")]
-    code = spending_tx_type_jar(tx_type, [str(j["code"]) for j in rows])
-    if code is None:
-        return JarInference(r)
+def _with_jar(r: IntentResult, code: str, rows: Sequence[Mapping[str, Any]], tx_type: str | None) -> JarInference:
+    """Điền tên hũ `code` vào `jar_text` như thể người dùng đã nói, nếu tên đó đọc lại (`jars.resolve_jar`) ra đúng hũ ấy; tên trùng hũ
+    khác thì chưa rõ, trả các hũ trùng làm ứng viên."""
     name = next(str(j["name"]) for j in rows if j["code"] == code)
     match = resolve_jar(name, rows)
     if match.status != "ok" or match.code != code:
@@ -146,3 +140,26 @@ def infer_pay_jar(r: IntentResult, jar_rows: Sequence[Mapping[str, Any]]) -> Jar
         return JarInference(r, candidates=tuple(dict.fromkeys((code, *others))))
     params = r.params.model_copy(update={"jar_text": name})
     return JarInference(r.model_copy(update={"params": params}), InferredJar(code, name, tx_type))
+
+
+def infer_pay_jar(r: IntentResult, jar_rows: Sequence[Mapping[str, Any]]) -> JarInference:
+    """Hũ trả của khoản chi khi người dùng không nêu hũ, theo thứ tự: (a) hũ router chọn theo ý định trong danh sách hũ của ví
+    (`spend_jar_code`, đã kiểm thuộc danh sách) nếu hũ đó còn là hũ người dùng của ví; (b) không có thì hũ của loại chi router trích, bằng
+    CÙNG quy tắc với phân loại giao dịch (`wallet.spending_tx_type_jar`); (c) vẫn không có thì chưa rõ (người gọi hỏi lại với chip mọi hũ).
+
+    Đã rõ: ra đúng một hũ người dùng có trong ví, và tên hũ đó đọc lại (`jars.resolve_jar`) ra đúng hũ ấy. Khi đó ý định được điền tên
+    hũ ở `jar_text` như thể người dùng đã nói, nên mọi bước sau (dựng kịch bản, kiểm tra, hỏi hũ lạ) chạy như cũ. Không cần suy khi
+    `lacks_pay_jar` sai, kể cả khi người dùng đã nêu hũ (tên hũ người dùng nêu thắng hũ router chọn) hay trả bằng Trả sau (hũ trả nợ theo
+    quy tắc hũ trả riêng, không dùng hũ suy ra). Tên hũ trùng hũ khác thì chưa rõ, hai hũ trùng làm ứng viên."""
+    p = r.params
+    if (p.spend_jar_code is None and p.tx_type is None) or not lacks_pay_jar(r):
+        return JarInference(r)
+    rows = [j for j in jar_rows if j.get("code") and j.get("name") and not is_system_jar(str(j["code"]), j.get("kind"))]
+    if p.spend_jar_code is not None and any(j["code"] == p.spend_jar_code for j in rows):
+        return _with_jar(r, p.spend_jar_code, rows, None)
+    if p.tx_type is None:
+        return JarInference(r)
+    code = spending_tx_type_jar(p.tx_type, [str(j["code"]) for j in rows])
+    if code is None:
+        return JarInference(r)
+    return _with_jar(r, code, rows, p.tx_type)

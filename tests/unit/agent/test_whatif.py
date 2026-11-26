@@ -471,11 +471,12 @@ def test_guardrail_dau_ra_chan_loi_giai_thich_thi_chi_con_so_lieu(monkeypatch):
 
 # --- hỏi lại ----------------------------------------------------------------------------------
 def test_thieu_so_tien_thi_hoi_dung_mot_cau_roi_chay_tiep_o_luot_sau(monkeypatch):
-    """Tiêu chí 6: "nếu mua cái điện thoại thì sao" -> đúng một câu hỏi, không tool; trả lời xong thì chạy tiếp."""
+    """Tiêu chí 6: "nếu mua cái điện thoại thì sao" -> đúng một câu hỏi, không tool nào ngoài lần đọc ví đầu lượt; trả lời xong thì
+    chạy tiếp."""
     llm = make_llm([route_response(intent="what_if", label="điện thoại")])
     events, tools, _ = run_turn("Nếu mua cái điện thoại thì sao", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert tools.calls == [] and block_types(events) == ["clarify"]
+    assert call_names(tools) == ["get_jar_balances"] and block_types(events) == ["clarify"]
     c = blocks_of(events)[0]["data"]
     assert c["slot"] == "amount" and c["question"].count("?") == 1 and c["pending_intent"] == "what_if" and c["chips"]
     # lượt sau: lịch sử có câu trước; router ghép hai câu nên what-if chạy tiếp
@@ -565,7 +566,7 @@ def test_kiem_tra_truoc_khi_chi_model_het_tran_van_co_the(monkeypatch):
 def test_kiem_tra_thieu_so_tien_thi_hoi_lai(monkeypatch):
     llm = make_llm([route_response(intent="affordability")])
     events, tools, _ = run_turn("kiểm tra giúp mình", llm=llm, monkeypatch=monkeypatch)
-    assert tools.calls == [] and blocks_of(events)[0]["data"]["slot"] == "amount"
+    assert call_names(tools) == ["get_jar_balances"] and blocks_of(events)[0]["data"]["slot"] == "amount"
 
 
 # --- khai báo bằng chat ----------------------------------------------------------------------
@@ -575,8 +576,8 @@ def test_khai_bao_nghia_vu_bang_chat_qua_update_profile_khong_token_roi_confirm_
     )
     events, tools, writer = run_turn("tiền trọ 2,5 triệu, đóng ngày 1", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert call_names(tools) == ["get_obligations", "update_profile"]
-    args = tools.calls[1][1]
+    assert call_names(tools) == ["get_jar_balances", "get_obligations", "update_profile"]  # đọc ví đầu lượt
+    args = tools.calls[2][1]
     assert args == {"obligation": {"op": "upsert", "name": "Tiền trọ", "amount_vnd": 2_500_000, "cycle": "monthly", "due_day": 1, "kind": "rent"}}
     assert "confirm_token" not in args
     assert block_types(events) == ["confirm_action"] and writer.calls[0]["task"] == "confirm_action"
@@ -590,7 +591,7 @@ def test_khai_bao_khoan_da_co_thi_sua_khong_tao_trung(monkeypatch):
     tools = FakeTools({"get_obligations": lambda a: classify_result("x", mcp_ok(obl))})
     llm = make_llm([route_response(intent="profile_update", obligation_name="tiền trọ", amount_vnd=2_700_000)])
     _, tools, _ = run_turn("tiền trọ giờ 2,7 triệu", llm=llm, tools=tools, monkeypatch=monkeypatch)
-    sent = tools.calls[1][1]["obligation"]
+    sent = dict(tools.calls)["update_profile"]["obligation"]
     assert sent["obligation_id"] == existing["id"] and "kind" not in sent
 
 
@@ -603,7 +604,8 @@ def test_khai_bao_khoan_moi_khong_ro_loai_thi_hoi_lai(monkeypatch):
 def test_khai_bao_luong(monkeypatch):
     llm = make_llm([route_response(intent="profile_update", salary_vnd=9_500_000, payday_day=5)])
     events, tools, _ = run_turn("lương mình 9,5 triệu về ngày 5", llm=llm, monkeypatch=monkeypatch)
-    assert call_names(tools) == ["update_profile"] and tools.calls[0][1] == {"monthly_salary_vnd": 9_500_000, "payday_day": 5}
+    assert call_names(tools) == ["get_jar_balances", "update_profile"]  # đọc ví đầu lượt
+    assert tools.calls[1][1] == {"monthly_salary_vnd": 9_500_000, "payday_day": 5}
     assert block_types(events) == ["confirm_action"]
 
 
@@ -632,7 +634,8 @@ def test_guardrail_chan_dau_vao_thi_tu_choi_dung_pham_vi_khong_goi_tool(monkeypa
     llm = make_llm([route_response(intent="what_if", amount_vnd=1_000_000, funding="jar", jar_text="giải trí")])
     events, tools, _ = run_turn("Nên mua cổ phiếu VNM nào?", llm=llm, monkeypatch=monkeypatch, guardrail=g, records=records)
     check_agui_order(events)
-    assert tools.calls == [] and block_types(events) == ["notice", "suggestions"]
+    # chỉ lần đọc ví đầu lượt (trước router, song song Guardrail); không tool nào của ý định router chọn
+    assert call_names(tools) == ["get_jar_balances"] and block_types(events) == ["notice", "suggestions"]
     wire = json.dumps(blocks_of(events), ensure_ascii=False) + text_of(events)
     assert "VNM" not in wire
     assert blocks_of(events)[0]["data"]["kind"] == "out_of_scope"
@@ -665,7 +668,7 @@ def test_ngoai_pham_vi_khong_co_loi_do_model_viet(monkeypatch):
     events, tools, _ = run_turn("nên mua cổ phiếu nào", llm=llm, monkeypatch=monkeypatch)
     wire = json.dumps(blocks_of(events), ensure_ascii=False) + text_of(events)
     assert "VNM" not in wire and "FPT" not in wire and block_types(events) == ["notice", "suggestions"]
-    assert tools.calls == []
+    assert call_names(tools) == ["get_jar_balances"]  # chỉ lần đọc ví đầu lượt
 
 
 def test_xa_giao_reply_co_so_khong_co_can_cu_thi_khong_phat(monkeypatch):
@@ -682,4 +685,4 @@ def test_hoi_da_chuyen_chua_thi_tra_loi_bang_dong_he_thong_khong_goi_tool_ghi(mo
     ]
     llm = make_llm([route_response(intent="chitchat", reply="Rồi, mình đã chuyển 100.000 ₫ từ Giải trí sang Ăn uống.")])
     events, tools, _ = run_turn(None, llm=llm, monkeypatch=monkeypatch, messages=msgs)
-    assert tools.calls == [] and "100.000" in text_of(events)
+    assert call_names(tools) == ["get_jar_balances"] and "100.000" in text_of(events)  # chỉ đọc ví đầu lượt, không tool ghi

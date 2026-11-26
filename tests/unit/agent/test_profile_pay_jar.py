@@ -126,7 +126,7 @@ def test_vi_co_hu_nghia_vu_khong_hoi_va_gui_dung_tham_so_cu(monkeypatch):
     tools = FakeTools()
     llm = make_llm([route_response(intent="profile_update", **OBLIGATION)])
     events, tools, _ = run_turn("tiền trọ 2,5 triệu, đóng ngày 1", llm=llm, tools=tools, monkeypatch=monkeypatch)
-    assert [name for name, _ in tools.calls] == ["get_obligations", "update_profile"]
+    assert [name for name, _ in tools.calls] == ["get_jar_balances", "get_obligations", "update_profile"]  # đọc ví đầu lượt
     assert "pay_jar" not in _calls(tools, "update_profile")[0]["obligation"]
     assert [b["type"] for b in blocks_of(events)] == ["confirm_action"]
 

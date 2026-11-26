@@ -7,6 +7,8 @@ import json
 import re
 
 from agent_helpers import (
+    JARS_READ,
+    JARS_READ_TOOL,
     FakeTools,
     blocks_of,
     check_agui_order,
@@ -55,9 +57,10 @@ def test_phi_dich_vu_moi_thang_co_so_tu_bang_va_trich_dan_dung_nguon(monkeypatch
     )
     check_agui_order(events)
     assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == [
-        "knowledge___get_fee_schedule"
+        JARS_READ_TOOL,
+        "knowledge___get_fee_schedule",
     ]
-    assert tools.calls == [("get_fee_schedule", {})]
+    assert tools.calls == [JARS_READ, ("get_fee_schedule", {})]
     (cit,) = citations(events)
     B.CitationBlock.model_validate(cit)
     (item,) = cit["data"]["items"]
@@ -74,7 +77,8 @@ def test_phi_dich_vu_moi_thang_co_so_tu_bang_va_trich_dan_dung_nguon(monkeypatch
     )
     assert "amount_vnd" not in json.dumps(cit)  # khối không mang số tiền
     t = types(events)
-    assert t.index("ACTIVITY_SNAPSHOT") < t.index("TOOL_CALL_RESULT")
+    # khối đứng trước TOOL_CALL_RESULT của tool sinh ra nó (lần gọi cuối; lần đầu là đọc ví đầu lượt)
+    assert t.index("ACTIVITY_SNAPSHOT") < max(i for i, x in enumerate(t) if x == "TOOL_CALL_RESULT")
     text = text_of(events)
     assert (
         "33.000 ₫ mỗi tháng" in text

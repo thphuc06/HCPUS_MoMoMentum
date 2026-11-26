@@ -13,6 +13,8 @@ from typing import Any
 
 import pytest
 from agent_helpers import (
+    JARS_READ,
+    JARS_READ_TOOL,
     FakeRecords,
     FakeTools,
     FakeWriter,
@@ -121,8 +123,8 @@ def test_quy_doi_so_tien_ngoai_te_cau_tra_loi_tu_ket_qua_tool_va_qua_kiem_can_cu
         records=records,
     )
     check_agui_order(events)
-    assert started(events) == ["knowledge___get_exchange_rate"]
-    assert tools.calls == [("get_exchange_rate", {"currency": "USD", "amount": 111.11})]
+    assert started(events) == [JARS_READ_TOOL, "knowledge___get_exchange_rate"]
+    assert tools.calls == [JARS_READ, ("get_exchange_rate", {"currency": "USD", "amount": 111.11})]
     text = text_of(events)
     # 111,11 × 25.790 = 2.865.526,9 -> 2.865.527 ₫ (làm tròn tới đồng ở Lambda, không ở agent)
     assert "111,11 USD" in text and "2.865.527 ₫" in text and "25.790 ₫ cho 1 USD" in text
@@ -147,7 +149,7 @@ def test_hoi_ty_gia_khong_so_tien_va_ngay_chua_co_bang_thi_noi_bang_gan_nhat(mon
         ),
         monkeypatch=monkeypatch,
     )
-    assert tools.calls == [("get_exchange_rate", {"currency": "EUR"})]
+    assert tools.calls == [JARS_READ, ("get_exchange_rate", {"currency": "EUR"})]
     text = text_of(events)
     assert "29.506,3 ₫ cho 1 EUR" in text and "20/11/2026" in text and "21/11/2026" in text
     assert "₫" not in text.replace("29.506,3 ₫", "")  # không có số VND nào khác
@@ -172,9 +174,9 @@ def test_nguon_ty_gia_loi_thi_bao_loi_cua_tool_khong_doan_so(monkeypatch):
         monkeypatch=monkeypatch,
     )
     check_agui_order(events)
-    assert {n for n, _ in tools.calls} == {
-        "get_exchange_rate"
-    }  # không kiểm tra với số đoán, không hỏi lại số tiền
+    names = [n for n, _ in tools.calls]
+    # đọc ví đầu lượt một lần; không kiểm tra với số đoán, không hỏi lại số tiền
+    assert set(names) == {"get_jar_balances", "get_exchange_rate"} and names.count("get_jar_balances") == 1
     (notice,) = [b for b in blocks_of(events) if b["type"] == "notice"]
     assert notice["data"]["code"] == "INTERNAL_ERROR" and "tỷ giá" in notice["data"]["message"]
     assert not [b for b in blocks_of(events) if b["type"] == "clarify"] and writer.calls == []
@@ -204,8 +206,10 @@ def test_kiem_tra_truoc_khi_chi_dung_so_vnd_cua_tool_ty_gia(monkeypatch):
     )
     check_agui_order(events)
     names = [n for n, _ in tools.calls]
-    assert names[0] == "get_exchange_rate" and names.count("affordability_check") == 1
-    assert tools.calls[0][1] == {"currency": "USD", "amount": 40}
+    # đọc ví đầu lượt (dùng lại cho cả lượt), rồi tỷ giá trước mọi tool khác
+    assert names[:2] == ["get_jar_balances", "get_exchange_rate"] and names.count("affordability_check") == 1
+    assert names.count("get_jar_balances") == 1
+    assert tools.calls[1][1] == {"currency": "USD", "amount": 40}
     assert (
         dict(tools.calls)["affordability_check"]["amount_vnd"] == 1_031_600
     )  # 40 × 25.790, từ kết quả tool
@@ -267,7 +271,7 @@ def test_what_if_so_vnd_cua_kich_ban_la_so_cua_tool_ty_gia_va_analyst_duoc_kiem_
     )
     check_agui_order(events)
     names = [n for n, _ in tools.calls]
-    assert names[0] == "get_exchange_rate"
+    assert names[:2] == ["get_jar_balances", "get_exchange_rate"] and names.count("get_jar_balances") == 1
     run_args = next(a for n, a in tools.calls if n == "run_scenario")
     assert run_args["scenario"]["amount_vnd"] == 1_289_500  # 50 × 25.790
     analyst_prompt = json.dumps(llm[1].calls[-1]["messages"], ensure_ascii=False)

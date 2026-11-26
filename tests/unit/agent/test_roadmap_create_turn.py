@@ -214,7 +214,7 @@ def test_xem_lo_trinh_khong_muc_tieu_van_la_xem(monkeypatch, action, question):
         question, llm=llm, tools=roadmap_tools(DEMO_JARS, latest="ok"), monkeypatch=monkeypatch
     )
     check_agui_order(events)
-    assert [tool for tool, _ in tools.calls] == ["get_roadmap"]
+    assert [tool for tool, _ in tools.calls] == ["get_jar_balances", "get_roadmap"]  # đọc ví đầu lượt
     assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
     assert [call["task"] for call in writer.calls] == ["roadmap"]
 
@@ -231,7 +231,7 @@ def test_cau_cut_khong_neu_hu_sau_cau_hoi_hu_khong_hoi_lai_lan_nua(monkeypatch):
         None, llm=llm, tools=roadmap_tools(DEMO_JARS, latest="ok"), monkeypatch=monkeypatch, messages=messages
     )
     check_agui_order(events)
-    assert [tool for tool, _ in tools.calls] == ["get_roadmap"]
+    assert [tool for tool, _ in tools.calls] == ["get_jar_balances", "get_roadmap"]  # đọc ví đầu lượt
     assert [b["type"] for b in blocks_of(events)] == ["roadmap"]
 
 

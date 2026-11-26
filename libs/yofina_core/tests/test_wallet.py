@@ -281,3 +281,18 @@ def test_chuoi_hu_cua_loai_giao_dich_hu_rieng_truoc_hu_chung_sau(default, tx_typ
     for wallet_codes in (_DEMO_WALLET, _DEMO_DAILY_WALLET, _THREE_JAR_WALLET):
         expected = next((code for code in chain if code in wallet_codes), None)
         assert wallet.transaction_jar(default, wallet_codes, tx_type=tx_type) == expected
+
+
+@pytest.mark.parametrize(
+    ("code", "kind", "expected"),
+    [
+        (wallet.OTHER_INCOME_JAR_CODE, None, True),
+        (wallet.UNCLASSIFIED_JAR_CODE, "system", True),
+        ("hu_tu_dat", "system", True),  # loại hệ thống thì là hũ hệ thống dù mã nào
+        ("an_uong", "spending", False),
+        ("quy_rieng", None, False),
+    ],
+)
+def test_hu_he_thong_theo_loai_hoac_ma_co_dinh(code, kind, expected):
+    """Hũ người dùng không chi được từ hũ hệ thống (#39, danh sách hũ đưa router chọn hũ chi chỉ gồm hũ người dùng)."""
+    assert wallet.is_system_jar(code, kind) is expected

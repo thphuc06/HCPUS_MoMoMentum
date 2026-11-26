@@ -129,7 +129,14 @@ _PARAM_KEYS = (
     "jar_text", "from_jar_text", "to_jar_text", "amount_vnd", "days_back", "limit", "funding", "scenario_kind",
     "label", "date_text", "salary_vnd", "payday_day", "obligation_name", "obligation_kind", "due_day", "keep_previous",
     "shock_id", "roadmap_action", "insight_kind", "fee_topic", "ingest_action", "currency", "amount_original", "tx_type",
+    "spend_jar_code",
 )  # fmt: skip
+
+
+#: Lần đọc ví ở đầu mỗi lượt có router gọi model (danh sách hũ cho router chọn hũ chi theo ý định, #39): tool call đầu tiên của lượt,
+#: phần sau của lượt dùng lại kết quả này.
+JARS_READ = ("get_jar_balances", {})
+JARS_READ_TOOL = PREFIX + "get_jar_balances"
 
 
 def route_response(**fields: Any) -> dict[str, Any]:

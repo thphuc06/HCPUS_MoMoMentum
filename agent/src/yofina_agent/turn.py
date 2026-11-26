@@ -7,7 +7,8 @@ Strands vẫn được dùng cho `MCPClient` (tool), `Agent` viết câu trả l
 Luồng (mã điều khiển, không để LLM quyết định thứ tự):
 
     RUN_STARTED
-      -> L0: che PII (yofina_core.pii) -> router (model nhỏ, ép tool) song song với Guardrail đầu vào
+      -> L0: che PII (yofina_core.pii) -> đọc ví một lần (get_jar_balances, dùng lại cho cả lượt) -> router (model nhỏ, ép tool, nhận
+         danh sách hũ của ví để chọn hũ chi) song song với Guardrail đầu vào
          (router lỗi: bộ phân loại dự phòng bằng luật; Guardrail chặn: coi như ngoài phạm vi)
       -> số tiền bằng ngoại tệ: knowledge___get_exchange_rate đổi sang VND (amount_vnd lấy từ kết quả tool; fx_chat.py)
       -> thiếu ô bắt buộc (số tiền, cách trả, hũ): khối `clarify` đúng một câu, kết thúc lượt (lượt sau router ghép với câu trước)
@@ -66,10 +67,12 @@ from yofina_agent.jars import JarMatch, resolve_jar
 from yofina_agent.roadmap_agent import UserGoal, build_roadmap
 from yofina_agent.router import (
     PENDING_INTENTS,
+    checked_spend_jar,
     merge_pending,
     pending_params,
     route,
     routed_summary,
+    router_jar_list,
 )
 from yofina_agent.schemas import (
     ROUTER_TX_TYPES,
@@ -584,7 +587,8 @@ class Turn:
         return res
 
     async def ensure_jars(self) -> CallResult:
-        """Danh sách hũ của chính người dùng (để ánh xạ tên hũ và lấy ngày mô phỏng); gọi một lần mỗi lượt."""
+        """Danh sách hũ của chính người dùng (để ánh xạ tên hũ và lấy ngày mô phỏng); gọi một lần mỗi lượt. Lượt có router đọc ở đầu
+        lượt (`router_jars`), mọi bước sau dùng lại kết quả này."""
         if self._jars is None:
             self._jars = await self.call_tool_retry(
                 "get_jar_balances", {}, compact=lambda o: compact_jars(o.payload or {}), block=None
@@ -592,6 +596,28 @@ class Turn:
             if self._jars.outcome.ok:
                 self._jar_rows = _jar_rows(self._jars.outcome.payload or {})
         return self._jars
+
+    async def router_jars(self) -> list[dict[str, str]] | None:
+        """Danh sách hũ người dùng đưa router chọn hũ chi (`router.router_jar_list`): lần đọc ví của lượt, đặt NGAY trước router. Đây là
+        lần đọc mà phần sau của lượt dùng lại (`ensure_jars`), không đọc hai lần; phiên MCP đã mở song song từ trước (`prewarm`). Đọc lỗi
+        thì None: router chạy không có danh sách (để trống hũ chi), lỗi được báo ở bước cần hũ như trước."""
+        try:
+            jars = await self.ensure_jars()
+        except Exception as exc:
+            # Lỗi bất ngờ giữa lần gọi (không phải kết quả lỗi của tool, `call_tool` đã đóng tool call): router vẫn chạy, không danh sách;
+            # nhớ lỗi như một kết quả lỗi của tool để bước cần hũ báo lỗi đúng chỗ, không đọc lại.
+            log.warning(json.dumps({"event": "router_jars_failed", "error": repr(exc)[:200]}))
+            jars = self._jars = CallResult(
+                ToolOutcome(
+                    self.s.tool("get_jar_balances"),
+                    ToolKind.UNAVAILABLE,
+                    code=ErrorCode.INTERNAL_ERROR.value,
+                    message=notices.GENERIC_ERROR_MESSAGE,
+                    detail=f"lỗi giữa lần gọi: {type(exc).__name__}",
+                ),
+                None,
+            )
+        return router_jar_list(self._jar_rows) if jars.outcome.ok else None
 
     def emit_jars_block(self) -> None:
         """Hiện thẻ số dư từ lần đọc hũ đã có (dùng khi cần cho người dùng thấy số)."""
@@ -991,6 +1017,7 @@ class Turn:
                 needs_clarification=False,
             )
         if not self.llm_down:
+            jars = await self.router_jars()
             try:
                 with self.step("router"):
                     res = await route(
@@ -1000,10 +1027,12 @@ class Turn:
                         max_attempts=self.s.router_max_attempts,
                         max_tokens=self.s.router_max_tokens,
                         scope=self.scope,
+                        jars=jars,
                     )
+                value = checked_spend_jar(res.value, jars)
                 # Đầu ra router (mã và tên trường có giá trị, không chữ người dùng): chẩn đoán được lượt trên app mà không gọi lại model.
-                log.info(json.dumps({"event": "routed", **routed_summary(res.value)}, ensure_ascii=False))
-                return res.value
+                log.info(json.dumps({"event": "routed", **routed_summary(value)}, ensure_ascii=False))
+                return value
             except (
                 Exception
             ) as exc:  # ModelBudgetExceeded, AllModelsFailed, StructuredOutputError, lỗi mạng...
@@ -1031,17 +1060,27 @@ class Turn:
         }[kind](r, question)
 
     async def on_balance(self, r: IntentResult, question: str) -> None:
-        res = await self.call_tool_retry(
-            "get_jar_balances",
-            {},
-            compact=lambda o: compact_jars(o.payload or {}),
-            block=jar_summary_block,
-        )
-        if not res.outcome.ok:
-            self.tool_failure(res.outcome)
+        """Thẻ số dư từ lần đọc ví của lượt (đã đọc trước router, `ensure_jars`): không đọc lần hai. Kết quả sai hợp đồng khối thì báo lỗi
+        như khi dựng khối trong `call_tool`."""
+        jars = await self.ensure_jars()
+        outcome, block = jars.outcome, None
+        if outcome.ok:
+            try:
+                block = jar_summary_block(outcome, self.trace_id)
+            except ContractMismatch as exc:
+                outcome = ToolOutcome(
+                    outcome.name,
+                    ToolKind.BAD_RESULT,
+                    code=ErrorCode.INTERNAL_ERROR.value,
+                    message=notices.GENERIC_ERROR_MESSAGE,
+                    detail=str(exc)[:300],
+                    args=outcome.args,
+                )
+        if block is None or jars.compact is None:
+            self.tool_failure(outcome)
             return
-        assert res.compact is not None
-        await self.write("balance", question, res.compact)
+        self.emit_block(block)
+        await self.write("balance", question, jars.compact)
 
     async def on_obligations(self, r: IntentResult, question: str) -> None:
         res = await self.call_tool_retry(
@@ -1517,10 +1556,10 @@ class Turn:
 
     # --- what-if và kiểm tra trước khi quẹt -------------------------------------------------
     async def infer_pay_jar(self, r: IntentResult) -> IntentResult:
-        """Lượt chỉ đọc thiếu hũ trả (`clarify.lacks_pay_jar`) mà router đã trích loại chi: suy hũ bằng quy tắc phân loại của ví
-        (`clarify.infer_pay_jar`). Đã rõ thì trả ý định đã điền tên hũ (không hỏi); chưa rõ thì giữ nguyên ý định để hỏi như cũ, nhớ
-        hũ ứng viên cho chip. Chỉ đọc danh sách hũ (một tool call, cũng là lần đọc mà câu hỏi hũ hay lượt tính sẽ dùng), không gọi model."""
-        if r.params.tx_type is None or not lacks_pay_jar(r):
+        """Lượt chỉ đọc thiếu hũ trả (`clarify.lacks_pay_jar`): dùng hũ router chọn theo ý định (`spend_jar_code`), không có thì hũ suy từ
+        loại chi router trích bằng quy tắc phân loại của ví (`clarify.infer_pay_jar`). Đã rõ thì trả ý định đã điền tên hũ (không hỏi);
+        chưa rõ thì giữ nguyên ý định để hỏi như cũ, nhớ hũ ứng viên cho chip. Dùng lần đọc ví của lượt, không gọi model."""
+        if (r.params.spend_jar_code is None and r.params.tx_type is None) or not lacks_pay_jar(r):
             return r
         jars = await self.ensure_jars()
         if not jars.outcome.ok:
@@ -1531,6 +1570,8 @@ class Turn:
             json.dumps(
                 {
                     "event": "pay_jar_inferred" if found.inferred else "pay_jar_unclear",
+                    "source": found.inferred.source if found.inferred else None,
+                    "spend_jar_code": r.params.spend_jar_code,
                     "tx_type": r.params.tx_type,
                     "jar": found.inferred.code if found.inferred else None,
                     "candidates": list(found.candidates),
@@ -1540,19 +1581,23 @@ class Turn:
         return found.result
 
     def note_inferred_jar(self, code: str | None) -> None:
-        """Khối `notice` thông tin "Tính theo hũ X" khi lượt tính theo đúng hũ mã đã suy (một lần mỗi lượt): người dùng thấy hũ nào
-        được dùng và biết nhắn tên hũ khác để đổi ở lượt sau. Hũ được dùng khác hũ đã suy (Orchestrator chọn hũ khác) thì không nói,
+        """Khối `notice` thông tin "Tính theo hũ X" khi lượt tính theo đúng hũ mã đã chọn (một lần mỗi lượt): người dùng thấy hũ nào
+        được dùng và biết nhắn tên hũ khác để đổi ở lượt sau. Hũ được dùng khác hũ đã chọn (Orchestrator chọn hũ khác) thì không nói,
         để thông báo không sai với số liệu."""
         inferred = self.inferred_jar
         if inferred is None or code != inferred.code or self._inferred_noticed:
             return
         self._inferred_noticed = True
-        label = ROUTER_TX_TYPES.get(inferred.tx_type, inferred.tx_type)
+        if inferred.tx_type is None:
+            message = notices.INFERRED_JAR_MESSAGE_INTENT.format(name=inferred.name)
+        else:
+            label = ROUTER_TX_TYPES.get(inferred.tx_type, inferred.tx_type)
+            message = notices.INFERRED_JAR_MESSAGE.format(name=inferred.name, label=label)
         self.emit_notice(
             kind="info",
             code=notices.INFERRED_JAR_CODE,
             title=notices.INFERRED_JAR_TITLE.format(name=inferred.name)[:80],
-            message=notices.INFERRED_JAR_MESSAGE.format(name=inferred.name, label=label)[:280],
+            message=message[:280],
         )
 
     async def on_what_if(self, r: IntentResult, question: str) -> None:

@@ -145,6 +145,21 @@ class IntentParams(_Model):
     # what_if có khoản chi và affordability: loại chi của khoản đó theo danh mục loại giao dịch của sản phẩm (router trích, không đoán).
     # Người dùng không nêu hũ thì mã đưa loại này qua quy tắc phân loại của ví để biết hũ trả (`clarify.infer_pay_jar`).
     tx_type: RouterTxType | None = None
+    # what_if có khoản chi và affordability: MÃ của hũ trong danh sách hũ của ví (thẻ <hu_cua_vi> của prompt router) mà khoản định chi thuộc
+    # về theo ý định của người dùng, hoặc null. Mã kiểm theo danh sách đã đưa ở lượt (`router.checked_spend_jar`); người dùng không nêu hũ
+    # thì đây là nguồn đầu tiên của hũ trả (`clarify.infer_pay_jar`), loại chi `tx_type` là đường lùi.
+    spend_jar_code: str | None = None
+
+    @field_validator("spend_jar_code", mode="before")
+    @classmethod
+    def _spend_jar_text(cls, value: Any) -> Any:
+        """Giá trị không phải chuỗi (hoặc chuỗi rỗng) coi như router không chọn hũ, không bắt router thử lại; chuỗi giữ nguyên, không sửa
+        chữ của model. Giá trị bị bỏ được ghi log (`router_spend_jar_dropped`, cắt ngắn) như mã loại chi lạ."""
+        if isinstance(value, str) and value:
+            return value
+        if value not in (None, ""):
+            log.warning(json.dumps({"event": "router_spend_jar_dropped", "value": str(value)[:40]}, ensure_ascii=False))
+        return None
 
     @field_validator("tx_type", mode="before")
     @classmethod

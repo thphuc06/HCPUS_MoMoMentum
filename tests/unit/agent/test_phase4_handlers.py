@@ -7,6 +7,8 @@ from typing import get_args
 
 import pytest
 from agent_helpers import (
+    JARS_READ,
+    JARS_READ_TOOL,
     REPO,
     FakeRecords,
     FakeTools,
@@ -85,11 +87,13 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
         (REPO / "contracts" / "fixtures" / "blocks" / "valid" / f"{block_fixture}.json").read_text(encoding="utf-8")
     )
     assert blocks_of(events)[0] == expected
-    assert tools.calls == [(tool, args)]
-    assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == [f"{target}___{tool}"]
-    assert types(events).index("ACTIVITY_SNAPSHOT") < types(events).index("TOOL_CALL_RESULT")
+    assert tools.calls == [JARS_READ, (tool, args)]
+    assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == [JARS_READ_TOOL, f"{target}___{tool}"]
+    t = types(events)
+    # khối đứng trước TOOL_CALL_RESULT của tool sinh ra nó (lần gọi cuối; lần đầu là đọc ví đầu lượt)
+    assert t.index("ACTIVITY_SNAPSHOT") < max(i for i, x in enumerate(t) if x == "TOOL_CALL_RESULT")
 
-    compact = json.loads(next(e.content for e in events if e.type.value == "TOOL_CALL_RESULT"))
+    compact = json.loads([e.content for e in events if e.type.value == "TOOL_CALL_RESULT"][-1])
     if intent == "resilience":
         weakest = next(c for c in data["components"] if c["key"] == data["weakest"])
         assert compact == {
@@ -140,7 +144,7 @@ def test_stress_clarify_uses_config(monkeypatch, shock_id):
     assert [(chip["label"], chip["value"]) for chip in block["data"]["chips"]] == [
         (shock.label, f"Thử cú sốc {shock.label}") for shock in load_shock_set().shocks
     ]
-    assert not tools.calls and not writer.calls
+    assert tools.calls == [JARS_READ] and not writer.calls  # chỉ lần đọc ví đầu lượt
 
 
 @pytest.mark.parametrize("click_chip", [True, False])
@@ -190,7 +194,7 @@ def test_phase4_tool_error(monkeypatch, intent, tool, error_fixture, kind):
     assert notice["type"] == "notice" and notice["data"]["kind"] == kind
     assert notice["data"]["code"] == payload["code"]
     assert notice["data"]["message"] == payload["message"]
-    assert len(tools.calls) == 1 and not writer.calls
+    assert tools.calls == [JARS_READ, (tool, params)] and not writer.calls
 
 
 def test_stress_chua_co_nen_du_bao_la_info(monkeypatch):

@@ -7,6 +7,8 @@ import json
 
 import pytest
 from agent_helpers import (
+    JARS_READ,
+    JARS_READ_TOOL,
     REPO,
     FakeTools,
     blocks_of,
@@ -44,14 +46,19 @@ def test_hoi_chung_ra_khoi_nhan_xet_quan_trong_nhat(monkeypatch):
         monkeypatch=monkeypatch,
     )
     check_agui_order(events)
-    assert tools.calls == [("get_behavior_profile", {})]
-    assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == ["forecast___get_behavior_profile"]
+    assert tools.calls == [JARS_READ, ("get_behavior_profile", {})]
+    assert [e.tool_call_name for e in events if e.type.value == "TOOL_CALL_START"] == [
+        JARS_READ_TOOL,
+        "forecast___get_behavior_profile",
+    ]
     (block,) = blocks_of(events)
     expected = json.loads(
         (REPO / "contracts/fixtures/blocks/valid/behavior_insight.chi_don_sau_luong.json").read_text(encoding="utf-8")
     )
     assert block == expected  # cùng khối với màn Hồ sơ dựng từ hồ sơ này
-    assert types(events).index("ACTIVITY_SNAPSHOT") < types(events).index("TOOL_CALL_RESULT")
+    t = types(events)
+    # khối đứng trước TOOL_CALL_RESULT của tool sinh ra nó (lần gọi cuối; lần đầu là đọc ví đầu lượt)
+    assert t.index("ACTIVITY_SNAPSHOT") < max(i for i, x in enumerate(t) if x == "TOOL_CALL_RESULT")
     # câu trả lời do mã dựng từ chính hồ sơ, không qua Writer
     assert not writer.calls
     (text,) = texts_of(events)

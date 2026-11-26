@@ -49,6 +49,12 @@ def is_goal_jar(kind: str, purpose: str | None) -> bool:
     return kind == "saving" and purpose in (None, "goal")
 
 
+def is_system_jar(code: str | None, kind: str | None = None) -> bool:
+    """Hũ hệ thống (Tiền vào khác, Chưa phân loại): loại `system`, hoặc mã cố định của hợp đồng khi dòng hũ không mang loại. Người
+    dùng không chọn hũ này để chi (danh sách hũ đưa router chọn hũ chi chỉ gồm hũ người dùng, #39)."""
+    return kind == "system" or code in SYSTEM_JAR_CODES.values()
+
+
 def resolve_obligation_pay_jar(
     jars: Iterable[tuple[str, str]], *, saved: str | None = None, selected: str | None = None
 ) -> str | None:

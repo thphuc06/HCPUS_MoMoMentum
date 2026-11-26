@@ -9,6 +9,8 @@ import json
 
 import pytest
 from agent_helpers import (
+    JARS_READ,
+    JARS_READ_TOOL,
     FakeTools,
     blocks_of,
     check_agui_order,
@@ -58,8 +60,8 @@ def test_vua_nap_anh_tra_trang_thai_va_bang_duyet(monkeypatch):
         monkeypatch=monkeypatch,
     )
     check_agui_order(events)
-    assert tool_names(events) == ["ingest___get_job_status"]
-    assert tools.calls == [("get_job_status", {})]  # lần nạp gần nhất, không truyền user_id
+    assert tool_names(events) == [JARS_READ_TOOL, "ingest___get_job_status"]
+    assert tools.calls == [JARS_READ, ("get_job_status", {})]  # lần nạp gần nhất, không truyền user_id
     (block,) = blocks_of(events)
     B.IngestReviewBlock.model_validate(block)
     assert (
@@ -68,9 +70,9 @@ def test_vua_nap_anh_tra_trang_thai_va_bang_duyet(monkeypatch):
     )
     assert block["data"] == payload["data"]["review"]  # số và dòng là của tool, không tính lại
     assert block["source"]["tool"] == "ingest___get_job_status"
-    # khối phát TRƯỚC kết quả tool (như mọi khối dựng từ tool)
+    # khối phát TRƯỚC kết quả tool (như mọi khối dựng từ tool; kết quả đầu tiên là lần đọc ví đầu lượt)
     t = types(events)
-    assert t.index("ACTIVITY_SNAPSHOT") < t.index("TOOL_CALL_RESULT")
+    assert t.index("ACTIVITY_SNAPSHOT") < max(i for i, x in enumerate(t) if x == "TOOL_CALL_RESULT")
     c = payload["data"]["review"]["counts"]
     text = text_of(events)
     assert (
@@ -93,8 +95,9 @@ def test_noi_dung_tep_chi_la_du_lieu_khong_vao_cau_tra_loi_va_khong_chay_tool_gh
     )
     check_agui_order(events)
     assert [c[0] for c in tools.calls] == [
-        "get_job_status"
-    ]  # không confirm_rows, không tool ghi nào
+        "get_jar_balances",
+        "get_job_status",
+    ]  # đọc ví đầu lượt; không confirm_rows, không tool ghi nào
     text = text_of(events)
     assert (
         "SYSTEM" not in text
@@ -102,7 +105,7 @@ def test_noi_dung_tep_chi_la_du_lieu_khong_vao_cau_tra_loi_va_khong_chay_tool_gh
         and "Bỏ qua" not in text
         and "5 triệu" not in text
     )
-    compact = results(events)[0]
+    compact = results(events)[-1]
     assert '"rows":' not in json.dumps(compact) and attack not in json.dumps(
         compact, ensure_ascii=False
     )
@@ -152,7 +155,7 @@ def test_chua_nap_lan_nao_thi_huong_dan_cach_nap(monkeypatch):
         monkeypatch=monkeypatch,
     )
     check_agui_order(events)
-    assert [c[0] for c in tools.calls] == ["get_job_status", "start_job"]
+    assert [c[0] for c in tools.calls] == ["get_jar_balances", "get_job_status", "start_job"]
     assert not [b for b in blocks_of(events) if b["type"] == "notice"]  # chưa nạp không phải lỗi
     text = text_of(events)
     assert text.startswith("Bạn chưa nạp ảnh hay tệp sao kê nào.")
@@ -168,7 +171,7 @@ def test_hoi_cach_nap_goi_start_job_khong_tao_job(monkeypatch):
         action="how_to",
     )
     check_agui_order(events)
-    assert tools.calls == [("start_job", {})] and tool_names(events) == ["ingest___start_job"]
+    assert tools.calls == [JARS_READ, ("start_job", {})] and tool_names(events) == [JARS_READ_TOOL, "ingest___start_job"]
     text = text_of(events)
     assert "PNG, JPEG, WebP, tối đa 3,75 MB" in text and "CSV, tối đa 2 MB" in text
     assert (
@@ -203,7 +206,8 @@ def test_khong_con_giao_dich_noi_ly_do_con_ngan_khong_bao_la_khong_phai_bien_lai
     assert "không giống biên lai" not in text and "không thành công" not in text
     assert writer.calls == []  # câu dựng bằng mã
     # bản gọn của TOOL_CALL_RESULT mang mã và lý do con, không mang thông điệp tự do
-    (res,) = results(events)
+    jars_res, res = results(events)
+    assert "jars" in jars_res  # lần đọc ví đầu lượt
     assert (res["error_code"], res["error_reason"]) == ("INGEST_NO_TRANSACTIONS", "own_account_transfer")
 
 
@@ -231,7 +235,7 @@ def test_loi_he_thong_thanh_notice_va_thu_lai_mot_lan(monkeypatch):
         "Mình vừa nạp ảnh", {"get_job_status": ok(err)}, monkeypatch=monkeypatch
     )
     check_agui_order(events)
-    assert [c[0] for c in tools.calls] == ["get_job_status", "get_job_status"]
+    assert [c[0] for c in tools.calls] == ["get_jar_balances", "get_job_status", "get_job_status"]
     (notice,) = [b for b in blocks_of(events) if b["type"] == "notice"]
     assert notice["data"]["code"] == "DATABASE_UNAVAILABLE"
 
@@ -256,7 +260,7 @@ def test_khong_hoi_cach_nap_thi_doc_lan_nap_gan_nhat(monkeypatch, action):
         monkeypatch=monkeypatch,
         action=action,
     )
-    assert tools.calls == [("get_job_status", {})]
+    assert tools.calls == [JARS_READ, ("get_job_status", {})]
 
 
 def test_cau_trang_thai_khong_co_so_nao_ngoai_so_cua_tool():

@@ -45,7 +45,9 @@ def tool_names(events):
 
 
 # --- đường nhanh số dư -----------------------------------------------------------------------
-def test_so_du_thu_tu_event_va_khoi_truoc_tool_call_result(monkeypatch):
+def test_so_du_dung_lan_doc_vi_dau_luot_khoi_truoc_cau_tra_loi(monkeypatch):
+    """Tra số dư dùng lại lần đọc ví ở đầu lượt (danh sách hũ cho router, #39): một tool call; thẻ số dư dựng từ kết quả đó nên đi sau
+    TOOL_CALL_RESULT của lần đọc, và trước chữ."""
     llm = make_llm([route_response(intent="balance_lookup")])
     events, tools, writer = run_turn(
         "hỏi gì cũng được",
@@ -59,8 +61,8 @@ def test_so_du_thu_tu_event_va_khoi_truoc_tool_call_result(monkeypatch):
         "RUN_STARTED",
         "TOOL_CALL_START",
         "TOOL_CALL_END",  # tool không tham số: không có TOOL_CALL_ARGS
-        "ACTIVITY_SNAPSHOT",
         "TOOL_CALL_RESULT",
+        "ACTIVITY_SNAPSHOT",
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
         "TEXT_MESSAGE_CONTENT",
@@ -164,7 +166,7 @@ def test_chuyen_hu_thieu_so_tien_thi_hoi_lai_khong_goi_tool(monkeypatch):
     )
     events, tools, _ = run_turn("chuyển từ giải trí sang ăn uống", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert tools.calls == []  # đúng một câu hỏi lại (khối clarify), không gọi tool
+    assert tools.calls == [("get_jar_balances", {})]  # chỉ lần đọc ví đầu lượt; đúng một câu hỏi lại (khối clarify)
     (clarify,) = blocks_of(events)
     assert clarify["type"] == "clarify" and clarify["data"]["slot"] == "amount"
     assert clarify["data"]["question"].count("?") == 1 and clarify["data"]["pending_intent"] == "move"
@@ -370,7 +372,7 @@ def test_ngoai_pham_vi_co_khoi_notice_va_cau_noi_ro_gioi_han(monkeypatch):
     )
     events, tools, _ = run_turn("câu nào đó", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert tools.calls == []
+    assert tools.calls == [("get_jar_balances", {})]  # chỉ lần đọc ví đầu lượt
     assert block_types(events) == ["notice", "suggestions"]
     n, sug = blocks_of(events)
     assert n["data"]["kind"] == "out_of_scope" and sug["data"]["context"] == "out_of_scope"
@@ -383,7 +385,7 @@ def test_xa_giao_dung_cau_tra_loi_cua_router(monkeypatch):
     llm = make_llm([route_response(intent="chitchat", reply="Chào bạn!")])
     events, tools, writer = run_turn("chào", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert tools.calls == [] and writer.calls == []
+    assert tools.calls == [("get_jar_balances", {})] and writer.calls == []  # chỉ lần đọc ví đầu lượt
     assert [e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT"] == ["Chào bạn!"]
 
 
@@ -441,7 +443,8 @@ def test_suy_giam_cau_khong_nhan_ra_thi_notice_khong_doan(monkeypatch):
     llm = make_llm([], FakeUsage(caps_hit={"m-small-a", "m-small-b"}))
     events, tools, _ = run_turn("nên mua cổ phiếu nào", llm=llm, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert tools.calls == [] and block_types(events) == ["notice"]
+    # đọc ví đầu lượt đã chạy trước khi lời gọi router chạm trần; ngoài lần đó không tool nào
+    assert tools.calls == [("get_jar_balances", {})] and block_types(events) == ["notice"]
     n = blocks_of(events)[0]["data"]
     assert (
         n["kind"] == "degraded"
