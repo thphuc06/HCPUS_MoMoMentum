@@ -109,7 +109,8 @@ def test_lo_trinh_xay_quy_du_phong_3_trieu_trong_3_thang_tinh_dich_so_du(env):
     assert [g["jar"]["code"] for g in plan["goals"] if not g["on_track"]] == ["muc_tieu"]
     lines = {x["jar"]["code"]: x for x in plan["lines"]}
     for code in ("chi_hang_ngay", "giai_tri"):
-        assert 0 < lines[code]["floor_vnd"] <= lines[code]["proposed_monthly_vnd"], code
+        # sàn chi (sàn mềm, C3 của báo cáo rà soát #39) báo ở `recent_spend`; LP vẫn giữ nó như ràng buộc mềm
+        assert 0 < lines[code]["recent_spend"]["keep_floor_vnd"] <= lines[code]["proposed_monthly_vnd"], code
     # bản đã lưu mang đúng mục tiêu đó; model thấy mục tiêu người dùng nói trong ngữ cảnh
     saved = next(g for g in rm["goals"] if g["jar"]["code"] == "du_phong")
     assert saved["target_vnd"] == 3_000_000 and saved["on_track"]

@@ -88,6 +88,9 @@ class AllocationParams:
     #: mức phạt mỗi đồng sàn chi chưa đạt: trên mức cần của mục tiêu (kể cả hũ đệm), dưới sàn thiết yếu; giữ hũ đệm nhân thêm
     #: `weight_emergency / weight_goal` (xem docstring module)
     penalty_spending_floor: float
+    #: mức chi gần đây của một hũ chi được coi là cao bất thường khi từ từng này lần mức nền dài hơn trở lên (#39, C5). Chỉ là cờ dữ kiện
+    #: người gọi trả cho agent (`AllocationSpend.unusually_high`); bộ giải không đọc và không đổi cách tính sàn.
+    spend_spike_ratio: float
 
 
 @dataclass(frozen=True)

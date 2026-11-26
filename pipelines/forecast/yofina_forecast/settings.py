@@ -43,6 +43,9 @@ DEFAULT_ALLOCATION_PARAMS = AllocationParams(
     # (1e5); giữ hũ đệm chưa tới đích phạt mức này x weight_emergency / weight_goal (1,5e4), nên thứ tự là nghĩa vụ > thiết yếu > giữ hũ
     # đệm > sàn chi > mức cần của mục tiêu
     penalty_spending_floor=1e4,
+    # cờ "chi gần đây cao bất thường" (#39, C5): mức chi của cửa sổ gần nhất từ từng này lần mức nền (phần lịch sử trước cửa sổ đó, có sẵn
+    # trong chuỗi chi của ngữ cảnh dự báo) trở lên. Chỉ là dữ kiện cho agent nói ra hoặc hỏi lại, không đổi sàn hay nghiệm LP
+    spend_spike_ratio=1.5,
 )
 #: hũ chi tiêu thiết yếu theo mẫu hũ mặc định (`db/seed/jar_templates.sql`: ăn uống, đi lại, hóa đơn); hũ người dùng tự thêm thì không
 #: thiết yếu. Cũng là nhóm LOẠI giao dịch thiết yếu: loại có `tx_type_map.default_jar_code` thuộc tập này là chi thiết yếu khi nằm ở

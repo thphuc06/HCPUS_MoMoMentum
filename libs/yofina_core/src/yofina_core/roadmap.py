@@ -64,9 +64,23 @@ class _Model(BaseModel):
 
 
 # --- optimize_allocation -----------------------------------------------------------------------
+class AllocationSpend(_Model):
+    """Mức chi thật gần đây của một hũ chi (#39, 26/11): DỮ KIỆN cho người lập lộ trình, không phải ràng buộc cứng. `recent_monthly_vnd` là
+    chi trung bình của cửa sổ gần nhất (`resilience_window_days` ngày) quy về tháng, không gồm khoản gắn nghĩa vụ; `keep_floor_vnd` là sàn
+    chi gợi ý (tỷ lệ giữ x mức đó, không vượt phần chia hiện tại; bộ tối ưu dùng nó làm ràng buộc mềm); `baseline_monthly_vnd` là mức nền
+    dài hơn (phần lịch sử trước cửa sổ gần nhất có trong đầu vào, quy về tháng), vắng khi lịch sử chưa đủ dài; `unusually_high` là mức gần
+    đây cao bất thường so với mức nền (để agent nói ra hoặc hỏi lại)."""
+
+    recent_monthly_vnd: Vnd
+    keep_floor_vnd: Vnd
+    baseline_monthly_vnd: Vnd | None = None
+    unusually_high: bool = False
+
+
 class AllocationLine(_Model):
     """Phân bổ hằng tháng cho một hũ: sàn cứng, mức hiện tại theo tỷ lệ chia, mức đề xuất. `floor_gap_vnd` là phần sàn chưa đạt
-    (biến elastic dương của LP); 0 nghĩa là sàn được giữ đủ."""
+    (biến elastic dương của LP); 0 nghĩa là sàn được giữ đủ. `floor_vnd` là sàn CỨNG (nghĩa vụ trả từ hũ, chi thiết yếu); sàn chi theo mức
+    chi thật gần đây là sàn mềm, nằm ở `recent_spend` (tùy chọn: chỉ hũ chi của tài khoản đã đủ lịch sử)."""
 
     jar: ForecastJar
     kind: AllocationJarKind
@@ -77,6 +91,7 @@ class AllocationLine(_Model):
     split_percent_current: Annotated[float, Field(ge=0, le=100)]
     split_percent_proposed: Annotated[float, Field(ge=0, le=100)]
     floor_gap_vnd: Vnd
+    recent_spend: AllocationSpend | None = None
 
 
 class AllocationRelaxation(_Model):
@@ -276,6 +291,7 @@ __all__ = [
     "AllocationPlanData",
     "AllocationRelaxation",
     "AllocationSolver",
+    "AllocationSpend",
     "AlternativeKind",
     "Roadmap",
     "RoadmapDraft",

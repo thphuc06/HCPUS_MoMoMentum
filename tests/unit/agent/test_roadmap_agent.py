@@ -1531,7 +1531,9 @@ def test_buoc_dua_phan_chia_cua_hu_xuong_duoi_san_vao_vong_sua(lines, bad, fixed
     assert result.outcome.ok and scope.calls == 2
     (feedback,) = prompt(client, 1)["feedback"]
     assert feedback["rule_id"] == "step_invalid" and "dưới sàn" in feedback["message"]
-    assert "Giải trí" in feedback["message"] and "mức chi thật gần đây" in feedback["message"]  # sàn chi (#39, 26/11 chiều)
+    # sàn của dòng là sàn CỨNG (khoản định kỳ trả từ hũ, chi thiết yếu); sàn chi theo mức chi thật gần đây không còn chặn bước (C3, #39)
+    assert "Giải trí" in feedback["message"] and "chi thiết yếu" in feedback["message"]
+    assert "mức chi thật gần đây" not in feedback["message"]
     (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
     assert rejected["detail"] == "amount_below_floor"
     later = args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]
@@ -1544,6 +1546,36 @@ def test_buoc_giam_toi_dung_san_van_dat():
     result, _, scope = build(tools, later_phase(cut("proposed_decrease")))
     assert result.outcome.ok and scope.calls == 1
     assert args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]["amount_vnd"] == 600_000
+
+
+#: mức chi thật gần đây của hũ Giải trí trong phương án (dữ kiện `recent_spend` của dòng phân bổ, #39)
+RECENT_GIAI_TRI = {
+    "giai_tri": {
+        "floor_vnd": 180_000,
+        "recent_spend": {
+            "recent_monthly_vnd": 1_400_000, "keep_floor_vnd": 700_000, "baseline_monthly_vnd": 600_000, "unusually_high": True,
+        },
+    }
+}  # fmt: skip
+
+
+def test_san_chi_goi_y_la_du_kien_trong_ngu_canh_khong_chan_buoc():
+    """Sàn chi theo mức chi thật gần đây là sàn MỀM (C3 của báo cáo rà soát #39): bước giảm chi đưa Giải trí còn 600.000 ₫ mỗi tháng, dưới
+    mức nên giữ 700.000 ₫ nhưng trên sàn cứng (Netflix 180.000 ₫), vẫn được lưu mà không vào vòng sửa. Model thấy mức chi thật, mức nên
+    giữ, mức nền dài hơn và cờ chi gần đây cao bất thường (C5) để nói trong lý do hoặc hỏi lại; các số đó dùng được trong lý do."""
+    tools = scripted_tools(allocation=allocation_with(RECENT_GIAI_TRI), checks=("ok", "ok"))
+    result, client, scope = build(tools, later_phase(cut("proposed_decrease")))
+    assert result.outcome.ok and scope.calls == 1
+    assert args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]["amount_vnd"] == 600_000
+    line = prompt(client)["context"]["allocation"]["lines"]["giai_tri"]
+    assert line["floor_vnd"] == "180.000 ₫"
+    assert (line["recent_spend_text"], line["keep_floor_text"], line["baseline_spend_text"]) == (
+        "1.400.000 ₫", "700.000 ₫", "600.000 ₫",
+    )  # fmt: skip
+    assert line["recent_spend_unusually_high"] is True
+    assert {"1.400.000 ₫", "700.000 ₫"} <= set(prompt(client)["reason_numbers"])
+    # hũ không có dữ kiện chi gần đây (hũ để dành) không có các khóa đó
+    assert "recent_spend_text" not in prompt(client)["context"]["allocation"]["lines"]["du_phong"]
 
 
 def test_save_jars_dua_hu_xuong_duoi_san_vao_vong_sua():

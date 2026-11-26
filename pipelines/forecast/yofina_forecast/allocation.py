@@ -33,16 +33,21 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
   khoản gắn nghĩa vụ), không vượt mức hiện tại (giữ không cắt, không nâng). Cổng dữ liệu: tài khoản có từ `cold_start_min_days` ngày
   lịch sử (cổng "ước lượng ban đầu" của dự báo); chưa đủ thì không áp. Hũ chi thiết yếu đã có sàn thiết yếu cao hơn nên không đổi; Chi
   hằng ngày của ví ba hũ có cả sàn thiết yếu (phần loại thiết yếu) lẫn sàn chi (cả hũ), sàn là số lớn hơn. Thứ tự ưu tiên ở
-  `yofina_ml.allocation`: mục tiêu không lấy tiền dưới sàn chi, nghĩa vụ và chi thiết yếu thì lấy được. `floor_vnd` của dòng phân bổ là
-  số lớn hơn của sàn cứng và sàn chi (sàn chi đã nhường thì bằng mức đề xuất), nên kiểm bước lộ trình (`amount_below_floor`) dùng cùng
-  sàn mà không thêm trường.
+  `yofina_ml.allocation`: mục tiêu không lấy tiền dưới sàn chi, nghĩa vụ và chi thiết yếu thì lấy được. Sàn chi là sàn MỀM với người lập
+  lộ trình (C3 của báo cáo rà soát, 26/11 tối): `floor_vnd` của dòng phân bổ chỉ là sàn cứng (nghĩa vụ, thiết yếu), còn mức chi thật gần
+  đây và sàn chi gợi ý đi riêng ở `recent_spend` (`AllocationSpend`) làm dữ kiện; kiểm bước lộ trình (`amount_below_floor`) chỉ chặn
+  theo sàn cứng.
+- **Mức nền chi dài hơn** (C5 phần nhỏ, #39): `recent_spend.baseline_monthly_vnd` là chi trung bình của phần lịch sử TRƯỚC cửa sổ gần nhất
+  có sẵn trong chuỗi `spend` của ngữ cảnh (không thêm truy vấn), khi phần đó dài ít nhất một cửa sổ; `unusually_high` khi mức gần đây từ
+  `spend_spike_ratio` lần mức nền trở lên. Chỉ là cờ cho agent nói ra hoặc hỏi lại: không đổi sàn chi hay sàn thiết yếu (mức nền bền
+  hơn là việc để sau, xem README).
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -61,6 +66,7 @@ from yofina_core.roadmap import (
     AllocationPlanData,
     AllocationRelaxation,
     AllocationSolver,
+    AllocationSpend,
 )
 from yofina_core.wallet import (
     DEFAULT_SPENDING_JAR,
@@ -126,6 +132,25 @@ class Built:
     split_percent: dict[str, float]
     #: đích của hũ đệm dùng để quyết giữ phần chia (đích lượt này nêu, hoặc số tháng chi thiết yếu); None nếu không có hũ giữ vai đệm
     buffer_target_vnd: int | None = None
+    #: mức chi thật gần đây của từng hũ chi (dữ kiện cho agent, `AllocationLine.recent_spend`); chỉ hũ chi của tài khoản đủ lịch sử
+    recent_spend: Mapping[str, AllocationSpend] = field(default_factory=dict)
+
+
+def _recent_spend(
+    series: Sequence[Any], typical: int, keep_floor: int, window_days: int, month_days: int, spike_ratio: float
+) -> AllocationSpend:
+    """Mức chi gần đây (`typical`, cùng số LP dùng cho sàn chi), sàn chi gợi ý và mức nền dài hơn của một hũ chi. Mức nền là chi trung bình
+    của phần chuỗi TRƯỚC cửa sổ gần nhất (đã có trong ngữ cảnh, không thêm truy vấn), quy về tháng, chỉ khi phần đó dài ít nhất một cửa
+    sổ; cờ `unusually_high` khi mức gần đây từ `spike_ratio` lần mức nền dương trở lên (C5 phần nhỏ của báo cáo rà soát #39)."""
+    days = [max(int_of(v), 0) for v in series]
+    earlier = days[:-window_days] if window_days > 0 else []
+    baseline = round(sum(earlier) / len(earlier) * month_days) if window_days > 0 and len(earlier) >= window_days else None
+    return AllocationSpend(
+        recent_monthly_vnd=typical,
+        keep_floor_vnd=keep_floor,
+        baseline_monthly_vnd=baseline,
+        unusually_high=baseline is not None and baseline > 0 and typical >= spike_ratio * baseline,
+    )
 
 
 class AllocationEngine:
@@ -302,6 +327,7 @@ class AllocationEngine:
 
         specs: list[JarSpec] = []
         split: dict[str, float] = {}
+        recent: dict[str, AllocationSpend] = {}
         essential_monthly = 0
         for code in codes:
             j = jars[code]
@@ -348,10 +374,12 @@ class AllocationEngine:
             # không cắt, không nâng). Hũ chi thiết yếu đã có sàn thiết yếu cao hơn; Chi hằng ngày của ví ba hũ có cả hai (lấy số lớn hơn)
             spend_floor = 0
             if kind == "spending" and typical_known:
-                typical = variable_monthly_spend(
-                    spend.get(code, []), s.resilience_window_days, month_days
-                )
+                series = spend.get(code, [])
+                typical = variable_monthly_spend(series, s.resilience_window_days, month_days)
                 spend_floor = min(round(prm.spending_keep_ratio * typical), current)
+                recent[code] = _recent_spend(
+                    series, typical, spend_floor, s.resilience_window_days, month_days, prm.spend_spike_ratio
+                )
             goal_spec = None
             if goal is not None:
                 when = goal.target_date
@@ -407,6 +435,7 @@ class AllocationEngine:
             jars=jars,
             split_percent=split,
             buffer_target_vnd=buffer_target,
+            recent_spend=recent,
         )
 
     # --- kết quả ----------------------------------------------------------------------------------
@@ -436,9 +465,9 @@ class AllocationEngine:
                     # hũ thành thiết yếu với model (bước giảm chi vẫn chọn được, tới sàn)
                     is_essential=sp.role in ("obligation", "essential", "emergency")
                     or (sp.floor_vnd > 0 and sp.floor_tier == "obligation"),
-                    # sàn của hũ: sàn cứng hoặc sàn chi (số lớn hơn). Sàn chi đã nhường cho nghĩa vụ, thiết yếu thì sàn là mức đề xuất: bước
-                    # lộ trình làm đúng phương án không bị kiểm sàn chặn, bước cắt sâu hơn thì bị (`amount_below_floor`)
-                    floor_vnd=max(sp.floor_vnd, min(sp.spend_floor_vnd, out.proposed_vnd)),
+                    # sàn CỨNG của hũ (nghĩa vụ trả từ hũ, chi thiết yếu). Sàn chi theo mức chi thật gần đây là sàn mềm với người lập lộ
+                    # trình (C3 của báo cáo rà soát #39): đi riêng ở `recent_spend` làm dữ kiện, kiểm bước không chặn theo nó
+                    floor_vnd=sp.floor_vnd,
                     current_monthly_vnd=sp.current_vnd,
                     proposed_monthly_vnd=out.proposed_vnd,
                     split_percent_current=round(min(b.split_percent[out.code], 100.0), 2),
@@ -446,6 +475,7 @@ class AllocationEngine:
                     if income
                     else 0.0,
                     floor_gap_vnd=out.floor_gap_vnd,
+                    recent_spend=b.recent_spend.get(out.code),
                 ).model_dump()
             )
         goals: list[dict[str, Any]] = []

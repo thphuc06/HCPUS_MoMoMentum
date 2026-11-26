@@ -346,9 +346,14 @@ def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env, caplog):
                 jar = lines[step["jar_code"]]
                 assert jar["current_monthly_vnd"] - step["amount_vnd"] >= jar["floor_vnd"], step
     # (e) sàn chi theo mức chi thật gần đây (#39, 26/11 chiều): Chi hằng ngày và Giải trí giữ ít nhất tỷ lệ giữ x mức chi điển hình kể cả
-    # khi sàn thiết yếu của Ăn uống vượt chỗ (nhường cũng không đủ); không còn bước "Giảm Chi hằng ngày 270.000 → 0 ₫"
+    # khi sàn thiết yếu của Ăn uống vượt chỗ (nhường cũng không đủ); không còn bước "Giảm Chi hằng ngày 270.000 → 0 ₫". Từ C3 (26/11 tối)
+    # sàn chi là sàn mềm: dòng phân bổ báo nó ở `recent_spend` (cùng mức chi thật gần đây và cờ chi cao bất thường), `floor_vnd` là sàn cứng
     for code in ("chi_hang_ngay", "giai_tri"):
-        assert 0 < lines[code]["floor_vnd"] <= lines[code]["proposed_monthly_vnd"], code
+        recent = lines[code]["recent_spend"]
+        assert 0 < recent["keep_floor_vnd"] <= lines[code]["proposed_monthly_vnd"], code
+    print("[cảnh 4] mức chi gần đây:", {c: x["recent_spend"] for c, x in lines.items() if "recent_spend" in x})
+    seen = got["planner"].contexts[0]["context"]["allocation"]["lines"]
+    assert seen["an_uong"]["recent_spend_text"] and seen["giai_tri"]["keep_floor_text"]
     to_zero = [s for phase in rm["phases"] for s in phase["steps"]
                if s["kind"] == "cut_spending" and any(m.get("after") == "0 ₫" for m in s.get("metrics", []))]  # fmt: skip
     assert to_zero == []

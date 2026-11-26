@@ -157,8 +157,10 @@ def test_phan_bo_lp_cua_vi_demo_khong_cat_hu_nao_duoi_khoan_dinh_ky_tra_tu_no(en
     for code in ("chi_hang_ngay", "giai_tri"):
         typical = variable_monthly_spend(spend[code], settings.resilience_window_days, settings.allocation.month_days)
         keep = min(round(settings.allocation.spending_keep_ratio * typical), lines[code]["current_monthly_vnd"])
-        print(f"  sàn chi {code}: mức chi điển hình {typical}, sàn {keep}")
-        assert keep > 0 and lines[code]["floor_vnd"] >= keep, code
+        recent = lines[code]["recent_spend"]
+        print(f"  sàn chi {code}: mức chi điển hình {typical}, sàn {keep}, dữ kiện cho agent {recent}")
+        # sàn chi là sàn mềm với lộ trình (C3, #39 26/11 tối): báo ở `recent_spend`, không nằm trong sàn cứng `floor_vnd`
+        assert keep > 0 and (recent["recent_monthly_vnd"], recent["keep_floor_vnd"]) == (typical, keep), code
         assert lines[code]["proposed_monthly_vnd"] >= keep, code
     for g in data["goals"]:
         print(f"  mục tiêu {g['jar']['code']}: kịp hạn {g['on_track']}, cần {g['monthly_needed_vnd']}/tháng, dự kiến {g.get('projected_date')}")

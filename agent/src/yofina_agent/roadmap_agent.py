@@ -83,6 +83,13 @@ Mỗi bước là MỘT hành động cụ thể người dùng tự làm đư�
   được chọn một cặp hũ và trường có trong amount_refs; hũ không có trong bảng thì không gắn số tiền theo hũ đó.
   amount_ref.jar_code phải là jar_code hoặc to_jar_code của chính bước đó.
   proposed_increase là phần đề xuất tăng so với hiện tại, proposed_decrease là phần giảm.
+- floor_vnd của một dòng phân bổ là sàn cứng (khoản định kỳ trả từ hũ, chi thiết yếu): không bước nào đưa phần hũ nhận mỗi
+  tháng xuống dưới mức đó. Dòng của hũ chi có thể kèm recent_spend_text (mức chi thật khoảng một tháng gần nhất của hũ, quy về
+  tháng) và keep_floor_text (mức nên giữ lại theo mức chi đó). keep_floor_text là gợi ý, không phải luật: bước đưa hũ xuống dưới
+  mức này vẫn được khi có lý do (người dùng muốn vậy, hoặc cần tiền cho nghĩa vụ hay mục tiêu đứng trước), và khi đó reason của
+  bước nói rõ hũ sẽ nhận ít hơn mức chi thật gần đây. recent_spend_unusually_high là mức chi gần đây cao bất thường so với mức
+  nền dài hơn (baseline_spend_text): khi điều này ảnh hưởng tới cách xếp lộ trình thì nói ra, đừng coi mức chi đó là thói quen
+  lâu dài.
 - title không chứa chữ số. reason chỉ được có số khi chép NGUYÊN VĂN một chuỗi trong reason_numbers (số dư, khoản đến
   hạn, ngày đến hạn, mục tiêu, khoản phân bổ); không tự tính, không ghép hay rút gọn chuỗi, không viết số tháng, phần trăm
   hay số đếm. Không đánh số giai đoạn hay bước (thứ tự đã do vị trí trong danh sách). Chương trình điền tiền, ngày và tham
@@ -113,7 +120,7 @@ ROADMAP_ADVICE_GUIDE = """
 Lập luận và kết luận cho người dùng (trường reasoning và conclusion): người dùng đọc phần này trong khung chat để thấy vì sao lộ \
 trình được xếp như vậy, như lời một người tư vấn nói với chính họ (xưng "bạn"); nên ngắn và đúng.
 - reasoning: 2 đến 4 bước, mỗi bước là một điều trong context ảnh hưởng tới cách xếp giai đoạn và bước (khoản sắp đến hạn, hũ sắp \
-cạn, thành phần yếu nhất, mục tiêu, phương án phân bổ, thói quen trong context.behavior). seen là điều đó, why là vì sao nó quan \
+cạn, thành phần yếu nhất, mục tiêu, phương án phân bổ, mức chi thật gần đây của hũ, thói quen trong context.behavior). seen là điều đó, why là vì sao nó quan \
 trọng, effect là nó làm lộ trình ưu tiên việc gì; mỗi trường một câu, tối đa khoảng 100 ký tự. basis là 1 đến 3 mã trong can_cu. \
 Không nhắc tool, tên trường hay mã hũ; gọi hũ bằng tên.
 - Số trong reasoning và conclusion theo đúng luật số của reason: chỉ chép nguyên văn chuỗi trong reason_numbers. Bước có số khác \
@@ -388,20 +395,31 @@ def _compact_allocation(plan: AllocationPlanData) -> dict[str, Any]:
         "status": plan.status,
         "period_start": plan.period_start,
         "horizon_months": plan.horizon_months,
-        "lines": {
-            line.jar.code: {
-                "kind": line.kind,
-                "is_essential": line.is_essential,
-                "floor_vnd": format_vnd(line.floor_vnd),
-                "floor_gap_vnd": format_vnd(line.floor_gap_vnd),
-                "current_monthly_vnd": format_vnd(line.current_monthly_vnd),
-                "proposed_monthly_vnd": format_vnd(line.proposed_monthly_vnd),
-                "split_percent_current": f"{line.split_percent_current:g}%",
-                "split_percent_proposed": f"{line.split_percent_proposed:g}%",
-            }
-            for line in plan.lines
-        },
+        "lines": {line.jar.code: _compact_line(line) for line in plan.lines},
     }
+
+
+def _compact_line(line: AllocationLine) -> dict[str, Any]:
+    """Một dòng phân bổ cho model. `floor_vnd` là sàn cứng; mức chi thật gần đây, mức nên giữ (sàn mềm) và mức nền dài hơn của hũ chi là dữ
+    kiện (`recent_spend`, C3 và C5 của báo cáo rà soát #39), chỉ có khi Lambda forecast trả."""
+    row: dict[str, Any] = {
+        "kind": line.kind,
+        "is_essential": line.is_essential,
+        "floor_vnd": format_vnd(line.floor_vnd),
+        "floor_gap_vnd": format_vnd(line.floor_gap_vnd),
+        "current_monthly_vnd": format_vnd(line.current_monthly_vnd),
+        "proposed_monthly_vnd": format_vnd(line.proposed_monthly_vnd),
+        "split_percent_current": f"{line.split_percent_current:g}%",
+        "split_percent_proposed": f"{line.split_percent_proposed:g}%",
+    }
+    if (recent := line.recent_spend) is not None:
+        row["recent_spend_text"] = format_vnd(recent.recent_monthly_vnd)
+        row["keep_floor_text"] = format_vnd(recent.keep_floor_vnd)
+        if recent.baseline_monthly_vnd is not None:
+            row["baseline_spend_text"] = format_vnd(recent.baseline_monthly_vnd)
+        if recent.unusually_high:
+            row["recent_spend_unusually_high"] = True
+    return row
 
 
 def _amount_refs(lines: dict[str, AllocationLine]) -> dict[str, dict[str, str]]:
@@ -892,8 +910,9 @@ def _amount_issue(
     - bước đổi tỷ lệ chia tăng phần của một hũ không vượt phần hũ đó cần thêm (mức chia mới không phải số tiền của bước), bước giảm phần
       chia hay giảm chi không vượt khoản hũ đó đang nhận mỗi tháng;
     - bước làm giảm khoản một hũ nhận mỗi tháng (giảm chi, giảm phần chia, chuyển tiền sau kỳ lương từ hũ nguồn) không đưa hũ đó xuống
-      dưới sàn của dòng phân bổ (`floor_vnd`: gồm mọi khoản định kỳ đang hoạt động trả từ hũ, như Netflix ở Giải trí, #39 26/11, và sàn
-      chi theo mức chi thật gần đây của hũ, #39 26/11 chiều; cùng sàn với LP).
+      dưới sàn CỨNG của dòng phân bổ (`floor_vnd`: mọi khoản định kỳ đang hoạt động trả từ hũ, như Netflix ở Giải trí, và chi thiết yếu).
+      Sàn chi theo mức chi thật gần đây là sàn MỀM (C3 của báo cáo rà soát #39): dữ kiện `recent_spend` của dòng mà model thấy và nói
+      trong lý do, không chặn ở đây.
 
     Trả (mã ổn định cho log, phản hồi cho vòng sửa), None khi hợp lệ."""
 
@@ -907,8 +926,8 @@ def _amount_issue(
             return None
         return "amount_below_floor", (
             f"Sau bước này hũ {name(line.jar.code)} chỉ còn nhận {format_vnd(max(after, 0))} mỗi tháng, dưới sàn"
-            f" {format_vnd(line.floor_vnd)} của hũ (khoản định kỳ trả từ hũ, chi thiết yếu và mức chi thật gần đây của hũ). Chọn hũ"
-            " nguồn khác hoặc tham chiếu nhỏ hơn để hũ còn ít nhất bằng sàn."
+            f" {format_vnd(line.floor_vnd)} của hũ (khoản định kỳ trả từ hũ và chi thiết yếu). Chọn hũ nguồn khác hoặc tham chiếu nhỏ"
+            " hơn để hũ còn ít nhất bằng sàn."
         )
 
     source, target = outline.jar_code, outline.to_jar_code

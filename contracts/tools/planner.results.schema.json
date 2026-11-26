@@ -80,7 +80,7 @@
       ]
     },
     "AllocationLine": {
-      "description": "Phân bổ hằng tháng cho một hũ: sàn cứng, mức hiện tại theo tỷ lệ chia lương, mức đề xuất. `floor_gap_vnd` là phần sàn chưa đạt (biến elastic dương của LP); 0 nghĩa là sàn được giữ đủ.",
+      "description": "Phân bổ hằng tháng cho một hũ: sàn cứng, mức hiện tại theo tỷ lệ chia lương, mức đề xuất. `floor_gap_vnd` là phần sàn chưa đạt (biến elastic dương của LP); 0 nghĩa là sàn được giữ đủ. `floor_vnd` là sàn CỨNG (nghĩa vụ trả từ hũ, chi thiết yếu); sàn chi theo mức chi thật gần đây là sàn mềm, nằm ở `recent_spend` (tùy chọn, #39: chỉ hũ chi của tài khoản đã đủ lịch sử).",
       "type": "object",
       "required": ["jar", "kind", "is_essential", "floor_vnd", "current_monthly_vnd", "proposed_monthly_vnd", "split_percent_current", "split_percent_proposed", "floor_gap_vnd"],
       "additionalProperties": false,
@@ -93,7 +93,20 @@
         "proposed_monthly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
         "split_percent_current": { "type": "number", "minimum": 0, "maximum": 100 },
         "split_percent_proposed": { "type": "number", "minimum": 0, "maximum": 100 },
-        "floor_gap_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" }
+        "floor_gap_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "recent_spend": { "$ref": "#/$defs/AllocationSpend" }
+      }
+    },
+    "AllocationSpend": {
+      "description": "Mức chi thật gần đây của một hũ chi (#39): dữ kiện cho người lập lộ trình, không phải ràng buộc cứng. `recent_monthly_vnd`: chi trung bình của cửa sổ gần nhất quy về tháng (không gồm khoản gắn nghĩa vụ); `keep_floor_vnd`: sàn chi gợi ý (tỷ lệ giữ x mức đó, không vượt phần chia hiện tại); `baseline_monthly_vnd`: mức nền của phần lịch sử trước cửa sổ gần nhất, vắng khi lịch sử chưa đủ dài; `unusually_high`: mức gần đây cao bất thường so với mức nền.",
+      "type": "object",
+      "required": ["recent_monthly_vnd", "keep_floor_vnd"],
+      "additionalProperties": false,
+      "properties": {
+        "recent_monthly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "keep_floor_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "baseline_monthly_vnd": { "$ref": "../blocks/envelope.schema.json#/$defs/Vnd" },
+        "unusually_high": { "type": "boolean" }
       }
     },
     "AllocationRelaxation": {

@@ -605,9 +605,11 @@ def test_obligation_jar_floor_also_counts_its_non_essential_obligations():
 def test_lp_never_proposes_a_jar_below_the_obligations_it_pays():
     res, _ = run(TIGHT_GOAL)
     plain = {line["jar"]["code"]: line for line in res["data"]["lines"]}
-    # hũ không có khoản định kỳ: trước 26/11 chiều vòng nới cắt về 0; nay chỉ tới sàn chi (nửa mức chi điển hình 300.000 ₫, #39)
+    # hũ không có khoản định kỳ: trước 26/11 chiều vòng nới cắt về 0; nay chỉ tới sàn chi (nửa mức chi điển hình 300.000 ₫, #39). Sàn chi
+    # là sàn mềm: báo ở `recent_spend`, sàn cứng của dòng là 0 (C3 của báo cáo rà soát #39)
     fun = plain["giai_tri"]
-    assert fun["proposed_monthly_vnd"] == fun["floor_vnd"] == round(P.spending_keep_ratio * 300_000)
+    assert fun["proposed_monthly_vnd"] == fun["recent_spend"]["keep_floor_vnd"] == round(P.spending_keep_ratio * 300_000)
+    assert fun["floor_vnd"] == 0
     w = committed(NETFLIX, LUNCH)
     out = AllocationEngine(pipe(w)).optimize(USER, TIGHT_GOAL)
     assert not errors_of(RESULT, out), errors_of(RESULT, out)
