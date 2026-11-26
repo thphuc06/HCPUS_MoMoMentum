@@ -93,15 +93,20 @@ def jar_at_due(
     due_vnd: int,
     short_floor_vnd: int,
     tight_floor_vnd: int,
+    income_on_due_vnd: int = 0,
 ) -> dict[str, Any]:
     """`JarAtDue`: hũ trả nghĩa vụ có đủ tiền khi đến hạn không, đọc từ chuỗi số dư SAU khi áp đề xuất (mỗi phần tử: ngày, P10,
     P50, P90 cuối ngày). `due_vnd` là TỔNG hũ này phải trả ngày đó (gồm khoản mới). Số dư cuối ngày đến hạn đã trừ mọi khoản
-    ngày đó và đã cộng tiền vào cùng ngày (lương), nên `balance_before_due_vnd = P50 + due_vnd` và
-    `shortfall = max(0, ngưỡng - P50)`. Ngày đến hạn ngoài chuỗi thì dùng ngày gần nhất trong chuỗi."""
+    ngày đó và đã cộng tiền vào cùng ngày (lương). `income_on_due_vnd` là phần lương về hũ đúng ngày đến hạn: khoản đến hạn đúng ngày
+    lương trả bằng số dư TRƯỚC khi lương về (chốt 26/11, BR-22, như `yofina_core.schedule.obligation_window`), nên số dư dùng để xét
+    là P50 (P10) cuối ngày trừ phần lương đó; `balance_before_due_vnd = P50 - lương cùng ngày + due_vnd` và
+    `shortfall = max(0, ngưỡng - (P50 - lương cùng ngày))`. Ngày đến hạn ngoài chuỗi thì dùng ngày gần nhất trong chuỗi."""
     row = next((d for d in days if d[0] == due_date), None)
     if row is None:
         row = days[0] if due_date < days[0][0] else days[-1]
     _day, p10, p50, _p90 = row
+    if _day == due_date:  # dòng thay thế (ngày đến hạn ngoài chuỗi) không chứa lương của ngày đến hạn
+        p10, p50 = p10 - income_on_due_vnd, p50 - income_on_due_vnd
     shortfall = max(0, short_floor_vnd - p50)
     if p50 < short_floor_vnd:
         status = "short"

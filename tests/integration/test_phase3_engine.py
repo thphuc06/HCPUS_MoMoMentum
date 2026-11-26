@@ -27,7 +27,7 @@ pytestmark = pytest.mark.usefixtures("fresh")
 TOOLS = "https://contracts.yofina.invalid/tools"
 BLOCKS = "https://contracts.yofina.invalid/blocks"
 REPORT_DIR = REPO / "build" / "reports"
-# Trả sau của minh trên ví demo đến hạn ngày 3 (`DEMO_CREDIT_DUE_DAY`, trước lương 05/12) thay vì ngày 5 của spec (#39)
+# Trả sau của minh trên ví demo đến hạn ngày 5 (BR-22), đúng ngày lương 05/12: chốt 26/11 tính là đến hạn trước lương (#39)
 MINH_BNPL_DUE = f"2026-12-{demo_wallet('minh').credit_due_day:02d}"
 MEASURES: dict[str, object] = {}
 
@@ -138,7 +138,8 @@ def test_chuyen_250k_cho_nguoi_nhan_demo_the_theo_hu_va_tong_tra_sau_1_250_000(
     )  # vượt ngưỡng: kèm luật
 
     # Ý của bản gốc (hũ trả hóa đơn không đủ nếu chuyển từ đó) giữ bằng cách NÊU hũ, đúng hợp đồng: hũ được chọn đứng đầu thẻ. Trừ
-    # 250.000 ₫ thì Nghĩa vụ không còn đủ cho tiền điện 26/11 và Trả sau 03/12 trước lương (rollout Bước 5), nên sát hoặc hụt; số dư
+    # 250.000 ₫ thì Nghĩa vụ không còn đủ cho tiền điện 26/11 và Trả sau 05/12 (đúng ngày lương, trả bằng số dư trước khi lương về,
+    # chốt 26/11), nên sát hoặc hụt; số dư
     # sau suy từ ví demo của bộ sinh.
     status, named = api(
         "minh",

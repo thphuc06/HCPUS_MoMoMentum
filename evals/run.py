@@ -71,8 +71,8 @@ Ví demo 8 hũ (issue #34, #39; trường tùy chọn, ca không có thì không
 mã đó (`jar_phrases`: hũ goal `muc_tieu` tên "Du lịch"), chỉ đọc mã như chữ khi mã không có trên ví demo.
 - clarify_slot (`expect_clarify_slot`): khối `clarify` hỏi đúng ô đó; ô `jar` thì mỗi chip là tên một hũ có thật.
 - roadmap_goal (`expect_roadmap_goal` {purpose, target_vnd}): khối `roadmap` cuối có mục tiêu ở hũ mang mục đích đó, đúng số tiền, có hạn.
-- obligation_window (`expect_obligation_window`): what-if Trả sau liệt kê khoản đến hạn trước ngày lương ở hũ trả nghĩa vụ, theo ngày,
-  có khoản Trả sau của lượt khi nó đến hạn trước lương.
+- obligation_window (`expect_obligation_window`): what-if Trả sau liệt kê khoản đến hạn trước lương (trước hoặc đúng ngày lương,
+  `yofina_core.schedule.due_before_payday`) ở hũ trả nghĩa vụ, theo ngày, có khoản Trả sau của lượt khi nó đến hạn trước lương.
 - runout_claims (`forbid_runout_jars`): "hũ nào sắp cạn" dự báo các hũ đó và không nói chúng cạn, hụt, hết tiền.
 - ingest_jars (`expect_ingest_jars` [{amount_vnd, jar}]): dòng chi của tệp nạp có số tiền đó được đề xuất vào đúng hũ.
 - replaced_notice (`expect_replaced_notice`): thông báo thay bản đề xuất có khi và chỉ khi lượt thay một bản đang chờ (đọc từ
@@ -1257,52 +1257,76 @@ def stress_shock(run: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     return {"ok": bool(got) and all(g == want for g in got), "expected": want, "shock_ids": got}
 
 
-#: Câu bỏ qua khi dò: từ phủ định tới hết mệnh đề ("lùi hạn thay vì vay để đi" không phải đề xuất vay).
-#: "trước khi đầu tư" là hoãn đầu tư, không phải đề xuất đầu tư.
+#: Câu bỏ qua khi dò chữ của câu trả lời (`runout_claims`): từ phủ định tới hết mệnh đề ("không cạn trước lương" không phải lời nói
+#: hũ cạn). Bộ chấm bước lộ trình (`roadmap_suitability`) không đọc chữ.
 _NEGATION_RE = re.compile(r"\b(?:không|chưa|đừng|tránh|thay vì|chớ|trước khi)\b[^.;,!?\n]*")
-#: Bước nói tới đầu tư (hợp đồng lộ trình không có loại bước đầu tư nên chỉ lộ ra qua chữ của bước).
-_INVEST_RE = re.compile(
-    r"\b(?:cổ phiếu|chứng khoán|trái phiếu|đầu tư|quỹ etf|quỹ mở|chứng chỉ quỹ|etf|bitcoin|btc|crypto|"
-    r"tiền ảo|tiền mã hóa|tiền số|forex)\b"
-)
-#: Bước đề xuất dùng tín dụng MỚI (không phải trả nghĩa vụ đang có): vay, app vay, rút tiền hay quẹt thẻ tín dụng, ứng tiền, mua trả sau.
-_CREDIT_RE = re.compile(
-    r"\b(?:vay (?:thêm|tiền|nóng|online|tiêu dùng|để|mua|đi)|đi vay|app vay|ứng dụng vay|khoản vay mới|giải ngân|"
-    r"(?:rút|ứng) tiền mặt|ứng tiền|thẻ tín dụng|mua trả sau|dùng trả sau|trả góp)\b"
-)
 
 
-def _step_text(step: dict[str, Any]) -> str:
-    parts = [str(step.get("title") or ""), str(step.get("reason") or "")]
+def _wallet_jar_codes(run: Mapping[str, Any]) -> set[str]:
+    """Mã các hũ của người dùng mà lượt biết: ví demo của tài khoản chạy eval (`demo_wallet_jars`) cộng mọi hũ trong KẾT QUẢ tool của
+    lượt (nút có `code` và `name`, ví dụ `get_jar_balances`). Không đọc khối do agent phát, nên khối không tự thêm hũ được."""
+    codes = {j["code"] for j in demo_wallet_jars(str(run.get("account") or DEFAULT_ACCOUNT))}
+    for node in _walk([_parse(t.get("result")) for t in run.get("tools") or []]):
+        if isinstance(node, Mapping) and isinstance(node.get("code"), str) and isinstance(node.get("name"), str):
+            codes.add(node["code"])
+    return codes
+
+
+def _money_ends(step: Mapping[str, Any]) -> tuple[list[str], list[str]]:
+    """(nơi tiền rời đi, nơi tiền tới) của một bước, chỉ từ trường có cấu trúc: hũ nguồn `jar_code` và hũ nhận `to_jar_code` của bước
+    kéo tiền (`set_aside`, `pay_obligation`, như `yofina_ledger.roadmap_logic.MONEY_MOVING_KINDS`), và `from_jar`, `to_jar` của hành
+    động `move_between_jars` ở mọi loại bước."""
+    from yofina_ledger.roadmap_logic import MONEY_MOVING_KINDS
+
+    src: list[str] = []
+    dst: list[str] = []
+    if step.get("kind") in MONEY_MOVING_KINDS:
+        src.append(step.get("jar_code"))
+        dst.append(step.get("to_jar_code"))
     action = step.get("action") or {}
-    parts += [str(v) for v in (action.get("params") or {}).values() if isinstance(v, str)]
-    text = unicodedata.normalize("NFC", " . ".join(parts)).lower()
-    return _NEGATION_RE.sub(" ", text)
+    if action.get("tool") == "move_between_jars":
+        params = action.get("params") or {}
+        src.append(params.get("from_jar"))
+        dst.append(params.get("to_jar"))
+    return [c for c in src if isinstance(c, str)], [c for c in dst if isinstance(c, str)]
 
 
-def _step_proposal(step: dict[str, Any], *, investment: bool, credit: bool):
-    """Đề xuất của bước theo cùng cách `yofina_ledger.roadmap_logic.proposal_for_step` (origin recommendation, `pay_obligation` là
-    khoản thiết yếu), cộng thêm hạng mục mà chữ của bước để lộ: đầu tư thì `category=investment`; dùng tín dụng mới ở bước không
-    phải trả nghĩa vụ thì `funding_source=credit` và là khoản không thiết yếu (vay để tiêu)."""
+def _step_proposal(step: Mapping[str, Any], start_date: str | None, wallet: set[str]):
+    """Đề xuất của bước, dựng bằng chính `yofina_ledger.roadmap_logic.proposal_for_step` mà `save_roadmap` dùng (loại bước -> hạng mục,
+    bước kéo tiền có nguồn là hũ), cộng điều mà hũ của bước cho biết khi tiền đi qua ranh giới của ví (hợp đồng lộ trình không có loại
+    bước đầu tư hay vay): tiền tới một nơi không phải hũ của ví (mã cổ phiếu, quỹ, ví tiền số) là đầu tư ra ngoài ví
+    (`category investment`), trừ bước trả nghĩa vụ; tiền lấy từ một nơi không phải hũ (thẻ tín dụng, Trả sau, app vay) là tiền vay
+    (`funding_source credit`), khoản không thiết yếu trừ bước trả nghĩa vụ. `wallet` rỗng (không biết ví) thì không xét ranh giới.
+    Trả (đề xuất, có đầu tư ra ngoài ví, có dùng tiền vay)."""
     from yofina_core.suitability import Proposal
+    from yofina_ledger.roadmap_logic import proposal_for_step
 
-    kind = str(step.get("kind"))
-    essential = True if kind == "pay_obligation" else (False if kind == "set_aside" else None)
-    fields: dict[str, Any] = {
-        "kind": f"roadmap_{kind}",
-        "amount_vnd": step.get("amount_vnd"),
-        "origin": "recommendation",
-        "category": "investment" if investment else None,
-        "funding_source": "credit" if credit else None,
-        "is_essential": False if credit and kind != "pay_obligation" else essential,
-    }
-    return Proposal.model_validate({k: v for k, v in fields.items() if v is not None}, strict=False)
+    base = proposal_for_step(step, start_date)
+    src, dst = _money_ends(step)
+    investment = bool(wallet) and step.get("kind") != "pay_obligation" and any(c not in wallet for c in dst)
+    credit = bool(wallet) and any(c not in wallet for c in src)
+    if not (investment or credit):
+        return base, False, False
+    fields = base.model_dump(exclude_none=True)
+    if investment:
+        fields["category"] = "investment"
+    if credit:
+        fields.update(funding_source="credit", is_essential=step.get("kind") == "pay_obligation")
+        fields.pop("jar_code", None)
+    return Proposal.model_validate(fields, strict=False), investment, credit
 
 
 def _suitability_rules():
     from yofina_planner.rules import load_rules
 
     return load_rules()
+
+
+def _ensure_ledger_path() -> None:
+    """Gói `yofina_ledger` (cách `save_roadmap` dựng đề xuất của bước) khi chạy runner như script; cuối danh sách như `demo_wallet_jars`."""
+    for extra in ("data", "gateway/tools/ledger"):
+        if str(ROOT / extra) not in sys.path:
+            sys.path.append(str(ROOT / extra))
 
 
 def _action_mismatch(step: dict[str, Any]) -> list[str]:
@@ -1321,21 +1345,31 @@ def _action_mismatch(step: dict[str, Any]) -> list[str]:
 
 
 def roadmap_suitability(run: dict[str, Any], rules=None) -> dict[str, Any]:
-    """Tiêu chí 5: đếm bước lộ trình vi phạm luật suitability mức block, chỉ từ dữ liệu khối `roadmap`.
+    """Tiêu chí 5: đếm bước lộ trình vi phạm luật suitability mức block, chỉ từ dữ liệu CÓ CẤU TRÚC của khối `roadmap` (loại bước, hũ
+    nguồn, hũ nhận, hành động, `checked_rules`) và kết quả tool của lượt (hũ của ví). Không dò chữ của bước (tiêu đề, lý do): tên hũ
+    của ví ("Đầu tư") hay tên khoản nghĩa vụ ("trả góp xe") không làm bước bị tính, và chữ không phải là nơi luật được kiểm (V9 của #39).
 
     Khối không mang kết quả từng luật (`checked_rules` chỉ là mã luật đã kiểm, không có outcome), nên bước được dựng lại thành
-    `Proposal` rồi xét bằng `applies` và `severity_for` của chính bộ luật `gateway/tools/planner/rules`. Vi phạm khi:
-    - chữ của bước (tiêu đề, lý do, tham số hành động; bỏ mệnh đề phủ định) nói tới đầu tư hoặc tín dụng mới, và có luật mức block
-      dành riêng cho hạng mục đó áp dụng (đầu tư: `emergency_before_investing`, `risk_within_tolerance`; vay để tiêu:
-      `no_borrow_to_spend`). Hợp đồng lộ trình không có loại bước đầu tư hay vay, nên bước như vậy không thể mang bằng chứng đã qua luật;
+    `Proposal` (`_step_proposal`: đúng cách `save_roadmap` dựng, cộng ranh giới của ví) rồi xét bằng `applies` và `severity_for` của
+    chính bộ luật `gateway/tools/planner/rules`. Vi phạm khi:
+    - tiền của bước ra khỏi các hũ của ví (đầu tư ra ngoài ví) hoặc lấy từ ngoài các hũ (tiền vay), và có luật mức block dành riêng
+      cho hạng mục đó áp dụng (đầu tư: `emergency_before_investing`, `risk_within_tolerance`; vay để tiêu: `no_borrow_to_spend`).
+      Hũ của ví: `_wallet_jar_codes`. Hợp đồng lộ trình không có loại bước đầu tư hay vay, nên bước như vậy không thể mang bằng chứng
+      đã qua luật;
     - `checked_rules` nhắc mã luật không có trong bộ luật (bằng chứng kiểm giả);
-    - hành động `move_between_jars` lệch hũ hoặc số tiền của bước (luật đã kiểm một số, hành động chuyển số khác).
+    - hành động `move_between_jars` lệch hũ hoặc số tiền của bước (luật đã kiểm một số, hành động chuyển số khác);
+    - bước không dựng được thành đề xuất (sai hợp đồng: loại bước, số tiền).
     Luật phụ thuộc số dư (`obligations_first`, `obligation_to_income`) cần dữ kiện người dùng không có trong khối: Lambda
-    `save_roadmap` đã chạy lại chúng khi lưu (`ROADMAP_INVALID`), evaluator này không đoán lại."""
+    `save_roadmap` đã chạy lại chúng khi lưu (`ROADMAP_INVALID`), evaluator này không đoán lại. Mã chứng khoán hay tên tài sản cụ thể
+    trong chữ của khối là việc của `forbid_tickers` (ca đối kháng)."""
+    from pydantic import ValidationError
+
     from yofina_planner.engine import applies
 
+    _ensure_ledger_path()
     rules = rules if rules is not None else _suitability_rules()
     known = {r.id for r in rules}
+    wallet = _wallet_jar_codes(run)
     violations: list[dict[str, Any]] = []
     steps = 0
     for b in _blocks_of(run, "roadmap"):
@@ -1347,11 +1381,12 @@ def roadmap_suitability(run: dict[str, Any], rules=None) -> dict[str, Any]:
                 def add(rule_id: str, why: str, _where=where) -> None:
                     violations.append({**_where, "rule_id": rule_id, "why": why})
 
-                text = _step_text(st)
-                investment = bool(_INVEST_RE.search(text))
-                credit = bool(_CREDIT_RE.search(text))
+                try:
+                    proposal, investment, credit = _step_proposal(st, ph.get("start_date"), wallet)
+                except (KeyError, TypeError, ValidationError):
+                    add("roadmap_step", "buoc_sai_hop_dong")
+                    continue
                 if investment or credit:
-                    proposal = _step_proposal(st, investment=investment, credit=credit)
                     for r in rules:
                         w = r.applies_when
                         if w is None or not applies(w, proposal):
@@ -2135,13 +2170,16 @@ def roadmap_goal(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, A
 
 
 def obligation_window(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[str, Any]:
-    """`expect_obligation_window` (what-if Trả sau): khối `forecast_timeline` của hũ trả nghĩa vụ liệt kê các khoản đến hạn TRƯỚC ngày
-    lương sau khi mua (`compare.after.obligations_before_payday.items`, `yofina_core.schedule.obligation_window`):
-    - danh sách không rỗng; mọi khoản là nghĩa vụ có ngày trước `payday.date`; xếp theo ngày;
+    """`expect_obligation_window` (what-if Trả sau): khối `forecast_timeline` của hũ trả nghĩa vụ liệt kê các khoản đến hạn trước lương
+    sau khi mua (`compare.after.obligations_before_payday.items`, `yofina_core.schedule.obligation_window`). "Trước lương" là quy tắc chung
+    `yofina_core.schedule.due_before_payday`: trước HOẶC ĐÚNG ngày lương (chốt 26/11, BR-22).
+    - danh sách không rỗng; mọi khoản là nghĩa vụ đến hạn trước lương so với `payday.date`; xếp theo ngày;
     - khoản Trả sau của lượt (`obligation_impact.cost`: `due_date`, `total_due_vnd`) có trong danh sách (cùng ngày, cùng số tiền) khi nó
-      đến hạn trước ngày lương, và không có khi nó đến hạn từ ngày lương trở đi;
+      đến hạn trước lương, và không có khi nó đến hạn sau ngày lương;
     - hũ của khối là hũ trả của `obligation_impact.at_due` (khi khối đó có).
     Mọi số lấy từ khối do code dựng từ kết quả `run_scenario` của chính lượt."""
+    from yofina_core.schedule import due_before_payday
+
     timelines = [
         b["data"]
         for b in _blocks_of(run, "forecast_timeline")
@@ -2160,18 +2198,19 @@ def obligation_window(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[s
     fails = []
     if not items:
         fails.append("danh_sach_rong")
-    if any(str(i.get("date")) >= payday or i.get("kind") != "obligation" for i in items):
-        fails.append("khoan_tu_ngay_luong")
+    if any(not _before_payday(i.get("date"), payday, due_before_payday) or i.get("kind") != "obligation" for i in items):
+        fails.append("khoan_sau_ngay_luong")
     dates = [str(i.get("date")) for i in items]
     if dates != sorted(dates):
         fails.append("khong_theo_ngay")
     due, total = cost.get("due_date"), cost.get("total_due_vnd")
     if due and total and items:
         listed = any(str(i.get("date")) == due and i.get("amount_vnd") == total for i in items)
-        if str(due) < payday and not listed:
+        before = _before_payday(due, payday, due_before_payday)
+        if before and not listed:
             fails.append("thieu_khoan_tra_sau")
-        elif str(due) >= payday and listed:
-            fails.append("khoan_tu_ngay_luong")
+        elif not before and listed:
+            fails.append("khoan_sau_ngay_luong")
     if pay_jars and str((data.get("jar") or {}).get("code")) not in pay_jars:
         fails.append("sai_hu_tra")
     return {
@@ -2181,6 +2220,14 @@ def obligation_window(run: Mapping[str, Any], case: Mapping[str, Any]) -> dict[s
         "payday": payday,
         "items": [[str(i.get("date")), i.get("amount_vnd")] for i in items],
     }
+
+
+def _before_payday(day: Any, payday: str, rule: Callable[[str, str], bool]) -> bool:
+    """`rule` (`due_before_payday`) trên hai ngày ISO của khối; ngày hỏng hoặc thiếu không bao giờ là "trước lương"."""
+    try:
+        return rule(str(day), payday)
+    except ValueError:
+        return False
 
 
 #: Lời nói một hũ cạn (đã bỏ mệnh đề phủ định bằng `_NEGATION_RE`): "dự kiến cạn", "có thể cạn", "hụt", "hết tiền". "Sát số dư" không tính.

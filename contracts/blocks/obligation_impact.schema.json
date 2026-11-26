@@ -144,7 +144,7 @@
         "jar": { "$ref": "forecast_timeline.schema.json#/$defs/ForecastJar" },
         "status": { "$ref": "forecast_timeline.schema.json#/$defs/JarStatus" },
         "balance_before_due_vnd": {
-          "description": "Số dư P50 dự kiến của hũ ngay trước ngày đến hạn (âm là đã hụt).",
+          "description": "Số dư P50 dự kiến của hũ ngay trước khi trả khoản (âm là đã hụt); đến hạn đúng ngày lương thì chưa gồm lương về cùng ngày.",
           "$ref": "envelope.schema.json#/$defs/VndSigned"
         },
         "due_vnd": {

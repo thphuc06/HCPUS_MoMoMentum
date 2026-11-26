@@ -6,7 +6,7 @@ Một bản tin SQS (thân là thông báo S3) xử lý như sau:
    không thì BỎ QUA (tải lại cùng URL, khóa lạ, bản tin kiểm tra của S3).
 2. Đọc tệp, băm `content_sha256`: trùng nội dung với job còn sống khác thì job này `rejected` (`INGEST_DUPLICATE_FILE`).
 3. `queued` -> `processing`, trích dòng (`extract.extract_rows`, che PII ngay, gán hũ bằng bộ phân loại phase 4 với nhãn k-NN và lịch sử
-   của chính người dùng), khử trùng với sổ cái (`app_find_ingest_matches`),
+   của chính người dùng), khử trùng với sổ cái (`app_find_ingest_matches`, ghép một-một ở `pick_matches`),
    ghi `ingest_rows`, tính độ phủ hiện tại, job sang `review`. Tệp gốc xóa khỏi S3 sau khi đọc xong (không giữ ảnh).
 4. Lỗi vĩnh viễn (tệp không đọc được, không phải tài chính, hết hạn mức model) -> job `rejected`/`failed` với mã lỗi, bản tin coi như xong.
    Lỗi tạm thời (Aurora đang dậy, model nghẽn) -> ném lại để SQS giao lại; đến lần giao cuối thì job được đánh dấu `failed` TRƯỚC khi bản
@@ -374,9 +374,10 @@ class Worker:
 #: là hai lần mua.
 WALLET_FUNDING = frozenset({"jar", "credit"})
 WALLET_MAX_DAY_DIFF = 1
-#: Khi một bên KHÔNG BIẾT đối tác (đã che "N***" hay rỗng) và nội dung không gần giống: chỉ coi là trùng một giao dịch ngoài ví khi số
-#: tiền đủ lớn để khó trùng ngẫu nhiên (tiền phòng, học phí, lương...) và lệch ngày không quá `UNKNOWN_PARTY_MAX_DAY_DIFF`. Khoản nhỏ
-#: (cà phê, xe ôm) cùng số tiền rất thường gặp: không ẩn, để người dùng duyệt.
+#: Khi một bên KHÔNG GHI đối tác (rỗng) và nội dung không gần giống: chỉ coi là trùng một giao dịch ngoài ví khi số tiền đủ lớn để khó
+#: trùng ngẫu nhiên (tiền phòng, học phí, lương...) và lệch ngày không quá `UNKNOWN_PARTY_MAX_DAY_DIFF`. Khoản nhỏ (cà phê, xe ôm) cùng
+#: số tiền rất thường gặp: không ẩn, để người dùng duyệt. Đối tác ĐÃ CHE (`masked_party`) không dùng luật này: tên đã che là một người
+#: cụ thể mà ta không biết là ai, nên cùng số tiền không phải bằng chứng là cùng người.
 UNKNOWN_PARTY_LARGE_VND = 500_000
 UNKNOWN_PARTY_MAX_DAY_DIFF = 1
 #: Nội dung "gần giống": tỷ lệ từ chung trên tập từ ngắn hơn (overlap coefficient), sau khi bỏ từ chung của mọi nội dung ngân hàng.
@@ -395,9 +396,15 @@ def known_party(name: str | None) -> str | None:
     """Đối tác đã chuẩn hóa, hoặc None khi KHÔNG BIẾT: rỗng hay đã che (`N***`, `[STK]`). Hai tên đã che cùng chữ cái đầu không phải
     là cùng một người, nên không dùng để so."""
     folded = fold_text(name or "")
-    if not folded or "*" in folded or "[" in folded:
+    if not folded or masked_party(name):
         return None
     return folded
+
+
+def masked_party(name: str | None) -> bool:
+    """Đối tác đã bị bộ che PII thay (`N***`, `[STK]`): có một bên cụ thể nhưng không còn biết là ai (khác với đối tác rỗng)."""
+    folded = fold_text(name or "")
+    return "*" in folded or "[" in folded
 
 
 def text_tokens(*parts: str | None) -> frozenset[str]:
@@ -479,10 +486,14 @@ def is_duplicate_match(
        ở cửa hàng khác là khoản khác: sao kê `c01` có 5 dòng bị đánh trùng giả theo cách cũ (Circle K 56.000 ₫ với GrabFood 56.000 ₫
        hôm sau, Be 26.000 ₫ với GrabFood cùng ngày...). Tên một từ khác tên kia ("Grab", "GrabFood") không khớp: dòng đó vào hàng chờ.
     3. Một bên KHÔNG BIẾT đối tác (`known_party`): đối tác đã che hay rỗng không phải là "khác". Trùng khi nội dung và đối tác gần giống
-       (`texts_similar`), hoặc khi cả hai ở ngoài ví, số tiền từ `UNKNOWN_PARTY_LARGE_VND` và lệch ngày không quá
-       `UNKNOWN_PARTY_MAX_DAY_DIFF`. Ca thật: ảnh `s02` (tiền phòng 1.500.000 ₫, đối tác "N***", "MINH CK tien phong thang 11") đã
-       chốt, rồi dòng 15 của `c01` ("MBVCB.3765569.CK tien phong T11", bộ đọc CSV lấy đối tác "TIEN PHONG") cùng ngày 01/11.
+       (`texts_similar`). Ca thật: ảnh `s02` (tiền phòng 1.500.000 ₫, đối tác "N***", "MINH CK tien phong thang 11") đã chốt, rồi
+       dòng 15 của `c01` ("MBVCB.3765569.CK tien phong T11", bộ đọc CSV lấy đối tác "TIEN PHONG") cùng ngày 01/11. Nội dung không gần
+       giống thì chỉ khi KHÔNG bên nào có đối tác đã che (`masked_party`), cả hai ở ngoài ví, số tiền từ `UNKNOWN_PARTY_LARGE_VND` và
+       lệch ngày không quá `UNKNOWN_PARTY_MAX_DAY_DIFF`: tên đã che là một người cụ thể chưa rõ là ai, nên hai khoản 1.000.000 ₫ cùng
+       ngày cho "N***" và "T***" (hay hai "N***") là hai lần chuyển, cùng số tiền không phải bằng chứng.
     4. Không đọc được giao dịch đã có (`existing` None): chỉ tin đối tác khớp của hàm DB.
+
+    Hàm này chỉ xét MỘT cặp; `pick_matches` ghép một-một trên mọi cặp được nhận.
     """
     diff = abs(int(m["day_diff"]))
     wallet = m.get("funding_source") in WALLET_FUNDING
@@ -499,8 +510,23 @@ def is_duplicate_match(
         text_tokens(cand_cp, cand_desc), text_tokens(existing.get("merchant"), existing.get("note"))
     ):
         return True
+    if masked_party(cand_cp) or masked_party(existing.get("merchant")):
+        return False
     amount = candidate.amount_vnd if candidate else 0
     return not wallet and amount >= UNKNOWN_PARTY_LARGE_VND and diff <= UNKNOWN_PARTY_MAX_DAY_DIFF
+
+
+def _party_matched(
+    m: Mapping[str, Any], candidate: Candidate | None, existing: Mapping[str, Any] | None
+) -> bool:
+    """Cặp đã được nhận có khớp đối tác không: hai bên đều biết đối tác thì theo `same_party`; một bên không biết thì không; không đọc
+    được giao dịch đã có thì theo `counterparty_match` của hàm DB."""
+    if existing is None:
+        return bool(m["counterparty_match"])
+    cand_cp = candidate.counterparty if candidate else None
+    if known_party(cand_cp) and known_party(existing.get("merchant")):
+        return same_party(cand_cp, existing.get("merchant"))
+    return False
 
 
 def pick_matches(
@@ -509,19 +535,31 @@ def pick_matches(
     window_days: int = 30,
     details: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[int, Mapping[str, Any]]:
-    """Giao dịch trùng gần ngày nhất cho từng ứng viên, chỉ trong các khớp được `is_duplicate_match` nhận; đối tác khớp được ưu tiên
-    (hàm DB đã sắp, đây chọn lại cho chắc). `candidates`: dòng nạp theo `idx`; `details`: đối tác và ghi chú của giao dịch đã có theo id
-    (vắng: chỉ tin `counterparty_match`)."""
-    best: dict[int, Mapping[str, Any]] = {}
+    """Ghép MỘT-MỘT dòng nạp với giao dịch đã có: mỗi giao dịch là bản trùng của tối đa một dòng và mỗi dòng trùng tối đa một giao
+    dịch, chỉ trong các cặp được `is_duplicate_match` nhận. Hai ly cà phê 45.000 ₫ cùng ngày mà sổ cái mới có một thì một dòng là
+    trùng, dòng kia là khoản mới; chọn khớp tốt nhất cho TỪNG dòng (cách cũ) thì cả hai thành "đã có" và mất một lần mua thật.
+
+    Ghép tham lam theo thứ tự: lệch ngày nhỏ nhất trước, rồi cặp khớp đối tác (`_party_matched`), rồi thứ tự dòng trong tệp (`idx`)
+    và id giao dịch cho tất định. Dòng không ghép được là dòng mới. `candidates`: dòng nạp theo `idx`; `details`: đối tác và ghi chú
+    của giao dịch đã có theo id (vắng: chỉ tin `counterparty_match`). Trả `idx -> khớp` của các dòng trùng."""
+    ranked: list[tuple[tuple[int, bool, int, str], Mapping[str, Any]]] = []
     for m in matches:
         idx = int(m["idx"])
-        existing = details.get(str(m["transaction_id"])) if details is not None else None
-        if not is_duplicate_match(m, (candidates or {}).get(idx), existing, window_days):
+        tx_id = str(m["transaction_id"])
+        existing = details.get(tx_id) if details is not None else None
+        cand = (candidates or {}).get(idx)
+        if not is_duplicate_match(m, cand, existing, window_days):
             continue
-        cur = best.get(idx)
-        key = (not bool(m["counterparty_match"]), abs(int(m["day_diff"])))
-        if cur is None or key < (not bool(cur["counterparty_match"]), abs(int(cur["day_diff"]))):
-            best[idx] = m
+        key = (abs(int(m["day_diff"])), not _party_matched(m, cand, existing), idx, tx_id)
+        ranked.append((key, m))
+    ranked.sort(key=lambda pair: pair[0])
+    best: dict[int, Mapping[str, Any]] = {}
+    taken: set[str] = set()
+    for (_diff, _no_party, idx, tx_id), m in ranked:
+        if idx in best or tx_id in taken:
+            continue
+        best[idx] = m
+        taken.add(tx_id)
     return best
 
 

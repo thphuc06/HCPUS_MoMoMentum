@@ -86,7 +86,7 @@
       }
     },
     "ForecastObligationWindow": {
-      "description": "Các khoản đến hạn của hũ Nghĩa vụ trước kỳ lương, theo ngày rồi theo tên. Khoản thiếu đầu tiên tính từ số dư P50 của ngày đó.",
+      "description": "Các khoản đến hạn của hũ Nghĩa vụ trước hoặc đúng ngày lương, theo ngày rồi theo tên. Khoản thiếu đầu tiên tính từ số dư P50 của ngày đó; khoản đến hạn đúng ngày lương trả bằng số dư trước khi lương về.",
       "type": "object",
       "required": ["items"],
       "additionalProperties": false,

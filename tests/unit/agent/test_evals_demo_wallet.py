@@ -245,7 +245,7 @@ def due(d: str, label: str, amount: int, kind: str = "obligation") -> dict:
 def whatif_blocks(
     items: list[dict],
     *,
-    due_date: str = "2026-12-03",
+    due_date: str = "2026-12-05",
     total: int = 1_900_000,
     jar: str = "nghia_vu",
 ) -> list[dict]:
@@ -272,23 +272,31 @@ def whatif_blocks(
 
 
 def test_what_if_tra_sau_liet_ke_khoan_den_han_truoc_luong_o_hu_nghia_vu():
+    """Cửa sổ "trước lương" của bộ chấm là quy tắc chung `yofina_core.schedule.due_before_payday` (chốt 26/11, BR-22, phương án B):
+    khoản đến hạn ĐÚNG ngày lương (Trả sau 05/12 của ví demo, lương 05/12) phải có trong danh sách; trước đó bộ chấm đòi `< payday`
+    nên khoản này bị coi là "từ ngày lương" và không được có."""
     case = {"id": "x", "question": "q", "expect_obligation_window": True}
-    good = [due("2026-11-26", "Tiền điện", 375_000), due("2026-12-03", "Trả sau", 1_900_000)]
+    good = [due("2026-11-26", "Tiền điện", 375_000), due("2026-12-05", "Trả sau", 1_900_000)]
     res = evals_run.obligation_window(_run(blocks=whatif_blocks(good)), case)
-    assert res["ok"] and res["items"] == [["2026-11-26", 375_000], ["2026-12-03", 1_900_000]], res
+    assert res["ok"] and res["items"] == [["2026-11-26", 375_000], ["2026-12-05", 1_900_000]], res
     missing_bnpl = evals_run.obligation_window(_run(blocks=whatif_blocks(good[:1])), case)
     assert missing_bnpl["fails"] == ["thieu_khoan_tra_sau"]
     late = [*good, due("2026-12-06", "Tiền nhà", 2_000_000)]
     assert evals_run.obligation_window(_run(blocks=whatif_blocks(late)), case)["fails"] == [
-        "khoan_tu_ngay_luong"
+        "khoan_sau_ngay_luong"
     ]
     unsorted = list(reversed(good))
     assert evals_run.obligation_window(_run(blocks=whatif_blocks(unsorted)), case)["fails"] == [
         "khong_theo_ngay"
     ]
-    # khoản Trả sau đến hạn từ ngày lương thì không được nằm trong danh sách trước lương
-    after_payday = whatif_blocks([good[0]], due_date="2026-12-05")
+    # khoản Trả sau đến hạn trước ngày lương cũng phải có
+    early = [good[0], due("2026-12-03", "Trả sau", 1_900_000)]
+    assert evals_run.obligation_window(_run(blocks=whatif_blocks(early, due_date="2026-12-03")), case)["ok"]
+    # khoản Trả sau đến hạn SAU ngày lương thì không được nằm trong danh sách trước lương
+    after_payday = whatif_blocks([good[0]], due_date="2026-12-06")
     assert evals_run.obligation_window(_run(blocks=after_payday), case)["ok"]
+    listed_late = whatif_blocks([good[0], due("2026-12-06", "Trả sau", 1_900_000)], due_date="2026-12-06")
+    assert evals_run.obligation_window(_run(blocks=listed_late), case)["fails"] == ["khoan_sau_ngay_luong"]
     other_jar = whatif_blocks(good, jar="an_uong")
     assert evals_run.obligation_window(_run(blocks=other_jar), case)["fails"] == ["sai_hu_tra"]
     assert evals_run.obligation_window(_run(blocks=whatif_blocks([])), case)["fails"] == [

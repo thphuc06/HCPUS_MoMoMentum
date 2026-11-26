@@ -2005,6 +2005,10 @@ def _no_outflow_sentence(data: Mapping[str, Any]) -> str | None:
     return f"Số dư hũ {name} dự kiến không xuống dưới mức hôm nay trong {horizon} ngày tới."
 
 
+def _days_between(start: date | str, end: date | str) -> int:
+    return (date.fromisoformat(_date_text(end)) - date.fromisoformat(_date_text(start))).days
+
+
 def _forecast_sentence(
     name: str,
     status: str,
@@ -2023,12 +2027,14 @@ def _forecast_sentence(
     elif status == "short" and not date_shown:
         # hũ thưa (#25): không nêu ngày cạn cụ thể
         text = f"Hũ {name} có thể cạn trước ngày lương {_dm(payday)}."
-    elif status == "short" and runout:
-        gap = (date.fromisoformat(_date_text(payday)) - date.fromisoformat(_date_text(runout))).days
+    elif status == "short" and runout and _days_between(runout, payday) >= 0:
+        gap = _days_between(runout, payday)
         text = (
             f"Hũ {name} dự kiến cạn ngày {_dm(runout)}, còn {gap} ngày tới kỳ lương {_dm(payday)}."
         )
     elif status == "short":
+        # cả khi ngày cạn (số dư cuối ngày) rơi SAU kỳ lương mà hũ vẫn hụt: khoản đến hạn đúng ngày lương thiếu tiền trước khi lương về
+        # (BR-22, chốt 26/11); khoản thiếu đầu tiên được nối sau câu này
         text = f"Hũ {name} dự kiến hụt trước kỳ lương {_dm(payday)}."
     elif status == "tight":
         text = f"Hũ {name} sát: dự kiến còn rất ít tiền trước kỳ lương {_dm(payday)}."

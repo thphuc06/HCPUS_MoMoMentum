@@ -157,6 +157,42 @@ def build_timeline_events(
     return events
 
 
+def salary_part_on(
+    day: date,
+    *,
+    jar_code: str,
+    origin: date,
+    salary_vnd: int | None,
+    payday_day: int | None,
+    split_shares: Sequence[tuple[str, Any]],
+) -> int:
+    """Phần lương về hũ `jar_code` đúng ngày `day` theo lịch lương của dự báo gốc `origin`: ngày lương sau `origin`, phần chia bằng
+    `split_amount` (cùng quy tắc mốc lương của `build_timeline_events` và đầu vào Monte Carlo của pipeline). 0 khi `day` không phải
+    ngày lương, chưa khai lương, hoặc tỷ lệ chia không đủ 100% (khi đó dự báo không mô phỏng lương)."""
+    if not salary_vnd or not payday_day or day <= origin:
+        return 0
+    if day != payday_in_month(int(payday_day), day.year, day.month):
+        return 0
+    try:
+        return split_amount(int(salary_vnd), list(split_shares)).get(jar_code, 0)
+    except ValueError:
+        return 0
+
+
+def due_before_payday(due: date | str, payday: date | str) -> bool:
+    """Cửa sổ "đến hạn trước lương" của kỳ lương `payday`: khoản đến hạn TRƯỚC HOẶC ĐÚNG ngày lương (chốt 26/11, BR-22, #39).
+
+    Một quy tắc cho danh sách khoản đến hạn của hũ trả nghĩa vụ (`obligation_window`: khối dự báo, what-if), bộ chấm eval và ngữ cảnh lộ
+    trình. Khoản đến hạn đúng ngày lương được trả bằng số dư TRƯỚC khi lương ngày đó về (thận trọng: khoản trừ có thể chạy trước khi
+    lương về), xem `obligation_window`. Nhận `date` hoặc ngày ISO `YYYY-MM-DD`.
+    """
+    return _as_date(due) <= _as_date(payday)
+
+
+def _as_date(day: date | str) -> date:
+    return day if isinstance(day, date) else date.fromisoformat(str(day))
+
+
 def obligation_window(
     events: Iterable[Mapping[str, Any]],
     payday: str,
@@ -164,14 +200,25 @@ def obligation_window(
     *,
     opening_balance_vnd: int = 0,
 ) -> dict[str, Any]:
-    """List dues before payday and identify the first underfunded item in the median forecast."""
+    """Các khoản đến hạn trước lương (`due_before_payday`: gồm ngày lương) của MỘT hũ, theo ngày rồi tên, và khoản thiếu đầu tiên
+    theo số dư P50.
+
+    `events` là mốc của hũ (`kind` `obligation` hoặc `salary`, ngày ISO); `original_due_date` (khoản quá hạn mà dự báo trừ vào ngày
+    dự báo đầu tiên) thay cho ngày hiển thị. `end_balances` là số dư P50 CUỐI ngày theo ngày ISO (đã trừ khoản đến hạn và cộng lương của
+    ngày đó). Tiền có để trả các khoản của ngày d là số dư cuối ngày d cộng lại các khoản đó và TRỪ lương về ngày d: khoản đến hạn đúng
+    ngày lương không được tính bằng lương của chính ngày đó. Khoản trước ngày dự báo đầu tiên trả từ `opening_balance_vnd`.
+    """
     dues = []
+    salary_by_day: dict[str, int] = {}
     for event in events:
+        if event["kind"] == "salary":
+            salary_by_day[event["date"]] = salary_by_day.get(event["date"], 0) + event["amount_vnd"]
+            continue
         if event["kind"] != "obligation":
             continue
         due = dict(event)
         due["date"] = due.pop("original_due_date", None) or due["date"]
-        if due["date"] < payday:
+        if due_before_payday(due["date"], payday):
             dues.append(due)
     dues.sort(key=lambda e: (e["date"], e["label"], e["amount_vnd"]))
     daily_totals: dict[str, int] = {}
@@ -179,7 +226,9 @@ def obligation_window(
         day = due["date"]
         daily_totals[day] = daily_totals.get(day, 0) + due["amount_vnd"]
     available_by_day = {
-        day: end_balances[day] + amount for day, amount in daily_totals.items() if day in end_balances
+        day: end_balances[day] + amount - salary_by_day.get(day, 0)
+        for day, amount in daily_totals.items()
+        if day in end_balances
     }
     result: dict[str, Any] = {"items": dues}
     first_forecast_day = min(end_balances, default=payday)

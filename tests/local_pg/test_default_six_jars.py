@@ -570,7 +570,8 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
     bnpl = next(o for o in ctx.obligations if o["kind"] == "bnpl")
     (due,) = [flow for flow in source.outflows if flow.ref_id == bnpl["id"]]
     assert due.amount_vnd == 1_000_000
-    assert due.date == date(2026, 12, 3)  # ngày đến hạn 3 của ví demo, trước lương 05/12
+    # ngày đến hạn 5 như BR-22, đúng ngày lương 05/12 (chốt 26/11, phương án B: vẫn là khoản đến hạn trước lương)
+    assert due.date == date(2026, 12, 5) == daily["payday_date"]
     assert all(
         flow.ref_id != bnpl["id"] for j in built.inputs.jars if j.code != source.code for flow in j.outflows
     )
@@ -600,8 +601,12 @@ def test_demo_runout_and_bnpl_with_local_engines(env):
     assert [row["amount_vnd"] for row in window["items"] if row["label"] == bnpl["name"]] == [
         2_200_000
     ]
-    assert window["first_shortfall"]["shortfall_vnd"] > 0
-    assert after["runout_date"] < daily["payday_date"].isoformat()
+    # khoản Trả sau đến hạn đúng ngày lương trả bằng số dư trước khi lương về: thiếu đúng ngày lương, hũ trả hụt khi đến hạn cùng số
+    # thiếu với danh sách (số dư cuối ngày đã cộng lương có thể còn dương, ngày cạn của dự báo rơi sau kỳ lương)
+    payday = daily["payday_date"].isoformat()
+    assert window["first_shortfall"]["date"] == payday and window["first_shortfall"]["shortfall_vnd"] > 0
+    at_due = impact["at_due"][0]
+    assert at_due["status"] == "short" and at_due["shortfall_vnd"] == window["first_shortfall"]["shortfall_vnd"]
 
     gathered = ResilienceEngine(pipeline).gather(user, env.clock())
     # điểm chống chịu: mỗi hũ tính một lần (Chi hằng ngày cộng số dư và chi lặt vặt của chính nó, không đếm lại chi của Ăn uống)

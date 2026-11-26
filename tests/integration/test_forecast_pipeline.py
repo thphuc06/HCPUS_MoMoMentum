@@ -23,7 +23,7 @@ pytestmark = pytest.mark.usefixtures("fresh")
 # `muc_tieu`, thêm Đầu tư 0 ₫), suy từ bộ sinh persona qua cùng ánh xạ mã hũ của đặt lại; tổng là 7.730.000 ₫ của bảng số Figma cộng
 # số dư hũ Chi hằng ngày
 DEMO_BALANCES = demo_balances("minh")
-# Trả sau của minh trên ví demo đến hạn ngày 3 (`DEMO_CREDIT_DUE_DAY`, trước lương 05/12) thay vì ngày 5 của spec
+# Trả sau của minh trên ví demo đến hạn ngày 5 (BR-22), đúng ngày lương 05/12: chốt 26/11 tính là đến hạn trước lương
 MINH_BNPL_DUE = f"2026-12-{demo_wallet('minh').credit_due_day:02d}"
 
 
@@ -99,8 +99,9 @@ def test_sau_dat_lai_minh_hu_an_uong_can_23_11_con_12_ngay_toi_ky_luong(api):
         None,
         "an_uong",
     )  # thẻ của Tổng quan vẫn là Ăn uống, không phải Chi hằng ngày
-    # các hũ khác: không hũ nào báo hụt; Nghĩa vụ (gộp Hóa đơn) sát vì tiền điện 26/11 và Trả sau 03/12 (rollout Bước 5: khả năng hụt
-    # 0,26); hũ goal Du lịch và Đầu tư 0 ₫ (không gì rút tiền) đủ; Chi hằng ngày (chi lặt vặt, khối `demo_jars`) đủ tới lương
+    # các hũ khác: không hũ nào báo hụt; Nghĩa vụ (gộp Hóa đơn) đủ hoặc sát: Trả sau 05/12 đến hạn đúng ngày lương, ngoài các ngày mà
+    # xác suất hụt xét (đo cục bộ 26/11: đủ, khả năng hụt 0; trước đó Trả sau 03/12 cho sát 0,26); hũ goal Du lịch và Đầu tư 0 ₫
+    # (không gì rút tiền) đủ; Chi hằng ngày (chi lặt vặt, khối `demo_jars`) đủ tới lương
     status = {j["code"]: j["status"] for j in ov["jars"]}
     assert (
         status["nghia_vu"] in ("tight", "ok")

@@ -199,11 +199,26 @@ def test_hai_doi_tac_da_che_khac_noi_dung_so_tien_nho_khong_trung():
 def test_khong_biet_doi_tac_so_tien_lon_ngoai_vi_trung_khi_lech_toi_da_mot_ngay(
     day_diff, funding, expected
 ):
+    """Cả hai bên đều không ghi đối tác (rỗng, không phải đã che): luật số tiền lớn, lệch tối đa một ngày như cũ."""
     existing = {"merchant": None, "note": "hoc phi"}
     got = is_duplicate_match(
-        match(day_diff, funding), cand("N***", "CK thang 11", 2_000_000), existing, WINDOW
+        match(day_diff, funding), cand(None, "CK thang 11", 2_000_000), existing, WINDOW
     )
     assert got is expected
+
+
+@pytest.mark.parametrize(
+    ("cand_cp", "existing_cp"),
+    [("N***", None), (None, "N***"), ("T***", "N***"), ("N***", "N***"), ("[STK]", None)],
+)
+def test_doi_tac_da_che_khong_trung_chi_vi_cung_so_tien(cand_cp, existing_cp):
+    """Tên đã che (`N***`, `[STK]`) là một người cụ thể mà ta không biết là ai: cùng số tiền lớn, cùng ngày, ngoài ví không đủ bằng
+    chứng là cùng người. Hai khoản 1.000.000 ₫ cho hai người đã che tên là hai lần chuyển, không phải dòng trùng."""
+    existing = {"merchant": existing_cp, "note": "CK"}
+    assert not is_duplicate_match(match(0), cand(cand_cp, "CK", 1_000_000), existing, WINDOW)
+    # nội dung gần giống vẫn là bằng chứng (ca thật s02 / c01 ở trên)
+    similar = {"merchant": existing_cp, "note": "MINH CK tien phong thang 11"}
+    assert is_duplicate_match(match(0), cand(cand_cp, "CK tien phong T11", 1_000_000), similar, WINDOW)
 
 
 def test_khong_biet_doi_tac_so_tien_nho_noi_dung_khac_khong_trung():
@@ -267,6 +282,7 @@ def test_tien_vao_sao_ke_vy_trung_thu_nhap_ngoai_vi_da_seed():
     assert not any(m["counterparty_match"] for m in fake_find_matches(ledger, cands, WINDOW))
     best = dedupe(ledger, cands)
     assert set(best) == set(cands)
+    assert len({m["transaction_id"] for m in best.values()}) == len(best)  # mỗi dòng ghép một giao dịch riêng
     for seq, m in best.items():
         tx = next(t for t in ledger if t["id"] == m["transaction_id"])
         assert (tx["kind"], tx["funding_source"], tx["app_date"]) == ("income", "external", cands[seq].app_date)
@@ -306,3 +322,74 @@ def test_khac_nguoi_cung_so_tien_cung_ngay_khong_gop(bank, wallet):
     ledger = [{"id": "t", "kind": "income", "app_date": date(2026, 11, 18), "amount_vnd": 4_800_000, "merchant": wallet,
                "note": None, "funding_source": "external"}]  # fmt: skip
     assert dedupe(ledger, {1: c}) == {}
+
+
+# --- ghép một-một (C6 của #39): mỗi giao dịch đã có chỉ là bản trùng của tối đa một dòng nạp ----------------------------------------
+DAY = date(2026, 11, 18)
+
+
+def tx(tx_id: str, amount: int, merchant: str | None, *, days: int = 0, funding: str = "external", kind: str = "expense",
+       note: str | None = None) -> dict[str, Any]:  # fmt: skip
+    return {"id": tx_id, "kind": kind, "app_date": DAY + timedelta(days=days), "amount_vnd": -amount if kind == "expense" else amount,
+            "merchant": merchant, "note": note, "funding_source": funding}  # fmt: skip
+
+
+def row(seq: int, amount: int, cp: str | None, desc: str | None = None, *, days: int = 0, kind: str = "expense") -> Candidate:
+    return Candidate(seq=seq, kind=kind, app_date=DAY + timedelta(days=days), amount_vnd=amount, counterparty=cp,
+                     description=desc, extract_confidence=0.95)  # fmt: skip
+
+
+def test_hai_ly_ca_phe_giong_het_so_da_co_mot_thi_chi_mot_dong_trung():
+    """Lịch sử ví có hai ly Highlands 45.000 ₫ cùng ngày, sổ cái mới ghi một (trả từ hũ): dòng thứ hai là lần mua thật, không bị ẩn."""
+    ledger = [tx("hc", 45_000, "Highlands Coffee", funding="jar")]
+    cands = {1: row(1, 45_000, "Highlands Coffee", "ca phe"), 2: row(2, 45_000, "Highlands Coffee", "ca phe")}
+    best = dedupe(ledger, cands)
+    assert set(best) == {1} and best[1]["transaction_id"] == "hc"  # cùng mức khớp: dòng đứng trước trong tệp
+
+
+def test_hai_lan_chuyen_500k_cung_nguoi_so_da_co_mot_thi_mot_lan_la_moi():
+    ledger = [tx("ha", 500_000, "Nguyễn Thu Hà")]
+    cands = {1: row(1, 500_000, "NGUYEN THU HA", "CK"), 2: row(2, 500_000, "NGUYEN THU HA", "CK")}
+    assert set(dedupe(ledger, cands)) == {1}
+
+
+def test_hai_khoan_1_trieu_cho_hai_nguoi_da_che_ten_khong_trung():
+    """Sổ cái có khoản 1.000.000 ₫ ngoài ví cho "N***" (lần nạp trước); tệp mới có khoản 1.000.000 ₫ cùng ngày cho "T***"."""
+    ledger = [tx("n", 1_000_000, "N***", note="CK")]
+    assert dedupe(ledger, {1: row(1, 1_000_000, "T***", "CK")}) == {}
+
+
+def test_hai_giao_dich_da_co_hai_dong_moi_moi_dong_mot_giao_dich():
+    ledger = [tx("a", 45_000, "Highlands Coffee", funding="jar"), tx("b", 45_000, "Highlands Coffee", funding="jar")]
+    cands = {1: row(1, 45_000, "Highlands Coffee"), 2: row(2, 45_000, "Highlands Coffee")}
+    best = dedupe(ledger, cands)
+    assert set(best) == {1, 2} and {m["transaction_id"] for m in best.values()} == {"a", "b"}
+
+
+def test_cap_lech_ngay_nho_nhat_duoc_ghep_truoc():
+    """Một khoản 4.800.000 ₫ đã có ngày 18/11; sao kê có hai dòng cùng đối tác ngày 19/11 (đứng trước) và 18/11: dòng cùng ngày là bản
+    trùng, dòng ngày 19/11 là khoản mới. Cách cũ chọn cho từng dòng nên cả hai dòng đều trỏ vào cùng một giao dịch."""
+    ledger = [tx("s", 4_800_000, "Studio Nắng (freelance thiết kế)", kind="income")]
+    cands = {
+        1: row(1, 4_800_000, "STUDIO NANG TT THIET KE", days=1, kind="income"),
+        2: row(2, 4_800_000, "STUDIO NANG TT THIET KE", kind="income"),
+    }
+    best = dedupe(ledger, cands)
+    assert set(best) == {2} and best[2]["transaction_id"] == "s"
+
+
+def test_cung_lech_ngay_thi_dong_khop_doi_tac_duoc_ghep_truoc():
+    """Cùng ngày: dòng không ghi đối tác mà nội dung gần giống (đứng trước) và dòng ghi đúng tên người nhận (`same_party`)."""
+    ledger = [tx("p", 1_500_000, "Trần Quang Huy", note="tien phong T11")]
+    cands = {1: row(1, 1_500_000, None, "CK tien phong T11"), 2: row(2, 1_500_000, "TRAN QUANG HUY", "CK tien phong T11")}
+    assert is_duplicate_match(fake_find_matches(ledger, {1: cands[1]}, WINDOW)[0], cands[1], details_of(ledger)["p"], WINDOW)
+    best = dedupe(ledger, cands)
+    assert set(best) == {2} and best[2]["transaction_id"] == "p"
+
+
+def test_khong_doc_duoc_giao_dich_da_co_van_ghep_mot_mot_theo_doi_tac_cua_ham_db():
+    """`details` vắng (không đọc được đối tác của giao dịch đã có): chỉ tin `counterparty_match` của hàm DB, vẫn một-một."""
+    ledger = [tx("hc", 45_000, "Highlands Coffee", funding="jar")]
+    cands = {1: row(1, 45_000, "Highlands Coffee"), 2: row(2, 45_000, "Highlands Coffee")}
+    best = pick_matches(fake_find_matches(ledger, cands, WINDOW), cands, WINDOW, None)
+    assert set(best) == {1}

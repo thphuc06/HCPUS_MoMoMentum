@@ -165,8 +165,37 @@ def test_bo_hu_demo_cua_minh_theo_ty_le_spec():
     ]  # fmt: skip
     # không có khoản chuyển "Để riêng tiền trả nghĩa vụ" của bộ bốn hũ cũ
     assert not any(t.note == "Để riêng tiền trả nghĩa vụ" for t in demo.transactions)
-    # Trả sau của minh đến hạn ngày 3 (trước kỳ lương ngày 5) để khoản đến hạn nằm trong cửa sổ "trước lương" của cảnh 2
-    assert demo.credit_due_day == 3
+    # Trả sau của minh đến hạn ngày 5 như BR-22 (chốt 26/11, phương án B): khoản đến hạn đúng ngày lương 05/12 nằm trong cửa sổ "trước
+    # lương" của hũ Nghĩa vụ (`yofina_core.schedule.due_before_payday`), ví demo không còn ngày đến hạn riêng
+    assert demo.credit_due_day == 5
+
+
+def test_vi_demo_khong_co_ngay_den_han_tra_sau_rieng():
+    """Chốt 26/11 (phương án B, #39): ví demo dùng đúng ngày đến hạn Trả sau của ví persona (`credit_line.due_day`, mặc định 5 như BR-22).
+    Trước đó `minh` có `credit_line.demo_due_day` = 3 chỉ để khoản Trả sau lọt vào cửa sổ "trước lương" khi cửa sổ còn loại ngày lương;
+    nay không spec nào khai khóa đó và bộ sinh không còn trường cho nó, nên không còn giá trị chỉnh riêng cho demo."""
+    import personas.six_jars as six_jars
+
+    assert not hasattr(six_jars, "DEMO_CREDIT_DUE_DAY")
+    for persona in PERSONAS:
+        spec = json.loads((REPO / "data" / "personas" / "specs" / f"{persona}.json").read_text("utf-8"))
+        assert "demo_due_day" not in (spec.get("credit_line") or {}), persona
+        original, demo = _demo(persona)
+        assert not hasattr(original, "demo_credit_due_day")
+        assert demo.credit_due_day == original.credit_due_day, persona
+
+
+@pytest.mark.parametrize(
+    ("persona", "due_day", "bnpl_due"),
+    [("minh", 5, [date(2026, 12, 5)]), ("khoa", 5, []), ("lan", 5, []), ("vy", 5, [])],
+)
+def test_dat_lai_demo_han_muc_va_khoan_tra_sau_nhu_truoc(persona, due_day, bnpl_due):
+    """Đặt lại ví demo (`materialize` của ví sau `apply_demo_layout`, như `LedgerService.reset_demo`) cho đúng hạn mức và khoản Trả sau
+    của ví persona: mọi persona ngày 5, `minh` có khoản 967.000 ₫ đến hạn 05/12 (đúng ngày lương). KỲ VỌNG viết tay."""
+    _, demo = _demo(persona)
+    seeded = materialize(demo, anchor=ANCHOR, now=NOW, tz=TZ, user_id=persona, obligation_pay_jar="nghia_vu")
+    assert seeded.credit_line["due_day"] == due_day
+    assert [o["due_date"] for o in seeded.obligations if o["kind"] == "bnpl"] == bnpl_due
 
 
 @pytest.mark.parametrize("persona", PERSONAS)

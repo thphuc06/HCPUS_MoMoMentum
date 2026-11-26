@@ -38,10 +38,6 @@ if TYPE_CHECKING:
 #: defaults to a legacy jar (`yofina_core.wallet.transaction_jar`): travel goes to the goal jar built from Du lịch.
 JAR_ALIASES = LEGACY_JAR_ALIASES
 
-#: simulated BNPL due day per persona on the demo wallet. Minh's spec uses the payday (5); the demo moves the December
-#: installment two days earlier so it falls inside the "due before payday" window of the Nghĩa vụ forecast (scene 2).
-DEMO_CREDIT_DUE_DAY = {"minh": 3}
-
 
 def demo_jar_code(code: str) -> str:
     return JAR_ALIASES.get(code, code)
@@ -207,6 +203,5 @@ def apply_demo_layout(data: PersonaData, layout: Sequence[DemoJar]) -> PersonaDa
             for ob in data.obligations
         ),
         salary_events=tuple(events),
-        credit_due_day=DEMO_CREDIT_DUE_DAY.get(data.persona, data.credit_due_day),
         demo_jars=(),
     )
