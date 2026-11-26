@@ -285,6 +285,8 @@ ERROR_TITLES: dict[str, str] = {
     ErrorCode.FORECAST_UNAVAILABLE: "Chưa có dự báo",
     ErrorCode.PROFILE_INCOMPLETE: "Chưa khai lương",
     ErrorCode.SCENARIO_INVALID: "Kịch bản chưa hợp lệ",
+    ErrorCode.DATE_IN_PAST: "Ngày này đã qua",
+    ErrorCode.LUNAR_YEAR_UNSUPPORTED: "Chưa tra được ngày Tết",
 }
 DEFAULT_ERROR_TITLE = "Không thực hiện được"
 

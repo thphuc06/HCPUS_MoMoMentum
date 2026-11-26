@@ -225,11 +225,11 @@ Tên tool qua Gateway là `<target>___<tool>`: thư mục `gateway/tools/<target
 | `ledger` | `ledger___get_jar_balances`, `ledger___query_transactions`, `ledger___get_cashflow_summary`, `ledger___get_obligations`, `ledger___get_unclassified` (đọc); `ledger___update_profile`, `ledger___record_transaction`, `ledger___move_between_jars`, `ledger___assign_jar` (ghi, cần xác nhận); `ledger___save_turn` (lưu khối UI của lượt) | `gateway/tools/ledger/` |
 | `forecast` | `forecast___get_forecast`, `forecast___run_scenario`, `forecast___list_scenarios`, `forecast___stress_test`, `forecast___affordability_check`, `forecast___get_resilience_score`, `forecast___get_behavior_profile` (đều chỉ đọc/tính; `run_scenario` ghi bảng `scenarios`) | `gateway/tools/forecast/` |
 | `planner` | `planner___optimize_allocation`, `planner___check_suitability` (không ghi); `planner___save_roadmap`, `planner___get_roadmap`, `planner___schedule_nudge` (ghi; nhắc ghi bảng `nudges`, không dùng EventBridge Scheduler) | `gateway/tools/planner/` |
-| `knowledge` | `knowledge___get_fee_schedule` (biểu phí có cấu trúc kèm nguồn), `knowledge___get_exchange_rate` (tỷ giá bán Vietcombank theo ngày). Không có `knowledge___search`: RAG đã cắt 24/11 | `gateway/tools/knowledge/` |
+| `knowledge` | `knowledge___get_fee_schedule` (biểu phí có cấu trúc kèm nguồn), `knowledge___get_exchange_rate` (tỷ giá bán Vietcombank theo ngày), `knowledge___resolve_date` (một ngày dương lịch tính từ đặc tả có cấu trúc: mốc, kỳ, độ lệch, trước mốc; Tết âm lịch theo bảng tra; hôm nay và ngày lương lấy phía server; cùng hàm `yofina_core.dates.resolve_date` mà agent gọi trong tiến trình cho hạn của router, còn Orchestrator what-if gọi tool khi điền đặc tả ngày). Ba tool chạy trong Lambda ledger. Không có `knowledge___search`: RAG đã cắt 24/11 | `gateway/tools/knowledge/` |
 | `ingest` | `ingest___start_job`, `ingest___get_job_status`, `ingest___confirm_rows` (ghi) | `gateway/tools/ingest/` |
 | `audit` | `audit___get_trace`, `audit___record_turn` (ghi bản ghi lượt) | `gateway/tools/audit/` |
 
-Danh sách trên khớp `contracts/tools/*.json` ngày 25/11; mỗi tool có một file Cedar ở `gateway/policies/`.
+Danh sách trên khớp `contracts/tools/*.json` ngày 26/11; mỗi tool có một file Cedar ở `gateway/policies/`.
 
 Mapping đầy đủ (chức năng, phía sau, ghi hay không) ở [proposal-summary.md §9](../proposal/proposal-summary.md#9-agentic-harness-9) (dùng tên có dấu chấm). Mỗi tool Lambda đọc tên tool từ `context.client_context.custom["bedrockAgentCoreToolName"]` rồi cắt tiền tố target. **[đọc tài liệu]**
 

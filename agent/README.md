@@ -44,13 +44,23 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
 
 ## Danh sách hũ cho router (`context` của lượt, #39)
 
-Router chọn hũ chi theo danh sách hũ của ví (`<hu_cua_vi>`) và đổi hạn mục tiêu ra ngày theo ngày mô phỏng (`<ngay_hom_nay>`). Frontend gửi hai thứ đó trong `context` của `RunAgentInput` (trường sẵn có của AG-UI), một mục tùy chọn:
+Router chọn hũ chi theo danh sách hũ của ví (`<hu_cua_vi>`) và đếm kỳ của đặc tả hạn mục tiêu theo ngày mô phỏng (`<ngay_hom_nay>`). Frontend gửi hai thứ đó trong `context` của `RunAgentInput` (trường sẵn có của AG-UI), một mục tùy chọn:
 
 ```
 {"description": "yofina.wallet", "value": "{\"app_date\": \"2026-11-21\", \"jars\": [{\"code\": \"an_uong\", \"name\": \"Ăn uống\", \"kind\": \"spending\"}, ...]}"}
 ```
 
 `jars`: hũ người dùng từ `GET /overview` (mã, tên, `kind`, `purpose` nếu có; không số dư, không hũ hệ thống), tối đa 20; frontend không gửi khi dữ liệu đang tải hay đang tải lại sau một lần ghi. Agent kiểm chặt (`router.wallet_context`), sai một chỗ là bỏ cả mục và đọc ví như cũ. Danh sách này chỉ vào prompt router, đánh dấu là dữ liệu; mọi tính toán sau đó (hũ trả, số dư, kịch bản, lộ trình) đọc ví bằng tool phía server, mã hũ router chọn phải có trong lần đọc đó. Thứ tự deploy: đổi được theo thứ tự nào cũng chạy (Runtime cũ bỏ qua `context`; frontend cũ không gửi thì Runtime mới đọc ví im lặng), nên deploy frontend và Runtime cùng đợt.
+
+## Ngày từ cách nói thời gian (`date_spec`, `knowledge___resolve_date`, #39)
+
+Model hiểu cách người dùng nói thời gian; phép tính lịch (độ dài tháng, năm nhuận, quý, Tết âm lịch) do hàm tất định `yofina_core.dates.resolve_date` làm. Model không tự đổi cách nói thời gian ra ngày `YYYY-MM-DD`.
+
+- **Đặc tả**: một đối tượng đúng dạng đầu vào của tool `knowledge___resolve_date` (trừ `user_id`): `anchor` (mốc), `period`/`period_offset` (kỳ), `lunar_year`, `day`/`month`/`year`, `offset` (độ lệch), `before` (trước mốc). Schema gửi model sinh từ `yofina_core.dates.DateSpec` (`schemas.date_spec_field`), nghĩa các trường ở `schemas.DATE_SPEC_DESCRIPTION`; agent không viết lại trường nào. Giá trị model trả giữ dạng thô (bỏ null); đúng sai do hàm kiểm lúc dùng, nên đặc tả sai không bắt model thử lại.
+- **Router** (hạn mục tiêu lộ trình): trả `date_text` (đúng chữ người dùng) và `date_spec`. `turn.goal_deadline` gọi `resolve_date(spec, hôm nay)` trong tiến trình; hôm nay là ngày mô phỏng của lần đọc ví (không có thì ngày frontend gửi). Không tool đọc nào của agent trả ngày lương đã khai, nên chỉ mốc `next_payday` mới gọi tool qua Gateway (tool đọc hôm nay và ngày lương phía server). Hạn phải sau hôm nay. Đặc tả sai, `DATE_IN_PAST`, `LUNAR_YEAR_UNSUPPORTED`, `PROFILE_INCOMPLETE`, hạn đúng hôm nay, hoặc router để trống đặc tả mà mã không đọc trọn được `date_text`: hỏi đúng một câu (khối `clarify` slot `date`; lời của phép tính đứng trước câu hỏi khi nói được cho người dùng; chip là ngày mã đọc được nếu có). Cách đọc `date_text` bằng regex (`textutil.parse_goal_date`, chỉ khi đọc trọn cụm) chỉ còn là đường lùi khi router không trả đặc tả; không còn phép so lệch 7 ngày giữa hai nguồn.
+- **Ngày mã đã biết** (chip "Hạn dd/mm/yyyy", ngày nói lại trong câu hỏi hũ hay câu hỏi lập/xem) đi qua cùng ô `date_spec` dưới dạng đặc tả của đúng ngày đó (`clarify.exact_date_spec`).
+- **Orchestrator what-if**: `ScenarioDraft` có `date_spec`, `end_date_spec`. Người dùng nêu đủ ngày tháng năm thì model điền `date`; cách nói khác thì điền đặc tả, mã gọi `knowledge___resolve_date` qua Gateway (bước của kế hoạch, `PLAN_TOOLS`) rồi mới chạy kịch bản; tool lỗi thì khối `notice` theo lời của tool. Không thêm lời gọi model; tool call chỉ có khi model điền đặc tả.
+- **Dữ kiện cho người viết**: `textutil.resolved_date_facts` (ngày `dd/mm/yyyy` và `dd/mm`, thứ, số ngày tới đó, mốc đã dùng và ngày của mốc, trước mốc hay không, kỳ, năm Tết và tên năm, độ lệch đã quy đổi). Writer của lượt xem lộ trình nhận ở `muc_tieu_nguoi_dung_hoi.han` (kèm `han_nguoi_dung_noi`), Analyst what-if ở `resolved_date`, `resolved_end_date`.
 
 ## Ý định `forecast_lookup` (phase 2)
 

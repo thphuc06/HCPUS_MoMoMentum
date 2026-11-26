@@ -48,8 +48,10 @@ from yofina_agent.schemas import (
     PlanLimits,
     PlanStep,
     Verdict,
+    date_spec_args,
+    date_spec_field,
 )
-from yofina_agent.textutil import parse_amount_vnd
+from yofina_agent.textutil import parse_amount_vnd, resolved_date_facts
 from yofina_agent.tools import (
     ToolKind,
     ToolOutcome,
@@ -68,6 +70,7 @@ from yofina_agent.verifier import (
     suitability_status,
 )
 from yofina_core import blocks as B
+from yofina_core.dates import DateResolveError, ResolvedDate
 from yofina_core.errors import ErrorCode
 from yofina_core.llm import user_message
 from yofina_core.money import format_vnd, format_vnd_short
@@ -85,8 +88,21 @@ ScenarioKindLit = Literal[
 
 
 # --- Orchestrator -----------------------------------------------------------------------------
+#: Đặc tả ngày của kịch bản (cùng định nghĩa với đầu vào tool `knowledge___resolve_date`, `schemas.date_spec_field`): model hiểu cách
+#: người dùng nói thời gian, mã gọi tool tính ra ngày (`resolve_draft_dates`).
+ScenarioDateSpec = date_spec_field(
+    "Ngày của kịch bản khi người dùng nói thời điểm mà không nêu đủ ngày, tháng, năm: hệ thống gọi tool knowledge___resolve_date "
+    "tính ra date rồi mới chạy kịch bản. Null khi đã điền date, khi là hôm nay hoặc khi không nói ngày."
+)
+ScenarioEndDateSpec = date_spec_field(
+    "recurring_expense: ngày kết thúc khi người dùng nói thời điểm mà không nêu đủ ngày, tháng, năm (tool knowledge___resolve_date "
+    "tính ra end_date). Null khi đã điền end_date hoặc không có ngày kết thúc."
+)
+
+
 class ScenarioDraft(BaseModel):
-    """Dạng phẳng của `ScenarioSpec` (Gateway không có `oneOf`): chỉ điền các trường của loại đã chọn, còn lại để null."""
+    """Dạng phẳng của `ScenarioSpec` (Gateway không có `oneOf`): chỉ điền các trường của loại đã chọn, còn lại để null. Ngày người dùng
+    nói theo cách khác một ngày đủ ngày, tháng, năm đi qua đặc tả (`date_spec`, `end_date_spec`), mã đổi ra `date`, `end_date`."""
 
     model_config = ConfigDict(extra="forbid")
     kind: ScenarioKindLit = Field(description="Loại kịch bản.")
@@ -96,11 +112,19 @@ class ScenarioDraft(BaseModel):
     )
     jar_code: str | None = Field(default=None, description="Mã hũ (một trong danh sách hũ).")
     pay_jar: str | None = Field(default=None, description="bnpl_purchase: hũ trả khi đến hạn nếu người dùng chọn rõ.")
-    date: str | None = Field(default=None, description="Ngày YYYY-MM-DD; để null nếu là hôm nay.")
+    date: str | None = Field(
+        default=None,
+        description="Ngày YYYY-MM-DD chỉ khi người dùng nêu đủ ngày, tháng, năm; null nếu là hôm nay, không nói ngày hoặc đã điền date_spec.",
+    )
+    date_spec: ScenarioDateSpec = None
     label: str | None = Field(default=None, description="Tên món hoặc khoản, tối đa 80 ký tự.")
     new_monthly_salary_vnd: int | None = Field(default=None, description="income_change: lương MỚI mỗi tháng.")
     cycle: Literal["weekly", "monthly", "yearly"] | None = Field(default=None, description="recurring_expense.")
-    end_date: str | None = Field(default=None, description="recurring_expense: ngày kết thúc YYYY-MM-DD, tùy chọn.")
+    end_date: str | None = Field(
+        default=None,
+        description="recurring_expense: ngày kết thúc YYYY-MM-DD, tùy chọn, chỉ khi người dùng nêu đủ ngày, tháng, năm.",
+    )
+    end_date_spec: ScenarioEndDateSpec = None
     from_jar: str | None = Field(default=None, description="jar_transfer: mã hũ nguồn.")
     to_jar: str | None = Field(default=None, description="jar_transfer: mã hũ đích.")
     delay_months: int | None = Field(default=None, description="goal_delay: số tháng hoãn, 1 đến 60.")
@@ -118,14 +142,14 @@ Sáu loại kịch bản (kind) và trường bắt buộc:
 - one_time_purchase: mua một lần bằng tiền hũ. Cần amount_vnd, funding_source="jar", jar_code (hũ trừ tiền).
 - bnpl_purchase: mua bằng Trả sau (mô phỏng). Cần amount_vnd, funding_source="credit". jar_code tùy chọn (hũ tính chi tiêu), pay_jar chỉ điền nếu người dùng chọn hũ trả khoản đến hạn.
 - income_change: lương đổi. Cần new_monthly_salary_vnd (lương MỚI mỗi tháng, không phải mức chênh). date tùy chọn.
-- recurring_expense: khoản chi lặp lại. Cần amount_vnd, cycle (weekly, monthly, yearly), date (lần đầu). Chỉ điền jar_code khi người dùng chọn hũ trả. end_date tùy chọn.
+- recurring_expense: khoản chi lặp lại. Cần amount_vnd, cycle (weekly, monthly, yearly), ngày lần đầu (date hoặc date_spec). Chỉ điền jar_code khi người dùng chọn hũ trả. Ngày kết thúc (end_date hoặc end_date_spec) tùy chọn.
 - jar_transfer: chuyển tiền giữa hai hũ. Cần amount_vnd, from_jar, to_jar (khác nhau).
 - goal_delay: hoãn mục tiêu tiết kiệm. Cần jar_code, delay_months (1 đến 60).
 
 Quy tắc:
 - Mã hũ (jar_code, from_jar, to_jar) PHẢI là một trong các mã trong <danh_sach_hu>. Không tự đặt mã. Người dùng gọi hũ bằng tên thì đối chiếu với tên trong danh sách.
 - Số tiền đổi sang VND, số nguyên ("1,2 triệu" là 1200000). Lấy từ <tham_so_router> hoặc từ câu hỏi; KHÔNG đoán số không có.
-- Ngày tính theo <ngay_hom_nay> (YYYY-MM-DD). "Hôm nay" hoặc không nói ngày: để date là null. "Ngày 1 tháng sau", "thứ hai tuần sau": tính ra ngày cụ thể.
+- Ngày: không tự tính ngày từ cách nói thời gian. Người dùng nêu đủ ngày, tháng, năm thì điền date (YYYY-MM-DD). Nói thời điểm theo cách khác thì điền date_spec theo mô tả của trường: hệ thống gọi tool knowledge___resolve_date (phép tính lịch tất định, hôm nay là <ngay_hom_nay>) để ra ngày rồi mới chạy kịch bản. Hôm nay hoặc không nói ngày: để date và date_spec là null. end_date và end_date_spec theo cùng cách.
 - label là tên món hoặc khoản người dùng nói (ngắn, tối đa 80 ký tự); không có thì null.
 - Người dùng nói Trả sau, Ví Trả Sau, BNPL thì chọn bnpl_purchase. Còn lại mua một lần thì one_time_purchase.
 - Chỉ điền trường của loại đã chọn, các trường khác để null.
@@ -168,6 +192,58 @@ def validate_spec(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         return scenario_to_wire(parse_scenario(flat))
     except (ValueError, ValidationError):
         return None
+
+
+# --- ngày của kịch bản từ đặc tả: tool `knowledge___resolve_date` ---------------------------------------------------
+RESOLVE_DATE_TOOL = "knowledge___resolve_date"
+#: (ô ngày của kịch bản, ô đặc tả của nó trong `ScenarioDraft`, khóa dữ kiện cho Analyst)
+_DATE_FIELDS = (("date", "date_spec", "resolved_date"), ("end_date", "end_date_spec", "resolved_end_date"))
+
+
+@dataclass(frozen=True)
+class DateFailed:
+    """Tool tính ngày trả lỗi cho đặc tả model điền (ngày đã qua, năm Tết ngoài bảng, chưa khai ngày lương, Gateway lỗi): lượt nói đúng
+    lời của tool và không chạy kịch bản (không tự dời ngày)."""
+
+    outcome: ToolOutcome
+
+
+async def resolve_draft_dates(turn: Turn, draft: Mapping[str, Any]) -> dict[str, Any] | DateFailed | None:
+    """Bản nháp kịch bản của Orchestrator với ô ngày đã điền từ đặc tả: mỗi đặc tả model điền (mà chưa nêu đúng ngày ở `date`,
+    `end_date`) là một bước `knowledge___resolve_date` của kế hoạch, chạy qua Gateway; ngày của tool vào kịch bản. Không có đặc tả thì
+    không gọi tool. None: đặc tả sai dạng (lỗi của model, xử lý như kịch bản sai). `DateFailed`: tool trả lỗi."""
+    out = dict(draft)
+    for key, spec_key, _ in _DATE_FIELDS:
+        spec = out.pop(spec_key, None)
+        if spec is None or out.get(key):
+            continue
+        try:
+            args = date_spec_args(spec)
+        except DateResolveError:
+            log.warning(json.dumps({"event": "orchestrator_invalid_date_spec", "field": spec_key}))
+            return None
+        res = await _step_call(turn, PlanStep(tool=RESOLVE_DATE_TOOL, args=args, parallel_group=0))
+        if not res.outcome.ok:
+            return DateFailed(res.outcome)
+        out[key] = ((res.outcome.payload or {}).get("data") or {}).get("date")
+    return out
+
+
+def resolved_dates_for_analyst(outcomes: Iterable[ToolOutcome], spec: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:
+    """Dữ kiện của các ngày kịch bản đã tính bằng tool ở lượt này (`textutil.resolved_date_facts`: ngày, mốc đã dùng, năm Tết...), theo
+    ô của kịch bản (`resolved_date`, `resolved_end_date`), để Analyst nói được ngày theo cách người dùng nói kèm đúng ngày."""
+    out: dict[str, dict[str, Any]] = {}
+    for o in outcomes:
+        if o.kind is not ToolKind.OK or o.name.rsplit("___", 1)[-1] != "resolve_date":
+            continue
+        try:
+            resolved = ResolvedDate.model_validate((o.payload or {}).get("data"))
+        except ValueError:
+            continue
+        for key, _, fact_key in _DATE_FIELDS:
+            if spec and spec.get(key) == resolved.date.isoformat():
+                out.setdefault(fact_key, resolved_date_facts(resolved))
+    return out
 
 
 def focus_jar(spec: Mapping[str, Any]) -> str | None:
@@ -354,7 +430,10 @@ nói tự nhiên là đã tính chung các khoản đó (nêu tên theo `bundle`
 tổng tiền chỉ được nêu bằng `bundle_total_text`, và phương án có thể là bỏ hoặc hoãn một trong các khoản. \
 Nếu <du_lieu> có `exchange_rate` thì người dùng nói khoản tiền bằng ngoại tệ (`amount_original_text`) và số VND của kịch bản đã được \
 quy đổi theo tỷ giá bán `rate_text` cho một đơn vị `currency` của `source` ngày `rate_date_text`; số VND đó là ước tính vì thanh toán \
-thẻ thường thêm phí chuyển đổi ngoại tệ.
+thẻ thường thêm phí chuyển đổi ngoại tệ. \
+Nếu <du_lieu> có `resolved_date` (hoặc `resolved_end_date`) thì đó là ngày của kịch bản hệ thống đã tính từ cách người dùng nói thời \
+gian, kèm mốc đã dùng (`anchor`, `anchor_date_text`, `before_anchor`, `lunar_new_year`): khi nhắc ngày đó thì gọi theo mốc người dùng \
+đã nói và kèm `date_text`, không tự tính lại.
 
 Phương án (options): 2 đến 3 lựa chọn THẬT SỰ khác nhau cho người dùng (ví dụ hoãn mua, dùng hũ khác, giảm số tiền, chuyển bù giữa hũ, nhắc lại sau, vẫn mua). \
 Mỗi phương án: option_id (chữ thường, số, gạch dưới), kind (defer, switch_jar, split, pay_now, use_credit, proceed, reduce_amount, move_between_jars, remind_later, skip), \
@@ -547,7 +626,7 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
     code_first = s.whatif_spec_source == "code_first"
     roles = ("small", "planner") if code_first else ("planner",)
 
-    async def orchestrate() -> dict[str, Any] | None:
+    async def orchestrate() -> dict[str, Any] | DateFailed | None:
         with turn.step("orchestrator"):
             return await _orchestrate(turn, r, question, history, roles)
 
@@ -577,6 +656,10 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
             _list_scenarios(turn) if list_early else _none(),
         )
         prefetched = {OBLIGATIONS_TOOL: obligations}
+    if isinstance(spec, DateFailed):
+        turn.tool_failure(spec.outcome)  # lời của tool (ngày đã tính đã qua, năm Tết ngoài bảng...): không chạy kịch bản
+        st.handled = True
+        return st
     if spec is None:
         return st  # người gọi (Turn.on_what_if) quyết định: thẻ kiểm tra tất định hoặc thông báo chưa dựng được
     st.spec = spec
@@ -638,10 +721,11 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
 
 async def _orchestrate(
     turn: Turn, r: IntentResult, question: str, history: str, roles: tuple[str, ...] = ("planner",)
-) -> dict[str, Any] | None:
+) -> dict[str, Any] | DateFailed | None:
     """Dựng spec bằng model theo thứ tự `roles`: vai lỗi hoặc trả spec sai thì thử vai kế (`code_first`: `small` rồi `planner`).
     Không vai nào cho spec dùng được thì dựng bằng mã từ tham số router (`deterministic_spec`), không có thì None. Chỉ lỗi của lần
-    thử cuối được ghi là suy giảm (`llm_failed`): vai nhỏ lỗi mà `planner` còn gọi được thì lượt không bị coi là mất model."""
+    thử cuối được ghi là suy giảm (`llm_failed`): vai nhỏ lỗi mà `planner` còn gọi được thì lượt không bị coi là mất model. Đặc tả ngày
+    model điền thành ngày qua tool `knowledge___resolve_date` (`resolve_draft_dates`); tool lỗi thì `DateFailed`."""
     rows = turn.jar_rows
     failure: BaseException | None = None
     for i, role in enumerate(roles):
@@ -660,7 +744,10 @@ async def _orchestrate(
                 max_tokens=turn.s.orchestrator_max_tokens,
                 scope=turn.scope,
             )
-            spec = validate_spec(res.value.scenario.model_dump())
+            dated = await resolve_draft_dates(turn, res.value.scenario.model_dump())
+            if isinstance(dated, DateFailed):
+                return dated  # ngày người dùng nói không tính được: người gọi nói lời của tool, không thử vai khác
+            spec = validate_spec(dated) if dated is not None else None
             if spec is not None and _jar_codes_ok(spec, rows):
                 log.info(
                     json.dumps({"event": "whatif_spec", "source": role, "model": res.model_id})
@@ -798,6 +885,12 @@ def _step_call(turn: Turn, st: PlanStep) -> Any:
         return turn.call_tool_retry(short, dict(st.args), target=target, compact=lambda o: compact_obligations(o.payload or {}))
     if st.tool == "forecast___get_forecast":
         return turn.call_tool_retry(short, dict(st.args), target=target, compact=lambda o: compact_forecast(o.payload or {}))
+    if st.tool == RESOLVE_DATE_TOOL:
+        # bản gọn là dữ kiện của ngày đã tính; kết quả sai hợp đồng thành lỗi của tool (call_tool bắt ValueError)
+        return turn.call_tool_retry(
+            short, dict(st.args), target=target,
+            compact=lambda o: resolved_date_facts(ResolvedDate.model_validate((o.payload or {}).get("data"))),
+        )  # fmt: skip
     return turn.call_tool_retry(short, dict(st.args), target=target)
 
 
@@ -809,6 +902,8 @@ async def _analyze_and_compose(turn: Turn, question: str, scenario_res: Any, st:
     fx = turn.compact_of("get_exchange_rate")  # khoản tiền người dùng nói bằng ngoại tệ (fx_chat): tỷ giá đã dùng để quy đổi
     if fx:
         compact["exchange_rate"] = fx
+    # ngày của kịch bản tính từ cách người dùng nói (tool resolve_date): mốc đã dùng, năm Tết... để nói theo cách người dùng nói
+    compact.update(resolved_dates_for_analyst(turn.tool_log, st.spec))
     # công tắc người tư vấn (#7): tắt thì Analyst chạy như trước luồng K (không thói quen, không căn cứ, không xin lập luận)
     advise = await turn.s.reasoning_switch.enabled()
     if st.behavior and advise:
