@@ -324,3 +324,10 @@ def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env):
             if step["kind"] == "cut_spending" and step.get("amount_vnd"):
                 jar = lines[step["jar_code"]]
                 assert jar["current_monthly_vnd"] - step["amount_vnd"] >= jar["floor_vnd"], step
+    # (e) sàn chi theo mức chi thật gần đây (#39, 26/11 chiều): Chi hằng ngày và Giải trí giữ ít nhất tỷ lệ giữ x mức chi điển hình kể cả
+    # khi sàn thiết yếu của Ăn uống vượt chỗ (nhường cũng không đủ); không còn bước "Giảm Chi hằng ngày 270.000 → 0 ₫"
+    for code in ("chi_hang_ngay", "giai_tri"):
+        assert 0 < lines[code]["floor_vnd"] <= lines[code]["proposed_monthly_vnd"], code
+    to_zero = [s for phase in rm["phases"] for s in phase["steps"]
+               if s["kind"] == "cut_spending" and any(m.get("after") == "0 ₫" for m in s.get("metrics", []))]  # fmt: skip
+    assert to_zero == []

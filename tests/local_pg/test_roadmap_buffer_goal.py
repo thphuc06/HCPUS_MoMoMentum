@@ -100,12 +100,16 @@ def test_lo_trinh_xay_quy_du_phong_3_trieu_trong_3_thang_tinh_dich_so_du(env):
     assert line["is_essential"]  # vẫn là hũ đệm với model
     assert goal["on_track"] and line["proposed_monthly_vnd"] >= goal["monthly_needed_vnd"]
     # số dư 2.700.000 ₫ chưa tới đích 3.000.000 ₫: Dự phòng giữ phần chia hiện tại (BR-65, 26/11 trưa). Trước đó LP "optimal" cắt Dự phòng
-    # 900.000 → 831.400 ₫ để Du lịch kịp hạn; nay Du lịch vẫn kịp hạn nhờ cắt sâu hũ không thiết yếu (vòng nới), nên bản lưu là "kịp
+    # 900.000 → 831.400 ₫ để Du lịch kịp hạn. Từ 26/11 chiều (#39) Chi hằng ngày, Giải trí chỉ xuống tới sàn chi (nửa mức chi thật gần
+    # đây) nên Du lịch không còn kịp hạn gốc mà lùi hạn (trước: cắt Chi hằng ngày còn 42.600 ₫ để Du lịch kịp hạn); bản lưu vẫn là "kịp
     # hạn sau khi điều chỉnh"
     assert line["proposed_monthly_vnd"] >= line["current_monthly_vnd"]
     assert plan["status"] == "relaxed"
-    assert {r["kind"] for r in plan["relaxations"]} == {"discretionary_reduced"}
-    assert all(g["on_track"] for g in plan["goals"])
+    assert {r["kind"] for r in plan["relaxations"]} == {"discretionary_reduced", "goal_delayed"}
+    assert [g["jar"]["code"] for g in plan["goals"] if not g["on_track"]] == ["muc_tieu"]
+    lines = {x["jar"]["code"]: x for x in plan["lines"]}
+    for code in ("chi_hang_ngay", "giai_tri"):
+        assert 0 < lines[code]["floor_vnd"] <= lines[code]["proposed_monthly_vnd"], code
     # bản đã lưu mang đúng mục tiêu đó; model thấy mục tiêu người dùng nói trong ngữ cảnh
     saved = next(g for g in rm["goals"] if g["jar"]["code"] == "du_phong")
     assert saved["target_vnd"] == 3_000_000 and saved["on_track"]

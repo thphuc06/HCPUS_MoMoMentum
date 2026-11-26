@@ -35,6 +35,14 @@ DEFAULT_ALLOCATION_PARAMS = AllocationParams(
     # chia hiện tại của nó để dồn cho mục tiêu khác (BR-65). 3 tháng theo C-13 (docs/ba/02, mốc thấp của khoảng 3–6 tháng của CFPB),
     # cùng mức `min_emergency_months` của luật suitability `emergency_before_investing`
     buffer_target_months=3.0,
+    # tỷ lệ giữ (#39, chủ dự án chốt 26/11): lộ trình và đề xuất không cắt một hũ chi dưới từng này phần mức chi điển hình mỗi tháng của
+    # chính hũ đó (chi trung bình `resilience_window_days` ngày gần nhất, quy về tháng). Cùng khóa cấu hình với đề xuất tỷ lệ của ledger
+    # (`yofina_ledger.split_proposal`, test đối chiếu mặc định)
+    spending_keep_ratio=0.5,
+    # mức phạt sàn chi: phải nằm giữa mức cần của mục tiêu (penalty_goal_need x weight_emergency / weight_goal = 1,5e3) và sàn thiết yếu
+    # (1e5); giữ hũ đệm chưa tới đích phạt mức này x weight_emergency / weight_goal (1,5e4), nên thứ tự là nghĩa vụ > thiết yếu > giữ hũ
+    # đệm > sàn chi > mức cần của mục tiêu
+    penalty_spending_floor=1e4,
 )
 #: hũ chi tiêu thiết yếu theo mẫu hũ mặc định (`db/seed/jar_templates.sql`: ăn uống, đi lại, hóa đơn); hũ người dùng tự thêm thì không
 #: thiết yếu. Cũng là nhóm LOẠI giao dịch thiết yếu: loại có `tx_type_map.default_jar_code` thuộc tập này là chi thiết yếu khi nằm ở

@@ -605,13 +605,18 @@ def test_obligation_jar_floor_also_counts_its_non_essential_obligations():
 def test_lp_never_proposes_a_jar_below_the_obligations_it_pays():
     res, _ = run(TIGHT_GOAL)
     plain = {line["jar"]["code"]: line for line in res["data"]["lines"]}
-    assert plain["giai_tri"]["proposed_monthly_vnd"] == 0  # hũ không có khoản định kỳ: vẫn cắt như trước
+    # hũ không có khoản định kỳ: trước 26/11 chiều vòng nới cắt về 0; nay chỉ tới sàn chi (nửa mức chi điển hình 300.000 ₫, #39)
+    fun = plain["giai_tri"]
+    assert fun["proposed_monthly_vnd"] == fun["floor_vnd"] == round(P.spending_keep_ratio * 300_000)
     w = committed(NETFLIX, LUNCH)
     out = AllocationEngine(pipe(w)).optimize(USER, TIGHT_GOAL)
     assert not errors_of(RESULT, out), errors_of(RESULT, out)
     d = AllocationPlanData.model_validate(out["data"])
     by = {line.jar.code: line for line in d.lines}
-    assert d.status == "relaxed"
+    # từ 26/11 chiều (#39): Du lịch không lấy được tiền dưới sàn chi của Giải trí hay phần chia của Dự phòng chưa tới đích, nên "chưa khả
+    # thi" kèm hai lựa chọn (trước: "relaxed", bỏ giữ Dự phòng để Du lịch lùi hạn); mọi sàn vẫn đủ
+    assert d.status == "infeasible" and len(d.alternatives) == 2
+    assert all(line.floor_gap_vnd == 0 for line in d.lines)
     assert by["giai_tri"].floor_vnd == 180_000 and by["giai_tri"].proposed_monthly_vnd >= 180_000
     assert by["giai_tri"].floor_gap_vnd == 0 and not by["giai_tri"].is_essential  # vẫn là hũ không thiết yếu với model
     assert by["an_uong"].proposed_monthly_vnd >= by["an_uong"].floor_vnd
@@ -838,24 +843,37 @@ def test_hu_dem_duoc_giu_khong_bi_cat_de_tang_hu_muc_tieu():
     assert total(sol) == problem.income_vnd and all(o.floor_gap_vnd == 0 for o in sol.jars)
 
 
-@pytest.mark.parametrize("income,status", [(10_000_000, "optimal"), (5_000_000, "infeasible")])
+@pytest.mark.parametrize("income,status", [(10_000_000, "relaxed"), (5_000_000, "infeasible")])
 def test_san_nghia_vu_va_thiet_yeu_van_thang_hu_dem_duoc_giu(income, status):
-    """Sàn thiết yếu cần thêm 2.000.000 ₫ mà hũ khác chỉ nhường được 1.500.000 ₫: Dự phòng vẫn bị cắt theo thứ tự ưu tiên hiện có, kết
-    quả y hệt khi không giữ; thu nhập không đủ sàn thì vẫn vô nghiệm như trước, không tệ hơn."""
+    """Sàn thiết yếu cần thêm 2.000.000 ₫ mà ở vòng chặt hũ khác chỉ nhường được 1.500.000 ₫. Từ 26/11 chiều (#39, thứ tự ưu tiên chốt:
+    giữ hũ đệm đứng trên phần cắt sâu của hũ không thiết yếu): vòng nới cắt Giải trí về 0 trước, Dự phòng giữ nguyên (trước đó vòng
+    chặt cắt Dự phòng 500.000 ₫, "optimal"). Thu nhập không đủ sàn thì vẫn vô nghiệm như trước, Dự phòng vẫn bị lấy cho sàn thiết yếu."""
     kw = {"an_uong_floor": 5_000_000, "income": income, "trip": False}
     held, plain = optimize(held_problem(hold=True, **kw)), optimize(held_problem(hold=False, **kw))
-    assert (held.status, proposals(held), held.relaxations) == (plain.status, proposals(plain), plain.relaxations)
-    assert held.status == status and prop(held, "du_phong") < 2_000_000
+    assert held.status == status and plain.status == ("optimal" if status == "relaxed" else status)
+    assert all(o.floor_gap_vnd == 0 for o in held.jars) == (status == "relaxed")
+    if status == "relaxed":
+        assert prop(plain, "du_phong") < 2_000_000 and prop(held, "du_phong") == 2_000_000
+        assert {(r.kind, r.jar_code) for r in held.relaxations} == {("discretionary_reduced", "giai_tri")}
+    else:
+        assert (proposals(held), held.relaxations) == (proposals(plain), plain.relaxations)
+        assert prop(held, "du_phong") < 2_000_000
 
 
 def test_khong_cho_noi_thi_giu_hu_dem_khong_lam_ca_kha_thi_thanh_vo_nghiem():
+    """Không cho nới, Du lịch chỉ kịp hạn nếu lấy phần chia của Dự phòng chưa tới đích. Từ 26/11 chiều (#39: giữ hũ đệm đứng trên mức cần
+    của mục tiêu, kể cả khi vì thế mà mục tiêu chưa khả thi): vô nghiệm vì mục tiêu không kịp, Dự phòng giữ nguyên, mọi sàn vẫn đủ (trước
+    đó: giữ mà vô nghiệm thì trả nghiệm không giữ, Dự phòng bị cắt cho Du lịch)."""
     plain = optimize(held_problem(hold=False, allow=False))
     held = optimize(held_problem(hold=True, allow=False))
-    assert plain.status == "optimal"
-    assert (held.status, proposals(held)) == (plain.status, proposals(plain))
+    assert plain.status == "optimal" and prop(plain, "du_phong") < 2_000_000
+    assert held.status == "infeasible" and prop(held, "du_phong") == 2_000_000
+    assert all(o.floor_gap_vnd == 0 for o in held.jars) and not held.outcome("du_lich").goal_on_track
 
 
 def test_giu_hu_dem_khong_bao_gio_lam_bai_toan_te_hon_va_khong_cat_hu_dem_nhieu_hon():
+    """Giữ hũ đệm không bao giờ làm thiếu sàn nghĩa vụ hay thiết yếu, không cắt hũ đệm nhiều hơn; vô nghiệm chỉ thêm khi mục tiêu không
+    kịp (từ 26/11 chiều mục tiêu không lấy phần chia của hũ đệm chưa tới đích, #39)."""
     rng = np.random.default_rng(39)
     for _ in range(300):
         income = int(rng.integers(0, 30_000_000))
@@ -871,7 +889,10 @@ def test_giu_hu_dem_khong_bao_gio_lam_bai_toan_te_hon_va_khong_cat_hu_dem_nhieu_
         plain = optimize(AllocationProblem(income, base, P, allow_relaxation=allow))
         held = optimize(AllocationProblem(income, held_jars, P, allow_relaxation=allow))
         assert total(held) == income and all(j.proposed_vnd >= 0 for j in held.jars)
-        assert not (held.status == "infeasible" and plain.status != "infeasible"), (income, kw, allow)
+        held_gaps, plain_gaps = (sum(o.floor_gap_vnd for o in s.jars) for s in (held, plain))
+        assert held_gaps <= plain_gaps + STEP, (income, kw, allow)
+        if held.status == "infeasible" and plain.status != "infeasible":
+            assert held_gaps == 0 and not held.outcome("du_lich").goal_on_track, (income, kw, allow)
         assert prop(held, "du_phong") >= prop(plain, "du_phong") - STEP, (income, kw, allow)
 
 
@@ -963,12 +984,16 @@ def test_vi_ba_hu_giu_du_phong_theo_purpose_va_san_nghia_vu_van_thang(code):
     assert by[code].hold_current and by[code].role == "emergency"
     sol = optimize(built.problem)
     assert sol.status == "optimal" and prop(sol, code) == by[code].current_vnd
-    # tiền trọ 7.500.000 ₫ vượt phần Nghĩa vụ: Dự phòng vẫn bị cắt cho sàn nghĩa vụ, y hệt khi không giữ
+    # tiền trọ 7.500.000 ₫ vượt phần Nghĩa vụ: Dự phòng vẫn bị cắt cho sàn nghĩa vụ. Từ 26/11 chiều (#39, thứ tự ưu tiên chốt: giữ hũ
+    # đệm đứng trên sàn chi) Chi hằng ngày nhường hết, kể cả phần dưới sàn chi, trước khi Dự phòng bị cắt (trước đó: y hệt khi không giữ,
+    # Dự phòng về 0 trong khi Chi hằng ngày còn)
     _, built, by = built_for(three_jar_world(rent(7_500_000), buffer_code=code))
-    assert by[code].hold_current
+    assert by[code].hold_current and by["chi_hang_ngay"].spend_floor_vnd > 0
     held, plain = optimize(built.problem), optimize(without_hold(built.problem))
-    assert (held.status, proposals(held)) == (plain.status, proposals(plain))
-    assert prop(held, code) < by[code].current_vnd and held.outcome("nghia_vu").floor_gap_vnd == 0
+    assert held.status == plain.status == "relaxed"
+    assert prop(held, "chi_hang_ngay") == 0 and prop(plain, "chi_hang_ngay") > 0
+    assert prop(plain, code) < prop(held, code) < by[code].current_vnd
+    assert held.outcome("nghia_vu").floor_gap_vnd == 0
 
 
 def test_lam_tron_khong_bien_hu_dem_dang_giu_hay_muc_can_da_du_thanh_hut():
