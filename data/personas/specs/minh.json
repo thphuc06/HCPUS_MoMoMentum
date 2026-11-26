@@ -79,6 +79,21 @@
       "expense_count": 0, "recent_share": 0.5, "merchants": []
     }
   ],
+  "demo_jars": [
+    {
+      "code": "chi_hang_ngay", "split_from": {"nghia_vu": 3}, "opening_vnd": 200000, "target_vnd": 300000,
+      "expense_count": 28, "recent_share": 0.13,
+      "rhythm": {"max_per_day": 2, "amount_sigma": 0.5},
+      "merchants": [
+        {"name": "Tạp hóa Cô Sáu", "tx_type": "qr_other", "weight": 3},
+        {"name": "Pharmacity", "tx_type": "other_expense", "weight": 2},
+        {"name": "Giặt sấy Hoa Mai", "tx_type": "qr_other", "weight": 2},
+        {"name": "Guardian", "tx_type": "other_expense"},
+        {"name": "Shopee - Đồ gia dụng", "tx_type": "other_expense"},
+        {"name": "Tiệm tóc Anh Tuấn", "tx_type": "qr_other"}
+      ]
+    }
+  ],
   "payees": [
     {"name": "Trần Quang Huy", "account_hint": "•••• 4821", "is_favorite": true, "used_days_ago": 6},
     {"name": "Nguyễn Thu Hà", "account_hint": "•••• 7390", "is_favorite": true, "used_days_ago": 20},

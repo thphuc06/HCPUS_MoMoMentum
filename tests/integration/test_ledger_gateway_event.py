@@ -4,7 +4,7 @@ client context, `user_id` ở sự kiện như interceptor sẽ ghi đè), cho c
 from __future__ import annotations
 
 import pytest
-from conftest import demo_jars
+from conftest import demo_balances, demo_jars
 
 from yofina_core.confirm import params_hash
 
@@ -30,7 +30,7 @@ def test_get_jar_balances(invoke, subs, schema_validator, api):
     schema_validator.results("GetJarBalancesResult", res)
     assert res["status"] == "OK"
     assert {j["code"]: j["balance_vnd"] for j in res["data"]["jars"]} == balances(api, "minh")
-    assert res["data"]["jars_total_vnd"] == 7_730_000
+    assert res["data"]["jars_total_vnd"] == sum(demo_balances("minh").values())  # ví demo, đọc từ bộ sinh
 
 
 def test_query_transactions_loc_va_phan_trang(invoke, subs, schema_validator):

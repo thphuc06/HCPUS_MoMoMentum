@@ -28,7 +28,7 @@ DEFAULT_OBLIGATION_JAR = "nghia_vu"
 DEFAULT_GOAL_JAR = "muc_tieu"
 #: Legacy seven-jar code -> the jar a newer layout folds it into (the demo layout of issue #39: Hóa đơn joins the shared
 #: Nghĩa vụ, the Du lịch goal becomes the user-added goal jar). One mapping for the demo reset (`personas.six_jars`), its
-#: roadmap seed and seed labels, and the type-to-jar step of classification (`transaction_jar`).
+#: roadmap seed, and the type-to-jar step of classification (`transaction_jar`, also used for the seed labels).
 LEGACY_JAR_ALIASES = {
     "hoa_don": DEFAULT_OBLIGATION_JAR,
     "du_lich": DEFAULT_GOAL_JAR,
@@ -79,27 +79,30 @@ def pay_jar_or_default(
     return saved if saved in eligible_codes else default
 
 
-def transaction_jar(default_code: str | None, jar_codes: Iterable[str], *, tx_type: str) -> str | None:
-    """Keep the legacy category when present and route known types on the newer layouts.
+def transaction_jar(
+    default_code: str | None, jar_codes: Iterable[str], *, tx_type: str | None = None
+) -> str | None:
+    """Jar of the wallet for a transaction type whose `tx_type_map.default_jar_code` is `default_code` (issue #39, 26/11).
 
-    Order: the legacy jar itself; the shared default of the onboarding layout (Nghĩa vụ for bills and subscriptions, Chi
-    hằng ngày for everyday categories), so a wallet that has those keeps its behaviour even after the user adds a goal jar;
-    then the jar `LEGACY_JAR_ALIASES` folds the legacy code into (the demo wallet has no Chi hằng ngày, its goal jar is the
-    persona's Du lịch jar)."""
+    A jar of the wallet that matches the type wins: the category jar itself (Ăn uống, Đi lại, Giải trí of the legacy layout,
+    also on the demo wallet next to Chi hằng ngày) or the jar `LEGACY_JAR_ALIASES` folds that category into (Hóa đơn into
+    Nghĩa vụ, the Du lịch goal into the goal jar). Only a wallet without such a jar uses the shared default of the onboarding
+    layout: Nghĩa vụ for bills and subscriptions, Chi hằng ngày for everyday categories. No match at all: None (the caller falls
+    back to the system jar of the type or asks). `tx_type` is optional for callers that only know a category, like a seed label
+    of the k-NN classifier (`yofina_ledger.classify_seed`)."""
     if default_code is None:
         return None
     codes = set(jar_codes)
-    if default_code in codes:
-        return default_code
-    if default_code == "hoa_don" or tx_type == "subscription":
-        candidates = [DEFAULT_OBLIGATION_JAR]
-    elif default_code in ("an_uong", "di_lai", "giai_tri", "du_lich"):
-        candidates = [DEFAULT_SPENDING_JAR]
-    else:
-        candidates = []
+    own = [default_code]
     if alias := LEGACY_JAR_ALIASES.get(default_code):
-        candidates.append(alias)
-    return next((code for code in candidates if code in codes), None)
+        own.append(alias)
+    if default_code == "hoa_don" or tx_type == "subscription":
+        shared = [DEFAULT_OBLIGATION_JAR]
+    elif default_code in ("an_uong", "di_lai", "giai_tri", "du_lich"):
+        shared = [DEFAULT_SPENDING_JAR]
+    else:
+        shared = []
+    return next((code for code in (*own, *shared) if code in codes), None)
 
 
 # --- giao dịch ---------------------------------------------------------------------------------

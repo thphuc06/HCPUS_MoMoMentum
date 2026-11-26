@@ -16,8 +16,9 @@ from yofina_core.confirm import issue_token, params_hash
 TOOL = "move_between_jars"
 MOVE = {"from_jar": "giai_tri", "to_jar": "an_uong", "amount_vnd": 100_000}
 
-# Ví demo của minh sau đặt lại (bộ hũ demo, issue #39), suy từ bộ sinh persona qua cùng ánh xạ mã hũ: Hóa đơn gộp vào Nghĩa vụ,
-# Du lịch là hũ goal `muc_tieu`, thêm Đầu tư 0 ₫; tổng vẫn 7.730.000 ₫ của bảng số Figma §5
+# Ví demo của minh sau đặt lại (bộ hũ demo, issue #39), suy từ bộ sinh persona qua cùng ánh xạ mã hũ: Chi hằng ngày cạnh các hũ tự thêm,
+# Hóa đơn gộp vào Nghĩa vụ, Du lịch là hũ goal `muc_tieu`, thêm Đầu tư 0 ₫; tổng là 7.730.000 ₫ của bảng số Figma §5 cộng số dư hũ Chi
+# hằng ngày (khối `demo_jars` của spec), đọc từ bộ sinh
 MINH_BALANCES = demo_balances("minh")
 
 pytestmark = pytest.mark.usefixtures("fresh")
@@ -81,7 +82,7 @@ def test_get_jars_minh_khop_bang_so_figma(api, schema_validator):
     bal, body = balances(api, "minh")
     schema_validator.openapi("JarsResponse", body)
     assert bal == MINH_BALANCES
-    assert body["jars_total_vnd"] == 7_730_000
+    assert body["jars_total_vnd"] == sum(MINH_BALANCES.values())
     assert [j["code"] for j in body["jars"]] == list(MINH_BALANCES)
     assert body["app_date"] >= "2026-11-21"  # ngày neo, rồi trôi theo ngày thật (ADR-0003)
 

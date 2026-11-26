@@ -79,6 +79,19 @@
       "expense_count": 0, "recent_share": 0.5, "merchants": []
     }
   ],
+  "demo_jars": [
+    {
+      "code": "chi_hang_ngay", "split_from": {"nghia_vu": 1, "du_phong": 2}, "opening_vnd": 100000, "target_vnd": 220000,
+      "expense_count": 12, "recent_share": 0.4,
+      "rhythm": {"max_per_day": 2},
+      "merchants": [
+        {"name": "Tạp hóa Út Hiền", "tx_type": "qr_other", "weight": 3},
+        {"name": "Guardian", "tx_type": "other_expense"},
+        {"name": "Hasaki", "tx_type": "other_expense"},
+        {"name": "Giặt ủi Sạch Thơm", "tx_type": "qr_other", "weight": 2}
+      ]
+    }
+  ],
   "payees": [
     {"name": "Phạm Thùy Linh", "account_hint": "•••• 3302", "is_favorite": true, "used_days_ago": 4},
     {"name": "Mẹ", "account_hint": "•••• 7716", "is_favorite": true, "used_days_ago": 20}

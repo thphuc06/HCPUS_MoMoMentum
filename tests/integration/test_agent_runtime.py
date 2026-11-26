@@ -50,7 +50,9 @@ def test_so_du_cac_hu_khop_rest_va_duoc_luu(agent_url, tokens, api, schema_valid
     run = ask(agent_url, tokens, "minh", "số dư các hũ của mình", session_id=sid)
     [jar_block] = run.blocks_of("jar_summary")
     jars = jar_block["data"]["jars"]
-    assert len(jars) == len(demo_jars("minh"))  # bộ hũ demo sau đặt lại (issue #39): 7 hũ của minh
+    assert len(jars) == len(
+        demo_jars("minh")
+    )  # bộ hũ demo sau đặt lại (issue #39, 26/11): 8 hũ của minh, có Chi hằng ngày
     assert {j["code"]: j["balance_vnd"] for j in jars} == balances(api, "minh")
     assert run.text.strip(), "phải có câu trả lời bằng chữ do agent sinh"
     assert run.finished["result"]["intent"] == "lookup"

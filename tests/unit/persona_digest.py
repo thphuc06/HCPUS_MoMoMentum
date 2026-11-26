@@ -18,6 +18,9 @@ TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 NOW = datetime(2026, 12, 10, 3, 0, tzinfo=UTC)
 #: trường thêm ở F6, mặc định vắng (None): bỏ khỏi bản băm khi vắng
 NEW_OPTIONAL_FIELDS = ("external_income_monthly_vnd",)
+#: trường chỉ ví demo dùng (issue #39: hũ Chi hằng ngày của khối `demo_jars`): `materialize` của ví persona không đọc nó, nên bản băm của
+#: ví persona không tính nó; ví demo có test riêng (`tests/unit/test_personas.py`)
+DEMO_ONLY_FIELDS = ("demo_jars",)
 MATERIALIZED_FIELDS = (
     "clock_offset_days", "app_date", "profile", "jars", "payees", "obligations", "credit_line",
     "transaction_rows", "salary_events",
@@ -35,6 +38,8 @@ def persona_digest(name: str) -> str:
     for key in NEW_OPTIONAL_FIELDS:
         if key in gen and gen[key] is None:
             del gen[key]
+    for key in DEMO_ONLY_FIELDS:
+        gen.pop(key, None)
     payload = {
         "generate": gen,
         "materialize": {k: getattr(m, k) for k in MATERIALIZED_FIELDS},

@@ -5,7 +5,8 @@ mỗi nhãn là một chuỗi giao dịch đã chuẩn hóa (bỏ dấu, chữ t
 base64 (2 KB mỗi vector thay vì 10 KB chữ). Nạp KHÔNG gọi Bedrock: Lambda ledger không có quyền Bedrock, và đặt lại phải nhanh.
 
 Hàm `apply_seed_labels(db, user_id, persona)` KHÔNG tự chạy khi đặt lại: người điều phối gọi nó SAU transaction đặt lại (bảng nhãn có khóa ngoại
-tới `jars`, nên đặt lại xóa nhãn cùng hũ). Nhãn của hũ mà người dùng không có thì bị bỏ qua.
+tới `jars`, nên đặt lại xóa nhãn cùng hũ). Nhãn vào hũ của ví theo cùng quy tắc với bước loại giao dịch của phân loại (`label_jar_pairs`); nhãn
+không có hũ nào nhận thì bị bỏ qua.
 """
 
 from __future__ import annotations
@@ -14,13 +15,13 @@ import base64
 import json
 import logging
 import struct
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from typing import Any
 
 from yofina_core.db import DataApi
-from yofina_core.wallet import EMBEDDING_DIMENSIONS
+from yofina_core.wallet import EMBEDDING_DIMENSIONS, transaction_jar
 from yofina_ledger.classify_write import vector_literal
 
 log = logging.getLogger("yofina.ledger.classify_seed")
@@ -78,10 +79,22 @@ def load_seed_set(persona: str) -> SeedSet | None:
     )
 
 
-def apply_seed_labels(
-    db: DataApi, user_id: str, persona: str, *, jar_aliases: Mapping[str, str] | None = None
-) -> int:
-    """Thay toàn bộ nhãn `seed` của người dùng bằng nhãn của persona (nhãn do người dùng sửa, nguồn `user`, giữ nguyên).
+def label_jar_pairs(seed: SeedSet, jar_codes: Iterable[str]) -> list[tuple[SeedLabel, str]]:
+    """Nhãn seed và hũ của ví nhận nó. Mã hũ của nhãn là nhóm của bộ bảy hũ (`an_uong`, `hoa_don`, `du_lich`...): hũ của ví đi
+    cùng quy tắc với bước loại giao dịch của phân loại (`yofina_core.wallet.transaction_jar`, issue #39): hũ riêng khớp nhóm thắng
+    (kể cả hũ mà ánh xạ bộ hũ cũ gộp nhóm vào, như Hóa đơn vào Nghĩa vụ), không có thì hũ chung (Chi hằng ngày, Nghĩa vụ). Nhãn
+    không có hũ nào nhận thì bỏ."""
+    codes = set(jar_codes)
+    return [
+        (lab, code)
+        for lab in seed.labels
+        if (code := transaction_jar(lab.jar_code, codes)) is not None
+    ]
+
+
+def apply_seed_labels(db: DataApi, user_id: str, persona: str) -> int:
+    """Thay toàn bộ nhãn `seed` của người dùng bằng nhãn của persona (nhãn do người dùng sửa, nguồn `user`, giữ nguyên), mỗi nhãn
+    vào hũ của ví theo `label_jar_pairs`.
 
     Một transaction. Trả số nhãn đã nạp (0 nếu persona không có file nhãn)."""
     seed = load_seed_set(persona)
@@ -106,8 +119,7 @@ def apply_seed_labels(
                 "model": seed.model,
                 "vec": vector_literal(decode_vector(lab.embedding_b64)),
             }
-            for lab in seed.labels
-            if (code := (jar_aliases or {}).get(lab.jar_code, lab.jar_code)) in jars
+            for lab, code in label_jar_pairs(seed, jars)
         ]
         sql = (
             "INSERT INTO tx_embeddings_labeled (user_id, text_norm, jar_code, source, model, embedding) "

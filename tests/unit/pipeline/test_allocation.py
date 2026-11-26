@@ -489,6 +489,39 @@ def test_mixed_daily_jar_floor_uses_only_essential_transaction_history():
         assert daily.floor_vnd == daily_essential * P.month_days * P.essential_floor_percent / 100
 
 
+def test_daily_jar_next_to_own_category_jars_is_not_counted_twice():
+    """Ví demo từ 26/11 (issue #39): Chi hằng ngày cạnh Ăn uống, Đi lại. Sàn của Ăn uống, Đi lại giữ theo chuỗi chi của chính chúng như
+    khi chưa có Chi hằng ngày; Chi hằng ngày chỉ tính phần chi loại thiết yếu ghi vào chính nó (`essential_spend`, không đếm lại chi của
+    Ăn uống). Hũ chỉ có chi lặt vặt (không loại thiết yếu) thì không thiết yếu, sàn 0, kể cả khi tổng chi của nó lớn."""
+    w = world()
+    engine = AllocationEngine(pipe(w))
+    gathered = engine.resilience.gather(USER, NOW)
+    alone = {j.code: j for j in engine.build(
+        gathered, horizon_months=3, goal_args=[], shock_id=None, allow_relaxation=False,
+    ).problem.jars}  # fmt: skip
+    template_row = next(j for j in gathered.jar_rows if j["code"] == "giai_tri")
+    template_ctx = next(j for j in gathered.ctx.jars if j["code"] == "giai_tri")
+    days = len(template_ctx["spend"])
+    jars = (
+        {**template_row, "code": "chi_hang_ngay", "name": "Chi hằng ngày", "split_percent": 0, "balance_vnd": 300_000},
+        *gathered.jar_rows,
+    )
+    for daily_essential, role in ((0, "discretionary"), (15_000, "essential")):
+        ctx = replace(gathered.ctx, jars=(
+            {**template_ctx, "code": "chi_hang_ngay", "spend": [80_000] * days, "essential_spend": [daily_essential] * days},
+            *gathered.ctx.jars,
+        ))  # fmt: skip
+        built = {j.code: j for j in engine.build(
+            replace(gathered, ctx=ctx, jar_rows=jars),
+            horizon_months=3, goal_args=[], shock_id=None, allow_relaxation=False,
+        ).problem.jars}  # fmt: skip
+        daily = built["chi_hang_ngay"]
+        assert daily.role == role
+        assert daily.floor_vnd == daily_essential * P.month_days * P.essential_floor_percent / 100
+        for code in ("an_uong", "di_lai", "giai_tri"):
+            assert (built[code].role, built[code].floor_vnd) == (alone[code].role, alone[code].floor_vnd), code
+
+
 def test_obligation_jar_floor_adds_essential_bills_not_tied_to_an_obligation():
     """Ví demo, ví ba hũ: hóa đơn vào hũ obligation. Sàn của hũ này = nghĩa vụ cứng đã khai + `essential_floor_percent` của chi
     thiết yếu theo LOẠI giao dịch không gắn nghĩa vụ (chuỗi `essential_spend` của ngữ cảnh), như sàn hũ Hóa đơn của ví bảy hũ cũ."""

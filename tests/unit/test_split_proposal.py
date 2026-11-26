@@ -370,6 +370,63 @@ def demo_jars():
     ]
 
 
+def demo_daily_jars():
+    """Bộ hũ demo từ 26/11 (issue #39) theo `jar_layout.DEMO_LAYOUT`, tỷ lệ của `minh`: ba hũ mặc định (Chi hằng ngày 3 điểm lấy từ
+    Nghĩa vụ) rồi hũ tự thêm."""
+    return [
+        jar("chi_hang_ngay", "spending", 3, sort_order=10),
+        jar("nghia_vu", "obligation", 33, sort_order=20),
+        jar("du_phong", "saving", 10, "buffer", sort_order=30),
+        jar("an_uong", "spending", 30, sort_order=40),
+        jar("di_lai", "spending", 7, sort_order=50),
+        jar("giai_tri", "spending", 7, sort_order=60),
+        jar("muc_tieu", "saving", 10, "goal", goal_vnd=6_000_000, goal_date=date(2027, 4, 1), sort_order=70),
+        jar("dau_tu", "saving", 0, "long_term", sort_order=80),
+    ]
+
+
+def test_essential_spending_jars_on_wallet_with_daily_jar_and_own_category_jars():
+    """Ví có cả hũ chung lẫn hũ riêng: loại ăn uống, đi lại vào hũ riêng nên Chi hằng ngày không nhận loại thiết yếu nào (không bị
+    coi là hũ thiết yếu); ví ba hũ người dùng thêm Giải trí, Mục tiêu thì Chi hằng ngày chỉ còn nhận ăn uống, đi lại nên thiết yếu."""
+    assert essential(demo_daily_jars()) == {"an_uong", "di_lai"}
+    with_food = [*three(), jar("an_uong", "spending", 0)]
+    assert essential(with_food) == {"an_uong"}  # Chi hằng ngày còn nhận đi lại và giải trí: hũ trộn
+    added = [*three(), jar("giai_tri", "spending", 0), jar("muc_tieu", "saving", 0, "goal")]
+    assert essential(added) == {"chi_hang_ngay"}
+
+
+@pytest.mark.parametrize(
+    ("rent", "expected"),
+    [
+        # 39%: +6 điểm, Chi hằng ngày (không thiết yếu, hũ chung đứng đầu) về 0 trước, rồi Giải trí
+        (3_000_000, {"chi_hang_ngay": 0, "giai_tri": 4, "an_uong": 30, "di_lai": 7, "muc_tieu": 10, "du_phong": 10,
+                     "nghia_vu": 39}),
+        # 53%: hết hũ chi không thiết yếu, Dự phòng giữ sàn 10, rồi hũ mục tiêu; Ăn uống, Đi lại giữ nguyên
+        (4_400_000, {"chi_hang_ngay": 0, "giai_tri": 0, "an_uong": 30, "di_lai": 7, "muc_tieu": 0, "du_phong": 10,
+                     "nghia_vu": 53}),
+        # 69%: hết nguồn không thiết yếu mới tới hũ chi thiết yếu (Ăn uống trước Đi lại theo thứ tự hũ)
+        (6_000_000, {"chi_hang_ngay": 0, "giai_tri": 0, "an_uong": 14, "di_lai": 7, "muc_tieu": 0, "du_phong": 10,
+                     "nghia_vu": 69}),
+    ],
+)  # fmt: skip
+def test_demo_daily_wallet_takes_from_non_essential_first_and_essential_last(rent, expected):
+    jars = demo_daily_jars()
+    obs = [ob("Tiền nhà", rent, pay="nghia_vu"), ob("Khoản vay", 900_000, kind="loan")]
+    result = propose(jars=jars, obligations=obs, salary_vnd=10_000_000, essential_jars=essential(jars))
+    assert result["status"] == "proposed"
+    shares = after(result)
+    assert {k: shares[k] for k in expected} == expected
+    assert shares["dau_tu"] == 0 and sum(shares.values()) == 100
+
+
+def test_demo_daily_wallet_excess_returns_to_daily_jar():
+    jars = demo_daily_jars()
+    obs = [ob("Tiền nhà", 2_000_000, pay="nghia_vu"), ob("Khoản vay", 900_000, kind="loan")]
+    result = propose(jars=jars, obligations=obs, salary_vnd=10_000_000, essential_jars=essential(jars))
+    shares = after(result)  # 29%: 4 điểm thừa về hũ chi đầu tiên là hũ chung Chi hằng ngày, hũ riêng giữ nguyên
+    assert (shares["nghia_vu"], shares["chi_hang_ngay"], shares["an_uong"], shares["giai_tri"]) == (29, 7, 30, 7)
+
+
 def legacy_jars():
     return [
         jar("an_uong", "spending", 25, sort_order=10),

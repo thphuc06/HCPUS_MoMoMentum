@@ -254,16 +254,21 @@ def test_reset_sinh_lai_persona_dat_dong_ho_ve_ngay_neo(schema_ok, groups):
     assert body["app_date"] == "2026-11-21" and body["clock_offset_days"] == -19
     (reset,) = repo.resets
     assert reset["uid"] == "sub-moi" and reset["profile"]["salary"] == 9_000_000
-    assert len(reset["jars"]) == 7 and body["jars_count"] == 7
+    assert len(reset["jars"]) == 8 and body["jars_count"] == 8
     assert {j["code"]: j["purpose"] for j in reset["jars"]} == {
+        "chi_hang_ngay": None,
+        "nghia_vu": None,
+        "du_phong": "buffer",
         "an_uong": None,
         "di_lai": None,
-        "nghia_vu": None,
         "giai_tri": None,
         "muc_tieu": "goal",
-        "du_phong": "buffer",
         "dau_tu": "long_term",
     }
+    # ba hũ mặc định trước, rồi hũ tự thêm (issue #39, 26/11)
+    assert [j["code"] for j in sorted(reset["jars"], key=lambda j: j["sort_order"])][:3] == [
+        "chi_hang_ngay", "nghia_vu", "du_phong",
+    ]  # fmt: skip
     assert body["transactions_count"] == len(reset["transactions"]) > 100
     assert (
         body["obligations_count"] == len(reset["obligations"]) == 7

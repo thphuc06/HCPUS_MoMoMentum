@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
 from botocore.exceptions import ClientError
 from ingest_helpers import PNG, FakeBedrock, FakeLabelStore, csv_bytes, make_gateway
 from yofina_classify.model import ExactLabel, Neighbor
@@ -307,3 +308,37 @@ def test_bang_loai_va_model_bat_dong_thi_vao_hang_cho():
     )
     assert (choice.code, choice.source, choice.tier) == ("an_uong", "type_map", "review")
     assert choice.confidence <= load_thresholds().review_min_confidence
+
+
+_DEMO_DAILY = [
+    ("chi_hang_ngay", "spending"), ("nghia_vu", "obligation"), ("du_phong", "saving"), ("an_uong", "spending"),
+    ("di_lai", "spending"), ("giai_tri", "spending"), ("muc_tieu", "saving"), ("dau_tu", "saving"),
+]  # fmt: skip
+_THREE = _DEMO_DAILY[:3]
+
+
+@pytest.mark.parametrize(
+    ("jars", "expected"),
+    [
+        # ví demo từ 26/11 (issue #39): hũ riêng khớp loại thắng Chi hằng ngày; du lịch vào hũ goal, hóa đơn vào Nghĩa vụ
+        (_DEMO_DAILY, {"food_drink": "an_uong", "ride_hailing": "di_lai", "entertainment": "giai_tri",
+                       "travel": "muc_tieu", "bill_electricity": "nghia_vu"}),
+        # ví ba hũ: mọi khoản chi vào Chi hằng ngày, hóa đơn vào Nghĩa vụ
+        (_THREE, {"food_drink": "chi_hang_ngay", "ride_hailing": "chi_hang_ngay", "entertainment": "chi_hang_ngay",
+                  "travel": "chi_hang_ngay", "bill_electricity": "nghia_vu"}),
+        # ví ba hũ người dùng thêm Ăn uống
+        ([*_THREE, ("an_uong", "spending")], {"food_drink": "an_uong", "ride_hailing": "chi_hang_ngay",
+                                              "entertainment": "chi_hang_ngay", "travel": "chi_hang_ngay",
+                                              "bill_electricity": "nghia_vu"}),
+    ],
+)  # fmt: skip
+def test_buoc_loai_giao_dich_cua_dong_nap_theo_hu_rieng_roi_hu_chung(jars, expected):
+    c = ctx(
+        None,
+        jars=[{"code": code, "name": code, "kind": kind, "balance_vnd": 0} for code, kind in jars],
+    )
+    rows = [RowInput(TODAY, 50000, f"Cửa hàng {t}", None, False, t, None, None) for t in expected]
+    got = classify_rows(rows, c.classify_inputs())
+    assert {t: (choice.code, choice.source) for t, choice in zip(expected, got, strict=True)} == {
+        t: (code, "type_map") for t, code in expected.items()
+    }

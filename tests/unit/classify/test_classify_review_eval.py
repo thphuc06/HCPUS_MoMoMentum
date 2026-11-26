@@ -125,6 +125,49 @@ def test_vector_seed_khu_hoi_float16_va_sai_chieu_bi_tu_choi():
         classify_seed.encode_vector([0.1, 0.2])
 
 
+@pytest.mark.parametrize(
+    ("wallet", "expected"),
+    [
+        # ví demo từ 26/11 (issue #39): có cả Chi hằng ngày lẫn hũ riêng; hũ riêng thắng, Hóa đơn vào Nghĩa vụ, Du lịch vào hũ goal
+        (
+            ("chi_hang_ngay", "nghia_vu", "du_phong", "an_uong", "di_lai", "giai_tri", "muc_tieu", "dau_tu"),
+            {"an_uong": "an_uong", "di_lai": "di_lai", "giai_tri": "giai_tri", "hoa_don": "nghia_vu",
+             "du_lich": "muc_tieu", "nghia_vu": "nghia_vu"},
+        ),
+        # ví ba hũ: nhãn chi vào Chi hằng ngày, hóa đơn vào Nghĩa vụ
+        (
+            ("chi_hang_ngay", "nghia_vu", "du_phong"),
+            {"an_uong": "chi_hang_ngay", "di_lai": "chi_hang_ngay", "giai_tri": "chi_hang_ngay",
+             "hoa_don": "nghia_vu", "du_lich": "chi_hang_ngay", "nghia_vu": "nghia_vu"},
+        ),
+        # ví ba hũ người dùng thêm Ăn uống: nhãn ăn uống vào hũ đó
+        (
+            ("chi_hang_ngay", "nghia_vu", "du_phong", "an_uong"),
+            {"an_uong": "an_uong", "di_lai": "chi_hang_ngay", "giai_tri": "chi_hang_ngay",
+             "hoa_don": "nghia_vu", "du_lich": "chi_hang_ngay", "nghia_vu": "nghia_vu"},
+        ),
+        # ví bảy hũ cũ: mỗi nhãn giữ mã hũ của nó
+        (
+            ("an_uong", "di_lai", "hoa_don", "giai_tri", "du_lich", "du_phong", "nghia_vu"),
+            {c: c for c in ("an_uong", "di_lai", "giai_tri", "hoa_don", "du_lich", "nghia_vu")},
+        ),
+        # không có hũ nào nhận: bỏ nhãn
+        (("du_phong",), {}),
+    ],
+)  # fmt: skip
+def test_nhan_seed_vao_hu_cua_vi_cung_quy_tac_voi_loai_giao_dich(wallet, expected):
+    vec = classify_seed.encode_vector([0.0] * EMBEDDING_DIMENSIONS)
+    seed = classify_seed.SeedSet(
+        "x",
+        "m",
+        tuple(
+            classify_seed.SeedLabel(f"nhan {c}", c, vec) for c in sorted(expected or {"an_uong": 0})
+        ),
+    )
+    got = {lab.jar_code: code for lab, code in classify_seed.label_jar_pairs(seed, wallet)}
+    assert got == expected
+
+
 def test_bo_du_lieu_du_300_dong_co_chuyen_khoan_ten_rieng_khong_loi_nhan_va_khop_bo_sinh():
     import build_dataset
 

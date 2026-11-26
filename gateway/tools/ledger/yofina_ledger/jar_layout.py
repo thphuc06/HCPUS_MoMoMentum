@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from os import getenv
 
-from yofina_core.wallet import DEFAULT_GOAL_JAR, DEFAULT_OBLIGATION_JAR
+from yofina_core.wallet import DEFAULT_GOAL_JAR, DEFAULT_OBLIGATION_JAR, DEFAULT_SPENDING_JAR
 
 DEMO_LAYOUT_ID = "demo"  # recorded in the reset audit event; the roadmap seed is mapped with the same aliases
 
@@ -35,9 +35,10 @@ def onboarding_override() -> list[dict[str, str | int]] | None:
 @dataclass(frozen=True)
 class DemoJar:
     """One jar of the demo layout. Its balance, split share, history and goal come from the persona jars that
-    `personas.six_jars.JAR_ALIASES` folds into it (none for a new jar); the layout only fixes code, label, kind and
-    purpose. A goal jar needs an amount and a date, so it is left out for a persona without a source jar that has a goal;
-    it is a jar the user added for that goal, so it shows the name of the source jar (Du lịch), not the layout label."""
+    `personas.six_jars.JAR_ALIASES` folds into it, or, for a jar no persona jar folds into, from the persona spec block
+    `demo_jars` (Chi hằng ngày) or nothing (Đầu tư: 0 ₫, 0%); the layout only fixes code, label, kind and purpose. A goal jar
+    needs an amount and a date, so it is left out for a persona without a source jar that has a goal; it is a jar the user
+    added for that goal, so it shows the name of the source jar (Du lịch), not the layout label."""
 
     code: str
     name: str
@@ -48,15 +49,16 @@ class DemoJar:
     purpose: str | None = None
 
 
-# Demo wallet after reset (issue #39): the two onboarding defaults (Nghĩa vụ, Dự phòng) plus the jars the user added after
-# splitting Chi hằng ngày into Ăn uống, Đi lại, Giải trí (behaviour signals are per jar code), Mục tiêu and Đầu tư. There is
-# no `chi_hang_ngay`. Order follows the persona wallets (Nghĩa vụ takes the place of Hóa đơn).
+# Demo wallet after reset (issue #39, changed 26/11 morning): the three onboarding defaults first (Chi hằng ngày, Nghĩa vụ, Dự
+# phòng), then the jars the user added: Ăn uống, Đi lại, Giải trí (behaviour signals are per jar code), Mục tiêu and Đầu tư. Chi
+# hằng ngày keeps the small everyday spending that no added jar takes (spec `demo_jars`); colour and icon as `jar_templates`.
 DEMO_LAYOUT = (
-    DemoJar("an_uong", "Ăn uống", "violet", "utensils", "spending", 10),
-    DemoJar("di_lai", "Đi lại", "sky", "bus", "spending", 20),
-    DemoJar(DEFAULT_OBLIGATION_JAR, "Nghĩa vụ", "slate", "wallet", "obligation", 30),
-    DemoJar("giai_tri", "Giải trí", "orchid", "gamepad", "spending", 40),
-    DemoJar(DEFAULT_GOAL_JAR, "Mục tiêu", "teal", "target", "saving", 50, purpose="goal"),
-    DemoJar("du_phong", "Dự phòng", "blue", "shield", "saving", 60, purpose="buffer"),
-    DemoJar("dau_tu", "Đầu tư", "brown", "landmark", "saving", 70, purpose="long_term"),
+    DemoJar(DEFAULT_SPENDING_JAR, "Chi hằng ngày", "violet", "utensils", "spending", 10),
+    DemoJar(DEFAULT_OBLIGATION_JAR, "Nghĩa vụ", "slate", "wallet", "obligation", 20),
+    DemoJar("du_phong", "Dự phòng", "blue", "shield", "saving", 30, purpose="buffer"),
+    DemoJar("an_uong", "Ăn uống", "violet", "utensils", "spending", 40),
+    DemoJar("di_lai", "Đi lại", "sky", "bus", "spending", 50),
+    DemoJar("giai_tri", "Giải trí", "orchid", "gamepad", "spending", 60),
+    DemoJar(DEFAULT_GOAL_JAR, "Mục tiêu", "teal", "target", "saving", 70, purpose="goal"),
+    DemoJar("dau_tu", "Đầu tư", "brown", "landmark", "saving", 80, purpose="long_term"),
 )

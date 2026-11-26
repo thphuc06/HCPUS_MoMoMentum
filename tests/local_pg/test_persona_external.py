@@ -23,8 +23,9 @@ from conftest import ANCHOR
 from persona_coverage import AFTER_RANGE, BEFORE_RANGE, coverage_facts
 
 from personas import generate, generate_out_of_wallet
-from personas.six_jars import JAR_ALIASES
+from personas.six_jars import JAR_ALIASES, apply_demo_layout
 from yofina_core import ingest
+from yofina_ledger.jar_layout import DEMO_LAYOUT
 from yofina_ml import quality
 from yofina_ml.types import CoverageInputs
 
@@ -40,6 +41,11 @@ SQL_COVERAGE = (
 SQL_MATCH = (
     "SELECT * FROM app_find_ingest_matches(:uid, CAST(:rows AS jsonb), CAST(:win AS integer))"
 )
+
+
+def demo_vy():
+    """Ví demo của `vy` mà `POST /demo/reset` nạp (bộ hũ demo, có hũ Chi hằng ngày của khối `demo_jars`)."""
+    return apply_demo_layout(generate("vy", anchor=ANCHOR), DEMO_LAYOUT)
 
 
 def reset_vy(env):
@@ -128,8 +134,8 @@ def test_vy_do_phu_truoc_nap_trong_dai(env):
     before = ingest.coverage_ratio(row)
     assert before == quality.data_coverage(CoverageInputs(**facts))
     assert BEFORE_RANGE[0] <= before <= BEFORE_RANGE[1], before
-    # DB và bộ sinh cho cùng thành phần (công thức dựng lại trong test đơn vị khớp SQL)
-    assert facts == coverage_facts(generate("vy", anchor=ANCHOR))
+    # DB và bộ sinh cho cùng thành phần (công thức dựng lại trong test đơn vị khớp SQL), trên ví demo mà đặt lại nạp
+    assert facts == coverage_facts(demo_vy())
     assert int(row["external_spend_vnd"]) == 0 and int(row["external_income_vnd"]) == 9_600_000
 
 
@@ -163,7 +169,7 @@ def test_vy_nap_sao_ke_do_phu_len_dai_sau_va_khu_trung_dung(env):
     assert AFTER_RANGE[0] <= after <= AFTER_RANGE[1], after
     assert after > before
     assert after == quality.data_coverage(CoverageInputs(**facts_of(after_row)))
-    assert facts_of(after_row) == coverage_facts(data, extra_expenses=spent)
+    assert facts_of(after_row) == coverage_facts(demo_vy(), extra_expenses=spent)
     assert balances(env, VY) == bal_before  # dòng external không đổi số dư hũ nào
 
     # nạp tiếp ảnh biên lai (hôm qua): không trùng sao kê đã nạp; độ phủ tăng nhưng chưa tới 100%

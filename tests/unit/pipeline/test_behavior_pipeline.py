@@ -495,6 +495,37 @@ def test_cong_chon_hu_thiet_yeu_sap_can_va_ghi_mot_ban_tin():
     }
 
 
+@pytest.mark.parametrize(("daily_essential", "chosen"), [(0, "an_uong"), (40_000, "chi_hang_ngay")])
+def test_cong_tren_vi_co_ca_chi_hang_ngay_va_hu_rieng(monkeypatch, daily_essential, chosen):
+    """Ví demo từ 26/11 (issue #39): Chi hằng ngày cạnh Ăn uống. Hũ chung chỉ là hũ thiết yếu của cổng khi chính nó có chi loại thiết
+    yếu (`essential_spend`); chi lặt vặt thì không, nên hũ này cạn cũng không chen lên trước cảnh báo Ăn uống (cảnh 1). Chi của Ăn uống
+    không bị đếm lại ở Chi hằng ngày: phần hụt ước tính của mỗi hũ theo chuỗi của chính nó."""
+    daily_row = {"code": "chi_hang_ngay", "name": "Chi hằng ngày", "kind": "spending", "balance_vnd": 60_000,
+                 "clock_offset_days": OFFSET}  # fmt: skip
+    monkeypatch.setattr(FakeForecastRepo, "jar_state", lambda self, user_id: [*copy.deepcopy(JARS), daily_row])
+    pipe = gate_pipeline(
+        summaries_rows=[
+            {"jar_code": "an_uong", "status": "short", "runout_date": date(2026, 11, 28), "payday_date": date(2026, 12, 5)},
+            {"jar_code": "chi_hang_ngay", "status": "short", "runout_date": date(2026, 11, 22),
+             "payday_date": date(2026, 12, 5)},
+        ],
+    )  # fmt: skip
+    ctx = Context(
+        meta={"app_date": ANCHOR.isoformat(), "profile": {"monthly_salary_vnd": 9_000_000, "payday_day": 5}},
+        jars=(
+            {"code": "an_uong", "kind": "spending", "spend": [120_000] * 30},
+            {"code": "chi_hang_ngay", "kind": "spending", "spend": [70_000] * 30, "essential_spend": [daily_essential] * 30},
+        ),
+        obligations=(),
+    )
+    monkeypatch.setattr(pipe, "load_context", lambda user_id, now: ctx)
+    repo = FakeRepo()
+    out = beh.run_nudge_gate(pipe, "u", NOW, repo=repo, profile=TEMPLATE)
+    c = repo.inserted[0]["decision"].chosen
+    assert out["chosen"] == "runout_warning" and c.jar_code == chosen
+    assert c.value_vnd == (120_000 * 7 if chosen == "an_uong" else daily_essential * 13)
+
+
 def test_cong_da_co_ban_tin_hom_nay_thi_khong_chon_lai():
     repo = FakeRepo(today={"id": "n1"})
     out = beh.run_nudge_gate(gate_pipeline(), "u", NOW, repo=repo, profile=TEMPLATE)

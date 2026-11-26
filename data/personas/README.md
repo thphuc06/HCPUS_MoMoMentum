@@ -4,11 +4,11 @@ Dữ liệu persona **seed** cho demo: hồ sơ, hũ (kể cả hai hũ hệ th�
 
 | File | Nội dung |
 |---|---|
-| `specs/<persona>.json` | Dữ liệu đầu vào của một persona: lương, ngày lương, mức rủi ro, số ngày lịch sử, seed, **nhịp chi tiêu** (`rhythm_defaults`, `rhythm` của từng hũ), danh sách hũ (mã, tên, loại, khóa màu/biểu tượng, tỷ lệ chia, số dư đầu kỳ, **số dư cần đạt**, số khoản chi, cửa hàng kèm `tx_type`, mục tiêu), `payees`, `obligations`, `credit_line`, `bnpl.purchases`, `system_jars` |
-| `generator.py` | `generate(persona, anchor=...)` dựng sổ cái; `materialize(...)` ghép với đồng hồ mô phỏng ([ADR-0003](../../docs/decisions/0003-dong-ho-mo-phong.md)) và dựng id tất định; `persona_from_groups`, `parse_groups_claim` |
+| `specs/<persona>.json` | Dữ liệu đầu vào của một persona: lương, ngày lương, mức rủi ro, số ngày lịch sử, seed, **nhịp chi tiêu** (`rhythm_defaults`, `rhythm` của từng hũ), danh sách hũ (mã, tên, loại, khóa màu/biểu tượng, tỷ lệ chia, số dư đầu kỳ, **số dư cần đạt**, số khoản chi, cửa hàng kèm `tx_type`, mục tiêu), `payees`, `obligations`, `credit_line`, `bnpl.purchases`, `system_jars`; khối `demo_jars` (hũ chỉ ví demo có: Chi hằng ngày, mục "Bộ hũ demo sau khi đặt lại") |
+| `generator.py` | `generate(persona, anchor=...)` dựng sổ cái (và dòng của hũ chỉ ví demo có, `PersonaData.demo_jars`); `materialize(...)` ghép với đồng hồ mô phỏng ([ADR-0003](../../docs/decisions/0003-dong-ho-mo-phong.md)) và dựng id tất định; `persona_from_groups`, `parse_groups_claim` |
 | `out_of_wallet.py` | `generate_out_of_wallet(persona, anchor=...)`: dựng khoản chi NGOÀI ví (thứ người dùng sẽ nạp từ sao kê hoặc ảnh) từ khối `out_of_wallet` của spec; `statement_csv` ghi sao kê CSV kiểu VCB. Không vào sổ cái seed |
 | `samples/` | Tệp mẫu để tải lên ở cảnh 5 (`vy_sao_ke_vcb.csv`, `vy_bien_lai_1.png`, `vy_bien_lai_2.png`) và `make_samples.py` sinh ra chúng; xem mục "Tệp mẫu cho cảnh 5" |
-| `six_jars.py` | `apply_demo_layout(data, DEMO_LAYOUT)`: gộp ví persona vào bộ hũ demo mà `POST /demo/reset` nạp (`JAR_ALIASES`, `DEMO_CREDIT_DUE_DAY`); mục "Bộ hũ demo sau khi đặt lại" |
+| `six_jars.py` | `apply_demo_layout(data, DEMO_LAYOUT)`: gộp ví persona vào bộ hũ demo mà `POST /demo/reset` nạp và thêm hũ Chi hằng ngày của khối `demo_jars` (`JAR_ALIASES`, `DEMO_CREDIT_DUE_DAY`); mục "Bộ hũ demo sau khi đặt lại" |
 | `accounts.json` | Ánh xạ tài khoản demo → persona và tiền tố nhóm Cognito (`persona-`). Mã sản phẩm không rẽ nhánh theo email: persona của người gọi lấy từ nhóm Cognito (claim `cognito:groups`) |
 
 ## Persona
@@ -24,18 +24,37 @@ Dữ liệu persona **seed** cho demo: hồ sơ, hũ (kể cả hai hũ hệ th�
 
 ## Bộ hũ demo sau khi đặt lại (issue #39)
 
-Spec ở `specs/` vẫn là ví bảy hũ cũ (bảng trên, băm đầu ra bộ sinh không đổi). `POST /demo/reset` (`LedgerService.reset_demo`) nạp ví đó **qua bộ hũ demo**: hai hũ mặc định của onboarding (Nghĩa vụ, Dự phòng) cộng các hũ người dùng tự thêm (Ăn uống, Đi lại, Giải trí, Mục tiêu, Đầu tư); không có hũ Chi hằng ngày. Lý do: PELT, hồ sơ hành vi và cờ đổi hành vi tính theo mã hũ, nên Ăn uống, Đi lại, Giải trí phải là hũ riêng (cảnh 1, cảnh 4). Mã, tên, loại, `purpose` ở `gateway/tools/ledger/yofina_ledger/jar_layout.py` (`DEMO_LAYOUT`); ánh xạ ở `six_jars.py`:
+Khối `jars` của spec ở `specs/` vẫn là ví bảy hũ cũ (bảng trên, băm đầu ra bộ sinh của ví persona không đổi). `POST /demo/reset` (`LedgerService.reset_demo`) nạp ví đó **qua bộ hũ demo** (đổi 26/11 sáng): ba hũ mặc định của onboarding trước (Chi hằng ngày, Nghĩa vụ, Dự phòng), rồi các hũ người dùng tự thêm (Ăn uống, Đi lại, Giải trí, Mục tiêu, Đầu tư). Lý do giữ hũ riêng: PELT, hồ sơ hành vi và cờ đổi hành vi tính theo mã hũ, nên Ăn uống, Đi lại, Giải trí phải là hũ riêng (cảnh 1, cảnh 4); lý do có Chi hằng ngày: người xem thấy đúng câu chuyện "3 hũ mặc định, thêm hũ khi cần". Mã, tên, màu, biểu tượng, loại, `purpose`, thứ tự ở `gateway/tools/ledger/yofina_ledger/jar_layout.py` (`DEMO_LAYOUT`); ánh xạ ở `six_jars.py`:
 
 | Hũ persona | Hũ demo |
 |---|---|
-| `an_uong`, `di_lai`, `giai_tri`, `du_phong`, `nghia_vu` | giữ mã (mọi dòng giữ nguyên số tiền và ngày) |
+| (không có) | `chi_hang_ngay` (Chi hằng ngày, `spending`): khối `demo_jars` của spec, mục dưới |
+| `an_uong`, `di_lai`, `giai_tri`, `du_phong`, `nghia_vu` | giữ mã (mọi dòng của Ăn uống, Đi lại, Giải trí giữ nguyên khóa, ngày, giờ, số tiền, đối tác) |
 | `hoa_don` | `nghia_vu` |
 | `du_lich` | `muc_tieu` (`purpose` `goal`; tên, mục tiêu và hạn của hũ Du lịch: hũ tự thêm cho một mục tiêu mang tên hũ nguồn, như lộ trình seed) |
 | (không có) | `dau_tu` (`purpose` `long_term`, 0 ₫, 0%, không lịch sử) |
 
-- Số dư, tỷ lệ chia (tổng tỷ lệ của hũ nguồn), dòng chia lương các kỳ trước (một dòng mỗi hũ mỗi kỳ), sự kiện lương, hũ trả của nghĩa vụ, nhãn phân loại seed (`classify_seed.apply_seed_labels`) và lộ trình seed (`roadmaps/README.md`) đi theo cùng ánh xạ. Giao dịch mới có loại mặc định vào hũ cũ không còn trên ví (ví dụ `travel` mặc định `du_lich`) cũng theo ánh xạ này (`yofina_core.wallet.LEGACY_JAR_ALIASES`, `transaction_jar`): trên ví demo `travel` vào hũ goal, trên ví có Chi hằng ngày vẫn vào Chi hằng ngày. Chuyển giữa hai hũ gộp vào cùng một hũ thì bỏ cả hai chân. Tổng tiền ví bằng ví persona.
-- Hũ Mục tiêu chỉ có khi persona có hũ nguồn mang mục tiêu: `minh`, `vy` có 7 hũ, `lan`, `khoa` có 6 hũ (không có Mục tiêu). Hũ persona không có trong ánh xạ thì đặt lại báo lỗi.
-- `minh` sau đặt lại: Ăn uống 380.000 ₫ (30%), Đi lại 640.000 ₫ (7%), Nghĩa vụ 1.450.000 ₫ (36%), Giải trí 760.000 ₫ (7%), Du lịch (hũ goal `muc_tieu`) 1.800.000 ₫ (10%, 6.000.000 ₫ đến 01/04/2027), Dự phòng 2.700.000 ₫ (10%), Đầu tư 0 ₫ (0%). Tiền cơm văn phòng vẫn trả từ Ăn uống nên mốc cạn 23/11 của cảnh 1 giữ nguyên; Netflix trả từ Giải trí; tiền nhà, hóa đơn và Trả sau trả từ Nghĩa vụ. Trả sau đến hạn ngày 3 thay vì ngày 5 (`DEMO_CREDIT_DUE_DAY`) để khoản đến hạn nằm trong danh sách "trước kỳ lương" của hũ Nghĩa vụ ở cảnh 2.
+**Khối `demo_jars`** (chỉ ví demo dùng; `generate` dựng dòng của nó vào `PersonaData.demo_jars` bằng `random.Random` riêng theo mã hũ, ví persona và `materialize` của ví persona không đọc nó, nên thêm hay chỉnh khối này không đổi một dòng nào của hũ khác):
+
+| Khóa | Ý nghĩa |
+|---|---|
+| `code` | Mã hũ demo (`chi_hang_ngay`); phải có trong `DEMO_LAYOUT`, không trùng hũ của ví persona |
+| `split_from` | Mã hũ demo -> số điểm % lấy sang hũ này. Mỗi kỳ lương trong lịch sử hũ nhận `floor(lương x điểm / 100)` của từng hũ nguồn, dòng chia lương của hũ nguồn bớt đúng chừng đó, số dư đầu kỳ của hũ nguồn tăng đúng tổng phần đã nhường: số dư hũ nguồn ở ngày neo giữ như spec |
+| `opening_vnd`, `target_vnd`, `expense_count`, `recent_share`, `rhythm`, `merchants` | Như một hũ của `jars`: chi = số dư đầu kỳ + lương chia - số dư cần đạt, nhịp và hàm chia tiền như bộ sinh |
+
+Chọn trong spec (ít xáo trộn nhất): khoản chi lặt vặt mà không hũ tự thêm nào nhận (tạp hóa, giặt sấy, nhà thuốc, đồ dùng cá nhân, mua sắm nhỏ), loại giao dịch có sẵn `qr_other` và `other_expense` (không loại nào trong đó đưa giao dịch về hũ khác của ví; `grocery` giữ ở Ăn uống), đối tác riêng; 3 điểm tỷ lệ lấy từ phần dư của Nghĩa vụ trên nhu cầu đã khai hoặc của Dự phòng trên sàn 10%, không từ ba hũ chi hay Mục tiêu:
+
+| Persona | `split_from` | Tỷ lệ sau (Chi hằng ngày / Nghĩa vụ / Dự phòng) | Số dư Chi hằng ngày | Chi trong lịch sử |
+|---|---|---|---:|---|
+| `minh` | Nghĩa vụ 3 | 3 / 33 / 10 | 300.000 ₫ | 28 khoản, 980.000 ₫ trong 120 ngày |
+| `lan` | Dự phòng 3 | 3 / 25 / 12 | 120.000 ₫ | 10 khoản, 210.000 ₫ trong 47 ngày |
+| `khoa` | Nghĩa vụ 3 | 3 / 27 / 20 | 160.000 ₫ | 5 khoản, 100.000 ₫ trong 18 ngày |
+| `vy` | Nghĩa vụ 1, Dự phòng 2 | 3 / 33 / 10 | 220.000 ₫ | 12 khoản, 360.000 ₫ trong 47 ngày |
+
+- Số dư, tỷ lệ chia (tổng tỷ lệ của hũ nguồn, trừ phần nhường cho Chi hằng ngày), dòng chia lương các kỳ trước (một dòng mỗi hũ mỗi kỳ), sự kiện lương, hũ trả của nghĩa vụ, nhãn phân loại seed (`classify_seed.apply_seed_labels`) và lộ trình seed (`roadmaps/README.md`) đi theo cùng ánh xạ. Chuyển giữa hai hũ gộp vào cùng một hũ thì bỏ cả hai chân. Tổng tiền ví bằng ví persona cộng số dư hũ Chi hằng ngày. Bộ sinh tự kiểm số dư chạy không âm và số dư cuối của mọi hũ demo.
+- Giao dịch mới chọn hũ theo loại (`yofina_core.wallet.transaction_jar`): hũ riêng khớp loại thắng (hũ mặc định của loại, hoặc hũ mà `LEGACY_JAR_ALIASES` gộp nó vào: `travel` mặc định `du_lich` vào hũ goal, hóa đơn vào Nghĩa vụ), không có hũ riêng mới vào hũ chung Chi hằng ngày hay Nghĩa vụ. Trên ví demo: ăn uống vào Ăn uống, du lịch vào hũ goal; trên ví ba hũ: vào Chi hằng ngày. Nhãn seed k-NN theo cùng quy tắc (`classify_seed.label_jar_pairs`).
+- Hũ Mục tiêu chỉ có khi persona có hũ nguồn mang mục tiêu: `minh`, `vy` có 8 hũ, `lan`, `khoa` có 7 hũ (không có Mục tiêu). Hũ persona không có trong ánh xạ, hay `split_from` lấy từ hũ không có hoặc không đủ tỷ lệ, thì đặt lại báo lỗi.
+- `minh` sau đặt lại: Chi hằng ngày 300.000 ₫ (3%), Nghĩa vụ 1.450.000 ₫ (33%), Dự phòng 2.700.000 ₫ (10%), Ăn uống 380.000 ₫ (30%), Đi lại 640.000 ₫ (7%), Giải trí 760.000 ₫ (7%), Du lịch (hũ goal `muc_tieu`) 1.800.000 ₫ (10%, 6.000.000 ₫ đến 01/04/2027), Đầu tư 0 ₫ (0%); tổng 8.030.000 ₫. Tiền cơm văn phòng vẫn trả từ Ăn uống nên mốc cạn 23/11 của cảnh 1 giữ nguyên; Netflix trả từ Giải trí; tiền nhà, hóa đơn và Trả sau trả từ Nghĩa vụ. Trả sau đến hạn ngày 3 thay vì ngày 5 (`DEMO_CREDIT_DUE_DAY`) để khoản đến hạn nằm trong danh sách "trước kỳ lương" của hũ Nghĩa vụ ở cảnh 2. Hũ Chi hằng ngày dự báo "đủ" tới lương, không có thẻ cạn.
 - Số đo cảnh 1 đến 4 trên ví demo: `docs/plan/default-six-jars-rollout.md`, Bước 5; đo lại bằng `tests/local_pg/test_demo_scenes.py -s`.
 
 ## Hiệu chỉnh cảnh 1 (phase 2, luồng C)
@@ -67,13 +86,13 @@ Tham số spec mới (đều tùy chọn; vắng thì bộ sinh cho ĐÚNG kết
 
 Số tiền chi ngoài ví ra từ tổng mỗi nhóm hũ trong spec qua cùng hàm chia lognormal và chọn ngày theo nhịp với bộ sinh persona. Mỗi `tx_type` là loại mà `db/seed/tx_type_map.sql` đã gán hũ mặc định, nên hũ của từng dòng đoán được ngay ở bước 0 của phân loại (test kiểm). Không khoản chi ngoài ví nào trùng số tiền với giao dịch trong ví (hay nguồn nạp khác) trong `dedupe_margin_days` ngày (rộng hơn cửa sổ khử trùng mặc định 3 ngày), nếu không worker sẽ loại nhầm nó thành bản sao. Ngược lại hai dòng TIỀN VÀO của sao kê cố ý trùng ngày và số tiền với hai dòng thu nhập ngoài ví đã seed: khử trùng loại chúng, thu nhập không bị cộng đôi (không thì độ phủ tụt xuống dưới dải, test phản chứng kiểm điều đó).
 
-Công thức trên dữ liệu `vy`: `income` = lương vào ví + thu nhập ngoài ví; `spend + net_jar` = số dư đầu kỳ + lương (số chi trong ví tự triệt tiêu); nạp thêm chi ngoài ví `S` thì tử số tăng đúng `S`. Số đo (đầu ra tính toán, test dựng lại bằng `yofina_ml.quality.data_coverage` rồi so với `app_get_data_coverage` trên PostgreSQL thật; test chỉ khẳng định dải 0,60 đến 0,70 trước và 0,80 đến 0,90 sau):
+Công thức trên dữ liệu `vy`: `income` = lương vào ví + thu nhập ngoài ví; `spend + net_jar` = số dư đầu kỳ + lương (số chi trong ví tự triệt tiêu); nạp thêm chi ngoài ví `S` thì tử số tăng đúng `S`. Số đo (đầu ra tính toán, test dựng lại bằng `yofina_ml.quality.data_coverage` rồi so với `app_get_data_coverage` trên PostgreSQL thật; test chỉ khẳng định dải 0,60 đến 0,70 trước và 0,80 đến 0,90 sau). Ví demo từ 26/11 sáng có thêm hũ Chi hằng ngày: số dư đầu kỳ của hũ đó (100.000 ₫) và phần lương mà Nghĩa vụ, Dự phòng nhường, dồn vào số dư đầu kỳ của chúng (480.000 ₫), làm tử số tăng 580.000 ₫ so với ví persona:
 
-| Thời điểm | Thu nhập | Tử số | Độ phủ |
-|---|---|---|---|
-| Sau `POST /demo/reset` (chưa nạp) | 25.600.000 ₫ | 17.000.000 ₫ | **0,664** |
-| Sau khi nạp `vy_sao_ke_vcb.csv` (39 dòng chi, 4.490.000 ₫; 2 dòng tiền vào bị khử trùng) | 25.600.000 ₫ | 21.490.000 ₫ | **0,839** |
-| Sau khi nạp thêm hai ảnh biên lai (265.000 ₫) | 25.600.000 ₫ | 21.755.000 ₫ | 0,850 |
+| Thời điểm | Thu nhập | Tử số (ví demo) | Độ phủ ví demo | Độ phủ ví persona |
+|---|---|---|---|---|
+| Sau `POST /demo/reset` (chưa nạp) | 25.600.000 ₫ | 17.580.000 ₫ | **0,687** | 0,664 |
+| Sau khi nạp `vy_sao_ke_vcb.csv` (39 dòng chi, 4.490.000 ₫; 2 dòng tiền vào bị khử trùng) | 25.600.000 ₫ | 22.070.000 ₫ | **0,862** | 0,839 |
+| Sau khi nạp thêm hai ảnh biên lai (265.000 ₫) | 25.600.000 ₫ | 22.335.000 ₫ | 0,872 | 0,850 |
 
 Muốn đổi số kịch bản thì sửa các số trong `specs/vy.json` (`external_income_monthly_vnd`, `total_vnd` của nhóm), không sửa mã. Sau khi nạp, chi ngoài ví cũng vào lịch sử chi của hũ (`app_get_daily_spend`), nên dự báo từng hũ đổi theo: đó là ý của cảnh 5.
 
@@ -86,8 +105,8 @@ Muốn đổi số kịch bản thì sửa các số trong `specs/vy.json` (`ext
 | `minh_bien_lai_1.png` | Ảnh biên lai chuyển khoản kiểu Vietcombank dựng bằng Pillow: 345.000 VND ngày 20/11/2026 cho một người (góp tiền ăn), có họ tên, số điện thoại, số tài khoản hư cấu nhìn rõ. Spec: `samples/minh_receipts.json` (issue #16) | Cảnh 5 trên `minh`, `giamkhao1`–`3`: PII bị che, dòng chi gợi ý hũ Ăn uống ([demo-script](../../docs/plan/demo-script.md), mục "Cảnh 5") |
 | `minh_bien_lai_2.png` | Ảnh thanh toán hóa đơn tiền nước 126.000 VND ngày 20/11/2026, cùng spec | Cảnh 5, ảnh dự phòng (hũ Hóa đơn) |
 | `minh_sao_ke_2_tuan.csv` | Sao kê 32 dòng chi hũ Ăn uống từ 07/11 đến 20/11/2026 (tổng 3.416.000 ₫), đưa chi hai tuần cuối lên 3,5 lần mức cũ (hệ số nhỏ nhất từ 3,0 bền khi tải trễ một ngày). Sinh bằng `samples/make_scene4_csv.py` (issue #22), độ bền đo bằng `scripts/measure_scene4_pelt.py` | **Cảnh 4**: tải trong ngày "Đặt lại dữ liệu" hoặc chậm nhất ngày hôm sau; PELT xác nhận điểm gãy, lộ trình sinh lại ([2026-11-26-canh4-pelt.md](../../docs/research/2026-11-26-canh4-pelt.md)) |
-| `vy_sao_ke_vcb.csv` | Sao kê kiểu Vietcombank (cùng cột và cách ghi với `evals/ingest/synthetic/csv/c01_vcb_50.csv`), 41 dòng từ 7/10 đến 19/11: 39 khoản chi (Highlands, GrabFood, Bách Hóa Xanh, Grab, CGV, Viettel, vé máy bay Vietjet...) và 2 dòng tiền vào freelance | Persona `vy`, **TẢI TỆP NÀY TRƯỚC**: độ phủ 0,664 -> 0,839, hai dòng tiền vào hiện là "trùng", hũ gợi ý đúng cho hầu hết dòng chi |
-| `vy_bien_lai_1.png`, `vy_bien_lai_2.png` | Ảnh biên lai chuyển khoản dựng bằng Pillow (kiểu Techcombank trả Grab, kiểu MB trả CGV), ngày 20/11, KHÁC mọi dòng của sao kê | Persona `vy`, cảnh tải ảnh (nếu kịch bản cần một giao dịch lẻ); tải sau CSV thì độ phủ lên 0,850 |
+| `vy_sao_ke_vcb.csv` | Sao kê kiểu Vietcombank (cùng cột và cách ghi với `evals/ingest/synthetic/csv/c01_vcb_50.csv`), 41 dòng từ 7/10 đến 19/11: 39 khoản chi (Highlands, GrabFood, Bách Hóa Xanh, Grab, CGV, Viettel, vé máy bay Vietjet...) và 2 dòng tiền vào freelance | Persona `vy`, **TẢI TỆP NÀY TRƯỚC**: độ phủ 0,687 -> 0,862 trên ví demo (ví persona 0,664 -> 0,839), hai dòng tiền vào hiện là "trùng", hũ gợi ý đúng cho hầu hết dòng chi |
+| `vy_bien_lai_1.png`, `vy_bien_lai_2.png` | Ảnh biên lai chuyển khoản dựng bằng Pillow (kiểu Techcombank trả Grab, kiểu MB trả CGV), ngày 20/11, KHÁC mọi dòng của sao kê | Persona `vy`, cảnh tải ảnh (nếu kịch bản cần một giao dịch lẻ); tải sau CSV thì độ phủ lên 0,872 (ví persona 0,850) |
 
 Tài khoản demo: từ issue #8, `giamkhao1`–`3` đều là persona `minh` (`accounts.json`), nên tệp của `minh` dùng được trên cả bốn tài khoản. Tệp của `vy` chỉ dùng được trên tài khoản đã nạp persona `vy` (`scripts/seed_persona.py ... --persona vy`, mục dưới); độ phủ của `minh` đã ở 100% nên muốn thấy độ phủ tăng thì dùng `vy`. Trước buổi demo bấm "Đặt lại dữ liệu" để xóa sạch lần nạp trước (đặt lại xóa cả dòng external, job nạp và đồng ý).
 
@@ -115,6 +134,7 @@ Mô tả đầy đủ ở đầu [generator.py](generator.py). Tóm tắt:
 3. **Chi tiêu còn lại** `T = đầu kỳ + lương chia − số dư cần đạt − tổng khoản trả nghĩa vụ` (≥ 0, bội của 1.000). `recent_share` của `T` nằm sau ngày lương gần nhất (chi tiêu dồn về cuối kỳ), phần còn lại chia theo số ngày cho các kỳ trước.
 4. **Nhịp**: trong mỗi khoảng, số khoản chi của từng ngày theo hạn ngạch tỷ lệ với trọng số (`weekend_multiplier` cho thứ bảy và chủ nhật, `early_period_multiplier` cho `early_period_days` ngày đầu kỳ lương; phần lẻ phát theo nhiễu nhỏ của seed), mỗi ngày tối đa `max_per_day` khoản; số tiền theo lognormal (`amount_sigma`), làm tròn 1.000 ₫, khoản lớn nhất nhận phần dư. Hũ Ăn uống của `minh`: 281 khoản trải trên cả 120 ngày (bản 47 ngày cũ: 110 khoản) (tối đa 5 khoản mỗi ngày), chi mỗi ngày cuối tuần cao hơn ngày thường khoảng 1,4 đến 1,6 lần tùy seed; `lan` khoảng 2,2 lần (test khẳng định trên 1,15 cho `minh`).
 5. **Bất biến** (bộ sinh tự kiểm, test kiểm lại): số dư cuối từng hũ bằng đúng `target_vnd`; số dư chạy không bao giờ âm (trừ Chưa phân loại); mỗi nhóm chuyển có tổng 0; tổng gốc Trả sau không vượt hạn mức; cùng (persona, seed, ngày neo) cho cùng kết quả. Khi nạp vào DB, số dư hũ **được dựng lại từ sổ cái** (`UPDATE jars ... sum(amount_vnd)`), nên số dư luôn đúng bất biến "bằng tổng các dòng trả bằng hũ".
+6. **Hũ chỉ ví demo có** (khối `demo_jars`, issue #39): dựng bằng cùng các bước 3 đến 5 nhưng với `random.Random` riêng theo mã hũ, vào `PersonaData.demo_jars`; `apply_demo_layout` thêm dòng chia lương mỗi kỳ, bớt phần đó ở hũ nguồn, cộng tổng phần đã nhường vào số dư đầu kỳ của hũ nguồn, rồi kiểm lại bất biến trên mọi hũ demo.
 
 Số dư cần đạt (`target_vnd`), số khoản chi và mọi tham số nhịp là **đầu vào** (hiệu chỉnh persona để ra đúng tình huống demo là hợp lệ); sổ cái là đầu ra tính toán. **Mức chi trung bình mỗi hũ** = `(đầu kỳ + lương chia − target_vnd − khoản trả nghĩa vụ) / số ngày`: chỉnh bằng `opening_vnd`, `target_vnd`, `recent_share` và `expense_count` của hũ; **nhịp** chỉnh bằng khối `rhythm_defaults` (hoặc `rhythm` của một hũ). Việc hiệu chỉnh để hũ Ăn uống cạn đúng 23/11 mô phỏng đã làm ở phase 2 luồng C với engine thật (mục "Hiệu chỉnh cảnh 1" dưới): chỉ sửa các số trong `specs/minh.json`, không sửa mã. `seed_salary_events` (mặc định `false`) bật việc nạp sự kiện lương `confirmed` của các kỳ trong lịch sử; mặc định tắt để kỳ lương hiện tại ở trạng thái `expected` như bảng số Figma ("còn 14 ngày tới kỳ lương").
 
@@ -128,4 +148,4 @@ Số dư cần đạt (`target_vnd`), số khoản chi và mọi tham số nhị
 
 ## Thêm persona
 
-Thêm `specs/<tên>.json` (theo mẫu `minh.json`), thêm tài khoản vào `accounts.json`, chạy `uv run pytest tests/unit/test_personas.py` (kiểm bất biến), rồi `uv run scripts/seed_demo.py <tài khoản>` (hoặc `scripts/seed_persona.py` khi ledger chưa được deploy lại, mục "Nạp persona mới lên AWS"). Ba persona `minh`, `lan`, `khoa` được khóa bằng băm đầu ra bộ sinh (`tests/unit/persona_digest.py`, mốc trong `tests/unit/test_persona_external.py`): sửa spec của chúng một cách có chủ đích thì chạy `PYTHONPATH="libs/yofina_core/src;data" uv run python tests/unit/persona_digest.py` rồi cập nhật mốc. Đóng gói: `uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas` kèm thư mục này vào Lambda ledger.
+Thêm `specs/<tên>.json` (theo mẫu `minh.json`, kể cả khối `demo_jars` để ví demo của persona có hũ Chi hằng ngày; không khai thì hũ đó 0 ₫, 0%), thêm tài khoản vào `accounts.json`, chạy `uv run pytest tests/unit/test_personas.py` (kiểm bất biến), rồi `uv run scripts/seed_demo.py <tài khoản>` (hoặc `scripts/seed_persona.py` khi ledger chưa được deploy lại, mục "Nạp persona mới lên AWS"). Ba persona `minh`, `lan`, `khoa` được khóa bằng băm đầu ra bộ sinh (`tests/unit/persona_digest.py`, mốc trong `tests/unit/test_persona_external.py`; bản băm là của ví persona, không tính `demo_jars`): sửa spec của chúng một cách có chủ đích thì chạy `PYTHONPATH="libs/yofina_core/src;data" uv run python tests/unit/persona_digest.py` rồi cập nhật mốc. Đóng gói: `uv run scripts/build_lambda.py gateway/tools/ledger --arch arm64 --extra data/personas:personas` kèm thư mục này vào Lambda ledger.

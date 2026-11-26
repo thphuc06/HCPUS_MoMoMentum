@@ -61,6 +61,18 @@
       "expense_count": 0, "recent_share": 0.85, "merchants": []
     }
   ],
+  "demo_jars": [
+    {
+      "code": "chi_hang_ngay", "split_from": {"nghia_vu": 3}, "opening_vnd": 50000, "target_vnd": 160000,
+      "expense_count": 5, "recent_share": 0.85,
+      "rhythm": {"max_per_day": 2},
+      "merchants": [
+        {"name": "Tạp hóa Kim Liên", "tx_type": "qr_other", "weight": 2},
+        {"name": "Pharmacity", "tx_type": "other_expense"},
+        {"name": "Điện máy Xanh - Phụ kiện", "tx_type": "other_expense"}
+      ]
+    }
+  ],
   "payees": [
     {"name": "Đỗ Hoàng Nam", "account_hint": "•••• 9042", "is_favorite": true, "used_days_ago": 4},
     {"name": "Võ Thị Lan", "account_hint": "•••• 3371", "is_favorite": false, "used_days_ago": 12}
