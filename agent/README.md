@@ -20,6 +20,7 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
       balance_lookup      get_jar_balances ──ACTIVITY_SNAPSHOT(jar_summary)──> TOOL_CALL_RESULT(bản gọn) ──> writer.py (1 câu)
       transactions_lookup get_jar_balances (ánh xạ tên hũ) + query_transactions ──> writer.py
       forecast_lookup     get_jar_balances (ánh xạ tên hũ) + forecast___get_forecast ──ACTIVITY_SNAPSHOT(forecast_timeline)──> writer.py (1 đến 2 câu)
+      profile_update     khoản biết trước → ledger___propose_jar_split → thẻ xác nhận save_jars khi có đề xuất → writer giải thích phần chia thay đổi
       move_between_jars   get_jar_balances (ánh xạ tên hũ) + move_between_jars KHÔNG token
                           ──NEEDS_CONFIRMATION──> ACTIVITY_SNAPSHOT(confirm) ──> writer.py (nhắc bấm Xác nhận)
       out_of_scope        khối notice + câu nói rõ giới hạn
