@@ -21,13 +21,15 @@ Bài toán theo tháng (đơn vị nội bộ là `rounding_step_vnd` VND để 
   sàn thiết yếu (`penalty_essential_floor`) > giữ hũ đệm chưa tới đích (`penalty_spending_floor x weight_emergency / weight_goal`) >
   sàn chi (`penalty_spending_floor`) > mức cần của mục tiêu (`penalty_goal_need`, hũ đệm nhân `weight_emergency / weight_goal`) >
   phần còn lại (trọng số cắt `k_j`). Cấu hình phải giữ đúng thứ tự này.
-- **Sàn chi** (`JarSpec.spend_floor_vnd`, người gọi tính: tỷ lệ giữ x mức chi điển hình của hũ, không vượt mức hiện tại): mục tiêu
+- **Sàn chi** (`JarSpec.spend_floor_vnd`, người gọi tính: tỷ lệ giữ x mức nền bền của hũ, không vượt mức hiện tại): mục tiêu
   không lấy được tiền dưới sàn chi (mục tiêu lùi hạn hoặc chưa khả thi), nghĩa vụ và chi thiết yếu thì lấy được. Phần sàn chi chưa đạt
   không làm bài toán vô nghiệm: nó là điều đã nới (`discretionary_reduced`). Sàn chi chỉ nhường để ví ĐỦ sàn: nhường hết mà vẫn thiếu
   sàn cứng (vô nghiệm dù sao) thì giải lại với sàn chi là cận dưới cứng, miễn nghĩa vụ cứng vẫn nhận đủ như khi nhường
   (`_keep_spend_floors`).
 - Hũ đệm (`emergency`) có thể mang mục tiêu (đích số dư của lượt lập lộ trình): phần thiếu của mức cần trên hũ đó phạt nặng hơn mục tiêu
   khác theo tỷ lệ `weight_emergency / weight_goal`, nên khi không đủ cho mọi mục tiêu thì hũ đệm được trước (BR-65).
+- Mục tiêu **chưa có hạn** (`GoalSpec.days_left` None, V2 của báo cáo rà soát #39): không có mức cần cứng hay ưa thích, nên không ép hũ
+  nào; hũ giữ phần chia theo thứ tự cắt (nhận phần còn lại sau các bậc trên), không bao giờ bị coi là trễ hạn hay phải lùi hạn.
 - Hũ đệm **chưa tới đích** (`hold_current`, người gọi quyết từ số dư và đích của hũ) giữ mức hiện tại ở CẢ HAI vòng: cắt xuống dưới mức
   hiện tại chịu mức phạt giữ hũ đệm ở trên, nên mục tiêu khác (kể cả khi vì thế mà chưa khả thi) và sàn chi không lấy được tiền từ hũ
   đệm (BR-65: hũ đệm chưa đủ thì không tăng hũ mục tiêu trước), còn sàn nghĩa vụ và sàn thiết yếu (phạt nặng hơn) vẫn lấy được.
@@ -82,19 +84,31 @@ class AllocationParams:
     #: đích tự tính của hũ đệm khi lượt gọi không nêu đích: từng này tháng chi thiết yếu (BR-64, C-13). Người gọi dùng để quyết
     #: `JarSpec.hold_current`; bộ giải không đọc.
     buffer_target_months: float
-    #: tỷ lệ giữ: sàn chi của hũ chi = tỷ lệ này x mức chi điển hình mỗi tháng của hũ (#39, 26/11). Người gọi tính `JarSpec.spend_floor_vnd`;
+    #: tỷ lệ giữ: sàn chi của hũ chi = tỷ lệ này x mức nền bền mỗi tháng của hũ (#39, 26/11). Người gọi tính `JarSpec.spend_floor_vnd`;
     #: bộ giải không đọc.
     spending_keep_ratio: float
     #: mức phạt mỗi đồng sàn chi chưa đạt: trên mức cần của mục tiêu (kể cả hũ đệm), dưới sàn thiết yếu; giữ hũ đệm nhân thêm
     #: `weight_emergency / weight_goal` (xem docstring module)
     penalty_spending_floor: float
+    #: mức chi gần đây của một hũ chi được coi là cao bất thường khi từ từng này lần mức nền bền trở lên (#39, C5), trừ khi bộ phát hiện
+    #: đổi hành vi PELT đã xác nhận dấu hiệu cho hũ đó (khi ấy dùng chính dấu hiệu đó). Chỉ là dữ kiện người gọi trả cho agent
+    #: (`AllocationSpend.unusually_high`); bộ giải không đọc và không đổi cách tính sàn.
+    spend_spike_ratio: float
+    #: cửa sổ mức nền bền (tuần): sàn thiết yếu, sàn chi và đích tự tính của hũ đệm tính từ trung vị chi theo tuần của từng này tuần gần
+    #: nhất (`yofina_core.spend_baseline`, #39 chốt 26/11). Người gọi tính; bộ giải không đọc.
+    spend_baseline_weeks: int
+    #: số tuần tối thiểu của cửa sổ mức nền; ít hơn (hoặc hũ thưa có trung vị 0) thì người gọi lùi về chi trung bình của cửa sổ gần nhất
+    spend_baseline_min_weeks: int
 
 
 @dataclass(frozen=True)
 class GoalSpec:
+    """Mục tiêu của một hũ. `days_left` None: mục tiêu CHƯA CÓ HẠN (V2 của báo cáo rà soát #39): không có mức cần cứng, hũ chỉ giữ phần
+    chia theo thứ tự cắt và nhận phần còn lại, không bao giờ bị coi là trễ hạn (người gọi báo "chưa có hạn" để agent hỏi lại)."""
+
     jar_code: str
     remaining_vnd: int
-    days_left: int
+    days_left: int | None
     target_vnd: int
     target_date: date | None
     weight: float = 1.0
@@ -164,7 +178,9 @@ class AllocationSolution:
 
 
 def goal_need_vnd(g: GoalSpec, month_days: int, *, extra_months: int = 0) -> int:
-    """Mức cần mỗi tháng để kịp hạn (hạn lùi thêm `extra_months` tháng nếu có)."""
+    """Mức cần mỗi tháng để kịp hạn (hạn lùi thêm `extra_months` tháng nếu có). Mục tiêu chưa có hạn không có mức cần (0)."""
+    if g.days_left is None:
+        return 0
     return monthly_needed_vnd(
         remaining_vnd=g.remaining_vnd,
         days_left=g.days_left + extra_months * month_days,
@@ -387,8 +403,10 @@ def _outcomes(p: AllocationProblem, xs: list[int]) -> tuple[JarOutcome, ...]:
             needed = goal_need_vnd(j.goal, prm.month_days)
             if xs[k] > 0:
                 days = int(np.ceil(j.goal.remaining_vnd * prm.month_days / xs[k]))
-            on_track = xs[k] >= needed
+            # chưa có hạn: không có mức cần nên không bao giờ "trễ hạn"; chỉ có ngày dự kiến theo mức đề xuất
+            on_track = j.goal.days_left is None or xs[k] >= needed
             if not on_track:
+                assert j.goal.days_left is not None
                 shortfall = max(
                     j.goal.remaining_vnd - int(xs[k] * max(j.goal.days_left, 1) / prm.month_days), 0
                 )

@@ -107,11 +107,22 @@ def test_phase4_success(monkeypatch, intent, tool, target, block_fixture, llm_do
             assert compact[key] == data[key]
         assert compact["shortfall_text"] == "8.890.000 ₫"
     else:
+        goals = [
+            {
+                "jar": g["jar"]["name"], "target_text": "6.000.000 ₫", "target_date_text": "31/03/2027", "on_track": g["on_track"],
+                "projected_date_text": "24/03/2027",
+            }
+            for g in data["goals"]
+        ]  # fmt: skip
         assert compact == {
             "version": data["version"],
             "status": data["status"],
             "reason": data["reason"]["text"],
+            # mã lý do (26/11 tối, #39): writer biết bản lập lại vì hũ đổi mức chi
+            "reason_code": data["reason"]["code"],
             "feasibility": data["feasibility"],
+            # mục tiêu có cấu trúc cho writer (V5 của báo cáo rà soát #39)
+            "goals": goals,
             "counts": data["counts"],
             "phase_count": len(data["phases"]),
             "step_titles": [step["title"] for step in data["phases"][0]["steps"]],

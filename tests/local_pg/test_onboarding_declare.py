@@ -210,16 +210,17 @@ def test_rest_route_reads_only_and_validates_known_items(env):
 
 
 def _spend_floor_percent(env, user, code):
-    """Sàn chi của hũ theo đúng số LP phân bổ dùng (chuỗi chi của ngữ cảnh dự báo, `variable_monthly_spend`, tỷ lệ giữ của bộ tối ưu),
-    quy ra điểm lương làm tròn lên."""
+    """Sàn chi của hũ theo đúng số LP phân bổ dùng (chuỗi chi của ngữ cảnh dự báo, mức nền bền `typical_monthly` của
+    `yofina_core.spend_baseline` từ 26/11 tối, tỷ lệ giữ của bộ tối ưu), quy ra điểm lương làm tròn lên."""
+    from yofina_core.spend_baseline import BaselineSettings, typical_monthly
     from yofina_forecast.inputs import Context
     from yofina_forecast.repo import ForecastRepo
-    from yofina_forecast.resilience import variable_monthly_spend
     from yofina_forecast.settings import DEFAULT_ALLOCATION_PARAMS as P
 
     ctx = Context.from_rows(ForecastRepo(env.db).context(user, env.clock(), "Asia/Ho_Chi_Minh", 330))
     spend = next(j["spend"] for j in ctx.jars if j["code"] == code)
-    typical = variable_monthly_spend(spend, 30, P.month_days)
+    base = BaselineSettings(P.spend_baseline_weeks, P.spend_baseline_min_weeks, P.month_days, 30)
+    typical = typical_monthly(spend, base).monthly_vnd
     return typical, math.ceil(Fraction(round(P.spending_keep_ratio * typical) * 100, SALARY))
 
 

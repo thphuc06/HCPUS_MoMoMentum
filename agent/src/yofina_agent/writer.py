@@ -57,8 +57,9 @@ TASKS: dict[str, str] = {
         "người dùng bấm Xác nhận trên thẻ; câu trả lời phải nói rõ điều này."
     ),
     "obligations": (
-        "Các khoản sắp đến hạn (không có thẻ riêng). total_due_text là tổng phải trả; mỗi khoản có hạn (due_date_text) và số tiền. "
-        "Danh sách rỗng nghĩa là chưa có khoản nào sắp đến hạn."
+        "Các khoản sắp đến hạn (không có thẻ riêng). total_due_text là tổng phải trả của mọi khoản; mỗi khoản có hạn (due_date_text) "
+        "và số tiền. has_more true nghĩa là danh sách chỉ có một phần, còn hidden_count khoản nữa không hiện (tổng vẫn gồm cả "
+        "chúng). Danh sách rỗng nghĩa là chưa có khoản nào sắp đến hạn."
     ),
     "affordability": (
         "Thẻ kiểm tra trước khi chi đã hiện kết quả từng hũ. verdict và headline là kết luận của hệ thống; jar_checks là trạng thái "
@@ -77,10 +78,16 @@ TASKS: dict[str, str] = {
         "runway_days_emergency là số ngày riêng hũ Dự phòng trụ được, null thì không nhắc; shortfall_text là khoản thiếu."
     ),
     "roadmap": (
-        "Thẻ lộ trình đã hiện các giai đoạn và bước. version là phiên bản, reason là lý do có phiên bản này, feasibility là khả năng "
-        "kịp mục tiêu (on_track kịp, relaxed kịp sau khi nới hạn hoặc mức, infeasible chưa khả thi). status proposed là bản đề xuất "
-        "chưa thay lộ trình đang dùng (người dùng so và chọn ở trang Lộ trình); active là lộ trình đang dùng. Không tự tính tổng "
-        "và không đề xuất bước mới."
+        "Thẻ lộ trình đã hiện các giai đoạn và bước. version là phiên bản, reason là lý do có phiên bản này. goals là các mục tiêu "
+        "của bản này (đích, hạn, kịp hay không); goals rỗng nghĩa là bản không có mục tiêu nào, nên không nói về kịp hạn. Mục tiêu có "
+        "no_deadline là chưa có hạn: nói rõ chưa có hạn, không nói kịp hay trễ, có thể hỏi người dùng hạn. feasibility on_track là "
+        "phương án không phải nới gì; relaxed là phương án đã phải nới một lần: mục tiêu nào có on_track false phải lùi hạn, còn khi "
+        "mọi mục tiêu on_track thì chỉ phải giảm chi ở hũ không thiết yếu và mục tiêu vẫn đúng hạn; infeasible là có mục tiêu chưa "
+        "khả thi trong hạn. status proposed là bản đề xuất chưa thay lộ trình đang dùng (người dùng so và chọn ở trang Lộ trình); "
+        "active là lộ trình đang dùng. reason_code behavior_changed là bản lập lại vì hệ thống đã xác nhận một hũ đổi mức chi (reason "
+        "nêu mức mỗi tuần trước và sau). Phần chia của lộ trình tính từ mức chi nền của chính người dùng trong mấy tháng gần đây, không "
+        "dồn theo riêng đợt chi mới: khi đó là chi tăng thì nói thật hũ đó đang chi cao hơn mức thường, và có thể hỏi người dùng đây "
+        "là đợt tạm hay nhịp chi mới. Không tự tính tổng và không đề xuất bước mới."
     ),
     "roadmap_step_edit": (
         "Người dùng muốn sửa một bước của lộ trình đang dùng; thẻ lộ trình đó đã hiện. Chat chưa sửa được bước nên chưa có gì "

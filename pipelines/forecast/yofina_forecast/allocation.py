@@ -10,39 +10,53 @@ Dựng bài toán (mọi số lấy từ dữ liệu người dùng hoặc cấu
   nghĩa vụ loại bị tăng giá tăng theo, khoản chi một lần trừ vào thu nhập: dựng lộ trình thích ứng sau `stress_test`.
 - **Mức hiện tại** của hũ = thu nhập x tỷ lệ chia đã khai.
 - **Sàn cứng** = nghĩa vụ cứng phải trả bằng hũ đó (nghĩa vụ thiết yếu và nợ Trả sau, vay; quy về tháng) cộng, với hũ chi tiêu thiết
-  yếu, `essential_floor_percent` của mức chi trung bình hằng tháng. Chi hằng ngày và hũ obligation chỉ tính phần chi có LOẠI giao dịch
+  yếu, `essential_floor_percent` của mức nền bền hằng tháng (xem "Mức nền bền"). Chi hằng ngày và hũ obligation chỉ tính phần chi có LOẠI giao dịch
   thiết yếu không gắn nghĩa vụ (`essential_spend`; hũ obligation: hóa đơn trả lẻ như nạp điện thoại). Nghĩa vụ ưu tiên hơn chi tiêu
   thiết yếu (mức phạt elastic khác nhau). Sàn của MỌI hũ (không theo mã) không dưới tổng mọi nghĩa vụ đang hoạt động trả từ hũ đó, kể cả
   khoản không thiết yếu (Netflix trả từ Giải trí giữ Giải trí không dưới mức Netflix); hũ chỉ có khoản không thiết yếu vẫn là hũ không
   thiết yếu, sàn bậc thiết yếu.
-- **Mục tiêu** = hũ có `goal_vnd`; mức cần mỗi tháng = phần còn thiếu x ngày của tháng / số ngày còn lại tới hạn (không có hạn thì hết
-  `horizon_months`). `goals` của tham số ghi đè trọng số, số tiền hoặc hạn của từng hũ (hũ không phải hũ tiết kiệm thì từ chối).
+- **Mục tiêu** = hũ có `goal_vnd`; mức cần mỗi tháng = phần còn thiếu x ngày của tháng / số ngày còn lại tới hạn. Không có hạn thì KHÔNG
+  gán hạn ngầm (trước đây coi như hết `horizon_months`, V2 của báo cáo rà soát #39): không có mức cần cứng, hũ nhận phần còn lại theo
+  thứ tự ưu tiên, kết quả không có `target_date` và tiêu đề nói "chưa có hạn" để agent hỏi lại. `goals` của tham số ghi đè trọng số, số
+  tiền hoặc hạn của từng hũ (hũ không phải hũ tiết kiệm thì từ chối).
   Hũ Dự phòng (`purpose` `buffer`, BR-64) nhận một mục `goals` làm đích số dư của lượt này (bắt buộc `target_vnd`, hạn tùy chọn;
   không đọc, không ghi `goal_vnd` của hũ), giữ vai đệm và được chiếu ra `goals` của kết quả như hũ mục tiêu; mức cần của nó xếp trước
   mục tiêu khác (BR-65). Hũ tiết kiệm cũ `purpose` NULL nhận mục tiêu như trước (vai mục tiêu).
 - **Hũ đệm chưa tới đích giữ phần chia hiện tại ở vòng chặt** (BR-65, #39 26/11 trưa): hũ đệm đầu tiên theo thứ tự (`emergency_jar`:
   `purpose` buffer, hoặc hũ tiết kiệm cũ không mục tiêu theo quy tắc tương thích), khi đang giữ vai đệm. Đích = đích lượt này nêu trong
-  `goals`; không nêu thì `buffer_target_months` tháng chi thiết yếu (BR-64; nghĩa vụ cứng quy về tháng cộng mức chi thiết yếu hằng tháng,
+  `goals`; không nêu thì `buffer_target_months` tháng chi thiết yếu (BR-64; nghĩa vụ cứng quy về tháng cộng mức nền bền chi thiết yếu,
   cùng các số dựng sàn, chưa nhân `essential_floor_percent`). Số dư dưới đích thì `JarSpec.hold_current`: mục tiêu khác và sàn chi không
   lấy tiền từ hũ đệm (ở cả hai vòng), sàn nghĩa vụ và thiết yếu vẫn lấy được (`yofina_ml.allocation`). Số dư đã tới đích thì cắt được như cũ.
 - Hũ chi tiêu thiết yếu theo cấu hình (`essential_jar_codes`), hũ tiết kiệm không mục tiêu là hũ Dự phòng (giữ mức hiện tại, cắt thì
   phạt nặng nhất), còn lại không thiết yếu.
-- **Sàn chi theo mức chi thật gần đây** (#39, chủ dự án chốt 26/11): mọi hũ `spending` (không theo mã, không theo persona) có sàn chi =
-  `spending_keep_ratio` (tỷ lệ giữ, `ForecastSettings.allocation`, mặc định 0,5) x mức chi điển hình mỗi tháng của CẢ hũ, đúng số LP
-  đã dùng (`variable_monthly_spend` của chuỗi `spend`: chi trung bình `resilience_window_days` ngày gần nhất quy về tháng, không gồm
-  khoản gắn nghĩa vụ), không vượt mức hiện tại (giữ không cắt, không nâng). Cổng dữ liệu: tài khoản có từ `cold_start_min_days` ngày
+- **Sàn chi theo mức chi thật** (#39, chủ dự án chốt 26/11): mọi hũ `spending` (không theo mã, không theo persona) có sàn chi =
+  `spending_keep_ratio` (tỷ lệ giữ, `ForecastSettings.allocation`, mặc định 0,5) x mức nền bền mỗi tháng của CẢ hũ (xem dưới), không
+  vượt mức hiện tại (giữ không cắt, không nâng). Cổng dữ liệu: tài khoản có từ `cold_start_min_days` ngày
   lịch sử (cổng "ước lượng ban đầu" của dự báo); chưa đủ thì không áp. Hũ chi thiết yếu đã có sàn thiết yếu cao hơn nên không đổi; Chi
   hằng ngày của ví ba hũ có cả sàn thiết yếu (phần loại thiết yếu) lẫn sàn chi (cả hũ), sàn là số lớn hơn. Thứ tự ưu tiên ở
-  `yofina_ml.allocation`: mục tiêu không lấy tiền dưới sàn chi, nghĩa vụ và chi thiết yếu thì lấy được. `floor_vnd` của dòng phân bổ là
-  số lớn hơn của sàn cứng và sàn chi (sàn chi đã nhường thì bằng mức đề xuất), nên kiểm bước lộ trình (`amount_below_floor`) dùng cùng
-  sàn mà không thêm trường.
+  `yofina_ml.allocation`: mục tiêu không lấy tiền dưới sàn chi, nghĩa vụ và chi thiết yếu thì lấy được. Sàn chi là sàn MỀM với người lập
+  lộ trình (C3 của báo cáo rà soát, 26/11 tối): `floor_vnd` của dòng phân bổ chỉ là sàn cứng (nghĩa vụ, thiết yếu), còn mức chi thật gần
+  đây và sàn chi gợi ý đi riêng ở `recent_spend` (`AllocationSpend`) làm dữ kiện; kiểm bước lộ trình (`amount_below_floor`) chỉ chặn
+  theo sàn cứng.
+- **Mức nền bền** (C5 của báo cáo rà soát, chủ dự án chốt 26/11 tối): sàn thiết yếu (`essential_floor_percent`), sàn chi
+  (`spending_keep_ratio`) và đích tự tính của hũ Dự phòng (`buffer_target_months`) tính từ mức nền của CHÍNH người dùng, không từ chi
+  trung bình 30 ngày gần nhất: trung vị chi theo tuần của `spend_baseline_weeks` tuần gần nhất quy về tháng (`yofina_core.spend_baseline`,
+  cùng hàm với đề xuất tỷ lệ của ledger), trên chính chuỗi `spend`/`essential_spend` của ngữ cảnh dự báo (cửa sổ `history_window_days`,
+  không thêm truy vấn). Dưới `spend_baseline_min_weeks` tuần (hoặc hũ thưa có trung vị 0) thì lùi về chi trung bình
+  `resilience_window_days` ngày như trước. Các hệ số giữ nguyên, chỉ đổi mức gốc. Dự báo (ngày cạn, dải, xác suất hụt) không đổi.
+- **Đợt chi tăng là dữ kiện** (`recent_spend`): `recent_monthly_vnd` là chi 30 ngày gần nhất, `baseline_monthly_vnd` là mức nền bền (vắng
+  khi lùi về cách cũ). `unusually_high` khi bộ phát hiện đổi hành vi PELT đã xác nhận mức chi TĂNG của hũ (`behavior_flags` `confirmed` hay
+  `applied`, dấu hiệu mới nhất của hũ, điểm gãy không cũ hơn `max_weeks_since_break` của chính bộ phát hiện): dùng chính dấu hiệu đó,
+  `high_since` là điểm gãy, `change_confirmed`; không có dấu hiệu đó thì theo ngưỡng `spend_spike_ratio` (mức gần đây so với mức nền),
+  `high_since` là đầu tuần sớm nhất của cửa sổ gần đây có chi tuần vượt ngưỡng. `runout_date` là ngày cạn của dự báo hiện có (tóm tắt
+  dự báo đã đọc cho `basis`). Không đổi sàn hay nghiệm LP; agent nói ra, đề xuất hoặc hỏi lại.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -61,6 +75,15 @@ from yofina_core.roadmap import (
     AllocationPlanData,
     AllocationRelaxation,
     AllocationSolver,
+    AllocationSpend,
+)
+from yofina_core.spend_baseline import (
+    WEEK_DAYS,
+    BaselineSettings,
+    SpendLevel,
+    typical_monthly,
+    week_start,
+    weekly_totals,
 )
 from yofina_core.wallet import (
     DEFAULT_SPENDING_JAR,
@@ -69,6 +92,7 @@ from yofina_core.wallet import (
     pay_jar_or_default,
     resolve_obligation_pay_jar,
 )
+from yofina_forecast import change
 from yofina_forecast.common import clip, int_of, to_date
 from yofina_forecast.resilience import (
     Gathered,
@@ -79,6 +103,7 @@ from yofina_forecast.resilience import (
 )
 from yofina_forecast.runner import Pipeline
 from yofina_forecast.stress import find_shock
+from yofina_ml import change as ml_change
 from yofina_ml.allocation import (
     AllocationProblem,
     AllocationSolution,
@@ -126,12 +151,97 @@ class Built:
     split_percent: dict[str, float]
     #: đích của hũ đệm dùng để quyết giữ phần chia (đích lượt này nêu, hoặc số tháng chi thiết yếu); None nếu không có hũ giữ vai đệm
     buffer_target_vnd: int | None = None
+    #: mức chi thật gần đây của từng hũ chi (dữ kiện cho agent, `AllocationLine.recent_spend`); chỉ hũ chi của tài khoản đủ lịch sử
+    recent_spend: Mapping[str, AllocationSpend] = field(default_factory=dict)
+
+
+def _recent_spend(
+    series: Sequence[Any],
+    *,
+    recent: int,
+    keep_floor: int,
+    level: SpendLevel,
+    window_days: int,
+    month_days: int,
+    spike_ratio: float,
+    last_day: date,
+    confirmed_since: date | None = None,
+    runout: date | None = None,
+) -> AllocationSpend:
+    """Dữ kiện mức chi của một hũ chi (`AllocationLine.recent_spend`): mức gần đây (`recent`, chi `window_days` ngày gần nhất), sàn chi gợi
+    ý, mức nền bền (`level`, chỉ khi tính được: không lùi về cách cũ) và đợt chi tăng (C5 của báo cáo rà soát #39, chốt 26/11 tối).
+
+    Đợt tăng: bộ phát hiện đổi hành vi đã xác nhận mức chi tăng của hũ (`confirmed_since` là điểm gãy) thì dùng chính dấu hiệu đó; không
+    thì mức gần đây từ `spike_ratio` lần mức nền trở lên, ngày bắt đầu là đầu tuần sớm nhất trong các tuần đủ 7 ngày của cửa sổ gần đây
+    có chi tuần từ `spike_ratio` lần mức nền tuần (tuần cắt lùi từ `last_day`). `runout` là ngày cạn của dự báo hiện có, chỉ kèm đợt tăng."""
+    baseline = level.monthly_vnd if level.robust else None
+    since: date | None = confirmed_since
+    high = confirmed_since is not None
+    if not high and baseline is not None and baseline > 0 and recent >= spike_ratio * baseline:
+        high = True
+        cut = spike_ratio * baseline * WEEK_DAYS / month_days
+        weeks = weekly_totals(series, window_days // WEEK_DAYS, skip_leading_zero=False)
+        first = next((k for k, total in enumerate(weeks) if total >= cut), None)
+        since = week_start(last_day, len(weeks), first) if first is not None else None
+    return AllocationSpend(
+        recent_monthly_vnd=recent,
+        keep_floor_vnd=keep_floor,
+        baseline_monthly_vnd=baseline,
+        unusually_high=high,
+        high_since=since.isoformat() if high and since is not None else None,
+        change_confirmed=confirmed_since is not None,
+        runout_date=runout.isoformat() if high and runout is not None else None,
+    )
+
+
+#: dấu hiệu đổi hành vi đã được bộ phát hiện PELT xác nhận (đã dùng để sinh lại lộ trình thì là `applied`, vẫn là đã xác nhận)
+CONFIRMED_FLAG_STATUSES = ("confirmed", "applied")
+
+
+def confirmed_rises(
+    flags: Sequence[Mapping[str, Any]], today: date, max_age_days: int
+) -> dict[str, date]:
+    """Hũ -> điểm gãy, cho hũ mà dấu hiệu đã xác nhận MỚI NHẤT (theo điểm gãy) là chi TĂNG và điểm gãy không cũ hơn `max_age_days` ngày
+    (`max_weeks_since_break` của chính bộ phát hiện: điểm gãy cũ hơn là tin cũ). Tăng rồi đã xác nhận giảm lại thì không còn đợt tăng."""
+    latest: dict[str, tuple[date, Mapping[str, Any]]] = {}
+    for f in flags:
+        cp = to_date(f.get("change_point_date"))
+        if f.get("status") not in CONFIRMED_FLAG_STATUSES or cp is None:
+            continue
+        code = str(f["jar_code"])
+        if code not in latest or cp > latest[code][0]:
+            latest[code] = (cp, f)
+    return {
+        code: cp
+        for code, (cp, f) in latest.items()
+        if f.get("direction") == "up" and 0 <= (today - cp).days <= max_age_days
+    }
 
 
 class AllocationEngine:
-    def __init__(self, pipeline: Pipeline, resilience: ResilienceEngine | None = None) -> None:
+    def __init__(
+        self,
+        pipeline: Pipeline,
+        resilience: ResilienceEngine | None = None,
+        *,
+        flags: change.FlagStore | None = None,
+    ) -> None:
+        """`flags`: kho `behavior_flags` (đọc dấu hiệu đổi hành vi đã xác nhận); vắng thì kho Aurora của `pipeline.repo` nếu có."""
         self.pipeline = pipeline
         self.resilience = resilience or ResilienceEngine(pipeline)
+        self.flags = flags
+
+    def _behavior_flags(self, user_id: str) -> list[Mapping[str, Any]]:
+        """Dấu hiệu đổi hành vi của người dùng (hàm DB sẵn có `app_list_behavior_flags`, cùng kho của bộ phát hiện). Không có kho hoặc đọc
+        hỏng thì rỗng: dữ kiện đợt tăng lùi về ngưỡng `spend_spike_ratio`, phương án vẫn tính (sàn không phụ thuộc dấu hiệu)."""
+        store = self.flags if self.flags is not None else change.store_for(self.pipeline)
+        if store is None:
+            return []
+        try:
+            return list(store.list(user_id))
+        except Exception as exc:  # dữ kiện phụ: không làm hỏng phương án
+            log.warning("behavior_flags_unavailable error=%s", type(exc).__name__)
+            return []
 
     # --- tham số ----------------------------------------------------------------------------------
     def _args(self, args: Mapping[str, Any]) -> tuple[int, list[dict[str, Any]], str | None, bool]:
@@ -200,11 +310,28 @@ class AllocationEngine:
         goal_args: Sequence[Mapping[str, Any]],
         shock_id: str | None,
         allow_relaxation: bool,
+        behavior_flags: Sequence[Mapping[str, Any]] = (),
     ) -> Built:
+        """`behavior_flags`: dấu hiệu đổi hành vi của người dùng (`_behavior_flags`), chỉ dùng cho dữ kiện đợt chi tăng."""
         s = self.pipeline.settings
         prm = s.allocation
         month_days = prm.month_days
         today = g.app_date
+        # mức nền bền (#39, chốt 26/11 tối): cùng hàm, cùng tham số với đề xuất tỷ lệ của ledger; lùi về chi trung bình 30 ngày như trước
+        baseline = BaselineSettings(
+            weeks=prm.spend_baseline_weeks,
+            min_weeks=prm.spend_baseline_min_weeks,
+            month_days=month_days,
+            fallback_days=s.resilience_window_days,
+        )
+        rises = confirmed_rises(
+            behavior_flags, today, ml_change.load_params().max_weeks_since_break * WEEK_DAYS
+        ) if behavior_flags else {}
+        runouts = {
+            str(r["jar_code"]): d
+            for r in g.summaries
+            if (d := to_date(r.get("runout_date"))) is not None and r.get("runout_date_shown", True)
+        }
         salary = int_of((g.ctx.meta.get("profile") or {})["monthly_salary_vnd"])
         shock = find_shock(shock_id) if shock_id else None
         jars = {j["code"]: j for j in g.jar_rows}
@@ -302,6 +429,7 @@ class AllocationEngine:
 
         specs: list[JarSpec] = []
         split: dict[str, float] = {}
+        recent: dict[str, AllocationSpend] = {}
         essential_monthly = 0
         for code in codes:
             j = jars[code]
@@ -315,9 +443,8 @@ class AllocationEngine:
                 essential_spend = essential_of.get(code, [])
             else:
                 essential_spend = spend.get(code, [])
-            monthly_spend = variable_monthly_spend(
-                essential_spend, s.resilience_window_days, month_days
-            )
+            # mức chi thiết yếu hằng tháng cho sàn thiết yếu và đích tự tính của hũ đệm: mức nền bền, không chi 30 ngày gần nhất
+            monthly_spend = typical_monthly(essential_spend, baseline).monthly_vnd
             if kind == "obligation":
                 role = "obligation"
             elif kind == "saving" and j.get("purpose") == "buffer":
@@ -343,19 +470,32 @@ class AllocationEngine:
             # không dưới tổng nghĩa vụ trả từ hũ (gồm khoản không thiết yếu); hũ không có khoản nào giữ sàn như trước
             floor = max(floor, owed[code])
             current = round(salary * pct / 100.0)
-            # sàn chi của MỌI hũ chi (không theo mã, không theo vai): tỷ lệ giữ x mức chi điển hình mỗi tháng của cả hũ, cùng số LP dùng ở
-            # trên (chi trung bình `resilience_window_days` ngày gần nhất, không gồm khoản đã gắn nghĩa vụ), không vượt mức hiện tại (giữ
-            # không cắt, không nâng). Hũ chi thiết yếu đã có sàn thiết yếu cao hơn; Chi hằng ngày của ví ba hũ có cả hai (lấy số lớn hơn)
+            # sàn chi của MỌI hũ chi (không theo mã, không theo vai): tỷ lệ giữ x mức nền bền mỗi tháng của cả hũ (chuỗi `spend`, không gồm
+            # khoản đã gắn nghĩa vụ; chưa đủ tuần thì chi trung bình `resilience_window_days` ngày như trước), không vượt mức hiện tại (giữ
+            # không cắt, không nâng). Hũ chi thiết yếu đã có sàn thiết yếu cao hơn; Chi hằng ngày của ví ba hũ có cả hai (lấy số lớn hơn).
+            # Mức chi 30 ngày gần nhất và đợt chi tăng là dữ kiện cho agent (`recent_spend`), không vào sàn
             spend_floor = 0
             if kind == "spending" and typical_known:
-                typical = variable_monthly_spend(
-                    spend.get(code, []), s.resilience_window_days, month_days
+                series = spend.get(code, [])
+                level = typical_monthly(series, baseline)
+                spend_floor = min(round(prm.spending_keep_ratio * level.monthly_vnd), current)
+                recent[code] = _recent_spend(
+                    series,
+                    recent=variable_monthly_spend(series, s.resilience_window_days, month_days),
+                    keep_floor=spend_floor,
+                    level=level,
+                    window_days=s.resilience_window_days,
+                    month_days=month_days,
+                    spike_ratio=prm.spend_spike_ratio,
+                    last_day=today - timedelta(days=1),
+                    confirmed_since=rises.get(code),
+                    runout=runouts.get(code),
                 )
-                spend_floor = min(round(prm.spending_keep_ratio * typical), current)
             goal_spec = None
             if goal is not None:
                 when = goal.target_date
-                days_left = (when - today).days if when else horizon_months * month_days
+                # chưa có hạn: không gán hạn ngầm (trước đây coi như hết `horizon_months`), không có mức cần cứng (V2, #39)
+                days_left = (when - today).days if when else None
                 goal_spec = GoalSpec(
                     jar_code=code,
                     remaining_vnd=max(goal.target_vnd - goal.balance_vnd, 0),
@@ -380,7 +520,7 @@ class AllocationEngine:
                 essential_monthly += monthly_spend
         # hũ đệm chưa tới đích giữ phần chia hiện tại ở vòng chặt (BR-65): hũ đệm đầu tiên theo thứ tự (`purpose` buffer, hoặc hũ tiết kiệm
         # cũ không mục tiêu theo quy tắc tương thích), khi đang giữ vai đệm. Đích là đích lượt này nêu, không có thì `buffer_target_months`
-        # tháng chi thiết yếu (BR-64): nghĩa vụ cứng quy về tháng cộng mức chi thiết yếu hằng tháng, cùng số LP dùng cho sàn.
+        # tháng chi thiết yếu (BR-64): nghĩa vụ cứng quy về tháng cộng mức nền bền chi thiết yếu hằng tháng, cùng số LP dùng cho sàn.
         essential_monthly += sum(oblig_floor.values())
         buffer_target: int | None = None
         buffer_row = emergency_jar(g.jar_rows)
@@ -407,6 +547,7 @@ class AllocationEngine:
             jars=jars,
             split_percent=split,
             buffer_target_vnd=buffer_target,
+            recent_spend=recent,
         )
 
     # --- kết quả ----------------------------------------------------------------------------------
@@ -436,9 +577,9 @@ class AllocationEngine:
                     # hũ thành thiết yếu với model (bước giảm chi vẫn chọn được, tới sàn)
                     is_essential=sp.role in ("obligation", "essential", "emergency")
                     or (sp.floor_vnd > 0 and sp.floor_tier == "obligation"),
-                    # sàn của hũ: sàn cứng hoặc sàn chi (số lớn hơn). Sàn chi đã nhường cho nghĩa vụ, thiết yếu thì sàn là mức đề xuất: bước
-                    # lộ trình làm đúng phương án không bị kiểm sàn chặn, bước cắt sâu hơn thì bị (`amount_below_floor`)
-                    floor_vnd=max(sp.floor_vnd, min(sp.spend_floor_vnd, out.proposed_vnd)),
+                    # sàn CỨNG của hũ (nghĩa vụ trả từ hũ, chi thiết yếu). Sàn chi theo mức chi thật gần đây là sàn mềm với người lập lộ
+                    # trình (C3 của báo cáo rà soát #39): đi riêng ở `recent_spend` làm dữ kiện, kiểm bước không chặn theo nó
+                    floor_vnd=sp.floor_vnd,
                     current_monthly_vnd=sp.current_vnd,
                     proposed_monthly_vnd=out.proposed_vnd,
                     split_percent_current=round(min(b.split_percent[out.code], 100.0), 2),
@@ -446,6 +587,7 @@ class AllocationEngine:
                     if income
                     else 0.0,
                     floor_gap_vnd=out.floor_gap_vnd,
+                    recent_spend=b.recent_spend.get(out.code),
                 ).model_dump()
             )
         goals: list[dict[str, Any]] = []
@@ -526,10 +668,13 @@ class AllocationEngine:
     @staticmethod
     def _headline(b: Built, sol: AllocationSolution) -> str:
         names = {c: j["name"] for c, j in b.jars.items()}
-        goal_names = ", ".join(names[c] for c in b.goals)
+        dated = ", ".join(names[c] for c, g in b.goals.items() if g.target_date is not None)
+        undated = ", ".join(names[c] for c, g in b.goals.items() if g.target_date is None)
+        # mục tiêu chưa có hạn không "kịp hạn" hay "trễ hạn": nói rõ chưa có hạn (V2, #39)
+        no_deadline = f" Mục tiêu {undated} chưa có hạn." if undated else ""
         if sol.status == "optimal":
-            tail = f", mục tiêu {goal_names} kịp hạn." if b.goals else "."
-            return clip(f"Phân bổ khả thi: đủ sàn mọi hũ{tail}", 160)
+            tail = f", mục tiêu {dated} kịp hạn." if dated else "."
+            return clip(f"Phân bổ khả thi: đủ sàn mọi hũ{tail}{no_deadline}", 160)
         if sol.status == "relaxed":
             parts = []
             for r in sol.relaxations:
@@ -538,7 +683,7 @@ class AllocationEngine:
                     if r.kind == "discretionary_reduced"
                     else f"lùi hạn mục tiêu {names[r.jar_code]}"
                 )
-            return clip("Phân bổ khả thi sau khi nới một lần: " + ", ".join(parts) + ".", 160)
+            return clip("Phân bổ khả thi sau khi nới một lần: " + ", ".join(parts) + "." + no_deadline, 160)
         reasons = []
         if sol.floor_gap_total_vnd > 0:
             reasons.append(
@@ -668,6 +813,7 @@ class AllocationEngine:
             goal_args=goal_args,
             shock_id=shock_id,
             allow_relaxation=allow,
+            behavior_flags=self._behavior_flags(user_id),
         )
         solution = optimize(built.problem)
         data = self._data(g, built, solution)

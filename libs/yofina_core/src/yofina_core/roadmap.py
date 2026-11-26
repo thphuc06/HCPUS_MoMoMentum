@@ -64,9 +64,30 @@ class _Model(BaseModel):
 
 
 # --- optimize_allocation -----------------------------------------------------------------------
+class AllocationSpend(_Model):
+    """Mức chi của một hũ chi (#39, 26/11): DỮ KIỆN cho người lập lộ trình, không phải ràng buộc cứng. `recent_monthly_vnd` là chi trung
+    bình của cửa sổ gần nhất (`resilience_window_days` ngày) quy về tháng, không gồm khoản gắn nghĩa vụ; `baseline_monthly_vnd` là mức nền
+    bền của chính người dùng (trung vị chi theo tuần trên cửa sổ dài, `yofina_core.spend_baseline`), vắng khi chưa đủ tuần; `keep_floor_vnd`
+    là sàn chi gợi ý (tỷ lệ giữ x mức nền bền, hoặc x mức gần đây khi chưa có mức nền; không vượt phần chia hiện tại; bộ tối ưu dùng nó
+    làm ràng buộc mềm); `unusually_high` là đợt chi tăng: mức gần đây cao bất thường so với mức nền, hoặc bộ phát hiện đổi hành vi đã xác
+    nhận mức chi tăng của hũ. Khi có đợt tăng: `high_since` là ngày bắt đầu (điểm gãy đã xác nhận, hoặc đầu tuần sớm nhất của cửa sổ gần
+    đây có chi tuần vượt ngưỡng), `change_confirmed` là bộ phát hiện đổi hành vi đã xác nhận, `runout_date` là ngày dự báo hiện có thấy hũ
+    cạn nếu giữ nhịp chi (vắng khi dự báo không thấy hũ cạn hoặc không hiện ngày cạn). Ba trường này tùy chọn (Lambda forecast từ 26/11
+    tối)."""
+
+    recent_monthly_vnd: Vnd
+    keep_floor_vnd: Vnd
+    baseline_monthly_vnd: Vnd | None = None
+    unusually_high: bool = False
+    high_since: IsoDate | None = None
+    change_confirmed: bool = False
+    runout_date: IsoDate | None = None
+
+
 class AllocationLine(_Model):
     """Phân bổ hằng tháng cho một hũ: sàn cứng, mức hiện tại theo tỷ lệ chia, mức đề xuất. `floor_gap_vnd` là phần sàn chưa đạt
-    (biến elastic dương của LP); 0 nghĩa là sàn được giữ đủ."""
+    (biến elastic dương của LP); 0 nghĩa là sàn được giữ đủ. `floor_vnd` là sàn CỨNG (nghĩa vụ trả từ hũ, chi thiết yếu); sàn chi theo mức
+    chi thật gần đây là sàn mềm, nằm ở `recent_spend` (tùy chọn: chỉ hũ chi của tài khoản đã đủ lịch sử)."""
 
     jar: ForecastJar
     kind: AllocationJarKind
@@ -77,6 +98,7 @@ class AllocationLine(_Model):
     split_percent_current: Annotated[float, Field(ge=0, le=100)]
     split_percent_proposed: Annotated[float, Field(ge=0, le=100)]
     floor_gap_vnd: Vnd
+    recent_spend: AllocationSpend | None = None
 
 
 class AllocationRelaxation(_Model):
@@ -276,6 +298,7 @@ __all__ = [
     "AllocationPlanData",
     "AllocationRelaxation",
     "AllocationSolver",
+    "AllocationSpend",
     "AlternativeKind",
     "Roadmap",
     "RoadmapDraft",

@@ -1038,8 +1038,10 @@ def test_future_step_over_current_balance_but_within_monthly_income_passes_like_
 
 
 def test_step_starting_now_over_current_balance_is_still_blocked(caplog):
-    # Cùng bước đó ở giai đoạn đầu (bắt đầu hôm nay, trước kỳ lương kế): tiền lấy từ số dư hiện có nên vẫn bị chặn và sửa.
+    # Cùng bước đó ở giai đoạn đầu (bắt đầu hôm nay, trước kỳ lương kế): tiền lấy một lần từ số dư hiện có nên vẫn bị chặn và sửa.
     # Từ #19 kỳ lộ trình bắt đầu ngày lương kế tiếp; kỳ chỉ còn bắt đầu hôm nay khi hồ sơ chưa có ngày lương (allocation giữ hôm nay).
+    # Từ C3 (#39) mã chặn bước ngay khi dựng (trần chuyển ngay: số dư trừ khoản hũ nguồn phải trả trước kỳ lương), trước lượt
+    # check_suitability; luật source_jar_covers vẫn chặn cùng bước đó lúc lưu.
     caplog.set_level("WARNING", logger="yofina.agent.roadmap")
     balances, facts = low_entertainment_balances(200_000)
     ok = fixture("optimize_allocation.ok.json")
@@ -1051,10 +1053,10 @@ def test_step_starting_now_over_current_balance_is_still_blocked(caplog):
     result, client, scope = build(tools, outline(step()), fixed)
     assert result.outcome.ok and scope.calls == 2
 
-    move = args_for(tools, "check_suitability")[0]["proposal"]
-    assert move["kind"] == "roadmap_set_aside" and move["start_date"] < facts.next_payday.isoformat()
+    assert all(a["proposal"]["kind"] != "roadmap_set_aside" for a in args_for(tools, "check_suitability"))
     (feedback,) = prompt(client, 1)["feedback"]
-    assert feedback["step_id"] == "bu_du_phong" and feedback["rule_id"] == "source_jar_covers"
+    assert feedback["step_id"] == "bu_du_phong" and feedback["rule_id"] == "step_invalid"
+    assert "200.000 ₫" in feedback["message"]
     # không tham chiếu nào của hai hũ vừa số dư 200.000 ₫ của hũ nguồn: phản hồi nói cách sửa khác
     assert "Không có tham chiếu nào" in feedback["message"]
     assert "dời bước sang giai đoạn sau kỳ lương" in feedback["message"]
@@ -1068,8 +1070,7 @@ def test_step_starting_now_over_current_balance_is_still_blocked(caplog):
     violations, _ = check_steps([phase], facts, cached_rules())
     assert [rule for _, rule, _ in violations] == ["source_jar_covers"]
     (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
-    assert rejected["phase_id"] == "on_dinh" and rejected["rule_id"] == "source_jar_covers"
-    assert rejected["funding_source"] == "jar"
+    assert rejected["phase_id"] == "on_dinh" and rejected["detail"] == "amount_over_available"
 
 
 def test_future_step_over_monthly_income_is_still_blocked():
@@ -1334,6 +1335,57 @@ def test_metric_chuyen_ngay_la_so_du_hai_hu_khop_so_tien_buoc():
     ]
 
 
+# --- bước chuyển làm ngay từ số dư (C3 của báo cáo rà soát #39): trần là số dư trừ khoản hũ nguồn phải trả trước kỳ lương, và phần hũ
+# nhận còn thiếu tới đích; không so với phần tăng MỖI THÁNG của phương án tối ưu (luật đó chỉ cho bước theo kỳ lương) ---------------
+def test_buoc_chuyen_ngay_lon_hon_phan_tang_moi_thang_ma_vua_so_du_kha_dung_thi_dat():
+    # Du lịch chỉ cần thêm 120.000 ₫ mỗi tháng theo phương án, nhưng chuyển ngay 600.000 ₫ từ Giải trí (760.000 ₫, không có khoản phải
+    # trả trước kỳ lương) vẫn nằm trong số dư và dưới phần Du lịch còn thiếu tới đích (6.000.000 - 1.800.000 ₫)
+    tools = scripted_tools()
+    move = step(to_jar_code="du_lich", amount_ref={"jar_code": "giai_tri", "field": "proposed_decrease"})
+    result, _, scope = build(tools, outline(move))
+    assert result.outcome.ok and scope.calls == 1
+    (saved,) = args_for(tools, "save_roadmap")[0]["phases"][0]["steps"]
+    assert (saved["to_jar_code"], saved["amount_vnd"]) == ("du_lich", 600_000)
+    # cùng bước đó sau kỳ lương là khoản hằng tháng: vẫn so với phần Du lịch cần thêm mỗi tháng
+    tools = scripted_tools(checks=("ok", "ok"))
+    result, client, _ = build(tools, later_phase(move), later_phase(review()))
+    assert result.outcome.ok and "cần thêm" in prompt(client, 1)["feedback"][0]["message"]
+
+
+def test_buoc_chuyen_ngay_tru_khoan_hu_nguon_phai_tra_truoc_ky_luong(caplog):
+    # Hóa đơn có 450.000 ₫ nhưng Tiền điện 375.000 ₫ trả từ hũ này đến hạn 26/11, trước kỳ lương 05/12: chuyển ngay tối đa 75.000 ₫
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    tools = scripted_tools()
+    move = step(jar_code="hoa_don", to_jar_code="du_lich", amount_ref={"jar_code": "du_lich", "field": "proposed_increase"})
+    result, client, scope = build(tools, outline(move, review()), outline(review()))
+    assert result.outcome.ok and scope.calls == 2
+    source = prompt(client)["context"]["first_phase_sources"]["hoa_don"]
+    assert (source["max_text"], source["due_before_payday_text"]) == ("75.000 ₫", "375.000 ₫")
+    assert source["refs"] == []  # không tham chiếu nào vừa 75.000 ₫
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert feedback["rule_id"] == "step_invalid"
+    assert all(text in feedback["message"] for text in ("450.000 ₫", "375.000 ₫", "75.000 ₫"))
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected["detail"] == "amount_over_available"
+
+
+def test_buoc_chuyen_ngay_khong_vuot_phan_hu_nhan_con_thieu_toi_dich(caplog):
+    # mục tiêu Du lịch 2.000.000 ₫, hũ đang có 1.800.000 ₫: chuyển ngay 600.000 ₫ vượt đích; 120.000 ₫ thì vừa
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    allocation = fixture("optimize_allocation.ok.json")
+    allocation["data"]["goals"][0]["target_vnd"] = 2_000_000
+    tools = scripted_tools(allocation=allocation, checks=("ok", "ok"))
+    over = step(to_jar_code="du_lich", amount_ref={"jar_code": "giai_tri", "field": "proposed_decrease"})
+    fits = step(to_jar_code="du_lich", amount_ref={"jar_code": "du_lich", "field": "proposed_increase"})
+    result, client, _ = build(tools, outline(over), outline(fits))
+    assert result.outcome.ok
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert "200.000 ₫" in feedback["message"] and "2.000.000 ₫" in feedback["message"]
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected["detail"] == "amount_over_goal_gap"
+    assert args_for(tools, "save_roadmap")[0]["phases"][0]["steps"][0]["amount_vnd"] == 120_000
+
+
 @pytest.mark.parametrize(
     ("ref", "expected"),
     [
@@ -1479,7 +1531,9 @@ def test_buoc_dua_phan_chia_cua_hu_xuong_duoi_san_vao_vong_sua(lines, bad, fixed
     assert result.outcome.ok and scope.calls == 2
     (feedback,) = prompt(client, 1)["feedback"]
     assert feedback["rule_id"] == "step_invalid" and "dưới sàn" in feedback["message"]
-    assert "Giải trí" in feedback["message"] and "mức chi thật gần đây" in feedback["message"]  # sàn chi (#39, 26/11 chiều)
+    # sàn của dòng là sàn CỨNG (khoản định kỳ trả từ hũ, chi thiết yếu); sàn chi theo mức chi thật gần đây không còn chặn bước (C3, #39)
+    assert "Giải trí" in feedback["message"] and "chi thiết yếu" in feedback["message"]
+    assert "mức chi thật gần đây" not in feedback["message"]
     (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
     assert rejected["detail"] == "amount_below_floor"
     later = args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]
@@ -1492,6 +1546,36 @@ def test_buoc_giam_toi_dung_san_van_dat():
     result, _, scope = build(tools, later_phase(cut("proposed_decrease")))
     assert result.outcome.ok and scope.calls == 1
     assert args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]["amount_vnd"] == 600_000
+
+
+#: mức chi thật gần đây của hũ Giải trí trong phương án (dữ kiện `recent_spend` của dòng phân bổ, #39)
+RECENT_GIAI_TRI = {
+    "giai_tri": {
+        "floor_vnd": 180_000,
+        "recent_spend": {
+            "recent_monthly_vnd": 1_400_000, "keep_floor_vnd": 700_000, "baseline_monthly_vnd": 600_000, "unusually_high": True,
+        },
+    }
+}  # fmt: skip
+
+
+def test_san_chi_goi_y_la_du_kien_trong_ngu_canh_khong_chan_buoc():
+    """Sàn chi theo mức chi thật gần đây là sàn MỀM (C3 của báo cáo rà soát #39): bước giảm chi đưa Giải trí còn 600.000 ₫ mỗi tháng, dưới
+    mức nên giữ 700.000 ₫ nhưng trên sàn cứng (Netflix 180.000 ₫), vẫn được lưu mà không vào vòng sửa. Model thấy mức chi thật, mức nên
+    giữ, mức nền dài hơn và cờ chi gần đây cao bất thường (C5) để nói trong lý do hoặc hỏi lại; các số đó dùng được trong lý do."""
+    tools = scripted_tools(allocation=allocation_with(RECENT_GIAI_TRI), checks=("ok", "ok"))
+    result, client, scope = build(tools, later_phase(cut("proposed_decrease")))
+    assert result.outcome.ok and scope.calls == 1
+    assert args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]["amount_vnd"] == 600_000
+    line = prompt(client)["context"]["allocation"]["lines"]["giai_tri"]
+    assert line["floor_vnd"] == "180.000 ₫"
+    assert (line["recent_spend_text"], line["keep_floor_text"], line["baseline_spend_text"]) == (
+        "1.400.000 ₫", "700.000 ₫", "600.000 ₫",
+    )  # fmt: skip
+    assert line["recent_spend_unusually_high"] is True
+    assert {"1.400.000 ₫", "700.000 ₫"} <= set(prompt(client)["reason_numbers"])
+    # hũ không có dữ kiện chi gần đây (hũ để dành) không có các khóa đó
+    assert "recent_spend_text" not in prompt(client)["context"]["allocation"]["lines"]["du_phong"]
 
 
 def test_save_jars_dua_hu_xuong_duoi_san_vao_vong_sua():
@@ -1654,6 +1738,31 @@ def test_nguon_giai_doan_dau_va_han_muc_tieu_dang_nguoi_doc():
     assert "31/03/2027" in prompt(client)["reason_numbers"]
 
 
+def test_muc_tieu_trong_phuong_an_va_co_chua_co_han_trong_ngu_canh():
+    """Mục tiêu của phương án vào ngữ cảnh lập lộ trình: đích, hạn, kịp hay không, mức cần mỗi tháng (V2 của báo cáo rà soát #39). Mục tiêu
+    không có hạn mang cờ có cấu trúc `no_deadline` (bộ tối ưu không đặt mức cần) để model không nói kịp hay trễ hạn và có thể nhắc
+    người dùng chọn hạn."""
+    tools = scripted_tools()
+    result, client, _ = build(tools, outline(review()))
+    assert result.outcome.ok
+    assert prompt(client)["context"]["allocation"]["goals"] == [
+        {
+            "jar_code": "du_lich", "target_text": "6.000.000 ₫", "target_date_text": "31/03/2027", "on_track": True,
+            "monthly_needed_text": "1.150.000 ₫", "projected_date_text": "24/03/2027",
+        }
+    ]  # fmt: skip
+    allocation = fixture("optimize_allocation.ok.json")
+    goal = allocation["data"]["goals"][0]
+    del goal["target_date"]
+    goal["monthly_needed_vnd"] = 0
+    tools = scripted_tools(allocation=allocation)
+    result, client, _ = build(tools, outline(review()))
+    assert result.outcome.ok
+    assert prompt(client)["context"]["allocation"]["goals"] == [
+        {"jar_code": "du_lich", "target_text": "6.000.000 ₫", "no_deadline": True, "on_track": True, "projected_date_text": "24/03/2027"}
+    ]
+
+
 def test_metric_buoc_chuyen_sau_ky_luong_theo_phan_tang_cua_hu_nhan():
     tools = scripted_tools(checks=("ok", "ok"))
     result, _, _ = build(tools, later_phase(step()))
@@ -1670,14 +1779,15 @@ def test_metric_buoc_chuyen_sau_ky_luong_theo_phan_tang_cua_hu_nhan():
     [
         (
             "active", "relaxed", None,
-            "Đây là lộ trình bạn đang dùng, phiên bản 3 (1 giai đoạn, 1 bước). Mục tiêu chỉ kịp sau khi nới hạn hoặc mức,"
-            " chi tiết ở thẻ. Bước tiếp theo: mở trang Lộ trình để chấp nhận, sửa hoặc từ chối từng bước.",
+            "Đây là lộ trình bạn đang dùng, phiên bản 3 (1 giai đoạn, 1 bước). Phương án phân bổ đề xuất đã phải giảm chi ở hũ"
+            " không thiết yếu hoặc lùi hạn mục tiêu, chi tiết ở thẻ. Bước tiếp theo: mở trang Lộ trình để chấp nhận, sửa hoặc"
+            " từ chối từng bước.",
         ),
         (
             "proposed", "on_track", 2,
             "Đây là bản đề xuất phiên bản 3 (1 giai đoạn, 1 bước), chưa thay lộ trình bạn đang dùng. Bản đang dùng vẫn là"
-            " phiên bản 2. Theo phương án phân bổ đề xuất, mục tiêu kịp hạn. Bước tiếp theo: bấm So với bản đang dùng trên"
-            " thẻ, rồi chọn Dùng bản mới hoặc Giữ bản cũ.",
+            " phiên bản 2. Theo phương án phân bổ đề xuất, các khoản cần lo đều đủ mà không phải lùi hạn hay giảm sâu hũ nào."
+            " Bước tiếp theo: bấm So với bản đang dùng trên thẻ, rồi chọn Dùng bản mới hoặc Giữ bản cũ.",
         ),
     ],
 )  # fmt: skip

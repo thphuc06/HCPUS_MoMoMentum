@@ -10,8 +10,8 @@ dạng:
   Fixture số dư hũ viết trước phase 4 nên thêm một biến thể có cột `jars` mà Ledger `ed95134` đã phát (`kind`, `goal_vnd`,
   `goal_date`); fixture dự báo là hũ Ăn uống nên thêm một biến thể của hũ Nghĩa vụ (hũ duy nhất Lambda mới phát khung khoản đến hạn);
 - dạng mới: cùng các payload đó, thêm trường mới đúng chỗ và đúng luật Lambda mới phát (`purpose` chỉ ở hũ để dành, khung khoản đến
-  hạn dựng bằng chính `obligation_window` cho hũ Nghĩa vụ), và phải hợp lệ với schema kết quả HIỆN TẠI của
-  `contracts/tools/*.results.schema.json` (nên không dựng tay một dạng Lambda không phát được).
+  hạn dựng bằng chính `obligation_window` cho hũ Nghĩa vụ, `recent_spend` chỉ ở dòng phân bổ của hũ chi: GG, #39), và phải hợp lệ với
+  schema kết quả HIỆN TẠI của `contracts/tools/*.results.schema.json` (nên không dựng tay một dạng Lambda không phát được).
 """
 
 from __future__ import annotations
@@ -40,7 +40,9 @@ REPO = Path(__file__).resolve().parents[3]
 FIXTURES = REPO / "contracts" / "fixtures" / "tools"
 #: ví persona mà fixture số dư hũ chép (cùng mã, tên, màu, số dư): nguồn của cột `jars` Ledger phát
 PERSONA_SPEC = REPO / "data" / "personas" / "specs" / "minh.json"
-NEW_FIELDS = ("purpose", "sinking_items", "obligations_before_payday", "field")
+NEW_FIELDS = (
+    "purpose", "sinking_items", "obligations_before_payday", "field", "recent_spend", "high_since", "change_confirmed",
+)  # fmt: skip
 TRACE = "8f3a21c94b7e4d0aa1c25e6f7b8c9d01"
 #: mục đích của hũ để dành trong fixture, như sau 0057 (ví demo, tài khoản mới)
 PURPOSES = {"du_phong": "buffer", "du_lich": "goal", "muc_tieu": "goal", "dau_tu": "long_term"}
@@ -211,7 +213,21 @@ def new_lambda_payload(tool: str, payload: dict[str, Any]) -> dict[str, Any]:
     if tool == "run_scenario":
         for t in data.get("timelines", []):
             _with_window(t)
+    if tool == "optimize_allocation":
+        _with_recent_spend(data)
     return out
+
+
+def _with_recent_spend(plan: dict[str, Any]) -> None:
+    """`recent_spend` của Lambda forecast mới (#39, GG): chỉ ở dòng hũ chi; mức nền và cờ chi cao bất thường tùy chọn như Lambda phát. Từ
+    26/11 tối (II) dòng có đợt chi tăng còn có ngày bắt đầu, cờ đã xác nhận đổi hành vi và ngày dự báo hũ cạn (đều tùy chọn)."""
+    for k, line in enumerate(x for x in plan["lines"] if x["kind"] == "spending"):
+        recent = {"recent_monthly_vnd": line["current_monthly_vnd"], "keep_floor_vnd": line["current_monthly_vnd"] // 2}
+        recent["unusually_high"] = k == 0
+        if k == 0:
+            recent["baseline_monthly_vnd"] = line["current_monthly_vnd"] // 3
+            recent.update(high_since="2026-11-07", change_confirmed=True, runout_date="2026-11-23")
+        line["recent_spend"] = recent
 
 
 @pytest.fixture(scope="module")
@@ -264,8 +280,11 @@ def test_dang_moi_that_su_co_truong_moi():
         seen |= {f for f in NEW_FIELDS if f'"{f}"' in text}
         if tool == "get_forecast" and "obligations_before_payday" in new["data"]:
             windows.append(new["data"]["obligations_before_payday"])
-    assert {"purpose", "sinking_items", "obligations_before_payday"} <= seen
+    assert {"purpose", "sinking_items", "obligations_before_payday", "recent_spend", "high_since", "change_confirmed"} <= seen
     assert any(w["items"] for w in windows)
+    # `runout_date` của dữ kiện đợt chi tăng (tên trùng trường sẵn có của dự báo nên kiểm riêng trong `recent_spend`)
+    plan = new_lambda_payload("optimize_allocation", _load("optimize_allocation.ok.json"))
+    assert any("runout_date" in (x.get("recent_spend") or {}) for x in plan["data"]["lines"])
 
 
 def test_purpose_chi_o_hu_de_danh():

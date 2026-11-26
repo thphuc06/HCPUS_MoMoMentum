@@ -39,6 +39,7 @@ from yofina_core.clock import app_today
 from yofina_core.errors import ErrorCode, ToolStatus, YofinaError
 from yofina_core.resilience import ResilienceConfig, band_for_score, load_resilience_config
 from yofina_core.schedule import expand_due_dates
+from yofina_core.spend_baseline import recent_monthly
 from yofina_core.wallet import is_buffer_jar, is_goal_jar
 from yofina_forecast.common import int_of, min_band, to_date
 from yofina_forecast.inputs import Context
@@ -70,6 +71,8 @@ class Gathered:
     basis: ForecastBasis
     #: tổng số dư và mã hũ Dự phòng (hũ tiết kiệm không có mục tiêu đầu tiên); None nếu không có
     emergency_jar_code: str | None
+    #: tóm tắt dự báo mới nhất của từng hũ (đã đọc cho `basis`; LP lấy ngày cạn của hũ đang chi tăng làm dữ kiện, không tính lại dự báo)
+    summaries: tuple[Mapping[str, Any], ...] = ()
 
 
 def emergency_jar(jar_rows: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
@@ -132,11 +135,8 @@ def window_obligations(
 
 def variable_monthly_spend(spend: Sequence[Any], window_days: int, month_days: int) -> int:
     """Chi thay đổi của một hũ quy về một tháng: trung bình `window_days` ngày lịch sử gần nhất x `month_days`. Chưa có ngày lịch sử
-    nào thì 0."""
-    tail = [max(int_of(v), 0) for v in spend][-window_days:]
-    if not tail:
-        return 0
-    return round(sum(tail) / len(tail) * month_days)
+    nào thì 0. Cùng công thức `yofina_core.spend_baseline.recent_monthly` (mức chi gần đây; cách lùi của mức nền bền)."""
+    return recent_monthly(spend, window_days, month_days)
 
 
 def forecast_basis(
@@ -216,6 +216,7 @@ class ResilienceEngine:
             inputs=inputs,
             basis=forecast_basis(summaries, now, s.freshness_seconds),
             emergency_jar_code=em["code"] if em else None,
+            summaries=tuple(summaries),
         )
 
     def build_inputs(

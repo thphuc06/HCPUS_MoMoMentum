@@ -127,6 +127,8 @@ def compact_confirm(data: Mapping[str, Any]) -> dict[str, Any]:
 _STATUS_VI = {"ok": "đủ", "tight": "sát", "short": "hụt"}
 _BAND_VI = {"high": "Cao", "medium": "Vừa", "low": "Thấp"}
 FORECAST_EVENTS_SHOWN = 3
+#: số khoản nghĩa vụ tối đa trong bản gọn (giữ ngữ cảnh gọn); cắt bớt thì bản gọn có `has_more` và `hidden_count`
+OBLIGATIONS_SHOWN = 8
 
 
 def _dm(value: str) -> str:
@@ -433,14 +435,18 @@ def compact_obligations(
             "due_date_text": _dm(o["due_date"]),
             **pay_jar(o),
         }
-        for o in d["obligations"][:8]
+        for o in d["obligations"][:OBLIGATIONS_SHOWN]
     ]
     out: dict[str, Any] = {
         "app_date": payload["app_date"],
         "obligations": rows,
         "total_due_vnd": to_vnd(d["total_due_vnd"]),
         "total_due_text": format_vnd(d["total_due_vnd"]),
+        # danh sách bị cắt thì model biết còn khoản chưa hiện (tổng vẫn tính đủ mọi khoản), không coi danh sách là đủ (#39, T2)
+        "has_more": len(d["obligations"]) > len(rows),
     }
+    if out["has_more"]:
+        out["hidden_count"] = len(d["obligations"]) - len(rows)
     return out
 
 
@@ -484,16 +490,40 @@ def compact_stress(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def compact_roadmap(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Lộ trình cho writer (lượt xem): phiên bản, lý do (chữ và mã lý do), khả năng kịp mục tiêu, và các mục tiêu có cấu trúc (V5 của báo cáo
+    rà soát #39): đích, hạn (hoặc `no_deadline` khi chưa có hạn), kịp hay không, phần thiếu, ngày dự kiến; `goals` rỗng là bản không có
+    mục tiêu. `reason_code` (#39, 26/11 tối) cho writer biết bản lập lại vì hệ thống xác nhận một hũ đổi mức chi (`behavior_changed`)."""
     data = payload["data"]
     return {
         "version": data["version"],
         "status": data["status"],
         "reason": data["reason"]["text"],
+        "reason_code": data["reason"]["code"],
         "feasibility": data["feasibility"],
+        "goals": [_roadmap_goal(g) for g in data.get("goals") or []],
         "counts": data["counts"],
         "phase_count": len(data["phases"]),
         "step_titles": [step["title"] for phase in data["phases"] for step in phase["steps"]][:3],
     }
+
+
+def _dmy(value: str) -> str:
+    d = date.fromisoformat(value)
+    return f"{d.day:02d}/{d.month:02d}/{d.year}"
+
+
+def _roadmap_goal(g: Mapping[str, Any]) -> dict[str, Any]:
+    row: dict[str, Any] = {"jar": g["jar"]["name"], "target_text": format_vnd(g["target_vnd"])}
+    if g.get("target_date"):
+        row["target_date_text"] = _dmy(g["target_date"])
+    else:
+        row["no_deadline"] = True
+    row["on_track"] = bool(g["on_track"])
+    if g.get("shortfall_vnd"):
+        row["shortfall_text"] = format_vnd(g["shortfall_vnd"])
+    if g.get("projected_date"):
+        row["projected_date_text"] = _dmy(g["projected_date"])
+    return row
 
 
 def compact_roadmap_steps(payload: Mapping[str, Any], jar_names: Mapping[str, str]) -> dict[str, Any]:

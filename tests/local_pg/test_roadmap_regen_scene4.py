@@ -9,8 +9,8 @@ sửa nó làm theo phản hồi của chương trình.
 Khẳng định trên CẤU TRÚC bản lộ trình đã lưu:
 - nghĩa vụ model thấy mang nhãn tiếng Việt của bảng chung, không mang mã loại; chữ do mã dựng không có mã loại thô;
 - giai đoạn đầu là từ hôm nay tới ngày lương kế (khoản đến hạn 23/11 nằm trong đó); mọi bước có hạn nằm trong khoảng ngày của giai đoạn;
-- số tiền mỗi bước không vượt tiền có thể chuyển (số dư hũ nguồn với bước làm ngay, khoản hũ nguồn nhận mỗi tháng với bước sau kỳ lương)
-  và không vượt phần hũ nhận cần thêm trong kỳ theo phương án tối ưu.
+- số tiền mỗi bước không vượt tiền có thể chuyển (bước làm ngay: số dư hũ nguồn trừ khoản hũ đó phải trả trước kỳ lương, và phần hũ nhận
+  còn thiếu tới đích; bước sau kỳ lương: khoản hũ nguồn nhận mỗi tháng và phần hũ nhận cần thêm trong kỳ theo phương án tối ưu).
 
 Chạy riêng (in bản lộ trình với `-s`):
 
@@ -47,12 +47,13 @@ from yofina_roadmap.settings import STAGES, RoadmapSettings  # noqa: E402
 from yofina_core.clock import next_payday  # noqa: E402
 from yofina_core.config import Config  # noqa: E402
 from yofina_core.llm import LlmGateway, LlmSettings, ModelSpec  # noqa: E402
+from yofina_core.spend_baseline import baseline_monthly  # noqa: E402
 from yofina_core.wallet import OBLIGATION_KIND_LABELS, OBLIGATION_KINDS  # noqa: E402
 from yofina_forecast import change  # noqa: E402
 from yofina_forecast.allocation import AllocationEngine  # noqa: E402
 from yofina_forecast.events import ForecastEventPublisher  # noqa: E402
 from yofina_forecast.repo import ForecastRepo  # noqa: E402
-from yofina_forecast.resilience import ResilienceEngine  # noqa: E402
+from yofina_forecast.resilience import ResilienceEngine, variable_monthly_spend  # noqa: E402
 from yofina_forecast.runner import Pipeline  # noqa: E402
 from yofina_forecast.tool import ForecastReader, ReadSettings  # noqa: E402
 from yofina_forecast.tool import handle_gateway as forecast_gateway  # noqa: E402
@@ -233,8 +234,10 @@ def _run_scene4(env) -> dict[str, Any]:
     return {
         "roadmap": roadmap,
         "planner": planner,
+        "pipeline": pipeline,
         "balances": {j["code"]: j for j in balances},
         "obligations": obligations,
+        "plan": allocation.last["data"],
         "lines": {line["jar"]["code"]: line for line in allocation.last["data"]["lines"]},
     }
 
@@ -252,10 +255,23 @@ def _code_built_texts(rm: dict[str, Any]) -> list[str]:
     return [t for t in texts if isinstance(t, str)]
 
 
-def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env):
+def rejected_steps(caplog) -> list[dict[str, Any]]:
+    """Sự kiện `roadmap_step_rejected` của Roadmap agent (mã luật, vòng, bước; không chữ, không tiền) để đo số bước bị từ chối."""
+    out = []
+    for record in caplog.records:
+        if record.name == "yofina.agent.roadmap" and '"roadmap_step_rejected"' in record.getMessage():
+            out.append(json.loads(record.getMessage()))
+    return out
+
+
+def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env, caplog):
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
     got = _run_scene4(env)
     rm, lines, balances = got["roadmap"], got["lines"], got["balances"]
     print("\n[cảnh 4] bản sinh lại:", json.dumps(rm["phases"], ensure_ascii=False, indent=1))
+    rejected = rejected_steps(caplog)
+    print("[cảnh 4] bước bị từ chối:", len(rejected), [(r["round"], r["step_id"], r.get("detail") or r["rule_id"]) for r in rejected])
+    print(f"[cảnh 4] LP {got['plan']['status']} | {got['plan']['headline']} | bản lưu {rm['feasibility']} | {rm['headline']}")
     assert (rm["version"], rm["status"], rm["reason"]["code"]) == (3, "proposed", "behavior_changed")
     today = date.fromisoformat(rm["app_date"])
     assert today == ANCHOR
@@ -285,21 +301,30 @@ def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env):
                 assert phase["start_date"] <= step["due_date"] <= phase["end_date"], step
     assert rm["horizon"]["start_date"] == today.isoformat()
 
-    # (c) số tiền: không vượt tiền có thể chuyển, không vượt phần hũ nhận cần thêm trong kỳ (theo LP đã chạy)
+    # (c) số tiền: bước làm ngay không vượt phần hũ nguồn chuyển ngay được (số dư trừ khoản nghĩa vụ hũ đó phải trả trước kỳ lương) và
+    # phần hũ nhận còn thiếu tới đích (C3, #39); bước sau kỳ lương không vượt khoản hũ nguồn nhận mỗi tháng và phần hũ nhận cần thêm trong
+    # kỳ theo LP đã chạy
     def need(code: str) -> int:
         line = lines[code]
         return max(line["proposed_monthly_vnd"] - line["current_monthly_vnd"], line["floor_gap_vnd"], 0)
 
+    due: dict[str, int] = {}
+    for o in got["obligations"]:
+        if o.get("pay_jar") and today.isoformat() <= o["due_date"] < payday.isoformat():
+            due[o["pay_jar"]] = due.get(o["pay_jar"], 0) + o["amount_vnd"]
+    goal_gap = {g["jar"]["code"]: g["target_vnd"] - balances[g["jar"]["code"]]["balance_vnd"] for g in rm["goals"]}
     for phase in rm["phases"]:
         now = phase["start_date"] <= today.isoformat()
         for step in phase["steps"]:
             amount = step.get("amount_vnd")
             if amount is None:
                 continue
-            if step["kind"] in ("set_aside", "pay_obligation"):
+            if step["kind"] in ("set_aside", "pay_obligation") and now:
+                assert amount <= balances[step["jar_code"]]["balance_vnd"] - due.get(step["jar_code"], 0), step
+                assert amount <= goal_gap.get(step["to_jar_code"], amount), step
+            elif step["kind"] in ("set_aside", "pay_obligation"):
                 assert amount <= need(step["to_jar_code"]), step
-                cap = balances[step["jar_code"]]["balance_vnd"] if now else lines[step["jar_code"]]["current_monthly_vnd"]
-                assert amount <= cap, step
+                assert amount <= lines[step["jar_code"]]["current_monthly_vnd"], step
             elif step["kind"] == "adjust_split":
                 assert amount <= need(step["jar_code"]), step
             elif step["kind"] == "cut_spending":
@@ -325,9 +350,43 @@ def test_canh_4_lo_trinh_sinh_lai_dung_nhan_ngay_va_so_tien(env):
                 jar = lines[step["jar_code"]]
                 assert jar["current_monthly_vnd"] - step["amount_vnd"] >= jar["floor_vnd"], step
     # (e) sàn chi theo mức chi thật gần đây (#39, 26/11 chiều): Chi hằng ngày và Giải trí giữ ít nhất tỷ lệ giữ x mức chi điển hình kể cả
-    # khi sàn thiết yếu của Ăn uống vượt chỗ (nhường cũng không đủ); không còn bước "Giảm Chi hằng ngày 270.000 → 0 ₫"
+    # khi sàn thiết yếu của Ăn uống vượt chỗ (nhường cũng không đủ); không còn bước "Giảm Chi hằng ngày 270.000 → 0 ₫". Từ C3 (26/11 tối)
+    # sàn chi là sàn mềm: dòng phân bổ báo nó ở `recent_spend` (cùng mức chi thật gần đây và cờ chi cao bất thường), `floor_vnd` là sàn cứng
     for code in ("chi_hang_ngay", "giai_tri"):
-        assert 0 < lines[code]["floor_vnd"] <= lines[code]["proposed_monthly_vnd"], code
+        recent = lines[code]["recent_spend"]
+        assert 0 < recent["keep_floor_vnd"] <= lines[code]["proposed_monthly_vnd"], code
+    print("[cảnh 4] mức chi gần đây:", {c: x["recent_spend"] for c, x in lines.items() if "recent_spend" in x})
+    seen = got["planner"].contexts[0]["context"]["allocation"]["lines"]
+    assert seen["an_uong"]["recent_spend_text"] and seen["giai_tri"]["keep_floor_text"]
     to_zero = [s for phase in rm["phases"] for s in phase["steps"]
                if s["kind"] == "cut_spending" and any(m.get("after") == "0 ₫" for m in s.get("metrics", []))]  # fmt: skip
     assert to_zero == []
+
+    # (f) mức nền bền (#39, chủ dự án chốt 26/11): sàn Ăn uống = 80% mức nền của chính Minh (trung vị chi theo tuần trên 12 tuần), không
+    # 80% chi 30 ngày vừa tăng vọt; tệp sao kê giữ hệ số 3,5. Dự phòng chưa tới đích giữ phần chia, không về 0 như trước (EE: 0 ₫)
+    pipeline = got["pipeline"]
+    prm = pipeline.settings.allocation
+    gathered = ResilienceEngine(pipeline).gather(USER, pipeline.now())
+    series = next(j["spend"] for j in gathered.ctx.jars if j["code"] == "an_uong")
+    base = baseline_monthly(series, weeks=prm.spend_baseline_weeks, min_weeks=prm.spend_baseline_min_weeks, month_days=prm.month_days)
+    recent = variable_monthly_spend(series, pipeline.settings.resilience_window_days, prm.month_days)
+    print(f"[cảnh 4] Ăn uống: mức nền {base}, chi 30 ngày {recent}, sàn {lines['an_uong']['floor_vnd']}")
+    assert base is not None and recent >= prm.spend_spike_ratio * base
+    assert lines["an_uong"]["floor_vnd"] == max(round(base * prm.essential_floor_percent / 100), owed["an_uong"])
+    assert lines["an_uong"]["floor_vnd"] < round(recent * prm.essential_floor_percent / 100)
+    assert lines["du_phong"]["proposed_monthly_vnd"] >= lines["du_phong"]["current_monthly_vnd"] > 0
+    # (g) đợt tăng là DỮ KIỆN cho model: hũ, mức nền, mức gần đây, từ ngày nào (điểm gãy PELT đã xác nhận), đã xác nhận đổi hành vi,
+    # ngày dự báo hũ cạn nếu giữ nhịp (dự báo hiện có, không đổi)
+    flags = [f for f in change.store_for(pipeline).list(USER) if f["jar_code"] == "an_uong" and f["status"] in ("confirmed", "applied")]
+    (pelt,) = flags
+    fact = lines["an_uong"]["recent_spend"]
+    assert (fact["recent_monthly_vnd"], fact["baseline_monthly_vnd"]) == (recent, base)
+    assert fact["unusually_high"] and fact["change_confirmed"]
+    assert fact["high_since"] == pelt["change_point_date"].isoformat()
+    summary = {r["jar_code"]: r for r in env.repo.forecast_summaries(USER)}["an_uong"]
+    assert summary["runout_date"] is not None and fact["runout_date"] == summary["runout_date"].isoformat()
+    for code in ("chi_hang_ngay", "di_lai", "giai_tri"):
+        assert not lines[code]["recent_spend"]["unusually_high"], code
+    seen_an = seen["an_uong"]
+    assert seen_an["recent_spend_unusually_high"] and seen_an["behavior_change_confirmed"]
+    assert {"baseline_spend_text", "recent_spend_text", "high_since_text", "runout_date_text"} <= set(seen_an)

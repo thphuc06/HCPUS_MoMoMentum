@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, fields
 from zoneinfo import ZoneInfo
 
 from yofina_core.config import Config
+from yofina_core.spend_baseline import DEFAULT_BASELINE_MIN_WEEKS, DEFAULT_BASELINE_WEEKS
 from yofina_core.wallet import DEFAULT_ESSENTIAL_CATEGORIES
 from yofina_ml.allocation import AllocationParams
 
@@ -22,7 +23,9 @@ DEFAULT_ALLOCATION_PARAMS = AllocationParams(
     rounding_step_vnd=1000,  # làm tròn số tiền đề xuất tới nghìn đồng
     relax_delay_months=6,  # vòng nới lùi hạn mục tiêu thêm từng này tháng
     discretionary_max_cut_percent=50.0,  # vòng chặt: hũ không thiết yếu chỉ bị cắt tối đa từng này % mức hiện tại
-    essential_floor_percent=80.0,  # sàn của hũ chi tiêu thiết yếu: từng này % mức chi trung bình hằng tháng
+    # sàn của hũ chi tiêu thiết yếu: từng này % mức nền bền hằng tháng của hũ (`spend_baseline_weeks`; trước 26/11 tối là % chi trung
+    # bình 30 ngày gần nhất)
+    essential_floor_percent=80.0,
     weight_discretionary=1.0,
     weight_goal=2.0,
     weight_essential=2.5,
@@ -35,14 +38,23 @@ DEFAULT_ALLOCATION_PARAMS = AllocationParams(
     # chia hiện tại của nó để dồn cho mục tiêu khác (BR-65). 3 tháng theo C-13 (docs/ba/02, mốc thấp của khoảng 3–6 tháng của CFPB),
     # cùng mức `min_emergency_months` của luật suitability `emergency_before_investing`
     buffer_target_months=3.0,
-    # tỷ lệ giữ (#39, chủ dự án chốt 26/11): lộ trình và đề xuất không cắt một hũ chi dưới từng này phần mức chi điển hình mỗi tháng của
-    # chính hũ đó (chi trung bình `resilience_window_days` ngày gần nhất, quy về tháng). Cùng khóa cấu hình với đề xuất tỷ lệ của ledger
-    # (`yofina_ledger.split_proposal`, test đối chiếu mặc định)
+    # tỷ lệ giữ (#39, chủ dự án chốt 26/11): lộ trình và đề xuất không cắt một hũ chi dưới từng này phần mức nền bền mỗi tháng của chính
+    # hũ đó (`spend_baseline_weeks`). Cùng khóa cấu hình với đề xuất tỷ lệ của ledger (`yofina_ledger.split_proposal`, test đối chiếu
+    # mặc định)
     spending_keep_ratio=0.5,
     # mức phạt sàn chi: phải nằm giữa mức cần của mục tiêu (penalty_goal_need x weight_emergency / weight_goal = 1,5e3) và sàn thiết yếu
     # (1e5); giữ hũ đệm chưa tới đích phạt mức này x weight_emergency / weight_goal (1,5e4), nên thứ tự là nghĩa vụ > thiết yếu > giữ hũ
     # đệm > sàn chi > mức cần của mục tiêu
     penalty_spending_floor=1e4,
+    # dữ kiện "đợt chi tăng" (#39, C5): mức chi 30 ngày gần nhất (`resilience_window_days`) từ từng này lần mức nền bền trở lên. Hũ đã có
+    # dấu hiệu đổi hành vi PELT xác nhận thì dùng chính dấu hiệu đó, không dùng ngưỡng này. Chỉ là dữ kiện cho agent, không đổi sàn hay
+    # nghiệm LP
+    spend_spike_ratio=1.5,
+    # mức nền bền (#39, chủ dự án chốt 26/11 tối): trung vị chi theo tuần của từng này tuần gần nhất, quy về tháng; dưới
+    # `spend_baseline_min_weeks` tuần (hoặc hũ thưa có trung vị 0) thì lùi về chi trung bình `resilience_window_days` ngày như trước.
+    # Mặc định dùng chung với ledger (`yofina_core.spend_baseline`)
+    spend_baseline_weeks=DEFAULT_BASELINE_WEEKS,
+    spend_baseline_min_weeks=DEFAULT_BASELINE_MIN_WEEKS,
 )
 #: hũ chi tiêu thiết yếu theo mẫu hũ mặc định (`db/seed/jar_templates.sql`: ăn uống, đi lại, hóa đơn); hũ người dùng tự thêm thì không
 #: thiết yếu. Cũng là nhóm LOẠI giao dịch thiết yếu: loại có `tx_type_map.default_jar_code` thuộc tập này là chi thiết yếu khi nằm ở

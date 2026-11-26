@@ -74,6 +74,7 @@ def agent_prompts() -> dict[str, str]:
         "whatif.ANALYST_SYSTEM": whatif.ANALYST_SYSTEM,
         "roadmap.ROADMAP_SYSTEM": roadmap_agent.ROADMAP_SYSTEM,
         "roadmap.ROADMAP_ADVICE_GUIDE": roadmap_agent.ROADMAP_ADVICE_GUIDE,
+        "roadmap.ROADMAP_REQUEST_GUIDE": roadmap_agent.ROADMAP_REQUEST_GUIDE,
         "whatif.ANALYST_MEMORY_GUIDE": whatif.ANALYST_MEMORY_GUIDE,
         "memory.PROMPT_NOTICE": memory.PROMPT_NOTICE,
         # nghĩa của đặc tả ngày: description của schema trường đặc tả (router, Orchestrator) gửi model
