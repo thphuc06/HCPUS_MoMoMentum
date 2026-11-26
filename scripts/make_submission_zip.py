@@ -8,9 +8,10 @@ Các bước, dừng ở bước đầu tiên lỗi và KHÔNG để lại tệp
 
 1. Tệp ra phải nằm NGOÀI repo (repo public; `*.zip` cũng bị `.gitignore` bỏ qua nên dễ quên mất tệp trong cây làm việc).
 2. Quét bí mật bằng một lệnh bên ngoài, chạy ở gốc repo; mã thoát khác 0 là có phát hiện hoặc quét hỏng, và script dừng. Mặc định:
-   `scripts/scan_repo.py` (việc B2 của phase 6) nếu có, không thì `gitleaks git` với `.gitleaks.toml` như job `secrets` của CI;
+   `scripts/scan_repo.py --ref <commit>` (việc B2 của phase 6: quét đúng nội dung commit sắp nén, danh sách cho phép lấy từ
+   `.gitleaks.toml` của commit đó) nếu có, không thì `gitleaks git` với `.gitleaks.toml` như job `secrets` của CI;
    không có công cụ nào thì dừng (không nén khi chưa quét). `--scan-cmd` thay lệnh mặc định. Script không in lại kết quả quét: bộ
-   quét tự in (gitleaks chạy với `--redact`).
+   quét tự in (scan_repo.py chỉ in giá trị đã che, gitleaks chạy với `--redact`).
 3. `git archive` của commit (không lẫn tệp chưa commit hay đang sửa dở), `core.autocrlf=false` nên byte trong zip là byte đã commit.
 4. Bỏ các đường dẫn ở `EXCLUDED_DIR_NAMES`, `EXCLUDED_PREFIXES`, và tệp `.env*` (trừ `.env.example`); ghi zip vào tệp tạm cạnh
    tệp ra rồi đổi tên, nên lỗi giữa chừng không để lại zip dở.
@@ -81,10 +82,11 @@ def _git(root: Path, *args: str) -> bytes:
 
 
 def default_scan_cmd(root: Path, commit: str) -> list[str]:
-    """Lệnh quét mặc định; không có công cụ nào thì `SubmissionError` (không nén khi chưa quét)."""
+    """Lệnh quét mặc định; không có công cụ nào thì `SubmissionError` (không nén khi chưa quét). `scripts/scan_repo.py --ref`
+    quét đúng nội dung của commit sắp nén (không phải cây làm việc)."""
     scan_repo = root / "scripts" / "scan_repo.py"
     if scan_repo.is_file():
-        return [sys.executable, str(scan_repo)]
+        return [sys.executable, str(scan_repo), "--ref", commit]
     gitleaks = shutil.which("gitleaks")
     if gitleaks:
         cmd = [

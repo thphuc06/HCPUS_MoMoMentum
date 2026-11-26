@@ -34,3 +34,57 @@ condition = "AND"
 paths = ['''^spikes/bedrock-models/results_[^/]+\.txt$''']
 regexTarget = "line"
 regexes = ['''AccessDeniedException: anthropic\.claude-''']
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Danh sách cho phép của scripts/scan_repo.py (B2 phase 6, #36) cho các loại mà gitleaks không có luật: account ID AWS, email,
+# số điện thoại, số tài khoản, mật khẩu ngắn. scan_repo.py đọc cả các mục [[allowlists]] ở trên; gitleaks bỏ qua bảng `scan_repo`.
+# Mỗi mục: lý do, luật, đúng giá trị (so sau khi bỏ dấu ngăn với số), thu hẹp theo đường dẫn; không mục nào bỏ qua cả tệp.
+# Định dạng đầy đủ ở docstring của scripts/scan_repo.py.
+
+[[scan_repo.allow]]
+description = """Account AWS giả 111111111111 mà test CDK (infra-cdk/test/*.test.ts) truyền vào env của stack để dựng template \
+không cần credential; không phải account thật. Cùng giá trị nằm trong mã stack (infra-cdk/lib/) vẫn bị báo."""
+rules = ["aws-account-id"]
+values = ["111111111111"]
+paths = ['''^infra-cdk/test/''']
+
+[[scan_repo.allow]]
+description = """Account AWS giả 000000000000 trong test frontend (frontend/src/lib/config.test.ts): ARN Runtime mẫu để kiểm hàm \
+dựng URL Runtime; ARN thật đọc từ biến môi trường lúc build, không nằm trong repo."""
+rules = ["aws-account-id"]
+values = ["000000000000"]
+paths = ['''^frontend/src/.+\.test\.tsx?$''']
+
+[[scan_repo.allow]]
+description = """SĐT và số tài khoản hư cấu trên biên lai mẫu của persona minh (data/personas/samples/minh_receipts.json do \
+make_samples.py sinh, commit 9871233 ghi rõ là hư cấu), chép lại ở fixture khối ingest_review (pii_masked) và bảng ảnh mẫu của \
+docs/plan/demo-script.md. Số tự đặt cho demo cảnh 5, không của ai."""
+rules = ["phone", "account-number"]
+values = ["0901234567", "0938765432", "1027356824", "19038642097531"]
+paths = [
+  '''^data/personas/samples/minh_receipts\.json$''',
+  '''^contracts/fixtures/blocks/''',
+  '''^docs/plan/demo-script\.md$''',
+]
+
+[[scan_repo.allow]]
+description = """Số giả dạng dãy chữ số liên tiếp (0123456789, 0912345678, 0987654321): 'số tài khoản kẻ tấn công', 'SĐT người \
+hưởng' tự đặt trong ca tấn công prompt injection và PII của evals (evals/adversarial/, evals/ingest/synthetic/ do \
+scripts/make_ingest_synthetic.py sinh) và fixture hợp đồng, để kiểm bộ che PII."""
+rules = ["phone", "account-number"]
+values = ["0123456789", "0912345678", "0987654321"]
+paths = ['''^evals/adversarial/''', '''^evals/ingest/synthetic/''', '''^contracts/fixtures/''']
+
+[[scan_repo.allow]]
+description = """Mật khẩu role yofina_app của PostgreSQL cục bộ (pgserver) mà tests/local_pg/conftest.py dựng rồi bỏ trong lượt \
+test, chỉ nghe trên máy chạy test; không dùng cho Aurora hay tài khoản nào."""
+rules = ["password"]
+values = ["local-test-only"]
+paths = ['''^tests/local_pg/conftest\.py$''']
+
+[[scan_repo.allow]]
+description = """Địa chỉ giả a@b.co trong tests/unit/agent/test_pii.py: đầu vào để kiểm mask_pii che email, không phải hộp thư \
+của ai."""
+rules = ["email"]
+values = ["a@b.co"]
+paths = ['''^tests/unit/agent/test_pii\.py$''']
