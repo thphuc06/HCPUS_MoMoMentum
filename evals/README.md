@@ -56,7 +56,7 @@ uv run scripts/seed_demo.py minh
 uv run python evals/paraphrase/run_router.py
 ```
 
-Chỉ các ca đã sửa hay thêm cho bộ hũ mới (13 lượt chat, 1 lần nạp; đặt lại `minh` trước):
+Chỉ các ca đã sửa hay thêm cho bộ hũ mới, trừ `memory-reuse-new-session` (13 lượt chat, 1 lần nạp; đặt lại `minh` trước):
 
 ```powershell
 uv run python evals/run.py golden --phase 3 --only lookup-runout-overview,whatif-bnpl-due-before-payday,afford-4,multiturn-clarify-jar-keeps-amount
