@@ -241,6 +241,10 @@ _SPEND_JAR_DESCRIPTION = (
     "nào. Người dùng nêu tên hũ sẽ trả thì là code của đúng hũ đó. Null khi câu không nói tiền dùng vào việc gì, khi không hũ nào hợp "
     "rõ hoặc có từ hai hũ hợp ngang nhau, hoặc khi không có <hu_cua_vi>. Chỉ chép code có trong <hu_cua_vi>."
 )
+_SPEND_JAR_NAMED_DESCRIPTION = (
+    "Chỉ khi có spend_jar_code: true nếu người dùng tự nêu tên hũ đó (trong <cau_moi>, hoặc trong câu đang chờ mà <cau_moi> trả lời), "
+    "false nếu họ không nêu hũ nào và bạn chọn hũ theo mục đích khoản chi."
+)
 _TX_TYPE_DESCRIPTION = (
     "Chỉ cho khoản chi của chính người dùng ở what_if và affordability: mã trong danh sách Loại chi của lời nhắc hệ thống theo MỤC "
     "ĐÍCH của khoản tiền (nhiều thứ cho cùng một việc thì lấy loại của việc đó). Không phụ thuộc hũ: hũ trả do spend_jar_code và "
@@ -251,8 +255,8 @@ _DATE_TEXT_DESCRIPTION = "Cụm chữ chỉ thời gian người dùng nói (h�
 
 class IntentParams(_Model):
     """Tham số của <cau_moi>. Trường chép chữ (jar_text, from_jar_text, to_jar_text, label, date_text, obligation_name) giữ đúng chữ
-    người dùng gõ và để null khi họ không nói; số tiền chỉ lấy số họ nói. Trường mã (spend_jar_code, tx_type, date_spec,
-    answers_pending và các trường kind, action, topic) là lựa chọn của bạn theo nghĩa của câu, theo mô tả của từng trường."""
+    người dùng gõ và để null khi họ không nói; số tiền chỉ lấy số họ nói. Trường mã (spend_jar_code, spend_jar_named, tx_type,
+    date_spec, answers_pending và các trường kind, action, topic) là lựa chọn của bạn theo nghĩa của câu, theo mô tả của từng trường."""
 
     # Docstring trên là `description` của `params` trong schema tool router (model đọc), không phải ghi chú cho lập trình viên.
     # Thứ tự trường là thứ tự trong schema: trường chọn theo nghĩa đứng cạnh trường chữ nó đi cùng (hũ, hạn), cờ trả lời câu hỏi lại
@@ -266,6 +270,9 @@ class IntentParams(_Model):
     # về theo ý định của người dùng, hoặc null. Mã kiểm theo danh sách đã đưa ở lượt (`router.checked_spend_jar`); người dùng không nêu hũ
     # thì đây là nguồn đầu tiên của hũ trả (`clarify.infer_pay_jar`), loại chi `tx_type` là đường lùi.
     spend_jar_code: str | None = Field(default=None, description=_SPEND_JAR_DESCRIPTION)
+    # người dùng có tự nêu hũ của spend_jar_code không (#39): false thì tên hũ model chép vào jar_text là hũ model chọn, không phải chữ
+    # người dùng; `router.checked_route` bỏ bản chép đó để lượt nói rõ "Tính theo hũ X" (hũ đã suy), không lọc chữ.
+    spend_jar_named: bool | None = Field(default=None, description=_SPEND_JAR_NAMED_DESCRIPTION)
     from_jar_text: str | None = None
     to_jar_text: str | None = None
     amount_vnd: Annotated[int, Field(ge=1)] | None = None
@@ -335,10 +342,11 @@ class IntentParams(_Model):
             log.warning(json.dumps({"event": "router_tx_type_dropped", "value": str(value)[:40]}, ensure_ascii=False))
         return None
 
-    @field_validator("answers_pending", mode="before")
+    @field_validator("answers_pending", "spend_jar_named", mode="before")
     @classmethod
     def _answers_pending_bool(cls, value: Any) -> Any:
-        """Chỉ nhận true/false; giá trị khác coi như router không nói (mã không ghép), không bắt router thử lại."""
+        """Chỉ nhận true/false; giá trị khác coi như router không nói (mã giữ đường cũ: không ghép, không bỏ jar_text), không bắt
+        router thử lại."""
         return value if isinstance(value, bool) else None
 
     @field_validator("memory_action", mode="before")

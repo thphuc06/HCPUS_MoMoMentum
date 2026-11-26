@@ -14,7 +14,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from functools import cache
 from typing import Any
@@ -30,8 +30,9 @@ from yofina_agent.clarify import (
     recognize_prompt,
 )
 from yofina_agent.fallback import _CREDIT, _has, _jar_phrase, classify_by_rules
+from yofina_agent.jars import resolve_jar
 from yofina_agent.schemas import ROUTER_TX_TYPES, IntentResult
-from yofina_agent.textutil import goal_date_phrase, normalize, parse_amount_vnd
+from yofina_agent.textutil import extract_amounts, goal_date_phrase, normalize, parse_amount_vnd
 from yofina_core.llm import LlmGateway, StructuredResult, TurnScope, user_message
 from yofina_core.resilience import load_shock_set
 from yofina_core.wallet import is_system_jar
@@ -101,8 +102,8 @@ amount_vnd để null; hệ thống tra tỷ giá bán rồi tự điền số V
 Hỏi tỷ giá mà không nêu số tiền thì chỉ đặt currency.
 - funding: "credit" khi người dùng nói Trả sau, Ví Trả Sau, BNPL, mua trước trả sau; "jar" khi họ nói trừ vào hũ hay tiền hũ; còn lại để null.
 - days_back là số ngày người dùng nhắc ("tuần qua" là 7, "tháng qua" là 30); limit là số giao dịch muốn xem nếu họ nói rõ.
-- tx_type và spend_jar_code chỉ dùng cho khoản chi của chính người dùng ở what_if và affordability, theo mô tả của từng trường \
-(danh sách loại chi ở cuối, danh sách hũ ở <hu_cua_vi>).
+- tx_type và spend_jar_code (cùng spend_jar_named) chỉ dùng cho khoản chi của chính người dùng ở what_if và affordability, theo mô tả \
+của từng trường (danh sách loại chi ở cuối, danh sách hũ ở <hu_cua_vi>).
 - profile_update: lương đặt vào salary_vnd, ngày nhận lương vào payday_day; MỘT khoản nghĩa vụ thì obligation_name (tên ngắn, ví dụ "Tiền trọ"), \
 obligation_kind (rent, bill, subscription hoặc loan; không chắc thì null), amount_vnd (số tiền mỗi kỳ), due_day (ngày đến hạn trong tháng).
 - shock_id chỉ dùng cho stress: chọn mã của cú sốc mẫu phù hợp, kể cả khi người dùng gửi nhãn từ chip; không khớp cú sốc nào thì để null.
@@ -266,6 +267,61 @@ def checked_spend_jar(r: IntentResult, jars: Sequence[Mapping[str, str]] | None)
     return r.model_copy(update={"params": r.params.model_copy(update={"spend_jar_code": None})})
 
 
+#: Ý định có khoản chi của chính người dùng trả từ một hũ: hũ người dùng nêu ở `jar_text`, hũ router chọn ở `spend_jar_code`.
+_SPEND_INTENTS = frozenset({"what_if", "affordability"})
+#: Trường số tiền VND router chép từ hội thoại (router không tự tính số): mã kiểm số đó có trong chữ của hội thoại.
+_VND_FIELDS = ("amount_vnd", "salary_vnd")
+
+
+def checked_route(
+    r: IntentResult, question: str, history: str, jars: Sequence[Mapping[str, str]] | None
+) -> IntentResult:
+    """Đầu ra router sau các bước kiểm bằng dữ liệu (#39), trước khi lượt dùng. Model quyết phần theo nghĩa (ý định, hũ hợp mục đích,
+    đặc tả hạn, câu trả lời hay yêu cầu mới); mã kiểm phần kiểm được và lùi an toàn khi không khớp, không sửa chữ của model:
+
+    - `spend_jar_code` phải có trong danh sách hũ của lượt (`checked_spend_jar`).
+    - Hũ model chọn không phải hũ người dùng nêu: khoản chi có `spend_jar_named` false mà `jar_text` đọc ra đúng hũ model chọn
+      (`jars.resolve_jar`) là bản chép của hũ đã suy, không phải chữ người dùng; bỏ `jar_text` để lượt tính theo `spend_jar_code` và nói
+      rõ "Tính theo hũ X". `jar_text` chỉ một hũ khác, `spend_jar_named` true hoặc trống (model không nói): giữ như cũ.
+    - Số tiền VND (`amount_vnd`, `salary_vnd`) phải là số có trong hội thoại (câu mới hoặc lịch sử, đọc bằng
+      `textutil.extract_amounts`, trong sai số làm tròn). Không có: dùng số tiền duy nhất của câu mới, câu mới có nhiều hơn một số thì
+      bỏ (lượt hỏi lại số tiền đúng một câu). Hội thoại không có số nào mã đọc được (số viết bằng chữ) thì giữ số của model.
+
+    Mỗi lần sửa ghi một dòng log (`router_jar_text_inferred`, `router_amount_ungrounded`), không ghi chữ hay số tiền của người dùng."""
+    r = checked_spend_jar(r, jars)
+    r = _without_inferred_jar_text(r, jars)
+    return _grounded_amounts(r, question, history)
+
+
+def _without_inferred_jar_text(r: IntentResult, jars: Sequence[Mapping[str, str]] | None) -> IntentResult:
+    p = r.params
+    if r.intent not in _SPEND_INTENTS or p.spend_jar_named is not False or p.spend_jar_code is None or p.jar_text is None:
+        return r
+    match = resolve_jar(p.jar_text, list(jars or ()))
+    if match.status != "ok" or match.code != p.spend_jar_code:
+        return r
+    log.info(json.dumps({"event": "router_jar_text_inferred", "spend_jar_code": p.spend_jar_code}, ensure_ascii=False))
+    return r.model_copy(update={"params": p.model_copy(update={"jar_text": None})})
+
+
+def _grounded_amounts(r: IntentResult, question: str, history: str) -> IntentResult:
+    said = extract_amounts(question)
+    seen = [*said, *extract_amounts(history)] if history else said
+    if not seen:
+        return r
+    update: dict[str, int | None] = {}
+    for name in _VND_FIELDS:
+        value = getattr(r.params, name)
+        if value is None or any(abs(value - amount) <= max(tol, 0.5) for amount, tol in seen):
+            continue
+        update[name] = said[0][0] if len(said) == 1 else None
+        action = "code_read" if update[name] is not None else "dropped"
+        log.warning(json.dumps({"event": "router_amount_ungrounded", "field": name, "action": action}))
+    if not update:
+        return r
+    return r.model_copy(update={"params": r.params.model_copy(update=update)})
+
+
 #: Tham số router có giá trị là mã trong một tập cố định (không phải chữ người dùng gõ): ghi nguyên giá trị vào log.
 _ROUTED_CODE_KEYS = (
     "lookup_kind",
@@ -273,6 +329,7 @@ _ROUTED_CODE_KEYS = (
     "scenario_kind",
     "tx_type",
     "spend_jar_code",
+    "spend_jar_named",
     "obligation_kind",
     "roadmap_action",
     "date_spec",
@@ -537,9 +594,10 @@ async def route(
     today: date | None = None,
 ) -> StructuredResult[IntentResult]:
     """Một lần phân loại. `jars`: danh sách hũ người dùng của ví (`router_jar_list`) để router chọn hũ chi; None khi lượt chưa đọc được
-    ví (router để `spend_jar_code` null). Người gọi kiểm mã router chọn bằng `checked_spend_jar` với đúng danh sách này. `today`: ngày mô
-    phỏng hôm nay (None: router không có mốc để đếm kỳ của đặc tả hạn)."""
-    return await gateway.astructured_json(
+    ví (router để `spend_jar_code` null). Kết quả đã qua `checked_route` (mã hũ thuộc danh sách, bản chép hũ đã suy, số tiền có trong
+    hội thoại); người gọi gọi lại `checked_spend_jar` với đúng danh sách này thì không đổi gì. `today`: ngày mô phỏng hôm nay (None:
+    router không có mốc để đếm kỳ của đặc tả hạn)."""
+    res = await gateway.astructured_json(
         ROUTER_ROLE,
         output_model=IntentResult,
         messages=[user_message(build_router_prompt(question, history, jars, today))],
@@ -554,3 +612,4 @@ async def route(
         # kết quả bị cắt ở trần token có thể vẫn khớp schema mà thiếu trường cuối (lời đáp câu chào, #39): không nhận, thử lại
         reject_truncated=True,
     )
+    return replace(res, value=checked_route(res.value, question, history, jars))
