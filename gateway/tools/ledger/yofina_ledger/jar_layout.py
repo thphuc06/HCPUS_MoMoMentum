@@ -51,9 +51,11 @@ class DemoJar:
 
 # Demo wallet after reset (issue #39, changed 26/11 morning): the three onboarding defaults first (Chi hằng ngày, Nghĩa vụ, Dự
 # phòng), then the jars the user added: Ăn uống, Đi lại, Giải trí (behaviour signals are per jar code), Mục tiêu and Đầu tư. Chi
-# hằng ngày keeps the small everyday spending that no added jar takes (spec `demo_jars`); colour and icon as `jar_templates`.
+# hằng ngày keeps the small everyday spending that no added jar takes (spec `demo_jars`); its colour and icon differ from Ăn uống next
+# to it (basket, not utensils; issue #39), as the catalogue row after `db/seed/jar_templates.sql`. The demo has eight jars and the
+# frontend seven jar colours, so Chi hằng ngày shares brown with Đầu tư (0 ₫, landmark icon), not violet with Ăn uống.
 DEMO_LAYOUT = (
-    DemoJar(DEFAULT_SPENDING_JAR, "Chi hằng ngày", "violet", "utensils", "spending", 10),
+    DemoJar(DEFAULT_SPENDING_JAR, "Chi hằng ngày", "brown", "basket", "spending", 10),
     DemoJar(DEFAULT_OBLIGATION_JAR, "Nghĩa vụ", "slate", "wallet", "obligation", 20),
     DemoJar("du_phong", "Dự phòng", "blue", "shield", "saving", 30, purpose="buffer"),
     DemoJar("an_uong", "Ăn uống", "violet", "utensils", "spending", 40),

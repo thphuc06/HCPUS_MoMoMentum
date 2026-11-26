@@ -1,4 +1,4 @@
-import { Bus, CalendarDays, CircleHelp, Gamepad2, Headphones, Inbox, Landmark, PiggyBank, Plane, Receipt, Shield, Target, Umbrella, Utensils, Wallet, Zap } from 'lucide-react'
+import { Bus, CalendarDays, CircleHelp, Gamepad2, Headphones, Inbox, Landmark, PiggyBank, Plane, Receipt, Shield, ShoppingBasket, Target, Umbrella, Utensils, Wallet, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 // Khóa màu và biểu tượng hũ do server gửi (contracts: color_key, icon_key). Frontend ánh xạ sang biến màu
@@ -18,6 +18,8 @@ const COLOR_VAR: Record<string, string> = {
 
 const ICONS: Record<string, LucideIcon> = {
   utensils: Utensils,
+  // Chi hằng ngày (#39): giỏ, khác Ăn uống (utensils) và Nghĩa vụ (wallet) khi cùng có trên một ví
+  basket: ShoppingBasket,
   calendar: CalendarDays,
   piggybank: PiggyBank,
   target: Target,

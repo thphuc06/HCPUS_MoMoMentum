@@ -9,3 +9,7 @@ INSERT INTO jar_templates (code, name, color_key, icon_key, kind, default_split_
   ('du_phong', 'Dự phòng', 'blue',   'shield',   'saving',     15, true, 60),
   ('nghia_vu', 'Nghĩa vụ', 'slate',  'wallet',   'obligation',  5, true, 70)
 ON CONFLICT (code) DO NOTHING;
+
+-- Chi hằng ngày (row created by migration 0059 with the colour and icon of Ăn uống, issue #39): its own colour and icon, as the demo
+-- layout (gateway/tools/ledger/yofina_ledger/jar_layout.py). Only these two columns; no row before 0059, so this cannot switch layouts.
+UPDATE jar_templates SET color_key = 'brown', icon_key = 'basket' WHERE code = 'chi_hang_ngay';

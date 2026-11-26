@@ -62,7 +62,7 @@
   ],
   "params": {
     "jars": [
-      { "code": "chi_hang_ngay", "name": "Chi hằng ngày", "color_key": "violet", "icon_key": "utensils", "kind": "spending", "split_percent": 28 },
+      { "code": "chi_hang_ngay", "name": "Chi hằng ngày", "color_key": "brown", "icon_key": "basket", "kind": "spending", "split_percent": 28 },
       { "code": "nghia_vu", "name": "Nghĩa vụ", "color_key": "slate", "icon_key": "wallet", "kind": "obligation", "split_percent": 35 },
       { "code": "du_phong", "name": "Dự phòng", "color_key": "blue", "icon_key": "shield", "kind": "saving", "purpose": "buffer", "split_percent": 25 },
       {

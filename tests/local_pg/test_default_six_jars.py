@@ -756,3 +756,17 @@ def test_long_term_jar_with_money_is_not_emergency_fund_anywhere(env):
     assert StressEngine(pipeline).run(user, "om_mot_tuan")["data"]["emergency_jar"]["code"] == "du_phong"
     roles = {j.code: j.role for j in _build(AllocationEngine(pipeline), gathered).problem.jars}
     assert (roles["du_phong"], roles["dau_tu"]) == ("emergency", "saving")
+
+
+def test_chi_hang_ngay_khac_mau_va_bieu_tuong_an_uong_tren_danh_muc_va_vi_demo(env):
+    """Issue #39 (26/11): migration 0059 tạo hàng Chi hằng ngày với màu và biểu tượng của Ăn uống; seed chạy sau ghi đè hai cột đó, nên
+    danh mục (tài khoản mới) và ví demo sau đặt lại cùng có màu, biểu tượng riêng cho Chi hằng ngày. Hũ đã tạo trước đó giữ màu cũ."""
+    templates = {t["code"]: t for t in env.svc.jar_templates_response()["templates"]}
+    theme = {code: (t["color_key"], t["icon_key"]) for code, t in templates.items()}
+    assert theme[DEFAULT_SPENDING_JAR] != theme["an_uong"]
+    assert theme[DEFAULT_SPENDING_JAR][1] not in {icon for code, (_, icon) in theme.items() if code != DEFAULT_SPENDING_JAR}
+    assert templates[DEFAULT_SPENDING_JAR]["is_default"] and templates[DEFAULT_SPENDING_JAR]["default_split_percent"] == 42
+    user = "six-daily-theme"
+    assert _reset(env, user, "persona-minh")["statusCode"] == 200
+    jars = {j["code"]: (j["color_key"], j["icon_key"]) for j in _read_jars(env, user)}
+    assert jars[DEFAULT_SPENDING_JAR] == theme[DEFAULT_SPENDING_JAR] != jars["an_uong"]
