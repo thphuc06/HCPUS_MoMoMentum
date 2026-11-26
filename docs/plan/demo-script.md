@@ -23,7 +23,7 @@ Hai nguồn, chưa có số nào đo trên app với ví 8 hũ:
 | 1 | Ăn uống 380.000 ₫ cạn 23/11, nhãn Cao | Như trên app: Ăn uống cạn 23/11, nhóm `high` (Cao), thẻ Tổng quan vẫn là Ăn uống. Hũ Chi hằng ngày 300.000 ₫ "đủ", không nêu ngày cạn (hũ thưa), không có thẻ |
 | 2 | Trọn câu 34 giây. Hũ Nghĩa vụ liệt kê Tiền điện 26/11 và Trả sau 03/12 (2.200.000 ₫: 1.000.000 ₫ có sẵn gồm phí 33.000 ₫, cộng 1.200.000 ₫), thiếu 1.161.791 ₫ | Số đo cục bộ (Trả sau ngày 5): Tiền điện 26/11 và Trả sau **05/12** (2.200.000 ₫), thiếu **1.168.392 ₫** (số dư trước khi lương về 1.031.608 ₫), hũ trả hụt cùng số, trạng thái Sau "hụt". Lời dẫn dùng "thiếu khoảng 1,17 triệu" |
 | 3 | Điểm 29 → 12, trụ 25 ngày | Điểm 29 → 12, trụ **26 ngày**. Lệch do hũ mới: số dư cộng 300.000 ₫, chi 30 ngày cộng khoảng 210.000 ₫ |
-| 4 | 32 dòng vào Ăn uống; bản v3 sau khoảng 30 giây, giai đoạn đầu 21/11–05/12, bước lớn nhất vào Ăn uống 2.657.800 ₫ | Phần không cần model như trên app: 32 dòng vào Ăn uống, PELT xác nhận từ hệ số 2,1 (ngưỡng mịn 2,04), tệp (hệ số 3,5) xác nhận khi tải trong ngày và trễ một ngày. Bản v3 cần model, chưa đo trên ví 8 hũ |
+| 4 | 32 dòng vào Ăn uống; bản v3 sau khoảng 30 giây, giai đoạn đầu 21/11–05/12, bước lớn nhất vào Ăn uống 2.657.800 ₫ | Phần không cần model như trên app: 32 dòng vào Ăn uống, PELT xác nhận từ hệ số 2,1 (ngưỡng mịn 2,04), tệp (hệ số 3,5) xác nhận khi tải trong ngày và trễ một ngày. Bản v3 với model giả tất định (`test_roadmap_regen_scene4.py`, phần số do engine quyết): Ăn uống 2.700.000 → 5.048.300 ₫/tháng, Dự phòng và Du lịch về 0 ₫, Chi hằng ngày 105.000 ₫, Giải trí 204.500 ₫, LP "sàn bắt buộc vượt thu nhập 798.900 ₫". Hệ số nhỏ hơn không giữ được cả Dự phòng lẫn độ bền khi tải trễ một ngày ([đo lại hệ số](../research/2026-11-26-canh4-pelt.md), mục "Hệ số và bản lộ trình sinh lại"). Bản v3 với model thật chưa đo trên ví 8 hũ |
 | 5 | Màn duyệt sau 8,5 giây, chip "Đã che: tên" | Không đo |
 
 Các số phân loại 92% / 17,4%, cổng hiện % 47 / 120 ngày và ngưỡng PELT 2,04 đo trên ví nhiều hũ theo loại chi, nên đúng cho ví demo. Không dùng chúng để nói về tài khoản mới 3 hũ ([đo ví 3 hũ](../research/2026-11-26-do-vi-ba-hu.md)).
@@ -50,6 +50,8 @@ Tệp `minh_sao_ke_2_tuan.csv`: tải ở `/samples/minh_sao_ke_2_tuan.csv` trê
 Tải lại cùng tệp lần hai bị từ chối vì trùng tệp; muốn làm lại thì đặt lại dữ liệu.
 
 Trên ví 8 hũ, cả 32 dòng vẫn vào Ăn uống, không dòng nào vào Chi hằng ngày; hũ Chi hằng ngày là chuỗi thưa nên bộ phát hiện bỏ qua. Lần đo 26/11 ở [đo ví 3 hũ](../research/2026-11-26-do-vi-ba-hu.md) (mục 3) thấy tệp hiện hành vẫn được xác nhận trên hũ Ăn uống riêng khi tải trễ 2 và 3 ngày, khác câu ở bước 1; chưa tìm nguyên nhân, nên vẫn làm cảnh 4 trong ngày đặt lại.
+
+Bản mới trên ví 8 hũ (đo cục bộ với model giả tất định) tăng phần chia Ăn uống lên khoảng 5 triệu ₫/tháng và đưa Dự phòng, Du lịch về 0 ₫, vì sàn thiết yếu của Ăn uống (5.847.200 ₫) vượt phần lương còn lại sau Nghĩa vụ, Đi lại và sàn chi. Du lịch hiện "chưa khả thi" kèm hai lựa chọn (lùi hạn 6 tháng, giảm mục tiêu còn 1.800.000 ₫). Khi dẫn, nói đây là hệ thống báo mức chi mới vượt khả năng, đừng nói như một lời khuyên bỏ tiết kiệm. Hệ số nhỏ hơn và các đánh đổi: [đo lại hệ số](../research/2026-11-26-canh4-pelt.md), mục "Hệ số và bản lộ trình sinh lại".
 
 ## Cảnh 5: ảnh chứng từ có PII (issue #16)
 
