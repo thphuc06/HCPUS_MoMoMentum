@@ -44,7 +44,7 @@ from yofina_core.clock import next_payday, payday_dates, payday_in_month
 from yofina_core.config import Config
 from yofina_core.money import format_vnd
 from yofina_core.params import ParamsError, TxTypeInfo, normalize_sinking_items, unique_jar_code
-from yofina_core.schedule import expand_due_dates
+from yofina_core.schedule import due_before_payday, expand_due_dates
 from yofina_core.spend_baseline import (
     DEFAULT_BASELINE_MIN_WEEKS,
     DEFAULT_BASELINE_WEEKS,
@@ -488,10 +488,12 @@ def period_checks(
     dues: Sequence[tuple[date, str, int]],
     pending_salary_vnd: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Kỳ lương hiện tại và kỳ kế tiếp: cộng các khoản đến hạn TRƯỚC ngày lương rồi so với số dư cộng phần chia.
+    """Kỳ lương hiện tại và kỳ kế tiếp: cộng các khoản đến hạn trước lương của mỗi kỳ (cửa sổ chung `schedule.due_before_payday`: gồm
+    khoản đến hạn ĐÚNG ngày lương, trả bằng số dư trước khi lương ngày đó về; BR-22) rồi so với số dư cộng phần chia.
 
-    Kỳ hiện tại: số dư hôm nay, cộng phần của lương đang chờ chia (nếu có, theo tỷ lệ `shares`). Kỳ kế tiếp: phần còn lại
-    sau kỳ hiện tại (không âm) cộng phần lương của ngày lương kế tiếp. Thiếu thì nêu khoản đầu tiên bị thiếu và số thiếu.
+    Kỳ hiện tại: từ hôm nay tới hết ngày lương kế, số dư hôm nay cộng phần của lương đang chờ chia (nếu có, theo tỷ lệ `shares`). Kỳ kế
+    tiếp: sau ngày lương kế tới hết ngày lương sau đó, phần còn lại sau kỳ hiện tại (không âm) cộng phần lương của ngày lương kế. Thiếu
+    thì nêu khoản đầu tiên bị thiếu và số thiếu.
     """
     p1 = next_payday(payday_day, today)
     p2 = next_payday(payday_day, p1)
@@ -499,9 +501,13 @@ def period_checks(
     pending = (jar_amounts(pending_salary_vnd, shares) or {}).get(jar_code, 0)
     carry = int(balance_vnd) + pending
     out = []
-    for start, end, income in ((today, p1, 0), (p1, p2, part)):
+    for index, (start, end, income) in enumerate(((today, p1, 0), (p1, p2, part))):
         available = carry + income
-        window = sorted((d for d in dues if start <= d[0] < end), key=lambda d: (d[0], d[1]))
+        # kỳ đầu gồm cả hôm nay; kỳ sau bắt đầu SAU ngày lương kế (khoản đúng ngày lương kế đã thuộc kỳ đầu)
+        window = sorted(
+            (d for d in dues if (start <= d[0] if index == 0 else start < d[0]) and due_before_payday(d[0], end)),
+            key=lambda d: (d[0], d[1]),
+        )
         total = sum(a for _, _, a in window)
         row: dict[str, Any] = {
             "jar_code": jar_code,
@@ -800,7 +806,7 @@ def build_proposal(
         jar_code=ob_jar,
         jar_name=str(by_code[ob_jar]["name"]),
         balance_vnd=convert.vnd(by_code[ob_jar]["balance_vnd"]),
-        dues=obligation_dues(obligations, order, ob_jar, first=today, through=p2 - timedelta(days=1)),
+        dues=obligation_dues(obligations, order, ob_jar, first=today, through=p2),
         pending_salary_vnd=pending_vnd,
     )
     if plan:

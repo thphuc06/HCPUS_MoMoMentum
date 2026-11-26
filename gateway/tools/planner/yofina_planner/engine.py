@@ -15,6 +15,7 @@ from datetime import date, timedelta
 
 from yofina_core.blocks import RuleCheck
 from yofina_core.money import format_vnd
+from yofina_core.schedule import due_before_payday
 from yofina_core.suitability import (
     AppliesWhen,
     Proposal,
@@ -91,14 +92,16 @@ def _dm(value: date) -> str:
 def _essential_covered(
     rule: SuitabilityRule, proposal: Proposal, facts: SuitabilityFacts, ctx: Context
 ) -> Outcome:
-    """Nghĩa vụ thiết yếu đến hạn trước kỳ lương kế phải còn được phủ đủ sau khi trừ khoản đề xuất khỏi hũ nguồn. Khoản bắt đầu
-    từ kỳ lương kế trở đi không chạm số dư trước kỳ lương nên không bị trừ."""
+    """Nghĩa vụ thiết yếu đến hạn trước kỳ lương kế (cửa sổ chung `schedule.due_before_payday`: gồm khoản đến hạn ĐÚNG ngày lương, trả
+    bằng số dư trước khi lương về; BR-22) phải còn được phủ đủ sau khi trừ khoản đề xuất khỏi hũ nguồn. Khoản bắt đầu từ kỳ lương kế trở
+    đi không chạm số dư trước kỳ lương nên không bị trừ."""
     if facts.next_payday is None:
         return Outcome("skipped", "Chưa khai ngày nhận lương nên chưa xét nghĩa vụ trước kỳ lương.")
     first = facts.today + timedelta(days=1)
-    last = facts.next_payday - timedelta(days=1)
     need: dict[str, int] = {}
-    for ob, _due in facts.dues_between(first, last):
+    for ob, due in facts.dues_between(first, facts.next_payday):
+        if not due_before_payday(due, facts.next_payday):
+            continue
         jar = facts.pay_jar_of(ob)
         if ob.is_essential and jar:
             need[jar] = need.get(jar, 0) + ob.amount_vnd

@@ -285,6 +285,27 @@ def test_period_checks_name_first_short_item_and_amount():
     assert first["shortfall"] == {"label": "Tiền trọ", "date": "2026-12-01", "shortfall_vnd": 2_375_000}
     assert (second["payday"], second["available_vnd"], second["due_vnd"]) == ("2027-01-05", 3_150_000, 220_000)
     assert "shortfall" not in second
+
+
+def test_period_checks_khoan_dung_ngay_luong_thuoc_ky_truoc_tra_bang_so_du_truoc_luong():
+    """Cửa sổ chung `due_before_payday` (BR-22, #39): khoản đến hạn ĐÚNG ngày lương 05/12 thuộc kỳ hiện tại và trả bằng số dư trước khi lương
+    05/12 về; khoản 06/12 thuộc kỳ kế; khoản đúng ngày lương 05/01 thuộc kỳ kế (trước lương 05/01). Không khoản nào tính hai lần."""
+    dues = [
+        (date(2026, 12, 5), "Trả sau", 1_200_000),
+        (date(2026, 12, 6), "Tiền trọ", 2_000_000),
+        (date(2027, 1, 5), "Trả sau", 300_000),
+        (date(2027, 1, 6), "Tiền trọ", 2_000_000),
+    ]
+    shares = [("chi_hang_ngay", Decimal(40)), ("nghia_vu", Decimal(35)), ("du_phong", Decimal(25))]
+    first, second = sp.period_checks(
+        today=TODAY, payday_day=PAYDAY, salary_vnd=SALARY, shares=shares, jar_code="nghia_vu",
+        jar_name="Nghĩa vụ", balance_vnd=1_000_000, dues=dues,
+    )  # fmt: skip
+    assert [i["date"] for i in first["items"]] == ["2026-12-05"]
+    assert (first["due_vnd"], first["available_vnd"]) == (1_200_000, 1_000_000)
+    assert first["shortfall"] == {"label": "Trả sau", "date": "2026-12-05", "shortfall_vnd": 200_000}
+    assert [i["date"] for i in second["items"]] == ["2026-12-06", "2027-01-05"]
+    assert (second["due_vnd"], second["available_vnd"]) == (2_300_000, 3_150_000)
     pending = sp.period_checks(
         today=TODAY, payday_day=PAYDAY, salary_vnd=SALARY, shares=shares, jar_code="nghia_vu",
         jar_name="Nghĩa vụ", balance_vnd=500_000, dues=dues, pending_salary_vnd=SALARY,

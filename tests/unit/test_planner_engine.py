@@ -114,6 +114,17 @@ def test_nghia_vu_truoc_khoan_thiet_yeu_khong_ap_dung():
     assert by(v)["obligations_first"].outcome == "skipped" and v.ok
 
 
+def test_nghia_vu_truoc_gom_khoan_den_han_dung_ngay_luong():
+    """Cửa sổ chung `due_before_payday` (BR-22, #39): khoản thiết yếu đến hạn ĐÚNG ngày lương 05/12 thuộc "trước kỳ lương", trả bằng số
+    dư trước khi lương về; khoản 06/12 thì không."""
+    on_payday = facts(obligations=(ob("Tiền trọ", 900_000, date(2026, 12, 5), pay="nghia_vu"),))
+    prop = {"kind": "one_time_purchase", "amount_vnd": 200_000, "funding_source": "jar", "jar_code": "nghia_vu"}
+    c = by(check(prop, on_payday))["obligations_first"]
+    assert c.outcome == "fail" and "Nghĩa vụ" in c.detail  # 1.000.000 - 200.000 < 900.000
+    after_payday = facts(obligations=(ob("Tiền trọ", 900_000, date(2026, 12, 6), pay="nghia_vu"),))
+    assert by(check(prop, after_payday))["obligations_first"].outcome == "pass"
+
+
 # --- luật 2 và 3: đầu tư -------------------------------------------------------------------------------
 def test_dau_tu_can_quy_du_phong_va_khau_vi_rui_ro():
     prop = {"kind": "proceed", "category": "investment", "amount_vnd": 500_000, "risk_level": "high", "origin": "recommendation"}
