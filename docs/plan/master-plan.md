@@ -123,7 +123,8 @@ Python quản lý bằng uv (một workspace ở gốc repo); frontend và CDK d
 |---|---|
 | Quota 10 request/phút làm chậm kiểm thử và đánh giá | Mọi lời gọi đi qua `yofina_core.llm`; test logic dùng model giả; test thật giãn nhịp; đánh giá chạy nền, chạy tiếp được |
 | Lát dọc phase 1 lộ ra thứ spike chưa thấy (interrupt qua Runtime, MCPClient với Gateway thật, CORS domain thật) | Mỗi điểm có thời hạn thử riêng và phương án lùi ghi sẵn trong file phase 1; luồng xác nhận không phụ thuộc interrupt |
-| Persona Minh không ra đúng số của Figma | Hiệu chỉnh bộ sinh để ngày cạn hũ Ăn uống rơi đúng 23/11; các số khác lấy theo engine, lệch thì sửa nhãn giao diện, không sửa engine |
+| Persona Minh không ra đúng số của Figma | Hiệu chỉnh bộ sinh để ngày cạn hũ Ăn uống rơi đúng 23/11; các số khác lấy theo engine, lệch thì sửa nhãn giao diện, không sửa engine. Từ 26/11 ví demo dùng bộ hũ riêng (Chi hằng ngày, Nghĩa vụ, Dự phòng cộng hũ tự thêm, giữ Ăn uống) nên cảnh 1 vẫn ra 23/11 |
+| Đổi bộ hũ mặc định giữa phase 6 (26/11: tài khoản mới 3 hũ theo mục đích, issue #39) làm số đo cũ không còn đúng cho mọi ví | Ví demo giữ hũ chi riêng nên số của cảnh 1–4 dùng được; số phân loại 92% / 17,4%, cổng 47/120 ngày, PELT 2,04 chỉ gắn với ví nhiều hũ theo loại chi; ví 3 hũ dẫn [số đo riêng](../research/2026-11-26-do-vi-ba-hu.md) |
 | Khoảng dự báo 30 ngày phủ thiếu (đã đo) | Phase 2 hiệu chỉnh bằng độ phủ trên backtest trước khi hiện xác suất hụt; hiện nhóm Cao/Vừa/Thấp thay vì phần trăm khi chưa đạt |
 | Ổ C còn 12 GB | Xóa `.venv` và `node_modules` trong `spikes/` trước khi cài project (giữ mã nguồn spike) |
 | Chi phí | Budgets + trần lượt gọi; Aurora 0,5 ACU khoảng 73 USD/tháng là khoản lớn nhất |

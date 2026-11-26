@@ -1,16 +1,16 @@
 # Yêu cầu chức năng (FR)
 
 > Bản nháp để chủ dự án duyệt, tổng hợp ngày 22/11/2026. FR1–FR15 giữ đúng mã và phạm vi của proposal §5. File này viết chi tiết thêm phần proposal chỉ có một dòng: người dùng, luồng chính, ngoại lệ, quy tắc áp dụng ([BR](02-business-rules.md)), tiêu chí nghiệm thu ([AC](05-acceptance-criteria.md)).
-> Trạng thái thực hiện lấy theo [HANDOFF](../../HANDOFF.md) và kết quả các phase, **cập nhật 24/11/2026 tối** (phase 5 đã deploy, chưa đóng). Bảng điều khiển tiến độ: [13-tien-do-technical.md](13-tien-do-technical.md).
+> Trạng thái thực hiện lấy theo [HANDOFF](../../HANDOFF.md) và kết quả các phase, **cập nhật 24/11/2026 tối** (phase 5 đã deploy, chưa đóng); phần bộ hũ cập nhật **26/11** theo bộ hũ mặc định mới (issue #39, cuối [B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)). Bảng điều khiển tiến độ: [13-tien-do-technical.md](13-tien-do-technical.md).
 
 ## Tổng quan
 
 | FR | Tên | Tính năng | Mức | Phase | Trạng thái thực hiện |
 |---|---|---|---|---|---|
-| FR1 | Hồ sơ, hũ và sổ cái | nền | MVP | 1–2 | ✅ Đạt (đóng phase 2, 22/11). Cơ cấu hũ mới (BR-63 đến 73) chưa code |
-| FR2 | Phân hũ tự động | nền | MVP | 2 (bước 0), 4 | ◐ Đủ 4 bước (phase 4, đóng 24/11): đúng 92%; **phải hỏi 17,4%**, chưa đạt < 10% |
+| FR1 | Hồ sơ, hũ và sổ cái | nền | MVP | 1–2 | ✅ Đạt (đóng phase 2, 22/11). Bộ hũ mới (26/11, đã deploy): tài khoản mới nhận 3 hũ mặc định, hũ có `purpose`, Quỹ dồn lưu khoản cần, bước 3 onboarding đề xuất tỷ lệ theo số đã khai; BR-64, 68, 70, 71 hoãn |
+| FR2 | Phân hũ tự động | nền | MVP | 2 (bước 0), 4 | ◐ Đủ 4 bước (phase 4, đóng 24/11): đúng 92%; **phải hỏi 17,4%**, chưa đạt < 10% (đo trên ví nhiều hũ theo loại chi; ví 3 hũ chưa đo phần có model) |
 | FR3 | Dự báo theo hũ | F1 | MVP | 2 | ✅ Đạt (phase 2); backtest đạt NFR-10, 11 |
-| FR4 | Quản lý nghĩa vụ | nền, F1, F3 | MVP | 2 | ✅ Đạt (phase 2); C-07 chưa chốt |
+| FR4 | Quản lý nghĩa vụ | nền, F1, F3 | MVP | 2 | ✅ Đạt (phase 2); C-07 chốt 26/11 (hũ trả theo một quy tắc chung) |
 | FR5 | What-if hội thoại | F2 | MVP | 3 | ✅ Đạt (phase 3, đóng 23/11): golden 30/30; p95 28 giây chưa đạt NFR-03 |
 | FR6 | Kiểm tra trước khi quẹt | F3 | MVP | 3 | ◐ Chạy (phase 3): p95 282 ms; **dải "sát" hẹp và định nghĩa khác BR-36** (C-02) |
 | FR7 | Điểm chống chịu | F4 | MVP | 4 | ✅ Đạt (phase 4, đóng 24/11) |
@@ -37,14 +37,14 @@
 
 - **Tiền điều kiện**: đã đăng nhập.
 - **Luồng chính**
-  1. Onboarding: nhập lương thực nhận và ngày nhận (bắt buộc), chọn bộ hũ mẫu hoặc tự tạo, đặt tỷ lệ chia sao cho tổng bằng 100%. *Đề xuất 24/11:* thêm một câu **tùy chọn** "Bạn đang ở giai đoạn nào?" để chọn một trong 3 bộ hũ theo giai đoạn sống; bỏ qua thì dùng bộ "Mới đi làm" (BR-70).
+  1. Onboarding: nhập lương thực nhận và ngày nhận (bắt buộc), nhận bộ hũ mặc định (từ 26/11: Chi hằng ngày 42%, Nghĩa vụ 33%, Dự phòng 25%) rồi sửa, thêm, bớt hũ, đặt tỷ lệ chia sao cho tổng bằng 100%. Bước 3 "Chi phí cố định" (tùy chọn) nhận nghĩa vụ và khoản biết trước đã khai, server đề xuất lại tỷ lệ qua thẻ (BR-78). *Đề xuất 24/11, **hoãn 26/11**:* thêm một câu **tùy chọn** "Bạn đang ở giai đoạn nào?" để chọn một trong 3 bộ hũ theo giai đoạn sống; bỏ qua thì dùng bộ "Mới đi làm" (BR-70).
   2. Tổng quan hiện tổng số dư, các hũ, thẻ chủ động và giao dịch gần đây.
-  3. Tạo, sửa hũ: tên, loại, tỷ lệ chia, mục tiêu và hạn (tùy chọn). *Đề xuất 24/11:*
-     - Hũ tích lũy chọn thêm **mục đích**: đệm an toàn, quỹ dồn, mục tiêu, dài hạn (BR-63).
-     - Hũ đệm có mục tiêu tự tính theo số tháng chi thiết yếu (BR-64).
-     - Hũ quỹ dồn có danh sách khoản cần (tên, số tiền, ngày cần) và số trích mỗi kỳ tự tính (BR-66).
-     - Hũ dài hạn chỉ nhận tiền khi hũ đệm đã đủ (BR-68).
-     - Có thể thêm các hũ tùy chọn: Gửi về gia đình, Phát triển bản thân, Sức khỏe (BR-72).
+  3. Tạo, sửa hũ: tên, loại, tỷ lệ chia, mục tiêu và hạn (tùy chọn). *Đề xuất 24/11 (trạng thái 26/11 ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)):*
+     - Hũ tích lũy chọn thêm **mục đích**: đệm an toàn, quỹ dồn, mục tiêu, dài hạn (BR-63; một phần: có cột `purpose`, chưa bắt buộc).
+     - Hũ đệm có mục tiêu tự tính theo số tháng chi thiết yếu (BR-64; hoãn).
+     - Hũ quỹ dồn có danh sách khoản cần (tên, số tiền, ngày cần) và số trích mỗi kỳ tự tính (BR-66; một phần: khoản cần lưu được, số trích tính một lần khi kê khai).
+     - Hũ dài hạn chỉ nhận tiền khi hũ đệm đã đủ (BR-68; hoãn).
+     - Có thể thêm các hũ tùy chọn: Gửi về gia đình, Phát triển bản thân, Sức khỏe (BR-72; chưa có mẫu riêng, người dùng tự thêm hũ).
   4. Ghi giao dịch trên ví mô phỏng: chi tiêu, chuyển cho người nhận, chuyển giữa hũ. Người dùng chọn hũ nguồn.
   5. Lương về thì hệ thống tạo sự kiện chờ. Người dùng chọn "chia vào hũ" hoặc "giữ ở Tiền vào khác".
   6. Tiền vào khác lương nằm ở ô Tiền vào khác; người dùng tự gán sang hũ.
@@ -53,7 +53,7 @@
   - Số tiền vượt trần hoặc vượt số dư hũ: từ chối, kèm lý do.
   - Lương lệch số đã khai quá ngưỡng: hỏi có cập nhật lương không.
   - Gửi trùng giao dịch: không ghi lần hai.
-- **BR**: BR-01, 02, 04–15, 45–47, 62; đề xuất: 63, 64, 66, 68–70, 72
+- **BR**: BR-01, 02, 04–15, 45–47, 62; bộ hũ 26/11: 63, 66, 69, 78 (đã làm hoặc một phần); hoãn: 64, 68, 70; đề xuất: 72
 - **AC**: [AC-FR1](05-acceptance-criteria.md#fr1--hồ-sơ-hũ-và-sổ-cái)
 
 ## FR2 — Phân hũ tự động
@@ -67,7 +67,7 @@
   3. Xử lý theo độ tin cậy: tự gán; tự gán và đưa vào "Xem lại"; hoặc vào Chưa phân loại để hỏi gộp mỗi ngày, mỗi khoản kèm 2 gợi ý.
   4. Người dùng sửa thì chọn "chỉ lần này" hoặc "luôn luôn cho người này"; lần sau với cùng người nhận thì tự gán đúng.
 - **Ngoại lệ**
-  - Khoản nhỏ một lần: vào hũ "Khác", không hỏi.
+  - Khoản nhỏ một lần: ~~vào hũ "Khác", không hỏi~~. **Không làm** (chủ dự án chốt 26/11, issue #28 đóng): khoản nhỏ một lần đi theo ngưỡng tin cậy như mọi khoản (BR-18).
   - Không rõ và đáng hỏi: hỏi gộp.
   - Lỗi xử lý: đưa vào hàng đợi lỗi.
 - **BR**: BR-14–19
@@ -88,7 +88,7 @@
   - Backtest chưa đạt độ phủ: hiện nhóm tin cậy thay cho %.
   - Dự báo quá hạn: tính lại trước khi trả lời.
   - Hũ hệ thống: không có dự báo.
-  - *Đề xuất 24/11:* mỗi loại hũ dự báo một kiểu (BR-73):
+  - *Đề xuất 24/11, **một phần 26/11**:* mỗi loại hũ dự báo một kiểu (BR-73). Đã làm: hũ Nghĩa vụ liệt kê khoản đến hạn trước kỳ lương, khoản thiếu đầu tiên và số thiếu; hũ không có gì rút tiền không có ngày cạn. Còn lại hoãn:
     - Chi theo kỳ: dự báo ngày cạn.
     - Nghĩa vụ: đủ hay thiếu trước ngày đến hạn.
     - Quỹ dồn và mục tiêu: tiến độ tới số tiền và ngày cần. Ngày cần của khoản quỹ dồn hiện thành mốc (BR-66).
@@ -101,8 +101,8 @@
 **User story**: Là người dùng, tôi muốn mọi khoản phải trả (trọ, hóa đơn, vay, trả sau) nằm chung một lịch và được tính vào dự báo, để không bị bất ngờ.
 
 - **Luồng chính**
-  1. Khai nghĩa vụ: loại, số tiền hoặc khoảng, chu kỳ, ngày đến hạn, cờ thiết yếu, hũ dùng để trả.
-  2. Mua bằng hạn mức trả sau mô phỏng thì tự sinh hoặc cộng dồn nghĩa vụ trả sau (gốc + phí, đến hạn ngày 5 kế tiếp).
+  1. Khai nghĩa vụ: loại, số tiền hoặc khoảng, chu kỳ, ngày đến hạn, cờ thiết yếu, hũ dùng để trả. Hũ trả (26/11): hũ đã lưu, hũ người dùng chọn, hũ Nghĩa vụ, rồi hũ `obligation` đầu tiên; ví không có hũ nào như vậy thì phải chọn (BR-26, C-07).
+  2. Mua bằng hạn mức trả sau mô phỏng thì tự sinh hoặc cộng dồn nghĩa vụ trả sau (gốc + phí, đến hạn ngày 5 kế tiếp; ví demo của `minh` dùng ngày 3, điều khoản mô phỏng, BR-22).
   3. Nghĩa vụ hiện thành mốc trên dòng thời gian dự báo, và được nhắc trước khi đến hạn.
   4. Trả nghĩa vụ từ một hũ: khoản một lần chuyển "đã trả", khoản lặp dời sang kỳ sau.
 - **Ngoại lệ**
@@ -154,7 +154,7 @@
   1. Màn Điểm chống chịu hiện điểm 0–100, bốn thành phần và giải thích từng thành phần.
   2. Bấm một trong ba cú sốc thì thấy điểm sau sốc và số ngày trụ được.
   3. Có dòng "không phải điểm tín dụng".
-  4. *Đề xuất 24/11:* số ngày trụ được khi có cú sốc tính chủ yếu từ **hũ đệm an toàn** (tiền trong hũ mục tiêu chỉ dùng khi hết đệm). Rút tiền khỏi hũ đệm thì hiện trước ảnh hưởng tới điểm (BR-64).
+  4. *Đề xuất 24/11:* số ngày trụ được khi có cú sốc tính chủ yếu từ **hũ đệm an toàn** (tiền trong hũ mục tiêu chỉ dùng khi hết đệm). Rút tiền khỏi hũ đệm thì hiện trước ảnh hưởng tới điểm (BR-64, **hoãn 26/11**).
 - **BR**: BC-07, BR-51, 52; đề xuất: 64
 - **AC**: [AC-FR7](05-acceptance-criteria.md#fr7--điểm-chống-chịu)
 
@@ -171,7 +171,7 @@
   - Mục tiêu không khả thi: nới ràng buộc mềm một lần; vẫn không được thì nói thẳng và đưa 2 lựa chọn.
   - Bước vi phạm suitability: bỏ bước đó.
   - Từ chối toàn bộ: hỏi một câu về lý do.
-- *Đề xuất 24/11:* lộ trình phân bổ tiền dư theo thứ tự cố định: nghĩa vụ → đệm an toàn → quỹ dồn → mục tiêu → dài hạn (BR-65). Khi có tín hiệu (lương tăng ổn định, hũ đệm đủ, hết khoản vay), lộ trình gợi ý chuyển sang bộ hũ của giai đoạn sống kế tiếp, không tự đổi (BR-71).
+- *Đề xuất 24/11:* lộ trình phân bổ tiền dư theo thứ tự cố định: nghĩa vụ → đệm an toàn → quỹ dồn → mục tiêu → dài hạn (BR-65, **một phần 26/11**: đề xuất tỷ lệ và LP không cắt Dự phòng trước hũ mục tiêu; chưa có bước "đệm tới mục tiêu trước"). Khi có tín hiệu (lương tăng ổn định, hũ đệm đủ, hết khoản vay), lộ trình gợi ý chuyển sang bộ hũ của giai đoạn sống kế tiếp, không tự đổi (BR-71, **hoãn 26/11**).
 - **BR**: BR-21, 42, 44, 53–55; đề xuất: 65–68, 71
 - **AC**: [AC-FR8](05-acceptance-criteria.md#fr8--lộ-trình-thích-ứng)
 
@@ -266,7 +266,7 @@
 
 | FR | Pain point | BR chính | Cảnh demo | Phase |
 |---|---|---|---|---|
-| FR1 | P4, P6 | BR-01, 04–15; đề xuất 63–72 | 1 | 1–2; cơ cấu hũ mới: 4 |
+| FR1 | P4, P6 | BR-01, 04–15; bộ hũ 63–78 (trạng thái ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)) | 1 | 1–2; bộ hũ mới: 6 (26/11) |
 | FR2 | P4 | BR-14–19 | — | 4 |
 | FR3 | P1 | BR-28–34 | 1 | 2 |
 | FR4 | P2, P3 | BR-20–27 | 1, 2 | 2 |

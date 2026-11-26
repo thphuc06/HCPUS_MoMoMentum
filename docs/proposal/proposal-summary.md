@@ -59,6 +59,8 @@ Xuyên suốt cả bảy: lớp **suitability + bảng "Vì sao"** (gợi ý kè
 
 Ví dụ AI tư vấn theo hũ (số minh họa): Hũ Ăn uống (46% ngân sách tháng tiêu trong 10 ngày đầu kỳ lương → đổi trần tháng thành trần tuần); Hũ Du lịch (mục tiêu 6 triệu trước tháng 4, đang trễ 5 tuần → lùi ngày đi hoặc chuyển 150 nghìn/tuần từ hũ Giải trí); Hũ Nghĩa vụ (Ví Trả Sau đến hạn ngày 5 trùng lương, giữ sẵn); Hũ Dự phòng (điểm chống chịu thấp, chỉ sống 9 ngày nếu mất thu nhập → ưu tiên hũ này trước mọi gợi ý đầu tư).
 
+> **Ghi chú lệch (thêm 26/11, không thuộc proposal):** proposal kể Minh với 7 hũ và các hũ theo loại chi ở trên. Sản phẩm dùng **bộ hũ mặc định theo mục đích thay bộ 7 hũ theo loại chi**: tài khoản mới nhận 3 hũ Chi hằng ngày, Nghĩa vụ (chung cho tiền nhà, hóa đơn, vay, Trả sau), Dự phòng; hũ khác do người dùng tự thêm. Ví demo của Minh có 8 hũ: 3 hũ đó (Hóa đơn gộp vào Nghĩa vụ) cộng hũ tự thêm Ăn uống, Đi lại, Giải trí, Du lịch (hũ mục tiêu), Đầu tư; Trả sau của Minh đến hạn ngày 3 (điều khoản mô phỏng). Vì sao: bộ 7 hũ để hóa đơn ở loại chi tiêu và để Du lịch cùng loại với Dự phòng, nên luật và dự báo không tách được tiền để tiêu, tiền phải trả, tiền không được đụng. Chi tiết: [ADR-0004](../decisions/0004-lech-so-voi-proposal.md) dòng 29.
+
 ### Đầu vào: người dùng tự khai báo (§4)
 
 Hackathon không tự đoán thu nhập hay chi phí cố định. Khai một lần lúc bắt đầu, sửa được bất cứ lúc nào, trên màn hình hoặc bằng chat ("tiền trọ 2,5 triệu, đóng ngày 1"). **Chỉ lương và ngày nhận là bắt buộc**; phần còn lại khai dần, dự báo ghi rõ dựa trên số đã khai.
