@@ -64,22 +64,31 @@ def test_roadmap_minh_giu_phan_chia_quy_don_tet_trong_ky(env):
         _print_plan(label, plan)
 
     near_lines = {line.jar.code: line for line in near.lines}
-    assert near_lines[code].proposed_monthly_vnd >= near_lines[code].current_monthly_vnd > 0
+    far_lines = {line.jar.code: line for line in far.lines}
+    near_sinking = near_lines[code].proposed_monthly_vnd
+    assert near_sinking > 0
+    assert near_sinking > far_lines[code].proposed_monthly_vnd
     buffer = near_lines[BUFFER_CODE]
     assert buffer.proposed_monthly_vnd >= buffer.current_monthly_vnd
     assert all(g.jar.code != code for g in near.goals)
 
+    assert sum(
+        max(0, line.proposed_monthly_vnd - line.current_monthly_vnd)
+        for line in near.lines
+        if (line.kind != "obligation" and not line.is_essential)
+        or line.floor_vnd <= line.current_monthly_vnd
+    ) == 0
+
+    assert near_lines[TRAVEL_CODE].proposed_monthly_vnd <= far_lines[TRAVEL_CODE].proposed_monthly_vnd
     travel = next(g for g in near.goals if g.jar.code == TRAVEL_CODE)
     assert travel.target_date == "2027-04-01"
-    if travel.on_track:
-        assert travel.projected_date and travel.projected_date <= travel.target_date
+    assert not travel.on_track
+    assert travel.projected_date is None or travel.projected_date > travel.target_date
+    if near.status == "infeasible":
+        assert {a.kind for a in near.alternatives} == {"delay_goal", "reduce_goal"}
     else:
-        assert travel.projected_date is None or travel.projected_date > travel.target_date
+        assert near.status == "relaxed" and near.solver.relaxation_rounds == 1
         assert any(r.kind == "goal_delayed" and r.jar_code == TRAVEL_CODE for r in near.relaxations)
-        if near.status == "infeasible":
-            assert {a.kind for a in near.alternatives} == {"delay_goal", "reduce_goal"}
-        else:
-            assert near.status == "relaxed" and near.solver.relaxation_rounds == 1
 
     assert {line.jar.code: line.current_monthly_vnd for line in far.lines} == {
         jar: line.current_monthly_vnd for jar, line in near_lines.items()
