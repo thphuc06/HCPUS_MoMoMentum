@@ -158,10 +158,10 @@ def test_id_token_va_khong_token_bi_tu_choi_o_runtime(agent_url, tokens):
 
 
 def test_tran_luot_goi_model_bang_0_van_co_khoi_so_lieu_va_notice(agent_url, tokens, api):
-    """Đặt trần Nova và Sonnet về 0 qua SSM `/yofina/llm/daily_cap_*`, phiên mới đọc cấu hình mới,
+    """Đặt trần router (Haiku, Nova), Nova và Sonnet về 0 qua SSM `/yofina/llm/daily_cap_*`, phiên mới đọc cấu hình mới,
     rồi KHÔI PHỤC. Agent phải trả khối jar_summary (tool thật) + notice degraded, không gọi model."""
     ssm = make_session().client("ssm")
-    names = ["/yofina/llm/daily_cap_small", "/yofina/llm/daily_cap_planner"]
+    names = ["/yofina/llm/daily_cap_router", "/yofina/llm/daily_cap_small", "/yofina/llm/daily_cap_planner"]
     old: dict[str, str | None] = {}
     for n in names:
         try:

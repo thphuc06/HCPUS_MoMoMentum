@@ -190,12 +190,16 @@ def make_llm(
     script: list[Any], usage: FakeUsage | None = None, rpm: int = 0
 ) -> tuple[LlmGateway, FakeBedrock, FakeUsage]:
     client, usage = FakeBedrock(script), usage or FakeUsage()
+    small = (
+        ModelSpec("m-small-a", rpm=rpm, daily_cap=100),
+        ModelSpec("m-small-b", rpm=rpm, daily_cap=100),
+    )
     settings = LlmSettings(
         roles={
-            "small": (
-                ModelSpec("m-small-a", rpm=rpm, daily_cap=100),
-                ModelSpec("m-small-b", rpm=rpm, daily_cap=100),
-            ),
+            "small": small,
+            # vai riêng của router (#39) dùng chung hai model giả với `small`: chặn trần của chúng là chặn cả router lẫn writer,
+            # như đường suy giảm của các test cũ; test chọn model của vai router ở test_router_role.py
+            "router": small,
             "planner": (ModelSpec("m-plan", rpm=rpm, daily_cap=100),),
         }
     )

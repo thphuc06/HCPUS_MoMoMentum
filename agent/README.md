@@ -14,7 +14,8 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
    RUN_STARTED (đi ngay, trước khi nạp cấu hình)
    turn.py ──> danh sách hũ cho router: mục `yofina.wallet` trong `context` của lượt (frontend gửi), hợp lệ thì không đọc ví;
                không có thì get_jar_balances IM LẶNG (chưa phát TOOL_CALL_*), phát khi phần sau của lượt dùng kết quả
-       ──> router.py (vai `small`, JSON bằng ép tool, tối đa router_max_attempts lần)
+       ──> router.py (vai `router`: Claude Haiku 4.5, Nova 2 Lite dự phòng, cache system + schema ở Haiku; JSON bằng ép tool,
+                      kết quả bị cắt ở trần token không nhận; tối đa router_max_attempts lần, router_max_tokens 800)
         └ lỗi/chạm trần ──> fallback.py (luật tối thiểu; suy giảm có kiểm soát)
       balance_lookup      get_jar_balances ──ACTIVITY_SNAPSHOT(jar_summary)──> TOOL_CALL_RESULT(bản gọn) ──> writer.py (1 câu)
       transactions_lookup get_jar_balances (ánh xạ tên hũ) + query_transactions ──> writer.py
@@ -40,7 +41,7 @@ POST /invocations ──> app.py: sub từ Authorization (identity.py), trace_id
 | `notices.py`, `defaults.json`, `settings.py` | Chuỗi nội dung `notice` theo mã lỗi; mặc định và đọc cấu hình |
 | `main.py` | Entrypoint của Runtime (uvicorn :8080) |
 
-`yofina_core.llm` (libs): mọi lời gọi Bedrock đi qua `LlmGateway`: chuỗi dự phòng theo vai (bắt `ThrottlingException` và `AccessDeniedException`), giới hạn tốc độ mỗi model (cửa sổ 60 giây), trần ngày đếm nguyên tử ở DynamoDB `yofina-usage` (chạm trần: `ModelBudgetExceeded`, không rơi sang model dự phòng), trần mỗi lượt hội thoại, log token. Cấu hình ở `libs/yofina_core/src/yofina_core/llm_defaults.json`.
+`yofina_core.llm` (libs): mọi lời gọi Bedrock đi qua `LlmGateway`: chuỗi dự phòng theo vai (bắt `ThrottlingException` và `AccessDeniedException`), giới hạn tốc độ mỗi model (cửa sổ 60 giây), trần ngày đếm nguyên tử ở DynamoDB `yofina-usage` (chạm trần: `ModelBudgetExceeded`, không rơi sang model dự phòng), trần mỗi lượt hội thoại, log token. Cấu hình ở `libs/yofina_core/src/yofina_core/llm_defaults.json`. Vai `router` (#39) là vai riêng của router; vai `small` (writer, what-if, phân loại, hồ sơ hành vi) vẫn Nova trước. Tốc độ và trần ngày tính theo model id nên Haiku của router dùng chung cửa sổ 8 lượt/phút và bộ đếm ngày với Haiku dự phòng của `small` (quota 10 RPM của tài khoản dùng chung với Memory); cửa sổ đầy thì chờ tối đa `rate_limit_max_wait_seconds` rồi rơi về Nova. Ghi đè trần: `/yofina/llm/daily_cap_router`.
 
 ## Danh sách hũ cho router (`context` của lượt, #39)
 
@@ -100,7 +101,7 @@ uv sync
 uv run pytest tests/unit/agent libs                          # unit test
 uv run python scripts/agent_run_local.py --mock               # agent + MCP giả (tests/support) ở :8080/:8201
 uv run scripts/agent_call_local.py --message "số dư các hũ của mình"
-uv run python scripts/agent_run_local.py --mock --cap-small 0 --cap-planner 0   # thử đường suy giảm
+uv run python scripts/agent_run_local.py --mock --cap-router 0 --cap-small 0 --cap-planner 0   # thử đường suy giảm
 ```
 
 Chạy local gọi Bedrock thật (Region `ap-southeast-1`, profile mặc định; máy dùng `aws login` cần `awscrt`, đã có trong nhóm dev) và đếm vào `yofina-usage` thật. `tests/support/mock_ledger_mcp.py` chỉ để dev/test: không nằm trong gói sản phẩm và `agent/` không import nó. Trỏ Gateway thật bằng `--gateway-url` hoặc `YOFINA_GATEWAY_URL`.

@@ -117,7 +117,7 @@ def gateway(client: FakeClient, usage: FakeUsage | None = None, **kw: Any) -> Ll
 # --- cấu hình -------------------------------------------------------------------------------
 def test_mac_dinh_dong_goi_co_cac_vai_va_tran():
     s = load_settings(Config({}), env={})
-    assert set(s.roles) == {"planner", "ingest", "ingest_columns", "small", "embedding"}
+    assert set(s.roles) == {"planner", "ingest", "ingest_columns", "small", "router", "embedding"}
     # vai nạp dữ liệu (F6): đọc ảnh bằng Sonnet 4.6 rồi Kimi K3; ánh xạ cột/phân loại CSV bằng model nhỏ; mỗi vai có trần riêng
     assert next(m.id for m in s.roles["ingest"]).endswith("claude-sonnet-4-6")
     assert s.roles["ingest"][1].temperature is False
@@ -130,12 +130,35 @@ def test_mac_dinh_dong_goi_co_cac_vai_va_tran():
     assert s.roles["planner"][1].temperature is False  # Kimi K3 không nhận temperature
 
 
-def test_mac_dinh_dong_goi_bat_cache_chi_cho_sonnet_4_6():
-    """#24: chỉ Sonnet 4.6 (tài liệu xác nhận cachePoint ở system và tools) của vai planner (Orchestrator, Analyst, phác thảo
-    lộ trình) bật cache; Kimi K3 và mọi model khác tắt."""
+HAIKU = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+NOVA = "global.amazon.nova-2-lite-v1:0"
+
+
+def test_vai_router_haiku_truoc_nova_du_phong_va_vai_small_khong_doi():
+    """#39 (chủ dự án 26/11): router chạy Claude Haiku 4.5, Nova 2 Lite dự phòng, bằng một vai riêng; vai `small` (writer, what-if,
+    phân loại, hồ sơ hành vi) giữ Nova trước. Bộ giới hạn tốc độ và bộ đếm ngày theo MODEL id nên Haiku của router và Haiku dự phòng
+    của `small` dùng chung một cửa sổ và một bộ đếm: tốc độ và trần của Haiku giữ đúng mức đang đặt (quota 10 RPM dùng chung với
+    Memory), không thêm chỗ mới."""
+    s = load_settings(Config({}), env={})
+    router, small = s.roles["router"], s.roles["small"]
+    assert [m.id for m in router] == [HAIKU, NOVA]
+    assert [m.id for m in small] == [NOVA, HAIKU]
+    assert (router[0].rpm, router[0].daily_cap) == (small[1].rpm, small[1].daily_cap) == (8, 2000)
+    assert (router[1].rpm, router[1].daily_cap) == (small[0].rpm, small[0].daily_cap) == (18, 2000)
+    assert router[0].prompt_cache is True and router[1].prompt_cache is False
+    assert not any(m.prompt_cache for m in small)
+
+
+def test_mac_dinh_dong_goi_bat_cache_chi_cho_sonnet_4_6_va_haiku_cua_router():
+    """#24: Sonnet 4.6 của vai planner (Orchestrator, Analyst, phác thảo lộ trình) bật cache (tài liệu xác nhận cachePoint ở system và
+    tools). #39: Claude Haiku 4.5 của vai router cũng bật (cùng ba trường nhận cachePoint, tối thiểu 4.096 token cho tiền tố: system và
+    schema của router khoảng 12.000 token). Haiku ở vai khác, Nova (không nhận cachePoint ở tools) và Kimi K3 tắt."""
     s = load_settings(Config({}), env={})
     on = {(role, m.id) for role, chain in s.roles.items() for m in chain if m.prompt_cache}
-    assert on == {("planner", "global.anthropic.claude-sonnet-4-6")}
+    assert on == {
+        ("planner", "global.anthropic.claude-sonnet-4-6"),
+        ("router", "global.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    }
     assert all(not m.prompt_cache for chain in s.roles.values() for m in chain if "kimi" in m.id)
     # cấu hình vai ghi đè bằng JSON (env/SSM) cũng đọc được cờ
     env = {

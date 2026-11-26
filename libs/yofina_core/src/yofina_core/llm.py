@@ -2,7 +2,7 @@
 
 Việc module làm (docs/plan/master-plan.md, mục "Model và giới hạn"):
 
-1. **Vai -> chuỗi model dự phòng.** Cấu hình vai (`planner`, `small`, `embedding`) và danh sách model
+1. **Vai -> chuỗi model dự phòng.** Cấu hình vai (`planner`, `small`, `router`, `embedding`...) và danh sách model
    theo thứ tự dự phòng nằm ở `llm_defaults.json` (đóng gói cùng module) và được ghi đè bằng
    biến môi trường `YOFINA_LLM_<TÊN>` hoặc SSM `/yofina/llm/<tên>` (xem `load_settings`). Không có
    model id nào nằm trong logic.

@@ -421,7 +421,9 @@ def test_tran_bang_0_theo_cau_hinh_cung_di_duong_suy_giam(monkeypatch):
     from yofina_core.config import Config
     from yofina_core.llm import LlmGateway, LlmSettings, ModelSpec
 
-    settings = LlmSettings(roles={"small": (ModelSpec("m", rpm=0, daily_cap=0),)})
+    settings = LlmSettings(
+        roles={"small": (ModelSpec("m", rpm=0, daily_cap=0),), "router": (ModelSpec("m", rpm=0, daily_cap=0),)}
+    )
     gw = LlmGateway(settings, config=Config({}), client=make_llm([])[1], usage=FakeUsage())
     events, _, _ = run_turn("số dư", llm=(gw, None, None), monkeypatch=monkeypatch)
     check_agui_order(events)

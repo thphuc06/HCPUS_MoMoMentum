@@ -2,7 +2,7 @@
 
     uv run python scripts/agent_run_local.py --mock                      # kèm MCP giả (tests/support) ở cổng 8201
     uv run python scripts/agent_run_local.py --gateway-url https://.../mcp  # trỏ Gateway thật
-    uv run python scripts/agent_run_local.py --mock --cap-small 0 --cap-planner 0   # thử đường suy giảm
+    uv run python scripts/agent_run_local.py --mock --cap-router 0 --cap-small 0 --cap-planner 0   # thử đường suy giảm
 
 Gọi Bedrock THẬT (Region ap-southeast-1, profile mặc định) và đếm lượt gọi vào DynamoDB `yofina-usage` THẬT
 (tên bảng đọc từ SSM `/yofina/dynamodb/usage-table`). `--cap-*` chỉ đặt trần bằng biến môi trường của tiến
@@ -41,6 +41,7 @@ def main() -> int:
         "--cap-planner", type=int, help="đặt trần ngày vai planner (0 = chặn mọi lượt gọi)"
     )
     ap.add_argument("--cap-small", type=int, help="đặt trần ngày vai small (0 = chặn mọi lượt gọi)")
+    ap.add_argument("--cap-router", type=int, help="đặt trần ngày vai router (0 = chặn mọi lượt gọi)")
     ap.add_argument("--log-level", default="INFO")
     args = ap.parse_args()
 
@@ -52,6 +53,8 @@ def main() -> int:
         os.environ["YOFINA_LLM_DAILY_CAP_PLANNER"] = str(args.cap_planner)
     if args.cap_small is not None:
         os.environ["YOFINA_LLM_DAILY_CAP_SMALL"] = str(args.cap_small)
+    if args.cap_router is not None:
+        os.environ["YOFINA_LLM_DAILY_CAP_ROUTER"] = str(args.cap_router)
 
     logging.basicConfig(
         level=args.log_level.upper(), format="%(message)s", stream=sys.stdout, force=True

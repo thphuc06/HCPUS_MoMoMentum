@@ -1,4 +1,5 @@
-"""Router (L1): phân loại ý định bằng model nhỏ, JSON có cấu trúc bằng ép tool, trả `schemas.IntentResult`.
+"""Router (L1): phân loại ý định bằng vai model `router` (Claude Haiku 4.5, Nova 2 Lite dự phòng), JSON có cấu trúc bằng ép tool, trả
+`schemas.IntentResult`.
 
 Một lượt gọi model (tối đa `router_max_attempts` nếu JSON sai schema), qua `yofina_core.llm` nên mọi lượt đều bị đếm và giới hạn.
 Router không gọi tool và không viết số liệu: nó chỉ trả ý định, tham số người dùng nói (tên hũ giữ nguyên chữ họ gõ) và, với
@@ -36,6 +37,10 @@ from yofina_core.resilience import load_shock_set
 from yofina_core.wallet import is_system_jar
 
 log = logging.getLogger("yofina.agent.router")
+
+#: Vai model của router trong `llm_defaults.json` (#39, chủ dự án 26/11): Claude Haiku 4.5 trước, Nova 2 Lite dự phòng, cache phần tĩnh
+#: ở Haiku. Vai riêng để không đổi model của vai `small` (writer, what-if, phân loại, hồ sơ hành vi).
+ROUTER_ROLE = "router"
 
 ROUTER_SYSTEM = """Bạn là bộ phân loại ý định cho Yofina, trợ lý quản lý chi tiêu theo "hũ" của người dùng Việt Nam. \
 Bạn phân loại và điền tham số bằng cách gọi tool `route`: trường chép chữ lấy đúng chữ người dùng, trường mã do bạn chọn theo \
@@ -531,7 +536,7 @@ async def route(
     ví (router để `spend_jar_code` null). Người gọi kiểm mã router chọn bằng `checked_spend_jar` với đúng danh sách này. `today`: ngày mô
     phỏng hôm nay (None: router không có mốc để đếm kỳ của đặc tả hạn)."""
     return await gateway.astructured_json(
-        "small",
+        ROUTER_ROLE,
         output_model=IntentResult,
         messages=[user_message(build_router_prompt(question, history, jars, today))],
         system=build_router_system(),
@@ -542,4 +547,6 @@ async def route(
         scope=scope,
         # schema chỉ bắt buộc trường không có mặc định: model điền trường dùng ở câu này, không chép đủ hơn 40 trường null (#39)
         require_all_fields=False,
+        # kết quả bị cắt ở trần token có thể vẫn khớp schema mà thiếu trường cuối (lời đáp câu chào, #39): không nhận, thử lại
+        reject_truncated=True,
     )
