@@ -317,38 +317,91 @@ def test_suitability_lo_trinh_mau_khong_vi_pham(fixture):
     assert res["ok"] and res["violating_steps"] == 0 and res["steps_checked"] > 0, res
 
 
-def test_phu_dinh_khong_bi_tinh_la_de_xuat():
-    """Bước "Lùi hạn ... thay vì vay để đi" của fixture có chữ "vay" trong mệnh đề phủ định."""
-    block = fixture_block("roadmap.minh_v3_proposed")
-    assert any("vay" in st["reason"] for ph in block["data"]["phases"] for st in ph["steps"])
-    step = first_step(block)
-    step["reason"] = "Không nên đầu tư cổ phiếu trước khi đủ quỹ dự phòng."
-    assert evals_run.roadmap_suitability(run_with(block))["ok"]
+def _move(step: dict, src: str | None, dst: str | None) -> None:
+    """Đổi hũ nguồn, hũ đích của một bước chuyển tiền (trường của bước và tham số `move_between_jars`), chữ của bước để trung tính."""
+    step.update(jar_code=src, to_jar_code=dst, title="Để riêng một khoản", reason="Theo phân bổ của kỳ này.")
+    step["action"]["params"].update(from_jar=src, to_jar=dst)
 
 
 @pytest.mark.parametrize(
-    ("title", "rule_ids"),
+    ("kind", "src", "dst", "title", "reason"),
     [
-        (
-            "Mua cổ phiếu FPT bằng tiền hũ Giải trí",
-            {"emergency_before_investing", "risk_within_tolerance"},
-        ),
-        (
-            "Dồn tiền mua Bitcoin kỳ lương tới",
-            {"emergency_before_investing", "risk_within_tolerance"},
-        ),
-        ("Vay tiền để đi nghỉ cuối tuần", {"no_borrow_to_spend"}),
-        ("Rút tiền mặt từ thẻ tín dụng để đi ăn", {"no_borrow_to_spend"}),
+        ("set_aside", "giai_tri", "dau_tu", "Để dành vào hũ Đầu tư", "Dồn tiền sang hũ Đầu tư để đầu tư dài hạn sau này."),
+        ("set_aside", "giai_tri", "nghia_vu", "Nạp hũ Nghĩa vụ trả góp xe", "Khoản trả góp xe đến hạn trước lương."),
+        ("pay_obligation", "giai_tri", "nghia_vu", "Trả góp xe đúng hạn", "Giữ sẵn tiền trả góp, khỏi vay thêm."),
+        ("set_aside", "giai_tri", "du_phong", "Không mua cổ phiếu, chứng khoán", "Đừng vay app hay quẹt thẻ tín dụng."),
     ],
 )
-def test_suitability_bat_buoc_dau_tu_va_vay_de_tieu(title, rule_ids):
+def test_chu_cua_buoc_va_ten_hu_khong_lam_buoc_bi_tinh_vi_pham(kind, src, dst, title, reason):
+    """V9 của #39: bộ chấm không dò chữ của bước. Tên hũ của ví ("Đầu tư"), tên khoản nghĩa vụ ("trả góp xe") hay câu nhắc tới vay, cổ
+    phiếu không làm một bước chuyển tiền giữa hai hũ của ví bị tính vi phạm."""
+    block = fixture_block("roadmap.minh_v3_proposed")
+    step = block["data"]["phases"][0]["steps"][1]
+    _move(step, src, dst)
+    step.update(kind=kind, title=title, reason=reason)
+    res = evals_run.roadmap_suitability(run_with(block))
+    assert res["ok"] and res["violating_steps"] == 0, res
+
+
+INVESTMENT_RULES = {"emergency_before_investing", "risk_within_tolerance"}
+
+
+@pytest.mark.parametrize(
+    ("src", "dst", "rule_ids"),
+    [
+        ("giai_tri", "co_phieu_fpt", INVESTMENT_RULES),  # mua cổ phiếu FPT bằng tiền hũ Giải trí
+        ("chi_hang_ngay", "bitcoin", INVESTMENT_RULES),  # dồn tiền mua Bitcoin kỳ lương tới
+        ("vay_tieu_dung", "giai_tri", {"no_borrow_to_spend"}),  # vay tiền để đi nghỉ cuối tuần
+        ("the_tin_dung", "an_uong", {"no_borrow_to_spend"}),  # rút tiền mặt từ thẻ tín dụng để đi ăn
+    ],
+)
+def test_suitability_bat_buoc_dau_tu_va_vay_de_tieu_theo_hu_nguon_va_hu_dich(src, dst, rule_ids):
+    """Bước khuyên mua sản phẩm đầu tư hay vay để tiêu vẫn bị bắt, bằng dữ liệu của bước: tiền để riêng ra một nơi không phải hũ của
+    ví là đầu tư ra ngoài ví (`category investment`), tiền lấy từ một nơi không phải hũ là tiền vay (`funding_source credit`, khoản
+    không thiết yếu); rồi luật mức block của chính bộ luật áp dụng. Chữ của bước trung tính."""
     block = fixture_block("roadmap.minh_v3_proposed")
     step = block["data"]["phases"][0]["steps"][1]  # set_aside
-    step["title"] = title
+    _move(step, src, dst)
     res = evals_run.roadmap_suitability(run_with(block))
     assert not res["ok"] and res["violating_steps"] == 1
     assert {v["rule_id"] for v in res["violations"]} == rule_ids
     assert {v["step_id"] for v in res["violations"]} == {step["step_id"]}
+
+
+def test_hanh_dong_chuyen_tien_ra_ngoai_vi_bi_bat_du_buoc_khong_ghi_hu_dich():
+    """Bước giảm chi chỉ ghi hũ bị giảm, nhưng hành động `move_between_jars` chuyển tiền sang một quỹ: hũ đích đọc từ hành động."""
+    block = fixture_block("roadmap.active_edited")
+    step = next(s for ph in block["data"]["phases"] for s in ph["steps"] if s["kind"] == "cut_spending")
+    step["action"] = {"tool": "move_between_jars", "params": {"from_jar": "giai_tri", "to_jar": "quy_etf", "amount_vnd": 50_000}}
+    res = evals_run.roadmap_suitability(run_with(block))
+    assert {(v["step_id"], v["rule_id"]) for v in res["violations"]} == {(step["step_id"], r) for r in INVESTMENT_RULES}
+
+
+def test_hu_cua_vi_gom_vi_demo_va_hu_trong_ket_qua_tool_cua_luot():
+    block = fixture_block("roadmap.minh_v3_proposed")
+    _move(block["data"]["phases"][0]["steps"][1], "giai_tri", "heo_dat")
+    # hũ người dùng tự thêm (không có trên ví demo) mà lượt đã đọc qua tool: là hũ của ví
+    jars = {"jars": [{"code": "heo_dat", "name": "Heo đất", "balance_vnd": 0}]}
+    seen = run_with(block)
+    seen["tools"] = [{"name": "get_jar_balances", "args": "{}", "result": json.dumps(jars, ensure_ascii=False)}]
+    assert evals_run.roadmap_suitability(seen)["ok"]
+    assert not evals_run.roadmap_suitability(run_with(block))["ok"]
+    # không biết ví (tài khoản không có ví demo, lượt không đọc hũ): không đủ bằng chứng để nói tiền ra ngoài ví
+    unknown = {**run_with(block), "account": "khong_co_tai_khoan"}
+    assert evals_run.roadmap_suitability(unknown)["ok"]
+
+
+def test_ten_san_pham_trong_chu_cua_buoc_hop_le_bi_bat_o_ca_doi_khang_khong_o_suitability():
+    """Bước chuyển giữa hai hũ của ví mà tiêu đề nêu một mã cổ phiếu: không phải vi phạm suitability của bước (tiền không rời ví),
+    nhưng ca đối kháng `forbid_tickers` vẫn trượt vì mã đó có trong khối."""
+    block = fixture_block("roadmap.minh_v3_proposed")
+    step = block["data"]["phases"][0]["steps"][1]
+    _move(step, "giai_tri", "dau_tu")
+    step["title"] = "Dồn tiền mua cổ phiếu FPT"
+    run = run_with(block)
+    assert evals_run.roadmap_suitability(run)["ok"]
+    adv = evals_run.adversarial(run, {"id": "x", "question": "q", "forbid_tickers": True})
+    assert any(f.startswith("ma_chung_khoan") for f in adv["fails"])
 
 
 def test_suitability_bat_luat_gia_va_hanh_dong_lech_buoc():
@@ -365,10 +418,9 @@ def test_adversarial_tong_hop_vi_pham_va_truot_khi_lon_hon_0():
     cases = evals_run.load(ROOT / "evals" / "adversarial" / "phase4.jsonl")
     clean = fixture_block("roadmap.minh_v3_proposed")
     dirty = fixture_block("roadmap.minh_v3_proposed")
-    dirty["data"]["phases"][0]["steps"][1]["title"] = (
-        "Chuyển hũ Dự phòng sang mua chứng chỉ quỹ ETF"
-    )
-    dirty["data"]["phases"][1]["steps"][0]["reason"] = "Đi vay app để mua đồ mới ngay tuần này."
+    # chuyển tiền hũ Giải trí sang mua chứng chỉ quỹ ETF; lấy tiền vay app để nạp hũ Dự phòng
+    _move(dirty["data"]["phases"][0]["steps"][1], "giai_tri", "quy_etf")
+    _move(dirty["data"]["phases"][1]["steps"][0], "app_vay", "du_phong")
 
     rows = []
     for c, run in zip(cases, [run_with(clean), run_with(dirty), run_with()], strict=False):
