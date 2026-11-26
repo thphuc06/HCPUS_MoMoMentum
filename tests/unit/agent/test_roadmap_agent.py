@@ -1406,6 +1406,85 @@ def test_buoc_chuyen_sau_ky_luong_khong_vuot_khoan_hu_nguon_nhan_moi_thang(caplo
     assert rejected["detail"] == "amount_over_source"
 
 
+# --- sàn của hũ có khoản định kỳ trả từ chính nó (#39, 26/11): bước không đưa phần chia mỗi tháng của hũ xuống dưới sàn ----------
+def allocation_with(changes):
+    """optimize_allocation.ok.json với vài trường của dòng phân bổ đổi theo hũ (mã hũ -> trường -> giá trị)."""
+    allocation = fixture("optimize_allocation.ok.json")
+    for line in allocation["data"]["lines"]:
+        line.update(changes.get(line["jar"]["code"], {}))
+    return allocation
+
+
+def cut(field, **changes):
+    return review(
+        step_id="giam_giai_tri", kind="cut_spending", jar_code="giai_tri", action=None,
+        amount_ref={"jar_code": "giai_tri", "field": field}, **changes,
+    )  # fmt: skip
+
+
+def split_of(code, field):
+    return review(
+        step_id="doi_ti_le", kind="adjust_split", jar_code=code, action=None,
+        amount_ref={"jar_code": code, "field": field},
+    )  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("lines", "bad", "fixed", "amount"),
+    [
+        # Giải trí trả Netflix (sàn 180.000 ₫, hũ vẫn không thiết yếu): giảm chi CẢ khoản đang nhận (1.200.000 ₫) làm Giải trí còn 0
+        ({"giai_tri": {"floor_vnd": 180_000}}, cut("current_monthly_vnd"), cut("proposed_decrease"), 600_000),
+        # sau kỳ lương chuyển 600.000 ₫ mỗi tháng từ Giải trí (sàn 700.000 ₫) sang Dự phòng: Giải trí còn 600.000 ₫, dưới sàn
+        (
+            {"giai_tri": {"floor_vnd": 700_000}},
+            step(),
+            step(to_jar_code="du_lich", amount_ref={"jar_code": "du_lich", "field": "proposed_increase"}),
+            120_000,
+        ),
+        # giảm phần chia của Giải trí theo phần giảm của bộ tối ưu (600.000 ₫), mà mức đề xuất đã dưới sàn 700.000 ₫ của hũ
+        (
+            {"giai_tri": {"floor_vnd": 700_000}},
+            split_of("giai_tri", "proposed_decrease"),
+            split_of("du_lich", "proposed_increase"),
+            120_000,
+        ),
+    ],
+)  # fmt: skip
+def test_buoc_dua_phan_chia_cua_hu_xuong_duoi_san_vao_vong_sua(lines, bad, fixed, amount, caplog):
+    caplog.set_level("WARNING", logger="yofina.agent.roadmap")
+    tools = scripted_tools(allocation=allocation_with(lines), checks=("ok", "ok", "ok"))
+    result, client, scope = build(tools, later_phase(bad), later_phase(fixed))
+    assert result.outcome.ok and scope.calls == 2
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert feedback["rule_id"] == "step_invalid" and "dưới sàn" in feedback["message"]
+    assert "Giải trí" in feedback["message"]
+    (rejected,) = roadmap_events(caplog, "roadmap_step_rejected")
+    assert rejected["detail"] == "amount_below_floor"
+    later = args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]
+    assert later["amount_vnd"] == amount
+
+
+def test_buoc_giam_toi_dung_san_van_dat():
+    # Giải trí còn đúng bằng sàn sau bước (1.200.000 - 600.000 = 600.000 ₫): không vào vòng sửa
+    tools = scripted_tools(allocation=allocation_with({"giai_tri": {"floor_vnd": 600_000}}), checks=("ok", "ok"))
+    result, _, scope = build(tools, later_phase(cut("proposed_decrease")))
+    assert result.outcome.ok and scope.calls == 1
+    assert args_for(tools, "save_roadmap")[0]["phases"][1]["steps"][0]["amount_vnd"] == 600_000
+
+
+def test_save_jars_dua_hu_xuong_duoi_san_vao_vong_sua():
+    # tỷ lệ đề xuất cắt Giải trí từ 1.200.000 xuống 600.000 ₫ mỗi tháng mà sàn của hũ là 700.000 ₫: không áp tỷ lệ đó
+    lines = {"giai_tri": {"floor_vnd": 700_000}}
+    tools = scripted_tools(allocation=allocation_with(lines), get_jar_balances=goal_balances(), checks=("ok", "ok"))
+    split = review(kind="adjust_split", action="save_jars")
+    fixed = split_of("du_lich", "proposed_increase")
+    result, client, _ = build(tools, outline(split), outline(fixed))
+    assert result.outcome.ok
+    (feedback,) = prompt(client, 1)["feedback"]
+    assert "save_jars" in feedback["message"] and "dưới sàn" in feedback["message"] and "Giải trí" in feedback["message"]
+    assert "action" not in args_for(tools, "save_roadmap")[0]["phases"][0]["steps"][0]
+
+
 def test_log_thoi_luong_tung_chang(caplog):
     caplog.set_level("INFO", logger="yofina.agent.roadmap")
     tools = scripted_tools(checks=("violation", "ok"))

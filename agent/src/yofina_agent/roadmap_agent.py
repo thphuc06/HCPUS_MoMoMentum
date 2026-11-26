@@ -577,6 +577,15 @@ def _save_jars_params(
         jars.append(item)
     if all(lines[jar.code].split_percent_proposed == jar.split_percent for jar in balances):
         raise ValueError("Tỷ lệ đề xuất trùng tỷ lệ hiện tại. Bỏ action save_jars.")
+    # tỷ lệ mới không được cắt một hũ xuống dưới sàn của dòng phân bổ (khoản định kỳ trả từ hũ, chi thiết yếu; #39 26/11). Hũ đã dưới
+    # sàn mà không bị cắt thêm thì không chặn ở đây.
+    if cut := [
+        jar for jar in balances
+        if lines[jar.code].proposed_monthly_vnd < min(lines[jar.code].current_monthly_vnd, lines[jar.code].floor_vnd)
+    ]:  # fmt: skip
+        raise ValueError(
+            f"Tỷ lệ đề xuất đưa hũ {', '.join(_clean_text(jar.name) for jar in cut)} xuống dưới sàn của hũ. Bỏ action save_jars."
+        )
     try:
         return normalize_params(SAVE_JARS, {"jars": jars})
     except ParamsError as exc:
@@ -731,13 +740,26 @@ def _amount_issue(
     - bước chuyển tiền không vượt phần hũ nhận cần thêm trong kỳ (`_need`), và ở giai đoạn sau kỳ lương không vượt khoản hũ nguồn nhận
       mỗi tháng theo tỷ lệ chia hiện tại (bước làm ngay đã bị luật `source_jar_covers` chặn theo số dư hiện có);
     - bước đổi tỷ lệ chia tăng phần của một hũ không vượt phần hũ đó cần thêm (mức chia mới không phải số tiền của bước), bước giảm phần
-      chia hay giảm chi không vượt khoản hũ đó đang nhận mỗi tháng.
+      chia hay giảm chi không vượt khoản hũ đó đang nhận mỗi tháng;
+    - bước làm giảm khoản một hũ nhận mỗi tháng (giảm chi, giảm phần chia, chuyển tiền sau kỳ lương từ hũ nguồn) không đưa hũ đó xuống
+      dưới sàn của dòng phân bổ (`floor_vnd`: gồm mọi khoản định kỳ đang hoạt động trả từ hũ, như Netflix ở Giải trí, #39 26/11).
+      Bước chuyển tiền làm ngay lấy từ số dư hiện có, không từ phần chia mỗi tháng, nên chỉ chịu luật `source_jar_covers`.
 
     Trả (mã ổn định cho log, phản hồi cho vòng sửa), None khi hợp lệ."""
 
     def name(code: str) -> str:
         jar = balances.get(code)
         return _clean_text(jar.name) if jar is not None else code
+
+    def below_floor(line: AllocationLine) -> tuple[str, str] | None:
+        after = line.current_monthly_vnd - amount
+        if after >= line.floor_vnd:
+            return None
+        return "amount_below_floor", (
+            f"Sau bước này hũ {name(line.jar.code)} chỉ còn nhận {format_vnd(max(after, 0))} mỗi tháng, dưới sàn"
+            f" {format_vnd(line.floor_vnd)} của hũ (khoản định kỳ trả từ hũ và chi thiết yếu). Chọn hũ nguồn khác hoặc tham"
+            " chiếu nhỏ hơn để hũ còn ít nhất bằng sàn."
+        )
 
     source, target = outline.jar_code, outline.to_jar_code
     if outline.kind in _MONEY_MOVING_KINDS and source and target and source != target:
@@ -753,6 +775,8 @@ def _amount_issue(
                 f"Số tiền {format_vnd(amount)} mỗi tháng lớn hơn khoản hũ {name(source)} nhận mỗi tháng"
                 f" ({format_vnd(src.current_monthly_vnd)}). Chọn hũ nguồn khác hoặc tham chiếu nhỏ hơn."
             )
+        if not immediate and src is not None:
+            return below_floor(src)
         return None
     line = lines[ref.jar_code]
     if outline.kind == "adjust_split" and ref.field not in _SOURCE_FIELDS:
@@ -762,11 +786,13 @@ def _amount_issue(
                 f"Số tiền {format_vnd(amount)} lớn hơn phần hũ {name(ref.jar_code)} cần thêm mỗi tháng ({format_vnd(need)});"
                 " mức chia mới không phải số tiền của bước. Dùng proposed_increase của hũ được tăng phần chia."
             )
-    elif outline.kind in ("adjust_split", "cut_spending") and amount > line.current_monthly_vnd:
-        return "amount_over_source", (
-            f"Số tiền {format_vnd(amount)} lớn hơn khoản hũ {name(ref.jar_code)} đang nhận mỗi tháng"
-            f" ({format_vnd(line.current_monthly_vnd)}). Dùng proposed_decrease của hũ đó."
-        )
+    elif outline.kind in ("adjust_split", "cut_spending"):
+        if amount > line.current_monthly_vnd:
+            return "amount_over_source", (
+                f"Số tiền {format_vnd(amount)} lớn hơn khoản hũ {name(ref.jar_code)} đang nhận mỗi tháng"
+                f" ({format_vnd(line.current_monthly_vnd)}). Dùng proposed_decrease của hũ đó."
+            )
+        return below_floor(line)
     return None
 
 
