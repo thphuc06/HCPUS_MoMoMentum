@@ -83,7 +83,9 @@ def test_dang_ngan_chi_co_khi_dung_so_tien_nguoi_dung_noi(monkeypatch):
     # 20.550.000 ₫ làm tròn ra "20,6 triệu" (khác số người dùng nói): không đưa dạng ngắn, chỉ dạng đầy đủ
     goal = {**GOAL, "amount_vnd": 20_550_000}
     routed = route_response(intent="roadmap", roadmap_action="view", **goal)
-    _, _, writer = run_turn(RR9, llm=make_llm([routed]), tools=_tools(), monkeypatch=monkeypatch, writer=FakeWriter("Được."))
+    # câu người dùng nêu đúng số router trả: harness router bỏ số tiền không có trong hội thoại
+    question = "lo trinh hien tai co kip gom 20.550.000 truoc Tet khong"
+    _, _, writer = run_turn(question, llm=make_llm([routed]), tools=_tools(), monkeypatch=monkeypatch, writer=FakeWriter("Được."))
     asked = writer.calls[0]["compact"]["muc_tieu_nguoi_dung_hoi"]
     assert asked["so_tien_text"] == "20.550.000 ₫" and "so_tien_short_text" not in asked
 

@@ -37,8 +37,10 @@ def _move(monkeypatch, amount: int, *, balances: dict | None = None, error: dict
         }
     )
     routed = route_response(intent="move", from_jar_text="Dự phòng", to_jar_text="Ăn uống", amount_vnd=amount)
+    # câu người dùng nêu đúng số router trả: harness router bỏ số tiền không có trong hội thoại
+    said = f"{amount:,}".replace(",", ".")
     events, tools, writer = run_turn(
-        "Mình muốn chuyển ngay 3 triệu từ Dự phòng sang Ăn uống", llm=make_llm([routed]), tools=tools, monkeypatch=monkeypatch
+        f"Mình muốn chuyển ngay {said} từ Dự phòng sang Ăn uống", llm=make_llm([routed]), tools=tools, monkeypatch=monkeypatch
     )
     check_agui_order(events)
     return events, tools, writer
