@@ -1,0 +1,60 @@
+{
+  "app_date": "2026-11-21",
+  "nudge": {
+    "nudge_id": "3e5f7a91-2b4d-4f6a-9c8e-0b2d4f6a8c1e",
+    "kind": "runout_warning",
+    "app_date": "2026-11-21",
+    "title": "Hũ Ăn uống dự kiến cạn ngày 23/11",
+    "reason": "Còn 380.000 ₫, cạn xong còn 12 ngày nữa mới tới kỳ lương 05/12.",
+    "gate": {
+      "rank": 1,
+      "score": 2.71,
+      "threshold": 1.0,
+      "candidates": 3
+    },
+    "jar_code": "an_uong",
+    "value_vnd": 1440000
+  },
+  "card": {
+    "v": 1,
+    "id": "proactive_card:8f3a21c94b7e4d0aa1c25e6f7b8c9d01:runout_warning",
+    "trace_id": "8f3a21c94b7e4d0aa1c25e6f7b8c9d01",
+    "fallback_text": "Hũ Ăn uống dự kiến cạn ngày 23/11. Còn 380.000 ₫, cạn xong còn 12 ngày nữa mới tới kỳ lương 05/12.",
+    "source": {
+      "tool": "rest:GET /nudges/today",
+      "as_of": "2026-12-10T03:00:00Z",
+      "app_date": "2026-11-21"
+    },
+    "type": "proactive_card",
+    "data": {
+      "kind": "runout_warning",
+      "status": "short",
+      "title": "Hũ Ăn uống dự kiến cạn ngày 23/11",
+      "reason": "Còn 380.000 ₫, cạn xong còn 12 ngày nữa mới tới kỳ lương 05/12.",
+      "jar_code": "an_uong",
+      "nudge_id": "3e5f7a91-2b4d-4f6a-9c8e-0b2d4f6a8c1e",
+      "actions": [
+        {
+          "kind": "open_forecast",
+          "label": "Xem dự báo",
+          "jar_code": "an_uong"
+        },
+        {
+          "kind": "ask_why",
+          "label": "Hỏi vì sao",
+          "jar_code": "an_uong",
+          "prompt": "Vì sao hũ Ăn uống dự kiến cạn ngày 23/11?"
+        },
+        {
+          "kind": "snooze",
+          "label": "Để sau"
+        },
+        {
+          "kind": "mute_kind",
+          "label": "Ít nhắc loại này"
+        }
+      ]
+    }
+  },
+  "suppressed": []
+}

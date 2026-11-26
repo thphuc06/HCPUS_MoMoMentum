@@ -384,3 +384,22 @@ def test_the_cua_moi_loai_dung_hop_dong(kind):
 def test_dat_lai_demo_xoa_ho_so_hanh_vi():
     tables = [s.split()[2] for s in RESET_DELETES]
     assert "behavior_profiles" in tables and tables.index("behavior_profiles") < tables.index("jars")
+
+
+def test_ban_tin_canh_bao_can_co_nut_hoi_vi_sao_nhu_the_tong_quan():
+    """Tổng quan ưu tiên bản tin của cổng (`GET /nudges/today`) hơn thẻ tất định của `GET /overview`; bản tin cảnh báo cạn từng thiếu nút
+    "Hỏi vì sao" nên nút mất khỏi Tổng quan khi cổng đã chọn bản tin hôm nay (#39). Câu hỏi dựng bằng mã từ tiêu đề của bản tin."""
+    row = {
+        "id": NID, "kind": "runout_warning", "title": "Hũ Ăn uống dự kiến cạn ngày 23/11", "body": "Lý do.", "jar_code": "an_uong",
+        "gate_reason": {"rank": 1, "score": 2.0, "threshold": 1.0, "candidates": 2, "status": "short"}, "trace_id": TRACE,
+    }  # fmt: skip
+    card = P.gate_card(row, as_of=datetime(2026, 12, 10, 3, 0, tzinfo=UTC), app_date=TODAY)
+    kinds = [a.kind for a in card.data.actions]
+    assert kinds == ["open_forecast", "ask_why", "snooze", "mute_kind"]
+    ask = card.data.actions[1]
+    assert (ask.label, ask.jar_code, ask.prompt) == ("Hỏi vì sao", "an_uong", "Vì sao hũ Ăn uống dự kiến cạn ngày 23/11?")
+    from pathlib import Path
+
+    fixture = Path(__file__).resolve().parents[2] / "contracts/fixtures/rest/OverviewResponse.minh.json"
+    overview_kinds = [a["kind"] for a in json.loads(fixture.read_text(encoding="utf-8"))["proactive_card"]["data"]["actions"]]  # thẻ tất định
+    assert kinds == overview_kinds

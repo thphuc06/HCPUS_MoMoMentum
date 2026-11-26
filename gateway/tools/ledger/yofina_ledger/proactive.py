@@ -572,17 +572,25 @@ def gather_candidates(
 
 
 # --- thẻ của bản tin ---------------------------------------------------------------------------------
-_GATE_ACTIONS: dict[str, Callable[[str | None], list[dict[str, Any]]]] = {
-    "runout_warning": lambda jar: [
+def _gate_ask_why(jar: str | None, title: str) -> dict[str, Any]:
+    """Nút "Hỏi vì sao" của bản tin cảnh báo cạn, như thẻ tất định của `GET /overview` (#39: Tổng quan ưu tiên bản tin của cổng, và
+    bản tin từng thiếu nút này). Dòng `nudges` không giữ tên hũ nên câu hỏi dựng bằng mã từ tiêu đề của bản tin (đã nêu tên hũ)."""
+    prompt = _clip(f"Vì sao {title[:1].lower()}{title[1:]}?", 200)
+    return {"kind": "ask_why", "label": "Hỏi vì sao", **({"jar_code": jar} if jar else {}), "prompt": prompt}
+
+
+_GATE_ACTIONS: dict[str, Callable[[str | None, str], list[dict[str, Any]]]] = {
+    "runout_warning": lambda jar, title: [
         {"kind": "open_forecast", "label": "Xem dự báo", **({"jar_code": jar} if jar else {})},
+        _gate_ask_why(jar, title),
         _SNOOZE,
         _MUTE,
     ],
-    "obligation_due": lambda jar: [{"kind": "open_obligations", "label": "Xem nghĩa vụ"}, _SNOOZE, _MUTE],
-    "roadmap_proposed": lambda jar: [{"kind": "open_roadmap", "label": "Xem lộ trình mới"}, _SNOOZE, _MUTE],
-    "review_needed": lambda jar: [{"kind": "review_unclassified", "label": "Trả lời ngay"}, _SNOOZE, _MUTE],
-    "resilience_drop": lambda jar: [{"kind": "open_resilience", "label": "Xem điểm chống chịu"}, _SNOOZE, _MUTE],
-    "behavior_insight": lambda jar: [{"kind": "open_profile", "label": "Xem hồ sơ chi tiêu"}, _SNOOZE, _MUTE],
+    "obligation_due": lambda jar, title: [{"kind": "open_obligations", "label": "Xem nghĩa vụ"}, _SNOOZE, _MUTE],
+    "roadmap_proposed": lambda jar, title: [{"kind": "open_roadmap", "label": "Xem lộ trình mới"}, _SNOOZE, _MUTE],
+    "review_needed": lambda jar, title: [{"kind": "review_unclassified", "label": "Trả lời ngay"}, _SNOOZE, _MUTE],
+    "resilience_drop": lambda jar, title: [{"kind": "open_resilience", "label": "Xem điểm chống chịu"}, _SNOOZE, _MUTE],
+    "behavior_insight": lambda jar, title: [{"kind": "open_profile", "label": "Xem hồ sơ chi tiêu"}, _SNOOZE, _MUTE],
 }
 #: trạng thái của thẻ theo loại khi dòng `nudges` không giữ trạng thái (cột không có); hũ hụt lấy từ `gate_reason.status`
 _GATE_STATUS = {
@@ -611,7 +619,7 @@ def gate_card(
         status=status,
         title=str(nudge["title"]),
         reason=str(nudge["body"]),
-        actions=_GATE_ACTIONS[kind](jar),
+        actions=_GATE_ACTIONS[kind](jar, str(nudge["title"])),
         trace_id=str(nudge["trace_id"]),
         source_tool=source_tool,
         as_of=as_of,
