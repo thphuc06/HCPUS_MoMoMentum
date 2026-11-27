@@ -53,21 +53,20 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | — | Có thêm tính năng mới không | Được, tới hết 30/11; chưa xanh thì cắt | 25/11 |
 | C-14 | Persona và tài khoản giám khảo | `minh` 120 ngày; `giamkhao1–3` dùng `minh`, không thuộc `ops` | 25/11 |
 | **I-01** | Mô hình kinh doanh | **M2 (pilot) → M7 (năm đầu) → M4 (bán bản quyền cho MoMo)**; slide mở bằng đích đến M4 ([06 mục 3c](06-mo-hinh-kinh-doanh.md#3c-bảy-mô-hình-kinh-doanh-để-chọn-2511)) | 26/11 |
+| **C-02** | Mức "sát" (vàng) khi kiểm tra trước khi chi | Xanh: trụ tới lương, dư thoải mái. **Vàng: theo P50 vẫn trụ tới lương nhưng số dư ngày lương dưới 3 ngày chi tiêu thường của hũ, hoặc P10 hụt trước lương.** Đỏ: theo P50 cạn trước lương. Đã báo [#30](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/30) | 27/11 |
+| **C-05** | Ngưỡng "khoản đủ lớn mới hỏi" | **Bỏ.** Thay bằng BR-79: hỏi theo tổng khoản tự xếp chưa xác nhận trong kỳ, vượt 2% lương thì một thẻ xem lại; chờ Phúc ước lượng ở [#53](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/53) | 27/11 |
+| **G-01** | Phạm vi demo cho quy tắc mới | **Làm G1** (chi phí trả sau quy ra năm, BR-75) trước 30/11 ở [#54](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/54); đi cùng phí trả chậm #52. G3 và BR-74 đến 77 để sau hạn nộp | 27/11 |
+| **J-01** | Số phân hũ trên slide | **Lựa chọn A (MVP):** chỉ dùng 92% đúng, 17,4% phải hỏi **của ví demo nhiều hũ** (giám khảo dùng persona `minh`); không đo ví 3 hũ có model trước hạn nộp | 27/11 |
+| **C-04** | Phí trả chậm trong sản phẩm mô phỏng | **Thêm mức A trước 30/11**: bốn bậc phí 5,25 / 10,5 / 15,75 / 21% theo số ngày trễ, hiện trên thẻ và what-if ([#52](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/52)); sổ cái trừ phí khi quá hạn để sau hạn nộp | 27/11 |
 
 ### 2.1 Gấp: technical đang chờ (chốt trước hạn tính năng 30/11)
 
 | ID | Câu hỏi | Đề xuất | Ai chốt | Gỡ việc gì |
 |---|---|---|---|---|
-| **C-02** → [#30](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/30) | Định nghĩa mức "sát" (vàng) khi kiểm tra trước khi chi | Theo BR-36: vàng khi ngày cạn mới rơi trước kỳ lương nhưng sau ngày cạn cũ. Technical đặt ngưỡng tương ứng | Nhóm | T-02; AC-FR6-01 |
 | **C-03** | Ngưỡng nghĩa vụ trên thu nhập (code đang dùng một ngưỡng 36%) | Đơn giản nhất: **giữ 36% làm mức đỏ** (có căn cứ quy tắc 28/36, nằm giữa đề xuất 30–40%), không tách hai mức trước demo | Nhóm | T-06 |
-| **BR-79** (thay C-05, [#53](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/53)) | Khoản nhỏ Yofina tự xếp mà người dùng chưa xác nhận có thể cộng dồn thành khoản lớn | **Bỏ C-05** (ngưỡng theo từng khoản; #28 đo chỉ giảm khoảng 1,2 điểm và tạo ra chi tiêu người dùng không biết). **Thay bằng BR-79:** cộng các khoản tự xếp chưa xác nhận theo hũ trong kỳ lương, vượt 2% lương thì một thẻ mời xem lại cả nhóm. Chờ Phúc ước lượng; không kịp 30/11 thì ghi lộ trình và nói trên slide | Kỹ thuật ước lượng | Độ đúng của dự báo |
-| **C-04** (T-09, [#52](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/52)) | **Phí trả chậm trong sản phẩm mô phỏng** | **Chốt 27/11, đã mở issue [#52](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/52). Thêm trước 30/11, mức A**: thêm một dòng phí trả chậm vào bảng biểu phí; engine kiểm tra trước khi chi và what-if **đã có sẵn đoạn đọc dòng này** và hiện "nếu trễ hạn phải trả thêm X ₫". Cần thêm vài dòng mã để nhận phí theo **tỷ lệ** như MoMo (5,25–21% dư nợ quá hạn). Mức B (sổ cái tự trừ phí khi quá hạn) để sau hạn nộp. Lý do: K4, mô hình M2 (thu theo phần trễ hạn giảm được) và G1 đều nói về phí trễ, nên demo cần cho thấy con số này | Nhóm, Kỹ thuật | Demo, slide kinh doanh |
 | **FR14** | Cảnh báo khoản chuyển lệch thói quen: làm bản nhỏ trước 30/11 hay để lộ trình | Chưa có quyết định bỏ hẳn; chỉ nằm trong thứ tự cắt. Bản nhỏ: khi chuyển tiền cho người nhận, so số tiền với thói quen (bộ phát hiện bất thường đã có trong mã) và hiện cảnh báo trong bản xem trước nếu lệch nhiều hoặc làm hụt hũ Dự phòng. **Đề xuất: ưu tiên C-04 trước; làm FR14 nếu chủ dự án thấy còn sức** | Chủ dự án | Không bắt buộc cho chủ đề "Trợ lý tài chính" |
-| **G-01, C-12, T-07** | Phạm vi demo cho các quy tắc mới | Chỉ thêm **G1** (chi phí quy năm trên thẻ kiểm tra trước khi chi, BR-75); phải xanh trước **30/11** (hạn tính năng mới). Không đổi bộ hũ demo (C-12): **đổi 26/11**, chủ dự án chốt bộ hũ mặc định theo mục đích và bộ hũ demo có hũ tự thêm, đã deploy (issue #39, xem cuối B2a của [02](02-business-rules.md)). Còn lại ghi là lộ trình | Nhóm, Kỹ thuật | T-07 |
 | C-01 | "Còn N ngày tới lương" tính từ hôm nay hay từ ngày cạn | Tách hai câu: ngày cạn, rồi số ngày trống tới lương | Nhóm | Câu chữ cảnh 1 |
 | C-08 | Vị trí và câu chữ nhãn "do AI tạo" | Dòng nhỏ dưới mỗi câu trả lời và trong màn Giới thiệu. Hỏi technical đã có chưa | Nhóm | AC-DEMO-03 |
-| C-14 | Persona chính | Mới đi làm (22–26), khớp persona Minh | Nhóm | Kịch bản demo |
-| E-02 | Định nghĩa "cảnh báo đúng" cho K5 | ±3 ngày quanh ngày dự báo. Technical sẽ chạy backtest tay cho K5 (Q11) | Nhóm | Số K5 trên slide |
 | NFR-31 | Bật CloudWatch Transaction Search (có phí) | Không bật; màn trace đọc từ `audit_events` đã đủ cho demo | Chủ dự án | Còn treo trong HANDOFF |
 | NFR-34 | Mức ngân sách AWS mỗi tháng | Chốt một con số để đặt cảnh báo | Chủ dự án | — |
 | NFR | Nới NFR-01 (lượt đầu phiên lạnh lên 3 giây); duyệt NFR-18, 23, 24, 28, 30, 37, 41, 43, 44 | Duyệt theo đề xuất trong file 04 | Kỹ thuật | — |
@@ -79,7 +78,6 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | **I-02** | **Duyệt các quy tắc đánh dấu đề xuất**: BC-13, BR-63 đến 78, NFR-44, K10, K11, L19, L20 | Duyệt theo khối: cơ cấu hũ (BR-63 đến 73, 78), chi phí trả sau (74 đến 76), hỗ trợ trước hạn (77). **26/11:** BR-67, 69 chốt và đã làm; BR-63 (chốt chưa bắt buộc trước hạn nộp), 64, 65, 66, 73, 78 một phần; BR-68, 70, 71 hoãn; còn duyệt BR-72, 74 đến 77. BR-79 đến 84 chỉ có ở Notion, chưa vào repo | Nhóm | [02](02-business-rules.md) |
 | E-01 | Duyệt mục tiêu K1–K11 | K4 10% nay có căn cứ AFM (đo được 21–24%); chú ý K3 (15%), K10 (25%), K11 (20%) | Nhóm | [08](08-kpi-kinh-doanh.md) |
 | E-03 | KPI nào lên slide | K2; **K5 với hai định nghĩa cạnh baseline**; K4 kèm thử nghiệm AFM; K9 dạng hòa vốn; phân hũ báo cả hai mặt | Nhóm | [08](08-kpi-kinh-doanh.md) |
-| **J-01** | Số phân loại trên slide; có đo ví 3 hũ có model trước 1/12 không | **Gắn 92%, 17,4% với ví demo nhiều hũ**; không dùng cho tài khoản mới 3 hũ. Đề xuất nhờ chủ dự án duyệt đo có model (khoảng 294 lời gọi model nhỏ). Chi tiết: [13 T-08](13-tien-do-technical.md) | Nhóm, chủ dự án | [13](13-tien-do-technical.md) |
 | D-01 | Hướng thương mại chính | B2B2C qua ví | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
 | D-02 | Chỉ số Bắc Đẩu | "Số người mỗi tuần tránh được hụt nhờ cảnh báo trước" | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
 | D-03 | Tên và ranh giới ba gói | Như 06 mục 5.2; chốt giá sau khi technical đo chi phí AI mỗi lượt | Nhóm | [06](06-mo-hinh-kinh-doanh.md) |
