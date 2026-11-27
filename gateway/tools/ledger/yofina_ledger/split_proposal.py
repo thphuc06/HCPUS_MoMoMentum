@@ -32,7 +32,9 @@ Quy tắc:
 
 from __future__ import annotations
 
+import hashlib
 import math
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -43,6 +45,8 @@ from typing import Any
 
 from yofina_core.clock import next_payday, payday_dates, payday_in_month
 from yofina_core.config import Config
+from yofina_core.confirm import canonical_json
+from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd
 from yofina_core.params import ParamsError, TxTypeInfo, normalize_sinking_items, unique_jar_code
 from yofina_core.schedule import due_before_payday, expand_due_dates
@@ -316,6 +320,41 @@ def stored_items(jar: Mapping[str, Any] | None) -> list[KnownItem]:
         KnownItem(str(i["name"]), convert.vnd(i["amount_vnd"]), convert.to_date(i["needed_date"]))  # type: ignore[arg-type]
         for i in ((jar or {}).get("sinking_items") or [])
     ]
+
+
+JAR_LIST_VERSION_LENGTH = 16
+JAR_LIST_VERSION_RE = re.compile(rf"[0-9a-f]{{{JAR_LIST_VERSION_LENGTH}}}")
+
+
+def jar_list_version(jars: Sequence[Mapping[str, Any]]) -> str:
+    """Phiên bản của các trường `save_jars` ghi, độc lập với thứ tự đọc các dòng và số dư."""
+    snapshot = [
+        {
+            "code": jar["code"],
+            "name": jar["name"],
+            "split_percent": format(Decimal(str(jar["split_percent"])).normalize(), "f"),
+            "kind": jar["kind"],
+            "purpose": jar.get("purpose"),
+            "color_key": jar["color_key"],
+            "icon_key": jar["icon_key"],
+            "sort_order": jar["sort_order"],
+            "goal_vnd": convert.vnd(jar["goal_vnd"]) if jar.get("goal_vnd") is not None else None,
+            "goal_date": str(jar["goal_date"]) if jar.get("goal_date") is not None else None,
+            "sinking_items": [item.wire() for item in stored_items(jar)],
+        }
+        for jar in sorted(jars, key=lambda jar: jar["code"])
+    ]
+    return hashlib.sha256(canonical_json(snapshot).encode("utf-8")).hexdigest()[
+        :JAR_LIST_VERSION_LENGTH
+    ]
+
+
+def check_jar_list_version(expected: str | None, jars: Sequence[Mapping[str, Any]]) -> None:
+    if expected is not None and expected != jar_list_version(jars):
+        raise YofinaError(
+            ErrorCode.PARAMS_MISMATCH,
+            "Danh sách hũ đã thay đổi sau khi tạo thẻ này, hãy xem lại.",
+        )
 
 
 def merge_items(existing: Sequence[KnownItem], new: Sequence[KnownItem]) -> list[KnownItem]:

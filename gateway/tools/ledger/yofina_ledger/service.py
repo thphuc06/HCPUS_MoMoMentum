@@ -34,14 +34,18 @@ from yofina_core.confirm import (
     ConfirmService,
     IssuedToken,
     ParamsError,
+    TokenPayload,
+    check_binding,
+    decode_token,
     hash_normalized_params,
+    issue_token,
     normalize_params,
 )
 from yofina_core.confirm import params_hash as compute_params_hash
 from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.money import format_vnd, to_vnd
-from yofina_core.wallet import ACTION_TOOLS, BNPL_PRODUCT_CODE, PLANNER_WRITE_TOOLS
-from yofina_ledger import events
+from yofina_core.wallet import ACTION_TOOLS, BNPL_PRODUCT_CODE, PLANNER_WRITE_TOOLS, SAVE_JARS
+from yofina_ledger import events, split_proposal
 from yofina_ledger.events import EventPublisher
 from yofina_ledger.forecast_client import ForecastClient
 from yofina_ledger.phase3 import Phase3Reads
@@ -372,6 +376,44 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         """Như `issue_confirmation_with_preview` nhưng chỉ trả token (đường dùng trong test và nơi không cần xem trước)."""
         return self.issue_confirmation_with_preview(user_id, **kwargs)[0]
 
+    def _issue_save_jars_versioned(
+        self, user_id: str, norm: dict[str, Any], digest: str
+    ) -> IssuedToken:
+        """Ký bản ledger đã chuẩn hóa. Bộ chuẩn hóa chung của ConfirmService bỏ base_version."""
+        token, payload = issue_token(
+            self.confirm._key(),
+            sub=user_id,
+            tool=SAVE_JARS,
+            params_hash=digest,
+            now_epoch=self.confirm._clock().timestamp(),
+            ttl_seconds=self.confirm.ttl_seconds,
+        )
+        return IssuedToken(
+            token=token,
+            expires_at=datetime.fromtimestamp(payload.exp, UTC),
+            ttl_seconds=self.confirm.ttl_seconds,
+            tool=SAVE_JARS,
+            params=norm,
+            params_hash=digest,
+        )
+
+    def _verify_save_jars_versioned(
+        self, user_id: str, norm: Mapping[str, Any], token: str
+    ) -> TokenPayload:
+        payload = decode_token(
+            token,
+            key=self.confirm._key(),
+            now_epoch=self.confirm._clock().timestamp(),
+            max_ttl_seconds=self.confirm.max_ttl_seconds,
+        )
+        check_binding(
+            payload,
+            sub=user_id,
+            tool=SAVE_JARS,
+            params_hash=hash_normalized_params(SAVE_JARS, norm),
+        )
+        return payload
+
     def issue_confirmation_with_preview(
         self,
         user_id: str,
@@ -422,6 +464,13 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         ref = parse_confirm_ref(conversation_id, confirm_block_id, norm, tool)
         if ref is not None:
             self._check_offer(user_id, ref, tool=tool, trace_id=trace_id, channel="rest")
+        if (
+            tool == SAVE_JARS
+            and "base_version" not in norm
+            and ref is None
+            and not client_params_hash
+        ):
+            norm["base_version"] = split_proposal.jar_list_version(st.user_jars())
         prep = self._validate(user_id, tool, norm, st, name_hint=name_hint)
         digest = hash_normalized_params(tool, prep.norm)
         if client_params_hash and client_params_hash != digest:
@@ -432,7 +481,12 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         preview: dict[str, Any] = {"summary": prep.summary[:120], "changes": prep.changes}
         if prep.warnings:
             preview["warnings"] = prep.warnings[:5]
-        return self.confirm.issue(user_id, tool, prep.norm), preview
+        issued = (
+            self._issue_save_jars_versioned(user_id, prep.norm, digest)
+            if tool == SAVE_JARS and "base_version" in prep.norm
+            else self.confirm.issue(user_id, tool, prep.norm)
+        )
+        return issued, preview
 
     def cancel_offer(
         self, user_id: str, *, conversation_id: Any, confirm_block_id: Any, trace_id: str
@@ -497,7 +551,11 @@ class LedgerService(WalletReads, WalletWrites, Phase3Reads):
         norm, st = self._normalize(user_id, tool, params)
         ref = parse_confirm_ref(conversation_id, confirm_block_id, norm, tool)
         try:
-            payload = self.confirm.verify(confirm_token, sub=user_id, tool=tool, params=norm)
+            payload = (
+                self._verify_save_jars_versioned(user_id, norm, confirm_token)
+                if tool == SAVE_JARS and "base_version" in norm
+                else self.confirm.verify(confirm_token, sub=user_id, tool=tool, params=norm)
+            )
         except YofinaError as exc:
             if exc.code in _TOKEN_REJECTIONS:
                 self._audit_rejection(user_id, exc, norm, trace_id, channel, tool)

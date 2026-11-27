@@ -292,6 +292,7 @@ def test_runtime_reads_propose_jar_split_result(fixture, kind):
             data = outcome.payload["data"]
             confirm = B.ConfirmActionData.model_validate(data["confirm"])
             assert confirm.tool == "save_jars" and confirm.params == data["params"]
+            assert isinstance(confirm.params["base_version"], str)
 
 
 def test_dang_moi_that_su_co_truong_moi():
