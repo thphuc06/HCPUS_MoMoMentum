@@ -56,7 +56,9 @@ Cấu hình riêng của `YofinaTools` (`loadToolsConfig` trong `lib/tools-stack
 | `appTimezone` / `demoAnchorDate` | `Asia/Ho_Chi_Minh` / `2026-11-21` | Đồng hồ mô phỏng ([ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md)) |
 | `dbResumeMaxWaitSeconds` | 18 | Chờ Aurora dậy trong Lambda (nhỏ hơn timeout) |
 | `apiThrottleRate` / `apiThrottleBurst` | 20 / 40 | Giới hạn mặc định của API |
-| `extraCorsOrigins` | `http://localhost:5173` | Origin CORS ngoài Amplify (phân cách bằng dấu phẩy) |
+| `extraCorsOrigins` | `http://localhost:5173` | Origin CORS ngoài Amplify (phân cách bằng dấu phẩy). Đặt `extraCorsOrigins=` để chỉ cho phép origin Amplify |
+| `opsGuardrailErrorAlarmThreshold` | 1 | Số lỗi guardrail trong 5 phút để gửi cảnh báo SNS. Đặt `0` để tắt cả metric filter và alarm |
+| `opsRuntimeEndpointName` | `DEFAULT` | Tên endpoint trong đường dẫn log group AgentCore Runtime mà metric filter sử dụng |
 | `onboardingJarLayout` | `catalogue` | Công tắc quay lui bộ hũ của tài khoản mới (#39), thành `YOFINA_ONBOARDING_JAR_LAYOUT` của Lambda ledger: `catalogue` là bộ hũ `is_default` của `jar_templates` (ba hũ sau 0059), `legacy` là bộ bảy hũ cũ. Quay lui: `uv run scripts/cdk.py deploy YofinaTools --require-approval never -c onboardingJarLayout=legacy`; chỉ đổi lần tạo ví sau, ví đã tạo và reset demo giữ nguyên. Lần deploy `YofinaTools` sau phải giữ `-c onboardingJarLayout=legacy` (hoặc đặt trong `cdk.context.json`), không thì về `catalogue`. Giá trị khác bị từ chối lúc synth |
 
 Cấu hình pipeline dự báo (`loadForecastConfig` trong `lib/forecast-pipeline.ts`, đổi bằng `-c`; truyền vào Lambda dưới dạng `YOFINA_FORECAST_*`, đọc ở `pipelines/forecast/yofina_forecast/settings.py`):
@@ -208,6 +210,27 @@ npm run typecheck --prefix infra-cdk              # kiểm kiểu
 - Không đổi ID construct của stack có dữ liệu (`Cluster`, `Users`, `Usage`...): đổi ID là thay thế tài nguyên. Luôn `diff` trước khi deploy.
 - Nâng `aws-cdk-lib`: kiểm `BootstrapVersion` tối thiểu trong template (`cdk.out/*.template.json`) không vượt 32.
 - Muốn đặt email cảnh báo lần đầu: `aws ssm put-parameter --name /yofina/alert-email --type SecureString --value <email> --region ap-southeast-1`, rồi deploy lại `YofinaFoundation`; subscription SNS ở trạng thái chờ cho tới khi người nhận bấm link xác nhận trong thư.
+
+### Alarm lỗi guardrail
+
+`YofinaTools` dùng metric filter trên log group `/aws/bedrock-agentcore/runtimes/<runtimeId>-DEFAULT` do AgentCore tạo.
+Filter đếm dòng chứa `"guardrail_error"`. Alarm `<prefix>-ops-guardrail-errors` gửi SNS khi tổng số lỗi trong 5 phút đạt ngưỡng.
+
+Ở tài khoản mới, deploy `YofinaTools` với `-c opsGuardrailErrorAlarmThreshold=0` vì `YofinaAgent` được deploy sau.
+Sau khi deploy `YofinaAgent` và gọi Runtime lần đầu, kiểm tra SSM `/<prefix>/agent/runtime-id` và log group đã tồn tại.
+Deploy lại `YofinaTools` với ngưỡng dương hoặc bỏ tùy chọn `0` để dùng ngưỡng mặc định.
+
+### Bản RC: bỏ localhost khỏi CORS
+
+Từ thư mục gốc của repo, deploy HTTP API với origin Amplify lấy từ SSM:
+
+```bash
+uv run scripts/cdk.py deploy YofinaTools --require-approval never -c extraCorsOrigins=
+```
+
+Giữ dấu `=` để truyền giá trị rỗng. Nếu bỏ tùy chọn, cấu hình dùng `http://localhost:5173` cho dev.
+Giữ `-c extraCorsOrigins=` trong các lần deploy RC sau hoặc cấu hình `"extraCorsOrigins": ""` trong `infra-cdk/cdk.context.json`.
+Khi deploy `YofinaIngest`, dùng cùng tùy chọn để CORS của bucket upload cũng chỉ cho phép origin Amplify.
 
 ## Migrator: chạy migration
 

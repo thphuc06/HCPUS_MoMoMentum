@@ -6,8 +6,13 @@ import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sns from 'aws-cdk-lib/aws-sns';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { YofinaConfig } from '../config/config';
+
+export const GUARDRAIL_METRIC_NAMESPACE = 'Yofina/Agent';
+export const GUARDRAIL_ERROR_METRIC_NAME = 'GuardrailErrors';
 
 /**
  * Cấu hình của bảng vận hành (FR15, phase 5 luồng D). Đổi bằng context `-c khóa=giá trị`; không giá trị nào phụ thuộc tài khoản.
@@ -23,6 +28,10 @@ export interface OpsDashboardConfig {
   readonly modelCapAlarmPercent: number;
   /** Alarm khi Aurora chạy ở ACU tối đa liên tục từng này phút (0 thì không tạo). */
   readonly acuAtMaxAlarmMinutes: number;
+  /** Ngưỡng lỗi guardrail trong 5 phút (0 thì bỏ alarm và metric filter). */
+  readonly guardrailErrorAlarmThreshold: number;
+  /** Tên endpoint trong log group của AgentCore Runtime. */
+  readonly runtimeEndpointName: string;
 }
 
 function ctxNum(scope: Construct, key: string, dflt: number): number {
@@ -40,6 +49,9 @@ export function loadOpsDashboardConfig(scope: Construct): OpsDashboardConfig {
   if (pct < 0 || pct > 100) throw new Error('opsModelCapAlarmPercent phải trong 0..100');
   const acuMinutes = ctxNum(scope, 'opsAcuAtMaxAlarmMinutes', 30);
   if (acuMinutes < 0 || acuMinutes % 5 !== 0) throw new Error('opsAcuAtMaxAlarmMinutes phải là bội của 5 (chu kỳ 5 phút)');
+  const guardrailErrorAlarmThreshold = ctxNum(scope, 'opsGuardrailErrorAlarmThreshold', 1);
+  if (guardrailErrorAlarmThreshold < 0) throw new Error('opsGuardrailErrorAlarmThreshold phải lớn hơn hoặc bằng 0');
+  const endpoint = scope.node.tryGetContext('opsRuntimeEndpointName');
   return {
     llmDefaults: path.resolve(
       __dirname,
@@ -50,6 +62,8 @@ export function loadOpsDashboardConfig(scope: Construct): OpsDashboardConfig {
     toolErrorsAlarmThreshold: ctxNum(scope, 'opsToolErrorsAlarmThreshold', 3),
     modelCapAlarmPercent: pct,
     acuAtMaxAlarmMinutes: acuMinutes,
+    guardrailErrorAlarmThreshold,
+    runtimeEndpointName: endpoint ? String(endpoint) : 'DEFAULT',
   };
 }
 
@@ -87,10 +101,9 @@ export interface OpsDashboardProps {
  * Bảng vận hành phía hạ tầng: dashboard CloudWatch `yofina-ops`, alarm về topic SNS sẵn có, và quyền đọc bảng `yofina-usage` cho
  * Lambda ledger (`GET /ops/summary` so lượt gọi model theo ngày với trần).
  *
- * Mọi metric là metric AWS có sẵn (Lambda, SQS, RDS, Bedrock, API Gateway, `AWS/Bedrock-AgentCore`): không thêm metric tùy biến,
- * không bật CloudWatch Transaction Search hay span OTel (cấu hình mức tài khoản, có phí; chủ dự án chưa quyết). Tài nguyên ở stack
- * khác (Lambda nạp dữ liệu, interceptor của Gateway, DLQ, Aurora) được tham chiếu theo tên dựng từ tiền tố, nên không tạo phụ thuộc
- * giữa các stack. DLQ đã có alarm riêng ở construct của chúng nên ở đây chỉ vẽ.
+ * Dashboard dùng metric AWS có sẵn (Lambda, SQS, RDS, Bedrock, API Gateway, `AWS/Bedrock-AgentCore`). Alarm guardrail dùng metric
+ * từ log AgentCore Runtime, tra runtime id qua SSM lúc deploy. Tài nguyên khác (Lambda nạp dữ liệu, interceptor, DLQ, Aurora) được
+ * tham chiếu theo tên dựng từ tiền tố. DLQ có alarm riêng. Dashboard không bật CloudWatch Transaction Search hay span OTel.
  */
 export class OpsDashboard extends Construct {
   public readonly dashboard: cloudwatch.Dashboard;
@@ -257,6 +270,36 @@ export class OpsDashboard extends Construct {
       this.alarms.push(a);
       return a;
     };
+    if (ops.guardrailErrorAlarmThreshold > 0) {
+      const runtimeId = ssm.StringParameter.valueForStringParameter(this, `/${p}/agent/runtime-id`);
+      const runtimeLogs = logs.LogGroup.fromLogGroupName(
+        this,
+        'RuntimeLogs',
+        `/aws/bedrock-agentcore/runtimes/${runtimeId}-${ops.runtimeEndpointName}`,
+      );
+      // AgentCore nhận stdout có tiền tố trước phần JSON, nên lọc theo từ khóa có ngoặc kép.
+      new logs.MetricFilter(this, 'GuardrailErrorsFilter', {
+        logGroup: runtimeLogs,
+        filterPattern: logs.FilterPattern.literal('"guardrail_error"'),
+        metricNamespace: GUARDRAIL_METRIC_NAMESPACE,
+        metricName: GUARDRAIL_ERROR_METRIC_NAME,
+        metricValue: '1',
+      });
+      alarm('GuardrailErrorsAlarm', {
+        alarmName: `${p}-ops-guardrail-errors`,
+        alarmDescription: 'Loi guardrail trong 5 phut. Xem log Runtime va kiem tra che do fail-open/fail-closed theo cau hinh.',
+        metric: new cloudwatch.Metric({
+          namespace: GUARDRAIL_METRIC_NAMESPACE,
+          metricName: GUARDRAIL_ERROR_METRIC_NAME,
+          statistic: 'Sum',
+          period: five,
+        }),
+        threshold: ops.guardrailErrorAlarmThreshold,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      });
+    }
     const errorsExpr = new cloudwatch.MathExpression({
       expression: toolFns.map((_, i) => `e${i}`).join(' + '),
       usingMetrics: Object.fromEntries(toolFns.map((n, i) => [`e${i}`, fnMetric(n, 'Errors', 'Sum')])),
