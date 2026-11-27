@@ -346,8 +346,9 @@ def test_confirm_rows_khong_token_chi_xem_truoc_khong_ghi(env):
     assert (
         d["tool"] == "confirm_rows" and d["params"] == norm
     )  # tham số đã chuẩn hóa (sắp theo row_id)
-    labels = [c["label"] for c in d["changes"]]
-    assert "Số dư các hũ" in labels and "Độ phủ dữ liệu" in labels
+    changes = {c["label"]: c for c in d["changes"]}
+    assert changes["Số dư các hũ"] == {"label": "Số dư các hũ", "after": "Không đổi"}
+    assert "Độ phủ dữ liệu" in changes
     assert d["warnings"] == ["1 dòng sẽ được bỏ qua, không ghi vào lịch sử."]
     assert d["expires_at"] == "2026-12-10T03:10:00Z"  # offer_ttl_seconds
     assert "confirm_token" not in json.dumps(out)  # agent không bao giờ nhận token

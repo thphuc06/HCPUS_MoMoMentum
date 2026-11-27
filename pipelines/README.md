@@ -1,10 +1,10 @@
 # pipelines/
 
-Ba nhịp chạy nền của hệ thống (proposal §8):
+Hai nhịp chạy nền đang dùng là Event và batch đêm. Batch tuần của proposal §8 đã cắt.
 
 | Thư mục | Nhịp | Nội dung | Proposal | Trạng thái |
 |---|---|---|---|---|
-| `event/` | Event, dưới 1 phút | Cập nhật dự báo nhanh theo sự kiện ledger (phase 2); phân hũ tự động (bước 0, luật, embedding, LLM), phát hiện lệch, cổng nhắc (phase 4, 5). EventBridge -> SQS (có DLQ) -> Lambda idempotent | §10.3 | Dự báo theo sự kiện **xong** (phase 2); phân hũ tự động **xong** (phase 4, Lambda `yofina-classify`, mã ở [`classify/`](classify/README.md)); sinh lại lộ trình theo sự kiện ở [`roadmap/`](roadmap/README.md) |
+| `event/` | Event, dưới 1 phút | Cập nhật dự báo nhanh theo sự kiện ledger (phase 2); phân hũ tự động (bước 0, luật, embedding, LLM), phát hiện lệch (phase 4, 5). Cổng nhắc chạy cuối batch đêm. EventBridge -> SQS (có DLQ) -> Lambda idempotent | §10.3 | Dự báo theo sự kiện **xong** (phase 2); phân hũ tự động **xong** (phase 4, Lambda `yofina-classify`, mã ở [`classify/`](classify/README.md)); sinh lại lộ trình theo sự kiện ở [`roadmap/`](roadmap/README.md) |
 | `nightly/` | Batch 02:00 giờ Việt Nam | Dự báo lại mọi người dùng (phase 2); điểm chống chịu, hồ sơ hành vi, PELT, bản tin (phase 4, 5). EventBridge Scheduler -> Step Functions | §10.4 | Dự báo đêm **xong** (phase 2) |
 | `weekly/` | Chủ nhật | Backtest, hiệu chỉnh khoảng tin cậy, đánh giá agent trên bộ câu chuẩn, đồng bộ kho tri thức | §8 (bảng "Cái gì chạy lúc nào") | **Cắt** (phase 6, Q11): thư mục chỉ có `.gitkeep`. Backtest và hiệu chỉnh chạy tay trên máy, eval chạy tay bằng `evals/`; RAG đã cắt nên không có kho tri thức để đồng bộ ([ADR-0004](../docs/decisions/0004-lech-so-voi-proposal.md) dòng 5) |
 | `forecast/` | (mã dùng chung) | **Lõi pipeline dự báo** và ba Lambda vỏ mỏng: batch, consumer sự kiện, tool | §10.4, §9 | Xong (phase 2) |

@@ -3,10 +3,11 @@ import { useApiResource } from '@/api/resource'
 import { ErrorState, ListSkeleton } from '@/components/StateViews'
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/button'
+import { Disclosure } from '@/components/ui/Disclosure'
 import { BehaviorInsightCard, NextStep } from '@/features/behavior/BehaviorInsightCard'
 import { BEHAVIOR_SECTION_ID } from '@/features/behavior/format'
 import { ExecuteStepDrawer } from '@/features/roadmap/RoadmapStepDialogs'
-import { formatDateTime } from '@/lib/format'
+import { formatSimMoment } from '@/lib/format'
 
 /** Bỏ dấu câu, khoảng trắng thừa và hoa thường để so hai câu. */
 const plain = (s: string) => s.normalize('NFC').toLowerCase().replace(/[.,;:!?…"'“”()]/g, '').replace(/\s+/g, ' ').trim()
@@ -57,8 +58,11 @@ export function BehaviorSection() {
             {!repeatsInsight(data.headline, data.insights) && <p className="text-subtitle font-semibold text-ink" data-testid="behavior-headline">{data.headline}</p>}
             <div className="mt-2 flex flex-wrap items-center gap-2 text-note text-ink-2 first:mt-0">
               {data.segment && <StatusChip kind="info">{data.segment.label}</StatusChip>}
-              <span className="num">Từ {data.history_days} ngày dữ liệu{data.computed_at ? ` · cập nhật ${formatDateTime(data.computed_at)}` : ''}</span>
+              <span className="num">Từ {data.history_days} ngày dữ liệu{data.computed_at ? ` · cập nhật ${formatSimMoment(data.app_date, data.computed_at)}` : ''}</span>
             </div>
+            <Disclosure label="Khi nào cập nhật?" panelClassName="text-note text-ink-2">
+              <p>Yofina tự tính lại dự báo, điểm chống chịu và nhận xét mỗi đêm. Đặt lại dữ liệu cũng tính lại ngay. Ngày ở trên là ngày mô phỏng.</p>
+            </Disclosure>
           </div>
           <ul className="space-y-3" aria-label="Các nhận xét">
             {data.insights.map((insight) => (
