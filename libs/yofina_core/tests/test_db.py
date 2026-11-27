@@ -1,4 +1,4 @@
-"""Client Data API với client boto3 giả: kiểu dữ liệu, retry resume, thứ tự transaction, rollback."""
+"""Client Data API với client boto3 giả: kiểu dữ liệu, retry, thứ tự transaction, rollback."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from yofina_core.errors import ErrorCode, YofinaError
 
 
 class AwsError(Exception):
-    def __init__(self, code: str, msg: str = "") -> None:
-        super().__init__(f"{code}: {msg}")
+    def __init__(self, code: str, msg: str = "", *, display: str | None = None) -> None:
+        super().__init__(f"{code}: {msg}" if display is None else display)
         self.response = {"Error": {"Code": code, "Message": msg}}
 
 
@@ -26,6 +26,7 @@ class FakeRds:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
         self.script: list = []
+        self.fail_batch: Exception | None = None
         self.fail_commit: Exception | None = None
         self.fail_begin: list[Exception] = []
 
@@ -41,6 +42,8 @@ class FakeRds:
 
     def batch_execute_statement(self, **kw):
         self._rec("batch", kw)
+        if self.fail_batch:
+            raise self.fail_batch
         return {"updateResults": []}
 
     def begin_transaction(self, **kw):
@@ -160,9 +163,57 @@ def test_het_ngan_sach_resume_thi_database_unavailable():
     assert sum(sleeps) <= SETTINGS.resume_max_wait_seconds
 
 
-def test_loi_khac_khong_retry_va_khong_ro_chi_tiet_sql():
+def test_retry_admin_shutdown_hai_lan_roi_thanh_cong(caplog):
     fake = FakeRds()
-    fake.script = [AwsError("BadRequestException", "syntax error at or near SELECT secret_table")]
+    error = AwsError("DatabaseErrorException", "FATAL: terminating connection due to administrator command")
+    fake.script = [error, error, {}]
+    db, sleeps = api(fake)
+    with caplog.at_level(logging.INFO, logger="yofina_core.db"):
+        assert db.query("SELECT 1") == []
+    assert fake.ops() == ["execute"] * 3
+    assert sleeps == [SETTINGS.resume_sleep_seconds] * 2
+    records = [r for r in caplog.records if r.name == "yofina_core.db"]
+    assert len(records) == 2
+    for record in records:
+        assert record.levelno in {logging.INFO, logging.WARNING}
+        assert "op=execute_statement" in record.getMessage()
+        assert "db_admin_shutdown" in record.getMessage()
+
+
+def test_retry_bad_request_co_sqlstate_trong_aws_error_message():
+    fake = FakeRds()
+    fake.script = [AwsError("BadRequestException", "SQLState: 57p01", display="Data API thất bại"), {}]
+    db, sleeps = api(fake)
+    assert db.query("SELECT 1") == []
+    assert fake.ops() == ["execute", "execute"]
+    assert sleeps == [SETTINGS.resume_sleep_seconds]
+
+
+@pytest.mark.parametrize("mixed", [False, True], ids=["shutdown", "resume_va_shutdown"])
+def test_admin_shutdown_va_resume_dung_chung_ngan_sach(mixed):
+    fake = FakeRds()
+    shutdown = AwsError("DatabaseErrorException", "SQLState: 57P01")
+    fake.script = [AwsError("DatabaseResumingException"), shutdown] * 25 if mixed else [shutdown] * 50
+    db, sleeps = api(fake)
+    with pytest.raises(YofinaError) as ei:
+        db.query("SELECT 1")
+    assert ei.value.code == ErrorCode.DATABASE_UNAVAILABLE
+    assert sleeps == [SETTINGS.resume_sleep_seconds] * 5
+    assert sum(sleeps) <= SETTINGS.resume_max_wait_seconds
+    assert fake.ops() == ["execute"] * 6
+
+
+@pytest.mark.parametrize(
+    ("code", "message"),
+    [
+        ("BadRequestException", "syntax error at or near SELECT secret_table"),
+        ("DatabaseErrorException", "syntax error at or near SELECT secret_table"),
+        ("InternalServerErrorException", "SQLState: 57P01 near secret_table"),
+    ],
+)
+def test_loi_khac_khong_retry_va_khong_ro_chi_tiet_sql(code, message):
+    fake = FakeRds()
+    fake.script = [AwsError(code, message)]
     db, sleeps = api(fake)
     with pytest.raises(YofinaError) as ei:
         db.query("SELECT 1")
@@ -295,6 +346,38 @@ def test_begin_transaction_cung_retry_resume():
     with db.transaction("u"):
         pass
     assert sleeps == [2] and fake.ops().count("begin") == 2
+
+
+def test_begin_transaction_cung_retry_admin_shutdown():
+    fake = FakeRds()
+    fake.fail_begin = [AwsError("DatabaseErrorException", "SQLState: 57P01")]
+    db, sleeps = api(fake)
+    with db.transaction("u"):
+        pass
+    assert fake.ops() == ["begin", "begin", "execute", "commit"]
+    assert sleeps == [SETTINGS.resume_sleep_seconds]
+
+
+@pytest.mark.parametrize("op", ["execute", "batch", "commit"])
+def test_admin_shutdown_trong_transaction_khong_retry_va_co_rollback(op):
+    fake = FakeRds()
+    shutdown = AwsError("DatabaseErrorException", "SQLState: 57P01")
+    if op == "execute":
+        fake.script = [{}, shutdown]
+    elif op == "batch":
+        fake.fail_batch = shutdown
+    else:
+        fake.fail_commit = shutdown
+    db, sleeps = api(fake)
+    with pytest.raises(YofinaError) as ei, db.transaction("u") as tx:
+        if op == "execute":
+            tx.execute("UPDATE jars SET x = 1")
+        elif op == "batch":
+            tx.batch("INSERT INTO t VALUES (:a)", [{"a": 1}])
+    assert ei.value.code == ErrorCode.DATABASE_UNAVAILABLE
+    assert sleeps == []
+    assert fake.ops() == ["begin", "execute", op, "rollback"]
+    assert fake.calls[-1][1]["transactionId"] == "tx-1"
 
 
 def test_transaction_yeu_cau_user_id():

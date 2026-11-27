@@ -107,6 +107,7 @@ describe('OpsDashboard', () => {
     const names = alarms.map((a) => a.Properties.AlarmName).sort();
     assert.deepEqual(names, [
       'yofina-ops-aurora-acu-at-max',
+      'yofina-ops-guardrail-errors',
       'yofina-ops-ledger-p95-latency',
       'yofina-ops-model-calls-cohere-embed-multilingual-v3',
       'yofina-ops-model-calls-global-anthropic-claude-sonnet-4-6',
@@ -127,6 +128,52 @@ describe('OpsDashboard', () => {
     assert.equal(byName['yofina-ops-ledger-p95-latency'].Threshold, 10000);
     assert.equal(stat(byName['yofina-ops-ledger-p95-latency']).Stat, 'p95');
     assert.equal(byName['yofina-ops-aurora-acu-at-max'].EvaluationPeriods, 6);
+  });
+
+  it('đếm guardrail_error trong log Runtime và báo SNS khi có lỗi trong 5 phút', () => {
+    const [runtimeId] = Object.entries(template.toJSON().Parameters ?? {}).find(
+      ([, parameter]) => (parameter as { Default?: string }).Default === '/yofina/agent/runtime-id',
+    ) ?? [];
+    assert.ok(runtimeId, 'thiếu tham số SSM chứa runtime id');
+    template.resourceCountIs('AWS::Logs::MetricFilter', 1);
+    template.hasResourceProperties('AWS::Logs::MetricFilter', {
+      LogGroupName: { 'Fn::Join': ['', ['/aws/bedrock-agentcore/runtimes/', { Ref: runtimeId }, '-DEFAULT']] },
+      FilterPattern: '"guardrail_error"',
+      MetricTransformations: [
+        { MetricNamespace: 'Yofina/Agent', MetricName: 'GuardrailErrors', MetricValue: '1', Dimensions: Match.absent() },
+      ],
+    });
+    template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+      AlarmName: 'yofina-ops-guardrail-errors',
+      AlarmActions: [{ Ref: template.getResourceId('AWS::SNS::Topic') }],
+      Namespace: 'Yofina/Agent',
+      MetricName: 'GuardrailErrors',
+      Dimensions: Match.absent(),
+      ComparisonOperator: 'GreaterThanOrEqualToThreshold',
+      Statistic: 'Sum',
+      Period: 300,
+      Threshold: 1,
+      EvaluationPeriods: 1,
+      TreatMissingData: 'notBreaching',
+    });
+  });
+
+  it('đổi được ngưỡng và endpoint của alarm guardrail', () => {
+    const t = build({ opsGuardrailErrorAlarmThreshold: '4', opsRuntimeEndpointName: 'LIVE' });
+    t.hasResourceProperties('AWS::CloudWatch::Alarm', { AlarmName: 'yofina-ops-guardrail-errors', Threshold: 4 });
+    const [filter] = Object.values(t.findResources('AWS::Logs::MetricFilter') as Record<string, Res>);
+    assert.equal(filter.Properties.LogGroupName['Fn::Join'][1].at(-1), '-LIVE');
+  });
+
+  it('ngưỡng guardrail bằng 0 bỏ metric filter, alarm và tham số Runtime', () => {
+    const t = build({ opsGuardrailErrorAlarmThreshold: '0' });
+    t.resourceCountIs('AWS::Logs::MetricFilter', 0);
+    assert.deepEqual(t.findResources('AWS::CloudWatch::Alarm', { Properties: { AlarmName: 'yofina-ops-guardrail-errors' } }), {});
+    assert.doesNotMatch(JSON.stringify(t.toJSON().Parameters ?? {}), /\/yofina\/agent\/runtime-id/);
+  });
+
+  it('từ chối ngưỡng guardrail âm', () => {
+    assert.throws(() => build({ opsGuardrailErrorAlarmThreshold: '-1' }), /opsGuardrailErrorAlarmThreshold/);
   });
 
   it('ledger chỉ được Query bảng yofina-usage và biết tên bảng', () => {
@@ -161,7 +208,7 @@ describe('OpsDashboard', () => {
     const names = Object.values(t.findResources('AWS::CloudWatch::Alarm') as Record<string, Res>).map(
       (a) => a.Properties.AlarmName,
     );
-    assert.deepEqual(names.sort(), ['yofina-ops-ledger-p95-latency', 'yofina-ops-tool-lambda-errors']);
+    assert.deepEqual(names.sort(), ['yofina-ops-guardrail-errors', 'yofina-ops-ledger-p95-latency', 'yofina-ops-tool-lambda-errors']);
     assert.throws(() => build({ opsAcuAtMaxAlarmMinutes: 7 }), /bội của 5/);
   });
 });

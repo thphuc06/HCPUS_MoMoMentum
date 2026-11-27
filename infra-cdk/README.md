@@ -17,7 +17,7 @@ Hạ tầng dạng code bằng AWS CDK (TypeScript). Region `ap-southeast-1`, đ
 | `YofinaTools` | **Pipeline dự báo (phase 2, luồng C)**: Lambda `yofina-forecast-batch`, `yofina-on-transaction`, `yofina-forecast` (một zip), bảng DynamoDB `yofina-idempotency`, SQS `yofina-forecast-events` + DLQ, rule trên `yofina-bus`, Step Functions `yofina-nightly`, EventBridge Scheduler `yofina-nightly-0200`, ba alarm -> SNS. Cộng: Lambda `yofina-ledger` (một mã, hai đường vào: Gateway và HTTP API), HTTP API `yofina-api` (JWT authorizer Cognito, CORS cho Amplify và localhost, 47 route: 42 tới Lambda ledger (`/jars`, `/jars/{jar_code}`, `POST /jars/split-proposal`, `/overview`, `/profile`, `/transactions`, `/tx-types`, `/payees`, `/obligations`, `/credit-line`, `/salary-events`, `/jar-templates`, `/forecasts/{jar_code}`, `/confirmations`, `/confirmations/cancel`, `/actions`, `/demo/reset`, `/conversations`, `/conversations/{conversation_id}`, `/traces/{trace_id}`, `/feedback`, 8 route `/roadmap*`, 2 route `/review*`, 3 route `/ops/*`, 5 route `/memory*` và `/me/delete-data*`, 2 route `/nudges/*`, `/cashflow`) và 5 tới `yofina-forecast` (`/affordability`, `/resilience*`, `/profile/behavior`); `tests/unit/test_rest_routes_cdk.py` đỏ khi `contracts/rest/openapi.yaml` có route mà CDK hoặc `rest_api.py` không nối), EventBridge bus `yofina-bus` và alarm `yofina-ledger-event-publish-failed` | cần zip ở `build/lambda/ledger-arm64.zip` (xem dưới); đọc giá trị của stack khác từ SSM lúc deploy |
 | `YofinaAgent` | Gateway MCP `yofina-gateway` (JWT authorizer, interceptor `yofina-gw-interceptor`, policy engine Cedar một policy mỗi tool, target `ledger` với schema từ `contracts/tools/ledger.json` và target `forecast` (Lambda `yofina-forecast`, schema từ `contracts/tools/forecast.json`, policy `get_forecast.cedar`)) và AgentCore Runtime `yofina_agent` (CodeZip ARM64, V2, AG-UI) cùng vai IAM của Gateway và Runtime | L1 (`Cfn*` của `aws-cdk-lib/aws-bedrockagentcore`; chưa dùng L2). Cần khóa zip ở SSM `/yofina/agent/zip-key` (`scripts/agent_deploy.py` ghi); đọc `YofinaTools`, `YofinaIdentity`, `YofinaFoundation` qua SSM |
 
-| `YofinaIngest` | **F6 nạp dữ liệu từ ảnh và CSV (phase 5)**: bucket `yofina-ingest-<account>-<region>`, SQS `yofina-ingest-jobs` + DLQ, alarm `yofina-ingest-jobs-dlq-not-empty`, Lambda `yofina-ingest-api` và `yofina-ingest` (worker), JWT authorizer `yofina-cognito-ingest` và 6 route `/ingest/*` gắn vào HTTP API `yofina-api` có sẵn | **chưa deploy**. Cần zip `build/lambda/ingest-arm64.zip`; đọc mọi giá trị stack khác từ SSM; không sửa `YofinaTools`. Chi tiết ở mục "Stack YofinaIngest" dưới |
+| `YofinaIngest` | **F6 nạp dữ liệu từ ảnh và CSV (phase 5)**: bucket `yofina-ingest-<account>-<region>`, SQS `yofina-ingest-jobs` + DLQ, alarm `yofina-ingest-jobs-dlq-not-empty`, Lambda `yofina-ingest-api` và `yofina-ingest` (worker), JWT authorizer `yofina-cognito-ingest` và 6 route `/ingest/*` gắn vào HTTP API `yofina-api` có sẵn | **Đã deploy**. Cần zip `build/lambda/ingest-arm64.zip`; đọc mọi giá trị stack khác từ SSM; không sửa `YofinaTools`. Chi tiết ở mục "Stack YofinaIngest" dưới |
 
 Stack của các phase sau thêm vào `bin/yofina.ts`. Mỗi stack ghi giá trị luồng khác cần vào SSM `/yofina/...` (xem bên dưới), nên stack sau đọc SSM hoặc nhận prop, không dùng `Fn::ImportValue` cứng.
 
@@ -56,7 +56,9 @@ Cấu hình riêng của `YofinaTools` (`loadToolsConfig` trong `lib/tools-stack
 | `appTimezone` / `demoAnchorDate` | `Asia/Ho_Chi_Minh` / `2026-11-21` | Đồng hồ mô phỏng ([ADR-0003](../docs/decisions/0003-dong-ho-mo-phong.md)) |
 | `dbResumeMaxWaitSeconds` | 18 | Chờ Aurora dậy trong Lambda (nhỏ hơn timeout) |
 | `apiThrottleRate` / `apiThrottleBurst` | 20 / 40 | Giới hạn mặc định của API |
-| `extraCorsOrigins` | `http://localhost:5173` | Origin CORS ngoài Amplify (phân cách bằng dấu phẩy) |
+| `extraCorsOrigins` | `http://localhost:5173` | Origin CORS ngoài Amplify (phân cách bằng dấu phẩy). Đặt `extraCorsOrigins=` để chỉ cho phép origin Amplify |
+| `opsGuardrailErrorAlarmThreshold` | 1 | Số lỗi guardrail trong 5 phút để gửi cảnh báo SNS. Đặt `0` để tắt cả metric filter và alarm |
+| `opsRuntimeEndpointName` | `DEFAULT` | Tên endpoint trong đường dẫn log group AgentCore Runtime mà metric filter sử dụng |
 | `onboardingJarLayout` | `catalogue` | Công tắc quay lui bộ hũ của tài khoản mới (#39), thành `YOFINA_ONBOARDING_JAR_LAYOUT` của Lambda ledger: `catalogue` là bộ hũ `is_default` của `jar_templates` (ba hũ sau 0059), `legacy` là bộ bảy hũ cũ. Quay lui: `uv run scripts/cdk.py deploy YofinaTools --require-approval never -c onboardingJarLayout=legacy`; chỉ đổi lần tạo ví sau, ví đã tạo và reset demo giữ nguyên. Lần deploy `YofinaTools` sau phải giữ `-c onboardingJarLayout=legacy` (hoặc đặt trong `cdk.context.json`), không thì về `catalogue`. Giá trị khác bị từ chối lúc synth |
 
 Cấu hình pipeline dự báo (`loadForecastConfig` trong `lib/forecast-pipeline.ts`, đổi bằng `-c`; truyền vào Lambda dưới dạng `YOFINA_FORECAST_*`, đọc ở `pipelines/forecast/yofina_forecast/settings.py`):
@@ -198,7 +200,7 @@ uv run scripts/cdk.py diff
 uv run scripts/cdk.py deploy YofinaFoundation --require-approval never
 uv run scripts/cdk.py deploy YofinaData YofinaIdentity YofinaFrontend --concurrency 3 --require-approval never
 uv run scripts/cdk.py deploy YofinaTools --require-approval never   # sau khi đóng zip Lambda ledger và forecast (mục "Đóng gói")
-uv run scripts/cdk.py deploy YofinaIngest --require-approval never  # F6 (chưa deploy): sau khi đóng zip ingest; diff trước
+uv run scripts/cdk.py deploy YofinaIngest --require-approval never  # F6: cập nhật sau khi đóng zip ingest, diff trước
 uv run scripts/agent_deploy.py                                       # build agent + upload + deploy YofinaAgent (Gateway, Cedar, Runtime) + chờ READY
 uv run scripts/cdk.py deploy YofinaAgent --require-approval never   # chỉ Gateway/Cedar/interceptor khi mã agent không đổi (nhanh, không đụng Runtime)
 npm run typecheck --prefix infra-cdk              # kiểm kiểu
@@ -208,6 +210,27 @@ npm run typecheck --prefix infra-cdk              # kiểm kiểu
 - Không đổi ID construct của stack có dữ liệu (`Cluster`, `Users`, `Usage`...): đổi ID là thay thế tài nguyên. Luôn `diff` trước khi deploy.
 - Nâng `aws-cdk-lib`: kiểm `BootstrapVersion` tối thiểu trong template (`cdk.out/*.template.json`) không vượt 32.
 - Muốn đặt email cảnh báo lần đầu: `aws ssm put-parameter --name /yofina/alert-email --type SecureString --value <email> --region ap-southeast-1`, rồi deploy lại `YofinaFoundation`; subscription SNS ở trạng thái chờ cho tới khi người nhận bấm link xác nhận trong thư.
+
+### Alarm lỗi guardrail
+
+`YofinaTools` dùng metric filter trên log group `/aws/bedrock-agentcore/runtimes/<runtimeId>-DEFAULT` do AgentCore tạo.
+Filter đếm dòng chứa `"guardrail_error"`. Alarm `<prefix>-ops-guardrail-errors` gửi SNS khi tổng số lỗi trong 5 phút đạt ngưỡng.
+
+Ở tài khoản mới, deploy `YofinaTools` với `-c opsGuardrailErrorAlarmThreshold=0` vì `YofinaAgent` được deploy sau.
+Sau khi deploy `YofinaAgent` và gọi Runtime lần đầu, kiểm tra SSM `/<prefix>/agent/runtime-id` và log group đã tồn tại.
+Deploy lại `YofinaTools` với ngưỡng dương hoặc bỏ tùy chọn `0` để dùng ngưỡng mặc định.
+
+### Bản RC: bỏ localhost khỏi CORS
+
+Từ thư mục gốc của repo, deploy HTTP API với origin Amplify lấy từ SSM:
+
+```bash
+uv run scripts/cdk.py deploy YofinaTools --require-approval never -c extraCorsOrigins=
+```
+
+Giữ dấu `=` để truyền giá trị rỗng. Nếu bỏ tùy chọn, cấu hình dùng `http://localhost:5173` cho dev.
+Giữ `-c extraCorsOrigins=` trong các lần deploy RC sau hoặc cấu hình `"extraCorsOrigins": ""` trong `infra-cdk/cdk.context.json`.
+Khi deploy `YofinaIngest`, dùng cùng tùy chọn để CORS của bucket upload cũng chỉ cho phép origin Amplify.
 
 ## Migrator: chạy migration
 
@@ -283,7 +306,7 @@ Dùng `uv pip install --python-platform aarch64-manylinux2014 --only-binary=:all
 | `gateway_url`, `gateway/id`, `gateway/arn` | Gateway `yofina-gateway` (URL MCP; `print_env.py python` ghi thành `YOFINA_GATEWAY_URL`) |
 | `agent/runtime-arn`, `agent/runtime-id`, `agent/runtime-url` | Runtime `yofina_agent`; URL invoke đầy đủ (`.../invocations?qualifier=DEFAULT`) ghi thành `VITE_AGENT_RUNTIME_URL`; ARN chứa account ID nên `print_env.py frontend` không ghi nó (Vite nhúng mọi `VITE_*` vào bundle) |
 | `agent/zip-key` | Khóa S3 của zip agent hiện hành (`builds/agent-<hash>.zip`); `scripts/agent_deploy.py` ghi (ngoài CDK) |
-| `ingest/bucket-name`, `ingest/api-function-name`, `ingest/worker-function-name`, `ingest/queue-url` | `YofinaIngest` (chưa deploy): bucket tệp tải lên, hai Lambda, hàng đợi job |
+| `ingest/bucket-name`, `ingest/api-function-name`, `ingest/worker-function-name`, `ingest/queue-url` | `YofinaIngest` (đã deploy): bucket tệp tải lên, hai Lambda, hàng đợi job |
 | `quota/chat_turns_per_day`, `quota/uploads_per_day` | Trần theo tài khoản mỗi ngày. Tạo tay, không do CDK; vắng thì dùng mặc định trong mã (mục dưới) |
 | `alert-email` | Email cảnh báo (SecureString, chỉ `scripts/cdk.py` đọc) |
 

@@ -1,6 +1,6 @@
 # knowledge-base/
 
-Thư mục dự kiến chứa nguồn cho RAG (Bedrock Knowledge Bases) theo proposal §7, §9: ba kho (biểu phí và điều khoản sản phẩm công khai có ngày hiệu lực; kiến thức tài chính cá nhân; bộ luật suitability kèm giải thích), hybrid search + rerank.
+Proposal §7, §9 từng dành thư mục này cho ba kho RAG (Bedrock Knowledge Bases) (biểu phí và điều khoản sản phẩm công khai có ngày hiệu lực; kiến thức tài chính cá nhân; bộ luật suitability kèm giải thích), hybrid search + rerank.
 
 **RAG đã cắt ngày 24/11** (chủ dự án; [ADR-0004](../docs/decisions/0004-lech-so-voi-proposal.md) dòng 1): mọi con số lấy từ bảng có cấu trúc và không cảnh demo nào cần tìm trong tài liệu. Thư mục chỉ còn README này.
 

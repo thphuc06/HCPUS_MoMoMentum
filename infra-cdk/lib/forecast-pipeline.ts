@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { Annotations, App, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
+import { Annotations, App, ArnFormat, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
@@ -418,9 +418,22 @@ export class ForecastPipeline extends Construct {
     });
 
     // --- lịch 02:00 giờ Việt Nam (EventBridge Scheduler hỗ trợ múi giờ IANA, không cần đổi sang UTC) ----------------------------
+    const stack = Stack.of(this);
     const schedulerRole = new iam.Role(this, 'SchedulerRole', {
       roleName: `${p}-nightly-scheduler`,
-      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
+      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com', {
+        conditions: {
+          StringEquals: {
+            'aws:SourceAccount': stack.account,
+            'aws:SourceArn': stack.formatArn({
+              service: 'scheduler',
+              resource: 'schedule-group',
+              resourceName: 'default',
+              arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+            }),
+          },
+        },
+      }),
     });
     this.nightly.grantStartExecution(schedulerRole);
     new scheduler.CfnSchedule(this, 'NightlySchedule', {

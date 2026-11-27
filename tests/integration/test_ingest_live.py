@@ -325,7 +325,7 @@ def test_06_xac_nhan_roi_chot_dong_ghi_external_va_do_phu_tang(vy, schema_valida
     pv = conf["preview"]
     assert str(len(selected)) in pv["summary"]
     changes = {c["label"]: c for c in pv["changes"]}
-    assert changes["Số dư các hũ"]["after"] == "Không đổi"
+    assert changes["Số dư các hũ"] == {"label": "Số dư các hũ", "after": "Không đổi"}
     # xem trước không ghi: job vẫn review, số dư hũ không đổi
     assert vy.get(f"/ingest/jobs/{job_id}")["status"] == "review"
     assert {j["code"]: j["balance_vnd"] for j in vy.get("/overview")["jars"]} == vy.state[

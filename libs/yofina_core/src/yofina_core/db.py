@@ -8,8 +8,9 @@ Quy tắc đã chứng minh trong spike và được cài ở đây:
   :uid, true)` -> các câu lệnh -> `Commit`. Rời khỏi khối `with` bằng ngoại lệ (hoặc thoát mà chưa
   commit) thì **luôn rollback trong `finally`**: một transaction bỏ dở giữ khóa tới ~3 phút.
 - Dùng secret của role `yofina_app` (không bao giờ secret master: master vượt RLS).
-- `DatabaseResumingException` (Aurora đang dậy sau auto-pause) được retry trong ngân sách thời gian
-  cấu hình; hết ngân sách thì `YofinaError(DATABASE_UNAVAILABLE)`. boto3 không tự retry loại lỗi này.
+- `DatabaseResumingException` (Aurora đang dậy sau auto-pause) và admin shutdown (`57P01`, ví dụ khi
+  failover) dùng chung ngân sách retry; hết ngân sách thì `YofinaError(DATABASE_UNAVAILABLE)`.
+  Với admin shutdown trong transaction đã mở, báo `DATABASE_UNAVAILABLE` ngay để khối `with` thử rollback.
 - Mọi truy vấn nhiều dòng phải có `LIMIT` (phản hồi tối đa 1 MiB, vượt là lỗi cả lệnh): trách nhiệm của
   câu SQL; `query(..., max_rows=...)` thêm một lưới an toàn phía client.
 - `numeric` về dạng chuỗi -> `Decimal`; `timestamptz` về dạng chuỗi UTC không hậu tố -> `datetime` có
@@ -44,6 +45,8 @@ Row = dict[str, Any]
 #: một tiền tố mã kiểu `ErrorCode` ("ROADMAP_VERSION_CONFLICT: ") trong thông điệp lỗi của Postgres; mã có thuộc `ErrorCode` không
 #: thì `_sql_business_code` kiểm
 _SQL_CODE_RE = re.compile(r"\b([A-Z][A-Z0-9_]+): ")
+_ADMIN_SHUTDOWN_SQLSTATE = "57P01"
+_ADMIN_SHUTDOWN_MESSAGE = "terminating connection due to administrator command"
 
 
 class RdsDataClient(Protocol):
@@ -61,7 +64,7 @@ class DataApiSettings:
     cluster_arn: str
     secret_arn: str
     database: str
-    #: tổng thời gian tối đa chờ Aurora dậy (giây), cộng dồn các lần retry
+    #: tổng thời gian tối đa chờ Aurora thức dậy hoặc kết nối lại (giây), cộng dồn các lần retry
     resume_max_wait_seconds: float = 20.0
     #: nghỉ giữa hai lần retry (giây); spike: lần thành công đầu tiên sau ~16 giây
     resume_sleep_seconds: float = 1.5
@@ -168,6 +171,17 @@ def _is_resuming(exc: Exception) -> bool:
     )
 
 
+def _is_admin_shutdown(exc: Exception) -> bool:
+    if _error_code(exc) not in {"DatabaseErrorException", "BadRequestException"}:
+        return False
+    response = getattr(exc, "response", None)
+    message = response.get("Error", {}).get("Message", "") if isinstance(response, Mapping) else ""
+    return any(
+        _ADMIN_SHUTDOWN_SQLSTATE.lower() in detail or _ADMIN_SHUTDOWN_MESSAGE in detail
+        for detail in (str(exc).lower(), str(message).lower())
+    )
+
+
 class DataApi:
     """Client Data API cho một cặp (cluster, secret của role `yofina_app`, database)."""
 
@@ -210,7 +224,7 @@ class DataApi:
 
     # --- retry --------------------------------------------------------------------------
     def _call(self, op: str, **kwargs: Any) -> dict[str, Any]:
-        """Gọi một thao tác Data API, retry `DatabaseResumingException` trong ngân sách thời gian."""
+        """Gọi Data API, retry lỗi khởi động hoặc mất kết nối do admin shutdown trong cùng ngân sách."""
         fn = getattr(self.client, op)
         deadline = self._monotonic() + self.settings.resume_max_wait_seconds
         while True:
@@ -218,15 +232,20 @@ class DataApi:
                 return fn(**kwargs)
             except Exception as exc:
                 if _is_resuming(exc):
-                    if self._monotonic() + self.settings.resume_sleep_seconds > deadline:
-                        raise YofinaError(
-                            ErrorCode.DATABASE_UNAVAILABLE,
-                            "Cơ sở dữ liệu đang khởi động, thử lại sau vài giây.",
-                        ) from exc
-                    log.info("db_resuming op=%s: chờ rồi thử lại", op)
-                    self._sleep(self.settings.resume_sleep_seconds)
-                    continue
-                raise _translate(exc) from exc
+                    error_kind = "db_resuming"
+                    message = "Cơ sở dữ liệu đang khởi động, thử lại sau vài giây."
+                elif _is_admin_shutdown(exc):
+                    error_kind = "db_admin_shutdown"
+                    message = "Kết nối đến cơ sở dữ liệu bị gián đoạn, thử lại sau vài giây."
+                    if "transactionId" in kwargs:
+                        raise YofinaError(ErrorCode.DATABASE_UNAVAILABLE, message) from exc
+                else:
+                    raise _translate(exc) from exc
+
+                if self._monotonic() + self.settings.resume_sleep_seconds > deadline:
+                    raise YofinaError(ErrorCode.DATABASE_UNAVAILABLE, message) from exc
+                log.info("%s op=%s: chờ rồi thử lại", error_kind, op)
+                self._sleep(self.settings.resume_sleep_seconds)
 
     def _base(self) -> dict[str, Any]:
         s = self.settings

@@ -99,6 +99,9 @@ export interface ToolsConfig {
 export const ONBOARDING_JAR_LAYOUTS = ['catalogue', 'legacy'] as const;
 export type OnboardingJarLayout = (typeof ONBOARDING_JAR_LAYOUTS)[number];
 
+/** Origin cho dev khi không đặt context `extraCorsOrigins`. */
+export const DEFAULT_EXTRA_CORS_ORIGIN = 'http://localhost:5173';
+
 function ctxNum(app: App, key: string, dflt: number): number {
   const v = app.node.tryGetContext(key);
   if (v === undefined || v === null || v === '') return dflt;
@@ -147,7 +150,7 @@ export function loadToolsConfig(app: App): ToolsConfig {
     dbResumeMaxWaitSeconds: resume,
     apiThrottleRate: ctxNum(app, 'apiThrottleRate', 20),
     apiThrottleBurst: ctxNum(app, 'apiThrottleBurst', 40),
-    extraCorsOrigins: ctxStr(app, 'extraCorsOrigins', 'http://localhost:5173')
+    extraCorsOrigins: String(app.node.tryGetContext('extraCorsOrigins') ?? DEFAULT_EXTRA_CORS_ORIGIN)
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),

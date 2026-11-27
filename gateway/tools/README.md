@@ -7,7 +7,7 @@ Lambda (Python) sau AgentCore Gateway, một thư mục cho mỗi nhóm tool (pr
 | `ledger/` | `ledger___*` — sổ cái, hũ, nghĩa vụ, hồ sơ | nền, FR1, FR2, FR4 |
 | `forecast/` | `forecast___*` — dự báo, what-if, stress test, kiểm tra trước khi quẹt, điểm chống chịu, hồ sơ hành vi | F1–F4, F7 |
 | `planner/` | `planner___*` — tối ưu phân bổ, suitability, lộ trình, nhắc | F5 |
-| `knowledge/` | `knowledge___*` — biểu phí có cấu trúc kèm nguồn, tỷ giá ngoại tệ (RAG đã cắt 24/11, [ADR-0004](../../docs/decisions/0004-lech-so-voi-proposal.md) dòng 1) | giải thích, F3 |
+| `knowledge/` | `knowledge___*` — biểu phí có cấu trúc kèm nguồn, tỷ giá ngoại tệ, `resolve_date` tính ngày từ đặc tả có cấu trúc (RAG đã cắt 24/11, [ADR-0004](../../docs/decisions/0004-lech-so-voi-proposal.md) dòng 1) | giải thích, F3 |
 | `ingest/` | `ingest___*` — nạp tệp ngoài ví | F6 |
 | `audit/` | `audit___*` — dữ liệu bảng "Vì sao" | FR11 |
 

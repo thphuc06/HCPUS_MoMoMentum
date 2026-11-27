@@ -339,8 +339,9 @@ def test_duong_chinh_tu_tai_len_toi_chot_so_du_hu_khong_doi(ing, env):
     )
     assert code == 200 and issued["tool"] == "confirm_rows" and len(issued["params_hash"]) == 64
     assert issued["preview"]["summary"] and issued["preview"]["warnings"]
-    labels = [c["label"] for c in issued["preview"]["changes"]]
-    assert "Độ phủ dữ liệu" in labels and "Số dư các hũ" in labels
+    changes = {c["label"]: c for c in issued["preview"]["changes"]}
+    assert changes["Số dư các hũ"] == {"label": "Số dư các hũ", "after": "Không đổi"}
+    assert "Độ phủ dữ liệu" in changes
     assert external(env) == []  # xác nhận không ghi gì
 
     code, receipt = ing.call(
