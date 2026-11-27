@@ -138,7 +138,7 @@ describe('OpsDashboard', () => {
     template.resourceCountIs('AWS::Logs::MetricFilter', 1);
     template.hasResourceProperties('AWS::Logs::MetricFilter', {
       LogGroupName: { 'Fn::Join': ['', ['/aws/bedrock-agentcore/runtimes/', { Ref: runtimeId }, '-DEFAULT']] },
-      FilterPattern: '"guardrail_error"',
+      FilterPattern: '{ $.event = "guardrail_error" }',
       MetricTransformations: [
         { MetricNamespace: 'Yofina/Agent', MetricName: 'GuardrailErrors', MetricValue: '1', Dimensions: Match.absent() },
       ],

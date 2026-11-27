@@ -53,8 +53,10 @@ from yofina_agent.clarify import (
     InferredJar,
     goal_date_chips,
     goal_jar_question,
+    goal_phrase,
     infer_pay_jar,
     is_known_item_update,
+    known_item_date_retry_question,
     known_item_question,
     lacks_pay_jar,
     resolve_clarify,
@@ -2033,12 +2035,17 @@ class Turn:
         p = r.params
         assert p.known_item_name and p.amount_vnd is not None and p.date_spec is not None
         self.scope.max_calls = min(self.s.max_model_calls_per_turn, 2)
-        ask_date = ClarifyRequest(slot="date", question=notices.KNOWN_ITEM_QUESTIONS["date"])
-        resolved, _ = await self.resolve_date_spec(p.date_spec)
-        if resolved is None or resolved.days_from_today <= 0:
-            await self.emit_clarify(ask_date, r)
+        resolved, error = await self.resolve_date_spec(p.date_spec)
+        today = resolved.today if resolved else self.date_today()
+        day = resolved.date if resolved else (error.resolved_date if error else None)
+        if day is None:
+            await self.emit_clarify(ClarifyRequest(slot="date", question=notices.KNOWN_ITEM_QUESTIONS["date"]), r)
             return
-        day = resolved.date
+        latest, _ = add_months(today, 12)
+        if day <= today:
+            question_date = known_item_date_retry_question(day, today, latest)
+            await self.emit_clarify(ClarifyRequest(slot="date", question=question_date), r)
+            return
         item = {"name": p.known_item_name, "amount_vnd": p.amount_vnd, "needed_date": day.isoformat()}
 
         def card(outcome: ToolOutcome, trace_id: str) -> list[B.ConfirmActionBlock]:
@@ -2062,10 +2069,11 @@ class Turn:
             await self.write("known_item_split", question, res.compact)
         elif o.kind is ToolKind.TOOL_ERROR and o.code == ErrorCode.PARAMS_INVALID.value and (
             o.error_field == "needed_date"
-            or (o.error_field is None and day > add_months(resolved.today, 12)[0])
+            or (o.error_field is None and day > latest)
         ):
             # Ledger kiểm cửa sổ hạn. Kết quả cũ không có field, chỉ dùng hạn để phân biệt sau khi tool từ chối.
-            await self.emit_clarify(ask_date, r)
+            question_date = known_item_date_retry_question(day, today, latest)
+            await self.emit_clarify(ClarifyRequest(slot="date", question=question_date), r)
         else:
             self.tool_failure(o, empty_codes=_ROADMAP_EMPTY_CODES)
 
@@ -2241,7 +2249,15 @@ class Turn:
                 resolved, _ = await self.resolve_date_spec(p.date_spec)
                 if resolved is not None and resolved.days_from_today > 0:
                     deadline = resolved.date
-            question = known_item_question(p, req.slot, deadline)
+            question = known_item_question(p, req.slot, deadline, question=req.question)
+            said_deadline = (p.date_text or "").replace("“", "").replace("”", "").strip()
+            if deadline is not None and said_deadline and said_deadline.isprintable() and "?" not in said_deadline:
+                # Đặt ngày đã tính trước cụm gốc để lượt sau đọc đúng hạn nếu trong cụm cũng có ngày.
+                date_phrase = goal_phrase(None, deadline=deadline)
+                head, separator, tail = question.rpartition(f"{date_phrase}. ")
+                clarified = f"{head}{date_phrase} (“{said_deadline}”). {tail}"
+                if separator and len(clarified) <= 200:  # Giới hạn độ dài của ClarifyData.question.
+                    question = clarified
         chips = [_readable_amount_chip(c) for c in (req.chips if chips is None else chips)]
         if req.slot == "jar" and not chips:
             chips = await self.jar_chips()  # hỏi hũ nào thì chip là các hũ thật

@@ -28,6 +28,7 @@ from yofina_core.wallet import (
     TX_TYPE_SALARY_SPLIT,
 )
 from yofina_ledger.jar_layout import onboarding_override
+from yofina_ledger.split_proposal import check_jar_list_version
 
 ALREADY_APPLIED_MESSAGE = "Đề nghị này đã được thực hiện rồi. Chưa ghi thêm gì."
 CANCELLED_MESSAGE = "Đề nghị này đã bị hủy. Hãy hỏi lại nếu bạn vẫn muốn thực hiện."
@@ -381,8 +382,12 @@ SQL_RELEASE_CANCELLED_CREDIT = (
     "updated_at = now() WHERE user_id = :uid"
 )
 
+SQL_LOCK_JAR_LIST = (
+    "SELECT pg_advisory_xact_lock(hashtext('save_jars'), hashtext(:uid)) IS NULL AS locked"
+)
 SQL_JARS_FOR_SAVE = (
-    "SELECT j.code, j.name, j.balance_vnd, j.purpose, j.goal_vnd, j.goal_date, j.sinking_items, "
+    "SELECT j.code, j.name, j.balance_vnd, j.kind, j.purpose, j.goal_vnd, j.goal_date, j.sinking_items, "
+    "j.color_key, j.icon_key, j.split_percent, j.sort_order, "
     "(SELECT count(*) FROM obligations o WHERE o.user_id = j.user_id AND o.pay_jar_code = j.code "
     "AND o.status = 'active') AS active_obligations, "
     "(SELECT count(*) FROM transactions t WHERE t.user_id = j.user_id AND t.jar_code = j.code) AS tx_count "
@@ -1218,7 +1223,10 @@ class WalletRepo:
         """Thay cả danh sách hũ người dùng; hũ bị bỏ chỉ khi số dư 0, không nghĩa vụ trả bằng nó, không lịch sử."""
         wanted = [j["code"] for j in norm["jars"]]
         with self.db.transaction(user_id) as t:
+            # Khóa danh sách trước khi đọc để thấy cả hũ mới mà lần lưu trước vừa thêm.
+            t.execute(SQL_LOCK_JAR_LIST, {"uid": user_id})
             existing = t.execute(SQL_JARS_FOR_SAVE, {"uid": user_id})
+            check_jar_list_version(norm.get("base_version"), existing)
             removed = [j for j in existing if j["code"] not in wanted]
             for j in removed:
                 if (

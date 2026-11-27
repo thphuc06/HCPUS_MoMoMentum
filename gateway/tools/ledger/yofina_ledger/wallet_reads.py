@@ -507,6 +507,8 @@ class WalletReads:
             )
         except ParamsError as exc:
             raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
+        if data["status"] == "proposed":
+            data["params"]["base_version"] = split_proposal.jar_list_version(jars)
         return {"app_date": today.isoformat(), "as_of": format_instant(now), **data}
 
     def propose_jar_split_result(

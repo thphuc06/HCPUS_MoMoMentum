@@ -1,5 +1,6 @@
 """Test chéo #41 × #44 trên ví Minh (chạy local_pg với `-s` để in hai bảng)."""
 
+import pytest
 from ledger_fakes import gateway_context
 from test_default_six_jars import _allocation, _read_jars, _reset
 from test_roadmap_regen_scene4 import FORECAST, LEDGER, LocalAllocation, LocalLambda, Planner, _llm
@@ -9,6 +10,7 @@ from yofina_roadmap.repo import RoadmapRepo
 from yofina_roadmap.runner import RoadmapRunner
 from yofina_roadmap.settings import STAGES, RoadmapSettings
 
+from yofina_core.errors import ErrorCode, YofinaError
 from yofina_core.roadmap import AllocationPlanData
 from yofina_ledger.events import SOURCE
 from yofina_ledger.gateway_api import handle_gateway
@@ -59,6 +61,71 @@ def _regenerate(env, user, update, monkeypatch):
     assert allocation.last is not None and allocation.last["status"] == "OK", allocation.last
     assert allocation.last["app_date"] == APP_DATE
     return AllocationPlanData.model_validate(allocation.last["data"])
+
+
+def _sinking_preview(env, user, item):
+    result = handle_gateway(
+        {"user_id": user, "sinking_items": [item]},
+        gateway_context("ledger___propose_jar_split"),
+        env.svc,
+    )
+    assert result["status"] == "OK", result
+    assert result["data"]["status"] == "proposed", result
+    return result["data"]["confirm"]
+
+
+def _sinking_jar(env, user):
+    return next(jar for jar in _read_jars(env, user) if jar["code"] == "quy_don")
+
+
+def _apply_save_jars(env, user, params, token):
+    return env.svc.apply_action(
+        user,
+        "save_jars",
+        params,
+        token,
+        trace_id="b1test123",
+        channel="rest",
+        source_tool="rest:POST /actions",
+    )
+
+
+def test_save_jars_rejects_stale_sinking_preview_and_accepts_fresh_preview(env):
+    user = "minh-sinking-preview-version"
+    assert _reset(env, user, "persona-minh")["statusCode"] == 200
+    books = {"name": "Tiền sách", "amount_vnd": 100_000, "needed_date": "2027-05-15"}
+    first = _sinking_preview(env, user, TET)
+    second = _sinking_preview(env, user, books)
+    signed_second = env.svc.issue_confirmation(
+        user,
+        tool="save_jars",
+        params=second["params"],
+        client_params_hash=second["params_hash"],
+        trace_id="b1test123",
+    )
+
+    env.act(user, "save_jars", first["params"])
+    with pytest.raises(YofinaError) as exc:
+        _apply_save_jars(env, user, signed_second.params, signed_second.token)
+    assert exc.value.code == ErrorCode.PARAMS_MISMATCH
+    assert exc.value.message == "Danh sách hũ đã thay đổi sau khi tạo thẻ này, hãy xem lại."
+    assert _sinking_jar(env, user)["sinking_items"] == [TET]
+
+    refreshed = _sinking_preview(env, user, books)
+    env.act(user, "save_jars", refreshed["params"])
+    assert _sinking_jar(env, user)["sinking_items"] == [TET, books]
+
+
+def test_save_jars_accepts_legacy_signed_params_without_base_version(env):
+    user = "minh-sinking-preview-legacy"
+    assert _reset(env, user, "persona-minh")["statusCode"] == 200
+    preview = _sinking_preview(env, user, TET)
+    legacy = {key: value for key, value in preview["params"].items() if key != "base_version"}
+    signed = env.svc.confirm.issue(user, "save_jars", legacy)
+
+    _apply_save_jars(env, user, legacy, signed.token)
+
+    assert _sinking_jar(env, user)["sinking_items"] == [TET]
 
 
 def test_minh_sinking_chat_then_regen(env, monkeypatch):

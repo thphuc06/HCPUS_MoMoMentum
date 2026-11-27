@@ -277,10 +277,10 @@ export class OpsDashboard extends Construct {
         'RuntimeLogs',
         `/aws/bedrock-agentcore/runtimes/${runtimeId}-${ops.runtimeEndpointName}`,
       );
-      // AgentCore nhận stdout có tiền tố trước phần JSON, nên lọc theo từ khóa có ngoặc kép.
+      // main.py ghi %(message)s ra stdout. Lọc trường event để bỏ qua lý do của memory_write_skipped.
       new logs.MetricFilter(this, 'GuardrailErrorsFilter', {
         logGroup: runtimeLogs,
-        filterPattern: logs.FilterPattern.literal('"guardrail_error"'),
+        filterPattern: logs.FilterPattern.stringValue('$.event', '=', 'guardrail_error'),
         metricNamespace: GUARDRAIL_METRIC_NAMESPACE,
         metricName: GUARDRAIL_ERROR_METRIC_NAME,
         metricValue: '1',

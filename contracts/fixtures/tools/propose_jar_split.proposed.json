@@ -145,7 +145,8 @@
           ],
           "split_percent": 28
         }
-      ]
+      ],
+      "base_version": "76f4acd188c95897"
     },
     "confirm": {
       "tool": "save_jars",
@@ -192,14 +193,15 @@
             ],
             "code": "quy_don"
           }
-        ]
+        ],
+        "base_version": "76f4acd188c95897"
       },
-      "params_hash": "2c4486fd565a9e84d9460b14a6053b5cb17849c5c70d8b73ec6bef5fbdd55109",
+      "params_hash": "28102b1a2312f13cfae3351b9b22ab6119e26cb2ab6f273890fd4f57f2382602",
       "summary": "Lưu 4 hũ và tỷ lệ chia lương",
       "changes": [
         {
-          "label": "Lý do: hũ Quỹ dồn",
-          "after": "Khoản biết trước cần 2.500.000 ₫/kỳ lương = 27,8% lương"
+          "label": "Hũ mới: Quỹ dồn",
+          "after": "28% · 2.520.000 ₫/kỳ"
         },
         {
           "label": "Hũ Chi hằng ngày",
@@ -207,8 +209,12 @@
           "after": "14% · 1.260.000 ₫/kỳ (−2.520.000 ₫)"
         },
         {
-          "label": "Hũ mới: Quỹ dồn",
-          "after": "28% · 2.520.000 ₫/kỳ"
+          "label": "Khoản mới: Tết",
+          "after": "5.000.000 ₫, cần trước 05/02"
+        },
+        {
+          "label": "Lý do: hũ Quỹ dồn",
+          "after": "Khoản biết trước cần 2.500.000 ₫/kỳ lương = 27,8% lương"
         }
       ],
       "warnings": [

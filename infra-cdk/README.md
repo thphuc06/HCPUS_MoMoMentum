@@ -213,10 +213,10 @@ npm run typecheck --prefix infra-cdk              # kiểm kiểu
 
 ### Alarm lỗi guardrail
 
-`YofinaTools` dùng metric filter trên log group `/aws/bedrock-agentcore/runtimes/<runtimeId>-DEFAULT` do AgentCore tạo.
-Filter đếm dòng chứa `"guardrail_error"`. Alarm `<prefix>-ops-guardrail-errors` gửi SNS khi tổng số lỗi trong 5 phút đạt ngưỡng.
+Alarm của `YofinaTools` phụ thuộc vào tham số SSM `/<prefix>/agent/runtime-id` và log group `/aws/bedrock-agentcore/runtimes/<runtimeId>-DEFAULT` do AgentCore tạo.
+Filter đếm bản ghi JSON có trường `event` bằng `"guardrail_error"`. Alarm `<prefix>-ops-guardrail-errors` gửi SNS khi tổng số lỗi trong 5 phút đạt ngưỡng.
 
-Ở tài khoản mới, deploy `YofinaTools` với `-c opsGuardrailErrorAlarmThreshold=0` vì `YofinaAgent` được deploy sau.
+Trong môi trường mới hoặc khi tạo lại Runtime, deploy `YofinaTools` với `-c opsGuardrailErrorAlarmThreshold=0` trước.
 Sau khi deploy `YofinaAgent` và gọi Runtime lần đầu, kiểm tra SSM `/<prefix>/agent/runtime-id` và log group đã tồn tại.
 Deploy lại `YofinaTools` với ngưỡng dương hoặc bỏ tùy chọn `0` để dùng ngưỡng mặc định.
 
