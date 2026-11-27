@@ -32,13 +32,14 @@ Ca cho hành vi mới của đợt này, mỗi ca 1 lượt chat:
 
 ### Chạy một lượt đầy đủ sau deploy
 
-Một lượt đầy đủ: 115 ca (golden 33 + 16 + 16, đối kháng 16 + 12 + 14 + 8), **117 lượt chat** (hai ca bộ nhớ có một phiên trước), 11 lần nạp tệp, 1 lời gọi judge; cộng 18 lời gọi router của bộ diễn đạt lại (không qua Runtime, không tính lượt chat). In lại bằng `--list` của từng bộ. Chi phí ước tính khoảng **2,5–3 USD** (mốc 2,2–2,5 USD cho 102 ca ở Runtime v25, khoảng 80% là Sonnet 4.6; nay thêm 13 ca, trong đó 2 ca lập lộ trình); đo phân loại ví 3 hũ thêm khoảng 0,3 USD ([classification/README.md](classification/README.md)).
+Một lượt đầy đủ: 115 ca (golden 33 + 16 + 16, đối kháng 16 + 12 + 14 + 8), **117 lượt chat** (hai ca bộ nhớ có một phiên trước), 11 lần nạp tệp, 1 lời gọi judge; cộng 18 lời gọi router của bộ diễn đạt lại (không qua Runtime, không tính lượt chat). In lại bằng `--list` của từng bộ. Chi phí ước tính khoảng **2,5–3 USD** (mốc 2,2–2,5 USD cho 102 ca ở Runtime v25, khoảng 80% là Sonnet 4.6; nay thêm 13 ca, trong đó 2 ca lập lộ trình; lượt đầy đủ 26/11 trên Runtime v34 tốn khoảng 2,0 USD, log ghi 1,91 USD); đo phân loại ví 3 hũ thêm khoảng 0,3 USD ([classification/README.md](classification/README.md)).
 
 Điều kiện trước khi chạy:
 1. Hỏi chủ dự án (tốn tiền model). Deploy đã xong và ổn.
 2. **Quota**: trần mặc định 100 lượt chat mỗi tài khoản mỗi ngày (`yofina_core.quota`, tính cả lượt kiểm tay trên app bằng `minh` trong ngày), ít hơn 117 lượt của một lượt đầy đủ: đặt SSM `/yofina/quota/chat_turns_per_day` cao hơn (ví dụ 300) cho ngày chạy, xóa khóa sau khi xong (#13, #35). Trần nạp 20 tệp mỗi ngày (`/yofina/quota/uploads_per_day`) đủ cho 11 lần nạp của một lượt; chạy lại ca nạp nhiều lần thì nâng cả khóa này. Giá trị SSM được nhớ 5 phút.
 3. **Đặt lại `minh`** trước mỗi nhóm bộ như dưới (nạp lại cùng tệp bị từ chối `INGEST_DUPLICATE_FILE`, ca nạp để lại dòng chờ duyệt, ca lộ trình để lại bản đề xuất), và sau khi xong.
 4. Kết quả cũ trong `evals/results/phase<N>-<bộ>.jsonl` làm runner bỏ qua ca đã có: xóa tệp hoặc thêm `--redo` khi chạy lại sau khi đặt lại.
+5. **Nhịp và chạy nền** (ghi chú sau lượt đầy đủ 26/11 trên Runtime v34): router Haiku giới hạn 8 lượt/phút dùng chung cho mọi lời gọi của vai `router`, nên giữ `--min-interval` từ 8 giây trở lên (lượt 26/11 dùng 20, mặc định của `run.py`; bộ diễn đạt lại nghỉ 8,5 giây), router khi đó không phải chờ hay rơi về Nova. Trên Windows, `run.py --background` có thể chết im lặng giữa chừng (26/11: sau 11 ca của golden phase 3, không báo lỗi): chạy bằng `Start-Process` (tiến trình riêng, log ra tệp) và theo dõi tệp kết quả `evals/results/phase<N>-<bộ>.jsonl`; chạy lại thì runner bỏ qua ca đã có, ca đang dở lúc tiến trình chết có thể chạy lặp.
 
 ```powershell
 uv run scripts/seed_demo.py minh
