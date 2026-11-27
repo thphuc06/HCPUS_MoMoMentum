@@ -74,7 +74,14 @@ SUGGESTION_ITEMS: tuple[dict[str, str], ...] = (
 SUGGESTIONS_TITLE = "Mình có thể giúp bạn"
 
 # Ô còn thiếu -> câu hỏi và chip (khối `clarify`). Chỉ là nhãn của ô thiếu, không gắn với câu mẫu nào.
+KNOWN_ITEM_QUESTIONS = {
+    "other": "Bạn muốn dành tiền cho khoản nào?",
+    "amount": "Khoản này cần tổng cộng bao nhiêu tiền?",
+    "date": "Bạn cần có đủ tiền cho khoản này vào ngày nào?",
+}
+
 CLARIFY: dict[str, dict] = {
+    "date": {"question": KNOWN_ITEM_QUESTIONS["date"], "chips": []},
     "amount": {
         "question": "Khoản này khoảng bao nhiêu tiền?",
         "chips": [

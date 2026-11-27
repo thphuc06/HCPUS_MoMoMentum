@@ -269,6 +269,31 @@ def test_runtime_moi_doc_duoc_ket_qua_cua_lambda_moi(tool, label, payload, valid
     READERS[tool](_outcome(tool, new))
 
 
+@pytest.mark.parametrize(
+    ("fixture", "kind"),
+    [("proposed", ToolKind.OK), ("infeasible", ToolKind.OK), ("error_params", ToolKind.TOOL_ERROR)],
+)
+def test_runtime_reads_propose_jar_split_result(fixture, kind):
+    tool = "propose_jar_split"
+    payload = _load(f"{tool}.{fixture}.json")
+    validator = Draft202012Validator(
+        {"$ref": f"{BASE}/tools/{RESULT_FILE[tool]}.results.schema.json#/$defs/{RESULT_DEF[tool]}"},
+        registry=build_registry(),
+    )
+    assert not _schema_errors(validator, payload)
+    outcome = classify_result(f"ledger___{tool}", _mcp(payload))
+    assert outcome.kind is kind
+    if fixture == "error_params":
+        assert outcome.code == "PARAMS_INVALID"
+    else:
+        assert outcome.payload == payload
+        assert payload["data"]["status"] == fixture
+        if fixture == "proposed":
+            data = outcome.payload["data"]
+            confirm = B.ConfirmActionData.model_validate(data["confirm"])
+            assert confirm.tool == "save_jars" and confirm.params == data["params"]
+
+
 def test_dang_moi_that_su_co_truong_moi():
     """Bộ dựng dạng mới đặt đúng các trường mới (không thì test trên chỉ chạy lại dạng cũ), kể cả khung khoản đến hạn có khoản."""
     seen: set[str] = set()

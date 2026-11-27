@@ -1,0 +1,63 @@
+{
+  "status": "OK",
+  "as_of": "2026-12-10T03:00:00Z",
+  "app_date": "2026-11-21",
+  "data": {
+    "app_date": "2026-11-21",
+    "as_of": "2026-12-10T03:00:00Z",
+    "salary_vnd": 2000000,
+    "obligation_basis": "template",
+    "sinking_items": [
+      {
+        "name": "Tết",
+        "amount_vnd": 5000000,
+        "needed_date": "2027-02-05",
+        "remaining_vnd": 5000000,
+        "paydays": 2,
+        "per_payday_vnd": 2500000
+      }
+    ],
+    "status": "infeasible",
+    "required_percent": 168,
+    "reasons": [
+      {
+        "jar_code": "quy_don",
+        "text": "Khoản biết trước cần 2.500.000 ₫/kỳ lương = 125% lương"
+      }
+    ],
+    "priority_obligations": [],
+    "jars": [
+      {
+        "code": "chi_hang_ngay",
+        "name": "Chi hằng ngày",
+        "kind": "spending",
+        "split_before": 42,
+        "split_after": 42,
+        "amount_before_vnd": 840000,
+        "amount_after_vnd": 840000,
+        "delta_vnd": 0
+      },
+      {
+        "code": "nghia_vu",
+        "name": "Nghĩa vụ",
+        "kind": "obligation",
+        "split_before": 33,
+        "split_after": 33,
+        "amount_before_vnd": 660000,
+        "amount_after_vnd": 660000,
+        "delta_vnd": 0
+      },
+      {
+        "code": "du_phong",
+        "name": "Dự phòng",
+        "kind": "saving",
+        "split_before": 25,
+        "split_after": 25,
+        "purpose": "buffer",
+        "amount_before_vnd": 500000,
+        "amount_after_vnd": 500000,
+        "delta_vnd": 0
+      }
+    ]
+  }
+}

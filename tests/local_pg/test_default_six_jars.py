@@ -392,6 +392,39 @@ def test_reset_uses_demo_layout_for_each_persona(env, persona):
     assert _read_jars(env, user) == jars
 
 
+@pytest.mark.parametrize("edited", [False, True], ids=["reset-minh", "funded-long-term-and-buffer"])
+def test_minh_tet_split_proposal_uses_br65_sources(env, edited):
+    user = "minh-tet-br65"
+    assert _reset(env, user, "persona-minh")["statusCode"] == 200
+    assert env.svc.profile_response(user)["app_date"] == "2026-11-21"
+    jars = _read_jars(env, user)
+    assert _layout(jars) == DEMO
+    if edited:
+        # Sau đặt lại, Đầu tư là 0% và Dự phòng ở sàn 10%. Chuyển 17 điểm từ Ăn uống để thấy thứ tự lấy nguồn.
+        changes = {"an_uong": 13, "du_phong": 15, "dau_tu": 12}
+        params = _editable(jars)
+        for jar in params:
+            jar["split_percent"] = changes.get(jar["code"], jar["split_percent"])
+        env.act(user, "save_jars", {"jars": params})
+
+    body = {"sinking_items": [{"name": "Tết", "amount_vnd": 5_000_000, "needed_date": "2027-02-05"}]}
+    response = handle_http(http_event("POST", "/jars/split-proposal", sub=user, body=body), env.svc)
+    assert response["statusCode"] == 200, response
+    proposal = json.loads(response["body"])
+    assert proposal["status"] == "proposed"
+    (plan,) = proposal["sinking_items"]
+    assert (plan["paydays"], plan["per_payday_vnd"]) == (2, 2_500_000)
+    codes = [*DEMO, "quy_don"]
+    before = (3, 33, 15, 13, 7, 7, 10, 12, 0) if edited else (3, 33, 10, 30, 7, 7, 10, 0, 0)
+    after = (2, 30, 15, 13, 7, 3, 2, 0, 28) if edited else (0, 30, 10, 23, 7, 2, 0, 0, 28)
+    print("\nHũ | Trước (%) | Sau (%)")
+    for row in proposal["jars"]:
+        print(f"{row['name']} | {row['split_before']} | {row['split_after']}")
+    assert [(j["code"], j["split_before"], j["split_after"]) for j in proposal["jars"]] == list(
+        zip(codes, before, after, strict=True)
+    )
+
+
 def test_demo_and_three_jar_wallets_route_new_transactions_by_type(env):
     """Giao dịch mới vào hũ theo loại (issue #39, 26/11): hũ riêng khớp loại thắng hũ chung. Ví demo 8 hũ (có cả Chi hằng ngày): ăn
     uống, đi lại, giải trí vào hũ riêng, hóa đơn vào Nghĩa vụ, du lịch vào hũ goal; ví ba hũ mới: chi vào Chi hằng ngày, hóa đơn vào

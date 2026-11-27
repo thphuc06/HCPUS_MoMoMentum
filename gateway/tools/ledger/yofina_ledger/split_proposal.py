@@ -13,17 +13,18 @@ Quy tắc:
 - **Quỹ dồn**: tỷ lệ cần = tổng (phần còn thiếu của từng khoản / số kỳ lương còn lại trước ngày cần) / lương, làm tròn lên.
   Số dư Quỹ dồn đang có được trừ vào khoản cần sớm nhất trước.
 - Chỉ đề xuất khi tỷ lệ cần lệch tỷ lệ đang đặt từ 1 điểm (hoặc có khoản biết trước mới). Phần chênh lấy từ hũ chi không
-  thiết yếu theo LOẠI giao dịch (Chi hằng ngày, hũ trộn, trước; rồi hũ như Giải trí), rồi Dự phòng nhưng không xuống dưới sàn
-  `buffer_min_split_percent`, rồi hũ để dành khác (mục tiêu, dài hạn xếp sau nghĩa vụ theo BR-65), hũ chi thiết yếu (chỉ nhận
-  loại ăn uống, đi lại, hóa đơn) sau cùng (BR-21, BR-54). Phần thừa trả về hũ chi đầu tiên (Chi hằng ngày trước).
+  thiết yếu theo LOẠI giao dịch (Chi hằng ngày, hũ trộn, trước; rồi hũ như Giải trí) tới sàn chi. Tiếp theo là hũ dài hạn,
+  hũ mục tiêu hoặc để dành cũ theo thứ tự ví (BR-65), phần sàn chi, Dự phòng tới `buffer_min_split_percent`, rồi hũ chi
+  thiết yếu (chỉ nhận loại ăn uống, đi lại, hóa đơn) sau cùng (BR-21, BR-54). Quỹ dồn không là nguồn bù. Phần thừa trả về
+  hũ chi đầu tiên (Chi hằng ngày trước).
 - Sàn của mọi hũ nguồn (không theo mã): tổng nghĩa vụ đã khai đang hoạt động trả từ hũ đó, quy về tháng như tỷ lệ cần của Nghĩa vụ
   (Netflix trả từ Giải trí giữ Giải trí ở 2% lương). Hũ đang thấp hơn sàn của nó thì không bị lấy thêm (không bị nâng); hũ không có
   khoản định kỳ nào thì sàn 0 như trước.
 - **Sàn chi** (#39, chốt 26/11 chiều) của hũ chi không thiết yếu (theo loại giao dịch): tỷ lệ giữ x mức nền bền mỗi tháng của cả hũ
   (trung vị chi theo tuần trên 12 tuần, `yofina_core.spend_baseline`, cùng hàm, nguồn số và tham số với LP phân bổ; chưa đủ tuần thì chi
   trung bình 30 ngày gần nhất như trước, chốt 26/11 tối: `spending_floors_vnd`, `SpendFloorSettings`), quy ra điểm lương làm tròn LÊN như
-  sàn khoản định kỳ, không vượt tỷ lệ đang đặt. Hũ chi không thiết yếu chỉ nhường tới sàn chi; Dự phòng tới sàn, hũ để dành khác (mục
-  tiêu) đi trước; còn thiếu thì sàn chi mới nhường (nghĩa vụ trước, không làm đề xuất thành "chưa khả thi"), rồi tới hũ chi thiết yếu.
+  sàn khoản định kỳ, không vượt tỷ lệ đang đặt. Hũ chi không thiết yếu nhường tới sàn chi trước hũ dài hạn và mục tiêu. Nếu vẫn
+  thiếu, phần sàn chi nhường tới mức đã cam kết trước khi lấy từ Dự phòng và hũ chi thiết yếu.
 - Nghĩa vụ + Quỹ dồn + sàn Dự phòng + sàn các hũ nguồn vượt 100%: không đề xuất tỷ lệ, không gợi ý cắt khoản thiết yếu (BR-21); trả
   danh sách nghĩa vụ theo thứ tự ưu tiên (nhà ở, điện nước, rồi nợ) để giao diện mở lộ trình.
 - Mẫu số chỉ là lương đã khai. Lần lương nhận gần nhất lệch số khai quá ngưỡng BR-12 thì hỏi cập nhật lương trước.
@@ -747,9 +748,8 @@ def build_proposal(
     spending = sorted(
         (j for j in jars if j["kind"] == "spending"), key=lambda j: j["code"] != DEFAULT_SPENDING_JAR
     )
-    # BR-21, BR-54: không cắt khoản thiết yếu trước. Lấy từ hũ chi không thiết yếu (theo loại giao dịch, `essential_spending_jars`;
-    # Chi hằng ngày là hũ trộn nên đứng đầu như trước) xuống tới sàn chi, rồi Dự phòng xuống tới sàn, rồi hũ để dành khác, rồi sàn chi
-    # nhường (nghĩa vụ trước, #39 26/11 chiều), hũ chi thiết yếu sau cùng.
+    # BR-21, BR-54, BR-65: hũ chi không thiết yếu (theo loại giao dịch, `essential_spending_jars`, Chi hằng ngày đứng đầu)
+    # nhường tới sàn chi trước, rồi hũ dài hạn, hũ mục tiêu, phần sàn chi, Dự phòng tới sàn và hũ chi thiết yếu sau cùng.
     essential_codes = essential_jars or frozenset()
     flexible_codes = [
         str(j["code"]) for j in spending if str(j["code"]) not in essential_codes and str(j["code"]) not in targets
@@ -760,18 +760,23 @@ def build_proposal(
         spend_pct = Decimal(ceil_percent(Fraction(int((spend_floor_vnd or {}).get(code, 0))), int(salary_vnd)))
         keep[code] = min(max(spend_pct, committed.get(code, ZERO)), shares[code])
     sources = [(code, keep[code]) for code in flexible_codes]
-    if buffer is not None:
-        sources.append((str(buffer["code"]), floor))
     sources += [
         (str(j["code"]), committed.get(str(j["code"]), ZERO))
         for j in jars
-        if j["kind"] == "saving" and j is not buffer and j.get("purpose") != "sinking"
+        if j["kind"] == "saving" and j is not buffer and j.get("purpose") == "long_term"
+    ]
+    sources += [
+        (str(j["code"]), committed.get(str(j["code"]), ZERO))
+        for j in jars
+        if j["kind"] == "saving" and j is not buffer and j.get("purpose") in {"goal", None}
     ]
     sources += [
         (code, committed.get(code, ZERO))
         for code in flexible_codes
         if keep[code] > committed.get(code, ZERO)
     ]
+    if buffer is not None:
+        sources.append((str(buffer["code"]), floor))
     sources += [
         (str(j["code"]), committed.get(str(j["code"]), ZERO))
         for j in spending

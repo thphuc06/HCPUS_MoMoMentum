@@ -34,6 +34,7 @@ _TOOL_STATUSES = frozenset({"ok", "error", "denied"})
 TOOL_LABELS: dict[str, str] = {
     # ledger
     "get_jar_balances": "Số dư các hũ",
+    "propose_jar_split": "Đề xuất tỷ lệ chia lương",
     "query_transactions": "Giao dịch gần đây",
     "get_cashflow_summary": "Dòng tiền",
     "get_obligations": "Nghĩa vụ sắp đến hạn",

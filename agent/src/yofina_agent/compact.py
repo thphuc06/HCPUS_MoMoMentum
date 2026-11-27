@@ -494,6 +494,49 @@ def compact_confirm_action(data: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+def compact_known_item_split(payload: Mapping[str, Any], name: str) -> dict[str, Any]:
+    """Dữ kiện từ đề xuất chia lương, không đưa tham số xác nhận vào lời nhắc."""
+    data = payload["data"]
+    status = data["status"]
+    if status not in {"proposed", "aligned", "infeasible", "salary_mismatch", "no_salary", "no_obligation_jar"}:
+        raise ValueError("Trạng thái đề xuất Quỹ dồn không hợp lệ cho khoản vừa khai")
+    out: dict[str, Any] = {"status": status}
+    if status in {"proposed", "aligned", "infeasible"}:
+        out["sinking_items"] = [
+            {
+                "name": item["name"],
+                "needed_date_text": _dm(item["needed_date"]),
+                "per_payday_text": format_vnd(item["per_payday_vnd"]),
+            }
+            for item in data.get("sinking_items", [])
+            if item["name"].casefold() == name.strip().casefold()
+        ]
+    if status == "proposed":
+        out["reduced_jars"] = [
+            {
+                "name": jar["name"],
+                "split_before_text": f"{jar['split_before']}%".replace(".", ","),
+                "split_after_text": f"{jar['split_after']}%".replace(".", ","),
+                "amount_before_text": format_vnd(jar["amount_before_vnd"]),
+                "amount_after_text": format_vnd(jar["amount_after_vnd"]),
+                "delta_text": format_vnd(abs(jar["delta_vnd"])),
+            }
+            for jar in data["jars"]
+            if jar["split_after"] < jar["split_before"]
+        ]
+    if status == "infeasible":
+        out["reasons"] = [reason["text"] for reason in data.get("reasons", [])]
+        out["priority_obligations"] = [
+            {"name": item["name"], "monthly_text": format_vnd(item["monthly_vnd"])}
+            for item in data.get("priority_obligations", [])
+        ]
+    if status == "salary_mismatch":
+        check = data["salary_check"]
+        out["declared_salary_text"] = format_vnd(check["declared_vnd"])
+        out["received_salary_text"] = format_vnd(check["received_vnd"])
+    return out
+
+
 def compact_resilience(payload: Mapping[str, Any]) -> dict[str, Any]:
     data = payload["data"]
     weakest = next(c for c in data["components"] if c["key"] == data["weakest"])

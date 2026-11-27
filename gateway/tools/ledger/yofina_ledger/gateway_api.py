@@ -5,7 +5,7 @@
   (spike Gateway §3a). Lambda không thấy JWT. Tham số lạ bị bỏ qua (Gateway không từ chối chúng).
 - Kết quả theo `contracts/tools/ledger.results.schema.json`; lỗi nghiệp vụ là kết quả thành công
   của Lambda: `{"status": "ERROR", "code", "message"}`.
-- Mười tool (đúng thứ tự `yofina_core.wallet.LEDGER_TOOLS`): năm tool đọc, bốn tool ghi, `save_turn`. Tool ghi KHÔNG có
+- Mười một tool (đúng thứ tự `yofina_core.wallet.LEDGER_TOOLS`): sáu tool đọc, bốn tool ghi, `save_turn`. Tool ghi KHÔNG có
   `confirm_token` thì không ghi, trả `NEEDS_CONFIRMATION` kèm bản xem trước. `save_jars` và `confirm_salary` chỉ có ở REST.
 - Phase 3: Lambda này CŨNG phục vụ ba target Gateway `planner` (`check_suitability`, `schedule_nudge`), `knowledge`
   (`get_fee_schedule`, `get_exchange_rate`, `resolve_date`) và `audit` (`get_trace`, `record_turn`) theo quyết định của người điều phối (không có Lambda riêng). Tên tool của các
@@ -43,6 +43,7 @@ _ARG_KEYS: dict[str, tuple[str, ...]] = {
     "get_cashflow_summary": ("from_date", "to_date"),
     "get_obligations": ("status", "within_days", "limit"),
     "get_unclassified": ("limit",),
+    "propose_jar_split": ("sinking_items",),
     "update_profile": (
         "display_name",
         "monthly_salary_vnd",
@@ -186,6 +187,8 @@ def _run(
         }
     if tool == "get_unclassified":
         return service.unclassified_result(user_id, **args)
+    if tool == "propose_jar_split":
+        return service.propose_jar_split_result(user_id, trace_id=trace_id, **args)
     if tool == "save_turn":
         return service.save_turn_result(user_id, **args)
     if tool == "check_suitability":

@@ -19,7 +19,7 @@ from yofina_agent.textutil import ungrounded_amounts
 from yofina_core.llm import LlmGateway, TurnScope
 
 #: Việc mà phần lời được kiểm trọn (mọi con số, kể cả điểm, số ngày, phiên bản) trước khi phát; sai thì bỏ phần lời.
-PHASE4_TASKS = frozenset({"resilience", "stress", "roadmap", "roadmap_step_edit"})
+PHASE4_TASKS = frozenset({"resilience", "stress", "roadmap", "roadmap_step_edit", "known_item_split"})
 _NUMBER_RE = re.compile(r"-?\d+(?:[.,/\-]\d+)*(?:\s*%)?")
 
 WRITER_SYSTEM = """Bạn là Yofina, trợ lý quản lý chi tiêu theo hũ cho người dùng Việt Nam. Trả lời bằng tiếng Việt, giọng thân thiện.
@@ -104,6 +104,17 @@ TASKS: dict[str, str] = {
     "confirm_action": (
         "Thẻ xác nhận một thay đổi đã hiện (summary, changes). Chưa lưu gì cho tới khi người dùng bấm Xác nhận trên thẻ; câu trả "
         "lời phải nói rõ điều này."
+    ),
+    "known_item_split": (
+        "Giải thích cách dành tiền theo kỳ lương cho khoản đã khai, trong tối đa bốn dòng. sinking_items là khoản đang xét, "
+        "per_payday_text là mức cần dành mỗi kỳ. Với proposed, nêu mức đó và hũ bị giảm trong reduced_jars, theo tiền giảm mỗi kỳ "
+        "(delta_text) và tỷ lệ trước/sau. amount_before_text và amount_after_text là số tiền vào hũ mỗi kỳ trước và sau đề xuất. "
+        "Chỉ nói về việc lùi hạn mục tiêu nếu có dữ kiện trực tiếp về hạn bị lùi. Chỉ proposed có thẻ xác nhận. "
+        "Nói rõ đề xuất ấy chỉ được lưu khi bấm Xác nhận. Muốn đổi cách chia thì vào Thêm hoặc sửa hũ. "
+        "aligned nghĩa là phần chia hiện tại của Quỹ dồn đã đáp ứng khoản này. infeasible nghĩa là chưa xếp được khoản này vào cách chia lương. "
+        "Giải thích infeasible theo reasons và các khoản phải ưu tiên trong priority_obligations, rồi mời lập lộ trình. "
+        "salary_mismatch là lương nhận gần đây lệch lương khai, mời cập nhật lương. no_salary thì mời khai lương và ngày nhận. "
+        "no_obligation_jar thì hướng dẫn bổ sung hũ Nghĩa vụ trong Thêm hoặc sửa hũ."
     ),
     "clarify": (
         "Hệ thống chưa xác định được điều nêu ở van_de. Hỏi lại người dùng đúng một câu (một dấu hỏi). cac_hu_hien_co là các hũ "
