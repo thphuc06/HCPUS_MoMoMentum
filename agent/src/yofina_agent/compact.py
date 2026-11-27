@@ -494,6 +494,25 @@ def compact_confirm_action(data: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _compact_sinking_item(item: Mapping[str, Any]) -> dict[str, Any]:
+    row = {"name": item["name"]}
+    if needed_date := item.get("needed_date"):
+        row["needed_date_text"] = _dm(needed_date)
+    if (amount := item.get("amount_vnd")) is not None:
+        row["amount_text"] = format_vnd(amount)
+    remaining = item.get("remaining_vnd")
+    if remaining is not None:
+        row["remaining_text"] = format_vnd(remaining)
+    if remaining == 0:
+        row["status"] = "funded"
+    elif remaining is not None and remaining > 0 and item.get("paydays") == 0:
+        row["status"] = "before_next_payday"
+    elif (per_payday := item.get("per_payday_vnd")) is not None:
+        row["status"] = "per_payday"
+        row["per_payday_text"] = format_vnd(per_payday)
+    return row
+
+
 def compact_known_item_split(payload: Mapping[str, Any], name: str) -> dict[str, Any]:
     """Dữ kiện từ đề xuất chia lương, không đưa tham số xác nhận vào lời nhắc."""
     data = payload["data"]
@@ -502,15 +521,9 @@ def compact_known_item_split(payload: Mapping[str, Any], name: str) -> dict[str,
         raise ValueError("Trạng thái đề xuất Quỹ dồn không hợp lệ cho khoản vừa khai")
     out: dict[str, Any] = {"status": status}
     if status in {"proposed", "aligned", "infeasible"}:
-        out["sinking_items"] = [
-            {
-                "name": item["name"],
-                "needed_date_text": _dm(item["needed_date"]),
-                "per_payday_text": format_vnd(item["per_payday_vnd"]),
-            }
-            for item in data.get("sinking_items", [])
-            if item["name"].casefold() == name.strip().casefold()
-        ]
+        requested_name = name.strip().casefold()
+        items = sorted(data.get("sinking_items") or (), key=lambda item: item["name"].casefold() != requested_name)
+        out["sinking_items"] = [_compact_sinking_item(item) for item in items]
     if status == "proposed":
         out["reduced_jars"] = [
             {

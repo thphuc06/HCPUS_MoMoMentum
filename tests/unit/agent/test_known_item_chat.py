@@ -7,6 +7,7 @@ import json
 import pytest
 from agent_helpers import (
     FakeTools,
+    FakeWriter,
     blocks_of,
     check_agui_order,
     fixture,
@@ -17,10 +18,13 @@ from agent_helpers import (
     tool_response,
 )
 from pydantic import ValidationError
+from yofina_agent import notices
 from yofina_agent.clarify import missing_slot
 from yofina_agent.router import checked_route
 from yofina_agent.schemas import IntentParams, IntentResult
 from yofina_agent.tools import classify_result
+
+from yofina_core.confirm import params_hash
 
 NAME = "Phí dự thi"
 AMOUNT = 5_000_000
@@ -152,6 +156,95 @@ def test_proposed_confirms_exact_tool_params_and_writes_with_two_model_calls(mon
         }
     ]
     assert preview["params_hash"] not in prompt and '"params":' not in prompt
+
+
+TUITION = {"name": "Học phí", "amount_vnd": 1_100_000, "needed_date": "2026-11-30"}
+TUITION_PLAN = {**TUITION, "remaining_vnd": 700_000, "paydays": 0}
+TUITION_FACTS = {
+    "name": "Học phí",
+    "needed_date_text": "30/11",
+    "amount_text": "1.100.000 ₫",
+    "remaining_text": "700.000 ₫",
+    "status": "before_next_payday",
+}
+TUITION_REPLY = "Học phí còn thiếu 700.000 ₫ và đến hạn 30/11 trước kỳ lương kế tiếp."
+
+
+@pytest.mark.parametrize(
+    ("item", "plan", "saved_vnd", "facts", "reply"),
+    [
+        pytest.param(TUITION, [TUITION_PLAN], 400_000, [TUITION_FACTS], TUITION_REPLY, id="before-next-payday"),
+        pytest.param(
+            ITEM,
+            [{**ITEM, "remaining_vnd": 0, "paydays": 2}],
+            AMOUNT,
+            [{
+                "name": "Tết",
+                "needed_date_text": "05/02",
+                "amount_text": "5.000.000 ₫",
+                "remaining_text": "0 ₫",
+                "status": "funded",
+            }],
+            "Quỹ dồn đã đủ 5.000.000 ₫ cho khoản Tết.",
+            id="funded",
+        ),
+        pytest.param(
+            ITEM,
+            [TUITION_PLAN, {**ITEM, "remaining_vnd": AMOUNT, "paydays": 2, "per_payday_vnd": 2_500_000}],
+            400_000,
+            [TUITION_FACTS, {
+                "name": "Tết",
+                "needed_date_text": "05/02",
+                "amount_text": "5.000.000 ₫",
+                "remaining_text": "5.000.000 ₫",
+                "status": "per_payday",
+                "per_payday_text": "2.500.000 ₫",
+            }],
+            f"{TUITION_REPLY} Khoản Tết cần dành 2.500.000 ₫ mỗi kỳ lương.",
+            id="mixed",
+        ),
+    ],
+)
+def test_sinking_items_keep_confirmation_and_grounded_explanation(item, plan, saved_vnd, facts, reply, monkeypatch):
+    payload = proposal_fixture("proposed")
+    payload["data"]["sinking_items"] = plan
+    preview = payload["data"]["confirm"]
+    preview["params"]["jars"][-1]["sinking_items"] = [
+        {key: row[key] for key in ("name", "amount_vnd", "needed_date")} for row in plan
+    ]
+    preview["params_hash"] = params_hash("save_jars", preview["params"])
+    wallet = fixture("get_jar_balances.ok.json")
+    wallet["data"]["jars"].append({
+        **preview["params"]["jars"][-1],
+        "balance_vnd": saved_vnd,
+    })
+    tools = tools_with_payload(payload)
+    tools.results["get_jar_balances"] = lambda _: classify_result("x", mcp_ok(wallet))
+    year, month, day = map(int, item["needed_date"].split("-"))
+    events, tools, writer = run_turn(
+        f"Mình cần đóng {item['name']} {item['amount_vnd']:,} đồng vào {day:02d}/{month:02d}/{year}.".replace(",", "."),
+        llm=make_llm([model_route(
+            known_item_name=item["name"],
+            amount_vnd=item["amount_vnd"],
+            date_spec={"anchor": "date", "day": day, "month": month, "year": year},
+        )]),
+        tools=tools,
+        writer=FakeWriter(reply),
+        monkeypatch=monkeypatch,
+    )
+    assert tools.calls[-1] == ("propose_jar_split", {"sinking_items": [item]})
+    check_agui_order(events)
+    (block,) = blocks_of(events)
+    assert block["type"] == "confirm_action"
+    assert block["data"]["tool"] == "save_jars"
+    assert block["data"]["params"] == preview["params"]
+    assert block["data"]["params_hash"] == preview["params_hash"]
+    text = "".join(e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT")
+    assert notices.GENERIC_ERROR_MESSAGE not in text
+    assert text == reply
+    (call,) = writer.calls
+    assert call["task"] == "known_item_split"
+    assert sorted(call["compact"]["sinking_items"], key=lambda row: row["name"]) == facts
 
 
 @pytest.mark.parametrize(
@@ -287,6 +380,53 @@ def test_only_the_requested_slot_is_enough_to_resume(
     )
     assert tools.calls[-1] == ("propose_jar_split", {"sinking_items": [ITEM]})
     assert [b["type"] for b in blocks_of(events)] == ["confirm_action"]
+
+
+@pytest.mark.parametrize(
+    ("reply", "date_text", "keeps_deadline"),
+    [
+        ("5 triệu", "trước Tết", True),
+        ("5 triệu", "  TRƯỚC  TẾT  ", True),
+        ("5 triệu, đổi sang sau Tết", "sau Tết", False),
+    ],
+    ids=["echo", "normalized-echo", "changed-date"],
+)
+def test_amount_reply_with_date_text_keeps_only_an_unchanged_lunar_deadline(
+    reply, date_text, keeps_deadline, monkeypatch
+):
+    opening = "Khoản Tết mình cần đóng trước Tết."
+    first, initial_tools, writer = run_turn(
+        opening,
+        llm=make_llm([model_route(
+            known_item_name="Tết",
+            date_text="trước Tết",
+            date_spec={"anchor": "lunar_new_year", "before": True},
+        )]),
+        monkeypatch=monkeypatch,
+    )
+    (clarify,) = blocks_of(first)
+    assert clarify["type"] == "clarify" and clarify["data"]["slot"] == "amount"
+    assert "05/02/2027" in clarify["fallback_text"]
+    assert [name for name, _ in initial_tools.calls] == READS[:1] and not writer.calls
+
+    events, tools, _ = run_turn(
+        None,
+        llm=make_llm([model_route(amount_vnd=AMOUNT, date_text=date_text, answers_pending=True)]),
+        tools=tools_with_payload(proposal_fixture("proposed")),
+        messages=[
+            {"id": "m1", "role": "user", "content": opening},
+            {"id": "m2", "role": "assistant", "content": clarify["fallback_text"]},
+            {"id": "m3", "role": "user", "content": reply},
+        ],
+        monkeypatch=monkeypatch,
+    )
+    (block,) = blocks_of(events)
+    if keeps_deadline:
+        assert tools.calls == [("get_jar_balances", {}), ("propose_jar_split", {"sinking_items": [ITEM]})]
+        assert block["type"] == "confirm_action" and block["data"]["tool"] == "save_jars"
+    else:
+        assert tools.calls == [("get_jar_balances", {})]
+        assert block["type"] == "clarify" and block["data"]["slot"] == "date"
 
 
 def test_interruption_does_not_reuse_pending_known_item_slots(monkeypatch):

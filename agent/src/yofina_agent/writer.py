@@ -106,12 +106,14 @@ TASKS: dict[str, str] = {
         "lời phải nói rõ điều này."
     ),
     "known_item_split": (
-        "Giải thích cách dành tiền theo kỳ lương cho khoản đã khai, trong tối đa bốn dòng. sinking_items là khoản đang xét, "
-        "per_payday_text là mức cần dành mỗi kỳ. Với proposed, nêu mức đó và hũ bị giảm trong reduced_jars, theo tiền giảm mỗi kỳ "
+        "Giải thích kế hoạch Quỹ dồn trong tối đa bốn dòng. Ưu tiên khoản vừa khai (đứng đầu sinking_items) và khoản thiếu tiền trước kỳ lương kế tiếp. "
+        "Với từng khoản có status funded, nói Quỹ dồn đã đủ tiền cho khoản đó. Với before_next_payday, nêu số còn thiếu "
+        "(remaining_text) và nói không thể dành phần thiếu từ lương trước hạn vì không còn kỳ lương nào. "
+        "Chỉ nêu mức cần dành mỗi kỳ cho một khoản khi có per_payday_text của chính khoản đó. Với proposed, nêu hũ bị giảm trong reduced_jars, theo tiền giảm mỗi kỳ "
         "(delta_text) và tỷ lệ trước/sau. amount_before_text và amount_after_text là số tiền vào hũ mỗi kỳ trước và sau đề xuất. "
         "Chỉ nói về việc lùi hạn mục tiêu nếu có dữ kiện trực tiếp về hạn bị lùi. Chỉ proposed có thẻ xác nhận. "
         "Nói rõ đề xuất ấy chỉ được lưu khi bấm Xác nhận. Muốn đổi cách chia thì vào Thêm hoặc sửa hũ. "
-        "aligned nghĩa là phần chia hiện tại của Quỹ dồn đã đáp ứng khoản này. infeasible nghĩa là chưa xếp được khoản này vào cách chia lương. "
+        "aligned nghĩa là không cần đổi tỷ lệ chia lương. infeasible nghĩa là chưa xếp được khoản này vào cách chia lương. "
         "Giải thích infeasible theo reasons và các khoản phải ưu tiên trong priority_obligations, rồi mời lập lộ trình. "
         "salary_mismatch là lương nhận gần đây lệch lương khai, mời cập nhật lương. no_salary thì mời khai lương và ngày nhận. "
         "no_obligation_jar thì hướng dẫn bổ sung hũ Nghĩa vụ trong Thêm hoặc sửa hũ."
