@@ -24,7 +24,7 @@ from yofina_agent.router import checked_route
 from yofina_agent.schemas import IntentParams, IntentResult
 from yofina_agent.tools import classify_result
 
-from yofina_core.confirm import params_hash
+from yofina_core.confirm import hash_normalized_params
 
 NAME = "Phí dự thi"
 AMOUNT = 5_000_000
@@ -212,7 +212,7 @@ def test_sinking_items_keep_confirmation_and_grounded_explanation(item, plan, sa
     preview["params"]["jars"][-1]["sinking_items"] = [
         {key: row[key] for key in ("name", "amount_vnd", "needed_date")} for row in plan
     ]
-    preview["params_hash"] = params_hash("save_jars", preview["params"])
+    preview["params_hash"] = hash_normalized_params("save_jars", preview["params"])
     wallet = fixture("get_jar_balances.ok.json")
     wallet["data"]["jars"].append({
         **preview["params"]["jars"][-1],
