@@ -62,6 +62,14 @@ NUDGE_KIND_LABELS = {
     "low_data": "Cần thêm dữ liệu",
     "purchase_review": "Xem lại khoản định mua",
 }
+JAR_KIND_LABELS = {"spending": "Chi tiêu", "obligation": "Nghĩa vụ", "saving": "Để dành"}
+JAR_PURPOSE_LABELS = {
+    None: "chưa đặt",
+    "buffer": "Dự phòng",
+    "goal": "Mục tiêu",
+    "sinking": "Quỹ dồn",
+    "long_term": "Dài hạn",
+}
 
 
 def _dm(value: date) -> str:
@@ -77,6 +85,88 @@ def _change(label: str, after: str, before: str | None = None) -> dict[str, str]
     if before is not None:
         item["before"] = _clip(before, 80)
     return item
+
+
+def _sinking_item_changes(
+    jar_name: str, before: list[dict[str, Any]], after: list[dict[str, Any]]
+) -> list[dict[str, str]]:
+    old = {item["name"].casefold(): item for item in before}
+    new = {item["name"].casefold(): item for item in after}
+    changes = []
+    for key, item in new.items():
+        previous = old.get(key)
+        if item == previous:
+            continue
+        amount = format_vnd(item["amount_vnd"])
+        needed = _dm(date.fromisoformat(item["needed_date"]))
+        label = f"Khoản {item['name']}"
+        if previous is None:
+            changes.append(_change(f"Khoản mới: {item['name']}", f"{amount}, cần trước {needed}"))
+        else:
+            old_amount = format_vnd(previous["amount_vnd"])
+            if previous["name"] != item["name"]:
+                label = f"Khoản {previous['name']} → {item['name']}"
+            changes.append(_change(label, f"{amount}, cần trước {needed}", old_amount))
+    for key, item in old.items():
+        if key not in new:
+            amount = format_vnd(item["amount_vnd"])
+            needed = _dm(date.fromisoformat(item["needed_date"]))
+            changes.append(
+                _change(f"Bỏ khoản {item['name']}", "không còn", f"{amount}, cần trước {needed}")
+            )
+    if [key for key in old if key in new] != [key for key in new if key in old]:
+        changes.append(
+            _change(f"Thứ tự khoản hũ {jar_name}", ", ".join(item["name"] for item in after))
+        )
+    return changes
+
+
+def _jar_setting_changes(
+    cur: Mapping[str, Any], jar: Mapping[str, Any], sort_order: int
+) -> list[dict[str, str]]:
+    name = jar["name"]
+    changes = []
+    if cur["name"] != name:
+        changes.append(_change("Tên hũ", name, cur["name"]))
+    if cur["kind"] != jar["kind"]:
+        changes.append(
+            _change(f"Loại hũ {name}", JAR_KIND_LABELS[jar["kind"]], JAR_KIND_LABELS[cur["kind"]])
+        )
+    if cur.get("purpose") != jar["purpose"]:
+        changes.append(
+            _change(
+                f"Mục đích hũ {name}",
+                JAR_PURPOSE_LABELS[jar["purpose"]],
+                JAR_PURPOSE_LABELS[cur.get("purpose")],
+            )
+        )
+    display = []
+    for key, label in (("color_key", "màu"), ("icon_key", "biểu tượng")):
+        if cur[key] != jar[key]:
+            display.append(f"{label} {cur[key]} → {jar[key]}")
+    old_order = cur["sort_order"]
+    if old_order != sort_order:
+        display.append(f"vị trí {old_order + 1} → {sort_order + 1}")
+    if display:
+        changes.append(_change(f"Hiển thị hũ {name}", ", ".join(display)))
+    return changes
+
+
+def _jar_goal_change(cur: Mapping[str, Any], jar: Mapping[str, Any]) -> dict[str, str] | None:
+    old_amount, amount = cur.get("goal_vnd"), jar["goal_vnd"]
+    if old_amount is not None:
+        old_amount = convert.vnd(old_amount)
+    old_date, goal_date = cur.get("goal_date"), jar["goal_date"]
+    parts = []
+    if old_amount != amount:
+        before = format_vnd(old_amount) if old_amount is not None else "chưa đặt"
+        after = format_vnd(amount) if amount is not None else "bỏ"
+        parts.append(f"mục tiêu {before} → {after}")
+    if (str(old_date) if old_date is not None else None) != goal_date:
+        before = _dm(date.fromisoformat(str(old_date))) if old_date is not None else "chưa đặt"
+        after = _dm(date.fromisoformat(goal_date)) if goal_date is not None else "bỏ"
+        parts.append(f"hạn {before} → {after}")
+    return _change(jar["name"], ", ".join(parts)) if parts else None
 
 
 @dataclass
@@ -141,7 +231,21 @@ class WalletWrites:
         st = self._load_state(user_id)
         try:
             ctx = self._norm_ctx(st)
+            version = params.get("base_version") if tool == SAVE_JARS else None
+            if version is not None:
+                if not isinstance(version, str) or not split_proposal.JAR_LIST_VERSION_RE.fullmatch(
+                    version
+                ):
+                    raise ParamsError("base_version không hợp lệ")
+                jars = params.get("jars")
+                if isinstance(jars, Sequence) and all(
+                    isinstance(jar, Mapping) and jar.get("code") for jar in jars
+                ):
+                    # Mọi mã hũ trong thẻ đã chuẩn hóa. Giữ nguyên cách kiểm hash khi hũ đã bị xóa.
+                    ctx = None
             norm = normalize_params(tool, params, ctx)
+            if version is not None:
+                norm["base_version"] = version
             if tool == RECORD_TRANSACTION and "obligation_id" in norm and not params.get("jar"):
                 ob = self._find_obligation(user_id, norm["obligation_id"])
                 pay = resolve_obligation_pay_jar(
@@ -733,10 +837,14 @@ class WalletWrites:
             raise YofinaError(
                 ErrorCode.PROFILE_INCOMPLETE, "Bạn chưa khai lương và ngày nhận lương."
             )
-        existing = {j["code"]: j for j in st.user_jars()}
+        current_jars = st.user_jars()
+        split_proposal.check_jar_list_version(norm.get("base_version"), current_jars)
+        existing = {j["code"]: j for j in current_jars}
         wanted = [j["code"] for j in norm["jars"]]
         usage = {u["code"]: u for u in self.repo.jars_usage(user_id)}
+        structural_changes: list[dict[str, str]] = []
         changes: list[dict[str, str]] = []
+        after_jars = []
         row = self.repo.user_row(user_id)
         salary = (
             convert.vnd(row["monthly_salary_vnd"])
@@ -752,12 +860,24 @@ class WalletWrites:
         amounts = before_amt is not None and after_amt is not None
         share_changed = False
         changed_codes: set[str] = set()
-        for j in norm["jars"]:
+        for i, j in enumerate(norm["jars"]):
             cur = existing.get(j["code"])
             try:
-                jar_commitments(j, cur or {})
+                metadata = jar_commitments(j, cur or {})
             except ParamsError as exc:
                 raise YofinaError(ErrorCode.PARAMS_INVALID, str(exc)) from exc
+            after_jar = {**j, **metadata, "balance_vnd": cur["balance_vnd"] if cur else 0}
+            after_jars.append(after_jar)
+            goal_change = _jar_goal_change(cur or {}, after_jar)
+            item_changes = _sinking_item_changes(
+                j["name"], (cur or {}).get("sinking_items") or [], metadata["sinking_items"]
+            )
+            if goal_change:
+                changes.append(goal_change)
+            if item_changes:
+                changes.extend(item_changes)
+            if goal_change or item_changes or (cur and cur.get("purpose") != metadata["purpose"]):
+                changed_codes.add(j["code"])
             pct = Decimal(str(j["split_percent"]))
             if cur is None:
                 share_changed = share_changed or pct > 0
@@ -765,13 +885,12 @@ class WalletWrites:
                 new_vnd = after_amt.get(j["code"]) if after_amt is not None else None
                 _, after = split_proposal.share_line(None, pct, None, new_vnd)
                 text = after if amounts else f"{convert.percent(pct)}% lương"
-                changes.append(_change(f"Hũ mới: {j['name']}", text))
+                structural_changes.append(_change(f"Hũ mới: {j['name']}", text))
                 continue
             old = Decimal(str(cur["split_percent"]))
             if old != pct:
                 share_changed = True
                 changed_codes.add(j["code"])
-            if old != pct or cur["name"] != j["name"]:
                 before, after = split_proposal.share_line(
                     old,
                     pct,
@@ -779,6 +898,7 @@ class WalletWrites:
                     after_amt.get(j["code"]) if after_amt is not None and amounts else None,
                 )
                 changes.append(_change(f"Hũ {j['name']}", after, before))
+            changes.extend(_jar_setting_changes(cur, after_jar, i))
         for code, cur in existing.items():
             if code in wanted:
                 continue
@@ -797,9 +917,9 @@ class WalletWrites:
                     ErrorCode.JAR_PROTECTED, f"Hũ {cur['name']} {reason} nên chưa bỏ được."
                 )
             share_changed = share_changed or Decimal(str(cur["split_percent"])) > 0
-            changes.append(_change(f"Bỏ hũ {cur['name']}", "không còn"))
-        reasons = self._save_jars_reasons(user_id, norm, st, salary, changed_codes)
-        if not changes:
+            structural_changes.append(_change(f"Bỏ hũ {cur['name']}", "không còn"))
+        reasons = self._save_jars_reasons(user_id, after_jars, st, salary, changed_codes)
+        if not structural_changes and not changes:
             changes.append(_change("Danh sách hũ", "không đổi"))
         warnings: list[str] = []
         extra: dict[str, Any] = {}
@@ -819,7 +939,7 @@ class WalletWrites:
             SAVE_JARS,
             norm,
             f"Lưu {len(norm['jars'])} hũ và tỷ lệ chia lương",
-            (reasons + changes)[:20],
+            (structural_changes + changes + reasons)[:20],
             warnings,
             st,
             extra,
@@ -828,21 +948,16 @@ class WalletWrites:
     def _save_jars_reasons(
         self,
         user_id: str,
-        norm: dict[str, Any],
+        after_jars: list[dict[str, Any]],
         st: UserState,
         salary: int | None,
         changed_codes: set[str],
     ) -> list[dict[str, str]]:
-        """Lý do bằng số đo cho các hũ có tỷ lệ đổi: nghĩa vụ đã khai quy về tháng so với lương đã khai, và số cần trích mỗi kỳ
-        cho các khoản của Quỹ dồn. Chưa khai nghĩa vụ thì nói rõ "chưa có số khai"."""
+        """Lý do bằng số đo khi tỷ lệ hoặc cam kết đổi: nghĩa vụ quy về tháng so với lương và số cần trích mỗi kỳ cho Quỹ dồn."""
         if not salary or not changed_codes:
             return []
         row = self.repo.user_row(user_id)
         payday = int(row["payday_day"]) if row and row.get("payday_day") is not None else None
-        after_jars = [
-            {**existing, **j} if (existing := st.jars.get(j["code"])) else {**j, "balance_vnd": 0}
-            for j in norm["jars"]
-        ]
         out: list[dict[str, str]] = []
         ob_jar = resolve_obligation_pay_jar((j["code"], j["kind"]) for j in after_jars)
         if ob_jar is not None and ob_jar in changed_codes:
@@ -856,12 +971,15 @@ class WalletWrites:
             )
             out.append(_change(f"Lý do: hũ {name}", text))
         for j in after_jars:
-            if (
-                j["code"] not in changed_codes
-                or j.get("purpose") != "sinking"
-                or not j.get("sinking_items")
-                or payday is None
-            ):
+            code = j["code"]
+            if code not in changed_codes or j.get("purpose") != "sinking":
+                continue
+            label = f"Lý do: hũ {j['name']}"
+            if not j["sinking_items"]:
+                if st.jars.get(code, {}).get("sinking_items"):
+                    out.append(_change(label, "không còn khoản cần trích mỗi kỳ"))
+                continue
+            if payday is None:
                 continue
             plan = split_proposal.sinking_plan(
                 split_proposal.stored_items(j),
@@ -869,9 +987,7 @@ class WalletWrites:
                 payday_day=payday,
                 saved_vnd=convert.vnd(j.get("balance_vnd") or 0),
             )
-            out.append(
-                _change(f"Lý do: hũ {j['name']}", split_proposal.sinking_reason(plan, salary))
-            )
+            out.append(_change(label, split_proposal.sinking_reason(plan, salary)))
         return out
 
     # --- xem trước (không ghi) ---------------------------------------------------------------------------------
@@ -904,6 +1020,8 @@ class WalletWrites:
         name_hint: str | None = None,
     ) -> tuple[Prepared, ConfirmActionBlock]:
         norm, st = self._normalize(user_id, tool, params)
+        if tool == SAVE_JARS and "base_version" not in norm:
+            norm["base_version"] = split_proposal.jar_list_version(st.user_jars())
         prep = self._validate(user_id, tool, norm, st, name_hint=name_hint)
         return prep, self._confirm_block(prep, trace_id=trace_id, source_tool=source_tool)
 

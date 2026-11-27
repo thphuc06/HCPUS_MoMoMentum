@@ -118,7 +118,7 @@
   },
   {
     "name": "propose_jar_split",
-    "description": "Đề xuất tỷ lệ chia lương khi người dùng khai khoản biết trước cho Quỹ dồn, ví dụ Tết hoặc học phí. Chỉ đọc. Trả tỷ lệ và tiền mỗi kỳ trước/sau, kiểm tra theo kỳ lương và dữ liệu thẻ xác nhận save_jars khi có đề xuất.",
+    "description": "Đề xuất tỷ lệ chia lương khi người dùng khai khoản biết trước cho Quỹ dồn, ví dụ Tết hoặc học phí. Chỉ đọc. Trả tỷ lệ và tiền mỗi kỳ trước/sau, kiểm tra theo kỳ lương và dữ liệu thẻ xác nhận save_jars khi có đề xuất. Giữ nguyên base_version do server trả trong tham số của thẻ.",
     "inputSchema": {
       "type": "object",
       "properties": {
