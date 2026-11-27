@@ -58,15 +58,15 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | **G-01** | Phạm vi demo cho quy tắc mới | **Làm G1** (chi phí trả sau quy ra năm, BR-75) trước 30/11 ở [#54](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/54); đi cùng phí trả chậm #52. G3 và BR-74 đến 77 để sau hạn nộp | 27/11 |
 | **J-01** | Số phân hũ trên slide | **Lựa chọn A (MVP):** chỉ dùng 92% đúng, 17,4% phải hỏi **của ví demo nhiều hũ** (giám khảo dùng persona `minh`); không đo ví 3 hũ có model trước hạn nộp | 27/11 |
 | **C-04** | Phí trả chậm trong sản phẩm mô phỏng | **Thêm mức A trước 30/11**: bốn bậc phí 5,25 / 10,5 / 15,75 / 21% theo số ngày trễ, hiện trên thẻ và what-if ([#52](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/52)); sổ cái trừ phí khi quá hạn để sau hạn nộp | 27/11 |
+| **C-03** | Ngưỡng nghĩa vụ trên thu nhập | **Giữ 36%** đang có trong code; tách hai mức để sau cuộc thi | 27/11 |
+| **C-01** | Câu "còn N ngày tới lương" | Tách hai câu (ngày cạn; số ngày trống tới lương). **Đã có trong app** | 27/11 |
+| **C-08** | Nhãn "do AI tạo" | Đầu khung chat và cuối mỗi câu trả lời. **Đã có trong app** | 27/11 |
+| **FR14** | Cảnh báo khoản chuyển lệch thói quen | Đã mở [#55](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/55) (`needs-triage`) để **chủ dự án quyết** làm bản nhỏ trước 30/11 hay để lộ trình. BA ưu tiên #52, #54 trước | 27/11 (chờ chủ dự án) |
 
 ### 2.1 Gấp: technical đang chờ (chốt trước hạn tính năng 30/11)
 
 | ID | Câu hỏi | Đề xuất | Ai chốt | Gỡ việc gì |
 |---|---|---|---|---|
-| **C-03** | Ngưỡng nghĩa vụ trên thu nhập (code đang dùng một ngưỡng 36%) | Đơn giản nhất: **giữ 36% làm mức đỏ** (có căn cứ quy tắc 28/36, nằm giữa đề xuất 30–40%), không tách hai mức trước demo | Nhóm | T-06 |
-| **FR14** | Cảnh báo khoản chuyển lệch thói quen: làm bản nhỏ trước 30/11 hay để lộ trình | Chưa có quyết định bỏ hẳn; chỉ nằm trong thứ tự cắt. Bản nhỏ: khi chuyển tiền cho người nhận, so số tiền với thói quen (bộ phát hiện bất thường đã có trong mã) và hiện cảnh báo trong bản xem trước nếu lệch nhiều hoặc làm hụt hũ Dự phòng. **Đề xuất: ưu tiên C-04 trước; làm FR14 nếu chủ dự án thấy còn sức** | Chủ dự án | Không bắt buộc cho chủ đề "Trợ lý tài chính" |
-| C-01 | "Còn N ngày tới lương" tính từ hôm nay hay từ ngày cạn | Tách hai câu: ngày cạn, rồi số ngày trống tới lương | Nhóm | Câu chữ cảnh 1 |
-| C-08 | Vị trí và câu chữ nhãn "do AI tạo" | Dòng nhỏ dưới mỗi câu trả lời và trong màn Giới thiệu. Hỏi technical đã có chưa | Nhóm | AC-DEMO-03 |
 | NFR-31 | Bật CloudWatch Transaction Search (có phí) | Không bật; màn trace đọc từ `audit_events` đã đủ cho demo | Chủ dự án | Còn treo trong HANDOFF |
 | NFR-34 | Mức ngân sách AWS mỗi tháng | Chốt một con số để đặt cảnh báo | Chủ dự án | — |
 | NFR | Nới NFR-01 (lượt đầu phiên lạnh lên 3 giây); duyệt NFR-18, 23, 24, 28, 30, 37, 41, 43, 44 | Duyệt theo đề xuất trong file 04 | Kỹ thuật | — |

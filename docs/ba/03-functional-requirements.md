@@ -20,7 +20,7 @@
 | FR11 | Bảng "Vì sao" | xuyên suốt | MVP | 3, 5 | ✅ Đạt (phase 3); trace mở qua REST (phase 5) |
 | FR12 | Suitability và xác nhận | xuyên suốt | MVP | 1 (xác nhận), 3 (suitability) | ✅ Xác nhận: Đạt (phase 1). Suitability: Đạt đối kháng (phase 3–5); lỗ hổng hũ Dự phòng đã vá bằng luật thứ bảy (25/11) |
 | FR13 | Bản tin chủ động | F7 | Mở rộng | 5 | ◐ Đã deploy (phase 5): thẻ và bản tin; chờ kiểm trên app |
-| FR14 | Cảnh báo khoản chuyển lệch thói quen | phụ | Mở rộng | 5 (nếu kịp) | ⏳ Chưa làm (phase 5 ghi "nếu kịp", nằm trong thứ tự cắt) |
+| FR14 | Cảnh báo khoản chuyển lệch thói quen | phụ | Mở rộng | 5 (nếu kịp) | ⏳ Chưa làm; chủ dự án quyết ở [#55](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/55) (bản nhỏ trước 30/11 hay lộ trình) |
 | FR15 | Bảng vận hành cho đội sản phẩm | vận hành | Mở rộng | 5 | ◐ Đã deploy (phase 5): trace qua REST đạt; Transaction Search chưa bật |
 
 **Vai trò:**
