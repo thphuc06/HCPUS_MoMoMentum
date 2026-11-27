@@ -4,7 +4,7 @@ Lambda `yofina-ledger` (Python 3.13, arm64, ngoài VPC): ví mô phỏng trên A
 
 | Đường vào | Danh tính (`user_id`) lấy từ | Dùng bởi |
 |---|---|---|
-| **HTTP API** (payload v2, `yofina-api`) | claim `sub` của JWT authorizer, **không bao giờ** từ thân yêu cầu hay query | frontend: 18 route của [openapi.yaml](../../../contracts/rest/openapi.yaml) (mục "Route") |
+| **HTTP API** (payload v2, `yofina-api`) | claim `sub` của JWT authorizer, **không bao giờ** từ thân yêu cầu hay query | frontend: các route trong [openapi.yaml](../../../contracts/rest/openapi.yaml) (mục "Route") |
 | **AgentCore Gateway** (Lambda target) | trường `user_id` của sự kiện, do interceptor ghi đè bằng `sub` của JWT; tên tool ở `context.client_context.custom["bedrockAgentCoreToolName"]`, cắt tiền tố `ledger___`; tham số lạ bị bỏ qua | agent: mười tool của [ledger.json](../../../contracts/tools/ledger.json) (năm đọc, bốn ghi, `save_turn`), kết quả theo [ledger.results.schema.json](../../../contracts/tools/ledger.results.schema.json) |
 
 ## Cấu trúc

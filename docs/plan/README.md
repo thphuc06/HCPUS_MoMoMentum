@@ -48,6 +48,6 @@ Proposal đề xuất 3 người: (1) agent và harness; (2) dữ liệu, ML và
 
 ## Thứ tự ưu tiên khi thiếu thời gian (§13)
 
-Làm lát dọc F1 → F2 → F3 trước. Sao kê PDF, bản tin, bảng vận hành là phần mở rộng. Chronos-2 "nếu kịp, không thì mở rộng" (số đo đề xuất để ngoài MVP, chưa chốt).
+Làm lát dọc F1 → F2 → F3 trước. Sao kê PDF, bản tin, bảng vận hành là phần mở rộng. Chronos-2 để ngoài MVP, chốt 21/11 ([open-questions.md](../requirements/open-questions.md)).
 
 Việc kế tiếp cụ thể xem [../../HANDOFF.md](../../HANDOFF.md). Kịch bản demo: [demo-script.md](demo-script.md).
