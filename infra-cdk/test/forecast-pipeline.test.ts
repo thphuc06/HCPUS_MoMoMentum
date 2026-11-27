@@ -78,6 +78,30 @@ describe('ForecastPipeline (phase 5: model nhỏ cho batch)', () => {
 
   after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
+  it('nightly: trust của Scheduler giới hạn theo tài khoản và schedule group default', () => {
+    const { stack, template } = build({});
+    template.hasResourceProperties('AWS::IAM::Role', {
+      RoleName: 'yofina-nightly-scheduler',
+      AssumeRolePolicyDocument: {
+        Statement: Match.arrayEquals([
+          {
+            Action: 'sts:AssumeRole',
+            Effect: 'Allow',
+            Principal: { Service: 'scheduler.amazonaws.com' },
+            Condition: {
+              StringEquals: {
+                'aws:SourceAccount': ENV.account,
+                'aws:SourceArn': stack.resolve(
+                  `arn:${stack.partition}:scheduler:${ENV.region}:${ENV.account}:schedule-group/default`,
+                ),
+              },
+            },
+          },
+        ]),
+      },
+    });
+  });
+
   it('batch: InvokeModel chỉ cho model của vai small, không ký tự thay thế, không vai planner', () => {
     const { template } = build({});
     const bedrock = statementsOf(template, 'yofina-forecast-batch').filter((s) =>

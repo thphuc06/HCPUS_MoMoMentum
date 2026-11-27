@@ -9,7 +9,7 @@ Cột Chuẩn dùng chương OWASP ASVS 4.0 mức 1 và mã AWS Well-Architected
 
 | # | Mức | Hạng mục | path:line | Mô tả | Đề xuất | Chuẩn | Sửa trước 03/12? |
 |---|---|---|---|---|---|---|---|
-| 1 | Trung bình | Scheduler trust | `infra-cdk/lib/forecast-pipeline.ts:423` | Trust của EventBridge Scheduler thiếu cả `aws:SourceAccount` và `aws:SourceArn`. Role được chạy state machine nightly. | Ràng theo tài khoản và ARN schedule group riêng. | SEC02, SEC03 | Có |
+| 1 | Trung bình | Scheduler trust | `infra-cdk/lib/forecast-pipeline.ts:424` | Trust của EventBridge Scheduler thiếu cả `aws:SourceAccount` và `aws:SourceArn` tại commit gốc. Role được chạy state machine nightly. | Đã sửa: thêm `aws:SourceAccount` và `aws:SourceArn` = ARN schedule group `default`. | SEC02, SEC03 | Đã sửa |
 | 2 | Thấp | Runtime trust | `infra-cdk/lib/agent-stack.ts:297`, `infra-cdk/lib/agent-stack.ts:299` | Trust giới hạn tài khoản và vùng của stack nhưng mẫu ARN khớp mọi Runtime trong vùng. | Thu hẹp theo Runtime hoặc tiền tố tên của ứng dụng. | SEC02, SEC03 | Sau |
 | 3 | Thấp | Data API | `infra-cdk/lib/classify.ts:191`, `infra-cdk/lib/forecast-pipeline.ts:262`, `infra-cdk/lib/tools-stack.ts:294` | Các role có thể chạy SQL trên cùng cluster và đọc secret ứng dụng. Quyền IAM theo cluster, thao tác SQL phụ thuộc DB role dùng chung. | Tách DB role theo chức năng. Gỡ quyền batch ở luồng không dùng. | V4, SEC03 | Sau |
 | 4 | Thấp | CORS | `infra-cdk/lib/tools-stack.ts:103`, `infra-cdk/lib/tools-stack.ts:367`, `infra-cdk/lib/ingest-stack.ts:219` | HTTP API và S3 presigned POST mặc định cho phép `http://localhost:5173` cùng origin Amplify. | Bỏ origin dev ở cả hai stack khi deploy RC. | V13, V14 | Có |
@@ -38,7 +38,7 @@ Cột Chuẩn dùng chương OWASP ASVS 4.0 mức 1 và mã AWS Well-Architected
 - Bỏ localhost trên HTTP API bằng `uv run scripts/cdk.py deploy YofinaTools --require-approval never -c extraCorsOrigins=`. Nhánh này giữ chuỗi rỗng rồi lọc phần tử rỗng nên chỉ còn Amplify (`infra-cdk/lib/tools-stack.ts:153`, `infra-cdk/lib/tools-stack.ts:156`).
 - Deploy `YofinaIngest` với cùng context để bỏ localhost ở CORS bucket. Kiểm Amplify vẫn nạp được tệp và localhost bị từ chối.
 - Đổi mật khẩu demo đã lộ trong lịch sử chat 23/11, thu hồi phiên cũ và kiểm đăng nhập với thông tin mới (`HANDOFF.md:235`).
-- Chốt trust của Scheduler, xác nhận Cedar `ENFORCE`, Runtime V2 và thử hai tài khoản để kiểm cách ly session (`infra-cdk/lib/agent-stack.ts:49`, `docs/research/spike-agentcore-runtime-cors.md:130`).
+- Xác nhận Cedar `ENFORCE`, Runtime V2 và thử hai tài khoản để kiểm cách ly session (`infra-cdk/lib/agent-stack.ts:49`, `docs/research/spike-agentcore-runtime-cors.md:130`).
 - Xác nhận retention log của Runtime và kiểm preflight, JWT trên endpoint RC.
 
 ## Ngoài phạm vi lượt này
