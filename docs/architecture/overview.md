@@ -138,16 +138,17 @@ Cơ chế đề xuất, hai nửa:
 - **Frontend dùng registry `type → { schema Zod, Component }`**, phân tích từng khối riêng (không `parse` cả mảng bằng một union): khối lạ hoặc sai schema hiển thị `fallback_text`, trang không vỡ. `ACTIVITY_SNAPSHOT` với `messageId` ổn định thay khối tại chỗ; `CUSTOM` để cho tín hiệu phụ. **[đã chạy thử]** ([Frontend §4–§5](../research/spike-frontend-stack.md); chạy với mock server SSE.)
 - **JSON gộp của proposal §9 (Composer) giữ làm bản ghi lượt** (lưu để phát lại và kiểm toán), không phải thứ stream tới trình duyệt. **[đề xuất]**
 - Không chuyển nguyên event stream của Strands ra trình duyệt (chứa system prompt và cấu hình tool); adapter AG-UI chỉ phát event AG-UI. **[đã chạy thử]** ([Strands §2.3](../research/spike-strands-agui-local.md))
-- Hai đầu (tool phát khối bằng Strands; frontend render từ mock server) **chưa nối với nhau**, và chưa qua Runtime thật.
+- Khối AG-UI đã chạy qua Runtime thật. Frontend nhận khối qua SSE, render qua registry và phát lại khối đã lưu khi tải lại trang. ([Kiểm trên trình duyệt](../requirements/open-questions.md))
 
-### Model (đề xuất, chưa chốt)
+### Model đang dùng
 
-> **[đề xuất]** theo kết quả thử; **bộ model chưa được chủ dự án chốt chính thức**. Claude 5.x (Sonnet 5.5, Haiku 5.5, Sonnet 5, Opus 4.7 trở lên, Fable) không gọi được trên tài khoản này: `AccessDeniedException` (HTTP 403), không phải `ThrottlingException`, ở cả `ap-southeast-1` và `us-east-1`. **[đã chạy thử]** ([Bedrock §1](../research/spike-bedrock-models.md)) Chuỗi dự phòng trong code phải bắt cả `AccessDeniedException`.
+> Cấu hình mặc định ở [`llm_defaults.json`](../../libs/yofina_core/src/yofina_core/llm_defaults.json). Claude 5.x (Sonnet 5.5, Haiku 5.5, Sonnet 5, Opus 4.7 trở lên, Fable) không gọi được trên tài khoản này: `AccessDeniedException` (HTTP 403), không phải `ThrottlingException`, ở cả `ap-southeast-1` và `us-east-1`. **[đã chạy thử]** ([Bedrock §1](../research/spike-bedrock-models.md)) Chuỗi dự phòng trong code phải bắt cả `AccessDeniedException`.
 
-| Vai | Dùng được ngay (đã gọi thật ở `ap-southeast-1`) | Ghi chú |
+| Vai | Model | Ghi chú |
 |---|---|---|
 | LLM lớn (planner) | Sonnet 4.6; dự phòng Kimi K3 | Sonnet 4.6: ép tool 14/14, structured output 14/14. Kimi K3: không cache, luôn suy nghĩ, không nhận `temperature` |
-| LLM nhỏ (router, diễn giải) | Haiku 4.5; hoặc Nova 2 Lite / Nova Pro | Nova không hỗ trợ `outputConfig`: ép tool để lấy JSON; Haiku 4.5 không cache được prompt ngắn (cần ít nhất 4.096 token) |
+| LLM nhỏ (`small`, diễn giải) | Nova 2 Lite, dự phòng Haiku 4.5 | Nova không hỗ trợ `outputConfig`: ép tool để lấy JSON |
+| Router (`router`) | Haiku 4.5, dự phòng Nova 2 Lite | Haiku bật prompt cache từ Runtime v33. Xem [HANDOFF](../../HANDOFF.md) |
 | Đọc ảnh | Sonnet 4.6, Kimi K3 | Đúng cả bốn trường trên 3 ảnh dựng sạch; Haiku 4.5 tự sửa sai nội dung không dấu |
 | Embedding | Cohere Embed Multilingual v3 hoặc v4 | Titan Text Embeddings V2 chỉ gọi được ở `us-east-1` |
 
@@ -184,7 +185,7 @@ Aurora PostgreSQL Serverless v2 (+ pgvector) là nguồn sự thật duy nhất;
 
 ### Bỏ và hoãn
 
-- **Bedrock Data Automation: bỏ.** Không liệt kê tiếng Việt. **[đọc tài liệu]** ([bedrock.md](../research/bedrock.md)) Model đọc ảnh trực tiếp đã thử được (Sonnet 4.6, Kimi K3). **[đã chạy thử]** ([Bedrock §5](../research/spike-bedrock-models.md)) Chỉ thử 3 ảnh dựng sạch, chưa thử ảnh chụp thật.
+- **Bedrock Data Automation: bỏ.** Không liệt kê tiếng Việt. **[đọc tài liệu]** ([bedrock.md](../research/bedrock.md)) Model đọc ảnh trực tiếp đã thử được (Sonnet 4.6, Kimi K3). **[đã chạy thử]** ([Bedrock §5](../research/spike-bedrock-models.md)) Spike thử 3 ảnh dựng sạch. OCR ảnh thật đạt 9/11 ở v25. Một ca đã sửa và đạt ở v26, cả bộ chưa đo lại ([HANDOFF](../../HANDOFF.md)).
 - **Automated Reasoning checks: hoãn.** Chỉ tiếng Anh, không có ở Singapore; verifier Python là đường chính. **[đọc tài liệu]** ([bedrock.md](../research/bedrock.md))
 - **SageMaker: không cần cho MVP** vì Chronos-2 ngoài MVP. **[đề xuất]**
 - **Guardrails không che PII trong kết quả tool** (và không kiểm tham số tool, định nghĩa tool), không có mẫu PII Việt Nam: che PII ở Lambda tool và bước nạp dữ liệu, thêm regex SĐT/CCCD/STK. Guardrails vẫn dùng cho đầu vào và đầu ra. **[đọc tài liệu]** ([bedrock.md](../research/bedrock.md)) Chưa tạo guardrail thử.
@@ -197,12 +198,12 @@ Aurora PostgreSQL Serverless v2 (+ pgvector) là nguồn sự thật duy nhất;
 | Nhịp | Kích hoạt | Việc làm | Độ trễ mục tiêu |
 |---|---|---|---|
 | Runtime đồng bộ | Chat, bấm kiểm tra, bấm cú sốc | Định tuyến, gọi tool, mô phỏng nhẹ, kiểm tra, stream | Vài giây (một lượt what-if đo được 6,3 s chỉ tính các call Bedrock, xem [Số đo](#số-đo-đã-có)) |
-| Runtime bất đồng bộ | Sinh lại lộ trình, nạp sao kê | Agent chạy nền, nhận tiến độ từng bước | Chục giây đến vài phút |
-| Event | Giao dịch mới, sửa phân loại, đổi mục tiêu | Phân loại, cập nhật số dư hũ, chỉnh nhanh dự báo, kiểm lệch, cổng nhắc | Dưới 1 phút |
-| Batch đêm (02:00) | EventBridge Scheduler → Step Functions | Dự báo lại, hồ sơ hành vi, điểm chống chịu, bản tin | Xong trước 06:00 |
-| Batch tuần (Chủ nhật) | Lịch | Backtest, hiệu chỉnh khoảng tin cậy, đánh giá agent trên bộ câu chuẩn, đồng bộ kho tri thức | Không ràng buộc |
+| Nạp tệp bất đồng bộ | S3 → SQS → Lambda | Nạp sao kê, giao diện hỏi tiến độ | Chục giây đến vài phút |
+| Event | Giao dịch mới, sửa phân loại, đổi mục tiêu | Phân loại, cập nhật số dư hũ, chỉnh nhanh dự báo, kiểm lệch. Lambda sinh lại lộ trình theo sự kiện | Dưới 1 phút |
+| Batch đêm (02:00) | EventBridge Scheduler → Step Functions | Dự báo lại, hồ sơ hành vi, điểm chống chịu, cổng nhắc ở cuối batch | Xong trước 06:00 |
+| Batch tuần | — | Cắt (Q11). Backtest và eval chạy tay | — |
 
-Thư mục tương ứng: `pipelines/event`, `pipelines/nightly`, `pipelines/weekly`. Job nền "tới 8 giờ" của proposal quá mức cần; mục tiêu thật là chục giây đến vài phút, nạp sao kê giữ qua SQS + Lambda và báo tiến độ bằng polling. **[đọc tài liệu]** ([agentcore.md §4](../research/agentcore.md))
+Mã triển khai nằm ở [`pipelines/classify/`](../../pipelines/classify/), [`pipelines/forecast/`](../../pipelines/forecast/), [`pipelines/roadmap/`](../../pipelines/roadmap/) và [`pipelines/ingest/`](../../pipelines/ingest/).
 
 ## Agentic harness 6 tầng (§9)
 
@@ -225,7 +226,7 @@ Tên tool qua Gateway là `<target>___<tool>`: thư mục `gateway/tools/<target
 |---|---|---|
 | `ledger` | `ledger___get_jar_balances`, `ledger___query_transactions`, `ledger___get_cashflow_summary`, `ledger___get_obligations`, `ledger___get_unclassified` (đọc); `ledger___update_profile`, `ledger___record_transaction`, `ledger___move_between_jars`, `ledger___assign_jar` (ghi, cần xác nhận); `ledger___save_turn` (lưu khối UI của lượt) | `gateway/tools/ledger/` |
 | `forecast` | `forecast___get_forecast`, `forecast___run_scenario`, `forecast___list_scenarios`, `forecast___stress_test`, `forecast___affordability_check`, `forecast___get_resilience_score`, `forecast___get_behavior_profile` (đều chỉ đọc/tính; `run_scenario` ghi bảng `scenarios`) | `gateway/tools/forecast/` |
-| `planner` | `planner___optimize_allocation`, `planner___check_suitability` (không ghi); `planner___save_roadmap`, `planner___get_roadmap`, `planner___schedule_nudge` (ghi; nhắc ghi bảng `nudges`, không dùng EventBridge Scheduler) | `gateway/tools/planner/` |
+| `planner` | `planner___optimize_allocation`, `planner___check_suitability`, `planner___get_roadmap` (không ghi); `planner___save_roadmap`, `planner___schedule_nudge` (ghi; nhắc ghi bảng `nudges`, không dùng EventBridge Scheduler) | `gateway/tools/planner/` |
 | `knowledge` | `knowledge___get_fee_schedule` (biểu phí có cấu trúc kèm nguồn), `knowledge___get_exchange_rate` (tỷ giá bán Vietcombank theo ngày), `knowledge___resolve_date` (một ngày dương lịch tính từ đặc tả có cấu trúc: mốc, kỳ, độ lệch, trước mốc; Tết âm lịch theo bảng tra; hôm nay và ngày lương lấy phía server; cùng hàm `yofina_core.dates.resolve_date` mà agent gọi trong tiến trình cho hạn của router, còn Orchestrator what-if và planner lộ trình (ngày nhắc theo mốc, `nudge_on_spec`) gọi tool khi điền đặc tả ngày). Ba tool chạy trong Lambda ledger. Không có `knowledge___search`: RAG đã cắt 24/11 | `gateway/tools/knowledge/` |
 | `ingest` | `ingest___start_job`, `ingest___get_job_status`, `ingest___confirm_rows` (ghi) | `gateway/tools/ingest/` |
 | `audit` | `audit___get_trace`, `audit___record_turn` (ghi bản ghi lượt) | `gateway/tools/audit/` |
@@ -292,14 +293,14 @@ Khối có phong bì `v`, `id`, `trace_id`, `fallback_text` và schema Zod ở f
 
 ## Pipeline F1–F7 (§10)
 
-| Pipeline | Tính năng | Nhịp | Thư mục dự kiến |
+| Pipeline | Tính năng | Nhịp | Mã triển khai |
 |---|---|---|---|
 | 10.1 Hỏi "nếu thì" | F2 | Runtime, streaming | `agent/` (+ `gateway/tools/forecast/`) |
 | 10.2 Kiểm tra trước khi quẹt | F3 | Runtime, mục tiêu < 2 giây | `gateway/tools/forecast/` (affordability_check) + hàm tuần tự trong agent |
-| 10.3 Phân hũ tự động, cập nhật tức thời | nền, F5 | Event | `pipelines/event/` |
-| 10.4 Batch đêm | F1, F4, F7 | 02:00 | `pipelines/nightly/`, `ml/` |
-| 10.5 Sinh/sinh lại lộ trình | F5 | Theo sự kiện, theo yêu cầu | `gateway/tools/planner/`, agent |
-| 10.6 Nạp dữ liệu ngoài ví | F6 | Bất đồng bộ | `gateway/tools/ingest/` (ảnh chụp và CSV; PDF mở rộng, đọc bằng model, không dùng Data Automation) |
+| 10.3 Phân hũ tự động, cập nhật tức thời | nền, F5 | Event | [`pipelines/classify/`](../../pipelines/classify/) và [`pipelines/forecast/`](../../pipelines/forecast/) |
+| 10.4 Batch đêm | F1, F4, F7 | 02:00 | [`pipelines/forecast/`](../../pipelines/forecast/), `ml/` |
+| 10.5 Sinh/sinh lại lộ trình | F5 | Theo sự kiện, theo yêu cầu | [`pipelines/roadmap/`](../../pipelines/roadmap/), `gateway/tools/planner/`, agent |
+| 10.6 Nạp dữ liệu ngoài ví | F6 | Bất đồng bộ | [`pipelines/ingest/`](../../pipelines/ingest/), `gateway/tools/ingest/` (ảnh chụp và CSV; PDF mở rộng, đọc bằng model, không dùng Data Automation) |
 
 ## ML và kỹ thuật (§11)
 
@@ -307,11 +308,11 @@ Chi tiết và số đo ở mục [ML (kết quả đã đo)](#ml-kết-quả-đ
 
 ## Khả năng quan sát và đánh giá (§9)
 
-Trace OpenTelemetry mỗi lượt (span cho router, planner, tool call, verifier); dashboard CloudWatch (độ trễ, token, chi phí, lỗi tool, số lần luật chặn); AgentCore Evaluations (Correctness, Helpfulness, GoalSuccessRate); evaluator tự viết `NumericGrounding`, `SchemaValidity`, `SuitabilityCompliance`; đánh giá offline bằng bộ câu chuẩn có quỹ đạo tool mong đợi (`evals/`).
+Màn trace đọc `audit_events` (`step_timings`). Dashboard CloudWatch theo dõi độ trễ và lỗi tool. Xem [ADR-0004](../decisions/0004-lech-so-voi-proposal.md), dòng 11 và 16.
 
-- `trace_id` do client sinh qua `traceparent` (xem [Frontend gọi thẳng Runtime](#frontend-gọi-thẳng-runtime)); log của app nằm ở log group của Runtime. **[đã chạy thử]** ([Runtime §6](../research/spike-agentcore-runtime-cors.md)) Bật OTel (ADOT) làm cold start V1 tăng khoảng 2,5 s; span chưa thấy được vì chưa bật CloudWatch Transaction Search (đổi cấu hình tài khoản, chưa làm).
-- Quyết định của Policy: ở `LOG_ONLY` mọi lời gọi đều qua, quyết định xem ở metric `AWS/Bedrock-AgentCore` (`AllowDecisions`, `DenyDecisions`, …); log ứng dụng của Gateway không ghi quyết định policy; chi tiết từng quyết định nằm ở span, cần Transaction Search. **[đã chạy thử]** ([Gateway §4](../research/spike-agentcore-gateway-identity.md))
-- Evaluations, evaluator tự viết, chi phí: **[đọc tài liệu]** ([agentcore.md §3.6, §3.8](../research/agentcore.md)); chưa thử. Lấy mẫu online thấp, ưu tiên evaluator code-based; judge dựng sẵn ở Singapore đi qua global cross-region inference.
+- `trace_id` do client sinh qua `traceparent` (xem [Frontend gọi thẳng Runtime](#frontend-gọi-thẳng-runtime)); log của app nằm ở log group của Runtime. **[đã chạy thử]** ([Runtime §6](../research/spike-agentcore-runtime-cors.md)) Bật OTel (ADOT) làm cold start V1 tăng khoảng 2,5 s. CloudWatch Transaction Search đã cắt (Q4).
+- Quyết định của Policy: ở `LOG_ONLY` mọi lời gọi đều qua, quyết định xem ở metric `AWS/Bedrock-AgentCore` (`AllowDecisions`, `DenyDecisions`, …); log ứng dụng của Gateway không ghi quyết định policy. **[đã chạy thử]** ([Gateway §4](../research/spike-agentcore-gateway-identity.md))
+- AgentCore Evaluations online đã cắt. Bộ [`evals/`](../../evals/README.md) chạy tay theo mốc deploy, có ca gọi Runtime và bộ chấm `NumericGrounding`, `SchemaValidity`, `SuitabilityCompliance`. Xem [HANDOFF](../../HANDOFF.md).
 
 ## Số đo đã có
 
