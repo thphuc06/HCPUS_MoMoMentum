@@ -451,7 +451,7 @@ class IngestApi:
             changes.append({"label": "Chi ngoài ví", "after": format_vnd(prep["spend"])})
         if prep["income"]:
             changes.append({"label": "Thu ngoài ví", "after": format_vnd(prep["income"])})
-        changes.append({"label": "Số dư các hũ", "before": "Giữ nguyên", "after": "Không đổi"})
+        changes.append({"label": "Số dư các hũ", "after": "Không đổi"})
         if before is not None and after is not None:
             changes.append(
                 {

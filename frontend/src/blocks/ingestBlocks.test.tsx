@@ -91,6 +91,7 @@ describe('coverage_change', () => {
     expect(screen.getByText('205.000 ₫')).toBeInTheDocument()
     expect(screen.getByText('2.000.000 ₫')).toBeInTheDocument()
     expect(screen.getByText('Số dư hũ không đổi — đây là chi tiêu ngoài ví.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Vì sao số dư hũ không đổi?' })).not.toBeInTheDocument()
   })
 
   it('không có before/after: không bịa phần trăm', () => {

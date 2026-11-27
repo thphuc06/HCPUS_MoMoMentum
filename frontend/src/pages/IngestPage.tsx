@@ -346,6 +346,11 @@ function ReviewStep({ data, onDone, onPickOther }: { data: IngestReviewData; onD
               Thêm {chosen.length} dòng ngoài ví vào lịch sử chi tiêu, bỏ {open.length - chosen.length} dòng. Số dư hũ không đổi.
             </p>
           )}
+          {flow.phase !== 'previewing' && !flow.error && chosen.some((r) => r.kind === 'expense') && (
+            <Disclosure label="Vì sao số dư hũ không đổi?" className="px-4" panelClassName="pb-2 text-note text-ink-2">
+              <p>Khoản chi được trả từ ngân hàng hoặc thẻ khác nên hũ không bị trừ tiền. Hũ bạn chọn chỉ dùng để dự báo nhịp chi.</p>
+            </Disclosure>
+          )}
           {flow.error && (
             <p role="alert" className="rounded-2xl bg-bad-bg px-3 py-2 text-small font-semibold text-bad-fg">
               {flow.error.message}
