@@ -313,6 +313,83 @@ def test_bad_deadline_asks_one_date_question(spec, call_expected, monkeypatch):
     assert not writer.calls
 
 
+@pytest.mark.parametrize(
+    ("today", "spec", "field", "name", "explanation", "window"),
+    [
+        pytest.param(
+            "2026-11-21", DATE_SPEC | {"day": 21, "year": 2028}, "needed_date", "Tết",
+            "21/02/2028 quá 12 tháng", "22/11/2026 đến 21/11/2027", id="15-months-away",
+        ),
+        pytest.param(
+            "2026-12-31", DATE_SPEC | {"day": 30, "month": 12, "year": 2026}, None, "Lệ phí",
+            "30/12/2026 đã qua", "01/01/2027 đến 31/12/2027", id="past-at-year-end",
+        ),
+        pytest.param(
+            "2026-11-21", DATE_SPEC | {"day": 21, "month": 11, "year": 2026}, None, "Tết",
+            "21/11/2026 là hôm nay", "22/11/2026 đến 21/11/2027", id="today",
+        ),
+        pytest.param(
+            "2028-02-29", DATE_SPEC | {"day": 1, "month": 3, "year": 2029}, None, "T" * 80,
+            "01/03/2029 quá 12 tháng", "01/03/2028 đến 28/02/2029", id="legacy-leap-day-long-name",
+        ),
+    ],
+)
+def test_rejected_deadline_explains_date_and_valid_range(today, spec, field, name, explanation, window, monkeypatch):
+    payload = proposal_fixture("error_params")
+    if field is not None:
+        payload["field"] = field
+    wallet = fixture("get_jar_balances.ok.json") | {"app_date": today}
+    tools = tools_with_payload(payload)
+    tools.results["get_jar_balances"] = lambda _: classify_result("x", mcp_ok(wallet))
+    llm = make_llm([model_route(known_item_name=name, amount_vnd=AMOUNT, date_spec=spec)])
+    rejected_date, _, _ = explanation.partition(" ")
+    events, tools, writer = run_turn(
+        f"Mình cần đóng khoản {name} 5 triệu vào {rejected_date}.",
+        llm=llm,
+        tools=tools,
+        monkeypatch=monkeypatch,
+    )
+
+    (block,) = blocks_of(events)
+    assert block["type"] == "clarify" and block["data"]["slot"] == "date"
+    question = block["data"]["question"]
+    assert question == f"Quỹ dồn: “{name}” · 5.000.000 ₫. Hạn {explanation}. Bạn chọn từ {window} nhé?"
+    assert len(question) <= 200
+    assert block["data"]["chips"] == []
+    assert [name for name, _ in tools.calls] == (READS if "quá 12 tháng" in explanation else READS[:1])
+    assert len(llm[1].calls) == events[-1].result["model_calls"] == 1
+    assert not writer.calls
+
+
+def test_valid_reply_to_rejected_deadline_resumes_pending_known_item(monkeypatch):
+    opening = "Mình cần đóng khoản Tết 5 triệu vào 21/02/2028."
+    rejected_spec = DATE_SPEC | {"day": 21, "year": 2028}
+    first, _, _ = run_turn(
+        opening,
+        llm=make_llm([model_route(**(FULL | {"date_spec": rejected_spec}))]),
+        tools=tools_with_payload(proposal_fixture("error_params") | {"field": "needed_date"}),
+        monkeypatch=monkeypatch,
+    )
+    (clarify,) = blocks_of(first)
+    assert "21/02/2028 quá 12 tháng" in clarify["data"]["question"]
+
+    events, tools, _ = run_turn(
+        None,
+        llm=make_llm([model_route(date_spec=DATE_SPEC, answers_pending=True)]),
+        tools=tools_with_payload(proposal_fixture("proposed")),
+        messages=[
+            {"id": "m1", "role": "user", "content": opening},
+            {"id": "m2", "role": "assistant", "content": clarify["fallback_text"]},
+            {"id": "m3", "role": "user", "content": "05/02/2027"},
+        ],
+        monkeypatch=monkeypatch,
+    )
+
+    assert tools.calls[-1] == ("propose_jar_split", {"sinking_items": [ITEM]})
+    (block,) = blocks_of(events)
+    assert block["type"] == "confirm_action" and block["data"]["tool"] == "save_jars"
+
+
 @pytest.mark.parametrize("code", ["FORBIDDEN", "PARAMS_INVALID", "PROFILE_INCOMPLETE"])
 def test_proposal_tool_errors_use_standard_notice(code, monkeypatch):
     data = {"status": "ERROR", "code": code, "message": "Chưa thể lập đề xuất."}

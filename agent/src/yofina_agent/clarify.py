@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from yofina_agent import notices
@@ -454,25 +454,51 @@ _KNOWN_ITEM_KEYS = {
     notices.KNOWN_ITEM_QUESTIONS["amount"]: ("amount_vnd",),
     notices.KNOWN_ITEM_QUESTIONS["date"]: ("date_text", "date_spec"),
 }
+_KNOWN_ITEM_DATE_RETRY = "Hạn {date} {reason}. Bạn chọn từ {earliest} đến {latest} nhé?"
+_KNOWN_ITEM_QUESTIONS_PATTERN = "|".join(re.escape(question) for question in _KNOWN_ITEM_KEYS)
 _KNOWN_ITEM_PROMPT = re.compile(
-    rf"{_KNOWN_ITEM_PREFIX}(?:: “(?P<name>[^?\r\n]+)”)?" r"(?: · (?P<goal>[^?\r\n]+))?\. (?P<question>.+)"
+    rf"{_KNOWN_ITEM_PREFIX}(?:: “(?P<name>[^?\r\n]+)”)?"
+    rf"(?: · (?P<goal>[^?\r\n]+))?\. "
+    rf"(?P<question>{_KNOWN_ITEM_QUESTIONS_PATTERN}|{_template(_KNOWN_ITEM_DATE_RETRY).pattern})"
 )
 
 
-def known_item_question(p: IntentParams, slot: str, deadline: date | None) -> str:
+def known_item_date_retry_question(day: date, today: date, latest: date) -> str:
+    """Nói lại hạn đã tính và cửa sổ hợp lệ khi hạn bị từ chối."""
+    if day < today:
+        reason = "đã qua"
+    elif day == today:
+        reason = "là hôm nay"
+    elif day > latest:
+        reason = "quá 12 tháng"
+    else:
+        reason = "chưa được chấp nhận"
+    return _KNOWN_ITEM_DATE_RETRY.format(
+        date=day.strftime("%d/%m/%Y"),
+        reason=reason,
+        earliest=(today + timedelta(days=1)).strftime("%d/%m/%Y"),
+        latest=latest.strftime("%d/%m/%Y"),
+    )
+
+
+def known_item_question(p: IntentParams, slot: str, deadline: date | None, *, question: str) -> str:
     """Nói lại các ô đã đủ để lượt sau giữ nguyên dữ kiện khi người dùng chỉ trả lời ô đang hỏi."""
     name = p.known_item_name
     title = f": “{name}”" if slot != "other" and name and not re.search(r"[?\r\n]", name) else ""
     goal = goal_phrase(p.amount_vnd if slot != "amount" else None, deadline=deadline)
     summary = f" · {goal}" if goal else ""
-    return f"{_KNOWN_ITEM_PREFIX}{title}{summary}. {notices.KNOWN_ITEM_QUESTIONS[slot]}"
+    full = f"{_KNOWN_ITEM_PREFIX}{title}{summary}. {question}"
+    if len(full) <= 200:  # Giới hạn của ClarifyData.question.
+        return full
+    return f"{_KNOWN_ITEM_PREFIX}{title}. {question}"
 
 
 def _known_item_prompt(text: str) -> AskedPrompt | None:
     """Đọc lại dữ kiện mã đã nói trong câu hỏi về Quỹ dồn."""
     match = _KNOWN_ITEM_PROMPT.fullmatch(text.strip())
-    if match is None or (keys := _KNOWN_ITEM_KEYS.get(match["question"])) is None:
+    if match is None:
         return None
+    keys = _KNOWN_ITEM_KEYS.get(match["question"], _KNOWN_ITEM_KEYS[notices.KNOWN_ITEM_QUESTIONS["date"]])
     given = _goal_given(match["goal"] or "")
     if match["name"]:
         given["known_item_name"] = match["name"]
