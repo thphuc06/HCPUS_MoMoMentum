@@ -337,3 +337,15 @@ describe('Hồ sơ: lối vào bảng vận hành', () => {
     expect(screen.getByRole('button', { name: 'Đặt lại dữ liệu' })).toBeInTheDocument()
   })
 })
+
+describe('Hồ sơ: dữ liệu demo không ghi cứng số hũ', () => {
+  it('mô tả đặt lại và hộp xác nhận nói "bộ hũ mặc định của ví mẫu", không còn "sáu hũ"', async () => {
+    const user = userEvent.setup()
+    mountApp(backend(), '/profile')
+    const section = await screen.findByRole('region', { name: 'Dữ liệu demo' })
+    expect(section).toHaveTextContent('Đặt lại sẽ thay các hũ hiện tại bằng bộ hũ mặc định của ví mẫu, nạp lại giao dịch mẫu và xóa hội thoại.')
+    expect(section).not.toHaveTextContent(/sáu hũ/i)
+    await user.click(within(section).getByRole('button', { name: 'Đặt lại dữ liệu' }))
+    expect(await screen.findByText(/Tài khoản này sẽ nhận bộ hũ mặc định của ví mẫu và giao dịch mẫu/)).not.toHaveTextContent(/sáu hũ/i)
+  })
+})

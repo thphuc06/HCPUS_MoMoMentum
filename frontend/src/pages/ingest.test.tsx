@@ -38,7 +38,13 @@ function confirmation(init: RequestInit): Json {
     tool: b.tool,
     params: b.params,
     params_hash: 'b'.repeat(64),
-    preview: { summary: 'Thêm 3 dòng ngoài ví vào lịch sử chi tiêu', changes: [{ label: 'Số dư hũ', after: 'không đổi' }] },
+    preview: {
+      summary: `Thêm ${b.params.rows.length} dòng ngoài ví vào lịch sử, số dư hũ không đổi`,
+      changes: [
+        { label: 'Số dư các hũ', after: 'Không đổi' },
+        { label: 'Độ phủ dữ liệu', before: '62%', after: '81%' },
+      ],
+    },
   }
 }
 
@@ -174,6 +180,16 @@ describe('I1 chọn tệp', () => {
 
     await user.click(screen.getByRole('button', { name: 'Xong, cập nhật dự báo' }))
     expect(await screen.findByTestId('preview-summary')).toHaveTextContent('Thêm 3 dòng ngoài ví')
+    const preview = within(screen.getByRole('region', { name: 'Xem trước' }))
+    const balance = preview.getByText('Số dư các hũ').closest('li')!
+    expect(balance).toHaveTextContent('Không đổi')
+    expect(balance).not.toHaveTextContent('Giữ nguyên')
+    expect(preview.getByText('Độ phủ dữ liệu').closest('li')).toHaveTextContent(/62%\s*81%/)
+    const disclosure = screen.getByRole('button', { name: 'Vì sao số dư hũ không đổi?' })
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false')
+    await user.click(disclosure)
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(/ngân hàng hoặc thẻ khác.*hũ không bị trừ.*dự báo nhịp chi/i)).toBeVisible()
     const conf = callsTo(calls, 'POST', '/ingest/confirmations')
     expect(conf).toHaveLength(1)
     expect(bodyOf(conf[0]!)).toEqual({
@@ -249,6 +265,17 @@ describe('quay lại lần nạp dang dở và trợ năng', () => {
     await pickImage(user)
     const h = await screen.findByRole('heading', { name: 'Đang xử lý' })
     await waitFor(() => expect(h).toHaveFocus())
+  })
+
+  it('chỉ chọn dòng thu thì xem trước không giải thích nguồn trả của khoản chi', async () => {
+    mountIngest(ingestBackend([job('review')]), `/ingest?job=${JOB}`)
+    const user = userEvent.setup()
+    const rows = await screen.findByRole('list', { name: 'Dòng đã đọc' })
+    for (const box of within(rows).getAllByRole('checkbox', { checked: true })) await user.click(box)
+    await user.click(within(rows).getByRole('checkbox', { name: /Thêm dòng Công ty \*\*\*/ }))
+    await user.click(screen.getByRole('button', { name: 'Xong, cập nhật dự báo' }))
+    expect(await screen.findByTestId('preview-summary')).toHaveTextContent('Thêm 1 dòng ngoài ví')
+    expect(screen.queryByRole('button', { name: 'Vì sao số dư hũ không đổi?' })).not.toBeInTheDocument()
   })
 
   it('bỏ chọn hết: nút nói rõ là bỏ qua, xác nhận chỉ gửi reject_row_ids', async () => {

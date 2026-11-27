@@ -48,6 +48,12 @@ export function ConsentSection() {
                 Muốn bỏ hết đồng ý và tệp đã nạp, dùng “Xóa dữ liệu của tôi” bên dưới.
               </p>
             </Disclosure>
+          <Disclosure label="Dữ liệu được xử lý ở đâu?" className="border-t border-line pt-1" panelClassName="pb-2 text-note text-ink-2">
+            <p>
+              Hệ thống chạy trên AWS tại Singapore (ap-southeast-1). Mô hình AI được gọi qua Amazon Bedrock có thể xử lý dữ liệu ngoài Singapore.
+              Bản demo dùng dữ liệu tổng hợp.
+            </p>
+          </Disclosure>
           <Link to="/ingest" className="-mt-1 mb-1 flex min-h-11 items-center text-small font-semibold text-brand-text">Nạp dữ liệu</Link>
         </div>
       )}
