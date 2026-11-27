@@ -1,6 +1,6 @@
 # ADR-0004: Lệch so với proposal
 
-- **Trạng thái**: Đề xuất
+- **Trạng thái**: Chấp nhận (chủ dự án, 27/11/2026)
 - **Ngày**: 2026-11-25
 - **Người/agent quyết định**: từng lệch do chủ dự án chốt ở nguồn ghi trong bảng (ngày chốt ở cột "Chốt ở đâu"); Kiro CLI (worker `p6/docs`, issue [#32](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/32)) gom lại thành ADR này. Chủ dự án duyệt thì đổi trạng thái sang `Đã chốt`.
 - **Liên quan**: proposal §1, §4, §8, §9, §10.3, §11, §14 ([proposal-summary.md](../proposal/proposal-summary.md)); [open-questions](../requirements/open-questions.md); [phase 6](../plan/phases/phase-6-danh-gia-dong-goi.md) mục 3 và mục 7 (Q4, Q11); kiểm toán 25/11: PV-12 ([proposal so với sản phẩm](../research/2026-11-25-audit-proposal-vs-product.md#lệch-kiến-trúc-câu-hỏi-3)), mục 1 của [kiểm toán ML](../research/2026-11-25-audit-ml-forecasting.md), P12-09 ([phase 1–2](../research/2026-11-25-audit-phase-1-2.md)); [ADR-0001](0001-frontend-stack.md), [ADR-0002](0002-xac-nhan-truoc-khi-ghi.md)
