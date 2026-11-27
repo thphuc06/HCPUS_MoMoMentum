@@ -52,8 +52,6 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | BC-12 | Hạn nộp | **03/12** (chủ dự án, theo trang cuộc thi) | 25/11 |
 | — | Có thêm tính năng mới không | Được, tới hết 30/11; chưa xanh thì cắt | 25/11 |
 | C-14 | Persona và tài khoản giám khảo | `minh` 120 ngày; `giamkhao1–3` dùng `minh`, không thuộc `ops` | 25/11 |
-| FR14 | Cảnh báo khoản chuyển lệch thói quen | Không làm; không nhận chủ đề "Chống lừa đảo" | 25/11 |
-| C-04 | Phí trả chậm trong sản phẩm | Chưa có, ghi là giới hạn đã biết (P3-06) | 25/11 |
 | **I-01** | Mô hình kinh doanh | **M2 (pilot) → M7 (năm đầu) → M4 (bán bản quyền cho MoMo)**; slide mở bằng đích đến M4 ([06 mục 3c](06-mo-hinh-kinh-doanh.md#3c-bảy-mô-hình-kinh-doanh-để-chọn-2511)) | 26/11 |
 
 ### 2.1 Gấp: technical đang chờ (chốt trước hạn tính năng 30/11)
@@ -63,6 +61,8 @@ Ký hiệu cột **Ai chốt**: Nhóm (BA, sản phẩm), Kỹ thuật, Chủ d�
 | **C-02** → [#30](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/30) | Định nghĩa mức "sát" (vàng) khi kiểm tra trước khi chi | Theo BR-36: vàng khi ngày cạn mới rơi trước kỳ lương nhưng sau ngày cạn cũ. Technical đặt ngưỡng tương ứng | Nhóm | T-02; AC-FR6-01 |
 | **C-03** | Ngưỡng nghĩa vụ trên thu nhập (code đang dùng một ngưỡng 36%) | Đơn giản nhất: **giữ 36% làm mức đỏ** (có căn cứ quy tắc 28/36, nằm giữa đề xuất 30–40%), không tách hai mức trước demo | Nhóm | T-06 |
 | **C-05** | Ngưỡng "khoản đủ lớn mới hỏi" khi phân hũ | Từ 2% lương tháng; ~~khoản nhỏ một lần vào hũ "Khác"~~ (hũ "Khác" không làm, 26/11) | Nhóm | T-03 (E7) |
+| **C-04** (T-09, [#52](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/52)) | **Phí trả chậm trong sản phẩm mô phỏng** | **Chốt 27/11, đã mở issue [#52](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/52). Thêm trước 30/11, mức A**: thêm một dòng phí trả chậm vào bảng biểu phí; engine kiểm tra trước khi chi và what-if **đã có sẵn đoạn đọc dòng này** và hiện "nếu trễ hạn phải trả thêm X ₫". Cần thêm vài dòng mã để nhận phí theo **tỷ lệ** như MoMo (5,25–21% dư nợ quá hạn). Mức B (sổ cái tự trừ phí khi quá hạn) để sau hạn nộp. Lý do: K4, mô hình M2 (thu theo phần trễ hạn giảm được) và G1 đều nói về phí trễ, nên demo cần cho thấy con số này | Nhóm, Kỹ thuật | Demo, slide kinh doanh |
+| **FR14** | Cảnh báo khoản chuyển lệch thói quen: làm bản nhỏ trước 30/11 hay để lộ trình | Chưa có quyết định bỏ hẳn; chỉ nằm trong thứ tự cắt. Bản nhỏ: khi chuyển tiền cho người nhận, so số tiền với thói quen (bộ phát hiện bất thường đã có trong mã) và hiện cảnh báo trong bản xem trước nếu lệch nhiều hoặc làm hụt hũ Dự phòng. **Đề xuất: ưu tiên C-04 trước; làm FR14 nếu chủ dự án thấy còn sức** | Chủ dự án | Không bắt buộc cho chủ đề "Trợ lý tài chính" |
 | **G-01, C-12, T-07** | Phạm vi demo cho các quy tắc mới | Chỉ thêm **G1** (chi phí quy năm trên thẻ kiểm tra trước khi chi, BR-75); phải xanh trước **30/11** (hạn tính năng mới). Không đổi bộ hũ demo (C-12): **đổi 26/11**, chủ dự án chốt bộ hũ mặc định theo mục đích và bộ hũ demo có hũ tự thêm, đã deploy (issue #39, xem cuối B2a của [02](02-business-rules.md)). Còn lại ghi là lộ trình | Nhóm, Kỹ thuật | T-07 |
 | C-01 | "Còn N ngày tới lương" tính từ hôm nay hay từ ngày cạn | Tách hai câu: ngày cạn, rồi số ngày trống tới lương | Nhóm | Câu chữ cảnh 1 |
 | C-08 | Vị trí và câu chữ nhãn "do AI tạo" | Dòng nhỏ dưới mỗi câu trả lời và trong màn Giới thiệu. Hỏi technical đã có chưa | Nhóm | AC-DEMO-03 |

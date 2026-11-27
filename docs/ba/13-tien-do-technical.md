@@ -68,6 +68,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 | T-06 | Ngưỡng nghĩa vụ trên thu nhập: code dùng **một ngưỡng 36%** (quy tắc 28/36, `rules/obligation_to_income.yaml`); BA đề xuất hai mức vàng 30%, đỏ 40% | BR-37, C-03 | Nhóm chốt C-03: giữ 36% làm mức đỏ, hoặc tách hai mức |
 | T-07 | Cơ cấu hũ mới (BR-63 đến 73) và các quy tắc chi phí trả sau (BR-74 đến 77) **chưa có trong code**. **26/11:** bộ hũ theo mục đích đã làm một phần (#39; trạng thái từng BR ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)); BR-74 đến 77 vẫn chưa có | — | Chốt phạm vi demo: G1 (chi phí quy năm) có thể làm nhanh trong FR6; phần còn lại ghi là lộ trình. **25/11:** được thêm tính năng tới hết 30/11; đề xuất chỉ thêm G1 (chi phí quy năm, BR-75) |
 | T-08 (BA ghi 26/11) | **Số phân loại trên slide phải đúng phạm vi ví.** 92% đúng và 17,4% phải hỏi là của **ví nhiều hũ có model** (ví demo). Ví 3 hũ mặc định của tài khoản mới **chưa đo có model**; không model thì hỏi 39,52%, tự gán sai 4,19% ([đo ví ba hũ](../research/2026-11-26-do-vi-ba-hu.md)) | BR-17, NFR-13, NFR-14, E-03 | Slide gắn số với ví demo; chủ dự án quyết có đo ví 3 hũ có model trước 1/12 không (P1 trong ghi chú đo) |
+| T-09 (BA ghi 27/11) → [#52](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/52) | **Phí trả chậm chưa có trong sản phẩm mô phỏng.** Bảng `fee_schedules` chỉ có phí dịch vụ 33.000 ₫/tháng. Mã đã sẵn chỗ: điều kiện `overdue` trong bảng; `afford.py` và `scenario.py` đọc dòng phí trễ và `credit.py` trả `late_penalty_vnd`, nhưng **chỉ nhận phí cố định** (`amount_vnd`), chưa nhận phí theo tỷ lệ (`rate_percent`) như biểu phí MoMo 5,25–21% | C-04, K4, BR-24, BR-37, BR-74, 06 M2 | Mức A trước 30/11: thêm dòng phí trễ có nguồn, cho `credit.py` nhận `rate_percent`. Mức B (sổ cái trừ phí khi quá hạn) sau hạn nộp |
 
 ### 4a. Chi tiết từng việc (gửi technical, ghi 25/11)
 
@@ -117,7 +118,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 - **BA chốt trước:** **C-03**. Đề xuất 25/11: giữ 36% làm mức đỏ, không sửa code trước demo.
 
 **T-07 [Thông tin] Quy tắc nghiệp vụ mới chưa có trong code**
-- **26/11:** bộ hũ theo mục đích **đã làm một phần** (#39; trạng thái từng BR ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)). Vẫn chưa có: chi phí trả sau minh bạch (BR-74 đến 76), hỗ trợ trước hạn (BR-77), FR14 (không làm).
+- **26/11:** bộ hũ theo mục đích **đã làm một phần** (#39; trạng thái từng BR ở [02 B2a](02-business-rules.md#b2a-cơ-cấu-hũ-theo-mục-đích-và-giai-đoạn-sống-đề-xuất-2411)). Vẫn chưa có: chi phí trả sau minh bạch (BR-74 đến 76), hỗ trợ trước hạn (BR-77), FR14 (chưa làm, chưa có quyết định bỏ hẳn).
 - **26/11 (issue #39):** đã làm BR-67, BR-69 và một phần BR-63, 65, 66, 73, 78 (3 hũ mặc định, `purpose`, Quỹ dồn, đề xuất tỷ lệ theo kê khai, hũ Nghĩa vụ chung); hoãn BR-64, 68, 70, 71; phần còn lại của BR-63 (bắt buộc mục đích, chặn hũ đệm thứ hai) để sau hạn nộp. BR-72, 74 đến 77 và FR14 vẫn chưa có.
 - **Đề xuất:** không đưa vào demo, trừ **G1** (hiện chi phí trả sau quy ra năm trên thẻ kiểm tra trước khi chi, BR-75) vì làm nhanh được. Phần còn lại ghi là lộ trình sau cuộc thi.
 - **BA chốt trước:** G-01, C-12 (đã đưa vào [12 mục 2.1](12-tong-hop-va-viec-can-chot.md#21-gấp-technical-đang-chờ-chốt-trước-hạn-tính-năng-3011), hạn 30/11).
@@ -143,6 +144,7 @@ Ký hiệu: ✅ đạt (có bằng chứng) · ◐ chạy được nhưng còn t
 | Issue | Việc | Ai | Hạn |
 |---|---|---|---|
 | [#30](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/30) | Dải vàng của kiểm tra trước khi chi, **chờ BA chốt C-02** | BA chốt, technical sửa | Trước 1/12 (càng sớm càng kịp đợt 2, 30/11) |
+| [#52](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/52) | **Phí trả chậm** của Trả sau (mô phỏng): bốn bậc theo tỷ lệ MoMo, hiện trên kiểm tra trước khi chi và what-if (T-09, C-04) | BA mở 27/11, technical làm | Trước 30/11 |
 | [#33](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/33) | **Số kinh doanh**: chi phí AI mỗi người dùng hoạt động mỗi tháng đặt cạnh giá; trang "Yofina trong MoMo"; câu kể "AI là phần cốt lõi … AI đề xuất, con người quyết định" | **BA** | Chủ dự án duyệt trước 1/12 |
 | [#26](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/26) | Đo K5 hai định nghĩa; sửa ba/08 mục 3.5 | Technical đo; **BA đã sửa 08 mục 3.5 (25/11)** | Đợt 2 |
 | [#37](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/37) | Slide tối đa 10 trang, mọi số trỏ được về repo | BA soạn nội dung, chủ dự án duyệt | Nháp 1/12, nộp 3/12 |
