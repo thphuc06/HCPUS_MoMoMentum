@@ -213,6 +213,8 @@ Thứ tự khi deploy: build zip (`pipelines/roadmap/README.md`), `uv run script
 
 **28/11 chiều (Claude Code, chủ dự án duyệt)**: đặt giữ log **14 ngày** cho log group Runtime `/aws/bedrock-agentcore/runtimes/yofina_agent-…-DEFAULT` (`PutRetentionPolicy`; trước đó giữ vô hạn, khoảng 1,7 MB). Log group này do AgentCore tạo, không do CDK quản lý, nên không lệch với stack. Quay lui: `DeleteRetentionPolicy`.
 
+**Deploy 28/11 chiều và tối (Codex, chủ dự án duyệt)**: Runtime **version 37** từ `main` `bfe9dfb` (PR #62, chỉ đổi zip agent). Runtime **version 38** READY 17:22 (+07): change set của `YofinaAgent` chỉ đổi đường dẫn S3 của AgentRuntime sang `builds/agent-ec81c1d99c5e.zip` (trước là `agent-edd8184a073e.zip`); mã của gói này được commit qua nhánh `fix/purchase-funding-28-11` sau khi deploy. Không IAM, không Lambda, không frontend, không migration. Chưa chạy golden eval trên v37, v38.
+
 | Tên | Loại | Phase | Tính tiền khi nhàn rỗi | Ghi chú |
 |---|---|---|---|---|
 | Migration `0053_phase5` | Schema Aurora | 5 | Không | Bảng `behavior_profiles`, `data_deletions` (RLS FORCE); cột mới của `nudges` (`value_vnd`, `gate_reason`, `title`, `body`, `outcome`, `outcome_at`); hàm `app_delete_user_data`, `app_nudge_outcome_stats`, `app_ops_list_traces`, `app_ops_get_trace`, `app_ops_summary`, `app_ops_model_calls_by_day` |

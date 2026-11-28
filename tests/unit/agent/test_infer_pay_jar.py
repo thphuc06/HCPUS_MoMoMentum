@@ -286,24 +286,16 @@ def test_kiem_tra_tra_sau_khong_dung_hu_suy_theo_loai_lam_hu_tra(monkeypatch):
 ROUTE_TRIP = {"intent": "what_if", "amount_vnd": 2_000_000, "scenario_kind": "one_time_purchase", "label": "chuyến đi", "tx_type": "travel"}
 
 
-def test_what_if_du_lich_khong_noi_cach_tra_hay_hu_thi_tinh_luon(monkeypatch):
-    """Trước đây hỏi "trả bằng tiền trong hũ hay Trả sau" rồi hỏi hũ; nay hũ đã rõ nên tính luôn từ hũ đó."""
-    llm = make_llm([route_response(**ROUTE_TRIP), tool_response("analyze", analysis())])
+def test_what_if_du_lich_chua_chon_hu_thi_hoi(monkeypatch):
+    llm = make_llm([route_response(**ROUTE_TRIP)])
     events, tools, _ = run_turn(TRAVEL_Q, llm=llm, tools=_tools(DEMO_8), settings=CODE_FIRST, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert "clarify" not in _types(events)
-    (args,) = _calls(tools, "run_scenario")
-    assert args["scenario"] == {
-        "kind": "one_time_purchase", "amount_vnd": 2_000_000, "funding_source": "jar", "jar_code": "muc_tieu", "label": "chuyến đi",
-    }  # fmt: skip
-    kinds = _types(events)
-    assert kinds.index("notice") < kinds.index("forecast_timeline")
-    _assert_notice_names(events, "Du lịch")
-    assert len(llm[1].calls) == 2  # router, Analyst (spec dựng bằng mã)
+    assert _types(events) == ["clarify"] and not _calls(tools, "run_scenario")
+    assert blocks_of(events)[0]["data"]["question"] == PAY_QUESTION
 
 
-def test_what_if_orchestrator_nhan_ten_hu_da_suy_trong_tham_so_router(monkeypatch):
-    spec = {"kind": "one_time_purchase", "amount_vnd": 2_000_000, "funding_source": "jar", "jar_code": "muc_tieu", "label": "chuyến đi",
+def test_what_if_orchestrator_nhan_ten_hu_nguoi_dung_chon(monkeypatch):
+    spec = {"kind": "one_time_purchase", "amount_vnd": 2_000_000, "funding_source": "jar", "jar_code": "giai_tri", "label": "chuyến đi",
             "date": "2026-12-05"}  # fmt: skip
     llm = make_llm(
         [
@@ -312,12 +304,12 @@ def test_what_if_orchestrator_nhan_ten_hu_da_suy_trong_tham_so_router(monkeypatc
             tool_response("analyze", analysis()),
         ]
     )
-    events, tools, _ = run_turn(TRAVEL_Q, llm=llm, tools=_tools(DEMO_8), monkeypatch=monkeypatch)
+    events, tools, _ = run_turn("Nếu trả 2 triệu từ hũ Du lịch tháng sau thì sao?", llm=llm, tools=_tools(DEMO_8), monkeypatch=monkeypatch)
     prompt = llm[1].calls[1]["messages"][0]["content"][0]["text"]
     router_params = json.loads(prompt.split("<tham_so_router>\n", 1)[1].split("\n</tham_so_router>", 1)[0])
     assert router_params["jar_text"] == "Du lịch" and router_params["tx_type"] == "travel"
     assert _calls(tools, "run_scenario")[0]["scenario"]["jar_code"] == "muc_tieu"
-    _assert_notice_names(events, "Du lịch")
+    assert _inferred_notice(events) is None
     assert len(llm[1].calls) == 3  # router, Orchestrator, Analyst: không thêm lời gọi nào
 
 
@@ -342,7 +334,8 @@ def test_what_if_tra_sau_giu_quy_tac_hu_tra(monkeypatch):
     route = {**ROUTE_TRIP, "scenario_kind": "bnpl_purchase", "funding": "credit"}
     llm = make_llm([route_response(**route)])
     events, tools, _ = run_turn(
-        TRAVEL_Q, llm=llm, tools=_tools(NO_OBLIGATION, run_scenario=scenario), settings=CODE_FIRST, monkeypatch=monkeypatch
+        "Nếu đi chơi xa 2 triệu bằng Trả sau thì sao?", llm=llm, tools=_tools(NO_OBLIGATION, run_scenario=scenario),
+        settings=CODE_FIRST, monkeypatch=monkeypatch
     )
     (args,) = _calls(tools, "run_scenario")
     assert "pay_jar" not in args["scenario"] and "jar_code" not in args["scenario"]
