@@ -2,7 +2,9 @@
 
 > **Quy ước**: cuối mỗi phiên **ghi đè** phần trạng thái, giữ file khoảng 100 dòng. Lịch sử (số đo từng lượt, việc đã làm) chỉ ghi vào [docs/ai-log/](docs/ai-log/README.md), không chép thêm mục theo ngày vào đây. Bản dài trước khi cắt (28/11): `git show bf52cae:HANDOFF.md`.
 
-Cập nhật lần cuối: **2026-11-28 chiều**. Bản đang chạy là `e784723` (đã gộp PR #57): Runtime **v36**, Amplify **job 30**, migration tới **0059**, Aurora **min 0**. Video demo xong (2:58, mp4 ở Drive, mã ở [video/](video/README.md)).
+Cập nhật **28/11 tối**. Runtime **v38** đang phục vụ qua endpoint DEFAULT (READY 17:22 +07), gói `agent-ec81c1d99c5e.zip`. Mã của gói này nằm trên `main` từ nhánh `fix/purchase-funding-28-11` (v37 `bfe9dfb` cộng luật chọn nguồn trả của mô phỏng mua hàng); đã đối chiếu từng tệp `.py` của `yofina_agent` (29) và `yofina_core` (25) trong zip với mã commit: khớp hết. Amplify **job 30**, migration tới **0059**, Aurora **min 0**. Video demo dài 2:58, MP4 ở Drive, mã ở [video/](video/README.md).
+
+> **Chưa chạy golden eval trên v37 và v38** (chủ dự án hoãn ngày 28/11, kể cả phase 3 và 4). Eval đầy đủ gần nhất là v36. Lượt v37 dừng ở `clarify-funding` sau G3 14/17, G4 1/2 (ca này đã sửa ở v38, mới kiểm tay hai lượt trên Runtime). Chạy lại golden phase 3 và 4 trước khi coi v38 là nền cho freeze.
 
 ## Hạn
 
@@ -13,17 +15,15 @@ Tính năng 30/11 · freeze 01/12 · RC và eval cuối 02/12 (#34, #35) · **n�
 - **Deploy 28/11 sáng đạt**: YofinaTools 06:47 (zip ledger, MetricFilter Guardrail `{ $.event = "guardrail_error" }`), YofinaAgent và Runtime v36 06:56, Amplify job 30 06:58. Không IAM, không migration, không YofinaIngest. Log 0 lỗi. Chi tiết: [aws-resources.md](docs/aws-resources.md).
 - **6 cảnh demo**: cảnh 1–4 đạt trên v36. Cảnh 5, 6 chưa đi lại từ v31 (#4). Hai số trong lời dẫn của [demo-script](docs/plan/demo-script.md) cần sửa: cảnh 3 trụ **25 ngày** (không còn 26), cảnh 2 thiếu **1.166.692 ₫** (v34: 1.167.673 ₫, chưa rõ vì sao lệch 981 ₫).
 - **Eval đầy đủ v36** (09:57–10:51, [eval-report.md](docs/research/eval-report.md)): qua Runtime 104/119, bộ diễn đạt lại router 20/21, khoảng 1,6 USD. Có 4 ca lùi so với v34, đều do router và prompt từ v35 (#60, #61), không phải PR #57.
-- **Lỗi mở sau đợt này** (không lỗi nào chặn 6 cảnh demo):
-  - [#58](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/58): khoản biết trước không khả thi thì lượt rỗng, vì bộ kiểm số bỏ lời writer và không có câu dự phòng. Sửa trước 30/11.
-  - [#60](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/60): router hỏi lại hai câu, bị validator từ chối, nên lượt hiện "AI đang gặp sự cố". Sửa trước 30/11.
-  - [#59](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/59): hạn Quỹ dồn lùi thêm 1 ngày ở lượt trả lời số tiền.
-  - [#61](https://github.com/thphuc06/HCPUS_MoMoMentum/issues/61) (needs-triage): 3 ca router đổi hành vi. Cần chủ dự án quyết sửa router hay sửa ca golden.
-  - Lùi an toàn, đã biết: "để dành 5 triệu trước Tết" tự chọn hũ Du lịch nên ra "kịp sau khi nới" (thấy cả ở v34). "Tết này" phải hỏi hạn một lần.
+- **Runtime v37** (28/11 chiều, PR #62 `bfe9dfb`): sửa #58 (lượt Quỹ dồn rỗng), #59 (hạn lùi 1 ngày), #60 (router hỏi hai câu ra "AI đang gặp sự cố"), #61 (ranh giới what_if/stress/roadmap; ca du lịch giữ hỏi hũ trả, sửa ca golden). Router cục bộ: bộ R 22/23, 3/3 ca đối chiếu. Bốn issue đóng theo PR; chưa có golden eval xác nhận (xem ghi chú trên).
+- **Runtime v38** (28/11 17:22): v37 tự chọn hũ Giải trí cho "Nếu mua tai nghe 1,2 triệu thì sao" và chạy mô phỏng (luật what_if mới của #61). v38: mô phỏng mua hàng chỉ dùng nguồn trả người dùng nêu hoặc chọn qua chip, chưa có thì hỏi hũ trả; kiểm tra trước khi chi (`affordability`) vẫn suy hũ từ loại chi. Kiểm tay 2 lượt trên `lan`: đạt.
+- **Cảnh 2, 5, 6 chưa đi lại trên v37/v38** (#4). Cảnh 2 chưa xác nhận phương án chuyển bù từ Dự phòng trên `giamkhao1`.
+- Lùi an toàn, đã biết: "để dành 5 triệu trước Tết" tự chọn hũ Du lịch nên ra "kịp sau khi nới" (thấy cả ở v34). "Tết này" phải hỏi hạn một lần.
 - **Log group Runtime** giữ 14 ngày từ 28/11 (trước đó giữ vô hạn).
 
 ## Việc kế tiếp
 
-1. **Đợt sửa trước 30/11**: #58, #60, rồi #59. #61 chờ quyết. Sau khi sửa: deploy, rồi chạy eval theo chính sách bên dưới.
+1. **Golden phase 3 và 4 trên v38** (khoảng 0,4 USD, theo chính sách eval bên dưới), so với v36 (G3 31/37, G4 11/16). Rồi đi cảnh 2, 5, 6 trên `giamkhao1` (#4) và sửa số lời dẫn.
 2. **Tính năng trước 30/11**: #52 (phí trả chậm Trả sau), #54 (G1 chi phí trả sau quy ra năm), #53 (BR-79, chờ ước lượng), #55 (FR14, chờ chủ dự án), #47 (bộ nhớ lưu yêu cầu bị luật chặn), #31 (20 câu giữ riêng, người viết), #30 (chờ BA chốt C-02).
 3. **Kiểm job đêm 29/11 02:00 chạy 6/6** (Step Functions `yofina-nightly`), vì trust policy Scheduler đã đổi ở #50.
 4. **Freeze 01/12**: #45 (preflight, eval_summary, runbook), #32. Bỏ CORS localhost ở bản RC: truyền `-c extraCorsOrigins=` cho **cả** YofinaTools và YofinaIngest.
