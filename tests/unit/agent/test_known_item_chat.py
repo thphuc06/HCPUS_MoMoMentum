@@ -290,6 +290,35 @@ def test_non_proposed_status_uses_writer_without_a_confirmation(status, monkeypa
 
 
 @pytest.mark.parametrize(
+    "status", ["aligned", "infeasible", "salary_mismatch", "no_salary", "no_obligation_jar"]
+)
+def test_split_has_grounded_fallback_when_writer_invents_a_number(status, monkeypatch):
+    payload = proposal_fixture("infeasible")
+    payload["data"]["status"] = status
+    if status == "salary_mismatch":
+        payload["data"]["salary_check"] = {
+            "declared_vnd": 2_000_000,
+            "received_vnd": 3_000_000,
+            "deviation_percent": 50,
+        }
+    events, _, _ = run_turn(
+        ASK,
+        llm=make_llm([model_route(**FULL)]),
+        tools=tools_with_payload(payload),
+        writer=FakeWriter("Bạn cần để riêng 99.000.000 ₫."),
+        monkeypatch=monkeypatch,
+    )
+    check_agui_order(events)
+    text = "".join(e.delta for e in events if e.type.value == "TEXT_MESSAGE_CONTENT")
+    assert text and "99.000.000" not in text
+    if status == "infeasible":
+        assert payload["data"]["reasons"][0]["text"] in text
+        (block,) = blocks_of(events)
+        assert block["type"] == "suggestions"
+        assert block["data"]["items"][0]["label"] == "Lập lộ trình"
+
+
+@pytest.mark.parametrize(
     ("spec", "call_expected"),
     [
         ({"anchor": "date", "day": 20, "month": 11, "year": 2026}, False),

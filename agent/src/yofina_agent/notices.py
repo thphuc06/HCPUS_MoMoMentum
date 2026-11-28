@@ -44,6 +44,13 @@ DEGRADED: dict[str, tuple[str, str]] = {
 
 ROUTER_REPHRASE = "Mình chưa hiểu yêu cầu này. Bạn có thể nói lại điều bạn muốn kiểm tra hoặc làm với các hũ không?"
 
+KNOWN_ITEM_SPLIT_FALLBACK = {
+    "aligned": "Khoản này đã khớp với cách chia lương hiện tại.",
+    "salary_mismatch": "Chưa thể đề xuất cách chia vì lương đã khai khác với lương thực nhận. Bạn kiểm tra lại thu nhập nhé.",
+    "no_salary": "Bạn khai lương trước để mình tính cách chia cho khoản này nhé.",
+    "no_obligation_jar": "Ví chưa có hũ Nghĩa vụ để tính cách chia lương cho khoản này.",
+}
+
 OUT_OF_SCOPE: tuple[str, str] = (
     "Ngoài phạm vi hiện tại",
     "Yofina giúp bạn quản lý chi tiêu theo hũ: xem số dư, dự báo hũ, thử kịch bản \"nếu mua...\" và kiểm tra trước khi chi. "

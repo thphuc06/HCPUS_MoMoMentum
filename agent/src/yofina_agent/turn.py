@@ -2070,7 +2070,26 @@ class Turn:
         )
         o = res.outcome
         if o.ok and res.compact is not None:
+            said = len(self.assistant_parts)
             await self.write("known_item_split", question, res.compact)
+            status = res.compact["status"]
+            if len(self.assistant_parts) == said and status != "proposed":
+                if status == "infeasible":
+                    reasons = "; ".join(res.compact["reasons"])
+                    detail = f": {reasons.rstrip('.')}" if reasons else ""
+                    await self.emit_fixed_text(f"Chưa xếp được khoản này vào cách chia lương{detail}.")
+                    self.emit_block(
+                        B.build_suggestions(
+                            context="after_answer",
+                            items=[{"id": "roadmap", "label": "Lập lộ trình", "prompt": "Lập lộ trình mới"}],
+                            trace_id=self.trace_id,
+                            source_tool="agent",
+                            as_of=self.d.now(),
+                            app_date=self.block_app_date(),
+                        )
+                    )
+                else:
+                    await self.emit_fixed_text(notices.KNOWN_ITEM_SPLIT_FALLBACK[status])
         elif o.kind is ToolKind.TOOL_ERROR and o.code == ErrorCode.PARAMS_INVALID.value and (
             o.error_field == "needed_date"
             or (o.error_field is None and day > latest)
