@@ -471,7 +471,8 @@ def test_router_tra_json_hong_het_so_lan_thi_dung_luat(monkeypatch):
     )
     check_agui_order(events)
     assert len(llm[1].calls) == 2  # giới hạn số lần thử, không lặp mãi
-    assert block_types(events) == ["jar_summary", "notice"] and tools.calls
+    assert block_types(events) == ["jar_summary"] and tools.calls
+    assert result_of(events)["degraded"] is False
 
 
 def test_writer_loi_giua_chung_thi_dong_tin_nhan_va_them_notice(monkeypatch):

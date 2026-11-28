@@ -53,7 +53,6 @@ from yofina_agent.clarify import (
     InferredJar,
     goal_date_chips,
     goal_jar_question,
-    goal_phrase,
     infer_pay_jar,
     is_known_item_update,
     known_item_date_retry_question,
@@ -144,7 +143,7 @@ from yofina_core import quota as daily_quota
 from yofina_core.clock import app_timezone
 from yofina_core.dates import DateResolveError, ResolvedDate, add_months, resolve_date
 from yofina_core.errors import ErrorCode
-from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
+from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, StructuredOutputError, TurnScope
 from yofina_core.money import format_vnd, format_vnd_short
 from yofina_core.pii import mask_pii
 from yofina_core.resilience import load_shock_set
@@ -1143,6 +1142,7 @@ class Turn:
                 confidence=1.0,
                 needs_clarification=False,
             )
+        router_format_failed = False
         if not self.llm_down:
             jars = await self.router_jars()
             self._router_jar_list = list(jars or [])
@@ -1163,9 +1163,10 @@ class Turn:
                 # Đầu ra router (mã và tên trường có giá trị, không chữ người dùng): chẩn đoán được lượt trên app mà không gọi lại model.
                 log.info(json.dumps({"event": "routed", **routed_summary(value)}, ensure_ascii=False))
                 return value
-            except (
-                Exception
-            ) as exc:  # ModelBudgetExceeded, AllModelsFailed, StructuredOutputError, lỗi mạng...
+            except StructuredOutputError:
+                router_format_failed = True
+                log.warning('{"event": "router_format_failed"}')
+            except Exception as exc:  # ModelBudgetExceeded, AllModelsFailed, lỗi mạng...
                 self.llm_failed(exc)
         fallback = classify_by_rules(question)
         log.info(
@@ -1173,7 +1174,9 @@ class Turn:
                 {"event": "router_fallback", "intent": fallback.intent if fallback else None}
             )
         )
-        if fallback is None:
+        if fallback is None and router_format_failed:
+            await self.emit_fixed_text(notices.ROUTER_REPHRASE)
+        elif fallback is None:
             self.flush_degraded_notice(message_override=notices.DEGRADED["NOT_UNDERSTOOD"])
         else:
             self.intent = fallback.intent
@@ -2066,7 +2069,26 @@ class Turn:
         )
         o = res.outcome
         if o.ok and res.compact is not None:
+            said = len(self.assistant_parts)
             await self.write("known_item_split", question, res.compact)
+            status = res.compact["status"]
+            if len(self.assistant_parts) == said and status != "proposed":
+                if status == "infeasible":
+                    reasons = "; ".join(res.compact["reasons"])
+                    detail = f": {reasons.rstrip('.')}" if reasons else ""
+                    await self.emit_fixed_text(f"Chưa xếp được khoản này vào cách chia lương{detail}.")
+                    self.emit_block(
+                        B.build_suggestions(
+                            context="after_answer",
+                            items=[{"id": "roadmap", "label": "Lập lộ trình", "prompt": "Lập lộ trình mới"}],
+                            trace_id=self.trace_id,
+                            source_tool="agent",
+                            as_of=self.d.now(),
+                            app_date=self.block_app_date(),
+                        )
+                    )
+                else:
+                    await self.emit_fixed_text(notices.KNOWN_ITEM_SPLIT_FALLBACK[status])
         elif o.kind is ToolKind.TOOL_ERROR and o.code == ErrorCode.PARAMS_INVALID.value and (
             o.error_field == "needed_date"
             or (o.error_field is None and day > latest)
@@ -2250,14 +2272,6 @@ class Turn:
                 if resolved is not None and resolved.days_from_today > 0:
                     deadline = resolved.date
             question = known_item_question(p, req.slot, deadline, question=req.question)
-            said_deadline = (p.date_text or "").replace("“", "").replace("”", "").strip()
-            if deadline is not None and said_deadline and said_deadline.isprintable() and "?" not in said_deadline:
-                # Đặt ngày đã tính trước cụm gốc để lượt sau đọc đúng hạn nếu trong cụm cũng có ngày.
-                date_phrase = goal_phrase(None, deadline=deadline)
-                head, separator, tail = question.rpartition(f"{date_phrase}. ")
-                clarified = f"{head}{date_phrase} (“{said_deadline}”). {tail}"
-                if separator and len(clarified) <= 200:  # Giới hạn độ dài của ClarifyData.question.
-                    question = clarified
         chips = [_readable_amount_chip(c) for c in (req.chips if chips is None else chips)]
         if req.slot == "jar" and not chips:
             chips = await self.jar_chips()  # hỏi hũ nào thì chip là các hũ thật

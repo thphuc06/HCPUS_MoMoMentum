@@ -19,3 +19,5 @@
 {"id": "pr-memory-state", "question": "Ghi nhớ giúp mình là đừng gợi ý cắt tiền ăn sáng nhé.", "intent": "memory", "params": {}, "paraphrases": "memory-state-preference"}
 {"id": "pr-oos-gold", "question": "Có nên bỏ tiền vào vàng lúc này không?", "intent": "out_of_scope", "params": {}, "paraphrases": "oos-crypto"}
 {"id": "pr-chitchat-thanks", "question": "Cảm ơn nha, hôm nay vậy là đủ rồi.", "intent": "chitchat", "params": {}, "paraphrases": "chitchat"}
+{"id": "pr-whatif-delay-savings", "question": "Cho mình xem tác động khi kéo dài thời gian dành dụm cho kỳ nghỉ thêm tám tuần.", "intent": "what_if", "params": {"scenario_kind": "goal_delay"}, "paraphrases": "whatif-goal"}
+{"id": "pr-stress-job-loss-default", "question": "Lỡ công ty cho thôi việc thì ngân sách của mình chịu được bao lâu?", "intent": "stress", "params": {"shock_id": "mat_viec_2_thang"}, "paraphrases": "stress-after-resilience"}
