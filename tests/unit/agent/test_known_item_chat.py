@@ -535,6 +535,41 @@ def test_amount_reply_with_date_text_keeps_only_an_unchanged_lunar_deadline(
         assert block["type"] == "clarify" and block["data"]["slot"] == "date"
 
 
+def test_amount_reply_keeps_resolved_deadline_even_if_router_subtracts_again(monkeypatch):
+    opening = "Mình cần một khoản để mua laptop trước ngày 15/03/2027"
+    first, _, _ = run_turn(
+        opening,
+        llm=make_llm([model_route(
+            known_item_name="laptop",
+            date_text="trước ngày 15/03/2027",
+            date_spec={"anchor": "date", "day": 15, "month": 3, "year": 2027, "before": True},
+        )]),
+        monkeypatch=monkeypatch,
+    )
+    (clarify,) = blocks_of(first)
+    _, tools, _ = run_turn(
+        None,
+        llm=make_llm([model_route(
+            amount_vnd=15_000_000,
+            date_text="trước ngày 15/03/2027",
+            date_spec={"anchor": "date", "day": 14, "month": 3, "year": 2027, "before": True},
+            answers_pending=True,
+        )]),
+        tools=tools_with_payload(proposal_fixture("infeasible")),
+        messages=[
+            {"id": "m1", "role": "user", "content": opening},
+            {"id": "m2", "role": "assistant", "content": clarify["fallback_text"]},
+            {"id": "m3", "role": "user", "content": "15 triệu"},
+        ],
+        monkeypatch=monkeypatch,
+    )
+    assert tools.calls[-1] == (
+        "propose_jar_split", {"sinking_items": [{"name": "laptop", "amount_vnd": 15_000_000, "needed_date": "2027-03-14"}]}
+    )
+    assert "hạn 14/03/2027" in clarify["data"]["question"]
+    assert "15/03/2027" not in clarify["data"]["question"]
+
+
 def test_interruption_does_not_reuse_pending_known_item_slots(monkeypatch):
     events, _, _ = run_turn(
         "Tết mình phải nộp tiền vào 05/02/2027.",

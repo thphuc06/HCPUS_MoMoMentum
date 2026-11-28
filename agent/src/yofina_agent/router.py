@@ -629,15 +629,15 @@ def merge_pending(
         return routed
     params = routed.params.model_dump() if intent == routed.intent else {}
     before = {k: v for k, v in params.items() if v is not None}
-    # Câu hỏi Quỹ dồn đã nói lại hạn tính được. Giữ đặc tả nếu router chỉ lặp lại đúng cụm hạn khi trả lời ô khác.
+    # Câu hỏi Quỹ dồn đã mang hạn tính được. Chỉ thay hạn khi người dùng nêu hạn mới trong câu trả lời.
+    spoken_date = normalize(params.get("date_text") or "")
     if (
         prompt.intent == "profile_update"
         and decided.isdisjoint(("date_text", "date_spec"))
-        and params.get("date_spec") is None
         and base.get("date_spec") is not None
-        and (echoed_date := normalize(params.get("date_text") or ""))
-        and echoed_date == normalize(base.get("date_text") or "")
+        and (not spoken_date or f" {spoken_date} " not in f" {normalize(question)} ")
     ):
+        params["date_text"] = base.get("date_text")
         params["date_spec"] = base["date_spec"]
     for k, v in got.items():
         if k.startswith("_") or k in _CARRY_KEYS:

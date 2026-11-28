@@ -53,7 +53,6 @@ from yofina_agent.clarify import (
     InferredJar,
     goal_date_chips,
     goal_jar_question,
-    goal_phrase,
     infer_pay_jar,
     is_known_item_update,
     known_item_date_retry_question,
@@ -2273,14 +2272,6 @@ class Turn:
                 if resolved is not None and resolved.days_from_today > 0:
                     deadline = resolved.date
             question = known_item_question(p, req.slot, deadline, question=req.question)
-            said_deadline = (p.date_text or "").replace("“", "").replace("”", "").strip()
-            if deadline is not None and said_deadline and said_deadline.isprintable() and "?" not in said_deadline:
-                # Đặt ngày đã tính trước cụm gốc để lượt sau đọc đúng hạn nếu trong cụm cũng có ngày.
-                date_phrase = goal_phrase(None, deadline=deadline)
-                head, separator, tail = question.rpartition(f"{date_phrase}. ")
-                clarified = f"{head}{date_phrase} (“{said_deadline}”). {tail}"
-                if separator and len(clarified) <= 200:  # Giới hạn độ dài của ClarifyData.question.
-                    question = clarified
         chips = [_readable_amount_chip(c) for c in (req.chips if chips is None else chips)]
         if req.slot == "jar" and not chips:
             chips = await self.jar_chips()  # hỏi hũ nào thì chip là các hũ thật
