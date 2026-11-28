@@ -19,7 +19,7 @@ from datetime import date
 from functools import cache
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import ValidationError, field_validator
 
 from yofina_agent.clarify import (
     CLARIFY_INTENTS,
@@ -40,6 +40,19 @@ from yofina_core.resilience import load_shock_set
 from yofina_core.wallet import is_system_jar
 
 log = logging.getLogger("yofina.agent.router")
+
+
+class _RouterOutput(IntentResult):
+    @field_validator("clarify", mode="before")
+    @classmethod
+    def _keep_first_question(cls, value: Any) -> Any:
+        if isinstance(value, dict) and isinstance(question := value.get("question"), str):
+            first, mark, rest = question.partition("?")
+            if "?" in rest:
+                log.info('{"event": "clarify_trimmed"}')
+                # Các chip có thể trả lời câu đã bỏ. Harness sẽ dựng lại chip khi có dữ liệu.
+                return {**value, "question": first + mark, "chips": []}
+        return value
 
 #: Vai model của router trong `llm_defaults.json` (#39, chủ dự án 26/11): Claude Haiku 4.5 trước, Nova 2 Lite dự phòng, cache phần tĩnh
 #: ở Haiku. Vai riêng để không đổi model của vai `small` (writer, what-if, phân loại, hồ sơ hành vi).
@@ -682,7 +695,7 @@ async def route(
     lịch sử (căn cứ cho số trong chữ router tự viết, cùng cửa sổ với `history`); trống thì chỉ câu mới là căn cứ."""
     res = await gateway.astructured_json(
         ROUTER_ROLE,
-        output_model=IntentResult,
+        output_model=_RouterOutput,
         messages=[user_message(build_router_prompt(question, history, jars, today))],
         system=build_router_system(),
         tool_name="route",

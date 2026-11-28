@@ -144,7 +144,7 @@ from yofina_core import quota as daily_quota
 from yofina_core.clock import app_timezone
 from yofina_core.dates import DateResolveError, ResolvedDate, add_months, resolve_date
 from yofina_core.errors import ErrorCode
-from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, TurnScope
+from yofina_core.llm import AllModelsFailed, LlmGateway, ModelBudgetExceeded, StructuredOutputError, TurnScope
 from yofina_core.money import format_vnd, format_vnd_short
 from yofina_core.pii import mask_pii
 from yofina_core.resilience import load_shock_set
@@ -1143,6 +1143,7 @@ class Turn:
                 confidence=1.0,
                 needs_clarification=False,
             )
+        router_format_failed = False
         if not self.llm_down:
             jars = await self.router_jars()
             self._router_jar_list = list(jars or [])
@@ -1163,9 +1164,10 @@ class Turn:
                 # Đầu ra router (mã và tên trường có giá trị, không chữ người dùng): chẩn đoán được lượt trên app mà không gọi lại model.
                 log.info(json.dumps({"event": "routed", **routed_summary(value)}, ensure_ascii=False))
                 return value
-            except (
-                Exception
-            ) as exc:  # ModelBudgetExceeded, AllModelsFailed, StructuredOutputError, lỗi mạng...
+            except StructuredOutputError:
+                router_format_failed = True
+                log.warning('{"event": "router_format_failed"}')
+            except Exception as exc:  # ModelBudgetExceeded, AllModelsFailed, lỗi mạng...
                 self.llm_failed(exc)
         fallback = classify_by_rules(question)
         log.info(
@@ -1173,7 +1175,9 @@ class Turn:
                 {"event": "router_fallback", "intent": fallback.intent if fallback else None}
             )
         )
-        if fallback is None:
+        if fallback is None and router_format_failed:
+            await self.emit_fixed_text(notices.ROUTER_REPHRASE)
+        elif fallback is None:
             self.flush_degraded_notice(message_override=notices.DEGRADED["NOT_UNDERSTOOD"])
         else:
             self.intent = fallback.intent

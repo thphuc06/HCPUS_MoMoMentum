@@ -177,6 +177,32 @@ def test_keep_previous_tra_loi_dung_cau_hoi_giu_bo_thi_giu(keep):
 
 
 # --- kết quả hỏng hay bị cắt: luật dự phòng, không lộ lỗi thô ------------------------------------------------------------------
+def test_router_hoi_hai_cau_thi_chi_hien_cau_dau(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    first = "Khoản này tăng bao nhiêu?"
+    reply = route_response(
+        intent="what_if",
+        scenario_kind="recurring_expense",
+        clarify={"slot": "amount", "question": f"{first} Bạn bắt đầu từ khi nào?"},
+    )
+    events, _, _ = run_turn("thử tính nếu tiền thuê tăng", llm=make_llm([reply, reply]), monkeypatch=monkeypatch)
+    check_agui_order(events)
+    (block,) = blocks_of(events)
+    assert block["type"] == "clarify"
+    assert block["data"]["question"] == first
+    assert _events_of(caplog, "clarify_trimmed")
+
+
+def test_router_sai_dinh_dang_sau_hai_lan_thi_hoi_lai_khong_bao_loi_chung(monkeypatch):
+    invalid = route_response(intent="unknown")
+    llm = make_llm([invalid, invalid])
+    events, _, _ = run_turn("tính giúp thay đổi khoản thu sắp tới", llm=llm, monkeypatch=monkeypatch)
+    check_agui_order(events)
+    assert len(llm[1].calls) == 2
+    assert any(e.type.value == "TEXT_MESSAGE_CONTENT" for e in events)
+    assert all(b["data"].get("code") != "INTERNAL_ERROR" for b in blocks_of(events))
+
+
 def test_router_bi_cat_ca_hai_lan_thi_dung_luat_va_khong_lo_loi_tho(monkeypatch):
     cut = route_response(intent="lookup", lookup_kind="balance")
     cut["stopReason"] = "max_tokens"

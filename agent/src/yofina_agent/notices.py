@@ -42,6 +42,8 @@ DEGRADED: dict[str, tuple[str, str]] = {
     ),
 }
 
+ROUTER_REPHRASE = "Mình chưa hiểu yêu cầu này. Bạn có thể nói lại điều bạn muốn kiểm tra hoặc làm với các hũ không?"
+
 OUT_OF_SCOPE: tuple[str, str] = (
     "Ngoài phạm vi hiện tại",
     "Yofina giúp bạn quản lý chi tiêu theo hũ: xem số dư, dự báo hũ, thử kịch bản \"nếu mua...\" và kiểm tra trước khi chi. "
