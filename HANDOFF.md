@@ -2,9 +2,24 @@
 
 > **Quy ước**: cập nhật (ghi đè phần trạng thái bên dưới) vào **cuối mỗi phiên làm việc**. HANDOFF là ảnh chụp hiện tại; lịch sử thay đổi nằm ở [docs/ai-log/](docs/ai-log/README.md). Đầu phiên mới: đọc file này trước.
 
-Cập nhật lần cuối: **2026-11-27 trưa** (Claude Code điều phối; bàn giao cho người tiếp theo). Bản đang chạy vẫn là **`6455558`** trên Runtime **v34**, Amplify **job 29**, migration tới **0059**. `main` đã gộp PR #48 (#41, #44), #49 (#32), #50 (#45), #51 (#40, #46), #56 (router) nhưng **chưa deploy, chưa eval** (thứ tự deploy và việc sửa trước deploy ở mục "Trạng thái trưa 27/11"). **Video demo xong** (2:58, mp4 ở Drive, mã ở [video/](video/README.md)). Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B). Lịch sử: [ai-log](docs/ai-log/2026-11.md).
+Cập nhật lần cuối: **2026-11-28 trưa** (Claude Code deploy, kiểm, eval). Bản đang chạy là **`e784723`** (đã gộp PR #57) trên Runtime **v36**, Amplify **job 30**, migration tới **0059**; Aurora về **min 0**. Kết quả kiểm và eval ở mục "Trạng thái trưa 28/11". **Video demo xong** (2:58, mp4 ở Drive, mã ở [video/](video/README.md)). Phase 5 vẫn chưa đóng chính thức (tiêu chí 3 OCR, đi lại 6 cảnh, xem mục B). Lịch sử: [ai-log](docs/ai-log/2026-11.md).
 
-## Trạng thái trưa 27/11 (bàn giao)
+## Trạng thái trưa 28/11 (đã deploy PR #57 và frontend #40/#46/#51)
+
+- **Hai lần deploy**. (1) 27/11: Tools, Ingest, Agent 17:05–17:15 từ `2145ccd`; 20:10 có người chạy lại `agent_deploy.py` → Runtime **v35** READY 20:14 (không ghi ai chạy). (2) 28/11 sáng từ `e784723`: zip ledger mới và MetricFilter Guardrail `{ $.event = "guardrail_error" }` (YofinaTools 06:47), YofinaAgent và Runtime **v36** (06:52–06:56), Amplify **job 30** (06:58). Mỗi bước: CodeSha256 khớp, `/jars` 200, log 0 lỗi. Không YofinaIngest, không migration. Chi tiết: [aws-resources.md](docs/aws-resources.md).
+- **Aurora** chạy 0,5 ACU từ 27/11 16:46 tới 28/11 11:02, đã trả về min 0 (tự ngủ sau 600 s).
+- **Kiểm sau deploy** (09:42–09:55, qua API bằng token của `_demo_auth`, không bấm trên app vì agent không nhập mật khẩu; cảnh 1/2/4 trên `giamkhao2`, b–h trên `giamkhao1`, i trên `giamkhao3`):
+  - a. Cảnh 1 đạt (Ăn uống cạn 23/11, Cao). Cảnh 2 thiếu **1.166.692 ₫** (v34: 1.167.673 ₫, lệch 981 ₫, tổng 2.200.000 ₫ khớp; chưa rõ vì sao lệch; lần này không có phương án chuyển bù từ Dự phòng). Cảnh 4 đạt (sinh lại khoảng 19 s, v3 kịp hạn, Dự phòng chuyển 362.000 ₫ sang Ăn uống).
+  - b. Đạt: Quỹ dồn 28%, Du lịch 0%, Dự phòng 10%, Tết 05/02/2027; xác nhận ra hũ Quỹ dồn. "Tết này" không được hiểu thành ngày nên hỏi hạn một lần trước khi ra thẻ.
+  - c. **Không đạt (lỗi mã)**: hỏi đúng câu số tiền, trả lời "15 triệu" không bị hỏi lại hạn, nhưng khi `propose_jar_split` trả `infeasible` thì lượt **rỗng** (không chữ, không khối, trace không có bước writer). Hạn còn lệch thêm một ngày ("trước 15/03" → hỏi 14/03 → gửi tool 13/03).
+  - d. Đạt (thẻ và câu giải thích khoản cần trước kỳ lương). e. Đạt với ngày cụ thể ("quá 12 tháng", khoảng 22/11/2026–21/11/2027); câu "tháng 6 năm 2028" chỉ ra câu hỏi hạn chung. f. Đạt (thẻ thứ hai 409 `PARAMS_MISMATCH` "Danh sách hũ đã thay đổi…", Quỹ dồn còn khoản của thẻ đầu); thẻ đầu không có câu giải thích. g. Đạt (dòng "Khoản Tết 5.000.000 ₫ → 6.000.000 ₫").
+  - h. **Lùi an toàn**: "để dành 5 triệu trước Tết" ra bản đề xuất 5.000.000 ₫, hạn 05/02/2027, nhưng agent tự chọn hũ Du lịch (không hỏi hũ) nên "kịp sau khi nới" thay vì "kịp hạn" như v34 với chip Dự phòng. Đã thấy lúc quay video trên v34.
+  - i. Đạt theo bundle đã deploy và API: không còn "sáu hũ"; có "Vì sao số dư hũ không đổi?", dòng "cập nhật" có ngày mô phỏng, "Khi nào cập nhật?". Nạp CSV ở `giamkhao3`: số dư hũ không đổi. Chưa xem tận mắt trên màn hình. j. Đạt: alarm OK, filter mới.
+  - Sau kiểm: `seed_demo.py` 6 tài khoản, xóa bộ nhớ `giamkhao1` (2), `giamkhao2` (1).
+- **Eval đầy đủ** (09:57–10:51, `minh`, [eval-report.md](docs/research/eval-report.md)): G3 31/37, G4 11/16, G5 13/16; A3–A6 16/16, 12/12, 14/14, 7/8; router 20/21; qua Runtime 104/119. Router Haiku 130 lượt, 0 lần rơi về Nova. Khoảng 1,6 USD. Trượt: bộ chấm 6 (như v34), model hoặc lùi an toàn 5, và **4 ca lùi so với v34**: `whatif-goal`, `multiturn-new-question`, `stress-after-resilience`, `stress-rent-specific-amount`. Chạy lại vẫn trượt; nghi do router/prompt của #41/#56 (lên từ v35, chưa từng eval), không phải PR #57. SSM trần đã xóa; bộ nhớ `minh` đã xóa và đặt lại.
+- **Việc còn lại**: sửa lượt rỗng khi Quỹ dồn `infeasible` và hạn lệch một ngày (ca c); tìm nguyên nhân 4 ca router lùi (so prompt router `6455558` với `e784723`); #47; #30; các ca biên của đề xuất tỷ lệ; #34/#35 ngày 02/12 (eval RC, Aurora 0,5 ACU trước buổi chấm, đổi mật khẩu demo, trần SSM); bỏ CORS localhost ở RC (`-c extraCorsOrigins=` cho YofinaTools và YofinaIngest); **kiểm job đêm 29/11 02:00 chạy 6/6** vì trust policy Scheduler đã đổi ở #50.
+
+## Trạng thái trưa 27/11 (bàn giao; phần "chưa deploy" đã cũ, xem mục trên)
 
 - **Hạn**: tính năng 30/11, freeze 01/12, RC và eval cuối 02/12 (#34, #35), **nộp trước 18:00 ngày 03/12** (#36 bộ nộp, #37 slide, #38 video), chung kết 11/12.
 - **Video (#38)**: xong trên Runtime v34 (8 cảnh app thật phủ F1–F7, sơ đồ hệ thống, giọng Polly Tiffany, phụ đề tiếng Anh). Chủ dự án đã đưa mp4 lên Drive; link chưa ghi vào README (#36). Nếu bản RC đổi giao diện các cảnh thì quay lại theo [video/README.md](video/README.md) (hồ sơ trình duyệt quay do chủ dự án tự đăng nhập; không gõ mật khẩu).
@@ -22,6 +37,15 @@ Cập nhật lần cuối: **2026-11-27 trưa** (Claude Code điều phối; bà
 - **Thứ tự deploy đề xuất** (mỗi bước xin chủ dự án duyệt, `cdk diff` trước): YofinaTools (`-c extraCorsOrigins=`) → YofinaIngest (cùng cờ) → YofinaAgent (schema tool Gateway, tệp Cedar mới) → `agent_deploy.py` (Runtime) → Amplify (`print_env.py frontend --write`, `npm.cmd run build`, `deploy_frontend.py`). Không migration. YofinaAgent phải trước Runtime, không thì luồng khai khoản biết trước bị từ chối hoặc "unknown tool". Sau deploy: `seed_demo.py`; kiểm trên `giamkhao1` (khai Tết ra thẻ theo thứ tự BR-65; "để dành 5 triệu trước Tết" vẫn ra lộ trình; cảnh 2 và 4 không đổi số; onboarding bước 3 của tài khoản mới); chạy `evals/paraphrase/run_router.py` (vài cent, xin duyệt) vì mô tả `one_time_purchase` đã thu hẹp và router #56 đổi.
 - **Issue mở theo hạn**: trước 30/11: #52 (phí trả chậm Trả sau), #54 (G1 chi phí trả sau quy ra năm), #53 (BR-79, chờ ước lượng), #55 (FR14, chờ chủ dự án), #47 (bộ nhớ lưu yêu cầu bị luật chặn thành sở thích), #31 (20 câu giữ riêng, người viết); freeze 01/12: #45 (phần còn lại: preflight, eval_summary, runbook), #32; RC 02/12: #34 (eval cuối), #35 (Aurora 0,5 ACU, đổi mật khẩu demo, trần SSM); nộp 03/12: #36, #37, #33 (số kinh doanh). Còn mở từ trước: #2–#7, #9, #11, #13–#15, #19, #21, #23, #30, #39 (xem lại cái nào đã xong để đóng).
 - **Công cụ**: Kiro báo hết hạn mức tháng (27/11); chủ dự án chọn dùng subagent Claude thay. Phiên AWS CLI (`aws login`) hết hạn sau khoảng 12 giờ; chủ dự án tự đăng nhập lại.
+
+## Đợt phát hành 27/11 17:20 (#48–#51 + #56; đã xong ở lần deploy 28/11)
+
+- Đã merge vào `main` (`2145ccd`): #49, #51 (+ câu hũ không số cứng), #50 (+ trust Scheduler `aws:SourceAccount`/`aws:SourceArn` = schedule-group/default), #48, #56 (sửa nóng prompt router: ingest status và ranh giới lookup forecast/behavior; router eval 20/21, ca trượt duy nhất `pr-profile-known-item` lệch chữ hoa do bộ chấm).
+- Test trên main (`8ead75c`): unit 5374 passed; local_pg 290; contracts OK; CDK 108/108; typecheck sạch; vitest đỏ `spending.test.tsx` (có sẵn) và `phase3Chat` ca H4 (đỏ khi chạy riêng trên máy này, CI xanh cùng cây mã).
+- Đã deploy: **Aurora min 0,5 ACU từ 16:46** (CHƯA trả về 0), YofinaTools 17:05–17:08, YofinaIngest 17:09–17:11, YofinaAgent 17:12–17:15. Mỗi bước: CodeSha256 khớp zip, `/jars` minh 200, log 0 lỗi. Alarm Guardrail không làm hỏng deploy.
+- 20:10: chạy lại `agent_deploy.py`, chủ dự án bảo dừng khi lệnh cập nhật đã gửi: YofinaAgent `UPDATE_IN_PROGRESS`, Runtime `UPDATING` lên **v35** (chạy tiếp phía AWS). Đầu phiên sau: kiểm Runtime READY v35 và stack `UPDATE_COMPLETE`, rồi chạy `quickcheck` (CodeSha, `/jars`, log); nếu stack rollback thì chạy lại `agent_deploy.py`. Frontend đã build sẵn (`frontend/dist`, có câu hũ mới).
+- **CHƯA**: Amplify, bước 5 (kiểm app), bước 6 (đóng issue, docs, ai-log). Zip ở `build/lambda/` đóng từ `2145ccd`.
+- Làm tiếp: `uv run scripts/agent_deploy.py` → Amplify (`print_env frontend --write`, build, `deploy_frontend.py`) → bước 5 → trả Aurora về `-c dbMinAcu=0`.
 
 ## Trạng thái sáng 27/11 (#41, #44: nhánh `int/qd-41-44`)
 
@@ -258,7 +282,7 @@ Kế hoạch: [docs/plan/master-plan.md](docs/plan/master-plan.md), sáu phase t
 ## Đang chạy trên AWS (`ap-southeast-1`)
 
 - Bảy stack đều `*_COMPLETE`. Danh sách tài nguyên: [docs/aws-resources.md](docs/aws-resources.md).
-- **Runtime `yofina_agent` v34**, **Amplify job 29**, migration tới **0059**, mã `6455558` (Runtime deploy khuya 26/11, Amplify job 29 từ đợt v33 vì frontend không đổi; mục "Trạng thái tối 26/11"). App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
+- **Runtime `yofina_agent` v36**, **Amplify job 30**, migration tới **0059**, mã `e784723` (deploy sáng 28/11; mục "Trạng thái trưa 28/11"). App: `https://main.dcrwn4u7vqklo.amplifyapp.com`.
 - Memory `yofina_memory` (id không đổi) với hai strategy override `preferences_vi`, `facts_vi`: override cả trích xuất lẫn hợp nhất, model **Claude Haiku 4.5** (khoảng $0,007–0,0125 mỗi lượt được ghi; quota 10 RPM dùng chung với model dự phòng của vai `small`). Lambda nạp gọi ra API tỷ giá Vietcombank (không VPC, không NAT).
 - Sáu tài khoản demo (`minh`, `lan`, `khoa`, `giamkhao1`–`3`), mật khẩu trong secret `yofina-demo-accounts`. **Mật khẩu đã lộ trong lịch sử chat 23/11: đổi trước buổi chấm.** Chỉ `minh` thuộc nhóm `ops` (#17; `giamkhao1` bị từ chối ở `/ops`, kiểm lại 26/11).
 - Aurora `yofina-db` min 0 ACU (lần gọi đầu chậm 15–20 giây). **Trước buổi demo** lên 0,5 ACU: `uv run scripts/cdk.py deploy YofinaData --require-approval never -c dbMinAcu=0.5`, xong trả về `-c dbMinAcu=0`.
@@ -268,7 +292,7 @@ Lệnh hay dùng (chi tiết ở `scripts/README.md`, `infra-cdk/README.md`): `u
 ## Số đo mới nhất
 
 - Test cục bộ ở `a846281` (mã Runtime v33, 26/11): unit 5260 passed, 2 skipped; `tests/local_pg` 285; vitest 1118; CDK 99/99 đo ở `1303eaf` (CDK không đổi từ đó). Số trên app sau v34: mục "Trạng thái tối 26/11".
-- Eval đầy đủ gần nhất (một lần, trên Runtime v34, 26/11 21:06–22:13): qua Runtime 104/115 ca, golden phase 3 29/33, phase 4 13/16, phase 5 13/16; adversarial phase 3/4/5/6 16/16, 12/12, 14/14, 7/8; router diễn đạt lại 18/18; router Haiku 119/119 lượt, 0 lần rơi về Nova. 11 ca trượt: 7 do bộ chấm `evals/run.py`, 4 do model (lùi an toàn); không ca nào lộ lỗi mã sản phẩm (mục "Còn mở" (b), (c)). Lượt trước (v25, 24/11): golden 31/31, 14/14, 11/15 (15/15 sau chạy lại); adversarial 16/16, 12/12, 14/14; diễn đạt lại 18/18. OCR real 9/11 ở v25 (r08 đã sửa và đạt ở v26, r12 sai ngày do ảnh mờ), chưa đo lại.
+- Eval đầy đủ gần nhất: Runtime v36, 28/11 09:57–10:51, qua Runtime 104/119 ([eval-report.md](docs/research/eval-report.md), mục "Trạng thái trưa 28/11"). Lượt trước (Runtime v34, 26/11 21:06–22:13): qua Runtime 104/115 ca, golden phase 3 29/33, phase 4 13/16, phase 5 13/16; adversarial phase 3/4/5/6 16/16, 12/12, 14/14, 7/8; router diễn đạt lại 18/18; router Haiku 119/119 lượt, 0 lần rơi về Nova. 11 ca trượt: 7 do bộ chấm `evals/run.py`, 4 do model (lùi an toàn); không ca nào lộ lỗi mã sản phẩm (mục "Còn mở" (b), (c)). Lượt trước (v25, 24/11): golden 31/31, 14/14, 11/15 (15/15 sau chạy lại); adversarial 16/16, 12/12, 14/14; diễn đạt lại 18/18. OCR real 9/11 ở v25 (r08 đã sửa và đạt ở v26, r12 sai ngày do ảnh mờ), chưa đo lại.
 - Chi phí một lượt eval đầy đủ khoảng **2,0 USD** ở v34 (115 ca; log ghi 1,91 USD, trong đó Sonnet planner 1,38, Haiku router 0,36); ở v25 khoảng 2,2–2,5 USD. Vì vậy: **chỉ chạy eval đầy đủ khi đã deploy xong và ổn hẳn; bình thường chỉ chạy vài ca `--only`**.
 
 ## Việc kế tiếp
