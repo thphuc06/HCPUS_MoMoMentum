@@ -30,6 +30,16 @@ Ca cho hành vi mới của đợt này, mỗi ca 1 lượt chat:
 
 `roadmap-regenerate-after-spending-change` chấm thông báo thay bản đề xuất theo bản mới nhất mà lượt đọc trước khi lưu (`expect_replaced_notice`): sau đặt lại không có bản chờ nào, nên thông báo chỉ bắt buộc khi ca trước (`roadmap-create-emergency-fund`) đã để lại bản đề xuất. Chưa có ca cho "chi lặt vặt vào Chi hằng ngày": bộ thử nạp (`evals/ingest`, sinh bằng `scripts/make_ingest_synthetic.py`) chưa có tệp nào chứa khoản lặt vặt.
 
+### Khi nào chạy bộ nào (chủ dự án chốt 28/11)
+
+| Lúc | Chạy | Tiền ước |
+|---|---|---|
+| Đang sửa một ca | `run.py … --only <id>`, mỗi ca một lần; sửa router thì `paraphrase/run_router.py` trên máy | vài cent |
+| Sau mỗi đợt sửa đã deploy | golden phase 3 và 4 (`run.py golden --phase 3`, `--phase 4`) cùng `paraphrase/run_router.py` | khoảng 0,5–0,8 USD |
+| Bản RC (#34) | lượt đầy đủ như mục dưới | khoảng 1,6–2 USD |
+
+Đợt sửa không được eval sẽ giấu lỗi: v35 không có lượt eval nào, nên 4 ca router lùi tới v36 mới lộ ([eval-report.md](../docs/research/eval-report.md)). Mỗi lượt có thư mục `evals/results/<YYYYMMDD-HHMM>_v<NN>_<sha7>/` kèm `manifest.json` (commit, Runtime, Amplify job, giờ chạy, tài khoản, khoảng nghỉ, SSM, tiền), và thêm một dòng vào eval-report.md.
+
 ### Chạy một lượt đầy đủ sau deploy
 
 Một lượt đầy đủ: 115 ca (golden 33 + 16 + 16, đối kháng 16 + 12 + 14 + 8), **117 lượt chat** (hai ca bộ nhớ có một phiên trước), 11 lần nạp tệp, 1 lời gọi judge; cộng 18 lời gọi router của bộ diễn đạt lại (không qua Runtime, không tính lượt chat). In lại bằng `--list` của từng bộ. Chi phí ước tính khoảng **2,5–3 USD** (mốc 2,2–2,5 USD cho 102 ca ở Runtime v25, khoảng 80% là Sonnet 4.6; nay thêm 13 ca, trong đó 2 ca lập lộ trình; lượt đầy đủ 26/11 trên Runtime v34 tốn khoảng 2,0 USD, log ghi 1,91 USD); đo phân loại ví 3 hũ thêm khoảng 0,3 USD ([classification/README.md](classification/README.md)).
