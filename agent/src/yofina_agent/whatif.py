@@ -34,6 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from yofina_agent import advisor, notices
 from yofina_agent.behavior_chat import compact_profile
+from yofina_agent.clarify import PAY_QUESTION, purchase_funding
 from yofina_agent.compact import compact_forecast, compact_jars, compact_obligations, compact_scenario
 from yofina_agent.jars import resolve_jar
 from yofina_agent.memory import jars_mentioned
@@ -679,6 +680,22 @@ async def run_what_if(turn: Turn, r: IntentResult, question: str, history: str) 
         return st
     if spec is None:
         return st  # người gọi (Turn.on_what_if) quyết định: thẻ kiểm tra tất định hoặc thông báo chưa dựng được
+    if spec["kind"] in ("one_time_purchase", "bnpl_purchase"):
+        # Orchestrator có thể đổi hũ hoặc cách trả sau khi router đã xử lý lựa chọn.
+        funding = r.params
+        if funding.scenario_kind not in (None, "one_time_purchase", "bnpl_purchase"):
+            purchase = r.model_copy(update={"params": funding.model_copy(update={"scenario_kind": spec["kind"]})})
+            funding = purchase_funding(purchase, question, turn.jar_rows, None).params
+        if funding.funding == "credit":
+            spec.update(kind="bnpl_purchase", funding_source="credit")
+        else:
+            chosen = resolve_jar(funding.jar_text, turn.jar_rows)
+            if chosen.status != "ok":
+                await turn.emit_clarify(ClarifyRequest(slot="jar", question=PAY_QUESTION), r)
+                st.handled = True
+                return st
+            spec.pop("pay_jar", None)
+            spec.update(kind="one_time_purchase", funding_source="jar", jar_code=chosen.code)
     st.spec = spec
 
     # 1b) khoản trước cùng hũ trong cuộc trò chuyện: hỏi giữ hay bỏ, giữ thì gộp

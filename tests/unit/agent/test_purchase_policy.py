@@ -63,23 +63,6 @@ def test_kiem_tra_suy_duoc_hu_thi_tinh_va_notice_co_chip(monkeypatch, results, k
     assert notice is not None and _chips(notice) == _expected("affordability", *kinds)
 
 
-@pytest.mark.parametrize(
-    ("results", "kinds"),
-    [({}, ("choose", "credit")), ({"get_obligations": _no_credit("get_obligations.ok.json")}, ("choose",))],
-    ids=["vi-co-han-muc", "vi-khong-han-muc"],
-)
-def test_what_if_suy_duoc_hu_thi_tinh_va_notice_co_chip(monkeypatch, results, kinds):
-    route = {"intent": "what_if", "amount_vnd": 1_500_000, "scenario_kind": "one_time_purchase", "label": "vé concert"}
-    llm = make_llm([route_response(**route, tx_type="entertainment"), tool_response("analyze", analysis())])
-    events, tools, _ = run_turn(
-        "nếu mua vé concert 1,5tr thì sao", llm=llm, tools=_tools(DEMO_8, **results), settings=CODE_FIRST, monkeypatch=monkeypatch
-    )
-    check_agui_order(events)
-    assert _calls(tools, "run_scenario")[0]["scenario"]["jar_code"] == "giai_tri"
-    notice = _inferred_notice(events)
-    assert notice is not None and _chips(notice) == _expected("what_if", *kinds)
-
-
 # --- không suy được: cùng một câu hỏi cho what-if và kiểm tra, chip mọi hũ cộng Trả sau ---------------------------------
 @pytest.mark.parametrize(
     ("question", "route"),
@@ -130,6 +113,22 @@ def test_chip_tra_sau_cua_cau_hoi_hu_thi_mo_phong_bang_tra_sau(monkeypatch):
     _, tools = _answer(monkeypatch, question, PAY_QUESTION, "Trả bằng Trả sau (mô phỏng)", {"intent": "what_if"}, analyst=True)
     (args,) = _calls(tools, "run_scenario")
     assert args["scenario"]["kind"] == "bnpl_purchase" and args["scenario"]["amount_vnd"] == 1_800_000
+
+
+def test_purchase_requires_user_funding_then_uses_the_selected_chip(monkeypatch):
+    question = "Nếu mua loa 900 nghìn thì sao?"
+    guess = dict(intent="what_if", scenario_kind="one_time_purchase", amount_vnd=900_000,
+                 jar_text="Giải trí", spend_jar_code="giai_tri", spend_jar_named=True)
+    events, tools, _ = run_turn(question, llm=make_llm([route_response(**guess)]),
+                                tools=_tools(DEMO_8), settings=CODE_FIRST, monkeypatch=monkeypatch)
+    assert not _calls(tools, "run_scenario")
+    (block,) = blocks_of(events)
+    assert block["type"] == "clarify" and block["data"]["question"] == PAY_QUESTION
+    chip = next(c for c in block["data"]["chips"] if c["label"] == "Chi hằng ngày")
+    _, tools = _answer(monkeypatch, question, block["data"]["question"], chip["value"], guess, analyst=True)
+    (call,) = _calls(tools, "run_scenario")
+    assert call["scenario"]["jar_code"] == "chi_hang_ngay"
+    assert call["scenario"]["amount_vnd"] == 900_000
 
 
 # --- chip của notice "Tính theo hũ X" ------------------------------------------------------------------------------

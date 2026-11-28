@@ -22,7 +22,6 @@ from agent_helpers import (
     mcp_ok,
     route_response,
     run_turn,
-    tool_response,
 )
 from test_infer_pay_jar import (
     CODE_FIRST,
@@ -36,7 +35,6 @@ from test_infer_pay_jar import (
     _types,
 )
 from test_live_pay_jar_chips import _events_of
-from test_whatif import analysis
 from yofina_agent.clarify import PAY_QUESTION
 from yofina_agent.router import (
     ROUTER_SYSTEM,
@@ -294,17 +292,14 @@ def test_tra_sau_khong_dung_hu_router_chon_lam_hu_tra(monkeypatch):
     assert _types(events) == ["clarify"] and _inferred_notice(events) is None
 
 
-def test_what_if_router_chon_hu_thi_dung_kich_ban_tu_hu_do(monkeypatch):
-    route = {"intent": "what_if", "amount_vnd": 2_000_000, "scenario_kind": "one_time_purchase", "label": "chuyến đi"}
-    llm = make_llm([route_response(**route, spend_jar_code="muc_tieu"), tool_response("analyze", analysis())])
+def test_what_if_router_chon_hu_van_hoi_nguoi_dung(monkeypatch):
+    llm = make_llm([route_response(intent="what_if", amount_vnd=2_000_000, scenario_kind="one_time_purchase",
+                                   spend_jar_code="muc_tieu")])
     events, tools, _ = run_turn(TRIP_Q, llm=llm, tools=_tools(DEMO_8), settings=CODE_FIRST, monkeypatch=monkeypatch)
     check_agui_order(events)
-    assert "clarify" not in _types(events)
-    assert _calls(tools, "run_scenario")[0]["scenario"]["jar_code"] == "muc_tieu"
+    assert _types(events) == ["clarify"] and not _calls(tools, "run_scenario")
+    assert blocks_of(events)[0]["data"]["question"] == PAY_QUESTION
     assert len(_calls(tools, "get_jar_balances")) == 1
-    kinds = _types(events)
-    assert kinds.index("notice") < kinds.index("forecast_timeline")
-    assert len(llm[1].calls) == 2  # router, Analyst
 
 
 def test_khai_nghia_vu_khong_dung_hu_router_chon(monkeypatch):

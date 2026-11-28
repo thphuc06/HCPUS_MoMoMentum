@@ -58,6 +58,7 @@ from yofina_agent.clarify import (
     known_item_date_retry_question,
     known_item_question,
     lacks_pay_jar,
+    purchase_funding,
     resolve_clarify,
     roadmap_choice_question,
 )
@@ -1026,8 +1027,10 @@ class Turn:
                 return
             routed = converted
         handler = self._intent_handlers()[routed.intent]
-        # Lượt chỉ đọc chưa nêu hũ trả: suy hũ từ loại chi router trích (quy tắc phân loại của ví) trước khi quyết định hỏi lại.
-        routed = await self.infer_pay_jar(routed)
+        if routed.intent == "what_if":
+            routed = purchase_funding(routed, question, self._router_jar_list or self._jar_rows, pending)
+        elif routed.intent == "affordability":
+            routed = await self.infer_pay_jar(routed)
         # Chỉ ý định có ô bắt buộc mới hỏi lại (clarify.CLARIFY_INTENTS); handler khác tự xử lý phần còn thiếu.
         if req := resolve_clarify(routed) or await self.unknown_jar_clarify(routed):
             await self.emit_clarify(req, routed)
@@ -1101,6 +1104,7 @@ class Turn:
             confidence=routed.confidence,
             needs_clarification=False,
         )
+        r = purchase_funding(r, pending_q, self._router_jar_list or self._jar_rows, None)
         self.whatif = await run_what_if(self, r, pending_q, pending_history)
         if self.whatif.spec is None and not self.whatif.handled:
             t, m = notices.SCENARIO_UNBUILDABLE

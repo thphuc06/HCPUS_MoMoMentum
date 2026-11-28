@@ -204,7 +204,12 @@ def test_what_if_tra_sau_tra_loi_ten_hu_thi_chay_lai_kich_ban_voi_pay_jar(monkey
     tools = _tools(run_scenario=_scenario_needs_pay_jar)
     chosen = _jars(with_obligation_jar=False)["data"]["jars"][-1]
     llm = make_llm([route_response(**ROUTE_WHAT_IF, jar_text=f"Hũ {chosen['name']}"), tool_response("analyze", analysis())])
-    events, tools, _ = run_turn(f"Hũ {chosen['name']}", llm=llm, tools=tools, settings=CODE_FIRST, monkeypatch=monkeypatch)
+    messages = [
+        {"id": "m1", "role": "user", "content": "Nếu mua tai nghe 1,2 triệu bằng Ví Trả Sau thì sao"},
+        {"id": "m2", "role": "assistant", "content": notices.CLARIFY["pay_jar"]["question"]},
+        {"id": "m3", "role": "user", "content": f"Hũ {chosen['name']}"},
+    ]
+    events, tools, _ = run_turn(None, messages=messages, llm=llm, tools=tools, settings=CODE_FIRST, monkeypatch=monkeypatch)
     check_agui_order(events)
     first, retry = _calls(tools, "run_scenario")
     assert "pay_jar" not in first["scenario"]

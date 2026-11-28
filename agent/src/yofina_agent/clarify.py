@@ -4,9 +4,8 @@ Router (model) có thể tự hỏi lại kèm chip; mã luôn kiểm lại các
 hoặc model không dùng được (suy giảm), mã dựng câu hỏi từ chuỗi sản phẩm trong `notices.CLARIFY` (không phải câu trả lời soạn sẵn cho một
 câu demo: chỉ là nhãn của ô còn thiếu). Chỉ hỏi một ô mỗi lượt; lượt sau người dùng trả lời thì router ghép với câu trước và chạy tiếp.
 
-Lượt chỉ đọc (what-if mua hàng, kiểm tra trước khi chi) thiếu hũ trả thì mã dùng hũ router chọn theo ý định trong danh sách hũ của ví,
-không có thì hũ suy từ loại chi bằng quy tắc phân loại của ví (`infer_pay_jar`), trước khi quyết định hỏi; chỉ hỏi khi chưa rõ, và hỏi
-cùng một câu cho mọi khoản mua (`PAY_QUESTION`: chip là mọi hũ cộng Trả sau; V4, #39).
+Mô phỏng mua hàng dùng nguồn trả người dùng chọn trong yêu cầu hoặc câu trả lời đang chờ. Kiểm tra trước khi chi
+(`affordability`) có thể suy hũ từ loại chi. Khi cần hỏi, cả hai dùng `PAY_QUESTION` và chip của ví.
 
 Câu hỏi mã đặt được nhận ra lại từ chữ của nó trong lịch sử (`recognize_prompt`): lượt sau biết câu trả lời điền ô nào và câu nào là bấm
 chip (V3, #39).
@@ -21,6 +20,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from yofina_agent import notices
+from yofina_agent.fallback import _CREDIT, _has, _jar_phrase
 from yofina_agent.jars import resolve_jar
 from yofina_agent.schemas import ClarifyChipIn, ClarifyRequest, IntentParams, IntentResult
 from yofina_agent.textutil import normalize, parse_amount_vnd
@@ -58,6 +58,54 @@ def is_known_item_update(p: IntentParams) -> bool:
         and p.obligation_name is None
         and (p.known_item_name is not None or p.date_spec is not None or p.date_text is not None)
     )
+
+
+def purchase_funding(
+    r: IntentResult, question: str, rows: Sequence[Mapping[str, Any]], pending: Mapping[str, Any] | None
+) -> IntentResult:
+    """Chỉ dùng nguồn trả người dùng chọn cho khoản mua đang xét."""
+    p = r.params
+    if r.intent != "what_if" or p.scenario_kind not in _PURCHASE_KINDS:
+        return r
+    norm = normalize(question)
+    prompt = (pending or {}).get("_prompt")
+    names = [str(row["name"]) for row in rows]
+    chip = prompt.chip(question, names) if prompt else None
+    answering = pending is not None and (chip is not None or p.answers_pending is True)
+    jar = (chip or {}).get("jar_text")
+    credit = _has(norm, _CREDIT) and not re.search(r"\bkhong (?:\w+ ){0,3}(?:tra sau|bnpl)\b", norm)
+    if not jar:
+        # So tên đầy đủ trước để giữ tên dài và tên có chữ dừng của bộ tách cụm.
+        by_name = {normalize(name): name for name in names}
+        choices = "|".join(re.escape(n) for n in sorted(by_name, key=len, reverse=True) if n)
+        if answering and norm.removeprefix("hu ") in by_name:
+            jar = by_name[norm.removeprefix("hu ")]
+        elif choices:
+            pattern = rf"\b(?:bang|tu|lay o|trich|trong|dung|lay|chon) (?:tien )?(?:hu )?({choices})\b"
+            matches = {m[1] for m in re.finditer(pattern, norm) if not norm[:m.start()].rstrip().endswith("khong")}
+            if len(matches) == 1:
+                jar = by_name[matches.pop()]
+    if not jar and p.jar_text and (norm.startswith("hu ") or re.search(r"\b(?:bang|tu|trong|dung|lay) hu\b", norm)):
+        # Tên lạ vẫn đi qua unknown_jar_clarify khi chính người dùng đã gõ tên đó.
+        phrase = _jar_phrase(norm)
+        if phrase and phrase not in by_name and normalize(p.jar_text).removeprefix("hu ") == phrase:
+            jar = phrase
+    if answering and not jar and not credit and pending:
+        jar = pending.get("jar_text")
+        credit = pending.get("funding") == "credit"
+    # Trả lời ô hũ trả nợ của một giao dịch Trả sau giữ cách trả đã chọn.
+    if answering and pending and pending.get("funding") == "credit" and prompt and "funding" not in (prompt.keys or ()):
+        credit = True
+    kind = p.scenario_kind
+    if credit:
+        kind = "bnpl_purchase"
+    elif kind == "bnpl_purchase":
+        kind = "one_time_purchase"
+    params = p.model_copy(update={
+        "jar_text": jar, "funding": "credit" if credit else ("jar" if jar else None),
+        "scenario_kind": kind, "spend_jar_code": None, "spend_jar_named": None,
+    })
+    return r.model_copy(update={"params": params})
 
 
 def missing_slot(r: IntentResult) -> str | None:
